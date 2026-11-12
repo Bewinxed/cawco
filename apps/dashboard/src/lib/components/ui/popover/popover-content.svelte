@@ -33,8 +33,18 @@
     "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
-    base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-c-floating-pad text-ink-strong shadow-overlay",
+    base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-c-floating-pad text-ink-strong",
     variants: {
+      /**
+       * Its drop (DESIGN.md, Shadow Vocabulary): `overlay` for what opens
+       * over the page (a popover, a menu, a toast); `tile` for a card that
+       * stands in its own place, as the side card does in its split, whose
+       * pane clips anything wider than the tile's drop.
+       */
+      depth: {
+        overlay: "shadow-overlay",
+        tile: "shadow-tile",
+      },
       motion: {
         pop: popMotion,
         hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--dur-exit)",
@@ -50,7 +60,7 @@
         drawn: "r-inset-c-floating-pad",
       },
     },
-    defaultVariants: { motion: "pop", edge: "own" },
+    defaultVariants: { motion: "pop", edge: "own", depth: "overlay" },
   });
 
   export type FloatingSurfaceLooks = VariantProps<typeof floatingSurface>;

@@ -597,7 +597,7 @@
   data-side-surface-expanded={expanded || undefined}
   aria-label={label}
   class={cn(
-    floatingSurface(),
+    floatingSurface({ depth: "tile" }),
     "group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0 timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:border-0 data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:border-0 in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:rounded-none in-data-preview-sheet:border-0 in-data-preview-sheet:bg-transparent in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   )}
   style:--side-room="var(--c-head-room)"
