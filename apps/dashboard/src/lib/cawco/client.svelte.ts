@@ -215,6 +215,7 @@ import {
   refusalClause,
 } from "./hub-read";
 import { newId } from "./id";
+import { isLive } from "./landing";
 import {
   type BoardRow,
   type InstanceIndex,
@@ -414,15 +415,6 @@ function ahead(deadline: number): boolean {
   }, 1000);
   return true;
 }
-
-/**
- * Only a session the hub can still reach is live; the rest is history. A
- * session its project is moving for (`moving`) is live work the hub carries.
- */
-const isLive = (row: BoardRow): boolean =>
-  row.status === "running" ||
-  row.status === "starting" ||
-  row.status === "moving";
 
 /**
  * A session that stays on the board until the operator discards it: live work,

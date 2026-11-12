@@ -537,13 +537,17 @@
              them under the row, as a session's mark unfolds its delegates;
              its press never reaches the link. Under a finger the switch
              reaches sideways to the name, the row's own gap (`row="list"`,
-             a compact row's), as a session row's does. -->
+             a compact row's), as a session row's does. The row opens its
+             project as the press bubbles up to it, so the switch, which
+             stops the press where it lands (TreeMark `toggle`), keeps it:
+             heard on the way down, the row opened the project under a
+             press on the mark. -->
         <a
           {href}
           {...props}
           id={railLinkId(project.id)}
           aria-current={here ? "page" : undefined}
-          onclickcapture={(event) => openProjectTab(event, project.id)}
+          onclick={(event) => openProjectTab(event, project.id)}
           class="{props.class} mark-line coarse:h-c-btn-h-lg"
           style:--mark-hit-gap="var(--row-compact-gap)"
           data-regroup="regroup:project:{project.id}"

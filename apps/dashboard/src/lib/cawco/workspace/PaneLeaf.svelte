@@ -80,6 +80,15 @@
     return seed?.id === projectId ? seed : null;
   };
 
+  /**
+   * The server's first screen of a conversation, for the pane it names on
+   * the server: the address's, or the one the layout landed the board's
+   * address on (+page.server.ts).
+   */
+  const servedTail = $derived(
+    (page.data as { tail?: ServerTail | null }).tail ?? null
+  );
+
   /** The active conversation, as this group's composer writes to it; none when it cannot be written to. */
   const bound = $derived(
     leaf.active ? composerBindings.get(leaf.active) : undefined
@@ -540,9 +549,7 @@
             browsingCwd={ctx?.cwd ?? ""}
             browsingHarness={ctx?.harness}
             focused={false}
-            serverTail={paneId === page.params.id
-              ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
-              : null}
+            serverTail={servedTail?.viewId === paneId ? servedTail : null}
             viewId={paneId}
             visible={shown}
           />

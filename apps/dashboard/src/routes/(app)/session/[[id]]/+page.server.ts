@@ -3,6 +3,8 @@ import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
 import { hubFailure, hubFetch, machineAway } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
+import { isSessionTab } from "#lib/cawco/workspace/tabs.js";
+import { focusedIn, type WorkspaceV1 } from "#lib/cawco/workspace/tree.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
 import type { PageServerLoad } from "./$types";
 
@@ -17,6 +19,17 @@ const askHeldFor = async (
   }
   const pending = (await response.json()) as { instanceId?: string }[];
   return pending.some((envelope) => envelope.instanceId === viewId);
+};
+
+/** The conversation the layout put in front of the board's address, if it put one there. */
+const landedOn = async (
+  parent: () => Promise<{ landed: string[]; workspace: WorkspaceV1 | null }>
+): Promise<string | undefined> => {
+  const { landed, workspace } = await parent();
+  const active = workspace ? focusedIn(workspace).active : null;
+  return active && landed.includes(active) && isSessionTab(active)
+    ? active
+    : undefined;
 };
 
 /**
@@ -42,10 +55,17 @@ export const load: PageServerLoad = async ({
   fetch,
   untrack,
   isDataRequest,
+  parent,
 }): Promise<{ tail: ServerTail | null }> => {
-  const viewId = untrack(() => params.id);
+  if (isDataRequest) {
+    return { tail: null };
+  }
+  // The board's address on a desk shows the conversation the layout landed
+  // on ((app)/+layout.server.ts `landOnDesk`), whose page is read as the
+  // address's own would be.
+  const viewId = untrack(() => params.id) ?? (await landedOn(parent));
   // The board has no transcript page to read.
-  if (!viewId || isDataRequest) {
+  if (!viewId) {
     return { tail: null };
   }
   const response = await fetch(

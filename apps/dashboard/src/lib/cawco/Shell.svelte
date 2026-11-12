@@ -837,12 +837,15 @@
   // the URL's conversation among them (the server placed it in the
   // cookie's tree), so a menu opened on that tab before hydration stays
   // with it. The URL is the address, and the browser follows it before
-  // anything is drawn, as the server did.
-  workspace.serve(
+  // anything is drawn, as the server did; unless the server landed the
+  // board's address on what a desk puts in front, whose address the
+  // workspace writes in its place.
+  const landed = workspace.serve(
     (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null,
-    (page.data as { resolved?: string[] }).resolved ?? []
+    (page.data as { resolved?: string[] }).resolved ?? [],
+    (page.data as { landed?: string[] }).landed ?? []
   );
-  if (browser) {
+  if (browser && !landed) {
     workspace.followUrl(location.href);
   }
   // Once the first paint is up, the page's own answers: the tree
@@ -1226,9 +1229,11 @@
    * the bar's item and the phone's sidebar row count it, and its card and
    * its drawer hold it. None closes the drawer.
    */
+  const filesSession = $derived(
+    onSession && workspace.activeSessionId ? workspace.activeSessionId : null
+  );
   $effect(() => {
-    const id =
-      onSession && workspace.activeSessionId ? workspace.activeSessionId : null;
+    const id = filesSession;
     untrack(() => {
       if (files.session !== id) {
         files.sheet = files.sheet && id !== null;
@@ -1249,9 +1254,9 @@
       });
     }
   });
-  const filesCounted = $derived(
-    files.session ? filesCount(files.session) : null
-  );
+  // Read off the conversation on screen, not the store the effect above
+  // writes: the server draws the bar's Files item with the conversation.
+  const filesCounted = $derived(filesSession ? filesCount(filesSession) : null);
   /**
    * Add machine's window, opened from the machines in the phone's sheet (a
    * way in, an install's row): the sheet goes as its drawer rises, and the
@@ -1690,7 +1695,7 @@
               <!-- Caw's head: what needs you, and its drawer. -->
               <NeedsCaw />
             {/snippet}
-            {#if railed && files.session}
+            {#if railed && filesSession}
               <!-- Files: the conversation on screen's artifacts and
                    attachments. -->
               <FilesItem count={filesCounted} />

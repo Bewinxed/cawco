@@ -158,3 +158,65 @@ export const blankWorkspace = (): WorkspaceV1 => ({
   focusedLeaf: "p0",
   ctx: {},
 });
+
+/**
+ * Puts a tab in a group's strip if it is not there yet: just after the tab
+ * in front, which it was opened from, else (the board in front) at the end.
+ */
+export function placeIn(leaf: LeafNode, tab: string): void {
+  if (leaf.tabs.includes(tab)) {
+    return;
+  }
+  const from = leaf.active;
+  const at = from ? leaf.tabs.indexOf(from) : -1;
+  if (!from || at === -1) {
+    leaf.tabs.push(tab);
+    leaf.opened = null;
+    return;
+  }
+  leaf.tabs.splice(at + 1, 0, tab);
+  leaf.opened = { id: tab, from };
+}
+
+/** Puts a tab in front of its group; any other tab than the one just opened forgets its opener. */
+export function showIn(leaf: LeafNode, tab: string | null): void {
+  if (leaf.opened && leaf.opened.id !== tab) {
+    leaf.opened = null;
+  }
+  leaf.active = tab;
+}
+
+/** The group the keyboard is in: the one the tree names, else its first. */
+export function focusedIn(tree: WorkspaceV1): LeafNode {
+  const leaves = leavesOf(tree.root);
+  return leaves.find((leaf) => leaf.id === tree.focusedLeaf) ?? leaves[0];
+}
+
+/**
+ * Every group that holds tabs with none in front shows its first: on a wide
+ * screen there is no home in the detail area, so a group left showing
+ * nothing would draw blank beside the others. The tabs it put in front.
+ */
+export function fillGroupsIn(tree: WorkspaceV1): string[] {
+  const filled: string[] = [];
+  for (const leaf of leavesOf(tree.root)) {
+    if (leaf.active === null && leaf.tabs.length > 0) {
+      showIn(leaf, leaf.tabs[0]);
+      filled.push(leaf.tabs[0]);
+    }
+  }
+  return filled;
+}
+
+/**
+ * A tab the reader did not pick put in front (a wide screen's landing): in
+ * the group that holds it, else the focused one, which takes the focus.
+ */
+export function landIn(tree: WorkspaceV1, tab: string): void {
+  const leaf =
+    leavesOf(tree.root).find((one) => one.tabs.includes(tab)) ??
+    focusedIn(tree);
+  placeIn(leaf, tab);
+  showIn(leaf, tab);
+  tree.focusedLeaf = leaf.id;
+}

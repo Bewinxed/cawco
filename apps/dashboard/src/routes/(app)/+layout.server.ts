@@ -1,7 +1,11 @@
+import type { ArtifactNeedsRead } from "@cawco/core/artifact-needs";
 import { harnessNamed } from "@cawco/core/harness";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
+import type { MoveJob } from "@cawco/core/move";
 import type {
+  Envelope,
+  FramePayload,
   InstanceRow,
   SessionPulse,
   StoredRecent,
@@ -10,7 +14,9 @@ import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { type ServedBoard, servedBoardOf } from "#lib/cawco/first-paint.js";
 import type { Area } from "#lib/cawco/home/areas.svelte.js";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
+import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
 import { KEPT, type Pref, prefCookie } from "#lib/cawco/prefs.js";
+import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
   isSessionTab,
   projectOfTab,
@@ -18,9 +24,15 @@ import {
 } from "#lib/cawco/workspace/tabs.js";
 import {
   blankWorkspace,
+  fillGroupsIn,
+  focusedIn,
+  landIn,
   leavesOf,
   parseContexts,
   parseWorkspace,
+  placeIn,
+  showIn,
+  type WorkspaceV1,
 } from "#lib/cawco/workspace/tree.js";
 import {
   FOLD_BOXES_PREF,
@@ -79,9 +91,90 @@ function narrowOf(cookie: string | undefined, headers: Headers): boolean {
   return PHONE_UA.test(headers.get("user-agent") ?? "");
 }
 
+/**
+ * What waits on the reader and what is moving, as a wide screen's landing
+ * reads them (landing.ts): the asks the hub holds that are the reader's to
+ * answer (as the store's `blocked` lists them, an ask routed to its
+ * parent's agent left out), the artifacts waiting on them that are not put
+ * away (the store's `artifactNeedsOpen`), and the moves just cancelled.
+ * Null when the hub would not give one of them: the page lands by itself.
+ */
+async function readWaits(
+  fetch: typeof globalThis.fetch
+): Promise<{ waits: Wait[]; cancelled: Set<string> } | null> {
+  const [pending, artifacts, moves] = await Promise.all([
+    readHub<Envelope<FramePayload>[]>(fetch, hubRequest("GET /api/pending")),
+    readHub<ArtifactNeedsRead>(fetch, hubRequest("GET /api/artifact-needs")),
+    readHub<MoveJob[]>(fetch, hubRequest("GET /api/moves")),
+  ]);
+  if (!(pending.ok && artifacts.ok && moves.ok)) {
+    return null;
+  }
+  const waits: Wait[] = [];
+  for (const { payload } of pending.value) {
+    // The hub tags an ask its delegate's parent answers on the frame
+    // itself, past its declared shape, as the store reads it.
+    if (
+      payload.kind === "permission_request" &&
+      !routedToParent(payload as { routedTo?: string })
+    ) {
+      waits.push({ opens: askOpens(payload), raisedAt: payload.raisedAt });
+    }
+  }
+  for (const need of artifacts.value.needs) {
+    if (!need.parked) {
+      waits.push({ opens: need.instanceId, raisedAt: need.raisedAt });
+    }
+  }
+  const cancelled = new Set(
+    moves.value
+      .filter((job) => job.stage === "cancelled")
+      .map((job) => job.targetInstanceId)
+  );
+  return { waits, cancelled };
+}
+
+/**
+ * A wide screen never shows an empty detail if anything can be opened
+ * (SessionSurface): every group holding tabs shows one, and with nothing in
+ * front of the focused group it lands on the longest wait, else the latest
+ * work (landing.ts). Done here as the page would do it once restored, so
+ * the first paint draws the strip, the pane and its transcript where they
+ * stay. The tabs it put in front, which the page counts as its own picks,
+ * not the reader's (SessionSurface `picked`).
+ */
+function landOnDesk(
+  tree: WorkspaceV1,
+  read: {
+    rows: InstanceRow[];
+    pulses: Record<string, SessionPulse>;
+    waits: Wait[];
+    cancelled: Set<string>;
+  }
+): string[] {
+  const landed = fillGroupsIn(tree);
+  if (focusedIn(tree).active !== null) {
+    return landed;
+  }
+  const listed = new Set(read.rows.map((row) => row.id));
+  const landing = landingOf({
+    waits: read.waits,
+    rows: read.rows,
+    pulseAt: (id) => read.pulses[id]?.at,
+    listed: (id) => listed.has(id),
+    cancelled: read.cancelled,
+  });
+  if (landing) {
+    landIn(tree, landing);
+    landed.push(landing);
+  }
+  return landed;
+}
+
 export const load: LayoutServerLoad = async ({
   cookies,
   fetch,
+  isDataRequest,
   request,
   url,
   untrack,
@@ -89,6 +182,14 @@ export const load: LayoutServerLoad = async ({
 }) => {
   const pref = (name: Pref) => cookies.get(prefCookie(name, url));
   const narrow = narrowOf(pref(NARROW_KEY), request.headers);
+  // Untrack URL access: a switch between conversations is a shallow pushState
+  // and the client store is authoritative once it has restored. This load exists
+  // for the first paint only — re-running it on every navigation would repeat
+  // the title fetches for nothing. Mirrors what `workspace.reveal()` does.
+  const pathname = untrack(() => url.pathname);
+  // A desk opening the board's address, as a page load: the first paint
+  // lands where the page would (`landOnDesk`), read alongside the board.
+  const lands = pathname === "/session" && !narrow && !isDataRequest;
   // Who this browser is to the hub (hub-auth.svelte.ts): one that must pair
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
@@ -106,6 +207,7 @@ export const load: LayoutServerLoad = async ({
     projectsRead,
     areasRead,
     storedRead,
+    waitsRead,
   ] = await Promise.all([
     readHub<HubAuthState>(fetch, hubRequest("GET /api/auth")),
     readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
@@ -114,6 +216,7 @@ export const load: LayoutServerLoad = async ({
     readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
     readHub<{ areas: Area[] }>(fetch, hubRequest("GET /api/areas")),
     readHub<StoredRecent>(fetch, hubRequest("GET /api/stored")),
+    lands ? readWaits(fetch) : null,
   ]);
   const auth = authRead.ok ? authRead.value : null;
   const board: ServedBoard | null =
@@ -160,28 +263,16 @@ export const load: LayoutServerLoad = async ({
     workspace.ctx = parseContexts(pref(WORKSPACE_CTX_KEY));
   }
 
-  // Untrack URL access: a switch between conversations is a shallow pushState
-  // and the client store is authoritative once it has restored. This load exists
-  // for the first paint only — re-running it on every navigation would repeat
-  // the title fetches for nothing. Mirrors what `workspace.reveal()` does.
-  const pathname = untrack(() => url.pathname);
   // The tab the URL names: a conversation, a project, or none.
   const urlTab = tabOfPath(pathname);
   const urlId = urlTab ?? "";
   if (urlId) {
     workspace ??= blankWorkspace();
-    const leaves = leavesOf(workspace.root);
-    const { focusedLeaf } = workspace;
     const leaf =
-      leaves.find((l) => l.tabs.includes(urlId)) ??
-      leaves.find((l) => l.id === focusedLeaf) ??
-      leaves[0];
-    if (!leaf.tabs.includes(urlId)) {
-      // Just after the tab in front, else at the end (workspace `place`).
-      const at = leaf.active ? leaf.tabs.indexOf(leaf.active) : -1;
-      leaf.tabs.splice(at === -1 ? leaf.tabs.length : at + 1, 0, urlId);
-    }
-    leaf.active = urlId;
+      leavesOf(workspace.root).find((l) => l.tabs.includes(urlId)) ??
+      focusedIn(workspace);
+    placeIn(leaf, urlId);
+    showIn(leaf, urlId);
     workspace.focusedLeaf = leaf.id;
     const machine = untrack(() => url.searchParams.get("machine"));
     const harness = harnessNamed(
@@ -196,10 +287,19 @@ export const load: LayoutServerLoad = async ({
       };
     }
   } else if (pathname === "/session" && workspace) {
-    const leaves = leavesOf(workspace.root);
-    const { focusedLeaf } = workspace;
-    const leaf = leaves.find((l) => l.id === focusedLeaf) ?? leaves[0];
-    leaf.active = null;
+    // The board's address: nothing in front of the focused group.
+    const leaf = focusedIn(workspace);
+    showIn(leaf, null);
+    workspace.focusedLeaf = leaf.id;
+  }
+  let landed: string[] = [];
+  if (lands && board && waitsRead) {
+    workspace ??= blankWorkspace();
+    landed = landOnDesk(workspace, {
+      rows: rowsRead.ok ? rowsRead.value : [],
+      pulses: pulsesRead.ok ? pulsesRead.value : {},
+      ...waitsRead,
+    });
   }
 
   // Each open tab's name as the hub gave it, or why the hub could not: a tab
@@ -217,6 +317,7 @@ export const load: LayoutServerLoad = async ({
       auth,
       board,
       kept,
+      landed,
     };
   }
 
@@ -250,6 +351,7 @@ export const load: LayoutServerLoad = async ({
       auth,
       board,
       kept,
+      landed,
     };
   }
 
@@ -320,5 +422,6 @@ export const load: LayoutServerLoad = async ({
     auth,
     board,
     kept,
+    landed,
   };
 };

@@ -107,7 +107,7 @@
   import { cn } from "#lib/utils.js";
   import { page } from "$app/state";
   import AskHere from "./AskHere.svelte";
-  import { shownAccount, stopWords } from "./accounts/switch.svelte";
+  import { stopWords } from "./accounts/switch.svelte";
   import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
   import type { BoardRow } from "./client.svelte";
@@ -129,7 +129,6 @@
   } from "./session-acts.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import type { MarkStatus } from "./TreeMark.svelte";
-  import AccountDot from "./usage/AccountDot.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
 
   let {
@@ -416,10 +415,7 @@
       >
     {/if}
     {#if !compact}
-      <!-- mark-line: a line of text, trimmed by the words; the account dot
-           stands in it on vertical-align: middle, the x-height's middle.
-           It says mark-text: its only element may be the dot's svg, which
-           the mark line alone would take for a box. -->
+      <!-- mark-text: a line of text, trimmed by the words. -->
       <span
         class="mark-text block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink"
       >
@@ -439,9 +435,7 @@
             >{stopped}</span
           >
         {:else}
-          <AccountDot
-            accountId={instance ? shownAccount(instance) : undefined}
-          />{line}
+          {line}
         {/if}
       </span>
     {/if}

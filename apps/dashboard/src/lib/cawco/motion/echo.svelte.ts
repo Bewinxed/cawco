@@ -36,6 +36,12 @@
  * because its place in the order changed, or started again after the list
  * was hidden, it still ends then (iOS SessionMark `run()`, `rested`).
  *
+ * What the page opened on is not news. The server draws every mark still
+ * (no script beats there), so an echo the first paint already holds starts
+ * rested: its mark keeps the still form the server drew, dot and all,
+ * through the load, and beats only for a status taken while the page is
+ * watching (a new status is a new echo element, read afresh).
+ *
  * With reduced motion nothing runs here.
  *
  * Nor while the list is not rendered (`watchRendered`: the home board put
@@ -48,6 +54,7 @@
  */
 import type { Attachment } from "svelte/attachments";
 import { watchRendered } from "#lib/utils/rendered.js";
+import { firstRender } from "../first-render.svelte";
 import { CURVE, dur, motionOk, numberOf } from "./curves.svelte";
 
 /** How many beats fit in one loop: the rows start a third of a loop apart. */
@@ -137,6 +144,14 @@ export function echoBeat(): Attachment<HTMLElement> {
     /** One fixed time for the list: every echo is timed from it. */
     const origin = Number(document.timeline.currentTime ?? 0);
     let pending = 0;
+    // Drawn by the server: rested from the start, so nothing replays.
+    if (firstRender.held) {
+      for (const echo of container.querySelectorAll("[data-echo]")) {
+        if (endOf(echo) === undefined) {
+          setEnd(echo, origin);
+        }
+      }
+    }
 
     /** The echo stops beating: its mark stands still on its status. */
     const stop = (echo: Element) => {

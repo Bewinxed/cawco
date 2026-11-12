@@ -1819,9 +1819,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         ?.querySelector('[data-slot="turn"][data-you]')
         ?.matches("[data-grouped]"),
       marks: people.filter((entry) =>
-        entry.querySelector(
-          '[data-turn-who] :is([data-slot="dot"], [data-account-dot-dot])[data-u]'
-        )
+        entry.querySelector('[data-turn-who] [data-slot="dot"][data-u]')
       ).length,
       seam: upper && lower ? Math.round(lower.top - upper.bottom) : null,
       agentWell: agent?.querySelector('[data-slot="well"]') ? "yes" : "no",
@@ -1830,7 +1828,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         : null,
       agentMark: (() => {
         const dot = agent?.querySelector(
-          '[data-turn-who] :is([data-slot="dot"], [data-account-dot-dot]):is([data-a], [data-slot="a"])'
+          '[data-turn-who] [data-slot="dot"]:is([data-a], [data-slot="a"])'
         );
         return dot ? getComputedStyle(dot).backgroundColor : null;
       })(),

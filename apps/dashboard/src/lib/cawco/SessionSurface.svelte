@@ -252,7 +252,10 @@
    * it. Seen is the owner looking (c3f704cb); a wide screen landing on the
    * latest work (c3d33dce) marked that work seen with nobody there.
    */
-  const picked = new SvelteSet<string>();
+  const picked = new SvelteSet<string>(
+    // The server's landing ((app)/+layout.server.ts `landOnDesk`) is the app's pick too.
+    untrack(() => (page.data as { landed?: string[] }).landed ?? [])
+  );
 
   /* ── Wide screens never show an empty detail if anything can be opened ──
      With nothing open, the longest-waiting ask's session opens, else the
@@ -368,10 +371,11 @@
     tail: ServerTail | null;
   }
 
-  const captureEntry = (): EntryData => ({
-    id: page.params.id ?? "",
-    tail: (page.data as { tail?: ServerTail | null }).tail ?? null,
-  });
+  /** Keyed by the tail's own conversation: the board's address on a desk carries the landed one's (+page.server.ts). */
+  const captureEntry = (): EntryData => {
+    const tail = (page.data as { tail?: ServerTail | null }).tail ?? null;
+    return { id: tail?.viewId ?? page.params.id ?? "", tail };
+  };
 
   let entry = $state<EntryData>(captureEntry());
   // A project's page carries its project's server read instead: held for its

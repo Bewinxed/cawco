@@ -46,12 +46,16 @@ import {
 import {
   type BranchNode,
   blankWorkspace,
+  fillGroupsIn,
   isTree,
   type LeafNode,
+  landIn,
   leavesOf,
   type PaneNode,
   parseWorkspace,
+  placeIn,
   type SessionContext,
+  showIn,
   type WorkspaceV1,
 } from "./tree";
 
@@ -221,8 +225,12 @@ function restore(): void {
   }
   // The tree kept here may not hold the URL's tab yet (the server put it in
   // the cookie's): following the URL puts it back, asked nothing when the
-  // server named it.
-  workspace.followUrl(location.href);
+  // server named it. The URL is the one on its way if one is (the server's
+  // landing, `serve`): the bar may not show it yet.
+  const meant = unwritten.at(-1)?.url;
+  workspace.followUrl(
+    meant ? new URL(meant, location.href).href : location.href
+  );
   for (const id of workspace.openIds) {
     askName(id);
   }
@@ -305,33 +313,12 @@ function enter(sessionId: string): void {
   }
 }
 
-/**
- * Puts a conversation in a group's strip if it is not there yet: just after
- * the tab in front, which it was opened from, else (the board in front) at
- * the end.
- */
+/** Puts a conversation in a group's strip if it is not there yet (tree `placeIn`), asked of the hub as it enters. */
 function place(leaf: LeafNode, sessionId: string): void {
-  if (leaf.tabs.includes(sessionId)) {
-    return;
+  if (!leaf.tabs.includes(sessionId)) {
+    enter(sessionId);
   }
-  enter(sessionId);
-  const from = leaf.active;
-  const at = from ? leaf.tabs.indexOf(from) : -1;
-  if (!from || at === -1) {
-    leaf.tabs.push(sessionId);
-    leaf.opened = null;
-    return;
-  }
-  leaf.tabs.splice(at + 1, 0, sessionId);
-  leaf.opened = { id: sessionId, from };
-}
-
-/** Puts a tab in front of its group; any other tab than the one just opened forgets its opener. */
-function show(leaf: LeafNode, sessionId: string | null): void {
-  if (leaf.opened && leaf.opened.id !== sessionId) {
-    leaf.opened = null;
-  }
-  leaf.active = sessionId;
+  placeIn(leaf, sessionId);
 }
 
 /** A tab that left a group takes the group's opener with it, as the tab opened or the one it came from. */
@@ -340,7 +327,7 @@ function takeOut(leaf: LeafNode, sessionId: string): void {
   leaf.tabs.splice(leaf.tabs.indexOf(sessionId), 1);
   forget(leaf, sessionId);
   if (leaf.active === sessionId) {
-    show(leaf, leaf.tabs[0] ?? null);
+    showIn(leaf, leaf.tabs[0] ?? null);
   }
 }
 
@@ -674,7 +661,7 @@ export const workspace = {
     if (sessionId) {
       place(leaf, sessionId);
     }
-    show(leaf, sessionId);
+    showIn(leaf, sessionId);
     held.focusedLeaf = leaf.id;
     save();
     project(sessionId, "push");
@@ -751,7 +738,7 @@ export const workspace = {
       // An address can name anything: asked of the hub as it enters (`place`).
       place(leaf, sessionId);
     }
-    show(leaf, sessionId);
+    showIn(leaf, sessionId);
     held.focusedLeaf = leaf.id;
     save();
   },
@@ -911,10 +898,8 @@ export const workspace = {
   land(sessionId: string): void {
     restore();
     workingSet.visit(sessionId);
-    const leaf = leafHolding(sessionId) ?? focused();
-    place(leaf, sessionId);
-    show(leaf, sessionId);
-    held.focusedLeaf = leaf.id;
+    enter(sessionId);
+    landIn(held, sessionId);
     save();
     project(sessionId, "replace");
   },
@@ -928,14 +913,7 @@ export const workspace = {
    */
   fillGroups(): void {
     restore();
-    let changed = false;
-    for (const leaf of leavesOf(held.root)) {
-      if (leaf.active === null && leaf.tabs.length > 0) {
-        show(leaf, leaf.tabs[0]);
-        changed = true;
-      }
-    }
-    if (changed) {
+    if (fillGroupsIn(held).length > 0) {
       save();
       project(focused().active, "replace");
     }
@@ -961,7 +939,7 @@ export const workspace = {
         }
       }
       if (extra.id === held.focusedLeaf) {
-        show(into, extra.active ?? into.active);
+        showIn(into, extra.active ?? into.active);
         held.focusedLeaf = into.id;
       }
       extra.tabs = [];
@@ -1034,7 +1012,7 @@ export const workspace = {
         ? target.tabs.length
         : Math.max(0, Math.min(index, target.tabs.length));
     target.tabs.splice(at, 0, sessionId);
-    show(target, sessionId);
+    showIn(target, sessionId);
     held.focusedLeaf = target.id;
     settle();
     project(sessionId, "push");
@@ -1104,10 +1082,18 @@ export const workspace = {
    * `named`: the tabs the server found the hub listing as sessions under
    * their own id, which `restore` asks nothing of (Naming the tabs); kept in
    * the browser alone, since on the server the module is every request's.
+   * `landed`: the tabs the server put in front of the board's address on a
+   * desk, as `fillGroups` and `land` would ((app)/+layout.server.ts
+   * `landOnDesk`): the address is replaced with the one in front, as theirs
+   * is. Whether it landed: the Shell then has no address to follow.
    */
-  serve(served: WorkspaceV1 | null, named: readonly string[]): void {
+  serve(
+    served: WorkspaceV1 | null,
+    named: readonly string[],
+    landed: readonly string[]
+  ): boolean {
     if (browser && restored) {
-      return;
+      return false;
     }
     if (browser) {
       for (const id of named) {
@@ -1118,6 +1104,11 @@ export const workspace = {
     held.root = next.root;
     held.focusedLeaf = next.focusedLeaf;
     held.ctx = next.ctx ?? {};
+    if (landed.length === 0) {
+      return false;
+    }
+    project(focused().active, "replace");
+    return true;
   },
 
   /** Whether the tree localStorage keeps is in front yet: what happens of itself (a group filled, a tab re-addressed) waits for it. */

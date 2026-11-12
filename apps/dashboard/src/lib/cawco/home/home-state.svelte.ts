@@ -57,6 +57,7 @@ import {
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence } from "../convergence";
 import { hubAuth } from "../hub-auth.svelte";
+import { askOpens, isDelegateOf, landingOf, movedAt } from "../landing";
 import { conversationHref, resolveSessionTitle } from "../links";
 import { machineVerdict } from "../machine-verdict";
 import { type MarkHue, markHue } from "../mark";
@@ -70,7 +71,6 @@ import { folderOf } from "../projects";
 import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
-import { standsAlone } from "../tree";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
    What "ended since you last looked" means is the owner's looking on
@@ -629,7 +629,7 @@ export type NeedsItem =
  * session whose pane draws it, else the session that asked.
  */
 export const askView = (item: AskItem): string =>
-  item.origin ?? item.instanceId;
+  askOpens({ instanceId: item.instanceId, originInstanceId: item.origin });
 
 /* ── Naming ────────────────────────────────────────────────────────── */
 
@@ -748,7 +748,7 @@ function placeOfRow(row: BoardRow): string {
 
 /** When a session last moved: its pulse, else the hub's own update time. */
 export function lastAt(row: BoardRow): number {
-  return cawco.pulseAt(row.id) ?? epochOf(row, "updatedAt");
+  return movedAt(row, cawco.pulseAt(row.id));
 }
 
 /**
@@ -831,9 +831,7 @@ const enteredWorking = new Map<string, number>();
  * test the Delegates switch and the tabs' counts both read.
  */
 export const isDelegate = (row: BoardRow): boolean =>
-  !standsAlone(row) ||
-  (!!row.parentInstanceId &&
-    cawco.instanceIndex.byId.has(row.parentInstanceId));
+  isDelegateOf(row, (id) => cawco.instanceIndex.byId.has(id));
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
@@ -1385,34 +1383,27 @@ class Home {
    * just cancelled: its tab closed for the fleet page (move design §2c), and
    * its row is on its way out.
    */
-  readonly landing = $derived.by<string | null>(() => {
-    const waiting = this.needs.find(
-      (item) => item.kind === "ask" || item.kind === "artifact"
-    );
-    if (waiting?.kind === "ask") {
-      return askView(waiting);
-    }
-    if (waiting?.kind === "artifact") {
-      return waiting.instanceId;
-    }
-    const cancelled = new Set(
-      cawco.moves
-        .filter((job) => job.stage === "cancelled")
-        .map((job) => job.targetInstanceId)
-    );
-    // The one that moved last; of two that moved together, the first listed.
-    let latest: { at: number; id: string } | null = null;
-    for (const row of cawco.runningInstances) {
-      if (isDelegate(row) || cancelled.has(row.id)) {
-        continue;
-      }
-      const at = lastAt(row);
-      if (latest === null || at > latest.at) {
-        latest = { at, id: row.id };
-      }
-    }
-    return latest?.id ?? null;
-  });
+  readonly landing = $derived.by<string | null>(() =>
+    landingOf({
+      waits: this.needs.flatMap((item) => {
+        if (item.kind === "ask") {
+          return [{ opens: askView(item), raisedAt: item.raisedAt }];
+        }
+        if (item.kind === "artifact") {
+          return [{ opens: item.instanceId, raisedAt: item.raisedAt }];
+        }
+        return [];
+      }),
+      rows: cawco.runningInstances,
+      pulseAt: cawco.pulseAt,
+      listed: (id) => cawco.instanceIndex.byId.has(id),
+      cancelled: new Set(
+        cawco.moves
+          .filter((job) => job.stage === "cancelled")
+          .map((job) => job.targetInstanceId)
+      ),
+    })
+  );
 }
 
 /**
