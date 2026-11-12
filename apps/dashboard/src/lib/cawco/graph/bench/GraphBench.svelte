@@ -62,6 +62,7 @@
     face,
     also = [],
     props = false,
+    stale = false,
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
@@ -73,6 +74,8 @@
     also?: string[];
     /** The form's props on the Dials card, through the real SheetInspector. */
     props?: boolean;
+    /** The hub's link down: the stage holds its last drawing (Not live). */
+    stale?: boolean;
   } = $props();
 
   /** Under 640px the panel is a phone's sheet: Close leads its head. */
@@ -443,6 +446,10 @@
   /** The component's own measure: a component held to a measure (the form's `max-w-c-measure`) is that wide, else its story's width. */
   let held = $state<number | null>(null);
   const measure = $derived(Math.min(own, held ?? own));
+  /** A device's width he picked; Adapt (the stage's own width, the page's whole) lays the drawing out to the page, as the stage page does. */
+  const fixed = $derived(
+    picked !== null && Math.abs(picked - room) > 1 ? picked : null
+  );
   /** The width the page has for the drawing. */
   const space = $derived(room > 0 ? room - gutter : measure);
   /**
@@ -450,14 +457,14 @@
    * else its own measure, or the widest width that fits the page where the
    * measure doesn't (a fluid component lays itself out to it, at 1:1).
    */
-  const width = $derived(picked ?? Math.min(measure, space));
+  const width = $derived(fixed ?? Math.min(measure, space));
   /** A width he picked wider than the page, scaled to fit it; 1:1 otherwise. */
-  const fit = $derived(picked === null ? 1 : Math.min(1, space / picked));
+  const fit = $derived(fixed === null ? 1 : Math.min(1, space / fixed));
   /** The drawing's height as laid out, px, for the box its scale stands in. */
   let tall = $state(0);
   // The drawing laid out: its measure the stage's split gives it, as the page says it.
   $effect(() => {
-    const at = picked ?? measure;
+    const at = fixed ?? measure;
     const scale = fit;
     const height = tall;
     untrack(() => {
@@ -600,6 +607,7 @@
           {link}
           keptDials={turned}
           {spec}
+          {stale}
           startFace={face}
         />
       </div>

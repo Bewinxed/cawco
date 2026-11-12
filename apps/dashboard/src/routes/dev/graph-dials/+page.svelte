@@ -5,7 +5,7 @@
    * with two of them turned, `?dials=none` with none, `?menu` with a second
    * component on its way, so the title is the components' menu, `?props`
    * with the form's props on the Dials card, written to the bench's copy
-   * of its states file.
+   * of its states file, `?stale` with the hub's link down (Not live).
    */
   import { ROUTINE_DIALS_GROUPED } from "#lib/cawco/graph/bench/fixture.js";
   import GraphBench from "#lib/cawco/graph/bench/GraphBench.svelte";
@@ -21,5 +21,6 @@
   dials={query.get("dials") === "none" ? [] : ROUTINE_DIALS_GROUPED}
   face={query.get("face") === "dials" ? "dials" : undefined}
   props={query.has("props")}
+  stale={query.has("stale")}
   turned={query.has("turned") ? { radius: 4, fill: "#e8f1ee" } : {}}
 />

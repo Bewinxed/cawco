@@ -17,7 +17,7 @@
    * that stays on, compares the kept state with the one before it
    * (`previousOf`), and a press on another state compares with that one
    * instead: the page draws it hidden under the kept one, reads what
-   * differs and rings it; the stage's head lists each difference, a press
+   * differs and rings it; a glass over the stage lists each difference, a press
    * on a line bringing its ring into view. Several components under one
    * ask: one in front, the others behind its name's menu.
    *
@@ -72,7 +72,7 @@
     IconChevronRight,
     IconCompareLinear,
     IconEyeLinear,
-    IconMaximizeLinear,
+    IconMaximize,
     IconMonitorLinear,
     IconMoon,
     IconMoonLinear,
@@ -507,6 +507,26 @@
   const PHONE_LINE = 640;
   /** The pane is a phone's width: the Map face is a list. */
   const narrow = $derived(surface > 0 && surface < PHONE_LINE);
+  /** The width the tools' full row needs on one line, px (PreviewTools `need`), as it last stood unfolded. */
+  let toolsNeed = $state(0);
+  let toolsFull = $state(0);
+  /**
+   * The tools stand folded (the mode a menu, the view View options): on a
+   * phone's pane, or wherever the full row is wider than the stage, so the
+   * row never wraps (the owner's pin: "this should NOT be on a 2nd row").
+   */
+  const folded = $derived(
+    narrow || (toolsFull > 0 && stageAcross > 0 && stageAcross < toolsFull)
+  );
+  // The full row's need, kept from while it stood: folded, the row measures its compact form.
+  $effect(() => {
+    const need = toolsNeed;
+    if (!folded && need > 0) {
+      untrack(() => {
+        toolsFull = need;
+      });
+    }
+  });
 
   /** The state the stage stands at, as the page names it: a variant's own story or record set; at a width he picked that one of its stories is written for (its phone story at 390), that story. */
   const refOf = (on: Review, pick: Pick, atWidth: number | null): StateRef => {
@@ -1109,6 +1129,12 @@
       widthPick = next === "adapt" ? "adapt" : Number(next);
     }
   };
+  /** The scale as a figure, while the drawing stands scaled; null at 1:1. */
+  const scalePercent = $derived(
+    link.laid && link.laid.scale < SCALED_UNDER
+      ? figure(Math.round(link.laid.scale * 100))
+      : null
+  );
 </script>
 
 <!-- What rises over the drawing: the map, the move, or the dials. -->
@@ -1394,6 +1420,24 @@
 <!-- The view as one button where the tools have no room for it (a phone,
      a narrow card): the widths, the appearance and Compare in a menu that
      opens above it. -->
+<!-- The scale a figure among the view's tools while the drawing stands
+     scaled down to fit, itself the Actual size switch (Apple's Actual
+     Size), in its glyph's place (the owner's pick on the stage notices,
+     "Into the floating tools"); while Actual size is on, 100%. -->
+{#snippet scaleFigure()}
+  <BarItem
+    data-slot="stage-scale"
+    form="words"
+    label={scalePercent
+      ? words.scaleShowActual(scalePercent)
+      : words.actualSize}
+    onclick={() => {
+      actual = !actual;
+    }}
+    pressed={actual}>{words.scalePercent(scalePercent ?? figure(100))}</BarItem
+  >
+{/snippet}
+
 {#snippet viewButton()}
   <BarGlass form="group">
     <DropdownMenu.Root>
@@ -1433,6 +1477,17 @@
             ></DropdownMenu.CheckboxItem
           >
         {/if}
+        {#if actual || scalePercent}
+          <!-- Folded, the scale stands with the widths it follows from,
+               in View options, so the row holds to one line. -->
+          <DropdownMenu.CheckboxItem bind:checked={actual}
+            ><IconMaximize /><span
+              >{scalePercent
+                ? words.actualSizeFrom(scalePercent)
+                : words.actualSize}</span
+            ></DropdownMenu.CheckboxItem
+          >
+        {/if}
         {#if tunable}
           <DropdownMenu.CheckboxItem
             checked={rising === "dials"}
@@ -1462,10 +1517,10 @@
      to be directly visible"): the widths as their devices' glyphs, the
      component's own first where no listed width is it, each saying its
      figure in its name and tooltip;
-     light or dark; Reduce motion; Compare; Actual size while the drawing
-     stands scaled, or while it is on. -->
+     light or dark; the dials; Compare; the scale, itself Actual size, while
+     the drawing stands scaled, or while Actual size is on. -->
 {#snippet viewTools()}
-  <div class="flex flex-wrap items-center justify-end gap-space-2">
+  <div class="flex items-center gap-space-2">
     <BarSegments
       label={words.width}
       onValueChange={pickWidth}
@@ -1505,15 +1560,8 @@
           pressed={comparing}
         />
       {/if}
-      {#if actual || (link.laid && link.laid.scale < SCALED_UNDER)}
-        <BarItem
-          icon={IconMaximizeLinear}
-          label={words.actualSize}
-          onclick={() => {
-            actual = !actual;
-          }}
-          pressed={actual}
-        />
+      {#if actual || scalePercent}
+        {@render scaleFigure()}
       {/if}
     </BarGlass>
   </div>
@@ -1566,9 +1614,6 @@
             flipped = !flipped;
           }}
           name={keptState?.name ?? ""}
-          scale={link.laid && link.laid.scale < SCALED_UNDER
-            ? words.scaledTo(figure(Math.round(link.laid.scale * 100)))
-            : null}
           {stale}
           variant={keptVariant?.name ?? null}
         />
@@ -1623,27 +1668,32 @@
             </div>
           </ThreadSheet>
         {/if}
-        <!-- Under the phone line the row folds to one line: the mode and
-                 the view each one button opening its menu above it, the
-                 states' group as it is. -->
+        <!-- The row folds on a phone's pane, or wherever its full form is
+             wider than the stage: the mode and the view each one button
+             opening its menu above it, the states' group as it is. -->
         <PreviewTools
           away={narrow && link.scrolledDown && !rising}
-          spread={!narrow}
+          spread={!folded}
           bind:height={toolsHeight}
+          bind:need={toolsNeed}
         >
           <div class="flex items-center">
-            {#if narrow}
+            {#if folded}
               {@render modeCompact?.()}
             {:else}
               {@render modeTools?.()}
             {/if}
           </div>
-          {@render headLead()}
+          <!-- Folded, the states' group gives up width first, its name cut
+               at its end, so the row holds to one line. -->
+          <div class="flex min-w-0">
+            {@render headLead()}
+          </div>
           <!-- What changed since he looked, beside the view (the owner's
                    pick: "On the page only"). -->
           <div class="flex items-end gap-space-2">
             {@render changesTools?.()}
-            {#if narrow}
+            {#if folded}
               {@render viewButton()}
             {:else}
               {@render viewTools()}
