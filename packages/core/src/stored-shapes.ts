@@ -1727,71 +1727,6 @@ const ProjectNoteShape = declared(
 );
 export const ProjectNoteSchema: z.ZodType<ProjectNoteType> = ProjectNoteShape;
 
-const DelegateAskStatusShape = declared(
-  z.enum(["pending", "answered", "denied"]),
-  "DelegateAskStatus",
-  "packages/core/src/protocol.ts"
-);
-
-const DelegateEventBaseShape = declared(
-  z.object({
-    createdAt: z.string(),
-    id: z.number(),
-    instanceId: z.string(),
-    parentInstanceId: z.string(),
-    requestId: z.string().nullable(),
-    requestKind: z.enum(["question", "tool"]).nullable(),
-    status: DelegateAskStatusShape.nullable(),
-    toolName: z.string().nullable(),
-  }),
-  "DelegateEventBase",
-  "packages/core/src/protocol.ts"
-);
-
-const DelegateEventShape = declared(
-  z.union([
-    DelegateEventBaseShape.extend({
-      kind: z.literal("ask"),
-      payload: z.object({
-        input: z.record(z.string(), z.unknown()).optional(),
-      }),
-    }),
-    DelegateEventBaseShape.extend({
-      kind: z.literal("answer"),
-      payload: z.object({
-        behavior: z.string(),
-        answers: z.record(z.string(), z.unknown()).optional(),
-      }),
-    }),
-    DelegateEventBaseShape.extend({
-      kind: z.literal("report"),
-      payload: z.object({
-        body: z.string(),
-        failed: z.boolean(),
-        headline: z.string().optional(),
-        notice: z.literal(true).optional(),
-        outputs: z.array(z.string()).optional(),
-        resultId: z.string().optional(),
-        completedAt: z.string().optional(),
-      }),
-    }),
-  ]),
-  "DelegateEvent",
-  "packages/core/src/protocol.ts"
-);
-
-const DelegateEventPayloadShape = declared(
-  z.union([
-    DelegateEventShape.options[2].shape.payload,
-    DelegateEventShape.options[1].shape.payload,
-    DelegateEventShape.options[0].shape.payload,
-  ]),
-  "DelegateEventPayload",
-  "packages/core/src/protocol.ts"
-);
-export const DelegateEventPayloadSchema: z.ZodType<DelegateEventPayloadType> =
-  DelegateEventPayloadShape;
-
 const ArtifactThumbnailShape = declared(
   z.object({
     at: z.string(),
@@ -2116,6 +2051,71 @@ const ConnectAccessShape = declared(
 );
 export const ConnectAccessSchema: z.ZodType<ConnectAccessType> =
   ConnectAccessShape;
+
+const DelegateAskStatusShape = declared(
+  z.enum(["pending", "answered", "denied"]),
+  "DelegateAskStatus",
+  "packages/core/src/protocol.ts"
+);
+
+const DelegateEventBaseShape = declared(
+  z.object({
+    createdAt: z.string(),
+    id: z.number(),
+    instanceId: z.string(),
+    parentInstanceId: z.string(),
+    requestId: z.string().nullable(),
+    requestKind: z.enum(["question", "tool"]).nullable(),
+    status: DelegateAskStatusShape.nullable(),
+    toolName: z.string().nullable(),
+  }),
+  "DelegateEventBase",
+  "packages/core/src/protocol.ts"
+);
+
+const DelegateEventShape = declared(
+  z.union([
+    DelegateEventBaseShape.extend({
+      kind: z.literal("ask"),
+      payload: z.object({
+        input: z.record(z.string(), z.unknown()).optional(),
+      }),
+    }),
+    DelegateEventBaseShape.extend({
+      kind: z.literal("answer"),
+      payload: z.object({
+        behavior: z.string(),
+        answers: z.record(z.string(), z.unknown()).optional(),
+      }),
+    }),
+    DelegateEventBaseShape.extend({
+      kind: z.literal("report"),
+      payload: z.object({
+        body: z.string(),
+        failed: z.boolean(),
+        headline: z.string().optional(),
+        notice: z.literal(true).optional(),
+        outputs: z.array(z.string()).optional(),
+        resultId: z.string().optional(),
+        completedAt: z.string().optional(),
+      }),
+    }),
+  ]),
+  "DelegateEvent",
+  "packages/core/src/protocol.ts"
+);
+
+const DelegateEventPayloadShape = declared(
+  z.union([
+    DelegateEventShape.options[2].shape.payload,
+    DelegateEventShape.options[1].shape.payload,
+    DelegateEventShape.options[0].shape.payload,
+  ]),
+  "DelegateEventPayload",
+  "packages/core/src/protocol.ts"
+);
+export const DelegateEventPayloadSchema: z.ZodType<DelegateEventPayloadType> =
+  DelegateEventPayloadShape;
 
 const VerbShape = declared(
   z.enum([
@@ -3258,9 +3258,6 @@ prove<
     Same<z.output<typeof DesignOfferNoteShape>, DesignOfferNoteType>,
     Same<z.output<typeof ProjectNoteEventShape>, ProjectNoteEventType>,
     Same<z.output<typeof ProjectNoteShape>, ProjectNoteType>,
-    Same<z.output<typeof DelegateAskStatusShape>, DelegateAskStatusType>,
-    Same<z.output<typeof DelegateEventShape>, DelegateEventType>,
-    Same<z.output<typeof DelegateEventPayloadShape>, DelegateEventPayloadType>,
     Same<z.output<typeof ArtifactThumbnailShape>, ArtifactThumbnailType>,
     Same<z.output<typeof CompactStageShape>, CompactStageType>,
     Same<z.output<typeof AccountHueShape>, AccountHueType>,
@@ -3282,6 +3279,9 @@ prove<
     Same<z.output<typeof CheckoutMoveShape>, CheckoutMoveType>,
     Same<z.output<typeof ClaudeModelUsageShape>, ClaudeModelUsageType>,
     Same<z.output<typeof ConnectAccessShape>, ConnectAccessType>,
+    Same<z.output<typeof DelegateAskStatusShape>, DelegateAskStatusType>,
+    Same<z.output<typeof DelegateEventShape>, DelegateEventType>,
+    Same<z.output<typeof DelegateEventPayloadShape>, DelegateEventPayloadType>,
     Same<z.output<typeof VerbShape>, VerbType>,
     Same<z.output<typeof EnvelopeShape>, EnvelopeType>,
     Same<z.output<typeof ExternalSourceShape>, ExternalSourceType>,
