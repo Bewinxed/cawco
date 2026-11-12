@@ -519,6 +519,7 @@
 @custom-variant slot-msg (&[data-slot="msg"]);
 @custom-variant slot-name (&[data-slot="name"]);
 @custom-variant slot-name-lead (&[data-slot="name-lead"]);
+@custom-variant slot-name-line (&[data-slot="name-line"]);
 @custom-variant slot-needs (&[data-slot="needs"]);
 @custom-variant slot-node-card (&[data-slot="node-card"]);
 @custom-variant slot-note (&[data-slot="note"]);
@@ -672,6 +673,7 @@
 @custom-variant slot-tree-mark-echo-box (&[data-slot="tree-mark-echo-box"]);
 @custom-variant slot-tree-mark-rest (&[data-slot="tree-mark-rest"]);
 @custom-variant slot-tree-node (&[data-slot="tree-node"]);
+@custom-variant slot-trim-chip (&[data-slot="trim-chip"]);
 @custom-variant slot-turn (&[data-slot="turn"]);
 @custom-variant slot-value (&[data-slot="value"]);
 @custom-variant slot-view-bar (&[data-slot="view-bar"]);

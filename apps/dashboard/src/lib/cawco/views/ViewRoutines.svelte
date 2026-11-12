@@ -16,7 +16,8 @@
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
+  import Caw from "#lib/cawco/home/Caw.svelte";
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
@@ -44,12 +45,14 @@
    * the soonest next run. The row opens its detail in place (RoutineDetail).
    * On a narrow ledger Last and Next fold into the schedule's line.
    *
-   * Under the ledger's card, Caw suggests the unused skills and servers
-   * routine (suggestions/CawSuggests) as the next row the ledger would hold,
-   * on the page in the suggestion's coral dotted edge, its mark, words and
-   * acts on the ledger's own columns. Turn on makes it, a row like the
-   * others; Not now waves it away; either keeps it gone from this project
-   * (hub unused-trim.ts). With no routine yet the empty state stands whole,
+   * Caw suggests the unused skills and servers routine as the ledger's last
+   * row, inside its card on its own columns, at a routine row's height and
+   * in its type: Caw's still in the state column, its name with a Suggested
+   * chip over why, Turn on where Next run's times start, and an ✕ (Not now)
+   * where a row's ⋯ stands, the row traced in the suggestion's coral dotted
+   * edge. It does not open. Turn on makes it, a row like the others; Not now
+   * waves it away; either keeps it gone from this project (hub
+   * unused-trim.ts). With no routine yet the empty state stands whole,
    * and the suggestion is its last chip: its ask in the composer, unsent,
    * and Caw turns the routine on when it goes (hub routines.ts
    * `routine_update`).
@@ -105,7 +108,6 @@
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { GLYPHS } from "#lib/cawco/starter-glyphs.js";
-  import CawSuggests from "#lib/cawco/suggestions/CawSuggests.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -120,8 +122,10 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconClock,
+    IconClose,
     IconHook,
     IconHourglass,
     IconNeedsYou,
@@ -273,6 +277,24 @@
   // --- Caw's suggestion: the unused skills and servers routine -------------------
 
   const offered = $derived(page?.trimOffered ?? false);
+  /** Caw's still in the state column: as wide as the column's lead (`--c-row-lead`, 28px). */
+  const CAW_LEAD = 28;
+  /** The Suggested chip stands under the name: beside it, the name would be cut. */
+  let chipUnder = $state(false);
+  /** Whether the name, the gap and the chip are wider than the cell's words column. */
+  function chipCrowds(column: HTMLElement): boolean {
+    const name = column.querySelector('[data-slot="name"]');
+    const chip = column.querySelector('[data-slot="trim-chip"]');
+    const line = column.querySelector('[data-slot="name-line"]');
+    if (!(name && chip && line)) {
+      return false;
+    }
+    const gap = Number.parseFloat(getComputedStyle(line).columnGap) || 0;
+    return (
+      name.scrollWidth + gap + chip.getBoundingClientRect().width >
+      column.clientWidth
+    );
+  }
   /** The answer on its way to the hub; null at rest. */
   let answering = $state<"on" | "dismissed" | null>(null);
   /** Why the hub refused the last answer, said under the suggestion until the next. */
@@ -732,9 +754,6 @@
       hideable: true,
       body: "capped",
       card: true,
-      // Under the ledger's card, Caw's suggestion is the next row it would
-      // hold, outside the card (CawSuggests).
-      ...(offered && !empty ? { foot: trimSuggestion } : {}),
     },
     sources: {
       title: words.sources,
@@ -1079,20 +1098,116 @@
   </Collapsible.Root>
 {/snippet}
 
-<!-- Caw's suggestion, and why the hub refused an answer to it, under it. -->
-{#snippet trimSuggestion()}
-  <CawSuggests
-    act={words.trimTurnOn}
-    dismiss={words.trimNotNow}
-    label={words.trimLabel}
-    onaccept={() => answerTrim("on")}
-    ondismiss={() => answerTrim("dismissed")}
-    reason={words.trimReason}
-    title={words.trimName}
-  />
-  {#if trimRefused}
-    <RowFault reason={trimRefused} />
-  {/if}
+<!-- Caw's suggestion, the ledger's last row: on its columns, at a routine
+     row's height and in its type, traced in the suggestion's coral dotted
+     edge drawn inside its box (so no column moves), its lower corners on
+     the card's while it is the card's last. It opens nothing. Why the hub
+     refused an answer stands under it, as a routine's refusal does. -->
+{#snippet trimRow()}
+  {@const busy = answering !== null}
+  <Table.Body data-view-routines-suggestion>
+    <Table.Row class="relative" variant="unruled">
+      <Table.Cell class="w-(--col-state)" variant="list">
+        <!-- The edge, an element of the row's first cell standing over the
+             whole row (the row is its containing block): a pseudo-element
+             of the row itself would be laid out as one more cell. -->
+        <span
+          data-slot="suggestion-edge"
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-0 outline-2 -outline-offset-2 outline-brand-solid outline-dotted data-card-last:rounded-b-lg"
+          data-card-last={trimRefused ? undefined : ""}
+        ></span>
+        <span
+          data-slot="lead"
+          aria-label={words.trimLabel}
+          class="grid w-c-row-lead place-items-center *:shrink-0"
+          role="img"><Caw size={CAW_LEAD} status="ready" still /></span
+        >
+      </Table.Cell>
+      <Table.Cell variant="list">
+        <!-- Its name and the Suggested chip on one line while they fit;
+             where they don't, the chip goes under the name, before why,
+             so the name is never cut for it and the row keeps two lines.
+             The chip's line box is its line's, so it adds no height. -->
+        <div
+          class="min-w-0"
+          {@attach frameSize(chipCrowds, (crowds) => {
+            chipUnder = crowds;
+          })}
+        >
+          <span
+            data-slot="name-line"
+            class="flex items-center gap-x-space-2 type-label"
+          >
+            <span data-slot="name" class="min-w-0 truncate text-ink-row"
+              >{words.trimName}</span
+            >
+            {#if !chipUnder}{@render suggestedChip()}{/if}
+          </span>
+          <span
+            data-slot="sub"
+            class="flex items-center gap-x-space-2 type-meta text-ink-muted"
+          >
+            {#if chipUnder}{@render suggestedChip()}{/if}
+            <span class="min-w-0 truncate" title={words.trimReason}
+              >{words.trimReason}</span
+            >
+          </span>
+          <!-- On a narrow ledger, Turn on under the line, on the name's edge. -->
+          <span
+            data-slot="folded"
+            class="hidden pt-space-2 @max-table-34rem/table:block"
+            >{@render turnOn(busy)}</span
+          >
+        </div>
+      </Table.Cell>
+      <Table.Cell data-col-last fold="measure" variant="list" />
+      <Table.Cell data-cell="next" fold="measure" variant="list">
+        {@render turnOn(busy)}
+      </Table.Cell>
+      <Table.Cell edge="end" variant="list">
+        <span class="relative z-1 inline-flex">
+          <Tip label={words.trimNotNow}>
+            {#snippet children(tip)}
+              <Button
+                {...tip}
+                aria-label={words.trimNotNow}
+                data-ghost
+                disabled={busy}
+                onclick={() => answerTrim("dismissed")}
+                size="icon-sm"
+                variant="ghost"><IconClose /></Button
+              >
+            {/snippet}
+          </Tip>
+        </span>
+      </Table.Cell>
+    </Table.Row>
+    {#if trimRefused}
+      <tr data-routine-refusal>
+        <td class="p-0" colspan={span}>
+          <RowFault
+            end="var(--space-3)"
+            indent="var(--space-3)"
+            reason={trimRefused}
+          />
+        </td>
+      </tr>
+    {/if}
+  </Table.Body>
+{/snippet}
+{#snippet suggestedChip()}
+  <span data-slot="trim-chip" class="flex h-lh shrink-0 items-center"
+    ><Badge><span>{words.trimSuggested}</span></Badge></span
+  >
+{/snippet}
+{#snippet turnOn(busy: boolean)}
+  <Button
+    disabled={busy}
+    onclick={() => answerTrim("on")}
+    size="sm"
+    variant="outline">{words.trimTurnOn}</Button
+  >
 {/snippet}
 
 <!-- One chip of the empty state: its glyph and words, a press putting
@@ -1242,6 +1357,9 @@
         {#each sorted as routine (routine.id)}
           {@render routineRows(routine)}
         {/each}
+        {#if offered}
+          {@render trimRow()}
+        {/if}
       </Table.Root>
     </div>
   {/if}

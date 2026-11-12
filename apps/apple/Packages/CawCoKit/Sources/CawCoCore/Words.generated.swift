@@ -3114,6 +3114,9 @@ public enum Words {
 
         public static let trimName = "Unused skills and servers"
 
+        /// The chip after its name, saying the row is Caw's offer, not a routine yet.
+        public static let trimSuggested = "Suggested"
+
         public static let trimReason = "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days."
 
         public static let trimLabel = "Caw suggests a routine"

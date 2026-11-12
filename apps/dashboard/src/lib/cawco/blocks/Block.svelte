@@ -13,8 +13,6 @@
    * - **Body:** the block's content, as its card or bare (a view or a board
    *   draws its own surfaces); a list stands at most --c-block-body-max tall
    *   on a desk and scrolls inside; the board fills the page's height.
-   * - **Foot:** what stands under the body, outside its card, on the page:
-   *   Caw's suggestion of the next row a ledger would hold (CawSuggests).
    *
    * While a block is in the air its own box stays as a slot (surface-recess,
    * a dashed control edge), and the block the pointer is nearest draws the
@@ -51,7 +49,6 @@
     meta,
     action,
     children,
-    foot,
     width,
     span,
     columns,
@@ -79,8 +76,6 @@
     /** The block's own action, before its ⋯. */
     action?: Snippet;
     children: Snippet;
-    /** Under the body, outside its card, on the page. */
-    foot?: Snippet;
     width: BlockWidth;
     /** The grid's columns it takes. */
     span: number;
@@ -219,14 +214,6 @@
   >
     {@render children()}
   </div>
-  {#if foot}
-    <div
-      data-slot="block-foot"
-      class="min-w-0 group-data-dragging/block:invisible"
-    >
-      {@render foot()}
-    </div>
-  {/if}
   <!-- The drop indicator: across the target's edge, in the gap between
        blocks. -->
   {#if over}

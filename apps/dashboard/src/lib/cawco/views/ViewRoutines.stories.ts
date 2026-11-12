@@ -16,7 +16,7 @@ export default {
   parameters: { viewport: 1440 },
 };
 
-/** Caw suggests a routine under my routines. */
+/** Caw suggests a routine as the last row of my list. */
 export const Suggested = {};
 
 /** I have no routines yet, and Caw suggests one. */

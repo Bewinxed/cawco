@@ -248,9 +248,11 @@ export const routinesWords = {
   actionCancelled: "Cancelled",
   from: (who: string) => `From ${who}`,
 
-  // Caw's suggestion of the unused skills and servers routine, at the
-  // Routines ledger's foot, or the empty page's last chip (hub unused-trim.ts).
+  // Caw's suggestion of the unused skills and servers routine, the Routines
+  // ledger's last row, or the empty page's last chip (hub unused-trim.ts).
   trimName: "Unused skills and servers",
+  /** The chip after its name, saying the row is Caw's offer, not a routine yet. */
+  trimSuggested: "Suggested",
   trimReason:
     "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days.",
   trimLabel: "Caw suggests a routine",
