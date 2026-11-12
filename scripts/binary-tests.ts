@@ -93,11 +93,14 @@ const testBinary = join(staging, "cawco-test");
 /** A command run to its end: its output goes to this run's, and a non-zero exit fails it. */
 const run: Runner = async (command, at, captured, extra) => {
   const started = performance.now();
+  // A CawCo session's shell points these at its own container socket, which makes `podman` a remote client; the
+  // tests need the host's own rootless podman.
+  const { CONTAINER_HOST: _c, DOCKER_HOST: _d, ...inherited } = process.env;
   const child = Bun.spawn(command, {
     cwd: at ?? repo,
     stdout: captured ? "pipe" : "inherit",
     stderr: "inherit",
-    env: { ...process.env, ...extra },
+    env: { ...inherited, ...extra },
   });
   const text = captured
     ? await new Response(child.stdout as ReadableStream).text()

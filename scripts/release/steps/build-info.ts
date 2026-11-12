@@ -5,7 +5,7 @@ import { alone, type StepContext } from "./shared";
 /**
  * The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
  * it overlaps its hub's. The info build runs only under a scratch HOME and an isolated loopback hub
- * (scripts/binary/proof-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
+ * (scripts/binary/test-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
  */
 export const buildInfo = async ({
   run,

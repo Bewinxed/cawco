@@ -55,7 +55,7 @@ CONF
   # The storage comes from storage.conf alone: any of --root, --runroot or --storage-driver on the command line drops
   # its driver options, `additionalimagestores` among them (measured on podman 5.7: `info` shows GraphOptions {} and
   # the store's images are pulled from a registry instead), so the instance would never see the image store.
-  echo "env CONTAINERS_CONF=$root.containers.conf CONTAINERS_STORAGE_CONF=$root.storage.conf REGISTRY_AUTH_FILE=$root.auth.json podman"
+  echo "env CONTAINERS_CONF=$root.containers.conf CONTAINERS_STORAGE_CONF=$root.storage.conf REGISTRY_AUTH_FILE=$root.auth.json podman --tmpdir $run/tmp"
 }
 
 # The instance's run dir and config files, its storage kept (the image store's instance).

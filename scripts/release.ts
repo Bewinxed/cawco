@@ -540,7 +540,7 @@ const signalGroupOf = async (
 };
 /**
  * How long a stopped command has to end before its group is killed: the
- * container proofs' own cleanup (prove-stage1.sh `finish`, prove-stage2.sh
+ * container tests' own cleanup (smoke-test.sh `finish`, e2e-test.sh
  * `rig_done`) removes every rig's containers through its podman instance and
  * then its vfs storage, which takes tens of seconds; a group killed while it
  * did left its containers, pasta and aardvark-dns running (obelisk,
