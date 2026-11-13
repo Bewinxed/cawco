@@ -15,7 +15,9 @@
  * the MCP server's own `Authorization: Bearer` header is: the hub takes no
  * call on a session's name alone.
  */
+
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { refusalWords } from "@cawco/core/hub-refusal";
 import { type HubRequest, hubAt, hubRequest } from "@cawco/core/hub-request";
 import {
   envelopeText,
@@ -90,7 +92,9 @@ export const listTools = async (
     hubRequest("GET /api/delegation/tools", { query: { instanceId } })
   );
   if (!response.ok) {
-    throw new ToolError(`${response.status}: ${await response.text()}`);
+    throw new ToolError(
+      `${response.status}: ${refusalWords(await response.text(), response.status)}`
+    );
   }
   const { tools } = (await response.json()) as {
     tools: { name: string; description: string }[];
@@ -147,7 +151,9 @@ export const callTool = async (
     }
   );
   if (!response.ok) {
-    throw new ToolError(`${response.status}: ${await response.text()}`);
+    throw new ToolError(
+      `${response.status}: ${refusalWords(await response.text(), response.status)}`
+    );
   }
   const result = (await response.json()) as ToolEnvelope;
   const text = envelopeText(result);

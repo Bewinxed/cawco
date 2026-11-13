@@ -3,12 +3,37 @@
  */
 
 import { agentProblem, parseAgentFrontMatter } from "@cawco/core/fleet";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, status, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 
+/**
+ * Why a write naming `expectedHash` may not land on subagent `name`: the
+ * stored file when it moved since that read or when "" asked for a new one
+ * under a taken name (409), a refusal when the read file is gone (404).
+ * Undefined when it may, or when no hash was named (the dashboard's save).
+ */
+const agentMoved = (
+  db: Pick<HubContext["db"], "listFleetAgents">,
+  name: string,
+  expectedHash: string | undefined
+) => {
+  if (expectedHash === undefined) {
+    return;
+  }
+  const current = db.listFleetAgents().find((row) => row.name === name);
+  if (!current) {
+    return expectedHash === ""
+      ? undefined
+      : problem(404, {
+          code: "no-subagent",
+          detail: `the fleet keeps no subagent ${name}`,
+        });
+  }
+  return current.hash === expectedHash ? undefined : status(409, current);
+};
+
 export const fleetAgentRoutes = ({
-  agentMoved,
   db,
   fanOutAgents,
   pushAgents,
@@ -16,12 +41,7 @@ export const fleetAgentRoutes = ({
   unpushable,
 }: Pick<
   HubContext,
-  | "agentMoved"
-  | "db"
-  | "fanOutAgents"
-  | "pushAgents"
-  | "registry"
-  | "unpushable"
+  "db" | "fanOutAgents" | "pushAgents" | "registry" | "unpushable"
 >) =>
   new Elysia()
     // A subagent is its markdown file (NEW.md §11): front matter over a body
@@ -40,17 +60,17 @@ export const fleetAgentRoutes = ({
           expectedHash: t.Optional(t.String()),
         }),
       },
-      ({ params, body, status }) => {
-        const problem = agentProblem(
+      ({ params, body }) => {
+        const misfit = agentProblem(
           parseAgentFrontMatter(body.content),
           params.name
         );
-        if (problem) {
-          return status(400, problem);
+        if (misfit) {
+          return problem(400, { code: "agent-invalid", detail: misfit });
         }
-        const moved = agentMoved(params.name, body.expectedHash);
+        const moved = agentMoved(db, params.name, body.expectedHash);
         if (moved) {
-          return status(moved.status, moved.answer);
+          return moved;
         }
 
         const agent = db.putFleetAgent({
@@ -68,17 +88,20 @@ export const fleetAgentRoutes = ({
     .delete(
       "/api/fleet/agents/:name",
       { query: t.Object({ expectedHash: t.Optional(t.String()) }) },
-      ({ params, query, status }) => {
-        const moved = agentMoved(params.name, query.expectedHash);
+      ({ params, query }) => {
+        const moved = agentMoved(db, params.name, query.expectedHash);
         if (moved) {
-          return status(moved.status, moved.answer);
+          return moved;
         }
         const trashed = db.trash.put(
           { kind: "agent", key: params.name },
           Date.now()
         );
         if (trashed === undefined) {
-          return status(404, `the fleet keeps no subagent ${params.name}`);
+          return problem(404, {
+            code: "no-subagent",
+            detail: `the fleet keeps no subagent ${params.name}`,
+          });
         }
         return undoable(trashed);
       }

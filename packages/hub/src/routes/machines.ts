@@ -1,8 +1,9 @@
 /**
  * Pausing a machine and starting it again.
  */
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { machineOut } from "../machine-out";
 
 export const machinePauseRoutes = ({
   identities,
@@ -29,16 +30,19 @@ export const machinePauseRoutes = ({
           call: t.Optional(t.String()),
         }),
       },
-      async ({ params, body, status, request }) => {
+      async ({ params, body, request }) => {
         const until = new Date(body.until);
         if (Number.isNaN(until.getTime())) {
-          return status(
-            400,
-            `until: "${body.until}" is not a time; send an ISO 8601 time, such as 2026-10-15T21:00:00Z.`
-          );
+          return problem(400, {
+            code: "until-not-time-send",
+            detail: `until: "${body.until}" is not a time; send an ISO 8601 time, such as 2026-10-15T21:00:00Z.`,
+          });
         }
         if (until.getTime() <= Date.now()) {
-          return status(400, `until: ${body.until} has already passed.`);
+          return problem(400, {
+            code: "until-has-already-passed",
+            detail: `until: ${body.until} has already passed.`,
+          });
         }
         // The session asking, when a session's credential asks it.
         const asker = identities.resolve(request.headers.get("authorization"));
@@ -50,18 +54,29 @@ export const machinePauseRoutes = ({
           ? machineRow(params.machineId)
           : undefined;
         if (!row) {
-          return status(404, "No machine with that id on this hub.");
+          return problem(404, {
+            code: "no-machine",
+            detail: "No machine with that id on this hub.",
+          });
         }
         publishInstances(params.machineId);
-        return row;
+        return machineOut(row);
       }
     )
     // Ends a machine's pause now: what it was kept goes, in order.
-    .post("/api/machines/:machineId/resume", ({ params, status }) => {
+    .post("/api/machines/:machineId/resume", ({ params }) => {
       if (!machineRow(params.machineId)) {
-        return status(404, "No machine with that id on this hub.");
+        return problem(404, {
+          code: "no-machine",
+          detail: "No machine with that id on this hub.",
+        });
       }
       machinePause.resume(params.machineId);
       const row = machineRow(params.machineId);
-      return row ?? status(404, "No machine with that id on this hub.");
+      return row
+        ? machineOut(row)
+        : problem(404, {
+            code: "no-machine",
+            detail: "No machine with that id on this hub.",
+          });
     });

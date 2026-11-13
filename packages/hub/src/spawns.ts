@@ -19,6 +19,7 @@ import type {
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { ElysiaStatus } from "elysia";
 import { StartsHeld } from "./continuations";
 import { peek } from "./cut-turns";
 import type { DbShape } from "./db/index";
@@ -486,10 +487,14 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (!indexed) {
       return null;
     }
+    const root = projectRoot(projectId);
+    if (root instanceof ElysiaStatus) {
+      return null;
+    }
     try {
       const { accounts } = new TaskDoc(
         indexed.path,
-        readFileSync(join(projectRoot(projectId), indexed.path), "utf8")
+        readFileSync(join(root, indexed.path), "utf8")
       ).read().fields;
       return accounts.length > 0 ? accounts : null;
     } catch {

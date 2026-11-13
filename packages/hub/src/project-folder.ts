@@ -43,15 +43,15 @@ import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
-import { type Ran, runCaptured } from "@cawco/core/run-captured";
+import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { resolveReal } from "@cawco/core/workspace-judge";
-import { Elysia, status, t } from "elysia";
-import { StatusRefusal } from "./refusal";
+import { Elysia, ElysiaStatus, problem, t, type UnwrapSchema } from "elysia";
+import type { AnyProblem } from "./refusal";
 
 /**
  * Where every project's folder lives: `projects/` beside the database, by
@@ -97,16 +97,17 @@ const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
 export const folderContent = (
   content: string,
   encoding: FolderEncoding = "utf8"
-): string | Uint8Array => {
+) => {
   if (encoding === "utf8") {
     return content;
   }
   const compact = content.replace(WHITESPACE, "");
   if (compact.length % 4 !== 0 || !BASE64.test(compact)) {
-    throw new FolderRefusal(
-      400,
-      "The content is not base64: give the file's bytes as standard base64 (A–Z, a–z, 0–9, + and /, padded with =)."
-    );
+    return problem(400, {
+      code: "folder-content-not-base64",
+      detail:
+        "The content is not base64: give the file's bytes as standard base64 (A–Z, a–z, 0–9, + and /, padded with =).",
+    });
   }
   return new Uint8Array(Buffer.from(compact, "base64"));
 };
@@ -178,21 +179,12 @@ export interface FolderHistory {
   path: string;
 }
 
-export type FolderRefusalStatus =
-  400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 503 | 504;
-
-/** A folder request the hub turns down, with the status and the words the caller reads. */
-export class FolderRefusal extends StatusRefusal<FolderRefusalStatus> {}
-
 /** An exclusive write refused: a file in its folder already holds its place (FolderWriteOptions.exclusive). */
-export class FolderTaken extends FolderRefusal {
-  constructor(rel: string, holder: string) {
-    super(
-      409,
-      `${rel} was not written: ${holder} already holds its place in the folder.`
-    );
-  }
-}
+const taken = (rel: string, holder: string) =>
+  problem(409, {
+    code: "folder-place-taken",
+    detail: `${rel} was not written: ${holder} already holds its place in the folder.`,
+  });
 
 const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 const DRIVE = /^[A-Za-z]:/u;
@@ -229,43 +221,44 @@ const size = (bytes: number): string =>
  * itself. Refuses anything that could reach past the folder or into its
  * history. Exported for the tools that name paths before they touch them.
  */
-export const folderPath = (raw: string): string => {
+export const folderPath = (raw: string) => {
   if (raw.length > PATH_LIMIT) {
-    throw new FolderRefusal(
-      400,
-      `The path is ${raw.length} characters long; paths stop at ${PATH_LIMIT}.`
-    );
+    return problem(400, {
+      code: "folder-path-too-long",
+      detail: `The path is ${raw.length} characters long; paths stop at ${PATH_LIMIT}.`,
+    });
   }
   if (hasControl(raw)) {
-    throw new FolderRefusal(
-      400,
-      "The path holds a control character; name files with printable characters."
-    );
+    return problem(400, {
+      code: "folder-path-control",
+      detail:
+        "The path holds a control character; name files with printable characters.",
+    });
   }
   if (raw.includes("\\")) {
-    throw new FolderRefusal(
-      400,
-      `${raw} uses a backslash; separate folders with "/".`
-    );
+    return problem(400, {
+      code: "folder-path-backslash",
+      detail: `${raw} uses a backslash; separate folders with "/".`,
+    });
   }
   if (isAbsolute(raw) || DRIVE.test(raw)) {
-    throw new FolderRefusal(
-      400,
-      `${raw} is an absolute path; name a path inside the project folder, like tasks/T-1.md.`
-    );
+    return problem(400, {
+      code: "folder-path-absolute",
+      detail: `${raw} is an absolute path; name a path inside the project folder, like tasks/T-1.md.`,
+    });
   }
   const parts = raw.split("/").filter((part) => part !== "" && part !== ".");
   if (parts.includes("..")) {
-    throw new FolderRefusal(
-      400,
-      `${raw} climbs out of the project folder with ".."; name a path inside it.`
-    );
+    return problem(400, {
+      code: "folder-path-outside",
+      detail: `${raw} climbs out of the project folder with ".."; name a path inside it.`,
+    });
   }
   if (parts.some((part) => part.toLowerCase() === ".git")) {
-    throw new FolderRefusal(
-      400,
-      `${raw} reaches into .git, the folder's history; only the hub writes there.`
-    );
+    return problem(400, {
+      code: "folder-path-in-git",
+      detail: `${raw} reaches into .git, the folder's history; only the hub writes there.`,
+    });
   }
   return parts.join("/");
 };
@@ -328,28 +321,34 @@ export const guardFolderFile = (
 };
 
 /** Refuses `bytes` for `rel` when its guard finds problems in them. */
-const guarded = (rel: string, bytes: Uint8Array): void => {
+const guarded = (rel: string, bytes: Uint8Array) => {
   const check = guards.get(rel);
   const problems = check ? check(new TextDecoder().decode(bytes)) : [];
-  if (problems.length > 0) {
-    throw new FolderRefusal(
-      422,
-      `${rel} was not written: ${problems.join(" ")}`
-    );
-  }
+  return problems.length > 0
+    ? problem(422, {
+        code: "folder-write-unfit",
+        detail: `${rel} was not written: ${problems.join(" ")}`,
+      })
+    : undefined;
 };
 
 /** The project's folder on disk, whether or not it has been made; refuses anything that is not a project id. */
-export const projectRoot = (projectId: string): string => {
+export const projectRoot = (projectId: string) => {
   if (projectId.startsWith(AREA_KEY)) {
     const areaId = projectId.slice(AREA_KEY.length);
     if (!PROJECT_ID.test(areaId)) {
-      throw new FolderRefusal(400, `${areaId} is not an area id.`);
+      return problem(400, {
+        code: "folder-area-id-unfit",
+        detail: `${areaId} is not an area id.`,
+      });
     }
     return join(AREAS_DIR, areaId);
   }
   if (!PROJECT_ID.test(projectId)) {
-    throw new FolderRefusal(400, `${projectId} is not a project id.`);
+    return problem(400, {
+      code: "folder-project-id-unfit",
+      detail: `${projectId} is not a project id.`,
+    });
   }
   return join(PROJECTS_DIR, projectId);
 };
@@ -404,12 +403,13 @@ const gitEnv = (): Record<string, string> => {
 };
 
 /** One git command against a project folder; answers its exit code and output. */
-const run = async (root: string, args: string[]): Promise<Ran> => {
+const run = async (root: string, args: string[]) => {
   if (!Bun.which("git")) {
-    throw new FolderRefusal(
-      503,
-      "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again."
-    );
+    return problem(503, {
+      code: "folder-git-missing",
+      detail:
+        "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again.",
+    });
   }
   const ran = await readWithin(GIT_TIMEOUT_MS, (signal) =>
     runCaptured(
@@ -438,36 +438,44 @@ const run = async (root: string, args: string[]): Promise<Ran> => {
       return ran.value;
     case "unanswered":
       // Not a git answer: never read as a failed or empty one.
-      throw new FolderRefusal(
-        504,
-        `git ${args[0]} did not finish within ${secondsOf(ran.after)} s in the project folder.`
-      );
+      return problem(504, {
+        code: "folder-git-unanswered",
+        detail: `git ${args[0]} did not finish within ${secondsOf(ran.after)} s in the project folder.`,
+      });
     default:
       unhandled("read", ran);
   }
 };
 
 /** {@link run}, refusing with the first line of git's own words when it fails. */
-const git = async (root: string, args: string[]): Promise<string> => {
+const git = async (root: string, args: string[]) => {
   const result = await run(root, args);
+  if (result instanceof ElysiaStatus) {
+    return result;
+  }
   if (result.code !== 0) {
     const said = result.stderr.trim().split("\n")[0]?.replace(TRAILING_DOT, "");
-    throw new FolderRefusal(
-      500,
-      `git ${args[0]} failed in the project folder: ${said || `exit ${result.code}`}.`
-    );
+    return problem(500, {
+      code: "folder-git-failed",
+      detail: `git ${args[0]} failed in the project folder: ${said || `exit ${result.code}`}.`,
+    });
   }
   return result.stdout;
 };
 
-/** A failed commit's refusal, saying the file was put back as it was. */
-const putBack = (error: unknown, rel: string): unknown =>
-  error instanceof FolderRefusal && error.status === 500
-    ? new FolderRefusal(500, `${error.message} ${rel} is as it was.`)
-    : error;
+/** A failed commit's refusal, saying (in `asWas`) the files were put back as they were. */
+const putBack = <R extends AnyProblem>(refused: R, asWas: string) =>
+  refused.status === 500
+    ? problem(500, {
+        code: "folder-git-failed",
+        detail: `${refused.response.detail} ${asWas}`,
+      })
+    : refused;
 
-const head = async (root: string): Promise<string> =>
-  (await git(root, ["rev-parse", "HEAD"])).trim();
+const head = async (root: string) => {
+  const out = await git(root, ["rev-parse", "HEAD"]);
+  return out instanceof ElysiaStatus ? out : out.trim();
+};
 
 /** `Name <email>` git accepts: no angle brackets or control characters in the name. */
 const signature = (author: FolderAuthor): string => {
@@ -482,13 +490,13 @@ const signature = (author: FolderAuthor): string => {
 };
 
 /** The commit message a caller asked for, trimmed; undefined for none, so the hub names the change. */
-const askedMessage = (message: string | undefined): string | undefined => {
+const askedMessage = (message: string | undefined) => {
   const trimmed = message?.trim();
   if (trimmed && trimmed.length > MESSAGE_LIMIT) {
-    throw new FolderRefusal(
-      400,
-      `The commit message is ${trimmed.length} characters long; messages stop at ${MESSAGE_LIMIT}.`
-    );
+    return problem(400, {
+      code: "folder-message-too-long",
+      detail: `The commit message is ${trimmed.length} characters long; messages stop at ${MESSAGE_LIMIT}.`,
+    });
   }
   return trimmed || undefined;
 };
@@ -503,8 +511,11 @@ const commitPaths = async (
   stage: string[],
   message: string,
   author: FolderAuthor
-): Promise<{ changed: boolean; sha: string }> => {
-  await git(root, stage);
+) => {
+  const staging = await git(root, stage);
+  if (staging instanceof ElysiaStatus) {
+    return staging;
+  }
   const staged = await run(root, [
     "diff",
     "--cached",
@@ -512,25 +523,33 @@ const commitPaths = async (
     "--",
     ...rels,
   ]);
-  if (staged.code === 0) {
-    return { sha: await head(root), changed: false };
+  if (staged instanceof ElysiaStatus) {
+    return staged;
   }
-  if (staged.code !== 1) {
-    throw new FolderRefusal(
-      500,
-      `git diff failed in the project folder: ${staged.stderr.trim()}`
-    );
+  if (staged.code !== 0 && staged.code !== 1) {
+    return problem(500, {
+      code: "folder-git-failed",
+      detail: `git diff failed in the project folder: ${staged.stderr.trim()}`,
+    });
   }
-  await git(root, [
-    "commit",
-    "-q",
-    `--author=${signature(author)}`,
-    "-m",
-    message,
-    "--",
-    ...rels,
-  ]);
-  return { sha: await head(root), changed: true };
+  if (staged.code === 1) {
+    const committed = await git(root, [
+      "commit",
+      "-q",
+      `--author=${signature(author)}`,
+      "-m",
+      message,
+      "--",
+      ...rels,
+    ]);
+    if (committed instanceof ElysiaStatus) {
+      return committed;
+    }
+  }
+  const sha = await head(root);
+  return sha instanceof ElysiaStatus
+    ? sha
+    : { sha, changed: staged.code === 1 };
 };
 
 /** {@link commitPaths} for one path. */
@@ -540,10 +559,10 @@ const commit = async (
   stage: string[],
   message: string,
   author: FolderAuthor
-): Promise<FolderCommit> => ({
-  path: rel,
-  ...(await commitPaths(root, [rel], stage, message, author)),
-});
+) => {
+  const done = await commitPaths(root, [rel], stage, message, author);
+  return done instanceof ElysiaStatus ? done : { path: rel, ...done };
+};
 
 // --- one project at a time ---------------------------------------------------
 
@@ -594,23 +613,32 @@ const exists = async (path: string): Promise<boolean> =>
  * AGENTS.md stub. Idempotent, and finishes a start an earlier run left half
  * done (a repository with no commit yet). Runs inside the project's turn.
  */
-const prepare = async (projectId: string, root: string): Promise<void> => {
+const prepare = async (projectId: string, root: string) => {
   if (ready.has(projectId)) {
     return;
   }
   // A read that outlived its project's forget (a task's triage, a waits
   // read) would make a new empty folder in the place its own goes back to.
   if (forgotten.has(projectId)) {
-    throw new FolderRefusal(404, projectTrashWords.forgottenFolder(projectId));
+    return problem(404, {
+      code: "folder-forgotten",
+      detail: projectTrashWords.forgottenFolder(projectId),
+    });
   }
   await mkdir(root, { recursive: true });
   if (!(await exists(join(root, ".git")))) {
-    await git(root, ["init", "-q"]);
+    const made = await git(root, ["init", "-q"]);
+    if (made instanceof ElysiaStatus) {
+      return made;
+    }
   }
   const started = await run(root, ["rev-parse", "--verify", "-q", "HEAD"]);
+  if (started instanceof ElysiaStatus) {
+    return started;
+  }
   if (started.code !== 0 && projectId.startsWith(AREA_KEY)) {
     // An area's folder holds no AGENTS.md: it is set up, never worked in.
-    await git(root, [
+    const first = await git(root, [
       "commit",
       "-q",
       "--allow-empty",
@@ -618,6 +646,9 @@ const prepare = async (projectId: string, root: string): Promise<void> => {
       "-m",
       "Start the area folder",
     ]);
+    if (first instanceof ElysiaStatus) {
+      return first;
+    }
   } else if (started.code !== 0) {
     const agents = join(root, "AGENTS.md");
     if (!(await exists(agents))) {
@@ -625,23 +656,35 @@ const prepare = async (projectId: string, root: string): Promise<void> => {
         scratchDir: join(root, ".git"),
       });
     }
-    await git(root, ["add", "--", "AGENTS.md"]);
-    await git(root, [
+    const added = await git(root, ["add", "--", "AGENTS.md"]);
+    if (added instanceof ElysiaStatus) {
+      return added;
+    }
+    const first = await git(root, [
       "commit",
       "-q",
       `--author=${HUB_NAME} <${NO_REPLY}>`,
       "-m",
       "Start the project folder",
     ]);
+    if (first instanceof ElysiaStatus) {
+      return first;
+    }
   }
   ready.add(projectId);
 };
 
 /** The folder's root for a read, made first when this is its first use. */
-const forReading = async (projectId: string): Promise<string> => {
+const forReading = async (projectId: string) => {
   const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
   if (!ready.has(projectId)) {
-    await inTurn(projectId, () => prepare(projectId, root));
+    const prepared = await inTurn(projectId, () => prepare(projectId, root));
+    if (prepared instanceof ElysiaStatus) {
+      return prepared;
+    }
   }
   return root;
 };
@@ -656,8 +699,9 @@ const forReading = async (projectId: string): Promise<string> => {
  * next command. r361, 2026-10-25: twenty delegates cut at 15:14:38, the
  * folder started at 15:14:43, and each boundary was handed over by 15:14:47.
  */
-export const makeProjectFolder = async (projectId: string): Promise<void> => {
-  await forReading(projectId);
+export const makeProjectFolder = async (projectId: string) => {
+  const root = await forReading(projectId);
+  return root instanceof ElysiaStatus ? root : undefined;
 };
 
 // --- where a path leads -----------------------------------------------------
@@ -679,20 +723,20 @@ const landing = async (abs: string): Promise<string> => {
 };
 
 /** For a read: links are followed, and refused when they lead out of the folder or into `.git`. */
-const readable = async (root: string, rel: string): Promise<string> => {
+const readable = async (root: string, rel: string) => {
   const realRoot = await realpath(root);
   const real = await landing(join(root, rel));
   if (!within(realRoot, real)) {
-    throw new FolderRefusal(
-      400,
-      `${rel} is a link that leads outside the project folder.`
-    );
+    return problem(400, {
+      code: "folder-link-outside",
+      detail: `${rel} is a link that leads outside the project folder.`,
+    });
   }
   if (within(join(realRoot, ".git"), real)) {
-    throw new FolderRefusal(
-      400,
-      `${rel} is a link into .git, the folder's history.`
-    );
+    return problem(400, {
+      code: "folder-link-in-git",
+      detail: `${rel} is a link into .git, the folder's history.`,
+    });
   }
   return real;
 };
@@ -702,71 +746,100 @@ const readable = async (root: string, rel: string): Promise<string> => {
  * followed, and every folder on the way must be a real folder inside (git
  * refuses a path beyond a link, and so does this).
  */
-const writable = async (root: string, rel: string): Promise<string> => {
+const writable = async (root: string, rel: string) => {
   const realRoot = await realpath(root);
   const abs = join(root, rel);
   const parent = await landing(dirname(abs));
   if (parent !== dirname(join(realRoot, rel))) {
-    throw new FolderRefusal(
-      400,
-      `${rel} passes through a link; name the path it leads to inside the project folder.`
-    );
+    return problem(400, {
+      code: "folder-path-through-link",
+      detail: `${rel} passes through a link; name the path it leads to inside the project folder.`,
+    });
   }
   return abs;
 };
 
-const notFound =
-  (rel: string) =>
-  (error: unknown): never => {
-    if (isMissing(error)) {
-      throw new FolderRefusal(
-        404,
-        `${rel || "The folder"} is not in the project folder.`
-      );
-    }
-    throw error;
-  };
+/** A missing path as the 404 it is; any other failure is thrown on. */
+const notFound = (rel: string) => (error: unknown) => {
+  if (isMissing(error)) {
+    return problem(404, {
+      code: "folder-file-missing",
+      detail: `${rel || "The folder"} is not in the project folder.`,
+    });
+  }
+  throw error;
+};
 
 // --- the folder's surface ---------------------------------------------------
+
+/**
+ * `rawPath` as a path in project `projectId`'s folder ({@link folderPath})
+ * and the folder's root for a read ({@link forReading}); or the refusal of
+ * either.
+ */
+const inFolder = async (projectId: string, rawPath: string) => {
+  const rel = folderPath(rawPath);
+  if (rel instanceof ElysiaStatus) {
+    return rel;
+  }
+  const root = await forReading(projectId);
+  return root instanceof ElysiaStatus ? root : { rel, root };
+};
+
+/** Where `rel` in project `projectId`'s folder really leads ({@link readable}), and what is there; refused when nothing is. */
+const statIn = async (projectId: string, rel: string) => {
+  const root = await forReading(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  const real = await readable(root, rel);
+  if (real instanceof ElysiaStatus) {
+    return real;
+  }
+  const info = await stat(real).catch(notFound(rel));
+  return info instanceof ElysiaStatus ? info : { real, info };
+};
 
 /** The entries of one folder, or of everything under it when `recursive`, in name order, capped. */
 export const listFolder = async (
   projectId: string,
   rawPath = "",
   recursive = false
-): Promise<FolderListing> => {
+) => {
   const rel = folderPath(rawPath);
-  const root = await forReading(projectId);
-  const real = await readable(root, rel);
-  const info = await stat(real).catch(notFound(rel));
+  if (rel instanceof ElysiaStatus) {
+    return rel;
+  }
+  const found = await statIn(projectId, rel);
+  if (found instanceof ElysiaStatus) {
+    return found;
+  }
+  const { real, info } = found;
   if (!info.isDirectory()) {
-    throw new FolderRefusal(
-      409,
-      `${rel} is a file; read it instead of listing it.`
-    );
+    return problem(409, {
+      code: "folder-listed-file",
+      detail: `${rel} is a file; read it instead of listing it.`,
+    });
   }
   const entries: FolderEntry[] = [];
   const complete = await walk(real, rel, recursive, entries);
-  return { path: rel, entries, truncated: !complete };
+  const listing: FolderListing = { path: rel, entries, truncated: !complete };
+  return listing;
 };
 
-/** The files under a folder of the project's, by path ({@link listFolder}); none when it has no such folder. */
+/** The files under a folder of the project's, by path ({@link listFolder}); none when it has no such folder, the folder's refusal when it does not list. */
 export const folderFilePaths = async (
   projectId: string,
   dir: string,
   recursive = false
-): Promise<string[]> => {
-  try {
-    const listing = await listFolder(projectId, dir, recursive);
-    return listing.entries
-      .filter((entry) => entry.kind === "file")
-      .map((entry) => entry.path);
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
-      return [];
-    }
-    throw error;
+) => {
+  const listing = await listFolder(projectId, dir, recursive);
+  if (listing instanceof ElysiaStatus) {
+    return listing.status === 404 ? [] : listing;
   }
+  return listing.entries
+    .filter((entry) => entry.kind === "file")
+    .map((entry) => entry.path);
 };
 
 /**
@@ -834,46 +907,49 @@ const statToRead = async (
   unnamed: string
 ) => {
   const rel = folderPath(rawPath);
-  if (!rel) {
-    throw new FolderRefusal(400, unnamed);
+  if (rel instanceof ElysiaStatus) {
+    return rel;
   }
-  const root = await forReading(projectId);
-  const real = await readable(root, rel);
-  const info = await stat(real).catch(notFound(rel));
-  return { rel, real, info };
+  if (!rel) {
+    return problem(400, { code: "folder-file-unnamed", detail: unnamed });
+  }
+  const found = await statIn(projectId, rel);
+  return found instanceof ElysiaStatus ? found : { rel, ...found };
 };
 
 /** One text file, whole: up to {@link FOLDER_FILE_LIMIT}; a binary file is refused. */
-export const readFolderFile = async (
-  projectId: string,
-  rawPath: string
-): Promise<FolderFile> => {
-  const { rel, real, info } = await statToRead(
+export const readFolderFile = async (projectId: string, rawPath: string) => {
+  const found = await statToRead(
     projectId,
     rawPath,
     "Name a file to read, like AGENTS.md."
   );
+  if (found instanceof ElysiaStatus) {
+    return found;
+  }
+  const { rel, real, info } = found;
   if (info.isDirectory()) {
-    throw new FolderRefusal(
-      409,
-      `${rel} is a folder; list it instead of reading it.`
-    );
+    return problem(409, {
+      code: "folder-read-folder",
+      detail: `${rel} is a folder; list it instead of reading it.`,
+    });
   }
   if (info.size > FOLDER_FILE_LIMIT) {
-    throw new FolderRefusal(
-      413,
-      `${rel} is ${size(info.size)}; reads stop at ${size(FOLDER_FILE_LIMIT)}.`
-    );
+    return problem(413, {
+      code: "folder-file-too-large",
+      detail: `${rel} is ${size(info.size)}; reads stop at ${size(FOLDER_FILE_LIMIT)}.`,
+    });
   }
   const bytes = await readFile(real);
   const content = asText(bytes);
   if (content === undefined) {
-    throw new FolderRefusal(
-      415,
-      `${rel} is a binary file, so it cannot be read as text.`
-    );
+    return problem(415, {
+      code: "folder-file-binary",
+      detail: `${rel} is a binary file, so it cannot be read as text.`,
+    });
   }
-  return { path: rel, content, size: bytes.byteLength };
+  const file: FolderFile = { path: rel, content, size: bytes.byteLength };
+  return file;
 };
 
 /** The pictures the hub serves a folder file as, by extension. */
@@ -941,20 +1017,27 @@ export const folderFileRaw = async (
   projectId: string,
   rawPath: string,
   limit = FOLDER_RAW_LIMIT
-): Promise<{ path: string; real: string; size: number }> => {
-  const { rel, real, info } = await statToRead(
+) => {
+  const found = await statToRead(
     projectId,
     rawPath,
     "Name a file, like media/cover.png."
   );
+  if (found instanceof ElysiaStatus) {
+    return found;
+  }
+  const { rel, real, info } = found;
   if (info.isDirectory()) {
-    throw new FolderRefusal(409, `${rel} is a folder, not a file.`);
+    return problem(409, {
+      code: "folder-read-folder",
+      detail: `${rel} is a folder, not a file.`,
+    });
   }
   if (info.size > limit) {
-    throw new FolderRefusal(
-      413,
-      `${rel} is ${size(info.size)}; files open up to ${size(limit)}.`
-    );
+    return problem(413, {
+      code: "folder-file-too-large",
+      detail: `${rel} is ${size(info.size)}; files open up to ${size(limit)}.`,
+    });
   }
   return { path: rel, real, size: info.size };
 };
@@ -967,9 +1050,11 @@ export const readFolderBytes = async (
   projectId: string,
   rawPath: string,
   limit: number
-): Promise<{ bytes: Uint8Array<ArrayBuffer>; path: string }> => {
+) => {
   const file = await folderFileRaw(projectId, rawPath, limit);
-  return { path: file.path, bytes: new Uint8Array(await readFile(file.real)) };
+  return file instanceof ElysiaStatus
+    ? file
+    : { path: file.path, bytes: new Uint8Array(await readFile(file.real)) };
 };
 
 const COMMIT_SHA = /^[0-9a-f]{40}$/u;
@@ -986,17 +1071,29 @@ export const readFolderFileAt = async (
   projectId: string,
   sha: string,
   rawPath: string
-): Promise<string | undefined> => {
+) => {
   const rel = folderPath(rawPath);
+  if (rel instanceof ElysiaStatus) {
+    return rel;
+  }
   if (!(rel && COMMIT_SHA.test(sha))) {
-    throw new FolderRefusal(400, "Name a commit's full sha and a file in it.");
+    return problem(400, {
+      code: "folder-commit-unnamed",
+      detail: "Name a commit's full sha and a file in it.",
+    });
   }
   const key = `${projectId}\0${sha}\0${rel}`;
   if (readAt.has(key)) {
     return readAt.get(key);
   }
   const root = await forReading(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
   const shown = await run(root, ["show", `${sha}:${rel}`]);
+  if (shown instanceof ElysiaStatus) {
+    return shown;
+  }
   const content = shown.code === 0 ? shown.stdout : undefined;
   if (readAt.size >= READ_AT_LIMIT) {
     readAt.delete(readAt.keys().next().value as string);
@@ -1011,7 +1108,7 @@ export interface FolderWriteOptions {
   /**
    * New files only: whether `name`, an entry in the folder `rel` goes into,
    * already holds `rel`'s place (the path itself always does). Any file held
-   * before or while it is placed refuses the write with {@link FolderTaken},
+   * before or while it is placed refuses the write with {@link taken},
    * and nothing of it stays written. Each file goes in with a hard link,
    * which never replaces what is at its path.
    */
@@ -1023,13 +1120,13 @@ export interface FolderWriteOptions {
 /** {@link FolderWriteOptions.exclusive}. */
 export type Exclusive = (name: string, rel: string) => boolean;
 
-/** Refuses with {@link FolderTaken} when an entry in `abs`'s folder, other than `self`, holds `rel`'s place. */
+/** Refuses with {@link taken} when an entry in `abs`'s folder, other than `self`, holds `rel`'s place. */
 const claimed = async (
   abs: string,
   rel: string,
   exclusive: Exclusive,
   self?: string
-): Promise<void> => {
+) => {
   const names = await readdir(dirname(abs)).catch((error: unknown) => {
     if (isMissing(error)) {
       return [];
@@ -1039,9 +1136,9 @@ const claimed = async (
   const holder = names.find(
     (name) => name !== self && (name === basename(abs) || exclusive(name, rel))
   );
-  if (holder !== undefined) {
-    throw new FolderTaken(rel, join(dirname(rel), holder));
-  }
+  return holder === undefined
+    ? undefined
+    : taken(rel, join(dirname(rel), holder));
 };
 
 /**
@@ -1068,7 +1165,7 @@ const placeOnly = async (
   abs: string,
   rel: string,
   exclusive: Exclusive
-): Promise<void> => {
+) => {
   const placed = await placeWhole(root, abs, bytes, true).then(
     () => true,
     (error: unknown) => {
@@ -1079,14 +1176,68 @@ const placeOnly = async (
     }
   );
   if (!placed) {
-    throw new FolderTaken(rel, rel);
+    return taken(rel, rel);
   }
-  try {
-    await claimed(abs, rel, exclusive, basename(abs));
-  } catch (error) {
-    await unlink(abs).catch(noop);
+  const takeOut = () => unlink(abs).catch(noop);
+  const held = await claimed(abs, rel, exclusive, basename(abs)).catch(
+    async (error: unknown) => {
+      await takeOut();
+      throw error;
+    }
+  );
+  if (held instanceof ElysiaStatus) {
+    await takeOut();
+  }
+  return held;
+};
+
+/**
+ * A write's commit message as asked ({@link askedMessage}) and the project's
+ * folder it goes to; or the refusal of either.
+ */
+const writeTo = (projectId: string, message: string | undefined) => {
+  const asked = askedMessage(message);
+  if (asked instanceof ElysiaStatus) {
+    return asked;
+  }
+  const root = projectRoot(projectId);
+  return root instanceof ElysiaStatus ? root : { asked, root };
+};
+
+/** `work` in the project's turn, once its folder is made ({@link prepare}). */
+const inFolderTurn = <T>(
+  projectId: string,
+  root: string,
+  work: () => Promise<T>
+) =>
+  inTurn(projectId, async () => {
+    const prepared = await prepare(projectId, root);
+    return prepared instanceof ElysiaStatus ? prepared : await work();
+  });
+
+/** Unstages `rels` whatever git answers: a reset that fails, or that the folder refuses, leaves the index as it was. */
+const unstage = (root: string, rels: string[]): Promise<void> =>
+  run(root, ["reset", "-q", "--", ...rels]).then(noop, noop);
+
+/**
+ * `steps` against the folder, `putAllBack` run when one of them refuses or
+ * throws; a refused commit says, in `asWas`, that the files are as they
+ * were.
+ */
+const orPutBack = async <T>(
+  putAllBack: () => Promise<void>,
+  asWas: string,
+  steps: () => Promise<T>
+) => {
+  const done = await steps().catch(async (error: unknown) => {
+    await putAllBack();
     throw error;
+  });
+  if (done instanceof ElysiaStatus) {
+    await putAllBack();
+    return putBack(done, asWas);
   }
+  return done;
 };
 
 /**
@@ -1099,55 +1250,75 @@ export const writeFolderFile = async (
   rawPath: string,
   content: string | Uint8Array,
   options: FolderWriteOptions = {}
-): Promise<FolderCommit> => {
+) => {
   const rel = folderPath(rawPath);
+  if (rel instanceof ElysiaStatus) {
+    return rel;
+  }
   if (!rel) {
-    throw new FolderRefusal(400, "Name a file to write, like tasks/T-1.md.");
+    return problem(400, {
+      code: "folder-file-unnamed",
+      detail: "Name a file to write, like tasks/T-1.md.",
+    });
   }
   const bytes = typeof content === "string" ? Buffer.from(content) : content;
   if (bytes.byteLength > FOLDER_FILE_LIMIT) {
-    throw new FolderRefusal(
-      413,
-      `The file is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
-    );
+    return problem(413, {
+      code: "folder-write-too-large",
+      detail: `The file is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`,
+    });
   }
-  guarded(rel, bytes);
-  const asked = askedMessage(options.message);
-  const root = projectRoot(projectId);
-  const written = await inTurn(projectId, async () => {
-    await prepare(projectId, root);
-    const { abs, there: before } = await fileToWrite(root, rel);
+  const unfit = guarded(rel, bytes);
+  if (unfit) {
+    return unfit;
+  }
+  const to = writeTo(projectId, options.message);
+  if (to instanceof ElysiaStatus) {
+    return to;
+  }
+  const { asked, root } = to;
+  const written = await inFolderTurn(projectId, root, async () => {
+    const target = await fileToWrite(root, rel);
+    if (target instanceof ElysiaStatus) {
+      return target;
+    }
+    const { abs, there: before } = target;
     const message = asked ?? `${before ? "Update" : "Add"} ${rel}`;
     const previous = before?.isFile() ? await readFile(abs) : undefined;
-    await parentFolder(abs, rel);
+    const parent = await parentFolder(abs, rel);
+    if (parent instanceof ElysiaStatus) {
+      return parent;
+    }
     const { exclusive } = options;
-    if (exclusive) {
-      await claimed(abs, rel, exclusive);
+    const placed = exclusive
+      ? ((await claimed(abs, rel, exclusive)) ??
+        (await placeOnly(root, bytes, abs, rel, exclusive)))
+      : await placeWhole(root, abs, bytes);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
     }
-    if (exclusive) {
-      await placeOnly(root, bytes, abs, rel, exclusive);
-    } else {
-      await placeWhole(root, abs, bytes);
-    }
-    try {
-      return await commit(
-        root,
-        rel,
-        ["add", "-A", "--", rel],
-        message,
-        options.author ?? YOU
-      );
-    } catch (error) {
+    const restore = async () => {
       if (previous) {
         await placeWhole(root, abs, previous).catch(noop);
       } else {
         await unlink(abs).catch(noop);
         await pruneEmpty(root, dirname(abs));
       }
-      await run(root, ["reset", "-q", "--", rel]).catch(noop);
-      throw putBack(error, rel);
-    }
+      await unstage(root, [rel]);
+    };
+    return await orPutBack(restore, `${rel} is as it was.`, () =>
+      commit(
+        root,
+        rel,
+        ["add", "-A", "--", rel],
+        message,
+        options.author ?? YOU
+      )
+    );
   });
+  if (written instanceof ElysiaStatus) {
+    return written;
+  }
   tellCommitted(projectId, {
     written: written.changed ? [rel] : [],
     deleted: [],
@@ -1165,29 +1336,37 @@ export interface FolderCommits {
 }
 
 /** Files a caller asked to write, each checked and sized as one write is; refused when one cannot be. */
-const toWrite = (
-  files: { path: string; content: string | Uint8Array }[]
-): { rel: string; bytes: Uint8Array }[] => {
-  const writes = files.map(({ path, content }) => {
+const toWrite = (files: { path: string; content: string | Uint8Array }[]) => {
+  const writes: { rel: string; bytes: Uint8Array }[] = [];
+  for (const { path, content } of files) {
     const rel = folderPath(path);
+    if (rel instanceof ElysiaStatus) {
+      return rel;
+    }
     if (!rel) {
-      throw new FolderRefusal(
-        400,
-        "Name each file to write, like assets/a.md."
-      );
+      return problem(400, {
+        code: "folder-file-unnamed",
+        detail: "Name each file to write, like assets/a.md.",
+      });
     }
     const bytes = typeof content === "string" ? Buffer.from(content) : content;
     if (bytes.byteLength > FOLDER_FILE_LIMIT) {
-      throw new FolderRefusal(
-        413,
-        `${rel} is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
-      );
+      return problem(413, {
+        code: "folder-write-too-large",
+        detail: `${rel} is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`,
+      });
     }
-    guarded(rel, bytes);
-    return { rel, bytes };
-  });
+    const unfit = guarded(rel, bytes);
+    if (unfit) {
+      return unfit;
+    }
+    writes.push({ rel, bytes });
+  }
   if (writes.length === 0) {
-    throw new FolderRefusal(400, "Name at least one file to write.");
+    return problem(400, {
+      code: "folder-write-none",
+      detail: "Name at least one file to write.",
+    });
   }
   return writes;
 };
@@ -1195,14 +1374,39 @@ const toWrite = (
 /** Where `rel` is written under `root`, and what is there now; refused when a folder is. */
 const fileToWrite = async (root: string, rel: string) => {
   const abs = await writable(root, rel);
+  if (abs instanceof ElysiaStatus) {
+    return abs;
+  }
   const there = await lstatIfThere(abs);
   if (there?.isDirectory()) {
-    throw new FolderRefusal(
-      409,
-      `${rel} is a folder, so a file cannot be written there.`
-    );
+    return problem(409, {
+      code: "folder-write-onto-folder",
+      detail: `${rel} is a folder, so a file cannot be written there.`,
+    });
   }
   return { abs, there };
+};
+
+/** Where `rel`, a file to take out (deleted or moved), is under `root`, and what it is; refused when nothing is there. */
+const fileToTake = async (root: string, rel: string) => {
+  const abs = await writable(root, rel);
+  if (abs instanceof ElysiaStatus) {
+    return abs;
+  }
+  const info = await lstat(abs).catch(notFound(rel));
+  return info instanceof ElysiaStatus ? info : { abs, info };
+};
+
+/** {@link fileToTake} for a delete: a folder is refused, its files going one by one. */
+const fileToDelete = async (root: string, rel: string) => {
+  const target = await fileToTake(root, rel);
+  if (!(target instanceof ElysiaStatus) && target.info.isDirectory()) {
+    return problem(409, {
+      code: "folder-delete-folder",
+      detail: `${rel} is a folder; delete the files in it one by one.`,
+    });
+  }
+  return target;
 };
 
 /** Makes the folder `rel` (at `abs`) is written in; refused when a file sits where it would be. */
@@ -1210,10 +1414,10 @@ const parentFolder = (abs: string, rel: string) =>
   mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
     const { code } = error as NodeJS.ErrnoException;
     if (code === "EEXIST" || code === "ENOTDIR") {
-      throw new FolderRefusal(
-        409,
-        `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`
-      );
+      return problem(409, {
+        code: "folder-write-under-file",
+        detail: `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`,
+      });
     }
     throw error;
   });
@@ -1221,7 +1425,7 @@ const parentFolder = (abs: string, rel: string) =>
 /**
  * Puts `bytes` at `rel` (its folders made as needed), atomically, keeping in
  * `before` what the path held first so a failed commit can put it back.
- * `exclusive`: only where nothing holds its place (FolderTaken otherwise),
+ * `exclusive`: only where nothing holds its place ({@link taken} otherwise),
  * and in `before` only once it is placed, so a put-back never removes
  * another writer's file.
  */
@@ -1231,16 +1435,29 @@ const putFile = async (
   bytes: Uint8Array,
   before: Map<string, Buffer | undefined>,
   exclusive?: Exclusive
-): Promise<void> => {
-  const { abs, there } = await fileToWrite(root, rel);
+) => {
+  const target = await fileToWrite(root, rel);
+  if (target instanceof ElysiaStatus) {
+    return target;
+  }
+  const { abs, there } = target;
   if (exclusive) {
-    await claimed(abs, rel, exclusive);
+    const held = await claimed(abs, rel, exclusive);
+    if (held instanceof ElysiaStatus) {
+      return held;
+    }
   } else if (!before.has(abs)) {
     before.set(abs, there?.isFile() ? await readFile(abs) : undefined);
   }
-  await parentFolder(abs, rel);
+  const parent = await parentFolder(abs, rel);
+  if (parent instanceof ElysiaStatus) {
+    return parent;
+  }
   if (exclusive) {
-    await placeOnly(root, bytes, abs, rel, exclusive);
+    const placed = await placeOnly(root, bytes, abs, rel, exclusive);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
+    }
     before.set(abs, undefined);
     return;
   }
@@ -1261,7 +1478,7 @@ const putBackAll = async (
       await pruneEmpty(root, dirname(abs));
     }
   }
-  await run(root, ["reset", "-q", "--", ...rels]).catch(noop);
+  await unstage(root, rels);
 };
 
 /**
@@ -1276,27 +1493,77 @@ export const writeFolderFiles = (
   projectId: string,
   files: { path: string; content: string | Uint8Array }[],
   options: FolderWriteOptions & { message: string }
-): Promise<FolderCommits> =>
-  changeFolderFiles(projectId, { writes: files, deletes: [] }, options);
+) => changeFolderFiles(projectId, { writes: files, deletes: [] }, options);
 
 /** Takes `rel` out of the tree, keeping in `before` what it held so a failed commit can put it back. */
 const removeFile = async (
   root: string,
   rel: string,
   before: Map<string, Buffer | undefined>
-): Promise<void> => {
-  const abs = await writable(root, rel);
-  const info = await lstat(abs).catch(notFound(rel));
-  if (info.isDirectory()) {
-    throw new FolderRefusal(
-      409,
-      `${rel} is a folder; delete the files in it one by one.`
-    );
+) => {
+  const target = await fileToDelete(root, rel);
+  if (target instanceof ElysiaStatus) {
+    return target;
   }
+  const { abs, info } = target;
   if (!before.has(abs)) {
     before.set(abs, info.isFile() ? await readFile(abs) : undefined);
   }
   await unlink(abs);
+};
+
+/**
+ * Puts each of `change`'s writes in place and takes each delete out,
+ * keeping in `before` what they held; with `exclusive`, each write's place
+ * is claimed again once all are in. The first refusal is answered.
+ */
+const placeChange = async (
+  root: string,
+  change: { deletes: string[]; writes: { bytes: Uint8Array; rel: string }[] },
+  before: Map<string, Buffer | undefined>,
+  exclusive: Exclusive | undefined
+) => {
+  for (const { rel, bytes } of change.writes) {
+    const put = await putFile(root, rel, bytes, before, exclusive);
+    if (put instanceof ElysiaStatus) {
+      return put;
+    }
+  }
+  for (const rel of change.deletes) {
+    const removed = await removeFile(root, rel, before);
+    if (removed instanceof ElysiaStatus) {
+      return removed;
+    }
+  }
+  if (!exclusive) {
+    return;
+  }
+  // A claim that landed on an earlier file while a later one went in.
+  for (const { rel } of change.writes) {
+    const abs = join(root, rel);
+    const held = await claimed(abs, rel, exclusive, basename(abs));
+    if (held instanceof ElysiaStatus) {
+      return held;
+    }
+  }
+};
+
+/** A change's deletes, each a file in the folder, each once; refused when one names none. */
+const toDelete = (paths: string[]) => {
+  const named: string[] = [];
+  for (const path of paths) {
+    const rel = folderPath(path);
+    if (rel instanceof ElysiaStatus) {
+      return rel;
+    }
+    named.push(rel);
+  }
+  return named.some((rel) => !rel)
+    ? problem(400, {
+        code: "folder-file-unnamed",
+        detail: "Name each file to delete.",
+      })
+    : [...new Set(named)];
 };
 
 /**
@@ -1313,69 +1580,81 @@ export const changeFolderFiles = async (
     writes: { path: string; content: string | Uint8Array }[];
   },
   options: FolderWriteOptions & { message: string }
-): Promise<FolderCommits> => {
+) => {
   const asked = askedMessage(options.message);
+  if (asked instanceof ElysiaStatus) {
+    return asked;
+  }
   if (!asked) {
-    throw new FolderRefusal(400, "Say what the files are in a commit message.");
+    return problem(400, {
+      code: "folder-message-missing",
+      detail: "Say what the files are in a commit message.",
+    });
   }
   const writes = change.writes.length > 0 ? toWrite(change.writes) : [];
-  const deletes = [...new Set(change.deletes.map((path) => folderPath(path)))];
-  if (deletes.some((rel) => !rel)) {
-    throw new FolderRefusal(400, "Name each file to delete.");
+  if (writes instanceof ElysiaStatus) {
+    return writes;
+  }
+  const deletes = toDelete(change.deletes);
+  if (deletes instanceof ElysiaStatus) {
+    return deletes;
   }
   if (writes.length + deletes.length === 0) {
-    throw new FolderRefusal(400, "Name at least one file to change.");
+    return problem(400, {
+      code: "folder-change-none",
+      detail: "Name at least one file to change.",
+    });
   }
   const written = new Set(writes.map((write) => write.rel));
   const both = deletes.find((rel) => written.has(rel));
   if (both) {
-    throw new FolderRefusal(
-      400,
-      `${both} is both written and deleted; name it once.`
-    );
+    return problem(400, {
+      code: "folder-change-twice",
+      detail: `${both} is both written and deleted; name it once.`,
+    });
   }
   const rels = [...written, ...deletes];
   const root = projectRoot(projectId);
-  const changed = await inTurn(projectId, async () => {
-    await prepare(projectId, root);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  const changed = await inFolderTurn(projectId, root, () => {
     /** What each path held before, to put back if anything fails. */
     const before = new Map<string, Buffer | undefined>();
-    const { exclusive } = options;
-    try {
-      for (const { rel, bytes } of writes) {
-        await putFile(root, rel, bytes, before, exclusive);
-      }
-      for (const rel of deletes) {
-        await removeFile(root, rel, before);
-      }
-      if (exclusive) {
-        // A claim that landed on an earlier file while a later one went in.
-        for (const { rel } of writes) {
-          const abs = join(root, rel);
-          await claimed(abs, rel, exclusive, basename(abs));
+    return orPutBack(
+      () => putBackAll(root, rels, before),
+      `${rels.join(", ")} are as they were.`,
+      async () => {
+        const placed = await placeChange(
+          root,
+          { writes, deletes },
+          before,
+          options.exclusive
+        );
+        if (placed instanceof ElysiaStatus) {
+          return placed;
         }
+        const done = await commitPaths(
+          root,
+          rels,
+          ["add", "-A", "--", ...rels],
+          asked,
+          options.author ?? YOU
+        );
+        if (done instanceof ElysiaStatus) {
+          return done;
+        }
+        for (const rel of deletes) {
+          await pruneEmpty(root, dirname(join(root, rel)));
+        }
+        const commits: FolderCommits = { ...done, paths: rels };
+        return commits;
       }
-      const done = await commitPaths(
-        root,
-        rels,
-        ["add", "-A", "--", ...rels],
-        asked,
-        options.author ?? YOU
-      );
-      for (const rel of deletes) {
-        await pruneEmpty(root, dirname(join(root, rel)));
-      }
-      return { ...done, paths: rels };
-    } catch (error) {
-      await putBackAll(root, rels, before);
-      throw error instanceof FolderRefusal && error.status === 500
-        ? new FolderRefusal(
-            500,
-            `${error.message} ${rels.join(", ")} are as they were.`
-          )
-        : error;
-    }
+    );
   });
+  if (changed instanceof ElysiaStatus) {
+    return changed;
+  }
   tellCommitted(projectId, {
     written: changed.changed ? [...written] : [],
     deleted: deletes,
@@ -1401,47 +1680,55 @@ export const deleteFolderFile = async (
   projectId: string,
   rawPath: string,
   options: FolderWriteOptions = {}
-): Promise<FolderCommit> => {
+) => {
   const rel = folderPath(rawPath);
-  if (!rel) {
-    throw new FolderRefusal(
-      400,
-      "Name a file to delete; the folder itself goes when its project does."
-    );
+  if (rel instanceof ElysiaStatus) {
+    return rel;
   }
-  const asked = askedMessage(options.message);
-  const root = projectRoot(projectId);
-  const done = await inTurn(projectId, async () => {
-    await prepare(projectId, root);
-    const abs = await writable(root, rel);
-    const info = await lstat(abs).catch(notFound(rel));
-    if (info.isDirectory()) {
-      throw new FolderRefusal(
-        409,
-        `${rel} is a folder; delete the files in it one by one.`
-      );
+  if (!rel) {
+    return problem(400, {
+      code: "folder-file-unnamed",
+      detail:
+        "Name a file to delete; the folder itself goes when its project does.",
+    });
+  }
+  const to = writeTo(projectId, options.message);
+  if (to instanceof ElysiaStatus) {
+    return to;
+  }
+  const { asked, root } = to;
+  const done = await inFolderTurn(projectId, root, async () => {
+    const target = await fileToDelete(root, rel);
+    if (target instanceof ElysiaStatus) {
+      return target;
     }
+    const { abs, info } = target;
     const message = asked ?? `Delete ${rel}`;
     const previous = info.isFile() ? await readFile(abs) : undefined;
     await unlink(abs);
-    try {
-      const committed = await commit(
+    const restore = async () => {
+      if (previous) {
+        await placeWhole(root, abs, previous).catch(noop);
+      }
+      await unstage(root, [rel]);
+    };
+    return await orPutBack(restore, `${rel} is as it was.`, async () => {
+      const made = await commit(
         root,
         rel,
         ["rm", "-q", "--cached", "--ignore-unmatch", "--", rel],
         message,
         options.author ?? YOU
       );
-      await pruneEmpty(root, dirname(abs));
-      return committed;
-    } catch (error) {
-      if (previous) {
-        await placeWhole(root, abs, previous).catch(noop);
+      if (!(made instanceof ElysiaStatus)) {
+        await pruneEmpty(root, dirname(abs));
       }
-      await run(root, ["reset", "-q", "--", rel]).catch(noop);
-      throw putBack(error, rel);
-    }
+      return made;
+    });
   });
+  if (done instanceof ElysiaStatus) {
+    return done;
+  }
   tellCommitted(projectId, { written: [], deleted: [rel] });
   return done;
 };
@@ -1457,51 +1744,76 @@ export const moveFolderFile = async (
   rawFrom: string,
   rawTo: string,
   options: FolderWriteOptions & { content?: string } = {}
-): Promise<FolderCommit> => {
+) => {
   const from = folderPath(rawFrom);
-  const to = folderPath(rawTo);
-  if (!(from && to)) {
-    throw new FolderRefusal(400, "Name the file to move and where it goes.");
+  if (from instanceof ElysiaStatus) {
+    return from;
   }
-  const asked = askedMessage(options.message);
-  const root = projectRoot(projectId);
-  const moved = await inTurn(projectId, async () => {
-    await prepare(projectId, root);
-    const source = await writable(root, from);
-    const info = await lstat(source).catch(notFound(from));
-    if (!info.isFile()) {
-      throw new FolderRefusal(
-        409,
-        `${from} is not a file, so it cannot be moved.`
-      );
+  const to = folderPath(rawTo);
+  if (to instanceof ElysiaStatus) {
+    return to;
+  }
+  if (!(from && to)) {
+    return problem(400, {
+      code: "folder-move-unnamed",
+      detail: "Name the file to move and where it goes.",
+    });
+  }
+  const into = writeTo(projectId, options.message);
+  if (into instanceof ElysiaStatus) {
+    return into;
+  }
+  const { asked, root } = into;
+  const moved = await inFolderTurn(projectId, root, async () => {
+    const target = await fileToTake(root, from);
+    if (target instanceof ElysiaStatus) {
+      return target;
     }
+    if (!target.info.isFile()) {
+      return problem(409, {
+        code: "folder-move-not-file",
+        detail: `${from} is not a file, so it cannot be moved.`,
+      });
+    }
+    const source = target.abs;
     const before = new Map<string, Buffer | undefined>();
     const bytes = await readFile(source);
-    try {
-      await putFile(
-        root,
-        to,
-        options.content === undefined
-          ? bytes
-          : Buffer.from(options.content, "utf8"),
-        before
-      );
-      before.set(source, bytes);
-      await unlink(source);
-      const done = await commitPaths(
-        root,
-        [from, to],
-        ["add", "-A", "--", from, to],
-        asked ?? `Move ${from} to ${to}`,
-        options.author ?? YOU
-      );
-      await pruneEmpty(root, dirname(source));
-      return { ...done, path: to };
-    } catch (error) {
-      await putBackAll(root, [from, to], before);
-      throw putBack(error, `${from} and ${to}`);
-    }
+    return await orPutBack(
+      () => putBackAll(root, [from, to], before),
+      `${from} and ${to} is as it was.`,
+      async () => {
+        const put = await putFile(
+          root,
+          to,
+          options.content === undefined
+            ? bytes
+            : Buffer.from(options.content, "utf8"),
+          before
+        );
+        if (put instanceof ElysiaStatus) {
+          return put;
+        }
+        before.set(source, bytes);
+        await unlink(source);
+        const done = await commitPaths(
+          root,
+          [from, to],
+          ["add", "-A", "--", from, to],
+          asked ?? `Move ${from} to ${to}`,
+          options.author ?? YOU
+        );
+        if (done instanceof ElysiaStatus) {
+          return done;
+        }
+        await pruneEmpty(root, dirname(source));
+        const landed: FolderCommit = { ...done, path: to };
+        return landed;
+      }
+    );
   });
+  if (moved instanceof ElysiaStatus) {
+    return moved;
+  }
   tellCommitted(
     projectId,
     from === to
@@ -1520,16 +1832,22 @@ export const folderHistory = async (
   projectId: string,
   rawPath = "",
   limit = HISTORY_DEFAULT
-): Promise<FolderHistory> => {
-  const rel = folderPath(rawPath);
+) => {
+  const at = await inFolder(projectId, rawPath);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  const { rel, root } = at;
   const count = Math.min(Math.max(Math.floor(limit), 1), HISTORY_LIMIT);
-  const root = await forReading(projectId);
   const out = await git(root, [
     "log",
     `--max-count=${count}`,
     "--format=%H%x1f%an%x1f%aI%x1f%s%x1e",
     ...(rel ? ["--follow", "--", rel] : []),
   ]);
+  if (out instanceof ElysiaStatus) {
+    return out;
+  }
   const commits = out
     .split("\x1e")
     .map((record) => record.trim())
@@ -1539,7 +1857,8 @@ export const folderHistory = async (
         record.split("\x1f");
       return { sha, author, date, message };
     });
-  return { path: rel, commits };
+  const history: FolderHistory = { path: rel, commits };
+  return history;
 };
 
 /**
@@ -1552,9 +1871,12 @@ export const lastCommitOf = async (
   projectId: string,
   rawPath: string,
   trailer: string
-): Promise<{ sha: string; trailer: string } | undefined> => {
-  const rel = folderPath(rawPath);
-  const root = await forReading(projectId);
+) => {
+  const at = await inFolder(projectId, rawPath);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  const { rel, root } = at;
   const out = await git(root, [
     "log",
     "-1",
@@ -1562,6 +1884,9 @@ export const lastCommitOf = async (
     "--",
     rel,
   ]);
+  if (out instanceof ElysiaStatus) {
+    return out;
+  }
   const [sha = "", value = ""] = out.trim().split("\x1f");
   return sha ? { sha, trailer: value.trim() } : undefined;
 };
@@ -1574,8 +1899,11 @@ export const lastCommitOf = async (
 export const folderCommitsCarrying = async (
   projectId: string,
   line: string
-): Promise<{ paths: string[]; sha: string }[]> => {
+) => {
   const root = await forReading(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
   const out = await git(root, [
     "log",
     "--fixed-strings",
@@ -1583,6 +1911,9 @@ export const folderCommitsCarrying = async (
     "--name-only",
     "--format=%x1e%H",
   ]);
+  if (out instanceof ElysiaStatus) {
+    return out;
+  }
   return out
     .split("\x1e")
     .map((record) => record.trim())
@@ -1598,13 +1929,17 @@ export const folderCommitsCarrying = async (
  * or not, uncapped and unsorted; none when the folder is not there. A read of
  * the directory alone: no git, no stat per file.
  */
-export const folderFileNames = async (
-  projectId: string,
-  rawDir: string
-): Promise<string[]> => {
-  const rel = folderPath(rawDir);
-  const root = await forReading(projectId);
-  return await readdir(await readable(root, rel)).catch((error: unknown) => {
+export const folderFileNames = async (projectId: string, rawDir: string) => {
+  const at = await inFolder(projectId, rawDir);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  const { rel, root } = at;
+  const real = await readable(root, rel);
+  if (real instanceof ElysiaStatus) {
+    return real;
+  }
+  return await readdir(real).catch((error: unknown): string[] => {
     if (isMissing(error)) {
       return [];
     }
@@ -1860,38 +2195,41 @@ const timesAt = async (
   rel: string,
   tip: string,
   known: FolderTimes | undefined
-): Promise<FolderTimes> => {
+) => {
   // Paths seen once stay seen, even across a rewritten history.
   const ever = new Set(known?.ever);
   if (!tip) {
-    return { head: tip, times: new Map(), ever };
+    const none: FolderTimes = { head: tip, times: new Map(), ever };
+    return none;
   }
-  const from =
-    known?.head &&
-    (await run(root, ["merge-base", "--is-ancestor", known.head, tip])).code ===
-      0
-      ? known
-      : undefined;
+  const ancestor = known?.head
+    ? await run(root, ["merge-base", "--is-ancestor", known.head, tip])
+    : undefined;
+  if (ancestor instanceof ElysiaStatus) {
+    return ancestor;
+  }
+  const from = ancestor?.code === 0 ? known : undefined;
   const times = new Map(from?.times);
-  applyLog(
-    times,
-    ever,
-    await git(root, [
-      "log",
-      "--reverse",
-      `--format=${LOG_FORMAT}`,
-      "-M",
-      "--name-status",
-      from ? `${from.head}..${tip}` : tip,
-      "--",
-      ...(rel ? [rel] : []),
-    ])
-  );
-  return { head: tip, times, ever };
+  const out = await git(root, [
+    "log",
+    "--reverse",
+    `--format=${LOG_FORMAT}`,
+    "-M",
+    "--name-status",
+    from ? `${from.head}..${tip}` : tip,
+    "--",
+    ...(rel ? [rel] : []),
+  ]);
+  if (out instanceof ElysiaStatus) {
+    return out;
+  }
+  applyLog(times, ever, out);
+  const read: FolderTimes = { head: tip, times, ever };
+  return read;
 };
 
 /** Each folder's file times, by project and folder, as of the last commit read. */
-const timesRead = new Map<string, Promise<FolderTimes>>();
+const timesRead = new Map<string, ReturnType<typeof timesAt>>();
 
 /**
  * When each file under `rawDir` was first added and last changed by a
@@ -1900,15 +2238,17 @@ const timesRead = new Map<string, Promise<FolderTimes>>();
  * while HEAD stands spawns no git, and a new commit reads only the commits
  * since.
  */
-export const folderFileTimes = async (
-  projectId: string,
-  rawDir: string
-): Promise<FolderTimes> => {
-  const rel = folderPath(rawDir);
-  const root = await forReading(projectId);
+export const folderFileTimes = async (projectId: string, rawDir: string) => {
+  const at = await inFolder(projectId, rawDir);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  const { rel, root } = at;
   const tip = await headCommit(root);
   const key = `${projectId}\0${rel}`;
-  const known = await timesRead.get(key)?.catch(() => undefined);
+  const kept = await timesRead.get(key)?.catch(() => undefined);
+  // A read that was refused is read again, as one that failed is.
+  const known = kept instanceof ElysiaStatus ? undefined : kept;
   if (known?.head === tip) {
     return known;
   }
@@ -1925,12 +2265,12 @@ const AUTHOR_TIME = /^author-time (\d+)$/u;
  * (1-based line → time), and the file's own mtime for a line git has no
  * date for (never committed, or a folder git cannot read).
  */
-export const folderBlame = async (
-  projectId: string,
-  rawPath: string
-): Promise<{ lines: ReadonlyMap<number, Date>; mtime: Date }> => {
-  const rel = folderPath(rawPath);
-  const root = await forReading(projectId);
+export const folderBlame = async (projectId: string, rawPath: string) => {
+  const file = await inFolder(projectId, rawPath);
+  if (file instanceof ElysiaStatus) {
+    return file;
+  }
+  const { rel, root } = file;
   const { mtime } = await stat(join(root, rel));
   const lines = new Map<number, Date>();
   const blamed = await run(root, [
@@ -1939,7 +2279,7 @@ export const folderBlame = async (
     "--",
     rel,
   ]).catch(() => undefined);
-  if (blamed?.code === 0) {
+  if (!(blamed instanceof ElysiaStatus) && blamed?.code === 0) {
     let line = 0;
     for (const row of blamed.stdout.split("\n")) {
       const at = BLAME_HEAD.exec(row);
@@ -1951,16 +2291,20 @@ export const folderBlame = async (
       }
     }
   }
-  return { lines, mtime };
+  const blame: { lines: ReadonlyMap<number, Date>; mtime: Date } = {
+    lines,
+    mtime,
+  };
+  return blame;
 };
 
 /** The files under `rawDir` whose content is not their last commit's: changed, or never committed. */
-export const folderUncommitted = async (
-  projectId: string,
-  rawDir: string
-): Promise<Set<string>> => {
-  const rel = folderPath(rawDir);
-  const root = await forReading(projectId);
+export const folderUncommitted = async (projectId: string, rawDir: string) => {
+  const at = await inFolder(projectId, rawDir);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  const { rel, root } = at;
   // `--no-optional-locks`: a read never takes the index lock a commit needs.
   const out = await git(root, [
     "--no-optional-locks",
@@ -1971,6 +2315,9 @@ export const folderUncommitted = async (
     "--",
     rel || ".",
   ]);
+  if (out instanceof ElysiaStatus) {
+    return out;
+  }
   const paths = new Set<string>();
   const records = out.split("\0");
   for (let index = 0; index < records.length; index += 1) {
@@ -1987,8 +2334,10 @@ export const folderUncommitted = async (
 };
 
 /** Whether the project's folder has been made: a project never written to has none. */
-export const hasProjectFolder = (projectId: string): Promise<boolean> =>
-  exists(join(projectRoot(projectId), ".git"));
+export const hasProjectFolder = async (projectId: string) => {
+  const root = projectRoot(projectId);
+  return root instanceof ElysiaStatus ? root : await exists(join(root, ".git"));
+};
 
 /**
  * A folder leaving its place (forgotten, or deleted for good): nothing read
@@ -2010,12 +2359,12 @@ const letGo = (projectId: string): void => {
  * entry). Answers where it went, or undefined when the project never had a
  * folder.
  */
-export const trashProjectFolder = async (
-  projectId: string,
-  entry: string
-): Promise<string | undefined> => {
+export const trashProjectFolder = async (projectId: string, entry: string) => {
   const root = projectRoot(projectId);
-  return await inTurn(projectId, async () => {
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  return await inTurn(projectId, async (): Promise<string | undefined> => {
     letGo(projectId);
     if (!(await exists(root))) {
       return;
@@ -2031,10 +2380,11 @@ export const trashProjectFolder = async (
  * A project deleted for good: its folder on the hub, history and all, gone,
  * and never made again by a read that outlives it. False when it had none.
  */
-export const deleteProjectFolder = async (
-  projectId: string
-): Promise<boolean> => {
+export const deleteProjectFolder = async (projectId: string) => {
   const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
   return await inTurn(projectId, async () => {
     letGo(projectId);
     if (!(await exists(root))) {
@@ -2055,18 +2405,21 @@ export const deleteProjectFolder = async (
 export const untrashProjectFolder = async (
   projectId: string,
   entry: string | null
-): Promise<void> => {
+) => {
   const root = projectRoot(projectId);
-  await inTurn(projectId, async () => {
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  return await inTurn(projectId, async () => {
     if (entry === null) {
       forgotten.delete(projectId);
       return;
     }
     if (await exists(root)) {
-      throw new FolderRefusal(
-        409,
-        projectTrashWords.folderTaken(projectId, root)
-      );
+      return problem(409, {
+        code: "folder-trash-place-taken",
+        detail: projectTrashWords.folderTaken(projectId, root),
+      });
     }
     await mkdir(PROJECTS_DIR, { recursive: true });
     await rename(join(PROJECT_TRASH_DIR, entry), root);
@@ -2076,23 +2429,6 @@ export const untrashProjectFolder = async (
 };
 
 // --- routes ----------------------------------------------------------------
-
-/** A refusal as the route's answer, in its status and words; anything else is thrown on. */
-export const refused = (error: unknown) => {
-  if (error instanceof FolderRefusal) {
-    return status(error.status, error.message);
-  }
-  throw error;
-};
-
-/** Runs a route's work, a folder refusal answered as {@link refused}. */
-export const folderAttempt = async <T>(work: () => T | Promise<T>) => {
-  try {
-    return await work();
-  } catch (error) {
-    return refused(error);
-  }
-};
 
 /**
  * The dashboard's routes for a project's folder, under
@@ -2110,15 +2446,57 @@ export const FOLDER_WRITE = t.Object({
   message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
 });
 
+/**
+ * A write as {@link FOLDER_WRITE} takes it, the operator's, into `folder` (a
+ * project's, or an area's: {@link areaFolder}); `changed` hears of it once
+ * it lands.
+ */
+export const writeAsked = async (
+  folder: string,
+  body: UnwrapSchema<typeof FOLDER_WRITE>,
+  changed: () => void
+) => {
+  const content = folderContent(body.content, body.encoding);
+  if (content instanceof ElysiaStatus) {
+    return content;
+  }
+  const written = await writeFolderFile(folder, body.path, content, {
+    author: YOU,
+    message: body.message,
+  });
+  if (!(written instanceof ElysiaStatus)) {
+    changed();
+  }
+  return written;
+};
+
+/** A delete of the operator's from `folder` ({@link writeAsked}); `changed` hears of it once it lands. */
+export const deleteAsked = async (
+  folder: string,
+  asked: { message?: string | undefined; path: string },
+  changed: () => void
+) => {
+  const deleted = await deleteFolderFile(folder, asked.path, {
+    author: YOU,
+    message: asked.message,
+  });
+  if (!(deleted instanceof ElysiaStatus)) {
+    changed();
+  }
+  return deleted;
+};
+
 export const projectFolderRoutes = (
   projectExists: (id: string) => boolean,
   changed: (id: string) => void = () => undefined
 ) => {
-  const known = (id: string): void => {
-    if (!projectExists(id)) {
-      throw new FolderRefusal(404, `The hub keeps no project ${id}.`);
-    }
-  };
+  const unknown = (id: string) =>
+    projectExists(id)
+      ? undefined
+      : problem(404, {
+          code: "folder-project-unknown",
+          detail: `The hub keeps no project ${id}.`,
+        });
   return new Elysia()
     .get(
       "/api/projects/:id/folder",
@@ -2128,74 +2506,53 @@ export const projectFolderRoutes = (
           recursive: t.Optional(t.Boolean()),
         }),
       },
-      async ({ params, query }) => {
-        try {
-          known(params.id);
-          return await listFolder(
-            params.id,
-            query.path ?? "",
-            query.recursive ?? false
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        unknown(params.id) ??
+        (await listFolder(
+          params.id,
+          query.path ?? "",
+          query.recursive ?? false
+        ))
     )
     .get(
       "/api/projects/:id/folder/file",
       { query: t.Object({ path: t.String() }) },
-      async ({ params, query }) => {
-        try {
-          known(params.id);
-          return await readFolderFile(params.id, query.path);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        unknown(params.id) ?? (await readFolderFile(params.id, query.path))
     )
     .get(
       "/api/projects/:id/folder/raw",
       { query: t.Object({ path: t.String() }) },
       async ({ params, query }) => {
-        try {
-          known(params.id);
-          const file = await folderFileRaw(params.id, query.path);
-          const body = Bun.file(file.real);
-          // Served on the dashboard's own origin: a page or a drawing in the
-          // folder is shown, never run (no script, no frame, no form).
-          return new Response(body, {
-            headers: {
-              "Content-Type": body.type || "application/octet-stream",
-              "Content-Length": String(file.size),
-              "Content-Disposition": "inline",
-              "Content-Security-Policy": "sandbox; default-src 'none'",
-              "X-Content-Type-Options": "nosniff",
-              "Cache-Control": "no-cache",
-            },
-          });
-        } catch (error) {
-          return refused(error);
+        const missing = unknown(params.id);
+        if (missing) {
+          return missing;
         }
+        const file = await folderFileRaw(params.id, query.path);
+        if (file instanceof ElysiaStatus) {
+          return file;
+        }
+        const body = Bun.file(file.real);
+        // Served on the dashboard's own origin: a page or a drawing in the
+        // folder is shown, never run (no script, no frame, no form).
+        return new Response(body, {
+          headers: {
+            "Content-Type": body.type || "application/octet-stream",
+            "Content-Length": String(file.size),
+            "Content-Disposition": "inline",
+            "Content-Security-Policy": "sandbox; default-src 'none'",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-cache",
+          },
+        });
       }
     )
     .put(
       "/api/projects/:id/folder/file",
       { body: FOLDER_WRITE },
-      async ({ params, body }) => {
-        try {
-          known(params.id);
-          const written = await writeFolderFile(
-            params.id,
-            body.path,
-            folderContent(body.content, body.encoding),
-            { author: YOU, message: body.message }
-          );
-          changed(params.id);
-          return written;
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, body }) =>
+        unknown(params.id) ??
+        (await writeAsked(params.id, body, () => changed(params.id)))
     )
     .delete(
       "/api/projects/:id/folder/file",
@@ -2205,19 +2562,9 @@ export const projectFolderRoutes = (
           message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
         }),
       },
-      async ({ params, query }) => {
-        try {
-          known(params.id);
-          const deleted = await deleteFolderFile(params.id, query.path, {
-            author: YOU,
-            message: query.message,
-          });
-          changed(params.id);
-          return deleted;
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        unknown(params.id) ??
+        (await deleteAsked(params.id, query, () => changed(params.id)))
     )
     .get(
       "/api/projects/:id/folder/history",
@@ -2227,13 +2574,8 @@ export const projectFolderRoutes = (
           limit: t.Optional(t.Integer({ minimum: 1, maximum: HISTORY_LIMIT })),
         }),
       },
-      async ({ params, query }) => {
-        try {
-          known(params.id);
-          return await folderHistory(params.id, query.path ?? "", query.limit);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        unknown(params.id) ??
+        (await folderHistory(params.id, query.path ?? "", query.limit))
     );
 };

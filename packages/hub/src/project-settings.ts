@@ -70,6 +70,7 @@
  * naming another is refused. What its work's landing gate runs is the project's
  * gate.md (gate-file.ts), not a setting.
  */
+
 import {
   type Account,
   accountNameAmong,
@@ -95,6 +96,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { projectSettingsWords } from "@cawco/core/words/project-settings";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { Areas } from "./areas";
 import type { Connections } from "./connections";
@@ -102,17 +104,14 @@ import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import {
   type DispatchChange,
-  type DispatchView,
+  type Dispatcher,
   dispatchProblem,
 } from "./dispatch";
 import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
-import {
-  accountChange,
-  type Edited,
-  type ProjectEdit,
-  projectName,
-} from "./project-edit";
+import type { createProjectEdits } from "./project-edit";
+import { accountChange, projectName } from "./project-edit";
+
 import { projectStartingSet } from "./project-starting-set";
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
@@ -123,35 +122,37 @@ const GITHUB_REPO =
 const REASON_LIMIT = 300;
 
 /** A refusal in one sentence: the call's error. */
-const refuse = (message: string): never => {
-  throw new Error(message);
-};
-
 /** A rename, checked as the person's own is (project-edit.ts `projectName`). */
-const renamed = (
-  project: ProjectRow,
-  asked: { name?: string }
-): ProjectSettingChange => {
+const renamed = (project: ProjectRow, asked: { name?: string }) => {
   const name = projectName(asked.name ?? "");
-  if (name === project.name) {
-    refuse(`This project is called ${name} already.`);
+  if (name instanceof ElysiaStatus) {
+    return name;
   }
-  return { kind: "rename", name };
+  if (name === project.name) {
+    return problem(400, {
+      code: "project-called-already",
+      detail: `This project is called ${name} already.`,
+    });
+  }
+  return { kind: "rename", name } satisfies ProjectSettingChange;
 };
 
 /** Review before done turned on or off, refused when it is that already. */
-const reviewSet = (
-  project: ProjectRow,
-  asked: { review?: boolean }
-): ProjectSettingChange => {
-  const review =
-    asked.review ?? refuse("set_review says on (true) or off (false).");
-  if (review === project.review) {
-    refuse(
-      `Review before done is ${review ? "on" : "off"} for this project already.`
-    );
+const reviewSet = (project: ProjectRow, asked: { review?: boolean }) => {
+  const { review } = asked;
+  if (review === null || review === undefined) {
+    return problem(400, {
+      code: "set-review-says-true",
+      detail: "set_review says on (true) or off (false).",
+    });
   }
-  return { kind: "set_review", review };
+  if (review === project.review) {
+    return problem(400, {
+      code: "review-before-done-project",
+      detail: `Review before done is ${review ? "on" : "off"} for this project already.`,
+    });
+  }
+  return { kind: "set_review", review } satisfies ProjectSettingChange;
 };
 
 /** What the tool takes: changes, flat, each read by its `kind`. */
@@ -297,32 +298,46 @@ const dispatchAsked = (
   asked: AskedChange & {
     kind: Exclude<DispatchSetting["kind"], "set_runs_on">;
   }
-): DispatchSetting => {
+) => {
   const { needs } = projectSettingsWords;
   switch (asked.kind) {
     case "set_dispatch":
-      return {
-        kind: asked.kind,
-        dispatch: asked.dispatch ?? refuse(needs.dispatch),
-      };
+      return asked.dispatch === undefined
+        ? problem(400, { code: "dispatch-needed", detail: needs.dispatch })
+        : ({
+            kind: asked.kind,
+            dispatch: asked.dispatch,
+          } satisfies DispatchSetting);
     case "set_max_attempts":
-      return {
-        kind: asked.kind,
-        maxAttempts: asked.max_attempts ?? refuse(needs.maxAttempts),
-      };
+      return asked.max_attempts === undefined
+        ? problem(400, {
+            code: "max-attempts-needed",
+            detail: needs.maxAttempts,
+          })
+        : ({
+            kind: asked.kind,
+            maxAttempts: asked.max_attempts,
+          } satisfies DispatchSetting);
     case "set_review_limit":
-      return {
-        kind: asked.kind,
-        reviewLimit: asked.review_limit ?? refuse(needs.reviewLimit),
-      };
+      return asked.review_limit === undefined
+        ? problem(400, {
+            code: "review-limit-needed",
+            detail: needs.reviewLimit,
+          })
+        : ({
+            kind: asked.kind,
+            reviewLimit: asked.review_limit,
+          } satisfies DispatchSetting);
     case "set_budget": {
-      const budget =
-        asked.budget === undefined ? refuse(needs.budget) : asked.budget;
+      if (asked.budget === undefined) {
+        return problem(400, { code: "budget", detail: needs.budget });
+      }
+      const { budget } = asked;
       // Empty clears it, as null does (dispatch.ts `columnsOf`).
       return {
         kind: asked.kind,
         budget: budget && Object.keys(budget).length > 0 ? budget : null,
-      };
+      } satisfies DispatchSetting;
     }
     default:
       return unhandled("dispatch setting", asked.kind);
@@ -386,18 +401,12 @@ export interface ProjectSettingsDeps {
    * dispatcher would do now: the dashboard's own path (dispatch.ts
    * `configure`, `view`).
    */
-  readonly dispatch: {
-    configure: (projectId: string, change: DispatchChange) => Promise<unknown>;
-    view: (projectId: string) => Promise<DispatchView>;
-  };
+  readonly dispatch: Pick<Dispatcher, "configure" | "view">;
   /**
    * The project's name, Review before done, default landing and account,
    * through the person's own edit (project-edit.ts).
    */
-  readonly edit: (
-    projectId: string,
-    change: ProjectEdit
-  ) => Promise<Pick<Edited, "conversation">>;
+  readonly edit: ReturnType<typeof createProjectEdits>["edit"];
   /**
    * Its Who decides and delegate types in effect (decides-file.ts,
    * project-delegate-types.ts): each kind's member and each type, with
@@ -441,12 +450,14 @@ export const createProjectSettings = ({
    * (roles.ts `allows`), and `named` must be it, by its id or its name in
    * any case (`cawco-dev` is the project Cawco-Dev).
    */
-  const ownProject = (actor: InstanceRow, named?: string): ProjectRow => {
+  const ownProject = (actor: InstanceRow, named?: string) => {
     const project = actor.projectId ? db.project(actor.projectId) : undefined;
     if (!project) {
-      return refuse(
-        "project_settings changes this session's project, and this session is in none."
-      );
+      return problem(400, {
+        code: "project-settings-changes-sessions",
+        detail:
+          "project_settings changes this session's project, and this session is in none.",
+      });
     }
     const asked = named?.trim().toLowerCase();
     if (
@@ -454,9 +465,13 @@ export const createProjectSettings = ({
       asked !== project.id.toLowerCase() &&
       asked !== project.name.trim().toLowerCase()
     ) {
-      return refuse(
-        projectSettingsWords.notYours(named?.trim() ?? "", project.name)
-      );
+      return problem(400, {
+        code: "not-yours",
+        detail: projectSettingsWords.notYours(
+          named?.trim() ?? "",
+          project.name
+        ),
+      });
     }
     return project;
   };
@@ -469,13 +484,19 @@ export const createProjectSettings = ({
       .map((view) => view.name);
 
   /** A repository link, checked against the project as it stands. */
-  const linkable = (project: ProjectRow, remote: string): void => {
+  const linkable = (project: ProjectRow, remote: string) => {
     if (project.links.includes(remote)) {
-      refuse(`This project is linked to ${remote} already.`);
+      return problem(400, {
+        code: "project-linked-already",
+        detail: `This project is linked to ${remote} already.`,
+      });
     }
     const other = db.projectByRemote(remote);
     if (other && other.id !== project.id) {
-      refuse(`${remote} is the project “${other.name}”'s repository.`);
+      return problem(400, {
+        code: "project-repository",
+        detail: `${remote} is the project “${other.name}”'s repository.`,
+      });
     }
   };
 
@@ -483,17 +504,25 @@ export const createProjectSettings = ({
   const runsOnChange = (
     project: ProjectRow,
     asked: string | null | undefined
-  ): ProjectSettingChange => {
+  ) => {
     if (asked === undefined) {
-      refuse("set_runs_on names runs_on: apple, linux, a machine, or null.");
+      return problem(400, {
+        code: "set-runs-names-runs",
+        detail: "set_runs_on names runs_on: apple, linux, a machine, or null.",
+      });
     }
     let to: string | null = null;
     if (asked?.trim()) {
       const value = runsOnValue(asked, db.listAgents());
-      to = "value" in value ? value.value : refuse(value.problem);
+      if (!("value" in value)) {
+        return problem(400, { code: "runs-on-unknown", detail: value.problem });
+      }
+      to = value.value;
     }
     const change: DispatchSetting = { kind: "set_runs_on", runsOn: to };
-    return project.runsOn === to ? refuse(alreadyWords(change)) : change;
+    return project.runsOn === to
+      ? problem(400, { code: "already-words", detail: alreadyWords(change) })
+      : change;
   };
 
   /**
@@ -504,28 +533,39 @@ export const createProjectSettings = ({
   const dispatchSet = (
     project: ProjectRow,
     asked: Parameters<typeof dispatchAsked>[0]
-  ): ProjectSettingChange => {
+  ) => {
     const change = dispatchAsked(asked);
+    if (change instanceof ElysiaStatus) {
+      return change;
+    }
     const columns = dispatchColumns(change);
     const same = Object.entries(columns).every(
       ([key, value]) =>
         JSON.stringify(project[key as keyof DispatchChange] ?? null) ===
         JSON.stringify(value ?? null)
     );
-    const problem = same ? alreadyWords(change) : dispatchProblem(columns);
-    return problem ? refuse(problem) : change;
+    const misfit = same ? alreadyWords(change) : dispatchProblem(columns);
+    return misfit
+      ? problem(400, { code: "dispatch-set-refused", detail: misfit })
+      : change;
   };
 
   /** Caw on or off, refused when he is that already. */
-  const eventsSet = (
-    project: ProjectRow,
-    asked: AskedChange
-  ): ProjectSettingChange => {
-    const on = asked.events ?? refuse(projectSettingsWords.needs.events);
-    if (on === project.eventsOn) {
-      refuse(projectSettingsWords.already.events(on));
+  const eventsSet = (project: ProjectRow, asked: AskedChange) => {
+    const on = asked.events;
+    if (on === null || on === undefined) {
+      return problem(400, {
+        code: "events",
+        detail: projectSettingsWords.needs.events,
+      });
     }
-    return { kind: "set_events", events: on };
+    if (on === project.eventsOn) {
+      return problem(400, {
+        code: "events",
+        detail: projectSettingsWords.already.events(on),
+      });
+    }
+    return { kind: "set_events", events: on } satisfies ProjectSettingChange;
   };
 
   /** One switch of the person's writing on tasks, refused when it is that already. */
@@ -534,21 +574,41 @@ export const createProjectSettings = ({
     asked: AskedChange & {
       kind: "set_hears_tasks" | "set_attempts_hear_comments";
     }
-  ): ProjectSettingChange => {
+  ) => {
     const { needs, already } = projectSettingsWords;
     if (asked.kind === "set_hears_tasks") {
-      const on = asked.hears_tasks ?? refuse(needs.hearsTasks);
-      if (on === project.hearsTasks) {
-        refuse(already.hearsTasks(on));
+      const on = asked.hears_tasks;
+      if (on === null || on === undefined) {
+        return problem(400, { code: "hears-tasks", detail: needs.hearsTasks });
       }
-      return { kind: asked.kind, hearsTasks: on };
+      if (on === project.hearsTasks) {
+        return problem(400, {
+          code: "hears-tasks",
+          detail: already.hearsTasks(on),
+        });
+      }
+      return {
+        kind: asked.kind,
+        hearsTasks: on,
+      } satisfies ProjectSettingChange;
     }
-    const on =
-      asked.attempts_hear_comments ?? refuse(needs.attemptsHearComments);
+    const on = asked.attempts_hear_comments;
+    if (on === null || on === undefined) {
+      return problem(400, {
+        code: "attempts-hear-comments",
+        detail: needs.attemptsHearComments,
+      });
+    }
     if (on === project.attemptsHearComments) {
-      refuse(already.attemptsHearComments(on));
+      return problem(400, {
+        code: "attempts-hear-comments",
+        detail: already.attemptsHearComments(on),
+      });
     }
-    return { kind: asked.kind, attemptsHearComments: on };
+    return {
+      kind: asked.kind,
+      attemptsHearComments: on,
+    } satisfies ProjectSettingChange;
   };
 
   /** An account by its name among the fleet's; null: none. */
@@ -562,120 +622,170 @@ export const createProjectSettings = ({
   };
 
   /** The account its sessions start on, checked as the person's own edit is, refused when it is that already. */
-  const accountSet = (
-    project: ProjectRow,
-    asked: AskedChange
-  ): ProjectSettingChange => {
+  const accountSet = (project: ProjectRow, asked: AskedChange) => {
     if (asked.account === undefined) {
-      refuse(projectAccountWords.needs);
+      return problem(400, {
+        code: "account-set-refused",
+        detail: projectAccountWords.needs,
+      });
     }
     const change = accountChange(project, asked.account, accounts());
+    if (change instanceof ElysiaStatus) {
+      return change;
+    }
     if (!change) {
-      return refuse(projectAccountWords.already(accountName(project.account)));
+      return problem(400, {
+        code: "already",
+        detail: projectAccountWords.already(accountName(project.account)),
+      });
     }
     return {
       kind: "set_account",
       account: change.account,
       name: accountName(change.account),
-    };
+    } satisfies ProjectSettingChange;
   };
 
   /** What its sessions on its account do at that account's limit, refused when it is that already. */
-  const atLimitSet = (
-    project: ProjectRow,
-    asked: AskedChange
-  ): ProjectSettingChange => {
-    const atLimit = asked.at_limit ?? refuse(projectAccountWords.atLimit.needs);
-    if (atLimit === project.accountAtLimit) {
-      refuse(projectAccountWords.atLimit.already(atLimit));
+  const atLimitSet = (project: ProjectRow, asked: AskedChange) => {
+    const atLimit = asked.at_limit;
+    if (atLimit === null || atLimit === undefined) {
+      return problem(400, {
+        code: "at-limit-set-refused",
+        detail: projectAccountWords.atLimit.needs,
+      });
     }
-    return { kind: "set_account_at_limit", atLimit };
+    if (atLimit === project.accountAtLimit) {
+      return problem(400, {
+        code: "already",
+        detail: projectAccountWords.atLimit.already(atLimit),
+      });
+    }
+    return {
+      kind: "set_account_at_limit",
+      atLimit,
+    } satisfies ProjectSettingChange;
   };
 
   /** The area it is put in, by id or name, or none; refused when it is there already. */
-  const areaSet = (
-    project: ProjectRow,
-    asked: AskedChange
-  ): ProjectSettingChange => {
+  const areaSet = (project: ProjectRow, asked: AskedChange) => {
     const { area: wanted } = asked;
     if (wanted === undefined) {
-      return refuse(areaWords.needs);
+      return problem(400, {
+        code: "area-set-refused",
+        detail: areaWords.needs,
+      });
     }
-    const area =
-      wanted === null
-        ? null
-        : (areas.named(wanted) ??
-          refuse(areaWords.unknown(wanted, areas.names())));
+    const area = wanted === null ? null : areas.named(wanted);
+    if (area === undefined && wanted !== null) {
+      return problem(400, {
+        code: "unknown-area",
+        detail: areaWords.unknown(wanted, areas.names()),
+      });
+    }
     const id = area?.id ?? null;
     if (id === project.areaId) {
-      refuse(areaWords.already(area?.name ?? null));
+      return problem(400, {
+        code: "already",
+        detail: areaWords.already(area?.name ?? null),
+      });
     }
-    return { kind: "set_area", area: id, name: area?.name ?? null };
+    return {
+      kind: "set_area",
+      area: id,
+      name: area?.name ?? null,
+    } satisfies ProjectSettingChange;
   };
 
   /** The set its sessions start with, its names each once; refused when it is that already. */
-  const startingSetChange = (
-    project: ProjectRow,
-    asked: AskedChange
-  ): ProjectSettingChange => {
+  const startingSetChange = (project: ProjectRow, asked: AskedChange) => {
     const wanted = asked.starting_set;
     if (wanted === undefined) {
-      return refuse(projectSettingsWords.needs.startingSet);
+      return problem(400, {
+        code: "starting-set-needed",
+        detail: projectSettingsWords.needs.startingSet,
+      });
     }
     const set = wanted && {
       skills: [...new Set(wanted.skills.map((name) => name.trim()))],
       servers: [...new Set(wanted.servers.map((name) => name.trim()))],
     };
-    const problem = set ? startingSetProblem(set) : undefined;
-    if (problem) {
-      refuse(`${problem}.`);
+    const misfit = set ? startingSetProblem(set) : undefined;
+    if (misfit) {
+      return problem(400, {
+        code: "starting-set-refused",
+        detail: `${misfit}.`,
+      });
     }
     const now = projectStartingSet(project.id);
     const same = set
       ? JSON.stringify(now.set) === JSON.stringify(set)
       : now.text === undefined;
     if (same) {
-      refuse(projectSettingsWords.already.startingSet);
+      return problem(400, {
+        code: "already",
+        detail: projectSettingsWords.already.startingSet,
+      });
     }
-    return { kind: "set_starting_set", startingSet: set };
+    return {
+      kind: "set_starting_set",
+      startingSet: set,
+    } satisfies ProjectSettingChange;
   };
 
   /** One asked change, checked against the project as it stands, as the hub stores it. */
-  const checked = async (
-    project: ProjectRow,
-    asked: AskedChange
-  ): Promise<ProjectSettingChange> => {
+  const grantChange = (project: ProjectRow, asked: AskedChange) => {
+    const name = asked.connection?.trim();
+    if (!name) {
+      return problem(400, {
+        code: "grant-connection-names-connection",
+        detail: "grant_connection names the connection.",
+      });
+    }
+    let view: ReturnType<Connections["get"]>;
+    try {
+      view = connections.get(name);
+    } catch {
+      return problem(400, {
+        code: "no-connection",
+        detail: projectSettingsWords.noConnection(name, grantable(project)),
+      });
+    }
+    if (view.projects.includes(project.id)) {
+      return problem(400, {
+        code: "granted-project-already",
+        detail: `${name} is granted to this project already.`,
+      });
+    }
+    return {
+      kind: "grant_connection",
+      connection: name,
+      service: view.service,
+      account: view.account,
+    } satisfies ProjectSettingChange;
+  };
+
+  const linkChange = (project: ProjectRow, asked: AskedChange) => {
+    const github = asked.github?.trim() ?? "";
+    if (!GITHUB_REPO.test(github)) {
+      return problem(400, {
+        code: "link-repo-takes-github",
+        detail: "link_repo takes the GitHub repository as owner/name.",
+      });
+    }
+    const refused = linkable(project, `github.com/${github}`);
+    if (refused instanceof ElysiaStatus) {
+      return refused;
+    }
+    return { kind: "link_repo", github } satisfies ProjectSettingChange;
+  };
+
+  const checked = async (project: ProjectRow, asked: AskedChange) => {
     switch (asked.kind) {
-      case "grant_connection": {
-        const name =
-          asked.connection?.trim() ||
-          refuse("grant_connection names the connection.");
-        let view: ReturnType<Connections["get"]>;
-        try {
-          view = connections.get(name);
-        } catch {
-          return refuse(
-            projectSettingsWords.noConnection(name, grantable(project))
-          );
-        }
-        if (view.projects.includes(project.id)) {
-          refuse(`${name} is granted to this project already.`);
-        }
-        return {
-          kind: "grant_connection",
-          connection: name,
-          service: view.service,
-          account: view.account,
-        };
-      }
-      case "link_repo": {
-        const github = asked.github?.trim() ?? "";
-        if (!GITHUB_REPO.test(github)) {
-          refuse("link_repo takes the GitHub repository as owner/name.");
-        }
-        linkable(project, `github.com/${github}`);
-        return { kind: "link_repo", github };
-      }
+      case "grant_connection":
+        return grantChange(project, asked);
+      case "link_repo":
+        return linkChange(project, asked);
       case "create_repo":
         return await publish.read(project, asked);
       case "set_runs_on":
@@ -707,38 +817,63 @@ export const createProjectSettings = ({
       default:
         return unhandled("project setting", asked.kind);
     }
-    const to = asked.lands ?? refuse("set_lands names main, branch or pr.");
-    if (project.lands === to) {
-      refuse(`This project's work lands on ${to} already.`);
+    const to = asked.lands;
+    if (to === null || to === undefined) {
+      return problem(400, {
+        code: "set-lands-names-main",
+        detail: "set_lands names main, branch or pr.",
+      });
     }
-    return { kind: "set_lands", lands: to };
+    if (project.lands === to) {
+      return problem(400, {
+        code: "projects-work-lands-already",
+        detail: `This project's work lands on ${to} already.`,
+      });
+    }
+    return { kind: "set_lands", lands: to } satisfies ProjectSettingChange;
   };
 
   /** Every change checked, else the first refusal; two changes of one kind are refused. */
-  const checkAll = async (
-    project: ProjectRow,
-    asked: AskedChange[]
-  ): Promise<ProjectSettingChange[]> => {
+  const checkAll = async (project: ProjectRow, asked: AskedChange[]) => {
     const kinds = new Set(
       asked.map((one) => `${one.kind}:${one.connection ?? ""}`)
     );
     if (kinds.size !== asked.length) {
-      refuse("Name each change once.");
+      return problem(400, {
+        code: "name-each-change-once",
+        detail: "Name each change once.",
+      });
     }
     const out: ProjectSettingChange[] = [];
     for (const one of asked) {
-      out.push(await checked(project, one));
+      const answered = await checked(project, one);
+      if (answered instanceof ElysiaStatus) {
+        return answered;
+      }
+      out.push(answered);
     }
     return out;
   };
 
   /** Applies one checked change through its setting's own code path; answers what the note says of it. */
+  /** A change of the project's own fields (project-edit.ts), made: its note, or its refusal. */
+  const editSaid = async (
+    change: ProjectSettingChange,
+    projectId: string,
+    asked: Parameters<typeof edit>[1]
+  ) => {
+    const edited = await edit(projectId, asked);
+    return edited instanceof ElysiaStatus
+      ? edited
+      : [projectSettingWords(change)];
+  };
+
   const applyOne = async (
     project: ProjectRow,
     change: ProjectSettingChange,
     /** Who its file's commit is by. */
     author: string
-  ): Promise<string[]> => {
+  ) => {
     switch (change.kind) {
       case "grant_connection": {
         const view = connections.get(change.connection);
@@ -751,15 +886,20 @@ export const createProjectSettings = ({
         db.addProjectLink(project.id, `github.com/${change.github}`);
         break;
       case "rename":
-        await edit(project.id, { name: change.name });
-        break;
+        return await editSaid(change, project.id, { name: change.name });
       case "set_review":
-        await edit(project.id, { review: change.review });
-        break;
+        return await editSaid(change, project.id, { review: change.review });
       case "create_repo": {
         // A publish links what it made, as its repository's copy.
-        const { full, from } = await publish.publish(project, change);
-        linkable(project, `github.com/${full}`);
+        const published = await publish.publish(project, change);
+        if (published instanceof ElysiaStatus) {
+          return published;
+        }
+        const { full, from } = published;
+        const refused2 = linkable(project, `github.com/${full}`);
+        if (refused2 instanceof ElysiaStatus) {
+          return refused2;
+        }
         db.addProjectLink(
           project.id,
           `github.com/${full}`,
@@ -768,15 +908,22 @@ export const createProjectSettings = ({
         return [
           projectSettingWords(change),
           projectSettingWords({ kind: "link_repo", github: full }),
-        ];
+        ] satisfies string[];
       }
       case "set_runs_on":
       case "set_dispatch":
       case "set_max_attempts":
       case "set_review_limit":
-      case "set_budget":
-        await dispatch.configure(project.id, dispatchColumns(change));
+      case "set_budget": {
+        const configured = await dispatch.configure(
+          project.id,
+          dispatchColumns(change)
+        );
+        if (configured instanceof ElysiaStatus) {
+          return configured;
+        }
         break;
+      }
       case "set_events":
         caw(project.id, { on: change.events });
         break;
@@ -787,33 +934,39 @@ export const createProjectSettings = ({
         caw(project.id, { attemptsHearComments: change.attemptsHearComments });
         break;
       case "set_account": {
-        const { conversation } = await edit(project.id, {
+        const answered = await edit(project.id, {
           account: change.account,
         });
+        if (answered instanceof ElysiaStatus) {
+          return answered;
+        }
+        const { conversation } = answered;
         return [
           projectSettingWords(change),
           ...(conversation
             ? [projectAccountWords.conversation(conversation)]
             : []),
-        ];
+        ] satisfies string[];
       }
       case "set_account_at_limit":
-        await edit(project.id, { accountAtLimit: change.atLimit });
-        break;
+        return await editSaid(change, project.id, {
+          accountAtLimit: change.atLimit,
+        });
       case "set_area": {
-        const { said } = await areas.place(project.id, change.area);
-        return [projectSettingWords(change), ...said];
+        const placed = await areas.place(project.id, change.area);
+        return placed instanceof ElysiaStatus
+          ? placed
+          : [projectSettingWords(change), ...placed.said];
       }
       case "set_starting_set":
         await writeStartingSet(project.id, change.startingSet, author);
         break;
       case "set_lands":
-        await edit(project.id, { lands: change.lands });
-        break;
+        return await editSaid(change, project.id, { lands: change.lands });
       default:
         unhandled("project setting", change);
     }
-    return [projectSettingWords(change)];
+    return [projectSettingWords(change)] satisfies string[];
   };
 
   /** Applies checked changes, each before the next. */
@@ -821,19 +974,32 @@ export const createProjectSettings = ({
     project: ProjectRow,
     changes: ProjectSettingChange[],
     author: string
-  ): Promise<string[]> => {
+  ) => {
     const said: string[] = [];
     for (const change of changes) {
-      said.push(...(await applyOne(project, change, author)));
+      const answered2 = await applyOne(project, change, author);
+      if (answered2 instanceof ElysiaStatus) {
+        return answered2;
+      }
+      said.push(...answered2);
     }
     console.log(`[project-settings] ${project.name}: ${said.join("; ")}`);
     return said;
   };
 
-  const reasonOf = (raw: string | undefined): string => {
-    const reason = raw?.trim() || refuse("Say why, in one sentence.");
+  const reasonOf = (raw: string | undefined) => {
+    const reason = raw?.trim();
+    if (!reason) {
+      return problem(400, {
+        code: "say-why-one-sentence",
+        detail: "Say why, in one sentence.",
+      });
+    }
     if (reason.length > REASON_LIMIT) {
-      refuse(`Say why in one sentence, under ${REASON_LIMIT} characters.`);
+      return problem(400, {
+        code: "say-why-one-sentence",
+        detail: `Say why in one sentence, under ${REASON_LIMIT} characters.`,
+      });
     }
     return reason;
   };
@@ -863,16 +1029,26 @@ export const createProjectSettings = ({
     asked: AskedChange[],
     reason: string,
     card: readonly ProjectSettingChange[]
-  ): Promise<string[]> => {
+  ) => {
     const fresh = ownProject(actor);
+    if (fresh instanceof ElysiaStatus) {
+      return fresh;
+    }
     const shown = card.find((one) => one.kind === "create_repo");
-    const changes = (await checkAll(fresh, asked)).map((one) =>
+    const answered3 = await checkAll(fresh, asked);
+    if (answered3 instanceof ElysiaStatus) {
+      return answered3;
+    }
+    const changes = answered3.map((one) =>
       one.kind === "create_repo" && shown?.kind === "create_repo"
         ? { ...one, leftOut: shown.leftOut }
         : one
     );
     // Approved: the person's own change.
     const said = await apply(fresh, changes, "you");
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
     note(actor, {
       title: "You approved a project setting",
       body: noteBody(said, changes, reason),
@@ -882,8 +1058,11 @@ export const createProjectSettings = ({
   };
 
   /** The project's settings as they stand, and what dispatch would do now. */
-  const read = async (project: ProjectRow): Promise<string> => {
+  const read = async (project: ProjectRow) => {
     const now = await dispatch.view(project.id);
+    if (now instanceof ElysiaStatus) {
+      return now;
+    }
     const area = project.areaId
       ? (areas.named(project.areaId)?.name ?? null)
       : null;
@@ -943,13 +1122,22 @@ export const createProjectSettings = ({
     actor: InstanceRow,
     input: z.infer<typeof definition>,
     toolUseId: string | undefined
-  ): Promise<string> => {
+  ) => {
     const project = ownProject(actor, input.project);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     if (!input.changes) {
       return await read(project);
     }
     const reason = reasonOf(input.reason);
+    if (reason instanceof ElysiaStatus) {
+      return reason;
+    }
     const changes = await checkAll(project, input.changes);
+    if (changes instanceof ElysiaStatus) {
+      return changes;
+    }
     // Creating a remote and pushing reach outside, and whether work waits
     // for the person's review is theirs to choose: always the person's.
     const asking =
@@ -959,6 +1147,9 @@ export const createProjectSettings = ({
       );
     if (!asking) {
       const said = await apply(project, changes, boardTitle(actor));
+      if (said instanceof ElysiaStatus) {
+        return said;
+      }
       note(actor, {
         title: `${boardTitle(actor)} changed this project's settings`,
         body: noteBody(said, changes, reason),
@@ -979,6 +1170,9 @@ export const createProjectSettings = ({
       return recorded;
     }
     const said = await approved(actor, input.changes, reason, changes);
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
     return `The person approved it, and it applied: ${said.join("; ")}.`;
   };
 
@@ -1015,7 +1209,7 @@ export const createProjectSettings = ({
   const runApproved = async (
     actor: InstanceRow,
     input: Record<string, unknown>
-  ): Promise<string> => {
+  ) => {
     // The ask's input carries the card's changes, as checked then: each
     // is checked again as the tool takes it.
     const card = cardOf(input);
@@ -1025,6 +1219,9 @@ export const createProjectSettings = ({
       reasonIn(input),
       card
     );
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
     return `Applied: ${said.join("; ")}.`;
   };
 

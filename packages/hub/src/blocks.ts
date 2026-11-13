@@ -32,9 +32,8 @@ import {
   viewBlock,
   viewOfBlock,
 } from "@cawco/core/blocks";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { DbShape } from "./db";
-import { FolderRefusal, refused } from "./project-folder";
 
 /** The most blocks one page holds: its built-ins and the views placed on it. */
 const MOST = 64;
@@ -42,8 +41,8 @@ const MOST = 64;
 export interface BlocksDeps {
   readonly changed: (projectId: string) => void;
   readonly db: Pick<DbShape, "blocks">;
-  /** The project's kept views, by name. */
-  readonly keptViews: (projectId: string) => Promise<string[]>;
+  /** The project's kept views, by name; undefined when the hub keeps no such project. */
+  readonly keptViews: (projectId: string) => Promise<string[] | undefined>;
   /** A project's name, or undefined when the hub keeps no such project. */
   readonly projectName: (projectId: string) => string | undefined;
 }
@@ -54,11 +53,15 @@ export const createBlocks = ({
   keptViews,
   projectName,
 }: BlocksDeps) => {
-  const known = (projectId: string): void => {
-    if (projectName(projectId) === undefined) {
-      throw new FolderRefusal(404, `The hub keeps no project ${projectId}.`);
-    }
-  };
+  /** The refusal of a project the hub does not keep. */
+  const noProject = (projectId: string) =>
+    problem(404, {
+      code: "block-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
+  /** The refusal of a project the hub does not keep; none for one it does. */
+  const unknownProject = (projectId: string) =>
+    projectName(projectId) === undefined ? noProject(projectId) : undefined;
 
   const arrangement = (projectId: string): BlockArrangement => {
     const pages: BlockArrangement["pages"] = {};
@@ -102,25 +105,23 @@ export const createBlocks = ({
 
   return {
     /** The project's arrangement: every page it has arranged, and what is proposed. */
-    read(projectId: string): BlockArrangement {
-      known(projectId);
-      return arrangement(projectId);
+    read(projectId: string) {
+      return unknownProject(projectId) ?? arrangement(projectId);
     },
 
     /** One page's arrangement, whole: checked, kept, told; answers the project's. */
-    async write(
-      projectId: string,
-      page: BlockPage,
-      blocks: BlockPlace[]
-    ): Promise<BlockArrangement> {
-      known(projectId);
+    async write(projectId: string, page: BlockPage, blocks: BlockPlace[]) {
+      const unknown = unknownProject(projectId);
+      if (unknown) {
+        return unknown;
+      }
       const seen = new Set<string>();
       for (const { block } of blocks) {
         if (seen.has(block)) {
-          throw new FolderRefusal(
-            400,
-            `The ${page} page names the block “${block}” twice; each block stands once.`
-          );
+          return problem(400, {
+            code: "block-named-twice",
+            detail: `The ${page} page names the block “${block}” twice; each block stands once.`,
+          });
         }
         seen.add(block);
       }
@@ -128,13 +129,17 @@ export const createBlocks = ({
         .map((each) => viewOfBlock(each.block))
         .filter((name): name is string => name !== null);
       if (placed.length > 0) {
-        const kept = new Set(await keptViews(projectId));
+        const views = await keptViews(projectId);
+        if (!views) {
+          return noProject(projectId);
+        }
+        const kept = new Set(views);
         const missing = placed.filter((name) => !kept.has(name));
         if (missing.length > 0) {
-          throw new FolderRefusal(
-            400,
-            `Only a kept view stands as a block, and ${missing.map((name) => `“${name}”`).join(", ")} ${missing.length > 1 ? "are" : "is"} not one of this project's kept views.`
-          );
+          return problem(400, {
+            code: "block-view-not-kept",
+            detail: `Only a kept view stands as a block, and ${missing.map((name) => `“${name}”`).join(", ")} ${missing.length > 1 ? "are" : "is"} not one of this project's kept views.`,
+          });
         }
       }
       db.blocks.setPage(projectId, page, blocks);
@@ -153,8 +158,11 @@ export const createBlocks = ({
       page: BlockPage,
       position: number | null,
       by: string
-    ): ProposedBlock {
-      known(projectId);
+    ) {
+      const unknown = unknownProject(projectId);
+      if (unknown) {
+        return unknown;
+      }
       db.blocks.propose({
         projectId,
         view,
@@ -164,7 +172,8 @@ export const createBlocks = ({
         proposedAt: new Date(),
       });
       changed(projectId);
-      return { view, page, position, by };
+      const proposed: ProposedBlock = { view, page, position, by };
+      return proposed;
     },
 
     /**
@@ -173,7 +182,7 @@ export const createBlocks = ({
      * order, narrow, and is gone. Answers that page, or null when the draft
      * stood on no page (it is a tab).
      */
-    async kept(projectId: string, view: string): Promise<BlockPage | null> {
+    async kept(projectId: string, view: string) {
       const proposal = db.blocks
         .proposals(projectId)
         .find((row) => row.view === view);
@@ -181,11 +190,13 @@ export const createBlocks = ({
         return null;
       }
       const block = viewBlock(view);
-      const places = placesOf(
-        projectId,
-        proposal.page,
-        new Set(await keptViews(projectId))
-      ).filter((place) => place.block !== block);
+      const views = await keptViews(projectId);
+      if (!views) {
+        return noProject(projectId);
+      }
+      const places = placesOf(projectId, proposal.page, new Set(views)).filter(
+        (place) => place.block !== block
+      );
       const at =
         proposal.position === null
           ? places.length
@@ -193,7 +204,8 @@ export const createBlocks = ({
       places.splice(at, 0, { block, width: "narrow", hidden: false });
       db.blocks.place(projectId, view, proposal.page, places);
       changed(projectId);
-      return proposal.page;
+      const page: BlockPage = proposal.page;
+      return page;
     },
 
     /** A draft discarded: the proposal it stood as goes with it. */
@@ -231,13 +243,7 @@ const WIDTH = t.UnionEnum(BLOCK_WIDTHS);
 /** The routes for a project's arrangement of blocks. */
 export const blockRoutes = (blocks: Blocks) =>
   new Elysia()
-    .get("/api/projects/:id/blocks", ({ params }) => {
-      try {
-        return blocks.read(params.id);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/projects/:id/blocks", ({ params }) => blocks.read(params.id))
     .put(
       "/api/projects/:id/blocks/:page",
       {
@@ -253,11 +259,5 @@ export const blockRoutes = (blocks: Blocks) =>
           ),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await blocks.write(params.id, params.page, body.blocks);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => blocks.write(params.id, params.page, body.blocks)
     );

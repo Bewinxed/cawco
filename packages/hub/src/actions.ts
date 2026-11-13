@@ -41,7 +41,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -55,6 +55,7 @@ import {
   actionProposedWords,
   actionWords,
 } from "./presenters/project";
+import { projectRefusalOf } from "./project-refusal";
 import type { Push } from "./push";
 import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
@@ -286,17 +287,22 @@ export const createActions = ({
       }
       return { taskId: null, thenStage: null };
     }
-    let found: Awaited<ReturnType<Tasks["get"]>>;
-    try {
-      found = await tasks.get(projectId, task);
-    } catch (error) {
-      return refuse(404, wordsOf(error));
+    // A task that does not read, refused or failing, is the proposal's 404.
+    const found = await tasks.get(projectId, task).then(
+      (read) => (read instanceof ElysiaStatus ? read.response.detail : read),
+      (error: unknown) => wordsOf(error)
+    );
+    if (typeof found === "string") {
+      return refuse(404, found);
     }
     titles.set(`${projectId}/${found.id}`, found.title);
     if (thenStage === undefined) {
       return { taskId: found.id, thenStage: null };
     }
     const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      throw projectRefusalOf(stages);
+    }
     const stage = stageNamed(stages, thenStage);
     if (!stage) {
       refuse(
@@ -450,17 +456,22 @@ export const createActions = ({
       return;
     }
     const when = row.runAt ? ` for ${row.runAt.toISOString()}` : "";
+    const unnoted = (why: string) =>
+      console.warn(
+        `[actions] ${row.id}: its proposal is not in ${taskId}'s activity: ${why}`
+      );
     try {
-      await tasks.comment(
+      const noted = await tasks.comment(
         row.projectId,
         taskId,
         `Proposed ${row.connection}/${row.tool}${when}: ${row.reason} (approved action ${row.id})`,
         sessionActor(actor)
       );
+      if (noted instanceof ElysiaStatus) {
+        unnoted(noted.response.detail);
+      }
     } catch (error) {
-      console.warn(
-        `[actions] ${row.id}: its proposal is not in ${taskId}'s activity: ${wordsOf(error)}`
-      );
+      unnoted(wordsOf(error));
     }
   };
 
@@ -587,7 +598,10 @@ export const createActions = ({
         row.thenStage,
         actionActor(row.id, `${row.connection}/${row.tool} done`)
       );
-      said = `Moved ${task.id} to ${task.stage}.`;
+      said =
+        task instanceof ElysiaStatus
+          ? `${row.taskId} did not move to ${row.thenStage}: ${task.response.detail}`
+          : `Moved ${task.id} to ${task.stage}.`;
     } catch (error) {
       said = `${row.taskId} did not move to ${row.thenStage}: ${wordsOf(error)}`;
     }
@@ -751,7 +765,7 @@ export const createActions = ({
         const task = await tasks
           .get(row.projectId, row.taskId ?? "")
           .catch(() => undefined);
-        if (task) {
+        if (task && !(task instanceof ElysiaStatus)) {
           titles.set(key, task.title);
         }
       }
@@ -938,7 +952,7 @@ export const ACTION_TOOLS: ReadonlySet<string> = new Set([
   "action_cancel",
 ]);
 
-const attempt = refusalAttempt(ActionRefusal);
+const attempt = refusalAttempt(ActionRefusal, "action-refused");
 
 const STATE = t.Union([
   t.Literal("proposed"),
