@@ -336,7 +336,7 @@ const BoundaryDecisionSchema = z.discriminatedUnion("decision", [
   }).readonly(),
 ]);
 
-export type BoundaryDecision = z.infer<typeof BoundaryDecisionSchema>;
+type BoundaryDecision = z.infer<typeof BoundaryDecisionSchema>;
 
 /** A {@link BoundaryDecision} as its decider writes it: the agent and the time are added. */
 type Deciding = BoundaryDecision extends infer One
