@@ -30,8 +30,6 @@ import { warn } from "./session-log";
 
 /** What the spin-offs say to the hub and read of the sessions around them. */
 export interface SpinOffHost {
-  /** The launch a session runs under now, by the generation its spawn named. */
-  generationOf: (instanceId: string) => string | undefined;
   /** A frame to the hub. */
   sink: FrameSink;
   /** Tells the transcript index a transcript this machine deleted. */
@@ -197,12 +195,18 @@ export class SpinOffs {
    * yet. A folder in a repository git does not read as a checkout (its
    * config says bare, its `.git` unreadable) is refused as a workspace's is,
    * never run in as it is: the spin-off would work in the live folder.
+   * `processGeneration` is the launch the spawn named, which the hub's
+   * record of the worktree carries ({@link #recordWorktree}).
    */
-  async addWorktree(instanceId: string, baseCwd: string): Promise<string> {
+  async addWorktree(
+    instanceId: string,
+    baseCwd: string,
+    processGeneration: string | undefined
+  ): Promise<string> {
     const recorded = await readJson<Worktree>(worktreeRecord(instanceId));
     if (recorded) {
       this.#worktrees.set(instanceId, recorded);
-      this.#recordWorktree(instanceId, recorded);
+      this.#recordWorktree(instanceId, processGeneration, recorded);
       return recorded.dir;
     }
     const root = await repoTop(baseCwd, Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
@@ -262,7 +266,7 @@ export class SpinOffs {
     await mkdir(dirname(worktreeRecord(instanceId)), { recursive: true });
     await writeJson(worktreeRecord(instanceId), worktree);
     this.#worktrees.set(instanceId, worktree);
-    this.#recordWorktree(instanceId, worktree);
+    this.#recordWorktree(instanceId, processGeneration, worktree);
     return dir;
   }
   /**
@@ -270,8 +274,11 @@ export class SpinOffs {
    * agent keeps of it until its opening message (`announce`), which the hub
    * does not store (core `ScratchWorktree`).
    */
-  #recordWorktree(instanceId: string, { dir, path, root }: Worktree): void {
-    const processGeneration = this.#host.generationOf(instanceId);
+  #recordWorktree(
+    instanceId: string,
+    processGeneration: string | undefined,
+    { dir, path, root }: Worktree
+  ): void {
     if (processGeneration) {
       this.#host.sink({
         kind: "scratch_worktree",

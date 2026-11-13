@@ -97,6 +97,7 @@ import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
+import type { BrowserPorts } from "./browser/browsers";
 import { harnessMcpUrl } from "./delegation";
 import { fleetMcpAt } from "./fleet-mcp-set";
 import { gatePath, type McpGate } from "./mcp-gate";
@@ -502,6 +503,7 @@ const sharedLaunch = (config: HostedConfig): Launch => ({
  * the roots it saves a capture in, as OpenCode's plugin launched it.
  */
 const gateLaunch = async (
+  ports: BrowserPorts,
   gateId: string,
   name: string,
   config: HostedConfig,
@@ -513,7 +515,7 @@ const gateLaunch = async (
       ? [
           ...door.throughGate(
             config.args ?? [],
-            await door.browserDoor(gateId)
+            await door.browserDoor(ports, gateId)
           ),
           `--filesystem-root=${workspaceScratchDir(gateId)}`,
           `--filesystem-root=${path}`,
@@ -956,6 +958,7 @@ class McpHost {
    * its process started ends it; the next call starts the new one.
    */
   async fetchGate(
+    ports: BrowserPorts,
     gateId: string,
     name: string,
     request: Request
@@ -986,7 +989,7 @@ class McpHost {
     if (hosted?.key !== keyOf(config)) {
       hosted?.stop();
       hosted = new Hosted(server, config, gateKeptFile(keyOf(config)), () =>
-        gateLaunch(id, server, config, path)
+        gateLaunch(ports, id, server, config, path)
       );
       gate.servers.set(server, hosted);
     }

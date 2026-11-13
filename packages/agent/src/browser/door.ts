@@ -34,7 +34,7 @@ import {
 } from "@cawco/core/paths/workspace";
 import { writeStateFile } from "@cawco/core/state-file";
 import { setProject } from "../boundary/looks";
-import { reserveBrowser } from "./browsers";
+import { type BrowserPorts, reserveBrowser } from "./browsers";
 import {
   closeWorkspaceBrowsers,
   dropWorkspaceBrowsers,
@@ -66,6 +66,7 @@ export interface BrowserDoor {
  * starts).
  */
 export const browserDoor = async (
+  ports: BrowserPorts,
   id: string,
   projectId?: string
 ): Promise<BrowserDoor> => {
@@ -75,7 +76,7 @@ export const browserDoor = async (
   }
   const token = await ensureGateToken(id);
   const key = await keyOfWorkspace(id, await machineId());
-  await reserveBrowser(key);
+  await reserveBrowser(ports, key);
   const config = join(workspaceStateDir(id), GATE_CONFIG_NAME);
   const body = `${JSON.stringify({
     wsEndpoint: `ws://127.0.0.1:${browserGatePort()}/${id}`,

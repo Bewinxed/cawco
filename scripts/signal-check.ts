@@ -34,12 +34,7 @@ const OWN = new Set([
  * raw call left fails the check too, so the list holds only what is still
  * true.
  */
-const KNOWN = new Map<string, string>([
-  [
-    "packages/agent/src/harnesses/opencode-plugin.ts",
-    "the plugin's text runs inside OpenCode's own process, which cannot load core: its one group kill keeps the wall's rule by hand (a pid its spawn made, an integer above 1)",
-  ],
-]);
+const KNOWN = new Map<string, string>();
 
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 
