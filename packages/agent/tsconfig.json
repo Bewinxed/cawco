@@ -21,6 +21,7 @@
   "references": [
     { "path": "../core" },
     { "path": "../jsonl-parser" },
-    { "path": "../preview" }
+    { "path": "../preview" },
+    { "path": "../hub" }
   ]
 }

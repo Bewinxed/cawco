@@ -140,6 +140,7 @@
         "@code-inspector/core": "2.0.9",
         "@earendil-works/pi-ai": "1.4.0",
         "@earendil-works/pi-coding-agent": "1.4.0",
+        "@elysia/eden": "2.0.0-rc.1",
         "@excalidraw/excalidraw": "0.18.1",
         "@excalidraw/mermaid-to-excalidraw": "2.2.2",
         "@gitbeaker/rest": "43.8.0",
@@ -165,6 +166,7 @@
         "zod": "4.6.5",
       },
       "devDependencies": {
+        "@cawco/hub": "workspace:*",
         "@jridgewell/trace-mapping": "0.3.31",
         "@types/bun": "^1.4.3",
         "@types/dockerode": "4.0.2",

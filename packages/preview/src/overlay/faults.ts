@@ -13,11 +13,11 @@
  * holds) sends nothing.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import {
   PAGE_FAULT_EVENT,
   PAGE_FAULT_TEXT_MAX,
   PAGE_FAULTS_KEPT,
+  type PageErrorReport,
   type PageFault,
   sameFault,
 } from "@cawco/core/page-faults";
@@ -68,23 +68,21 @@ function send(fault: PageFault): void {
     return;
   }
   sent += 1;
-  const request = hubRequest("POST /api/dashboard-errors", {
-    body: {
-      message: clip(
-        fault.kind === "error" ? fault.message : `${fault.kind} fault`
-      ),
-      stack: "",
-      path: location.pathname.slice(0, 1000) || "/",
-      sessionId: null,
-      version: "overlay",
-      userAgent: navigator.userAgent.slice(0, 512),
-      fault: { artifact: to.artifact, revision: to.revision, fault },
-    },
-  });
+  const report: PageErrorReport = {
+    message: clip(
+      fault.kind === "error" ? fault.message : `${fault.kind} fault`
+    ),
+    stack: "",
+    path: location.pathname.slice(0, 1000) || "/",
+    sessionId: null,
+    version: "overlay",
+    userAgent: navigator.userAgent.slice(0, 512),
+    fault: { artifact: to.artifact, revision: to.revision, fault },
+  };
   fetch(PREVIEW_ERRORS_PATH, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(report),
     keepalive: true,
   }).catch(() => undefined);
 }
