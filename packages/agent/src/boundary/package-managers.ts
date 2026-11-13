@@ -127,12 +127,16 @@ const writeBunConfig = async (configHome: string): Promise<void> => {
   await writeNew(join(configHome, ".bunfig.toml"), BUN_GLOBAL_STORE);
 };
 
+/** Whether `error` is a create's EEXIST: the path is already there. */
+const isExisting = (error: unknown): boolean =>
+  error instanceof Error && "code" in error && error.code === "EEXIST";
+
 /** Writes `path` only as a new file: one there already is the workspace's to keep. */
 const writeNew = async (path: string, content: string): Promise<void> => {
   try {
     await writeFile(path, content, { flag: "wx" });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (!isExisting(error)) {
       throw error;
     }
   }
@@ -240,7 +244,7 @@ const linkYarnFolder = async (id: string, dataHome: string): Promise<void> => {
   try {
     await symlink(yarnGlobalFolder(), join(dir, "berry"));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (!isExisting(error)) {
       throw error;
     }
   }
@@ -258,7 +262,7 @@ const linkGitConfig = async (configHome: string): Promise<void> => {
   try {
     await symlink(userGitConfigDir(), join(configHome, "git"));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (!isExisting(error)) {
       throw error;
     }
   }

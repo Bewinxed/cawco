@@ -441,7 +441,7 @@ export const NARROW_CAUSE_WORDS: Readonly<Record<NarrowCause, string>> = {
 
 /** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
 const socketsOf = async (pid: number): Promise<string[]> => {
-  const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
+  const fds = await readdir(`/proc/${pid}/fd`).catch(() => []);
   const links = await Promise.all(
     fds.map((fd) => readlink(`/proc/${pid}/fd/${fd}`).catch(() => undefined))
   );
