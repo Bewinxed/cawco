@@ -7,13 +7,13 @@ import { detach } from "@cawco/core/detach";
  * beside the log, never through the virtualized container itself.
  */
 import { untrack } from "svelte";
-import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { track } from "#lib/platform/track.js";
 import type { ConversationFind } from "../find/conversation-find.svelte";
 import type { SessionState } from "../stores/sessions.svelte";
 import { readOlderPage } from "../stores/transcript-reads.svelte";
 import type { Ticket } from "./arrivals.svelte";
 import type { Landing } from "./kept-place.svelte";
+import { clearAfterFade } from "./mark-fade";
 import { type OpenAsk, openAt, rowAt } from "./open-at.svelte";
 import type { Row } from "./rows";
 import { FAR_FROM_LATEST } from "./scroll-pin.svelte";
@@ -183,11 +183,13 @@ export class RecordSeek {
     }
     const { key } = this.marked;
     this.marked = { key, state: "off" };
-    setTimeout(() => {
-      if (this.marked?.key === key && this.marked.state === "off") {
+    clearAfterFade(
+      () => this.marked,
+      key,
+      () => {
         this.marked = null;
       }
-    }, dur("--duration-panel"));
+    );
   };
 
   constructor(host: RecordSeekHost) {
