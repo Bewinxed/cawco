@@ -847,9 +847,9 @@
   // board's address on what a desk puts in front, whose address the
   // workspace writes in its place.
   const landed = workspace.serve(
-    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null,
-    (page.data as { resolved?: string[] }).resolved ?? [],
-    (page.data as { landed?: string[] }).landed ?? []
+    page.data.workspace ?? null,
+    page.data.resolved ?? [],
+    page.data.landed ?? []
   );
   if (browser && !landed) {
     workspace.followUrl(location.href);

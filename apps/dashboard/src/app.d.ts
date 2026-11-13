@@ -74,7 +74,34 @@ declare global {
       region?: boolean;
     }
     // interface Locals {}
-    // interface PageData {}
+    /** What a route's load hands the shell, read from `page.data` by the components that draw it. */
+    interface PageData {
+      /** Each tab's shape as last measured, from the layout's cookie. */
+      foldBoxes?: Record<
+        string,
+        import("./lib/components/ui/fluid-tabs/fold-memory").FoldMeasure
+      >;
+      /** The conversations' names the layout's server load read, by session. */
+      names?: Record<string, import("./lib/platform/hub-read").HubRead<string>>;
+      /** The first paint's board: what the server read of the hub (stores/board.svelte.ts `servedBoard`). */
+      board?: import("./lib/cawco/served-board").ServedBoard<
+        import("./lib/cawco/projects").ProjectRow
+      > | null;
+      /** The server's copy of each kept preference (platform/prefs.ts). */
+      kept?: Partial<Record<import("./lib/platform/prefs").Pref, string>>;
+      /** The conversations the layout landed the board's address on. */
+      landed?: string[];
+      /** The tabs whose names the server resolved. */
+      resolved?: string[];
+      /** A project page's server-read start, when the page is one. */
+      seed?: import("./lib/cawco/workspace/project-seed").ProjectSeed | null;
+      /** The transcript's server-read tail, when the page is a session's. */
+      tail?:
+        import("./lib/cawco/stores/transcript-reads.svelte").ServerTail | null;
+      /** The workspace the server's cookie held. */
+      workspace?:
+        import("./lib/cawco/workspace/workspace.svelte").WorkspaceV1 | null;
+    }
     interface PageState {
       /** As `taskOpened`, for a project folder's file opened as its own page (`?file=`). */
       fileOpened?: boolean;

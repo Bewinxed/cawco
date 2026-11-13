@@ -301,9 +301,12 @@
       return;
     }
     // Not optimistic: the request leaves when the hub has taken the answer.
-    submitCommand(session.instanceId, session.machineId, "permission.answer", {
-      requestId: request.requestId,
-      result: permissionAnswer(request, kind),
+    submitCommand(session.instanceId, session.machineId, {
+      kind: "permission.answer",
+      intent: {
+        requestId: request.requestId,
+        result: permissionAnswer(request, kind),
+      },
     });
   }
 

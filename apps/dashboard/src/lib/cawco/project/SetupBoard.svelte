@@ -91,12 +91,10 @@
     asked: BlockedRequest,
     result: PermissionResult
   ): string | null =>
-    submitCommand(
-      asked.request.instanceId,
-      asked.machineId,
-      "permission.answer",
-      { requestId: asked.request.requestId, result }
-    );
+    submitCommand(asked.request.instanceId, asked.machineId, {
+      kind: "permission.answer",
+      intent: { requestId: asked.request.requestId, result },
+    });
 
   let questions = $state<HTMLElement>();
 
