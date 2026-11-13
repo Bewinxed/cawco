@@ -14,8 +14,9 @@
   import type { RebalanceNotice } from "@cawco/core/accounts";
   import { rebalanceWords } from "@cawco/core/words/account-lines";
   import AccountTile from "#lib/cawco/accounts/AccountTile.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import NoticeRow from "#lib/cawco/home/NoticeRow.svelte";
+  import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
   import { IconAccounts } from "#lib/icons.js";
 
   let {
@@ -28,7 +29,8 @@
   } = $props();
 
   const providerOf = (accountId: string) =>
-    cawco.accounts?.accounts.find((one) => one.id === accountId)?.provider;
+    accountsStore.accounts?.accounts.find((one) => one.id === accountId)
+      ?.provider;
 </script>
 
 <div data-slot="group" class="group">

@@ -45,17 +45,18 @@ import { failureWords } from "#lib/platform/hub-read.js";
 import { browser } from "$app/env";
 import { dur } from "../../platform/motion/curves.svelte";
 import { store, stored } from "../../platform/storage";
-import {
-  type BlockedRequest,
-  type BoardRow,
-  cawco,
-  cawOf,
-  configureCaw,
-  type ProjectRow,
-} from "../client.svelte";
+import { connectionStore } from "../hub/socket.svelte";
+import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
+import type { ProjectRow } from "../projects";
 import { QUESTION_KEYS } from "../question";
+import { asksStore } from "../stores/asks.svelte";
+import { boardStore } from "../stores/board.svelte";
+import { clockStore } from "../stores/clock.svelte";
+import { needsStore } from "../stores/needs.svelte";
+import { cawOf, configureCaw, projectsStore } from "../stores/projects.svelte";
+import type { BlockedRequest } from "../stores/sessions.svelte";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
@@ -370,7 +371,7 @@ export class CawLead {
   readonly conversation = $derived.by((): BoardRow | null => {
     const named = this.project?.conversationInstanceId;
     return named
-      ? (cawco.listedInstances.find((row) => row.id === named) ?? null)
+      ? (boardStore.listedInstances.find((row) => row.id === named) ?? null)
       : null;
   });
   /** Its session's id; null for none. */
@@ -380,7 +381,9 @@ export class CawLead {
    * the socket's first snapshot is in, the page load's read until then.
    */
   readonly #machinesOnline = $derived.by(() =>
-    cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
+    boardStore.liveRead
+      ? boardStore.onlineMachines.length > 0
+      : this.#loadedOnline()
   );
   /**
    * The session a start of his conversation is making, while that start
@@ -426,7 +429,7 @@ export class CawLead {
       this.project !== null ||
       this.waited ||
       this.#reading() ||
-      cawco.hub === "unreachable"
+      connectionStore.hub === "unreachable"
   );
 
   /** Turns the project's events on or off, or moves them to another harness or model. */
@@ -460,7 +463,7 @@ export class CawLead {
   /** What the conversation has asked, oldest first: its parked asks. */
   readonly asks = $derived.by((): BlockedRequest[] => {
     const id = this.conversationId;
-    return id ? cawco.blocked.filter((row) => row.instanceId === id) : [];
+    return id ? asksStore.blocked.filter((row) => row.instanceId === id) : [];
   });
 
   /**
@@ -470,7 +473,7 @@ export class CawLead {
   readonly cards = $derived.by((): ArtifactNeed[] => {
     const id = this.conversationId;
     return id
-      ? cawco.artifactNeedsOpen.filter((need) => need.instanceId === id)
+      ? needsStore.artifactNeedsOpen.filter((need) => need.instanceId === id)
       : [];
   });
 
@@ -480,7 +483,7 @@ export class CawLead {
   readonly status = $derived.by((): CawStatus => {
     // A wait stands over whatever he was: the hub away, or another
     // project's board on its way.
-    if (cawco.hub === "unreachable") {
+    if (connectionStore.hub === "unreachable") {
       return "reconnecting";
     }
     if (this.#reading()) {
@@ -493,12 +496,12 @@ export class CawLead {
     // card or canvas of his in Needs you. His row's mark and his tab's
     // glyph read the same.
     const id = this.conversationId;
-    if (id && cawco.activityOf(id) === "blocked") {
+    if (id && asksStore.activityOf(id) === "blocked") {
       return "needs-you";
     }
     // The conversation's own turn: an attempt it parents running is not Caw
     // working. Off, it still answers your words, and works while it does.
-    if (id && cawco.busyOf(id)) {
+    if (id && asksStore.busyOf(id)) {
       return "working";
     }
     if (!this.project.eventsOn) {
@@ -521,13 +524,13 @@ export class CawLead {
 
   /** The project's spend cap while it holds the project back. */
   readonly cap = $derived.by((): ProjectCap | null =>
-    cawco.capHolding(this.#projectId())
+    projectsStore.capHolding(this.#projectId())
   );
 
   /** The cap's line: reached, and when the next period starts it clear. */
   readonly capLine = $derived.by((): string | null =>
     this.cap
-      ? `Budget reached · resets ${resetLabel(new Date(this.cap.resetsAt).toISOString(), cawco.now)}`
+      ? `Budget reached · resets ${resetLabel(new Date(this.cap.resetsAt).toISOString(), clockStore.now)}`
       : null
   );
 
@@ -549,7 +552,7 @@ export class CawLead {
         );
       case "working": {
         const id = this.conversationId;
-        const tool = id ? cawco.currentToolOf(id) : null;
+        const tool = id ? asksStore.currentToolOf(id) : null;
         return tool
           ? [tool.name, tool.glance].filter(Boolean).join(" · ")
           : said.working;

@@ -1,7 +1,7 @@
 import { hubRequest } from "@cawco/core/hub-request";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
-import type { ServerTail } from "#lib/cawco/client.svelte.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
+import type { ServerTail } from "#lib/cawco/stores/transcript-reads.svelte.js";
 import { isSessionTab } from "#lib/cawco/workspace/tabs.js";
 import { focusedIn, type WorkspaceV1 } from "#lib/cawco/workspace/tree.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";

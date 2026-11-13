@@ -17,9 +17,10 @@
  * dashboard's alone: the app draws none of these surfaces.
  */
 import { accountsWords } from "@cawco/core/words/accounts";
-import { cawco } from "./client.svelte";
 import { newSession, type SpawnPrefill } from "./spawn/new-session.svelte";
 import { spawnPrefs } from "./spawnPrefs.svelte";
+import { boardStore } from "./stores/board.svelte";
+import { sessionsStore } from "./stores/sessions.svelte";
 import { paneDrafts } from "./transcript/composer-draft.svelte";
 import { speakerName } from "./transcript/speaker";
 
@@ -33,7 +34,7 @@ export const NO_SESSION_CAN_START =
  * Rule): the ask stands, and the form says what it finds.
  */
 export const sessionCanStart = (): boolean =>
-  !cawco.liveRead || cawco.onlineMachines.length > 0;
+  !boardStore.liveRead || boardStore.onlineMachines.length > 0;
 
 /** "Ask" takes its object by name (DESIGN.md, Voice): the form's own agent, as it opens. */
 export const askLabel = (what: string): string =>
@@ -125,14 +126,14 @@ export function askFirst(
   writable: boolean,
   anchor: HTMLElement | null
 ): void {
-  const row = cawco.session(instanceId);
+  const row = sessionsStore.session(instanceId);
   const words = firstAskWords(row?.cwd ?? "");
   const draft = paneDrafts.get(instanceId);
   if (draft && writable) {
     draft.ask(words);
     return;
   }
-  const projectId = cawco.instanceIndex.byId.get(instanceId)?.projectId;
+  const projectId = boardStore.instanceIndex.byId.get(instanceId)?.projectId;
   askNewSession(words, anchor, {
     ...(row?.machineId ? { machineId: row.machineId } : {}),
     ...(row?.cwd ? { cwd: row.cwd } : {}),

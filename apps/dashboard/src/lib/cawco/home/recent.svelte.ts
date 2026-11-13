@@ -25,7 +25,7 @@
  * there (core `projectAt`) is the hub's to reconcile, off the machine's
  * catalog (hub stored-recent.ts, core `StoredRecent`): one a session of the
  * hub wraps is that session, a row the board lists, or one the hub holds
- * behind it (`cawco.olderInstances`: the person's own sessions the board no
+ * behind it (`boardStore.olderInstances`: the person's own sessions the board no
  * longer lists, and what nests under them), listed by the one rule above, a
  * delegate under its session. Only a transcript no session wraps, that its
  * harness records a person started (core
@@ -47,15 +47,14 @@ import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { epochOf } from "../board.svelte";
-import {
-  type BoardRow,
-  cawco,
-  isFailed,
-  isStale,
-  type ProjectRow,
-} from "../client.svelte";
+import type { BoardRow } from "../links";
 import { markHue } from "../mark";
+import type { ProjectRow } from "../projects";
 import { folderOf } from "../projects";
+import { asksStore } from "../stores/asks.svelte";
+import { boardStore, isFailed, isStale } from "../stores/board.svelte";
+import { projectsStore } from "../stores/projects.svelte";
+import { storedStore } from "../stores/stored.svelte";
 import type { MarkStatus } from "../TreeMark.svelte";
 import { areaIdOf, areas } from "./areas.svelte";
 import type { GroupBy } from "./grouping.svelte";
@@ -125,7 +124,7 @@ const theirs = personsOwn;
 
 /** Something of it waits on the person: an ask, or its stop at its account's limit. */
 const waitsOnThem = (row: BoardRow): boolean =>
-  cawco.activityOf(row.id) === "blocked" || !!row.stalled;
+  asksStore.activityOf(row.id) === "blocked" || !!row.stalled;
 
 /** It waits on the person, or it failed. */
 const needsThem = (row: BoardRow): boolean => waitsOnThem(row) || isFailed(row);
@@ -147,7 +146,7 @@ function statusOf(row: BoardRow): RecentStatus {
   if (
     row.status === "starting" ||
     row.status === "moving" ||
-    cawco.activityOf(row.id) === "working" ||
+    asksStore.activityOf(row.id) === "working" ||
     (live && (row.wakesItself === true || (row.queuedSends ?? 0) > 0))
   ) {
     return "working";
@@ -186,13 +185,13 @@ function dayOf(at: number, now: number): Day {
 
 /**
  * The sessions Recent reads: the board's listed rows, then the older ones
- * the hub answered the stored transcripts with (`cawco.olderInstances`),
+ * the hub answered the stored transcripts with (`boardStore.olderInstances`),
  * by id.
  */
 class Sessions {
   readonly rows = $derived<BoardRow[]>([
-    ...cawco.listedInstances,
-    ...cawco.olderInstances,
+    ...boardStore.listedInstances,
+    ...boardStore.olderInstances,
   ]);
   readonly byId = $derived(
     new Map(this.rows.map((row) => [row.id, row] as const))
@@ -223,14 +222,18 @@ function listedHere(row: BoardRow, from: BoardRow | undefined): boolean {
 /**
  * The transcripts stored on the machines that stand as rows: in a project's
  * folder on their machine, started by a person, wrapped by no session, as
- * the hub keeps them (`cawco.storedTranscripts`, hub stored-recent.ts).
+ * the hub keeps them (`storedStore.storedTranscripts`, hub stored-recent.ts).
  * Their day is the list's, read with the clock.
  */
 class StoredTranscripts {
   readonly entries = $derived.by(() => {
     const out: Omit<StoredEntry, "day">[] = [];
-    for (const { machineId, projectId, info } of cawco.storedTranscripts) {
-      const project = cawco.project(projectId);
+    for (const {
+      machineId,
+      projectId,
+      info,
+    } of storedStore.storedTranscripts) {
+      const project = projectsStore.project(projectId);
       if (!project) {
         continue;
       }
@@ -298,7 +301,9 @@ const projectOf = (entry: RecentEntry) => {
   if (entry.kind === "stored") {
     return entry.project;
   }
-  return entry.row.projectId ? cawco.project(entry.row.projectId) : null;
+  return entry.row.projectId
+    ? projectsStore.project(entry.row.projectId)
+    : null;
 };
 
 /** The machine a row is on. */
@@ -372,10 +377,11 @@ export function groupEntries(
 
 /** A project group's hue, the one its project's row wears. */
 export function projectHue(key: string) {
-  const project = key ? cawco.project(key) : null;
+  const project = key ? projectsStore.project(key) : null;
   return markHue(project ? folderOf(project) : "");
 }
 
 /** A machine group's operating system, for its mark. */
 export const machineOs = (machineId: string): string =>
-  cawco.machines.find((machine) => machine.machineId === machineId)?.os ?? "";
+  boardStore.machines.find((machine) => machine.machineId === machineId)?.os ??
+  "";

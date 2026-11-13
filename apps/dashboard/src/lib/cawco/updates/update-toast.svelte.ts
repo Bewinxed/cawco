@@ -35,7 +35,7 @@
  * long as he was gone (his report, nightly 6314).
  *
  * A page whose wire is older than the hub's is offered it the same way: it
- * has stopped reading the hub (client.svelte.ts `olderThanHub`), and the
+ * has stopped reading the hub (hub/socket.svelte.ts `olderThanHub`), and the
  * connection band says so over it. A page reloaded once for this build that
  * came back on its own build is not offered it again ({@link reloadedFor}):
  * the reload would only load this build again.

@@ -92,13 +92,16 @@
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
-  import { cawco, isFailed, isStale } from "../client.svelte";
+
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { conversationHref } from "../links";
   import { markHue } from "../mark";
   import { folderOf } from "../projects";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
+  import { asksStore } from "../stores/asks.svelte";
+  import { boardStore, isFailed, isStale } from "../stores/board.svelte";
+  import { projectsStore } from "../stores/projects.svelte";
   import TreeMark from "../TreeMark.svelte";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
@@ -166,7 +169,7 @@
    * project's mark as the rail draws it.
    */
   function resolveProject(id: string, projectId: string): Tab {
-    const project = cawco.project(projectId);
+    const project = projectsStore.project(projectId);
     const served = servedNames[id];
     const name = project?.name ?? (served?.ok ? served.value : null);
     return {
@@ -190,13 +193,13 @@
     if (projectId) {
       return resolveProject(id, projectId);
     }
-    const row = cawco.instanceIndex.byId.get(id);
+    const row = boardStore.instanceIndex.byId.get(id);
     const ctx = contextOf(id);
     const { label, named } = sessionName(id, servedNames);
-    const activity = cawco.activityOf(id);
+    const activity = asksStore.activityOf(id);
     const failed = row ? isFailed(row) : false;
     const stale = row ? isStale(row) : false;
-    const tool = cawco.currentToolOf(id)?.name;
+    const tool = asksStore.currentToolOf(id)?.name;
     let status = "";
     if (failed) {
       status = FAILED_LABEL;
@@ -212,7 +215,7 @@
     return {
       id,
       key: `${id}:${arrivals.get(id) ?? 0}`,
-      href: conversationHref(id, cawco.instanceIndex, {
+      href: conversationHref(id, boardStore.instanceIndex, {
         machineId: ctx?.machine,
         cwd: ctx?.cwd,
       }),
@@ -755,7 +758,7 @@
     const projectId =
       projectOfTab(here) ??
       (here && ctx?.cwd
-        ? cawco.instanceIndex.byId.get(here)?.projectId
+        ? boardStore.instanceIndex.byId.get(here)?.projectId
         : undefined);
     newSession(
       {
@@ -1536,7 +1539,7 @@
               <span>Continue in new session…</span>
             </ContextMenu.Item>
           {/if}
-          {@const row = cawco.rowOf(tab.id)}
+          {@const row = boardStore.rowOf(tab.id)}
           {#if row}
             <AccountSubmenu instance={row} />
           {/if}
@@ -1671,7 +1674,7 @@
                 {#if tab.projectId}
                   <!-- A project's tab leads with its mark as the rail draws
                        it, on every width: it has no status rim to say it. -->
-                  {@const project = cawco.project(tab.projectId)}
+                  {@const project = projectsStore.project(tab.projectId)}
                   <TreeMark
                     faceAlways
                     fill="var(--color-mark-{markHue(

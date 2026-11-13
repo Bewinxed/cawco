@@ -20,13 +20,7 @@
   import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDuration } from "#lib/utils/time.js";
-  import {
-    cawco,
-    readDelegate,
-    readTranscript,
-    unwatchDelegate,
-    watchDelegate,
-  } from "../client.svelte";
+
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
@@ -36,6 +30,15 @@
     sessionPlace,
     sessionTitle,
   } from "../session-names.svelte";
+  import { asksStore } from "../stores/asks.svelte";
+  import { boardStore } from "../stores/board.svelte";
+  import { delegatesStore, readDelegate } from "../stores/delegates.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
+  import {
+    unwatchDelegate,
+    watchDelegate,
+  } from "../stores/subscriptions.svelte";
+  import { readTranscript } from "../stores/transcript-reads.svelte";
   import type { Message } from "../types";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";
@@ -57,8 +60,8 @@
   const id = $derived(meta.delegateInstanceId ?? null);
   const started = $derived(meta.handoffKind === "start");
 
-  const row = $derived(id ? cawco.instanceIndex.byId.get(id) : undefined);
-  const branch = $derived(id ? cawco.session(id) : null);
+  const row = $derived(id ? boardStore.instanceIndex.byId.get(id) : undefined);
+  const branch = $derived(id ? sessionsStore.session(id) : null);
   /**
    * The delegate as the hub's names have it, when the board no longer holds
    * its row (it moved more than a day ago): its harness, its state at rest
@@ -100,8 +103,10 @@
       readDelegate(message.instanceId, id);
     }
   });
-  const record = $derived(id && !elsewhere ? cawco.delegateOf(id) : null);
-  const parent = $derived(cawco.session(message.instanceId));
+  const record = $derived(
+    id && !elsewhere ? delegatesStore.delegateOf(id) : null
+  );
+  const parent = $derived(sessionsStore.session(message.instanceId));
 
   const toolInput = $derived.by((): Record<string, unknown> => {
     const raw = meta.toolInput;
@@ -263,8 +268,8 @@
   const live = $derived(
     row?.status === "running" || row?.status === "starting"
   );
-  const activity = $derived(id ? cawco.activityOf(id) : "idle");
-  const currentTool = $derived(id ? cawco.currentToolOf(id) : null);
+  const activity = $derived(id ? asksStore.activityOf(id) : "idle");
+  const currentTool = $derived(id ? asksStore.currentToolOf(id) : null);
 
   /** A delegate card's phase: what its session is doing, or where it is in its life. */
   type Phase =
@@ -542,7 +547,7 @@
         <a
           aria-label="Open {label} in its own view"
           class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-          href={conversationHref(id, cawco.instanceIndex)}
+          href={conversationHref(id, boardStore.instanceIndex)}
           title="Open {label} in its own view"
         >
           <IconExternal class="size-icon-sm block" />

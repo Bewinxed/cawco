@@ -4,8 +4,8 @@
  *
  * Everything here is structural: it moves numbers and stages around a plain
  * object and calls out through {@link StreamHost} for the two things it cannot
- * do itself (apply a frame, re-read a transcript). `client.svelte.ts` owns the
- * runes binding and the socket; this file owns the decisions. It is the only
+ * do itself (apply a frame, re-read a transcript). `stores/ledger.svelte.ts` owns
+ * the runes binding and `hub/socket.svelte.ts` the socket; this file owns the decisions. It is the only
  * way a session's frames reach this client, and the only way a command leaves.
  *
  * The rules it enforces, in one place:
@@ -363,7 +363,7 @@ export function beginRead(state: StreamState, sessionId: string): void {
  * longer than the ring holds. `connected`: the socket's board is in, and
  * names that run. Before it is, the cursor keeps the place, and the socket
  * resumes from it when its hub is of the same run ({@link resumeHeld}). One it does not follow keeps no cursor, so it is
- * read again when it is followed (client.svelte.ts `syncSubscriptions`).
+ * read again when it is followed (stores/subscriptions.svelte.ts `syncSubscriptions`).
  */
 export function adoptPage(
   state: StreamState,

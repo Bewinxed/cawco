@@ -1,5 +1,6 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
+  import type { InstanceRow } from "@cawco/core/protocol";
   /**
    * Right-click (long-press on touch, the menu key on a focused row) on a
    * session, wherever one is listed: the rail, a project's page, the Fleet
@@ -40,20 +41,6 @@
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import {
-    answeredOr,
-    archiveWorkspace,
-    cawco,
-    deleteTranscript,
-    didntAnswer,
-    discardSession,
-    type InstanceRow,
-    keepSession,
-    machineControl,
-    removeSession,
-    workspaceHeld,
-    workspaceWaiting,
-  } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
     archive,
@@ -62,11 +49,24 @@
     home,
     unarchive,
   } from "./home/home-state.svelte";
+  import { answeredOr, didntAnswer } from "./hub/control";
   import { conversationHref } from "./links";
   import { heldByMove } from "./move.svelte";
   import { stopOnRow } from "./session-acts.svelte";
   import { sessionName } from "./session-name";
   import { startFork } from "./spawn/new-session.svelte";
+  import { asksStore } from "./stores/asks.svelte";
+  import { boardStore } from "./stores/board.svelte";
+  import {
+    archiveWorkspace,
+    deleteTranscript,
+    machineControl,
+    removeSession,
+    workspaceHeld,
+    workspaceWaiting,
+  } from "./stores/machines";
+  import { discardSession, keepSession } from "./stores/row-acts.svelte";
+  import { sessionsStore } from "./stores/sessions.svelte";
   import { TRY_AGAIN } from "./unanswered";
   import OpenItems from "./workspace/OpenItems.svelte";
   import { focusAfterMenu } from "./workspace/open-beside.svelte";
@@ -85,22 +85,25 @@
 
   let { asker, instance, onarchive, onrename, children }: Props = $props();
 
-  const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
+  const href = $derived(
+    conversationHref(instance.id, boardStore.instanceIndex)
+  );
   const scratch = $derived(instance.kind === "scratch");
   const running = $derived(
     instance.status === "running" || instance.status === "starting"
   );
   /** Stopping now cuts a turn short: the item says so. */
   const midTurn = $derived(
-    running && cawco.activityOf(instance.id) === "working"
+    running && asksStore.activityOf(instance.id) === "working"
   );
 
-  const session = $derived(cawco.session(instance.id) ?? null);
+  const session = $derived(sessionsStore.session(instance.id) ?? null);
   /** The SDK session a fork branches from. */
   const forkable = $derived(session?.sessionId ?? instance.sessionId ?? null);
   const machine = $derived(
-    cawco.machines.find((entry) => entry.machineId === instance.machineId) ??
-      null
+    boardStore.machines.find(
+      (entry) => entry.machineId === instance.machineId
+    ) ?? null
   );
 
   /**
@@ -149,7 +152,7 @@
           forked,
           "whether the fork started is not known"
         ),
-        cawco.instanceIndex
+        boardStore.instanceIndex
       )
     );
   }
