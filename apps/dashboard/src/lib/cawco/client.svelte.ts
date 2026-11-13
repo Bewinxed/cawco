@@ -490,6 +490,8 @@ routeFrames([
   ...hubOnly("stage"),
   // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
   ...hubOnly("browsers"),
+  // A machine's passkey relay capability travels machine → hub only.
+  ...hubOnly("passkey_relay"),
   // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
   ...hubOnly("browser_handback"),
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
