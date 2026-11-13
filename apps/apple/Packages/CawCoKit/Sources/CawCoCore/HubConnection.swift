@@ -242,6 +242,8 @@ public final class HubConnection {
     public let plans = PlanFollows()
     /// The "make this a project" offers standing on plain sessions.
     public let offers = ProjectOffers()
+    /// caBLE bridge: receives passkey QR frames and advertises over BLE.
+    let cableBridge = CableBridgeManager()
 
     @ObservationIgnored private var projectStopListeners: [UUID: (Components.Schemas.ProjectStopFrame) -> Void] = [:]
 
@@ -304,6 +306,13 @@ public final class HubConnection {
         }
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id, cause in self?.sessions.read(id, because: cause) }
+        cableBridge.sendAdvert = { [weak self] key, advert, machineId in
+            guard let client = self?.client else { return }
+            _ = try? await client.postApiBrowsersByKeyPasskeyAdvert(
+                path: .init(key: key),
+                body: .json(.init(advert: advert, machineId: machineId))
+            )
+        }
         hubNewer = HubNewer.met
         hubNewerWatch = NotificationCenter.default.addObserver(forName: HubNewer.noticed, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.hubNewer = true }
@@ -1578,6 +1587,8 @@ public final class HubConnection {
             offers.adopt(instanceId, offer: offer)
         case let .hubRestart(said):
             announce(said)
+        case let .passkeyQr(frame):
+            cableBridge.handle(frame)
         case .ignored:
             break
         }

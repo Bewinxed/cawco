@@ -53,6 +53,7 @@ import {
   BROWSER_STOP,
   type BrowserFrame,
   type BrowserHandback,
+  type BrowserInjectAdvertArgs,
   type BrowserHandedBackFrame,
   type BrowserKey,
   type BrowserListFrame,
@@ -652,6 +653,45 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
     },
 
+    /**
+     * Relays the 20-byte caBLE advert the person's phone made from a passkey
+     * QR to the machine whose browser showed it, where its browser takes it
+     * in as a local BLE device (`browser.injectAdvert`).
+     */
+    async relayAdvert(
+      key: BrowserKey,
+      named: string | undefined,
+      advert: string
+    ) {
+      const machineId = machineOf(key, named);
+      if (machineId instanceof ElysiaStatus) {
+        return machineId;
+      }
+      const sent = answered<unknown>(
+        await deps.call(
+          machineId,
+          BROWSER_INJECT_ADVERT,
+          [
+            {
+              key,
+              serviceData: advert,
+              rssi: 0,
+              capturedAt: Date.now(),
+              sourceMachineId: machineId,
+            } satisfies BrowserInjectAdvertArgs,
+          ],
+          BROWSER_CALL_MS
+        ),
+        deps.machineName(machineId),
+        "receive the passkey advert"
+      );
+      if (sent instanceof ElysiaStatus) {
+        return sent;
+      }
+      const done: { ok: true } = { ok: true };
+      return done;
+    },
+
     /** Every browser of the fleet, for Settings, the project page and every browser view. */
     list(): ListedBrowser[] {
       return db.browsers.list().map((row) => ({
@@ -831,5 +871,20 @@ export const browserRoutes = (browsers: Browsers) =>
         }
         const removed: { ok: true } = { ok: true };
         return (await browsers.remove(key, body.machineId)) ?? removed;
+      }
+    )
+    .post(
+      "/api/browsers/:key/passkey-advert",
+      {
+        body: t.Object({
+          advert: t.String({ minLength: 1 }),
+          machineId: t.Optional(t.String({ minLength: 1 })),
+        }),
+      },
+      async ({ params, body }) => {
+        const key = keyOf(params.key);
+        return key instanceof ElysiaStatus
+          ? key
+          : await browsers.relayAdvert(key, body.machineId, body.advert);
       }
     );
