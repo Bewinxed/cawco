@@ -43,6 +43,7 @@ import {
   type BrowserRow,
   type BrowserShieldArgs,
   isBrowserKey,
+  type PasskeyQrFrame,
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -59,6 +60,7 @@ import { endWatch, watchView } from "./cdp-watch";
 import { nekoLogin } from "./container-host";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
+import { extractFidoUri } from "./passkey-qr";
 import {
   allBrowsers,
   type BrowserRecord,
@@ -101,7 +103,10 @@ interface Held extends Kept {
 const held = new Map<BrowserKey, Held>();
 
 let sink: (frame: BrowserHandedBackFrame) => void = () => undefined;
+let qrSink: (frame: PasskeyQrFrame) => void = () => undefined;
 let machineId = "";
+/** The last FIDO URI emitted per browser key: emit only once per unique URI. */
+const lastQr = new Map<BrowserKey, string>();
 
 /** Where the daemon tells the hub of a take-over it ended itself, and the machine it is. */
 export const setShieldSink = (
@@ -110,6 +115,13 @@ export const setShieldSink = (
 ): void => {
   machineId = id;
   sink = send;
+};
+
+/** Where the daemon tells the hub of a FIDO URI extracted from a passkey QR. */
+export const setPasskeyQrSink = (
+  send: (frame: PasskeyQrFrame) => void
+): void => {
+  qrSink = send;
 };
 
 const shieldFile = (key: BrowserKey): string =>
@@ -588,6 +600,7 @@ const release = async (
 ): Promise<void> => {
   tellHub(answer, said);
   held.delete(key);
+  lastQr.delete(key);
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(key, undefined).catch((error: unknown) =>
@@ -695,6 +708,8 @@ const watchOnce = async (): Promise<void> => {
       );
       continue;
     }
+    // While the take-over stands, check for a passkey QR on the page.
+    pollPasskeyQr(key, take).catch(() => undefined);
     const views = Math.max(take.hubViewers, (await take.cdp)?.viewers ?? 0);
     if (views > 0) {
       take.unwatchedSince = undefined;
@@ -709,6 +724,42 @@ const watchOnce = async (): Promise<void> => {
       // which); the next count tries the hand-back again.
       await handBackBrowser(key, "unwatched").catch(() => undefined);
     }
+  }
+};
+
+/**
+ * Attempts to extract a FIDO URI from the page the person is looking at
+ * during a take-over. When a new URI is found (one not already emitted for
+ * this browser), it is sent to the hub as a {@link PasskeyQrFrame}.
+ */
+const pollPasskeyQr = async (key: BrowserKey, take: Held): Promise<void> => {
+  if (!take.targetId) {
+    return;
+  }
+  const record = await readBrowser(key);
+  if (!record) {
+    return;
+  }
+  let link: CdpLink | undefined;
+  try {
+    link = await CdpLink.open(`http://127.0.0.1:${portsOf(record).devtools}`);
+    const session = await link.attach(take.targetId);
+    const uri = await extractFidoUri(link, session);
+    if (uri && uri !== lastQr.get(key)) {
+      lastQr.set(key, uri);
+      qrSink({
+        kind: "passkey_qr",
+        machineId,
+        key,
+        fidoUri: uri,
+        extractedAt: Date.now(),
+      });
+      console.info(`[browser] ${key}: passkey QR extracted`);
+    }
+  } catch {
+    // The browser may not be reachable; silently skip this tick.
+  } finally {
+    link?.close();
   }
 };
 

@@ -226,6 +226,7 @@ import {
   browserViewers,
   handBackBrowser,
   restoreShields,
+  setPasskeyQrSink,
   setShieldSink,
   shieldBrowser,
 } from "./browser/shield";
@@ -2411,6 +2412,7 @@ const attach = (
         frame.kind === "browsers" ||
         frame.kind === "browser_handback" ||
         frame.kind === "browser_list" ||
+        frame.kind === "passkey_qr" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone" ||
         frame.kind === "catalog_moved"
@@ -3683,6 +3685,9 @@ const startDaemon = (rediscover = false) =>
     // (browser/shield.ts); a take-over with no view for two minutes is
     // handed back here, and the hub told.
     setShieldSink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    setPasskeyQrSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
     supervisor.registerDaemonFunction(BROWSER_SHIELD, (args) =>

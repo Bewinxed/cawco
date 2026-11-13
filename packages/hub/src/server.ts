@@ -476,6 +476,7 @@ import {
   type BrowserKey,
   type BrowserPageArgs,
   isBrowserKey,
+  type PasskeyQrFrame,
 } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
@@ -4116,6 +4117,9 @@ export const createServer = (
       },
     });
   };
+  /** The latest passkey QR per browser key: newly connected dashboards get it. */
+  const latestPasskeyQr = new Map<BrowserKey, PasskeyQrFrame>();
+
   // The fleet's browsers and the browser asks that wait on the person
   // (browsers.ts, browser-tools.ts). Made before the settlement listener
   // below, which withdraws the asks of sessions that ended.
@@ -39882,9 +39886,28 @@ export const createServer = (
               }
               // A take-over its machine ended itself: the ask's call answers.
               if (kind === "browser_handback") {
+                const hb = message.payload as BrowserHandedBackFrame;
+                latestPasskeyQr.delete(hb.key);
                 browsers.heardHandback({
-                  ...(message.payload as BrowserHandedBackFrame),
+                  ...hb,
                   machineId: message.machineId,
+                });
+                break;
+              }
+              // A passkey QR extracted from a browser's page: broadcast to
+              // every dashboard so the takeover view and the iOS app can
+              // render a clear, scannable QR locally; kept per browser key
+              // so newly connected dashboards get the latest.
+              if (kind === "passkey_qr") {
+                const qr = {
+                  ...(message.payload as PasskeyQrFrame),
+                  machineId: message.machineId,
+                };
+                latestPasskeyQr.set(qr.key, qr);
+                registry.broadcast({
+                  verb: "frames",
+                  machineId: "hub",
+                  payload: qr,
                 });
                 break;
               }

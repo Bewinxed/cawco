@@ -4039,6 +4039,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "browser_handback") {
     return;
   }
+  // A passkey QR travels machine → hub → dashboard; handled by the takeover view, not session state.
+  if (frame.kind === "passkey_qr") {
+    return;
+  }
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
   if (frame.kind === "stream_relay") {
     return;

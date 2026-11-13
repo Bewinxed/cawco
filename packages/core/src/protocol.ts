@@ -1621,6 +1621,8 @@ export type FramePayload =
   | import("./browser").BrowserHandedBackFrame
   /** Hub-originated: every browser of the fleet, whole, on each change. */
   | import("./browser").BrowserListFrame
+  /** Daemon-originated: a FIDO URI extracted from a browser's passkey QR code. */
+  | import("./browser").PasskeyQrFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
   /** Hub-originated: the stream relay's journey, whole, on each change. */
