@@ -91,7 +91,7 @@ const readNames = async (
   }
   const resolved = await Bun.dns
     .lookup(names.sample)
-    .catch(() => [] as { address: string }[]);
+    .catch((): { address: string }[] => []);
   return {
     names,
     loopback:

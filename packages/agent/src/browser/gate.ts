@@ -66,7 +66,7 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { SHIELD_CLOSE_WORDS, SHIELD_WORDS } from "@cawco/core/words/browser";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
-import { CdpCalls } from "./cdp-calls";
+import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 import { browserDir } from "./state";
 
 /** What a refusal says, one sentence each. */
@@ -177,14 +177,15 @@ const MAX_MESSAGE = 512 * 1024 * 1024;
 
 type Json = Record<string, unknown>;
 
-interface Cdp {
-  error?: { code: number; message: string };
-  id?: number;
-  method?: string;
-  params?: Json;
-  result?: Json;
-  sessionId?: string;
-}
+const CdpSchema = z.object({
+  error: z.object({ code: z.number(), message: z.string() }).optional(),
+  id: z.number().optional(),
+  method: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  result: z.record(z.string(), z.unknown()).optional(),
+  sessionId: z.string().optional(),
+});
+type Cdp = z.infer<typeof CdpSchema>;
 
 interface TargetInfo {
   browserContextId?: string;
@@ -218,10 +219,17 @@ const isFilter = (value: unknown): value is Filter[] =>
   value.every((entry) => !!entry && typeof entry === "object");
 
 const isInfo = (value: unknown): value is TargetInfo =>
-  !!value &&
   typeof value === "object" &&
-  typeof (value as TargetInfo).targetId === "string" &&
-  typeof (value as TargetInfo).type === "string";
+  value !== null &&
+  "targetId" in value &&
+  typeof value.targetId === "string" &&
+  "type" in value &&
+  typeof value.type === "string";
+
+/** A page's navigation history entries, as far as the gate reads them. */
+const HistoryEntries = z.array(
+  z.object({ id: z.number().optional(), url: z.string().optional() })
+);
 
 const text = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
@@ -240,7 +248,8 @@ const parse = (data: string): Cdp | undefined => {
   } catch {
     value = undefined;
   }
-  return value && typeof value === "object" ? (value as Cdp) : undefined;
+  const message = CdpSchema.safeParse(value);
+  return message.success ? message.data : undefined;
 };
 
 /** A filter as given, or Chromium's own when none was. */
@@ -340,7 +349,7 @@ const dialCalls = async (
   const socket = await dial(url);
   const calls = gateCalls(socket);
   socket.onmessage = (event) => {
-    const message = parse(said(event.data as string));
+    const message = parse(said(event.data));
     if (message) {
       answered(calls, message);
     }
@@ -734,9 +743,8 @@ export class Gate {
       throw new Error(`${this.key} does not run.`);
     }
     const read = await readWithin(10_000, (signal) =>
-      fetch(`${base}/json/version`, { signal }).then(
-        (response) =>
-          response.json() as Promise<{ webSocketDebuggerUrl?: string }>
+      fetch(`${base}/json/version`, { signal }).then(async (response) =>
+        DevtoolsVersion.parse(await response.json())
       )
     );
     const url =
@@ -1095,7 +1103,7 @@ export class Gate {
       const wire = gateCalls(socket);
       watch.wire = wire;
       socket.onmessage = (event) => {
-        const message = parse(said(event.data as string));
+        const message = parse(said(event.data));
         if (message && !answered(wire, message)) {
           this.#watched(message, wire, tabsAttached);
         }
@@ -1284,7 +1292,7 @@ class Link {
         }
         this.#up = up;
         this.#wire = gateCalls(up);
-        up.onmessage = (event) => this.#fromBrowser(said(event.data as string));
+        up.onmessage = (event) => this.#fromBrowser(said(event.data));
         up.onclose = () => {
           this.#wire?.fail(GATE_WORDS.stopped);
           this.close(1001, GATE_WORDS.stopped);
@@ -1460,9 +1468,7 @@ class Link {
       const history = await this.#wire
         .call("Page.getNavigationHistory", {}, sessionId)
         .catch((): Json => ({}));
-      const entries = Array.isArray(history.entries)
-        ? (history.entries as { id?: number; url?: string }[])
-        : [];
+      const entries = HistoryEntries.catch([]).parse(history.entries);
       if (ownPage(entries.find((entry) => entry.id === params.entryId)?.url)) {
         return GATE_WORDS.ownPages;
       }

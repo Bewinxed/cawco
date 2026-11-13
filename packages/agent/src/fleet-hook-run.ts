@@ -24,8 +24,8 @@ import {
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import type { Boundary } from "./boundary/state";
-import type { SetHook } from "./fleet-harness-set";
 import { commandLineOf } from "./fleet-hook-guard";
+import type { SetHook } from "./fleet-set-rows";
 
 /** Claude Code's own default for a command hook: "`command`, `http`, `mcp_tool`: 10 minutes" (code.claude.com/docs/en/hooks-guide). */
 const DEFAULT_TIMEOUT_S = 600;
@@ -54,10 +54,10 @@ const runCommand = (
 ): Promise<Ran> =>
   new Promise((resolve) => {
     const line = commandLineOf(handler);
-    const [file, ...args] = place.boundary
-      ? [place.boundary.prefix, line]
-      : ["bash", "-c", line];
-    const child = spawn(file as string, args, {
+    const [file, args]: [string, string[]] = place.boundary
+      ? [place.boundary.prefix, [line]]
+      : ["bash", ["-c", line]];
+    const child = spawn(file, args, {
       cwd: place.cwd,
       env: {
         ...sessionEnvironment(process.env),
@@ -139,7 +139,10 @@ export const runFleetHooks = async (
   const finished: HookVerdict[] = [];
   await Promise.all(
     due.map(async (hook): Promise<void> => {
-      const handler = hook.handler as HookCommandHandler;
+      const { handler } = hook;
+      if (handler.type !== "command") {
+        return;
+      }
       const running = runCommand(handler, stdin, place);
       if (handler.async) {
         running.catch(() => undefined);
