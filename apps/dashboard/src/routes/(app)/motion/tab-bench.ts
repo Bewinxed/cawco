@@ -5,9 +5,9 @@
 import type { LeafNode } from "#lib/cawco/workspace/tree.js";
 
 /**
- * The client's own state, as the hub's frames and reads would have set it
- * (dev's `__cawcoDebug`, set when client.svelte.ts loads, which a bench
- * page imports ahead of its script): what a bench seeds its sessions into.
+ * The stores' own state, as the hub's frames and reads would have set it
+ * (dev's `__cawcoDebug`, set when client.svelte.ts loads, which the app
+ * layout imports ahead of any page): what a bench seeds its sessions into.
  */
 export const benchDebug = () => window.__cawcoDebug;
 

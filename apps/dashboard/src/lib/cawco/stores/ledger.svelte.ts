@@ -13,6 +13,7 @@ import {
   latestCommand,
   type StreamHost,
 } from "../stream";
+import { watchedIds } from "./follows.svelte";
 
 /* ------------------------------------------------------------------ *
  * The Ledger Protocol binding
@@ -30,16 +31,22 @@ import {
  */
 export const streamState = $state(createStreamState());
 
-/** What the ledger reaches back into: the stores' frame apply, follows, re-reads and failure word. */
+/** What the ledger reaches back into: the stores' frame apply, re-reads and failure word. */
 type LedgerPorts = Required<
-  Pick<StreamHost, "applyFrame" | "follows" | "rereadHistory" | "noteFailure">
+  Pick<StreamHost, "applyFrame" | "rereadHistory" | "noteFailure">
 >;
 
+/** A port nothing has plugged ({@link plugLedger}) fails by name when it is called. */
+const unplugged = (port: keyof LedgerPorts) => () => {
+  throw new Error(
+    `ledger: the ${port} port was called before the client plugged the ledger (plugLedger)`
+  );
+};
+
 let ledgerPorts: LedgerPorts = {
-  applyFrame: () => undefined,
-  follows: () => false,
-  rereadHistory: () => undefined,
-  noteFailure: () => undefined,
+  applyFrame: unplugged("applyFrame"),
+  rereadHistory: unplugged("rereadHistory"),
+  noteFailure: unplugged("noteFailure"),
 };
 
 /** The stores, plugged into the ledger's ports. */
@@ -49,7 +56,7 @@ export function plugLedger(ports: LedgerPorts): void {
 
 export const streamHost: StreamHost = {
   applyFrame: (sessionId, frame) => ledgerPorts.applyFrame(sessionId, frame),
-  follows: (sessionId) => ledgerPorts.follows(sessionId),
+  follows: (sessionId) => watchedIds().includes(sessionId),
   rereadHistory: (sessionId, cause) =>
     ledgerPorts.rereadHistory(sessionId, cause),
   sendToHub: sendIfOpen,
@@ -68,8 +75,6 @@ export const streamHost: StreamHost = {
     clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
   noteFailure: (record) => ledgerPorts.noteFailure(record),
 };
-
-/** Re-exported so a component reads one import for a command and its stages. */
 
 /** One command's record, by the id {@link submitCommand} returned. */
 export function commandRecord(commandId: string): CommandRecord | null {

@@ -5,7 +5,7 @@
    * PaneLeaf lends it, over a conversation whose plan has eight steps and
    * which has twelve delegates working: running, starting, waiting on a
    * the Mac's build slot (a long state that has to truncate in its chip) and
-   * queued behind files another item owns. Only the client's state is
+   * queued behind files another item owns. Only the stores' state is
    * seeded (dev's `__cawcoDebug`).
    *
    * In the reader's theme; `?case=` (4, 11, 1r, 1f, 3r2f, 5f, 7r13f,
