@@ -20,6 +20,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
 import type { ArtifactSessionFrame } from "@cawco/core/frames";
 import type { FsEntry, FsPayload } from "@cawco/core/protocol";
+import { z } from "zod";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
@@ -41,6 +42,14 @@ const DEAD_MS = 40_000;
 const RETRY_MS = [500, 1000, 2000, 5000, 10_000] as const;
 /** The close codes the hub refuses this socket with. */
 const REFUSALS = new Set<number>(Object.values(ARTIFACT_SESSION_REFUSED));
+
+const FsEntriesSchema = z.array(
+  z.object({
+    kind: z.enum(["dir", "file"]),
+    name: z.string(),
+    size: z.number(),
+  })
+) satisfies z.ZodType<FsEntry[]>;
 
 interface Waiter {
   reject: (error: Error) => void;
@@ -147,7 +156,8 @@ export class ArtifactSession implements PaneFleet {
   closePreview = (): void => undefined;
 
   readonly folders: FolderReader = {
-    list: (machineId, path) => this.#fs<FsEntry[]>(machineId, "list", path),
+    list: (machineId, path) =>
+      this.#fs(machineId, "list", path, FsEntriesSchema),
     unanswered: (machineId, missed) => this.#didntAnswer(machineId, missed),
     // The tab knows one session: on its machine, the picker opens on its folder.
     recent: (machineId) =>
@@ -259,7 +269,8 @@ export class ArtifactSession implements PaneFleet {
   #fs<T>(
     machineId: string,
     op: FsPayload["op"],
-    path: string
+    path: string,
+    answer: z.ZodType<T>
   ): Promise<Bounded<T>> {
     const socket = this.#socket;
     if (socket?.readyState !== WebSocket.OPEN) {
@@ -276,7 +287,14 @@ export class ArtifactSession implements PaneFleet {
       (signal) =>
         new Promise<T>((resolve, reject) => {
           this.#asks.set(requestId, {
-            resolve: (result) => resolve(result as T),
+            resolve: (result) => {
+              const read = answer.safeParse(result);
+              if (read.success) {
+                resolve(read.data);
+              } else {
+                reject(read.error);
+              }
+            },
             reject,
           });
           signal.addEventListener("abort", () => this.#asks.delete(requestId), {

@@ -108,6 +108,8 @@ const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
  * up (the shell's `data-rolling`) the halo's margins take a press and never
  * pan the page.
  */
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 const LAYER =
   "absolute z-1 inset-x-0 bottom-0 pointer-events-none *:block *:size-full *:overflow-visible";
 
@@ -197,18 +199,29 @@ export class GrownShape {
     this.#drop.className = `${LAYER} opacity-0 invisible origin-bottom data-settled:opacity-100 data-settled:visible data-settled:transition-fade-show`;
     this.#drop.setAttribute("data-slot", "grown-drop");
     this.#drop.setAttribute("aria-hidden", "true");
-    this.#drop.innerHTML = `<svg><defs><filter id="${shade}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">${lay}</filter></defs><path fill="url(#${fill})" filter="url(#${shade})"/></svg>`;
+    this.#dropSvg = document.createElementNS(SVG_NS, "svg");
+    this.#dropPath = document.createElementNS(SVG_NS, "path");
+    this.#dropFilter = document.createElementNS(SVG_NS, "filter");
+    this.#dropFilter.id = shade;
+    this.#dropFilter.setAttribute("filterUnits", "userSpaceOnUse");
+    this.#dropFilter.setAttribute("color-interpolation-filters", "sRGB");
+    this.#dropFilter.innerHTML = lay;
+    const dropDefs = document.createElementNS(SVG_NS, "defs");
+    dropDefs.append(this.#dropFilter);
+    this.#dropPath.setAttribute("fill", `url(#${fill})`);
+    this.#dropPath.setAttribute("filter", `url(#${shade})`);
+    this.#dropSvg.append(dropDefs, this.#dropPath);
+    this.#drop.append(this.#dropSvg);
     host.append(this.#drop);
-    this.#dropSvg = this.#drop.querySelector("svg") as SVGSVGElement;
-    this.#dropPath = this.#drop.querySelector("path") as SVGPathElement;
-    this.#dropFilter = this.#drop.querySelector("filter") as SVGFilterElement;
     this.#halo = document.createElement("div");
     this.#halo.className = `${LAYER} in-data-rolling:pointer-events-auto in-data-rolling:touch-none`;
     this.#halo.setAttribute("data-slot", "grown-halo");
     this.#halo.setAttribute("aria-hidden", "true");
     // Solid, not the composer's glass: the transcript must not read through
     // what stands in it. Only the top of the grown part fades.
-    this.#halo.innerHTML = `<svg><defs>
+    this.#svg = document.createElementNS(SVG_NS, "svg");
+    this.#path = document.createElementNS(SVG_NS, "path");
+    this.#svg.innerHTML = `<defs>
       <linearGradient id="${fill}" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" style="stop-color: var(--color-surface-raised); ${clear}"/>
         <stop offset="0.2" style="stop-color: var(--color-surface-raised)"/>
@@ -219,11 +232,14 @@ export class GrownShape {
         <stop offset="0.32" style="stop-color: var(--color-border-control)"/>
         <stop offset="1" style="stop-color: var(--color-border-control)"/>
       </linearGradient>
-    </defs><path fill="url(#${fill})" stroke="url(#${edge})" stroke-width="1"/></svg>`;
+    </defs>`;
+    this.#path.setAttribute("fill", `url(#${fill})`);
+    this.#path.setAttribute("stroke", `url(#${edge})`);
+    this.#path.setAttribute("stroke-width", "1");
+    this.#svg.append(this.#path);
+    this.#halo.append(this.#svg);
     host.append(this.#halo);
-    this.#svg = this.#halo.querySelector("svg") as SVGSVGElement;
-    this.#path = this.#halo.querySelector("path") as SVGPathElement;
-    const stops = this.#halo.querySelectorAll("stop");
+    const stops = this.#svg.querySelectorAll("stop");
     this.#mid = stops[1];
     this.#edge = stops[4];
     // The shell resized (the window, the panel): the shape takes its width,
