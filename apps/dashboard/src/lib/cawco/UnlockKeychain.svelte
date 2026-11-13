@@ -100,7 +100,7 @@
     attempt += 1;
     const mine = attempt;
     // The form's parent is the view the status replaces.
-    held = (event.currentTarget.parentElement as HTMLElement).offsetHeight;
+    held = event.currentTarget.parentElement?.offsetHeight ?? held;
     phase = { kind: "working" };
     const sent = password;
     // Cleared the moment it has been sent, whatever the answer will be.

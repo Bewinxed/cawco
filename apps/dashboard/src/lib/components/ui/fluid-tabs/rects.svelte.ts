@@ -178,13 +178,18 @@ export class TabRects {
     };
     if (record.type === "childList") {
       return [...record.addedNodes, ...record.removedNodes].some(
-        (node) => this.#values.has(node as HTMLElement) || holds(node)
+        (node) =>
+          (node instanceof HTMLElement && this.#values.has(node)) || holds(node)
       );
     }
     if (
       record.attributeName === "style" &&
       placedBy(record.oldValue) ===
-        placedBy((record.target as Element).getAttribute("style"))
+        placedBy(
+          record.target instanceof Element
+            ? record.target.getAttribute("style")
+            : null
+        )
     ) {
       return false;
     }
@@ -225,7 +230,12 @@ export class TabRects {
       return;
     }
     this.items = next;
-    this.#onOrder(next.map((el) => this.#values.get(el) as string));
+    this.#onOrder(
+      next.flatMap((el) => {
+        const value = this.#values.get(el);
+        return value === undefined ? [] : [value];
+      })
+    );
     // The new order is read with its own boxes once they are measured.
     this.#schedule();
   }
@@ -276,15 +286,15 @@ export class TabRects {
       }
       let top = element.offsetTop;
       let left = element.offsetLeft;
-      let ancestor = element.offsetParent as HTMLElement | null;
+      let ancestor: Element | null = element.offsetParent;
       while (
-        ancestor &&
+        ancestor instanceof HTMLElement &&
         ancestor !== container &&
         container.contains(ancestor)
       ) {
         top += ancestor.offsetTop + ancestor.clientTop;
         left += ancestor.offsetLeft + ancestor.clientLeft;
-        ancestor = ancestor.offsetParent as HTMLElement | null;
+        ancestor = ancestor.offsetParent;
       }
       rects.set(element, {
         top,

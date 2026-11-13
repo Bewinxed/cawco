@@ -37,6 +37,7 @@ as-unknown-as	{ fragment: Node; instance: { content: Node } | null; }	apps/dashb
 as-unknown-as	{ getSettings: () => Promise<{ applied?: { effort?: EffortLevel | null }	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ getTaskOutput?: (taskId: string) => Promise<{ output: string }>; }	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ IdleDetector?: IdleDetectorClass }	apps/dashboard/src/lib/cawco/presence.ts	1
+as-unknown-as	{ headers: Record<string, string>; path: string; upstream?: WebSocket; q	scripts/probe-kit/safari-bridge.ts	1
 as-unknown-as	{ instance: { content: Node } | null }	apps/dashboard/scripts/outro-reads-check.ts	1
 as-unknown-as	{ message?: { type?: unknown; content?: unknown; message?: unknown }; }	packages/core/src/transcript-rules.ts	1
 as-unknown-as	{ preview: unknown }	apps/dashboard/src/lib/cawco/address/flow/Page.svelte	1
@@ -60,7 +61,6 @@ as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/project/caw-lead.fixture.ts	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
-as-unknown-as	Component<ElementProps>	apps/dashboard/src/lib/cawco/references.ts	1
 as-unknown-as	ConstructorParameters<typeof ExcalidrawBinding>[3]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
 as-unknown-as	Darwin	packages/agent/src/layer.ts	1

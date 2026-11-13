@@ -13,7 +13,7 @@ import {
   todoGroups,
   todoProgress,
 } from "@cawco/core/plan";
-import { applyPatch, type Operation } from "rfc6902";
+import { applyPatch } from "rfc6902";
 import { SessionPlanSchema } from "#lib/cawco/stored-shapes.js";
 
 /** A session's plan as this tab holds it, and the revision it is at. */
@@ -44,7 +44,7 @@ export function handlePlanMessage(
   if (typeof message !== "object" || message === null) {
     return false;
   }
-  const { type } = message as { type?: unknown };
+  const type = "type" in message ? message.type : undefined;
   if (type === "plan.snapshot") {
     const { type: _type, instanceId, rev, ...plan } = message as PlanSnapshot;
     asked.delete(instanceId);
@@ -65,7 +65,7 @@ export function handlePlanMessage(
   }
   // A plain copy of the held plan, which may be the store's proxy, to patch.
   const next = SessionPlanSchema.parse(JSON.parse(JSON.stringify(held.plan)));
-  if (applyPatch(next, patch as Operation[]).some((error) => error !== null)) {
+  if (applyPatch(next, patch).some((error) => error !== null)) {
     gap(instanceId, resync);
     return true;
   }

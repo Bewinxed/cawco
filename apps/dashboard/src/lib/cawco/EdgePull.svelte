@@ -14,11 +14,11 @@
     onpull: () => void;
   } = $props();
 
-  function press(event: PointerEvent) {
+  function press(event: PointerEvent & { currentTarget: HTMLElement }) {
     if (event.pointerType === "mouse") {
       return;
     }
-    const zone = event.currentTarget as HTMLElement;
+    const zone = event.currentTarget;
     const x0 = event.clientX;
     const y0 = event.clientY;
     zone.setPointerCapture(event.pointerId);
