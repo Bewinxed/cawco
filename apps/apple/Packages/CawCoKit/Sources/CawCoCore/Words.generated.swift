@@ -2651,6 +2651,12 @@ public enum Words {
 
         public static let retry = "Retry"
 
+        /// A page asked to open a link its own program does not name (dashboard frame-links.svelte.ts).
+        public static let referenceNotOnPage = "It was not opened: the page's words do not name that link."
+
+        /// A page asked to open an artifact none of its own pieces shows (dashboard frame-links.svelte.ts).
+        public static let artifactNotOnPage = "It was not opened: none of the page's pieces shows that artifact."
+
         /// The list's groups, by a page's standing: waiting on picks, sent, decided.
         public static let needsYou = "Needs you"
 
@@ -3934,7 +3940,7 @@ public enum Words {
 
         public static let problemTrimmerRole = "role trimmer is the unused skills and servers routine's: the hub starts that run itself, and it denies shell, edit and web tools"
 
-        // packages/core/src/harness/kinds.ts `EFFORT_LEVELS`
+        // packages/core/src/harness.ts `EFFORT_LEVELS`
         /// Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read.
         public static let effortLevels: [String] = ["low", "medium", "high", "xhigh", "max"]
     }
@@ -4101,11 +4107,6 @@ public enum Words {
         /// What the hub answers a write that names a secret as something other than a string, null or the set mark.
         public static func secretNotText(field: String, key: String) -> String {
             "\(key) in \(field) must be a string. Send its value as text, or null to clear it."
-        }
-
-        /// What the hub answers a write that names an empty value for a secret the server holds none of.
-        public static func secretEmpty(field: String, key: String) -> String {
-            "\(key) in \(field) is empty, and a secret is never empty. Send the value, or leave \(key) out."
         }
 
         /// Under the name of a server that holds secrets, renamed: the new server would hold none.

@@ -3314,8 +3314,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/FleetDecidesAdvisor`.
-    public enum FleetDecidesAdvisor: OpenEnum {
+    /// `#/components/schemas/FleetDecidesCaw`.
+    public enum FleetDecidesCaw: OpenEnum {
         case asleep
         case chart
         case done
