@@ -62,11 +62,11 @@ const load = (): SpawnPrefs => {
         : FALLBACK.model,
     permissionMode:
       typeof parsed.permissionMode === "string"
-        ? (parsed.permissionMode as PermissionMode)
+        ? parsed.permissionMode
         : FALLBACK.permissionMode,
     effort:
       harness && typeof parsed.effort === "string"
-        ? (parsed.effort as EffortLevel)
+        ? parsed.effort
         : FALLBACK.effort,
   };
 };

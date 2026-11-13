@@ -181,7 +181,10 @@
   );
 
   async function askDeleteTranscript() {
-    const sessionId = instance.sessionId as string;
+    const { sessionId } = instance;
+    if (!sessionId) {
+      return;
+    }
     await asker.ask({
       at: instance.id,
       title: "Delete this transcript?",
@@ -229,7 +232,10 @@
    * words what it cannot read.
    */
   async function askArchiveWorkspace() {
-    const workspaceId = ownWorkspace as string;
+    const workspaceId = ownWorkspace;
+    if (!workspaceId) {
+      return;
+    }
     const where = machine ? machineLabel(machine.hostname) : "its machine";
     const [held, waiting] = await Promise.all([
       workspaceHeld(workspaceId).catch(() => undefined),

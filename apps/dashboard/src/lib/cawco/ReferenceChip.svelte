@@ -11,7 +11,7 @@
    * drawn whole.
    */
   import type { Component, Snippet } from "svelte";
-  import type { HTMLAttributes, HTMLButtonAttributes } from "svelte/elements";
+  import type { HTMLAttributes } from "svelte/elements";
   import type { OpenAt } from "./artifact-names.svelte";
   import ReferenceFace, { referenceChipClass } from "./ReferenceFace.svelte";
   import RowFault from "./RowFault.svelte";
@@ -31,7 +31,7 @@
     href,
     ref = $bindable(),
     ...rest
-  }: Omit<HTMLButtonAttributes, "onclick"> & {
+  }: Omit<HTMLAttributes<HTMLElement>, "onclick"> & {
     /**
      * Where it goes, where the surface it stands on has its own way to the
      * place (a task's sheet: the card in Decisions, sheet-cards.ts): a link,
@@ -74,7 +74,7 @@
 
 {#if href}
   <a
-    {...rest as HTMLAttributes<HTMLAnchorElement>}
+    {...rest}
     class={referenceChipClass(true)}
     {href}
     onclick={() => onpress?.()}>{@render face()}</a
