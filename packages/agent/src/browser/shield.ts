@@ -8,7 +8,10 @@
  * host's picture only while nobody holds the browser; no viewer ever hosts
  * it (its controls are locked, and only its admin gives them). Hand back
  * ends the take-over's view, whose DevTools link takes the person's layout
- * with it (the agent's page is the desktop's again before the gate opens),
+ * with it once any sharp picture it asked for has answered, and every page
+ * is set to its window's own size (own-size.ts: a link cut mid-picture
+ * leaves its page at the picture's size), so the agent's page is the
+ * desktop's again before the gate opens,
  * loads the front page again by GET (nothing typed survives in a field),
  * empties neko's clipboard on the container host (the local host's
  * headless Chromium has no clipboard the person could fill), opens the
@@ -61,6 +64,7 @@ import { endWatch, watchView } from "./cdp-watch";
 import { nekoLogin } from "./container-host";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
+import { restoreWindows } from "./own-size";
 import {
   allBrowsers,
   type BrowserRecord,
@@ -79,6 +83,9 @@ const NEKO_MS = 5000;
 
 /** How long a take-over's view, still starting as the take-over ends, is waited for before the gate opens. Our call. */
 const VIEW_START_MS = 5000;
+
+/** How long the browser's pages have to be set to their windows' size before the gate opens: a few protocol calls per window and page. Our call. */
+const RESTORE_MS = 5000;
 
 /** A take-over as the browser's dir keeps it. */
 const KeptSchema = z.object({
@@ -598,10 +605,46 @@ const endView = async (take: Held): Promise<void> => {
   }
   const read = await readWithin(VIEW_START_MS, () => starting);
   if (read.kind === "answered") {
-    read.value?.stop();
+    await read.value?.stop();
     return;
   }
   starting.then((view) => view?.stop()).catch(() => undefined);
+};
+
+/**
+ * Every page of `key`'s browser at its window's own size before the gate
+ * opens (own-size.ts): a take-over's link that closed while its sharp
+ * picture was being taken, which no stop can rule out (a dropped
+ * connection, a daemon that died), leaves the page laid out at the
+ * picture's size. Within {@link RESTORE_MS}; a browser that stopped has no
+ * page to set right.
+ */
+const restorePages = async (key: BrowserKey): Promise<void> => {
+  const record = await readBrowser(key);
+  if (record?.state !== "live") {
+    return;
+  }
+  const read = await readWithin(RESTORE_MS, () =>
+    restoreWindows(`http://127.0.0.1:${portsOf(record).devtools}`)
+  ).catch((error: unknown) => {
+    console.warn(
+      `[browser] ${key}'s pages were not set to their windows' size: ${why(error)}`
+    );
+  });
+  if (!read) {
+    return;
+  }
+  if (read.kind === "unanswered") {
+    console.warn(
+      `[browser] ${key}'s pages were not set to their windows' size within ${RESTORE_MS / 1000} s`
+    );
+    return;
+  }
+  if (read.value.length > 0) {
+    console.warn(
+      `[browser] ${key}: loaded again, not at their window's size after the take-over: ${read.value.join(", ")}`
+    );
+  }
 };
 
 /**
@@ -609,8 +652,10 @@ const endView = async (take: Held): Promise<void> => {
  * the gate open, and the hub told. The hand-back is told first, whoever
  * ended it (`said`), so the ask's call answers with the page's origin; then
  * the record, whose frame every screen follows. The take-over's view is
- * ended before the gate opens, whichever way it ends: the layout its
- * DevTools link set dies with the link, and no agent meets the person's.
+ * ended and every page set to its window's size before the gate opens,
+ * whichever way it ends: the layout its DevTools link set dies with the
+ * link, a page a cut link left at its sharp picture's size is set right,
+ * and no agent meets the person's.
  */
 const release = async (
   key: BrowserKey,
@@ -623,6 +668,7 @@ const release = async (
   if (take) {
     await endView(take);
   }
+  await restorePages(key);
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(key, undefined).catch((error: unknown) =>
