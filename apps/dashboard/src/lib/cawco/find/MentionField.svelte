@@ -47,11 +47,11 @@
   import { copyChips } from "../chip-copy";
   import type SkillChip from "../SkillChip.svelte";
   import { type Skill, skillWords } from "../skill-chips";
-  import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";
   import MentionMenu from "./MentionMenu.svelte";
   import {
     type Chip,
+    type Handled,
     lookUp,
     MentionState,
     madeChip,
@@ -144,8 +144,7 @@
     for (let next = br.nextSibling; next; next = next.nextSibling) {
       const tailBreak =
         next instanceof HTMLElement && next.dataset.tail !== undefined;
-      const blank =
-        next.nodeType === Node.TEXT_NODE && (next as Text).data === "";
+      const blank = next instanceof Text && next.data === "";
       if (!(tailBreak || blank)) {
         return true;
       }
@@ -157,8 +156,8 @@
   function serialise(node: Node): string {
     let out = "";
     for (const child of node.childNodes) {
-      if (child.nodeType === Node.TEXT_NODE) {
-        out += (child as Text).data.replaceAll(" ", " ");
+      if (child instanceof Text) {
+        out += child.data.replaceAll(" ", " ");
       } else if (child instanceof HTMLElement) {
         out += serialiseElement(child, out);
       }
@@ -235,11 +234,7 @@
     const parts: Node[] = [];
     let from = 0;
     for (const match of text.matchAll(SERIALISED)) {
-      const [whole, name, handle] = match as unknown as [
-        string,
-        string,
-        string,
-      ];
+      const [whole, name, handle] = match;
       const start = match.index ?? 0;
       parts.push(...wordsOf(text.slice(from, start)));
       parts.push(drawnChip(whole, name, handle));
@@ -262,7 +257,7 @@
     const pattern = known ? skillWords(known.named.keys()) : null;
     let from = 0;
     for (const match of known && pattern ? text.matchAll(pattern) : []) {
-      const skill = known?.named.get(match[1] as string);
+      const skill = known?.named.get(match[1]);
       const start = match.index ?? 0;
       if (!(known && skill)) {
         continue;
@@ -314,8 +309,9 @@
     for (let node = walk.nextNode(); node; node = walk.nextNode()) {
       pattern.lastIndex = 0;
       if (
+        node instanceof Text &&
         !node.parentElement?.closest(CHIP) &&
-        pattern.test((node as Text).data)
+        pattern.test(node.data)
       ) {
         return true;
       }
@@ -374,7 +370,10 @@
       span.dataset.tip = chip.tip;
       span.dataset.tone = row.state.tone;
       span.setAttribute("aria-label", `${chip.label}, ${chip.tip}`);
-      const glyph = span.querySelector("[data-mention-glyph]") as HTMLElement;
+      const glyph = span.querySelector("[data-mention-glyph]");
+      if (!(glyph instanceof HTMLElement)) {
+        return;
+      }
       glyph.replaceChildren();
       const mounted = mount(row.glyph, { target: glyph });
       chips.set(span, () => unmount(mounted));
@@ -408,7 +407,8 @@
   /** Each piece of the message in the field, where it starts and ends in the string. */
   interface Atom {
     end: number;
-    node: Node;
+    node: ChildNode;
+    parent: Node;
     start: number;
     text: boolean;
   }
@@ -420,8 +420,8 @@
    * holding more (`serialise`).
    */
   function lengthOf(child: Node): number | null {
-    if (child.nodeType === Node.TEXT_NODE) {
-      return (child as Text).data.length;
+    if (child instanceof Text) {
+      return child.data.length;
     }
     if (!(child instanceof HTMLElement) || child.dataset.tail !== undefined) {
       return 0;
@@ -444,14 +444,18 @@
         const len = lengthOf(child);
         if (len === null) {
           // A block's line starts with a newline, after what stands before it.
-          if ((child as HTMLElement).tagName === "DIV" && n > from) {
+          if (
+            child instanceof HTMLElement &&
+            child.tagName === "DIV" &&
+            n > from
+          ) {
             n += 1;
           }
           walk(child);
           continue;
         }
         const text = child.nodeType === Node.TEXT_NODE;
-        out.push({ node: child, start: n, end: n + len, text });
+        out.push({ node: child, parent, start: n, end: n + len, text });
         n += len;
       }
     };
@@ -498,17 +502,19 @@
   }
 
   /** The point in the field at offset `n` of the string: never past the tail. */
-  function pointAt(n: number, list: Atom[]): [Node, number] {
+  function pointAt(
+    n: number,
+    list: Atom[],
+    root: HTMLDivElement
+  ): [Node, number] {
     for (const atom of list) {
       if (atom.text && n <= atom.end) {
         return [atom.node, Math.max(0, n - atom.start)];
       }
       if (!atom.text && n <= atom.start) {
-        const parent = atom.node.parentNode as Node;
-        return [parent, [...parent.childNodes].indexOf(atom.node as ChildNode)];
+        return [atom.parent, [...atom.parent.childNodes].indexOf(atom.node)];
       }
     }
-    const root = editor as HTMLDivElement;
     return [root, root.childNodes.length];
   }
 
@@ -543,8 +549,8 @@
     }
     const list = atoms();
     const range = document.createRange();
-    range.setStart(...pointAt(from, list));
-    range.setEnd(...pointAt(to, list));
+    range.setStart(...pointAt(from, list, editor));
+    range.setEnd(...pointAt(to, list, editor));
     const picked = getSelection();
     picked?.removeAllRanges();
     picked?.addRange(range);
@@ -568,7 +574,7 @@
       if (c === "\n") {
         return null;
       }
-      if (c === "@" && (i === 0 || SPACE.test(before[i - 1] as string))) {
+      if (c === "@" && (i === 0 || SPACE.test(before[i - 1]))) {
         const query = before.slice(i + 1).replaceAll(" ", " ");
         if (query.length > 80 || query.startsWith(" ")) {
           return null;
@@ -598,22 +604,22 @@
     }
   }
 
-  function oninput(event: Event & { currentTarget: HTMLDivElement }) {
+  function oninput(event: Parameters<NonNullable<Handlers["oninput"]>>[0]) {
     sync();
     chipTyped();
     look();
-    hostInput?.(event as Parameters<NonNullable<Handlers["oninput"]>>[0]);
+    hostInput?.(event);
   }
 
   function insert(chip: Chip) {
     const picked = getSelection();
-    if (!(at && picked && editor)) {
+    if (!(at && picked?.anchorNode && editor)) {
       return;
     }
     remember(chip);
     const range = document.createRange();
     range.setStart(at.node, at.offset);
-    range.setEnd(picked.anchorNode as Node, picked.anchorOffset);
+    range.setEnd(picked.anchorNode, picked.anchorOffset);
     range.deleteContents();
     const span = chipNode(chip);
     range.insertNode(span);
@@ -696,7 +702,7 @@
     );
   }
 
-  function pick(result: FindResult) {
+  function pick(result: Handled) {
     const chip = mention.chip(result);
     if (chip) {
       insert(chip);
@@ -868,8 +874,9 @@
     tip = null;
   };
   function onpointerover(event: PointerEvent) {
-    const chip = (event.target as Element).closest<HTMLElement>(CHIP);
-    if (!chip || event.pointerType !== "mouse") {
+    const chip =
+      event.target instanceof Element ? event.target.closest(CHIP) : null;
+    if (!(chip instanceof HTMLElement) || event.pointerType !== "mouse") {
       return;
     }
     if (tipTimer) {
@@ -878,14 +885,21 @@
     tipTimer = setTimeout(() => showTip(chip), tip ? 0 : 350);
   }
   function onpointerout(event: PointerEvent) {
-    const chip = (event.target as Element).closest(CHIP);
-    if (chip && !chip.contains(event.relatedTarget as Node)) {
+    const chip =
+      event.target instanceof Element ? event.target.closest(CHIP) : null;
+    if (
+      chip &&
+      !chip.contains(
+        event.relatedTarget instanceof Node ? event.relatedTarget : null
+      )
+    ) {
       hideTip();
     }
   }
   function onpointerdown(event: PointerEvent) {
-    const chip = (event.target as Element).closest<HTMLElement>(CHIP);
-    if (chip) {
+    const chip =
+      event.target instanceof Element ? event.target.closest(CHIP) : null;
+    if (chip instanceof HTMLElement) {
       event.preventDefault();
       if (tip?.of === chip) {
         hideTip();

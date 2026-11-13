@@ -22,7 +22,8 @@
 import type { CawStatus } from "@cawco/core/project-conversation";
 import { DAY_MS } from "@cawco/core/time";
 
-export type Network = "tailscale" | "headscale" | "netbird";
+export const NETWORK_IDS = ["tailscale", "headscale", "netbird"] as const;
+export type Network = (typeof NETWORK_IDS)[number];
 
 /** Where the tray was opened from. */
 export type Source = "needs" | "settings";
@@ -253,10 +254,11 @@ export abstract class NetworkDevice {
 
   /** A failure's way out, where it redoes a step the network asked for (REDO): true when it went. */
   protected redo(cause: string): cause is keyof typeof REDO {
-    if (!Object.hasOwn(REDO, cause)) {
+    const found = Object.entries(REDO).find(([key]) => key === cause);
+    if (!found) {
       return false;
     }
-    this.go(REDO[cause as keyof typeof REDO]);
+    this.go(found[1]);
     return true;
   }
 }
@@ -489,9 +491,10 @@ export class AddressTray extends NetworkDevice {
     this.#hold();
     const valid = viewsOn(this.network);
     if (!valid.includes(view)) {
-      this.network = (["tailscale", "headscale", "netbird"] as const).find(
-        (one) => viewsOn(one).includes(view)
-      ) as Network;
+      const owner = NETWORK_IDS.find((one) => viewsOn(one).includes(view));
+      if (owner) {
+        this.network = owner;
+      }
     }
     const step = VIEWS.find((one) => one.id === view)?.step ?? "finding";
     this.jumped = true;

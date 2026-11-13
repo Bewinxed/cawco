@@ -25,16 +25,14 @@ import type { TaskFind } from "#lib/cawco/tasks/task-find.svelte.js";
 import { clearPicks, selection } from "#lib/cawco/tasks/task-select.svelte.js";
 import { taskShare } from "#lib/cawco/tasks/task-share.js";
 import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
-import {
-  discardView,
-  keepView,
-  viewsOf,
-  viewTool,
-} from "#lib/cawco/views-api.js";
+import { discardView, keepView, viewsOf } from "#lib/cawco/views-api.js";
+import { hub } from "#lib/platform/hub.js";
 import {
   failureSentence,
   type HubRead,
+  hubData,
   failureWords as message,
+  refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { departShared } from "#lib/platform/motion/share.svelte.js";
 import { newestRead } from "#lib/platform/newest-read.js";
@@ -174,9 +172,10 @@ export class ProjectBoard {
     const id = this.#project();
     const newest = this.#datedReads.next();
     try {
-      const read = (await viewTool(id, "tasks", {})) as {
-        rows: ViewTaskRow[];
-      };
+      const read = await hubData(
+        hub.api.projects({ id })["view-tools"].tasks.post({}),
+        refusedOrUnreached
+      );
       if (id === this.#project() && newest()) {
         this.dated = read.rows;
       }
