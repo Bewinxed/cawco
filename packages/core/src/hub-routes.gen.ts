@@ -4203,7 +4203,7 @@ export interface components {
       /** @description A page's whole document. */
       html?: string;
       /**
-       * @description page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, every story drawn live (component-canvas skill). preview: a server on `port`, or a folder (`dir`), at `path`. canvas: `elements`, `mermaid`, or empty.
+       * @description page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, every story drawn live and read back with artifact_read: how you look at UI you build (component-canvas skill). preview: a server on `port`, or a folder (`dir`), at `path`, for the person to use; the app holds no CawCo sign-in. canvas: `elements`, `mermaid`, or empty.
        * @enum {string}
        */
       kind: "page" | "component" | "preview" | "canvas";

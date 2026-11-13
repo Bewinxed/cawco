@@ -18,7 +18,6 @@ import { join, relative } from "node:path";
 import {
   type AgentRow,
   ARTIFACT_NAME,
-  CAWCO_HUB_PORT,
   type ArtifactChoices,
   type ArtifactDoes,
   type ArtifactHit,
@@ -37,6 +36,7 @@ import {
   artifactSavesNotice,
   artifactStopHref,
   artifactToolWords,
+  CAWCO_HUB_PORT,
   type ChoiceEntry,
   changeLink,
   choiceEntryProblem,
@@ -1964,6 +1964,8 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     next?: ArtifactRow
   ) => Promise<void>;
+  /** The machine the hub runs on; undefined before it is read. */
+  hubMachine: () => string | undefined;
   instance: (id: string) => InstanceRow | undefined;
   /** The rows of `ids` the hub holds, in one read. */
   instances: (ids: string[]) => InstanceRow[];
@@ -2016,8 +2018,6 @@ export interface ArtifactServiceDeps {
   looked: (id: string) => void;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
-  /** The machine the hub runs on; undefined before it is read. */
-  hubMachine: () => string | undefined;
   /**
    * Something an artifact's Needs-you item is read from moved (its row, its
    * ask, the person's look): the lane is read again and every screen told.
@@ -4351,6 +4351,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Whether `port` on `machineId` is one CawCo serves: the dashboard's on
+   * every machine (the agent's loopback carries it), the hub's API on the
+   * hub's machine.
+   */
+  const ownPort = (port: number, machineId: string): boolean =>
+    port === localDashboardPort() ||
+    (port === CAWCO_HUB_PORT && machineId === deps.hubMachine());
+
+  /**
    * The source a preview input names, on the machine that serves it: a
    * workspace's port on the workspace's machine, in its network; a port or a
    * folder on the machine `machine` names, else the session's.
@@ -4392,13 +4401,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `No machine named ${input.machine} is known to this hub.`
       );
     }
-    // CawCo's own ports: the dashboard's on every machine (the agent's
-    // loopback carries it), the hub's API on the hub's machine.
-    if (
-      input.port !== undefined &&
-      (input.port === localDashboardPort() ||
-        (input.port === CAWCO_HUB_PORT && machineId === deps.hubMachine()))
-    ) {
+    if (input.port !== undefined && ownPort(input.port, machineId)) {
       throw new ArtifactRefusal(400, artifactToolWords.previewOfOwnPort);
     }
     return {

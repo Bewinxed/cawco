@@ -123,10 +123,14 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * it while the project has none, routine_update with enabled: true alone
  * turns it on, and routine_create points there instead of a second routine
  * (worker 30,579 measured).
+ * 2026-11-13: artifact_create's `kind` says an agent looks at UI it builds
+ * on the component canvas and that a preview's app holds no CawCo sign-in
+ * (the rule lived only in the owner's private memory documents; worker
+ * 30,613, delegate 11,278 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 30_620,
-  delegate: 11_250,
+  delegate: 11_300,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
