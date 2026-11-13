@@ -105,7 +105,7 @@ export class PageCover {
         this.#deps.previewFrame.post({ type: "cawco:foot-room", px: 0 });
         return;
       }
-      const gap = numberOf("--space-2");
+      const gap = numberOf("--spacing-space-2");
       const sayNow = () => {
         const foot = frame.getBoundingClientRect().bottom - frame.clientTop;
         this.#deps.previewFrame.post({
