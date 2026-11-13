@@ -18,10 +18,13 @@ import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { hubFetch } from "#lib/platform/hub-read.js";
-import { cawco } from "./client.svelte";
-import { planProgress } from "./plan/PlanPane.svelte";
+import { planProgress } from "./plan";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
+import { boardStore } from "./stores/board.svelte";
+import { plansStore } from "./stores/plans.svelte";
+import { projectsStore } from "./stores/projects.svelte";
+import { tickersStore } from "./stores/tickers.svelte";
 
 /** The kinds this module names. */
 export type ThingKind = Extract<
@@ -70,7 +73,7 @@ function askOnce<T>(key: string, read: () => Promise<T>): T | null | undefined {
 
 /** A task as the hub answered it, read again whenever its project's tasks moved. */
 const taskOf = (project: string, task: string): TaskView | null | undefined => {
-  const moved = cawco.taskChangedOf(project, task);
+  const moved = tickersStore.taskChangedOf(project, task);
   return askOnce(`task:${project}/${task}@${moved}`, () =>
     readTask(project, task)
   );
@@ -78,7 +81,7 @@ const taskOf = (project: string, task: string): TaskView | null | undefined => {
 
 /** A session's plan: the store's, else the hub's answer. */
 const planOf = (session: string): SessionPlan | null | undefined =>
-  cawco.planOf(session) ??
+  plansStore.planOf(session) ??
   askOnce(`plan:${session}`, () =>
     readJson<SessionPlan>(
       hubRequest("GET /api/instances/:id/plan", { path: { id: session } })
@@ -126,7 +129,7 @@ const projectHref = (project: string) =>
 /** Each kind's reading: the thing its id names, undefined while asked, null when there is none. */
 const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
   project: (id) => {
-    const project = cawco.project(id);
+    const project = projectsStore.project(id);
     return project
       ? {
           label: project.name,
@@ -137,7 +140,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       : null;
   },
   machine: (id) => {
-    const machine = cawco.machines.find((one) => one.machineId === id);
+    const machine = boardStore.machines.find((one) => one.machineId === id);
     return machine
       ? {
           label: machineLabel(machine.hostname),
@@ -161,7 +164,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       label: view.title,
       state: stageLabel(view.stage),
       peek: [
-        `${view.id} · ${cawco.project(project)?.name ?? project}`,
+        `${view.id} · ${projectsStore.project(project)?.name ?? project}`,
         view.description.split("\n").find((line) => line.trim()) ?? "",
       ].filter(Boolean),
       place: {

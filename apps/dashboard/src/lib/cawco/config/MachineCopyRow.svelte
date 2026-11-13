@@ -20,7 +20,7 @@
   import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
-  import type { Machine } from "../client.svelte";
+  import type { Machine } from "../stores/board.svelte";
   import type { MachineCopies } from "./machine-copies.svelte";
 
   let {

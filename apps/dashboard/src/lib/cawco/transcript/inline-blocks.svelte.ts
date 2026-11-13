@@ -37,9 +37,9 @@ import {
 } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { dur } from "../../platform/motion/curves.svelte";
-import type { SessionState } from "../client.svelte";
 import { artifactsOf, readArtifacts } from "../files/files.svelte";
 import { LIVE_REPLY as LIVE } from "../markdown-blocks";
+import type { SessionState } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import type InlineBlock from "./InlineBlock.svelte";
 

@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { traitsOf } from "@cawco/core/harness/traits";
   import { MediaQuery } from "svelte/reactivity";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
 
   /** No pointer hovers: the handle stands on the speaker line instead of the strip. One for every row. */
   const coarse = new MediaQuery("(pointer: coarse)");
@@ -15,7 +15,6 @@
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { tick, untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -36,28 +35,31 @@
   import { goto } from "$app/navigation";
   import { hueVar, nameOf } from "../accounts/model.svelte";
   import { moveTo, movingTo } from "../accounts/switch.svelte";
+  import { answeredOr } from "../hub/control";
+  import { ModeUnchosen } from "../hub/socket.svelte";
+  import { conversationHref } from "../links";
+  import MessageBody from "../MessageBody.svelte";
+  import { newSession, startFork } from "../spawn/new-session.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import {
-    answeredOr,
     canWithdraw,
-    cawco,
-    commandRecord,
     discardUnreached,
-    editAndResend,
     editFailed,
     failedSendPayload,
-    forkPointOf,
-    ModeUnchosen,
-    relaunchSession,
     removeSend,
     restoreDraft,
     retryFailed,
     retryOf,
     retrySend,
+  } from "../stores/commands.svelte";
+  import { commandRecord } from "../stores/ledger.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
+  import {
+    editAndResend,
+    forkPointOf,
+    relaunchSession,
     userTurnActions,
-  } from "../client.svelte";
-  import { conversationHref } from "../links";
-  import MessageBody from "../MessageBody.svelte";
-  import { newSession, startFork } from "../spawn/new-session.svelte";
+  } from "../stores/turns.svelte";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
@@ -191,7 +193,7 @@
     editError = "";
     try {
       const machineId =
-        cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+        boardStore.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
       answeredOr(
         machineId,
         await editAndResend(message.instanceId, message.id, editContent.trim()),
@@ -279,7 +281,7 @@
     editError = "";
     try {
       const machineId =
-        cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+        boardStore.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
       const branched = await startFork(
         await forkPointOf(message.instanceId, message.id),
         trigger
@@ -293,7 +295,7 @@
         branched,
         "whether the branch started is not known"
       );
-      await goto(conversationHref(forked, cawco.instanceIndex));
+      await goto(conversationHref(forked, boardStore.instanceIndex));
     } catch (error) {
       editError = failureWords(error);
     } finally {
@@ -384,7 +386,7 @@
       return retrying ? SENDING : "not sent";
     }
     if (waiting) {
-      const here = cawco.session(message.instanceId);
+      const here = sessionsStore.session(message.instanceId);
       if (!traitsOf(here?.harness).queuesSends) {
         return "sent";
       }
@@ -396,7 +398,9 @@
   });
 
   /** The session this row was sent to. */
-  const target = $derived(cawco.instanceIndex.byId.get(message.instanceId));
+  const target = $derived(
+    boardStore.instanceIndex.byId.get(message.instanceId)
+  );
   /**
    * The way back from a send the hub refused, read against the fleet as it
    * is now (send-recovery.svelte.ts): its own words, and what recovers it.

@@ -3,7 +3,7 @@
  * reads of the hub and hands the page as `board`, cut to the fields the first
  * paint reads (the sidebar's Recent and Projects, the bar's Machines, the
  * home, the tab strip). The store draws from it until its own reads land
- * (client.svelte.ts `servedBoard`); the socket's snapshot then brings every
+ * (stores/board.svelte.ts `servedBoard`); the socket's snapshot then brings every
  * row whole. Every field left out is optional on its row's type, so a served
  * row stands as one: what reads a field the first paint does not draw reads
  * it from the snapshot a moment later, as it did before rows were served.

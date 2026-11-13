@@ -4,13 +4,13 @@
  * the design in `.design-foundations/plans/2026-10-09-project-move.md`). The
  * hub owns each move as a job; this tab reads what one would take, starts
  * it, and asks the hub to stop or retry it. What a job is doing reaches
- * every screen on the `moves` frame (`cawco.moves`).
+ * every screen on the `moves` frame (`movesStore.moves`).
  */
 
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core/move";
 import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
-import { cawco, heardMove } from "./client.svelte";
+import { heardMove, movesStore } from "./stores/moves.svelte";
 
 /** The hub's refusal, in its one sentence (hub-read `hubRefusal`). */
 const refusal = (response: Response): Promise<Error> => hubRefusal(response);
@@ -85,7 +85,7 @@ async function moveAct(request: HubRequest): Promise<MoveJob> {
 
 /** The move whose session is `instanceId`, while the hub keeps it. */
 export const moveOf = (instanceId: string): MoveJob | undefined =>
-  cawco.moves.find((job) => job.targetInstanceId === instanceId);
+  movesStore.moves.find((job) => job.targetInstanceId === instanceId);
 
 /** Whether a move still holds `instanceId`'s row: the move's to cancel, in its pane, not a row to remove. */
 export const heldByMove = (instanceId: string): boolean => {

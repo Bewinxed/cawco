@@ -15,18 +15,20 @@
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { goto } from "$app/navigation";
-import { actOnRelay, cawco } from "../client.svelte";
 import { connect } from "../connect/installs.svelte";
+import { boardStore } from "../stores/board.svelte";
+import { projectsStore } from "../stores/projects.svelte";
+import { actOnRelay, relayStore } from "../stores/relay.svelte";
 import type { FirstRunState } from "./FirstRun.svelte";
 import { home } from "./home-state.svelte";
 
 /** The first machine, online first: the one the row names. */
 function machineOf(): FirstRunState["machine"] {
-  const [online] = cawco.onlineMachines;
+  const [online] = boardStore.onlineMachines;
   if (online) {
     return { state: "done", name: machineLabel(online.hostname) };
   }
-  const [any] = cawco.machines;
+  const [any] = boardStore.machines;
   return any
     ? { state: "offline", name: machineLabel(any.hostname) }
     : { state: "todo" };
@@ -34,7 +36,7 @@ function machineOf(): FirstRunState["machine"] {
 
 /** A harness signed in on an online machine; else the reason one could not be. */
 function harnessOf(): FirstRunState["harness"] {
-  const reports = cawco.onlineMachines.flatMap(
+  const reports = boardStore.onlineMachines.flatMap(
     (machine) => machine.harnesses ?? []
   );
   const signed = reports.find(
@@ -55,7 +57,7 @@ function harnessOf(): FirstRunState["harness"] {
 
 /** The relay offered and answered (Set up, or Later), or set up and live. */
 function relayOf(): FirstRunState["relay"] {
-  const journey = cawco.relayJourney;
+  const journey = relayStore.relayJourney;
   if (journey?.done) {
     return "done";
   }
@@ -64,10 +66,10 @@ function relayOf(): FirstRunState["relay"] {
 
 /** The row's steps while it stands; null once there is a project, or before the hub is read. */
 export function firstRunSteps(): FirstRunState | null {
-  if (!(home.ready && home.live && cawco.projectsRead)) {
+  if (!(home.ready && home.live && projectsStore.projectsRead)) {
     return null;
   }
-  if (cawco.projects.length > 0) {
+  if (projectsStore.projects.length > 0) {
     return null;
   }
   return {

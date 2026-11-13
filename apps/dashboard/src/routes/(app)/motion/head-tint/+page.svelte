@@ -2,8 +2,8 @@
   import type { SessionPulse } from "@cawco/core/protocol";
   import { HOUR_MS } from "@cawco/core/time";
   import { onMount, untrack } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
@@ -158,7 +158,7 @@
     session.cwd = "/bench";
     session.messages = history(id);
     session.initialized = true;
-    debug.state.sessions[id] = session;
+    debug.sessionsState.sessions[id] = session;
     // After its session is in: the pulse is written onto it, as the socket's is.
     debug.frame({
       kind: "pulse",
@@ -192,7 +192,7 @@
     return () => {
       Reflect.deleteProperty(window, "__ht");
       for (const id of ids) {
-        delete debug.state.sessions[id];
+        delete debug.sessionsState.sessions[id];
       }
     };
   });
