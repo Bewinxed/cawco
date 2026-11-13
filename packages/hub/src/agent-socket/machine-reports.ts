@@ -18,6 +18,7 @@ export type MachineReportsContext = Pick<
   | "keepFleetReport"
   | "moves"
   | "pendingInstalls"
+  | "registry"
   | "ridingReported"
   | "stageHeard"
   | "storedRecent"
@@ -164,6 +165,32 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     return "continue";
   };
 
+  const passkeyRelayHeard = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A machine's BLE capability changed: every dashboard shows which
+    // machines capture. A captured FIDO caBLE advert goes to every other
+    // machine with a live take-over (browsers.ts).
+    if (kind === "passkey_relay") {
+      ctx.registry.broadcast({
+        verb: "frames",
+        machineId: message.machineId,
+        payload: body,
+      });
+      return "stop";
+    }
+    if (kind === "passkey_advert") {
+      const { serviceData, rssi, capturedAt } = body;
+      ctx.browsers.relayPasskeyAdvert(message.machineId, {
+        serviceData,
+        rssi,
+        capturedAt,
+      });
+      return "stop";
+    }
+    return "continue";
+  };
+
   const streamRelayHeard = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
     const { kind, body } = agentFrame;
@@ -221,6 +248,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     catalogMoved,
     fleetConverging,
     browserHandedBack,
+    passkeyRelayHeard,
     streamRelayHeard,
     moveProgressed,
     accountBorrowed,
