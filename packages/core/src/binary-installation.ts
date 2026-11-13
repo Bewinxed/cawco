@@ -126,7 +126,7 @@ const TrialMarkerSchema = z.object({
   decision: z.enum(["confirm", "roll-back"]).optional(),
   /** The keeper handover is done and the state says installed: a resumed helper does not hand it over again. */
   keeperDone: z.boolean().optional(),
-  /** The rollback's reason is the hub's silence, not the build's own fault (core binary-health.ts `HealthProblem`). */
+  /** The rollback's reason is the hub's silence, not the build's own fault (cli binary-health.ts `HealthProblem`). */
   hubSilent: z.literal(true).optional(),
   previous: z.string(),
   /** Why a rollback was decided: the problem that stood at the deadline. */

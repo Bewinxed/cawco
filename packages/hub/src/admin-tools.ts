@@ -380,8 +380,8 @@ export const answeredWithoutAsking = (
  * person's ask, run by the hub once they approve it, or at once in Full Send
  * (asks.ts).
  */
-function admin<T extends z.ZodRawShape>(
-  group: string,
+function admin<G extends string, T extends z.ZodRawShape>(
+  group: G,
   about: string,
   reads: readonly [string, ...string[]],
   writes: readonly [string, ...string[]],
@@ -396,7 +396,7 @@ function admin<T extends z.ZodRawShape>(
   readFields: readonly (keyof T & string)[] = []
 ) {
   const read = tool(
-    `admin_${group}_read`,
+    `admin_${group}_read` as const,
     `Read ${about} \`action\`: ${reads.map((action) => `'${action}'`).join(", ")}.`,
     {
       action: z.enum(reads),
@@ -409,7 +409,7 @@ function admin<T extends z.ZodRawShape>(
       present(answer, asked as { action: string } & Record<string, unknown>)
   );
   const write = tool(
-    `admin_${group}_write`,
+    `admin_${group}_write` as const,
     `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The person approves it first, unless in Full Send; their answer arrives as a message.`,
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
