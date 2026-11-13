@@ -11,12 +11,10 @@
  */
 
 import { docMeta } from "@cawco/core/doc-meta";
+import { frameSaid } from "@cawco/core/page-wire";
 import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
 import { themeVariablesCss } from "@cawco/core/theme-css";
-import {
-  heardFromHost,
-  toHost as postToHost,
-} from "@cawco/preview/overlay/host-origin";
+import { heardFromHost } from "@cawco/preview/overlay/host-origin";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
@@ -40,6 +38,7 @@ import { guardImages } from "./images";
 import { tokenMs } from "./motion";
 import { Rail } from "./rail";
 import { type CanvasHold, subscribeHold } from "./replica";
+import { sayToHost } from "./say";
 import {
   bindScene,
   type CanvasInk,
@@ -110,11 +109,9 @@ const takeScheme = (said: unknown) => {
 };
 document.documentElement.style.colorScheme = scheme;
 window.addEventListener("message", (event) => {
-  if (
-    heardFromHost(event) &&
-    (event.data?.type === "cawco:hello" || event.data?.type === "cawco:theme")
-  ) {
-    takeScheme(event.data.theme);
+  const said = heardFromHost(event) ? frameSaid(event.data) : null;
+  if (said?.type === "cawco:hello" || said?.type === "cawco:theme") {
+    takeScheme(said.theme);
   }
 });
 const schemeStore = {
@@ -156,7 +153,7 @@ const heldNow = (): CanvasHold => {
 };
 
 const toHost = (what: "dock" | "done" | "pictured") =>
-  postToHost({ type: `cawco:${what}` });
+  sayToHost({ type: `cawco:${what}` });
 
 // What of the canvas's edges the host's chrome takes (`inset`) the overlay
 // takes for the page (preview overlay/page.ts `takeInset`): it hears the
@@ -169,8 +166,9 @@ const toHost = (what: "dock" | "done" | "pictured") =>
 let placedDocked = false;
 const placeListeners = new Set<() => void>();
 window.addEventListener("message", (event) => {
-  if (heardFromHost(event) && event.data?.type === "cawco:place") {
-    placedDocked = event.data.docked === true;
+  const said = heardFromHost(event) ? frameSaid(event.data) : null;
+  if (said?.type === "cawco:place") {
+    placedDocked = said.docked === true;
     for (const listener of placeListeners) {
       listener();
     }
@@ -285,7 +283,7 @@ function tellShape(api: ExcalidrawImperativeAPI): () => void {
     const said = box ? `${box.width} ${box.height}` : "";
     if (box && said !== told) {
       told = said;
-      postToHost({
+      sayToHost({
         type: CANVAS_EMBED_SIZE,
         width: box.width,
         height: box.height,
@@ -442,7 +440,10 @@ function Host() {
     let stopTelling: (() => void) | undefined;
     // The host asks for the picture before it sends or folds the canvas.
     const asked = async (event: MessageEvent) => {
-      if (!heardFromHost(event) || event.data?.type !== "cawco:picture") {
+      if (
+        !heardFromHost(event) ||
+        frameSaid(event.data)?.type !== "cawco:picture"
+      ) {
         return;
       }
       await bound?.picture().catch(() => undefined);
@@ -495,7 +496,7 @@ function Host() {
         event.source === window && event.origin === location.origin;
       if (
         !(fromHere || heardFromHost(event)) ||
-        event.data?.type !== "cawco:pencil-double-tap"
+        frameSaid(event.data)?.type !== "cawco:pencil-double-tap"
       ) {
         return;
       }

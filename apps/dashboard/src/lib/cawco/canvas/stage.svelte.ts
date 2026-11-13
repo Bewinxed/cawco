@@ -18,6 +18,7 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
+import type { FrameSays } from "@cawco/core/page-wire";
 import { previewRoute } from "@cawco/core/preview/routes";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
@@ -344,7 +345,7 @@ export class Stage {
   }
 
   /** To the page, on its own origin alone. */
-  post(message: object): void {
+  post(message: FrameSays): void {
     if (this.origin) {
       this.frame?.contentWindow?.postMessage(message, this.origin);
     }

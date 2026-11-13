@@ -37,7 +37,7 @@ function getterOf<T>(
   if (!get) {
     throw new Error(`[cawco] ${name} has no getter to stand a frame in for`);
   }
-  return (self) => get.call(self) as T;
+  return (self) => get.call(self);
 }
 
 const innerWidthOf = getterOf<number>(window, Window.prototype, "innerWidth");
@@ -92,7 +92,7 @@ function asFrame(real: VisualViewport, frame: DOMRect): VisualViewport {
     addEventListener: real.addEventListener.bind(real),
     removeEventListener: real.removeEventListener.bind(real),
     dispatchEvent: real.dispatchEvent.bind(real),
-  } as VisualViewport;
+  };
 }
 
 /**

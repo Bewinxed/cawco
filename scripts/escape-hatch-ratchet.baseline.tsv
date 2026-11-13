@@ -12,10 +12,6 @@ as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; projectsStat
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; sessionsState: { s	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
 as-unknown-as	{ __cawcoDebug: { sessionsState: { sessions: Record<string, SessionState	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: Bench }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
-as-unknown-as	{ __cawcoDeliver: (data: unknown) => void }	packages/agent/src/chromium.ts	1
-as-unknown-as	{ __cawcoDeliver?: (data: unknown) => void }	scripts/probe-kit/specs/app-comment-mode.ts	1
-as-unknown-as	{ __cawcoGraph: CanvasGraph }	packages/agent/src/stage-host/canvas/embed.ts	1
-as-unknown-as	{ __cawcoGraph?: CanvasGraph }	packages/agent/src/stage-host/canvas/stage.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
 as-unknown-as	{ __find: unknown }	apps/dashboard/src/routes/(app)/motion/find/+page.svelte	1
 as-unknown-as	{ __rbReal?: Real }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
@@ -26,51 +22,10 @@ as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEv
 as-unknown-as	{ cawco?: Bridge }	apps/dashboard/src/lib/cawco/decisions/host/page.svelte.ts	1
 as-unknown-as	{ cawco?: Bridge }	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	{ cawcoArtifact: ArtifactGlobal }	packages/agent/src/canvas-host/replica.ts	1
+as-unknown-as	{ config: object }	packages/hub/src/db/owner-columns.ts	1
 as-unknown-as	{ credentials?: { store?: { constructor?: unknown } }; }	packages/agent/src/harnesses/pi-accounts.ts	1
 as-unknown-as	{ details?: unknown; firstKeptEntryId?: string; id?: string; message?: {	packages/agent/src/harnesses/pi-services.ts	1
 as-unknown-as	{ dialect: { migrate: ( migrations: MigrationMeta[], session: unknown, c	packages/hub/src/db/migrate.ts	1
-as-unknown-as	{ document: { documentElement: { scrollHeight: number }; fonts: { ready:	packages/agent/src/artifact-picture.ts	1
-as-unknown-as	{ document: { getAnimations: () => Run[] }; }	packages/agent/src/chromium.ts	1
-as-unknown-as	{ document: { querySelector: ( selector: string ) => { clientHeight: num	packages/agent/src/artifact-picture.ts	1
-as-unknown-as	{ cawco?: StandIn }	scripts/probe-kit/decision-pick-wiring.ts	1
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (n: string) => { get: (id: string) => 	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (n: string) => { get: (k: string) => u	scripts/probe-kit/specs/comments.ts	4
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (n: string) => { toJSON: () => object 	scripts/probe-kit/specs/ink.ts	1
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (name: string) => { delete: (key: stri	scripts/probe-kit/specs/ink-scrollers.ts	1
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (name: string) => { get: (key: string)	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (name: string) => { has: (key: string)	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawcoArtifact: { doc: { getMap: (name: string) => { toJSON: () => obje	scripts/probe-kit/specs/ink-scrollers.ts	2
-as-unknown-as	{ cawcoArtifact: { doc: PageDoc } }	scripts/probe-kit/pins.ts	2
-as-unknown-as	{ cawcoArtifact: { subscribe: ( h: (hold: { link: { state: string } }) =	scripts/probe-kit/specs/comment-link.ts	1
-as-unknown-as	{ cawcoArtifact: { subscribe: ( hear: (hold: { link: { state: string } }	scripts/probe-kit/specs/preview-restart.ts	1
-as-unknown-as	{ cawcoArtifact: object; cawcoCanvasDoc: object; }	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/app-comment-mode.ts	2
-as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/artifact-resize-loop.ts	2
-as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/frame-escape.ts	1
-as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/handed-inputs.ts	1
-as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/pin-list-hold.ts	1
-as-unknown-as	{ cawcoArtifact?: { subscribe: ( holder: (hold: { link: { state: string 	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawcoArtifact?: { subscribe: ( holder: (hold: { link: { state: string 	scripts/probe-kit/specs/pane-refusal.ts	1
-as-unknown-as	{ cawcoArtifact?: { subscribe: ( holder: (hold: { ref: { id: string } | 	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawcoArtifact?: { subscribe: ( holder: (hold: { ref: { id: string } | 	scripts/probe-kit/specs/pane-refusal.ts	1
-as-unknown-as	{ cawcoArtifact?: unknown }	scripts/probe-kit/specs/rail-resolve.ts	1
-as-unknown-as	{ cawcoCanvasDoc: { getArray: (name: string) => { toArray: () => { get: 	scripts/probe-kit/specs/composer-canvas.ts	2
-as-unknown-as	{ cawcoCanvasDoc: { getMap: (name: string) => { get: (key: string) => Re	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoCanvasDoc: { getMap: (name: string) => { toJSON: () => unknown };	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoCanvasProbe: { api: { getAppState: () => { scrollX: number; scrol	scripts/probe-kit/specs/comments.ts	2
-as-unknown-as	{ cawcoCanvasProbe: { api: { getAppState: () => { selectedElementIds: ob	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoCanvasProbe: { api: { updateScene: (scene: object) => void } }; }	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawcoCanvasProbe: { elements: () => { id: string }[] }; }	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoCanvasProbe: { elements: () => ProbeElement[]; live: { getMap: (n	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoCanvasProbe: CanvasProbe }	scripts/probe-kit/specs/canvas.ts	14
-as-unknown-as	{ cawcoCanvasProbe: object }	scripts/stand-ins/canvas-bound.ts	1
-as-unknown-as	{ cawcoCanvasProbe?: { live: object; scene: object }; }	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ cawcoCanvasProbe?: CanvasProbe }	scripts/probe-kit/specs/canvas.ts	2
-as-unknown-as	{ credentials?: { store?: { constructor?: unknown } }; }	packages/agent/src/harnesses/pi-accounts.ts	1
-as-unknown-as	{ details?: unknown; firstKeptEntryId?: string; id?: string; message?: {	packages/agent/src/harnesses/pi-services.ts	1
-as-unknown-as	{ dialect: { migrate: ( migrations: MigrationMeta[], session: unknown, c	packages/hub/src/db/migrate.ts	1
-as-unknown-as	{ element?: Element | null }	scripts/probe-kit/specs/live-perf.ts	1
-as-unknown-as	{ executorUnsandboxed?: ( ref: { id: string; path: string }, gen: string	scripts/probe-kit/workspace-executor.ts	1
 as-unknown-as	{ fragment: { nodes: Node[] }; }	apps/dashboard/scripts/mark-line-check.ts	1
 as-unknown-as	{ fragment: Node; instance: { content: Node } | null; }	apps/dashboard/scripts/outro-reads-check.ts	1
 as-unknown-as	{ getSettings: () => Promise<{ applied?: { effort?: EffortLevel | null }	packages/agent/src/harnesses/claude.ts	1
@@ -110,8 +65,6 @@ as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
 as-unknown-as	FleetMcpConfig	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Freshable[]	packages/core/src/usage/windows.ts	1
-as-unknown-as	Heard	packages/agent/src/artifact-picture.ts	2
-as-unknown-as	Holder	scripts/probe-kit/specs/canvas-cost.ts	6
 as-unknown-as	HookDraft	packages/hub/src/server.ts	1
 as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	InstanceRow	apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data.ts	2
@@ -123,14 +76,8 @@ as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NativeClass	apps/dashboard/src/lib/platform/frame-observer.ts	1
 as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
-as-unknown-as	Node[]	packages/agent/src/stage-host/story-file.ts	1
 as-unknown-as	number	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
-as-unknown-as	Pictures	packages/agent/src/frame-picture.ts	5
-as-unknown-as	Parameters< typeof lfsOffers.createLfsOffers >[0]["db"]	scripts/probe-kit/specs/host-lfs.ts	1
-as-unknown-as	Parameters<typeof accountsRead>[2]	scripts/probe-kit/specs/account-refused.ts	1
-as-unknown-as	Parameters<typeof createPlaceRepos>[0]["db"]	scripts/probe-kit/specs/host-lfs.ts	1
-as-unknown-as	Pid	scripts/probe-kit/signal-wall-child.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PinPeekFrame.stories.ts	4
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
@@ -147,6 +94,8 @@ as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSe
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
 as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
+as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
+as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
@@ -159,12 +108,9 @@ as-unknown-as	ServerWebSocket<ArtifactSocket>	packages/hub/src/preview-routes.ts
 as-unknown-as	ServerWebSocket<PreviewSocket>	packages/hub/src/browser-routes.ts	1
 as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Shared	apps/dashboard/src/lib/platform/frame-observer.ts	1
-as-unknown-as	Skeleton[]	packages/agent/src/canvas-host/scene.ts	1
-as-unknown-as	Shift[]	scripts/probe-kit/specs/live-perf.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
 as-unknown-as	StateCard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services.ts	1
-as-unknown-as	string[]	packages/agent/src/stage-host/canvas/measure.ts	1
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
 as-unknown-as	typeof RTCPeerConnection	apps/dashboard/src/routes/dev/browser-panel/+page.svelte	1
 as-unknown-as	typeof WebSocket	packages/preview/src/overlay/doc-worker.ts	1
