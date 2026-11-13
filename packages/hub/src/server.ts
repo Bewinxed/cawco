@@ -35361,7 +35361,6 @@ export const createServer = (
             body.fromMachine ? undefined : held,
             {
               dropped: mcpWords.secretsLeft,
-              empty: mcpWords.secretEmpty,
               missing: mcpWords.secretNotHeld,
               notText: mcpWords.secretNotText,
             }

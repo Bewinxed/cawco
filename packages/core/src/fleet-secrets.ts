@@ -21,7 +21,7 @@
  * - a key left out of `env` or `headers` (or the whole map left out), or
  *   written as {@link SECRET_SET}, is not sent: the server keeps its value;
  * - a string replaces it (an empty string for a held key keeps it: a form's "not retyped";
- *   for any other key it is refused, as is any value that is no string);
+ *   an empty one for any other key is stored, a variable may be empty; a value that is no string is refused);
  * - `null` clears it;
  * - a secret part written into `url` replaces its own, the others stay, and
  *   `urlSecret: null` clears every one.
@@ -319,19 +319,17 @@ const applyNamed = (
   written: (value: unknown) => unknown
 ):
   | { values: Record<string, unknown> }
-  | { key: string; refused: "empty" | "missing" | "notText" } => {
+  | { key: string; refused: "missing" | "notText" } => {
   const values = { ...held };
   for (const [key, value] of Object.entries(named)) {
     if (value === null) {
       delete values[key];
     } else if (isSecretSet(value) || (value === "" && key in values)) {
       // The mark, or an empty value for a held key, keeps what is held: an
-      // empty string is how a form says "not retyped", never a new secret.
+      // empty string is how a form says "not retyped"; for a key not held it is a value like any other.
       if (!(key in values)) {
         return { key, refused: "missing" };
       }
-    } else if (value === "") {
-      return { key, refused: "empty" };
     } else if (typeof value === "string") {
       values[key] = written(value);
     } else {
@@ -373,7 +371,7 @@ const carriesHeld = (
 /**
  * The config a write names, carrying every secret it does not name from
  * `held` (the config the server has now). A secret said to be set that the
- * server holds none of, a value that is no string and an empty one are
+ * server holds none of and a value that is no string are
  * problems, in the words `refusals` gives.
  */
 export const mergeMcpSecrets = (
@@ -381,7 +379,6 @@ export const mergeMcpSecrets = (
   held: FleetMcpConfig | undefined,
   refusals: {
     dropped: (field: string, keys: string[]) => string;
-    empty: (field: string, key: string) => string;
     missing: (field: string, key: string) => string;
     notText: (field: string, key: string) => string;
   }

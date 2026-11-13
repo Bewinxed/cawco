@@ -31,6 +31,7 @@ import type {
   FleetItemState,
   FleetItemStatus,
   FleetMcpServer,
+  FleetMcpTakeAnswer,
   FleetReportFrame,
   FleetSyncReport,
   FramePayload,
@@ -76,6 +77,7 @@ import {
   CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
+  CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_QUERIES,
   CONTROL_READ_CONTINUATION,
@@ -5642,7 +5644,7 @@ export class SessionSupervisor {
         result:
           method === CONTROL_SET_PERMISSION_MODE
             ? { permissionMode: args[0] }
-            : result,
+            : this.#answerWithoutSecrets(method, result),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -6442,19 +6444,7 @@ export class SessionSupervisor {
     const mcpFailures = new Map<HarnessKind, string>();
     // What a status line may not carry: the values of each server's secrets
     // (core fleet-secrets.ts), cut out where the line is made.
-    const secretsByName = new Map<string, string[]>();
-    for (const row of [
-      ...(incoming?.mcp ?? this.#desired.config().mcp),
-      ...(incoming?.placedMcp ??
-        Object.values(this.#desired.config().projects).flatMap(
-          (rows) => rows.mcp
-        )),
-    ]) {
-      secretsByName.set(row.name, [
-        ...(secretsByName.get(row.name) ?? []),
-        ...secretValuesOf(row.config),
-      ]);
-    }
+    const secretsByName = this.#mcpSecrets(incoming);
     const allSecrets = [...secretsByName.values()].flat();
     const withoutValues = (
       rows: Record<string, State>
@@ -6669,6 +6659,54 @@ export class SessionSupervisor {
     );
     this.#lastReport = report;
     return report;
+  }
+
+  /** Each server's secret values by name, from the config in hand or else the desired one (core fleet-secrets.ts). */
+  #mcpSecrets(incoming?: PlacedFleetConfig): Map<string, string[]> {
+    const byName = new Map<string, string[]>();
+    for (const row of [
+      ...(incoming?.mcp ?? this.#desired.config().mcp),
+      ...(incoming?.placedMcp ??
+        Object.values(this.#desired.config().projects).flatMap(
+          (rows) => rows.mcp
+        )),
+    ]) {
+      byName.set(row.name, [
+        ...(byName.get(row.name) ?? []),
+        ...secretValuesOf(row.config),
+      ]);
+    }
+    return byName;
+  }
+
+  /** A control's answer, with the fleet MCP change's and heal's cut of secrets. */
+  #answerWithoutSecrets(method: string, result: unknown): unknown {
+    return method === CONTROL_MCP_FLEET_CHANGED ||
+      method === CONTROL_MCP_FLEET_HEAL
+      ? this.#takenWithoutSecrets(result)
+      : result;
+  }
+
+  /** A fleet MCP change's or heal's answer with each server's secret values cut from its words. */
+  #takenWithoutSecrets(result: unknown): unknown {
+    const { servers } = (result ?? {}) as Partial<FleetMcpTakeAnswer>;
+    if (!Array.isArray(servers)) {
+      return result;
+    }
+    const byName = this.#mcpSecrets();
+    return {
+      ...(result as object),
+      servers: servers.map((server) => {
+        const secrets = byName.get(server.name) ?? [];
+        return {
+          ...server,
+          status: withoutSecrets(server.status, secrets),
+          ...(server.error === undefined
+            ? {}
+            : { error: withoutSecrets(server.error, secrets) }),
+        };
+      }),
+    };
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches to whichever catalog/harness/daemon method the control names, each a distinct branch
