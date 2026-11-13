@@ -219,11 +219,23 @@
     if (width > 0 && height > 0 && Math.abs(width / height - ratio) > 0.001) {
       ratio = width / height;
     }
+    if (
+      width > 0 &&
+      height > 0 &&
+      (width !== framed.w || height !== framed.h)
+    ) {
+      framed = { w: width, h: height };
+    }
     drawOverview();
   }
 
   /** The stream's own shape, from its frames; a screen's 16:10 until the first. */
   let ratio = $state(SCREEN_RATIO);
+  /** The page's size as its frames last drew it, CSS px. */
+  let framed = $state<{ w: number; h: number }>({
+    w: BROWSER_SCREEN.width,
+    h: BROWSER_SCREEN.height,
+  });
   /** The well's room for the screen, px: its own box less its padding. */
   let room = $state({ w: 0, h: 0, gap: 0 });
   /** The phone's foot under the screen, px: where it is and its controls. */
@@ -271,17 +283,46 @@
       laid = null;
       return;
     }
-    if (form === "desk") {
+    // At a desk the desktop layout is the browser's own viewport: the page
+    // stays as it was watched.
+    if (form === "desk" && !handheld) {
       if (untrack(() => laid?.form) !== "desk") {
         laid = { form: "desk" };
       }
       return;
     }
-    const { w, h } = phoneRoom;
-    if (keyboardUp || w <= 0 || h <= 0) {
+    const next = roomLayout();
+    if (keyboardUp || !next) {
       return;
     }
-    const next: TakeoverLayout = {
+    const now = untrack(() => laid);
+    // The first layout of a form goes at once; a change waits for the
+    // room to stand.
+    const wait = now?.form === next.form ? LAYOUT_SETTLE_MS : 0;
+    const timer = setTimeout(() => {
+      if (!sameLayout(now, next)) {
+        laid = next;
+      }
+    }, wait);
+    return () => clearTimeout(timer);
+  });
+
+  /**
+   * The layout the room asks for: the phone layout at the room's size, or
+   * on a phone the desktop layout as tall as the room is at the picture's
+   * opening zoom, so the picture fills it; none while there is no room.
+   */
+  function roomLayout(): TakeoverLayout | null {
+    if (form === "desk") {
+      return below > 0
+        ? { form: "desk", height: Math.floor(below / READ_SCALE) }
+        : null;
+    }
+    const { w, h } = phoneRoom;
+    if (w <= 0 || h <= 0) {
+      return null;
+    }
+    return {
       form: "phone",
       width: w,
       height: h,
@@ -291,21 +332,40 @@
       ),
       landscape: w > h,
     };
-    const now = untrack(() => laid);
-    // The first phone layout of a take-over goes at once; a change waits
-    // for the room to stand.
-    const wait = now?.form === "phone" ? LAYOUT_SETTLE_MS : 0;
-    const timer = setTimeout(() => {
-      if (!(
-        now?.form === "phone" &&
-        now.width === next.width &&
-        now.height === next.height &&
-        now.scale === next.scale
-      )) {
-        laid = next;
-      }
-    }, wait);
-    return () => clearTimeout(timer);
+  }
+
+  /** Whether two layouts lay the page out alike. */
+  function sameLayout(
+    a: TakeoverLayout | null,
+    b: TakeoverLayout | null
+  ): boolean {
+    if (a?.form === "phone" && b?.form === "phone") {
+      return (
+        a.width === b.width && a.height === b.height && a.scale === b.scale
+      );
+    }
+    return a?.form === "desk" && b?.form === "desk" && a.height === b.height;
+  }
+
+  /**
+   * The page the desktop layout's picture zooms, CSS px. On a phone, the
+   * size its layout lays it out at, from the moment the person picks it:
+   * the one sent, else the one about to be (the phone layout's frames
+   * still standing would make the whole page seem a phone's, and the
+   * picture would open at that page's fit, not the reading zoom). At a
+   * desk, the browser's own viewport: the frames' size.
+   */
+  const page = $derived.by(() => {
+    if (!(mine && form === "desk" && handheld)) {
+      return framed;
+    }
+    if (laid?.form === "desk" && laid.height !== undefined) {
+      return { w: BROWSER_SCREEN.width, h: laid.height };
+    }
+    const next = roomLayout();
+    return next?.form === "desk" && next.height !== undefined
+      ? { w: BROWSER_SCREEN.width, h: next.height }
+      : framed;
   });
 
   // The layout to the daemon: first on every connection (the stream keeps it), and on each change.
@@ -341,9 +401,7 @@
   /** The person moved the picture since the layout opened: where the page's focus stands no longer moves it. */
   let placed = false;
   /** The picture's zoom that shows the whole page across the screen. */
-  const fit = $derived(
-    screen.w > 0 ? screen.w / BROWSER_SCREEN.width : READ_SCALE
-  );
+  const fit = $derived(screen.w > 0 ? screen.w / page.w : READ_SCALE);
   /** The picture moves and zooms: the desktop layout, held. */
   const picturing = $derived(mine && form === "desk");
   const zoom = $derived(
@@ -353,8 +411,8 @@
   const pageBox = $derived(
     picturing
       ? {
-          w: BROWSER_SCREEN.width * zoom,
-          h: BROWSER_SCREEN.height * zoom,
+          w: page.w * zoom,
+          h: page.h * zoom,
           x: view.x,
           y: view.y,
         }
@@ -367,8 +425,8 @@
   function setView(scale: number, x: number, y: number) {
     const s = Math.max(fit, Math.min(ZOOM_MOST, scale));
     const most = {
-      x: Math.max(0, BROWSER_SCREEN.width * s - screen.w),
-      y: Math.max(0, BROWSER_SCREEN.height * s - screen.h),
+      x: Math.max(0, page.w * s - screen.w),
+      y: Math.max(0, page.h * s - screen.h),
     };
     const next = {
       scale: s,
@@ -392,9 +450,9 @@
     });
   });
 
-  // The picture stays on the page as the screen changes (the sheet moved).
+  // The picture stays on the page as the screen or the page changes (the sheet moved, the page laid out again).
   $effect(() => {
-    track(screen.w, screen.h);
+    track(screen.w, screen.h, page.w, page.h);
     if (!picturing) {
       return;
     }
@@ -417,14 +475,20 @@
     );
   }
 
-  /** Fit the page: the whole page across the screen, and back to reading size. */
+  /**
+   * Fit the page: the whole page across the screen; and back to reading
+   * size as the layout opens, at the page's start until the daemon says
+   * where the page's focus stands, then centred on it.
+   */
   function fitPage() {
-    placed = true;
     if (zoomedIn) {
+      placed = true;
       setView(fit, 0, 0);
-    } else {
-      setView(READ_SCALE, view.x, view.y);
+      return;
     }
+    placed = false;
+    setView(READ_SCALE, 0, 0);
+    frames?.askFocus();
   }
 
   // The stream, while the browser is live: the page's frames (a take-over
@@ -1115,13 +1179,32 @@
       return;
     }
     placed = true;
-    const pageW = BROWSER_SCREEN.width * zoom;
-    const pageH = BROWSER_SCREEN.height * zoom;
+    const pageW = page.w * zoom;
+    const pageH = page.h * zoom;
     setView(
       zoom,
       ((event.clientX - box.left) / box.width) * pageW - screen.w / 2,
       ((event.clientY - box.top) / box.height) * pageH - screen.h / 2
     );
+  }
+
+  /** An arrow key on the overview: the view moved a quarter of the screen that way. */
+  function overviewKey(event: KeyboardEvent) {
+    const step = { x: screen.w / 4, y: screen.h / 4 };
+    const by: Record<string, { x: number; y: number }> = {
+      ArrowLeft: { x: -step.x, y: 0 },
+      ArrowRight: { x: step.x, y: 0 },
+      ArrowUp: { x: 0, y: -step.y },
+      ArrowDown: { x: 0, y: step.y },
+    };
+    const move = by[event.key];
+    if (!move) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    placed = true;
+    setView(zoom, view.x + move.x, view.y + move.y);
   }
 
   /** What the well says when it shows no stream: a wait, or a failure with its way out. */
@@ -1234,7 +1317,8 @@
        phone's sheet the screen at its top, at its width, with where it is
        and its controls right under it. Taken over, `data-form` is the
        layout the page is in: at a desk the phone's page stands in a card
-       with room round it. -->
+       with room round it, its shadow one the room holds whole (the well
+       clips what it holds). -->
   <div
     bind:this={well}
     class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:not-data-fill:data-[form=phone]:p-space-5"
@@ -1272,17 +1356,21 @@
          the field the person tapped stands over the keyboard. -->
     <div
       bind:this={screenBox}
-      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-modal not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-overlay"
+      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-modal not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
       data-slot="browser-screen"
       style:--keyboard-shift="{-keyboardShift}px"
       style:--screen-h="{screen.h}px"
       style:--screen-w="{screen.w}px"
     >
       <!-- The page's picture: the screen's own box, or the desktop layout's
-           picture at its zoom, moved under the person's fingers. -->
+           picture at its zoom, moved under the person's fingers. While the
+           stream waits (connecting again as control changes hands) the
+           last picture leaves as the wait comes in, so the wait's line
+           never stands over a page that is no longer there. -->
       <div
-        class="absolute start-0 top-0 h-(--page-h) w-(--page-w) translate-x-(--page-x) translate-y-(--page-y)"
+        class="absolute start-0 top-0 h-(--page-h) w-(--page-w) translate-x-(--page-x) translate-y-(--page-y) data-waiting:animate-wait-grace-out"
         data-slot="browser-page"
+        data-waiting={shown?.kind === "wait" || undefined}
         style:--page-h="{pageBox.h}px"
         style:--page-w="{pageBox.w}px"
         style:--page-x="{-pageBox.x}px"
@@ -1357,15 +1445,17 @@
       {/if}
       {#if zoomedIn}
         <!-- The whole page in small over the picture's corner, the part in
-             view marked; a press there moves the view to it. -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -- a pointer's shortcut over the picture, which fingers pan as well. -->
-        <div
+             view marked: a button that moves the view, to where it is
+             pressed, or a step at a time by the arrow keys. -->
+        <button
           aria-label={browserWords.overview}
-          class="absolute end-space-3 top-space-3 z-1 aspect-16/10 w-22 touch-none overflow-hidden rounded-xs border border-border-contrast bg-surface-raised shadow-raised"
+          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs border border-border-contrast bg-surface-raised p-0 shadow-raised"
           data-slot="browser-overview"
+          onkeydown={overviewKey}
           onpointerdown={overviewAt}
           onpointermove={overviewAt}
-          role="img"
+          style:--page-ratio={page.w / page.h}
+          type="button"
         >
           <canvas bind:this={overviewCanvas} class="absolute inset-0 size-full"
           ></canvas>
@@ -1376,7 +1466,7 @@
             style:--view-x="{(pageBox.x / pageBox.w) * 100}%"
             style:--view-y="{(pageBox.y / pageBox.h) * 100}%"
           ></div>
-        </div>
+        </button>
       {/if}
       {#if driving && coarse.current && !addressAtFoot}
         <!-- On a desk's screen under a finger, Show keyboard floats at the
@@ -1404,7 +1494,11 @@
         )}
       >
         <div class="flex min-w-0 flex-1">
-          <BrowserAddress {mine} origin={browser?.origin ?? null} />
+          <BrowserAddress
+            connecting={streamState.kind !== "live"}
+            {mine}
+            origin={browser?.origin ?? null}
+          />
         </div>
         {#if driving}
           <BarGlass form="group">

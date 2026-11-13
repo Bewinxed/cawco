@@ -37,11 +37,7 @@
   import { browserHead } from "#lib/cawco/preview/browser-head.js";
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
-  import {
-    BarGlass,
-    BarItem,
-    BarSegments,
-  } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem, BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -526,10 +522,10 @@
   >
 {/snippet}
 {#snippet addressBar()}
-  <BrowserAddress {mine} {origin} />
+  <BrowserAddress connecting={!viewing} {mine} {origin} />
 {/snippet}
 {#snippet addressMenu()}
-  <BrowserAddress as="menu" {mine} {origin} />
+  <BrowserAddress as="menu" connecting={!viewing} {mine} {origin} />
 {/snippet}
 {#snippet layoutBar()}
   <BarSegments
@@ -542,17 +538,15 @@
   />
 {/snippet}
 {#snippet layoutCompact()}
-  <BarGlass form="group">
-    <BarItem
-      icon={form === "phone" ? IconPhoneLinear : IconMonitorLinear}
-      label={form === "phone"
-        ? browserWords.toDeskLayout
-        : browserWords.toPhoneLayout}
-      onclick={() => {
-        form = form === "phone" ? "desk" : "phone";
-      }}
-    />
-  </BarGlass>
+  <BarItem
+    icon={form === "phone" ? IconMonitorLinear : IconPhoneLinear}
+    label={form === "phone"
+      ? browserWords.toDeskLayout
+      : browserWords.toPhoneLayout}
+    onclick={() => {
+      form = form === "phone" ? "desk" : "phone";
+    }}
+  />
 {/snippet}
 {#snippet layoutMenu()}
   <DropdownMenu.Item

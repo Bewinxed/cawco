@@ -67,9 +67,11 @@ type Message = z.infer<typeof MessageSchema>;
 /** A take-over's screencast: none yet, frames being made, or ended. */
 type CastState = "idle" | "casting" | "stopped";
 
-/** The frame's largest edges, and the page's viewport in the desktop layout: the container host's screen. */
+/** The frame's largest edges, and the desktop layout's width on a phone: the container host's screen. */
 const FRAME = BROWSER_SCREEN;
 const QUALITY = 70;
+/** How far a frame's shape may stand from its metadata's and still be the viewport's: a px of rounding on either edge. */
+const SHAPE_SLACK = 0.01;
 /** The sharp picture's quality: it stands while the page is still, so it is read closely. */
 const SHARP_QUALITY = 80;
 /**
@@ -268,7 +270,7 @@ const InputSchema: z.ZodType<TakeoverInput> = z.discriminatedUnion("t", [
   z.object({
     t: z.literal("layout"),
     layout: z.discriminatedUnion("form", [
-      z.object({ form: z.literal("desk") }),
+      z.object({ form: z.literal("desk"), height: PHONE_SIDE.optional() }),
       z.object({
         form: z.literal("phone"),
         width: PHONE_SIDE,
@@ -289,6 +291,7 @@ const InputSchema: z.ZodType<TakeoverInput> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("hold"), ...AT }),
   z.object({ t: z.literal("select"), ...AT }),
   z.object({ t: z.literal("reload") }),
+  z.object({ t: z.literal("askFocus") }),
 ]);
 
 /** A view's message as {@link TakeoverInput}, or undefined when it is none. */
@@ -651,6 +654,9 @@ export class CdpTakeover {
       case "reload":
         await this.#link.call("Page.reload", {}, page);
         return;
+      case "askFocus":
+        await this.#tellFocus();
+        return;
       default:
         return;
     }
@@ -769,12 +775,15 @@ export class CdpTakeover {
         call("Emulation.setPageScaleFactor", { pageScaleFactor: 1 }),
       ];
     }
-    // The desktop layout is the container host's screen on both hosts: the
-    // local host's headless Chromium lays the page out in its window less
-    // the browser's own UI, whose height changes by version (1280x657
-    // under Chrome 156's new headless for a 1280,800 window). The
-    // viewport is set as Playwright sets every viewport (playwright-core
-    // 1.64.1 `_updateViewport`).
+    // The desktop layout with no height is the browser's own viewport: the
+    // page stays laid out as it is watched (on the local host its window
+    // less the browser's own UI, 1280x657 under Chrome 156's new headless
+    // for a 1280,800 window), so nothing moves as control arrives.
+    if (layout.form === "desk" && layout.height === undefined) {
+      return [call("Emulation.clearDeviceMetricsOverride"), touch];
+    }
+    // Else the viewport is set as Playwright sets every viewport
+    // (playwright-core 1.64.1 `_updateViewport`).
     const metrics =
       layout.form === "phone"
         ? {
@@ -788,7 +797,7 @@ export class CdpTakeover {
           }
         : {
             width: FRAME.width,
-            height: FRAME.height,
+            height: layout.height,
             deviceScaleFactor: 1,
             mobile: false,
           };
@@ -847,10 +856,7 @@ export class CdpTakeover {
     }
     this.#cast = session;
     this.#lastData = "";
-    const most =
-      this.#layout?.form === "phone"
-        ? { width: this.#layout.width, height: this.#layout.height }
-        : FRAME;
+    const most = this.#laidSize() ?? FRAME;
     await this.#link.call(
       "Page.startScreencast",
       {
@@ -1026,11 +1032,11 @@ export class CdpTakeover {
     this.#lastData = params.data;
     const jpeg = Buffer.from(params.data, "base64");
     const laid = this.#laidSize();
+    const picture = jpegSize(jpeg);
     if (laid) {
       // A frame whose picture is not the layout's size was drawn before the
       // layout took (a desktop page shrunk into a phone's frame), whatever
       // its metadata says: it is dropped, and the layout's own follows.
-      const picture = jpegSize(jpeg);
       if (
         picture &&
         (picture.width !== laid.width || picture.height !== laid.height)
@@ -1043,10 +1049,22 @@ export class CdpTakeover {
         deviceHeight?: number;
         deviceWidth?: number;
       };
-      this.#size = {
+      const size = {
         width: Math.round(metadata.deviceWidth ?? FRAME.width),
         height: Math.round(metadata.deviceHeight ?? FRAME.height),
       };
+      // The browser's own viewport has no size of the layout's to hold a
+      // frame to: one whose picture is not the shape its metadata says (a
+      // phone's page drawn as the layout left it) is dropped instead.
+      if (
+        this.#layout &&
+        picture &&
+        Math.abs(picture.width / picture.height - size.width / size.height) >
+          SHAPE_SLACK
+      ) {
+        return;
+      }
+      this.#size = size;
     }
     this.#send(jpeg);
     clearTimeout(this.#settle);
@@ -1094,14 +1112,18 @@ export class CdpTakeover {
     this.#send(jpeg);
   }
 
-  /** The CSS size the layout lays the page out at; none while no layout is held, or for a screencast alone. */
+  /** The CSS size the layout lays the page out at; none while no layout is held, for the browser's own viewport, or for a screencast alone. */
   #laidSize(): { width: number; height: number } | undefined {
-    if (this.#watch || !this.#layout) {
+    const layout = this.#layout;
+    if (this.#watch || !layout) {
       return;
     }
-    return this.#layout.form === "phone"
-      ? { width: this.#layout.width, height: this.#layout.height }
-      : { width: FRAME.width, height: FRAME.height };
+    if (layout.form === "phone") {
+      return { width: layout.width, height: layout.height };
+    }
+    return layout.height === undefined
+      ? undefined
+      : { width: FRAME.width, height: layout.height };
   }
 
   /** One picture of the shown page to every view: its viewport's CSS size, then the JPEG. */

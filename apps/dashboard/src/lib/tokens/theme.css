@@ -1559,6 +1559,9 @@
     forwards;
   --animate-wait-grace-in: kit-fade-in var(--duration-fade) var(--ease-out)
     var(--duration-wait-grace) both;
+  /* What a wait stands over leaves as the wait comes in: a stale picture under a translucent skeleton would read as the page. */
+  --animate-wait-grace-out: kit-fade-out var(--duration-fade) var(--ease-out)
+    var(--duration-wait-grace) both;
   --animate-check-in: kit-fade-in var(--duration-toggle) var(--ease-out) both;
   --animate-check-draw: check-draw var(--duration-toggle) var(--ease-out) both;
   --animate-rail-label-in: rail-label-in var(--duration-exit) var(--ease-out)
