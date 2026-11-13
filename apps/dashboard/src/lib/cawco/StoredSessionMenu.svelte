@@ -23,10 +23,12 @@
   import { goto } from "$app/navigation";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import { answeredOr, cawco, deleteTranscript } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
+  import { answeredOr } from "./hub/control";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import { startFork } from "./spawn/new-session.svelte";
+  import { boardStore } from "./stores/board.svelte";
+  import { deleteTranscript } from "./stores/machines";
   import OpenItems from "./workspace/OpenItems.svelte";
   import { focusAfterMenu } from "./workspace/open-beside.svelte";
 
@@ -47,7 +49,7 @@
   } = $props();
 
   const href = $derived(
-    conversationHref(info.sessionId, cawco.instanceIndex, {
+    conversationHref(info.sessionId, boardStore.instanceIndex, {
       machineId,
       cwd: info.cwd,
     })
@@ -55,7 +57,7 @@
 
   /** The hub's row for this conversation, when the hub keeps one. */
   const row = $derived(
-    instanceForSession(cawco.instanceIndex, info.sessionId, {
+    instanceForSession(boardStore.instanceIndex, info.sessionId, {
       machineId,
       cwd: info.cwd,
     })
@@ -120,7 +122,7 @@
       forked,
       "whether the fork started is not known"
     );
-    await goto(conversationHref(instanceId, cawco.instanceIndex));
+    await goto(conversationHref(instanceId, boardStore.instanceIndex));
   }
 </script>
 

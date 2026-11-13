@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { InstanceRow } from "@cawco/core/protocol";
   /**
    * The sessions an account carries, on its dial's corner: a 16px count in
    * the kit badge's paint (its delegates' sessions among them: each is a
@@ -29,9 +30,10 @@
    */
   import { MediaQuery } from "svelte/reactivity";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { cawco, type InstanceRow } from "../client.svelte";
+
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";
   import { conversationHref } from "../links";
+  import { boardStore } from "../stores/board.svelte";
   import SessionStatus from "../workspace/SessionStatus.svelte";
 
   let {
@@ -223,7 +225,7 @@
               data-slot="item"
               class="h-c-nav-h transition-[background-color] duration-(--duration-control) ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
               data-session-link={session.id}
-              href={conversationHref(session.id, cawco.instanceIndex)}
+              href={conversationHref(session.id, boardStore.instanceIndex)}
               onclick={opened}
             >
               <SessionStatus compact sessionId={session.id} />

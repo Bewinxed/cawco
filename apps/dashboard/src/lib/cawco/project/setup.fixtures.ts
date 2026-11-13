@@ -12,7 +12,7 @@ import {
   presentPermission,
 } from "@cawco/core/permission-presentation";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-import type { BlockedRequest } from "../client.svelte";
+import type { BlockedRequest } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import type { Stage as DraftStage, SetupDelegate } from "./setup-stage";
 

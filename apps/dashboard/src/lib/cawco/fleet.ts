@@ -46,8 +46,8 @@ import {
   hubFetch,
   hubJson,
 } from "#lib/platform/hub-read.js";
-import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
+import { machineFs, onFleetFetch } from "./stores/machines";
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
 export interface FleetMemoryRow {

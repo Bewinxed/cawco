@@ -12,18 +12,19 @@
   import { detach } from "@cawco/core/detach";
   import { accountsWords as words } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
-  import {
-    accountRemoval,
-    cawco,
-    deleteAccount,
-    patchAccount,
-  } from "#lib/cawco/client.svelte.js";
+
   import { keepDraft } from "#lib/cawco/config/drafts.svelte.js";
   import { EditorQuestion } from "#lib/cawco/config/EditorFooter.svelte";
   import EditorFrame from "#lib/cawco/config/EditorFrame.svelte";
   import EditorSection from "#lib/cawco/config/EditorSection.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import TitleInput from "#lib/cawco/config/TitleInput.svelte";
+  import {
+    accountRemoval,
+    accountsStore,
+    deleteAccount,
+    patchAccount,
+  } from "#lib/cawco/stores/accounts.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconPalette, IconServer, IconUsage } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
@@ -110,7 +111,7 @@
 
   async function askRemove() {
     // The machines signed in to it are what the removal reaches: named.
-    const signins = cawco.accounts?.signins ?? [];
+    const signins = accountsStore.accounts?.signins ?? [];
     const on = machinesFor(account.provider)
       .filter(
         (machine) =>

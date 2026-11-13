@@ -47,6 +47,7 @@ import {
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
+import { socketOpen } from "../hub/socket.svelte";
 
 /** The URL's word for the window: an install's id, or the draft's. */
 export const INSTALL_PARAM = "install";
@@ -233,7 +234,7 @@ class Connect {
     try {
       this.take(await hubJson<InstallsRead>(hubRequest("GET /api/installs")));
     } catch {
-      if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
+      if (!socketOpen()) {
         return;
       }
       this.#readRetry = setTimeout(() => {
@@ -571,7 +572,7 @@ export function takeInstallsFrame(frame: InstallsFrame): void {
 }
 
 /**
- * The hub was reached on a socket (client.svelte.ts `hubReached`): the
+ * The hub was reached on a socket (hub/socket.svelte.ts `hubReached`): the
  * installs and the draft are read whole, now that the socket carrying their
  * frames is open, so no change falls between the read and the frames (a
  * draft save that outlived a reload, an install a hub restart lost).

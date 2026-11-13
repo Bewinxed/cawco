@@ -16,10 +16,11 @@
    * it closes.
    */
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
-  import { cawco } from "../client.svelte";
+
   import { modeRefusal, permissionModesFor } from "../permission-modes";
   import NsPopover from "../spawn/NsPopover.svelte";
   import PermissionSection from "../spawn/PermissionSection.svelte";
+  import { boardStore } from "../stores/board.svelte";
 
   let {
     id,
@@ -42,7 +43,7 @@
   } = $props();
 
   const machine = $derived(
-    cawco.machines.find((row) => row.machineId === machineId)
+    boardStore.machines.find((row) => row.machineId === machineId)
   );
   const report = $derived(
     machine?.harnesses?.find((row) => row.harness === harness)

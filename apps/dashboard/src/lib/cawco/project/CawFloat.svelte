@@ -36,8 +36,8 @@
    */
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { appearOnMount } from "#lib/platform/motion/curves.svelte.js";
-  import type { PendingPermission } from "../client.svelte";
   import { stopWork } from "../stop-work.svelte";
+  import type { PendingPermission } from "../stores/sessions.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import ProjectConversation from "./ProjectConversation.svelte";
   import type { SetupProgress } from "./setup-progress";
