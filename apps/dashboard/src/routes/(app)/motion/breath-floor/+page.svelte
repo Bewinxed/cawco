@@ -49,8 +49,8 @@
 
   /**
    * A session at work, as its pulse would say (dev's `__cawcoDebug`, set
-   * when client.svelte.ts loads, which SessionStatus imports ahead of this
-   * script): what SessionStatus draws its Working glyph for.
+   * when client.svelte.ts loads, which the app layout imports ahead of any
+   * page): what SessionStatus draws its Working glyph for.
    */
   const WORKING_ID = "0f1e2d3c-0000-4000-8000-0000000000b1";
   window.__cawcoDebug.frame({

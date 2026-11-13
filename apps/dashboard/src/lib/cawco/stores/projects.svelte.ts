@@ -240,11 +240,6 @@ export const configureCaw = async (
 };
 
 /**
- * Session `instanceId`, started in his panel, is the project's conversation
- * now (hub caw.ts `name`): the one the project's row names, which his panel
- * shows and his events reach. The answer's name stands on the row at once.
- */
-/**
  * How the person's start of a project's conversation goes, as the hub says
  * every start of it goes (hub caw.ts `startOf`): where, on the project's
  * harness and model, in which mode; refused, in words, while no machine is
@@ -256,6 +251,11 @@ export const conversationStart = (projectId: string) =>
     refusedOrUnreached
   );
 
+/**
+ * Session `instanceId`, started in his panel, is the project's conversation
+ * now (hub caw.ts `name`): the one the project's row names, which his panel
+ * shows and his events reach. The answer's name stands on the row at once.
+ */
 export const nameConversation = async (
   projectId: string,
   instanceId: string
@@ -314,7 +314,6 @@ export const requestView = (projectId: string, text: string) =>
 export const projectSpend = (projectId: string) =>
   hubData(hub.api.projects({ id: projectId }).spend.get(), refusedOrUnreached);
 
-/** Sets what an attempt at the project's tasks may spend; null clears it. */
 /**
  * Sets the project's spend cap — dollars a day or a month, or none — and what
  * reaching it does, its own or (null) the fleet's.
