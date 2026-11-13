@@ -18,9 +18,18 @@
  * So each window a page stands in is moved off its bounds and back: one px
  * wider and back for a window in its normal state, out of its state and
  * back for a maximized or full-screen one (the container host's Chromium
- * starts maximized). Then each page is read: one whose viewport is not its
- * window's width is loaded again by GET (never a reload, which would post a
- * form again), the one way left that sets it right.
+ * starts maximized). One window is settled whole before the next is
+ * touched: each step waits for the window's page to take it, and after the
+ * move every page in the window is read. A step can be lost on the way to
+ * the screen: on the container host a sign-in's popup window, moved after
+ * its opener's window was un-maximized and maximized again, took the one
+ * px and kept it, its bounds saying 500 and its page 501, 8 times in 10
+ * (the container run's run15 trace). Sending the same bounds again changes
+ * nothing Chromium can see, so a window with a page still off its width is
+ * moved again the other way (one px narrower and back), up to
+ * {@link MOVES_MOST} moves. Only a page no move brought to its window's
+ * width is loaded again by GET (never a reload, which would post a form
+ * again), the one way left that sets it right.
  */
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
@@ -42,69 +51,39 @@ const WindowSchema = z.object({
 const WidthSchema = z.object({ result: z.object({ value: z.number() }) });
 
 type Window = z.infer<typeof WindowSchema>;
+interface Page {
+  targetId: string;
+  url: string;
+}
 
-/** Each page's window, by page. */
-const windowsOf = async (
-  link: CdpLink,
-  pages: string[]
-): Promise<Map<string, Window>> => {
-  const windows = new Map<string, Window>();
-  for (const targetId of pages) {
-    const read = WindowSchema.safeParse(
-      await link
-        .call("Browser.getWindowForTarget", { targetId })
-        .catch(() => null)
-    );
-    if (read.success) {
-      windows.set(targetId, read.data);
-    }
-  }
-  return windows;
-};
-
-/** How long a window's pages have to take its new width after its bounds change: Chromium sizes them a frame or two later. Our call. */
+/** How long a window's page has to take a step of its bounds: Chromium sizes it a frame or two later, and the container's window manager later still. Our call. */
 const SETTLE_MS = 1000;
 /** How often a page's width is read while it settles. */
 const SETTLE_STEP_MS = 25;
+/** How many times a window is moved off its bounds and back before a page still off its width is loaded again. Our call. */
+const MOVES_MOST = 3;
 
-/** Waits up to {@link SETTLE_MS} for page `targetId` to stand at its window's width; answers whether it did. */
-const settled = async (link: CdpLink, targetId: string): Promise<boolean> => {
-  const until = performance.now() + SETTLE_MS;
-  for (;;) {
-    const window = (await windowsOf(link, [targetId])).get(targetId);
-    const viewport = await widthOf(link, targetId).catch(() => undefined);
-    if (
-      window?.bounds.width !== undefined &&
-      viewport === window.bounds.width
-    ) {
-      return true;
-    }
-    if (performance.now() >= until) {
-      return false;
-    }
-    await Bun.sleep(SETTLE_STEP_MS);
-  }
-};
+/** What {@link restoreWindows} did, by page URL: for the run that drives it to tell a heal from a second move from a load. */
+export interface Restored {
+  /** Pages whose window took more than one move before they stood at its width, and how many it took. */
+  again: { url: string; moves: number }[];
+  /** Pages no move brought to their window's width, loaded again by GET. */
+  loaded: string[];
+  /** Pages off their window's width before any move: what a cut link left. */
+  stuck: string[];
+}
 
-/**
- * The window `window` moved off its bounds and back, each step taken by
- * page `targetId` before the next (two steps sent at once can land as no
- * change at all): every view in it sized from the window again.
- */
-const resize = async (
+/** Page `targetId`'s window, or undefined when it has none to read. */
+const windowOf = async (
   link: CdpLink,
-  targetId: string,
-  { windowId, bounds }: Window
-) => {
-  const state = bounds.windowState ?? "normal";
-  const steps =
-    state === "normal" && bounds.width !== undefined
-      ? [{ width: bounds.width + 1 }, { width: bounds.width }]
-      : [{ windowState: "normal" }, { windowState: state }];
-  for (const step of steps) {
-    await link.call("Browser.setWindowBounds", { windowId, bounds: step });
-    await settled(link, targetId);
-  }
+  targetId: string
+): Promise<Window | undefined> => {
+  const read = WindowSchema.safeParse(
+    await link
+      .call("Browser.getWindowForTarget", { targetId })
+      .catch(() => null)
+  );
+  return read.success ? read.data : undefined;
 };
 
 /** Page `targetId`'s viewport width, CSS px; undefined when it does not answer. */
@@ -129,39 +108,121 @@ const widthOf = async (
   }
 };
 
+/** Whether page `targetId` stands at its window's width now. */
+const atWidth = async (link: CdpLink, targetId: string): Promise<boolean> => {
+  const window = await windowOf(link, targetId);
+  const viewport = await widthOf(link, targetId).catch(() => undefined);
+  return window?.bounds.width !== undefined && viewport === window.bounds.width;
+};
+
+/** Waits up to {@link SETTLE_MS} for page `targetId` to stand at its window's width; answers whether it did. */
+const settled = async (link: CdpLink, targetId: string): Promise<boolean> => {
+  const until = performance.now() + SETTLE_MS;
+  for (;;) {
+    if (await atWidth(link, targetId)) {
+      return true;
+    }
+    if (performance.now() >= until) {
+      return false;
+    }
+    await Bun.sleep(SETTLE_STEP_MS);
+  }
+};
+
+/**
+ * Window `window` moved off its bounds and back, its `move`th time (one px
+ * wider first, narrower the next, so each move is a change Chromium sees),
+ * each step taken by page `lead` before the next: two steps sent at once
+ * can land as no change at all.
+ */
+const moveOnce = async (
+  link: CdpLink,
+  lead: string,
+  { windowId, bounds }: Window,
+  move: number
+) => {
+  const state = bounds.windowState ?? "normal";
+  const by = move % 2 === 1 ? 1 : -1;
+  const steps =
+    state === "normal" && bounds.width !== undefined
+      ? [{ width: bounds.width + by }, { width: bounds.width }]
+      : [{ windowState: "normal" }, { windowState: state }];
+  for (const step of steps) {
+    await link.call("Browser.setWindowBounds", { windowId, bounds: step });
+    await settled(link, lead);
+  }
+};
+
+/**
+ * One window settled whole: moved until every page in it stands at its
+ * width, up to {@link MOVES_MOST} moves. Answers the moves it took, and the
+ * pages still off after the last.
+ */
+const settleWindow = async (
+  link: CdpLink,
+  window: Window,
+  pages: Page[]
+): Promise<{ moves: number; off: Page[] }> => {
+  const [lead] = pages;
+  let off = pages;
+  let moves = 0;
+  while (lead && off.length > 0 && moves < MOVES_MOST) {
+    moves += 1;
+    await moveOnce(link, lead.targetId, window, moves);
+    const still: Page[] = [];
+    for (const page of pages) {
+      if (!(await atWidth(link, page.targetId))) {
+        still.push(page);
+      }
+    }
+    off = still;
+  }
+  return { moves, off };
+};
+
 /**
  * Lays every page of the Chromium at `devtools` out at its window's own
- * size: each window moved off its bounds and back, then each page read,
- * and one still not at its window's width loaded again by GET. Answers the
- * pages loaded again, by URL.
+ * size: one window at a time moved off its bounds and back until every
+ * page in it stands at its width, and a page no move brought there loaded
+ * again by GET.
  */
-export const restoreWindows = async (devtools: string): Promise<string[]> => {
+export const restoreWindows = async (devtools: string): Promise<Restored> => {
   const link = await CdpLink.open(devtools);
   try {
     const pages = TargetsSchema.parse(
       await link.call("Target.getTargets")
     ).targetInfos.filter((one) => one.type === "page");
-    const windows = await windowsOf(
-      link,
-      pages.map((one) => one.targetId)
-    );
-    const moved = new Set<number>();
-    for (const [targetId, window] of windows) {
-      if (!moved.has(window.windowId)) {
-        moved.add(window.windowId);
-        await resize(link, targetId, window);
-      }
-    }
-    const loaded: string[] = [];
+    const restored: Restored = { stuck: [], again: [], loaded: [] };
+    // The pages by window, each window as it stood before anything moved.
+    const byWindow = new Map<number, { window: Window; pages: Page[] }>();
     for (const page of pages) {
-      if (!windows.has(page.targetId) || (await settled(link, page.targetId))) {
+      const window = await windowOf(link, page.targetId);
+      if (!window) {
         continue;
       }
-      const session = await link.attach(page.targetId);
-      link.post("Page.navigate", { url: page.url }, session);
-      loaded.push(page.url);
+      if (!(await atWidth(link, page.targetId))) {
+        restored.stuck.push(page.url);
+      }
+      const held = byWindow.get(window.windowId) ?? { window, pages: [] };
+      held.pages.push(page);
+      byWindow.set(window.windowId, held);
     }
-    return loaded;
+    for (const { window, pages: inWindow } of byWindow.values()) {
+      const { moves, off } = await settleWindow(link, window, inWindow);
+      if (moves > 1) {
+        for (const page of inWindow) {
+          if (!off.includes(page)) {
+            restored.again.push({ url: page.url, moves });
+          }
+        }
+      }
+      for (const page of off) {
+        const session = await link.attach(page.targetId);
+        link.post("Page.navigate", { url: page.url }, session);
+        restored.loaded.push(page.url);
+      }
+    }
+    return restored;
   } finally {
     link.close();
   }

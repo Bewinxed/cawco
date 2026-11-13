@@ -84,8 +84,8 @@ const NEKO_MS = 5000;
 /** How long a take-over's view, still starting as the take-over ends, is waited for before the gate opens. Our call. */
 const VIEW_START_MS = 5000;
 
-/** How long the browser's pages have to be set to their windows' size before the gate opens: a few protocol calls per window and page. Our call. */
-const RESTORE_MS = 5000;
+/** How long the browser's pages have to be set to their windows' size before the gate opens: up to three moves of two settled steps (a second each at most) for each of a couple of windows; a healthy browser takes well under one. Our call. */
+const RESTORE_MS = 15_000;
 
 /** A take-over as the browser's dir keeps it. */
 const KeptSchema = z.object({
@@ -640,9 +640,10 @@ const restorePages = async (key: BrowserKey): Promise<void> => {
     );
     return;
   }
-  if (read.value.length > 0) {
-    console.warn(
-      `[browser] ${key}: loaded again, not at their window's size after the take-over: ${read.value.join(", ")}`
+  const { stuck, again, loaded } = read.value;
+  if (stuck.length > 0) {
+    console.info(
+      `[browser] ${key}: off their window's size after the take-over: ${stuck.join(", ")}; moved again: ${again.map((one) => `${one.url} (${one.moves} moves)`).join(", ") || "none"}; loaded again: ${loaded.join(", ") || "none"}`
     );
   }
 };
