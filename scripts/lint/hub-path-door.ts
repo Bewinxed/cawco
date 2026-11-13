@@ -79,8 +79,6 @@ const OWN: Record<string, string> = {
  * Eden, read by hub-read's readers (house/eden-answers-read).
  */
 const HUB_PATH_USERS: Record<string, string> = {
-  "apps/dashboard/src/lib/cawco/presence.ts":
-    "the beat a closing page leaves: only a beacon goes with it",
   "apps/dashboard/src/lib/cawco/transcript/file-upload.ts":
     "an upload that says how far it has gone: only an XHR does",
   "apps/dashboard/src/lib/cawco/views-api.ts":
@@ -89,8 +87,6 @@ const HUB_PATH_USERS: Record<string, string> = {
     "the delete for good, whose `delete` segment Eden's types fold into DELETE /api/projects/:id",
   "apps/dashboard/src/lib/cawco/links.ts":
     "the transcript read, its answer and its body each under a limit of their own",
-  "apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte":
-    "the address core's reach probe asks under its own deadline",
   "apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte":
     "a machine's picture or video, an element's src",
   "apps/dashboard/src/lib/cawco/artifact-api.ts":
