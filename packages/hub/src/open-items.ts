@@ -38,10 +38,14 @@ import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { stepLink, taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
+import { ElysiaStatus, problem } from "elysia";
 import type { QuestionAnswer } from "./artifacts/questions";
+import type { Artifacts } from "./artifacts/service";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
-import type { Note } from "./memory";
+import type { inboxNotes, Note } from "./memory";
+import type { Plans } from "./plans";
+
 import type { Tasks } from "./tasks";
 
 /**
@@ -350,12 +354,12 @@ export const filingWrote = (
 
 export interface OpenItemsDeps {
   db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;
-  /** A project's memory inbox, oldest first (memory.ts `inboxNotes`). */
-  inbox: (projectId: string) => Promise<Note[]>;
-  /** A session's plan as its followers hold it (plans.ts `read`). */
-  plan: (instanceId: string) => Promise<SessionPlan>;
-  /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`). */
-  questions: (instanceId: string) => AskedOf[];
+  /** A project's memory inbox, oldest first (memory.ts `inboxNotes`), or the folder's refusal. */
+  inbox: typeof inboxNotes;
+  /** A session's plan as its followers hold it (plans.ts `read`), or its refusal. */
+  plan: Plans["read"];
+  /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`), or the refusal of a session the hub does not have. */
+  questions: Artifacts["questions"];
   tasks: Pick<Tasks, "get" | "list">;
 }
 
@@ -365,13 +369,16 @@ const projectOf = (deps: OpenItemsDeps, row: InstanceRow): string | null =>
   (row.workItemId ? deps.db.workItem(row.workItemId)?.projectId : null) ??
   null;
 
-/** The open tasks `instanceId` filed in `projectId`, each read whole. */
+/** The open tasks `instanceId` filed in `projectId`, each read whole; the first refused read. */
 const filedTasks = async (
   deps: OpenItemsDeps,
   projectId: string,
   instanceId: string
-): Promise<OpenItemRows["tasks"]> => {
+) => {
   const list = await deps.tasks.list(projectId);
+  if (list instanceof ElysiaStatus) {
+    return list;
+  }
   const open = list.tasks.filter(
     (task) =>
       task.createdBy?.id === instanceId &&
@@ -379,33 +386,47 @@ const filedTasks = async (
       task.kind !== "dropped" &&
       task.archivedAt === null
   );
-  return await Promise.all(
-    open.map(async (task) => {
-      const read = await deps.tasks.get(projectId, task.id);
-      return {
-        id: read.id,
-        stage: read.stage,
-        title: read.title,
-        description: read.description,
-        todos: read.todos,
-      };
-    })
+  const reads = await Promise.all(
+    open.map((task) => deps.tasks.get(projectId, task.id))
   );
+  const filed: OpenItemRows["tasks"] = [];
+  for (const read of reads) {
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    filed.push({
+      id: read.id,
+      stage: read.stage,
+      title: read.title,
+      description: read.description,
+      todos: read.todos,
+    });
+  }
+  return filed;
 };
 
 export const createOpenItems = (deps: OpenItemsDeps) => {
-  /** Every source's rows for `instanceId`; a session in no project has its plan alone. */
-  const rows = async (instanceId: string): Promise<OpenItemRows> => {
+  /** Every source's rows for `instanceId`; a session in no project has its plan alone; the first refused read. */
+  const rows = async (instanceId: string) => {
     const [row] = deps.db.getInstancesByIds([instanceId]);
     if (!row) {
-      throw new Error(`No session ${instanceId} on this hub.`);
+      return problem(404, {
+        code: "open-items-session-unknown",
+        detail: `No session ${instanceId} on this hub.`,
+      });
     }
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);
+    if (plan instanceof ElysiaStatus) {
+      return plan;
+    }
     const asks = deps.db.asks.openOf(instanceId).map(askLink);
     const questions = deps.questions(instanceId);
+    if (questions instanceof ElysiaStatus) {
+      return questions;
+    }
     if (!projectId) {
-      return {
+      const alone: OpenItemRows = {
         session: instanceId,
         projectId: null,
         asks,
@@ -414,12 +435,19 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
         tasks: [],
         notes: [],
       };
+      return alone;
     }
     const [tasks, notes] = await Promise.all([
       filedTasks(deps, projectId, instanceId),
       deps.inbox(projectId),
     ]);
-    return {
+    if (tasks instanceof ElysiaStatus) {
+      return tasks;
+    }
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
+    const held: OpenItemRows = {
       session: instanceId,
       projectId,
       asks,
@@ -428,6 +456,7 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       tasks,
       notes: notes.filter((note) => note.session === instanceId),
     };
+    return held;
   };
   return {
     rows,
@@ -435,6 +464,9 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     read: async (
       instanceId: string,
       page: QuestionsPage = { cursor: 0, detailed: false }
-    ): Promise<string> => openItemsSection(await rows(instanceId), page),
+    ) => {
+      const held = await rows(instanceId);
+      return held instanceof ElysiaStatus ? held : openItemsSection(held, page);
+    },
   };
 };

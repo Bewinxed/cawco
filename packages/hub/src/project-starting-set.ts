@@ -26,6 +26,7 @@ import {
   startingSetProblem,
 } from "@cawco/core/delegate-types";
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
+import { ElysiaStatus } from "elysia";
 import {
   deleteFolderFile,
   projectRoot,
@@ -128,12 +129,13 @@ export interface ProjectStartingSet {
  * row, as a project's delegate types are read (project-delegate-types.ts).
  */
 export const projectStartingSet = (projectId: string): ProjectStartingSet => {
+  const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    return {};
+  }
   let text: string;
   try {
-    text = readFileSync(
-      join(projectRoot(projectId), STARTING_SET_FILE),
-      "utf8"
-    );
+    text = readFileSync(join(root, STARTING_SET_FILE), "utf8");
   } catch {
     return {};
   }
@@ -150,22 +152,28 @@ export const writeProjectStartingSet = async (
   projectId: string,
   set: StartingSet | null,
   author: string
-): Promise<void> => {
+) => {
   const { text } = projectStartingSet(projectId);
   const message = set
     ? `Set the starting set: ${set.skills.length} skills, ${set.servers.length} servers`
     : "Remove the starting set";
   if (set) {
-    await writeFolderFile(
+    const written = await writeFolderFile(
       projectId,
       STARTING_SET_FILE,
       startingSetFileOf(set, text),
       { author: { name: author }, message }
     );
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
   } else if (text !== undefined) {
-    await deleteFolderFile(projectId, STARTING_SET_FILE, {
+    const deleted = await deleteFolderFile(projectId, STARTING_SET_FILE, {
       author: { name: author },
       message,
     });
+    if (deleted instanceof ElysiaStatus) {
+      return deleted;
+    }
   }
 };
