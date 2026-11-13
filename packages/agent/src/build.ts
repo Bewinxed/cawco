@@ -6,6 +6,9 @@
 
 import { readBuildInfo } from "@cawco/core/build-info";
 import type { BuildInfo } from "@cawco/core/protocol";
+import { z } from "zod";
+
+const MANIFEST = z.object({ version: z.string() });
 
 let reported: Promise<BuildInfo> | undefined;
 
@@ -15,9 +18,11 @@ let reported: Promise<BuildInfo> | undefined;
  */
 export const buildInfo = (): Promise<BuildInfo> => {
   reported ??= readBuildInfo(async () => {
-    const manifest = (await Bun.file(
-      Bun.fileURLToPath(new URL("../package.json", import.meta.url))
-    ).json()) as { version: string };
+    const manifest = MANIFEST.parse(
+      await Bun.file(
+        Bun.fileURLToPath(new URL("../package.json", import.meta.url))
+      ).json()
+    );
     return manifest.version;
   });
   return reported;

@@ -120,7 +120,7 @@ const pidsUnder = async (dir: string): Promise<number[]> => {
     .filter(Boolean)
     .map(Number);
   const entries = await readdir(dir, { withFileTypes: true }).catch(
-    unlessGone([] as Dirent[])
+    unlessGone<Dirent[]>([])
   );
   const below = await Promise.all(
     entries
@@ -403,11 +403,11 @@ export async function keeperJobsHere(): Promise<KeeperJob[]> {
     }
   };
   if (process.platform === "linux") {
-    (await readdir(systemdDir()).catch(() => [] as string[])).forEach(
+    (await readdir(systemdDir()).catch((): string[] => [])).forEach(
       add(KEEPER_UNIT)
     );
   } else if (process.platform === "darwin") {
-    (await readdir(launchAgentsDir()).catch(() => [] as string[])).forEach(
+    (await readdir(launchAgentsDir()).catch((): string[] => [])).forEach(
       add(KEEPER_PLIST)
     );
     [...(await launchdJobs()).keys()].forEach(add(KEEPER_LABEL));
