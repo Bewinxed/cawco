@@ -372,8 +372,8 @@ suppression	biome-ignore lint/style/noNonNullAssertion	packages/agent/src/harnes
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/canvas/stage.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/HoverPanel.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/preview/PinCard.svelte	1
-suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/Composer.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/grown.ts	2
+suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/queued-edit.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/components/ui/tooltip/glide-tip.svelte	1
