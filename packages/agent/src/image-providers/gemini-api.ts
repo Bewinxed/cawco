@@ -143,7 +143,7 @@ const httpRefusal = (
   const field = (name: "code" | "message"): string => {
     const value =
       said && typeof said === "object" && name in said
-        ? (said as Record<string, unknown>)[name]
+        ? Reflect.get(said, name)
         : undefined;
     return typeof value === "string" ? value : "";
   };

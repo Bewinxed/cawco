@@ -68,29 +68,31 @@ const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 const SESSION_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
+/** What a `first` may carry; the fields are checked after, as the cut reads them. */
+const WireFirstSession = z.object({
+  harness: z.enum(HARNESSES).refine((kind) => SPILLING[kind]),
+  instanceId: z.string(),
+  resume: z.string().nullish().catch(null),
+});
+
 /**
  * The hub's `first` of a workspace's cut, as it came over the wire: a
  * {@link WorkspaceFirstSession}, or none for anything else (none named, a
  * gate workspace's cut), so a cut never fails for it.
  */
 export const firstSessionOf = (raw: unknown): WorkspaceFirstSession | null => {
-  const given = raw as Partial<WorkspaceFirstSession> | null | undefined;
-  if (!(
-    given &&
-    typeof given.instanceId === "string" &&
-    INSTANCE_ID.test(given.instanceId) &&
-    typeof given.harness === "string" &&
-    HARNESSES.some((kind) => kind === given.harness && SPILLING[kind])
-  )) {
+  const given = WireFirstSession.safeParse(raw);
+  if (!given.success) {
+    return null;
+  }
+  const { harness, instanceId, resume } = given.data;
+  if (!INSTANCE_ID.test(instanceId)) {
     return null;
   }
   return {
-    harness: given.harness,
-    instanceId: given.instanceId,
-    resume:
-      typeof given.resume === "string" && SESSION_UUID.test(given.resume)
-        ? given.resume
-        : null,
+    harness,
+    instanceId,
+    resume: resume && SESSION_UUID.test(resume) ? resume : null,
   };
 };
 

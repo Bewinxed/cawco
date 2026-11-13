@@ -449,18 +449,23 @@ const readUpdateSettings = (
  */
 class AttemptFailed extends Error {}
 
-interface Failure {
-  count: number;
-  error: string;
-  nextAt: number;
-  version: string;
-}
+const Failure = z.object({
+  count: z.number(),
+  error: z.string(),
+  nextAt: z.number(),
+  version: z.string(),
+});
+type Failure = z.infer<typeof Failure>;
 const failuresPath = () => join(binaryRoot(), "update-failures.json");
 async function readFailure(version: string): Promise<Failure | undefined> {
-  const saved = (await Bun.file(failuresPath())
-    .json()
-    .catch(() => undefined)) as Failure | undefined;
-  return saved?.version === version ? saved : undefined;
+  const saved = Failure.safeParse(
+    await Bun.file(failuresPath())
+      .json()
+      .catch(() => undefined)
+  );
+  return saved.success && saved.data.version === version
+    ? saved.data
+    : undefined;
 }
 async function recordFailure(version: string, error: string): Promise<void> {
   const before = await readFailure(version);
@@ -796,8 +801,7 @@ export class BinaryUpdater {
   async #setChanged(update: Partial<BinaryUpdateState>): Promise<boolean> {
     const changed = Object.entries(update).some(
       ([key, value]) =>
-        JSON.stringify(this.#state[key as keyof BinaryUpdateState]) !==
-        JSON.stringify(value)
+        JSON.stringify(Reflect.get(this.#state, key)) !== JSON.stringify(value)
     );
     if (changed) {
       await this.#set(update);

@@ -102,16 +102,21 @@ const routeOf = (
 
 /** `ports` as a person reads them: runs as `3457–3556`. */
 const portRuns = (ports: number[]): string => {
+  const [first, ...later] = ports;
+  if (first === undefined) {
+    return "";
+  }
   const runs: string[] = [];
-  let [start] = ports;
-  for (let at = 1; at <= ports.length; at += 1) {
-    const port = ports[at];
-    const previous = ports[at - 1] as number;
+  let start = first;
+  let previous = first;
+  for (const port of later) {
     if (port !== previous + 1) {
       runs.push(start === previous ? `${previous}` : `${start}–${previous}`);
       start = port;
     }
+    previous = port;
   }
+  runs.push(start === previous ? `${previous}` : `${start}–${previous}`);
   return runs.join(", ");
 };
 
@@ -192,6 +197,10 @@ const listen = (
     },
   });
 
+/** The `code` an error carries, when it is an error that has one. */
+const codeOf = (error: unknown): unknown =>
+  error instanceof Error && "code" in error ? error.code : undefined;
+
 /**
  * Every pair of `all` (a loopback port, the hub's port it is carried to) on
  * each of `hosts`: what opened, the ports another listener holds, and the
@@ -217,7 +226,7 @@ async function listenAll(
         try {
           servers.push(listen(hubHost, hostname, local, port, route));
         } catch (error) {
-          const { code } = error as { code?: unknown };
+          const code = codeOf(error);
           if (code === "EADDRINUSE") {
             held.set(hostname, [...(held.get(hostname) ?? []), local]);
             continue;
