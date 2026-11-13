@@ -35,6 +35,7 @@
  * would relay.
  */
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
 import {
@@ -82,6 +83,9 @@ import {
   type Progress,
   portsOf,
 } from "./state";
+
+/** Whether this machine has `/dev/vhci`, so containers can run a virtual BLE adapter for passkey relay. */
+const hasVhci = (): boolean => existsSync("/dev/vhci");
 
 /** Where a container in a namespace of its own reaches the machine, and so the relay on it: pasta's `--map-guest-addr`, Podman 5.3 on. */
 const MACHINE_FROM_PASTA = "host.containers.internal";
@@ -676,6 +680,7 @@ export class ContainerHost implements BrowserHost {
           }),
         }
       : undefined;
+    const vhci = hasVhci();
     const created = await this.#docker.createContainer({
       name: nameOf(owner, record.key),
       Image: image,
@@ -717,6 +722,21 @@ export class ContainerHost implements BrowserHost {
         // machine itself, and takes none (preview-names.ts `machineHostOf`).
         ...(hostRules && extraHosts.length > 0
           ? { ExtraHosts: extraHosts }
+          : {}),
+        // The virtual HCI adapter for passkey relay (PasskeyInjector):
+        // mounted only when the host has /dev/vhci, so machines without
+        // the module loaded start the container unchanged.
+        ...(vhci
+          ? {
+              Devices: [
+                {
+                  PathOnHost: "/dev/vhci",
+                  PathInContainer: "/dev/vhci",
+                  CgroupPermissions: "rwm",
+                },
+              ],
+              CapAdd: ["NET_ADMIN"],
+            }
           : {}),
         NetworkMode: placed.NetworkMode,
         PortBindings: {
