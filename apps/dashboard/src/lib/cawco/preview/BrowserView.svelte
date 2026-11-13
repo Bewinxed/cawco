@@ -27,12 +27,12 @@
    * right under it, as a phone browser frames a page.
    *
    * Taken over, the page takes the layout of the device the person holds
-   * (`form`, the head's switch; a phone's sheet starts on the phone's, a
-   * desk on the desktop's, on every take-over), and the hands that drive it
+   * (`form`, the head's switch; a phone starts on the phone's, a desk on
+   * the desktop's, on every take-over), and the hands that drive it
    * follow the layout (the takeover pitch, shape A):
    *
-   * - **Phone layout on a phone**: the page laid out at the sheet's room
-   *   under the head, real touch (a drag scrolls and flings, a pinch zooms,
+   * - **Phone layout on a phone**: the page laid out at the room the panel
+   *   has under the head, laid out again as the phone turns, real touch (a drag scrolls and flings, a pinch zooms,
    *   a tap clicks, a finger held still selects the word under it).
    * - **Phone layout at a desk**: the phone's width (core `FORMS.phone`) at
    *   the well's height up to a phone's (`screenHeight`), at 1:1, centred in
@@ -60,6 +60,7 @@
   import { browserWords } from "@cawco/core/words/browser";
   import { commonWords } from "@cawco/core/words/common";
   import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { track } from "#lib/cawco/track.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
@@ -176,6 +177,17 @@
   let sent = SINK_PAD;
   /** A finger, not a cursor: Show keyboard floats at the stream's foot. */
   const coarse = new IsCoarsePointer();
+  /** A phone in either hold: a finger, and a screen under the phone line (core `FORMS` tablet) on one side or the other. */
+  const phoneScreen = new MediaQuery(
+    "(pointer: coarse) and ((max-width: 639px) or (max-height: 639px))"
+  );
+  /**
+   * The person holds a phone: its sheet (`addressAtFoot`), or a phone turned
+   * to landscape, whose panel stands beside the conversation. A phone's
+   * page fills the room it has, in either layout, and follows it as the
+   * phone turns.
+   */
+  const handheld = $derived(addressAtFoot || phoneScreen.current);
   let details = $state(false);
   /** A start the hub refused, in its words. */
   let refusal = $state<string | null>(null);
@@ -218,13 +230,13 @@
   let footH = $state(0);
 
   // Each take-over starts on the layout of the device taking over: a
-  // phone's sheet on the phone's, a desk on the desktop's.
+  // phone, held either way, on the phone's; a desk on the desktop's.
   let formFor = 0;
   $effect(() => {
     const since = browser?.takeover?.since;
     if (since && since !== formFor) {
       formFor = since;
-      form = untrack(() => (addressAtFoot ? "phone" : "desk"));
+      form = untrack(() => (handheld ? "phone" : "desk"));
     }
   });
 
@@ -235,7 +247,7 @@
 
   /** The phone layout's page as the well has room for it, CSS px: the sheet's room on a phone, a phone's shape at a desk. */
   const phoneRoom = $derived(
-    addressAtFoot
+    handheld
       ? { w: Math.floor(room.w), h: Math.floor(below) }
       : {
           w: Math.min(FORMS.phone, Math.floor(room.w)),
@@ -315,7 +327,7 @@
         ? { w: laid.width, h: laid.height }
         : phoneRoom;
     }
-    if (mine && addressAtFoot) {
+    if (mine && handheld) {
       return { w: room.w, h: below };
     }
     const w = addressAtFoot
@@ -376,7 +388,7 @@
     }
     untrack(() => {
       placed = false;
-      view = { scale: addressAtFoot ? READ_SCALE : 0, x: 0, y: 0 };
+      view = { scale: handheld ? READ_SCALE : 0, x: 0, y: 0 };
     });
   });
 
@@ -395,7 +407,7 @@
 
   /** Where the page's focus stands: a desktop layout opened on a phone moves to it, until the person moves it. */
   function focused(focus: TakeoverFocus) {
-    if (!(picturing && addressAtFoot) || placed) {
+    if (!(picturing && handheld) || placed) {
       return;
     }
     setView(
@@ -685,8 +697,8 @@
    * refresh): each sent as the page's own touch as it comes, every sample
    * of a coalesced move with its own time, so the page scrolls, flings and
    * pinches as a phone's page does. A finger held still is a long press:
-   * its touch cancelled, the word under it selected, and a drag from there
-   * selects on with the mouse's button held.
+   * its touch cancelled, the word under it selected and nothing activated,
+   * and a drag from there carries the selection on.
    */
   function touch(
     event: PointerEvent,
@@ -730,7 +742,7 @@
       }
       const point = gesture?.kind === "select" ? at(one) : null;
       if (point) {
-        to.move(point.x, point.y);
+        to.select(point.x, point.y);
       } else if (gesture?.kind !== "select") {
         to.touch("move", points(), timeOf(one));
       }
@@ -742,13 +754,10 @@
     phase: "up" | "cancel",
     to: TakeoverStream
   ) {
-    const lifted = at(event);
     fingers.delete(event.pointerId);
     clearTimeout(holdTimer);
     if (gesture?.kind === "select") {
-      if (fingers.size === 0 && lifted) {
-        to.button(lifted.x, lifted.y, 0, false);
-      }
+      // The selection stands as the finger lifts: nothing is pressed.
       gesture = fingers.size === 0 ? null : gesture;
       return;
     }
@@ -776,7 +785,7 @@
   ) {
     const before = fingers.get(event.pointerId);
     if (phase === "down") {
-      pictureDown(event, to);
+      pictureDown(event);
     } else if (before) {
       if (phase === "move") {
         pictureMove(event, before, to);
@@ -786,7 +795,7 @@
     }
   }
 
-  function pictureDown(event: PointerEvent, to: TakeoverStream) {
+  function pictureDown(event: PointerEvent) {
     fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const point = at(event);
     if (fingers.size === 1) {
@@ -801,9 +810,6 @@
       return;
     }
     clearTimeout(holdTimer);
-    if (gesture?.kind === "select" && point) {
-      to.button(point.x, point.y, 0, false);
-    }
     const { mid, dist } = pair();
     gesture = {
       kind: "two",
@@ -845,7 +851,7 @@
       case "select": {
         const point = at(event);
         if (point) {
-          to.move(point.x, point.y);
+          to.select(point.x, point.y);
         }
         return;
       }
@@ -873,8 +879,6 @@
     const point = at(event);
     if (gesture?.kind === "wait" && phase === "up" && point) {
       to.button(point.x, point.y, 0, true);
-      to.button(point.x, point.y, 0, false);
-    } else if (gesture?.kind === "select" && point) {
       to.button(point.x, point.y, 0, false);
     }
     gesture = fingers.size > 0 ? { kind: "spent" } : null;
@@ -1003,7 +1007,7 @@
    * last tapped (the field the keyboard is for) stands in view, px.
    */
   const keyboardShift = $derived(
-    keyboardUp && form === "phone" && addressAtFoot
+    keyboardUp && form === "phone" && handheld
       ? Math.max(
           0,
           Math.min(screen.h - below, tappedAt - Math.max(0, below) / 2)
@@ -1233,8 +1237,9 @@
        with room round it. -->
   <div
     bind:this={well}
-    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:data-[form=phone]:p-space-5"
+    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:not-data-fill:data-[form=phone]:p-space-5"
     data-form={mine ? form : undefined}
+    data-fill={handheld || undefined}
     data-framed={addressAtFoot || undefined}
     data-slot="browser-well"
     data-stream={source ?? undefined}
@@ -1267,7 +1272,7 @@
          the field the person tapped stands over the keyboard. -->
     <div
       bind:this={screenBox}
-      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:in-data-[form=phone]:rounded-modal not-in-data-framed:in-data-[form=phone]:border not-in-data-framed:in-data-[form=phone]:border-border-hairline not-in-data-framed:in-data-[form=phone]:shadow-overlay"
+      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-modal not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-overlay"
       data-slot="browser-screen"
       style:--keyboard-shift="{-keyboardShift}px"
       style:--screen-h="{screen.h}px"

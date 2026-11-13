@@ -20,6 +20,13 @@
    * `away` (its machine isn't connected), `local` (a machine with no
    * container runtime: the local browser's line under the stream),
    * `long` (an origin longer than the address holds).
+   *
+   * `?state=live&live=1`, served by `bun run takeover:bench`
+   * (scripts/takeover-bench.ts): no stand-in. The view's socket is the
+   * daemon's own take-over of a real Chromium showing a sign-in page, and
+   * Take over and Hand back go to the bench's server, which holds the
+   * browser as the shield does; while held the head adds Reload page on a
+   * desk, as PreviewPane's does.
    */
   import type { ListedBrowser } from "@cawco/core/browser";
   import { browserWords } from "@cawco/core/words/browser";
@@ -41,10 +48,39 @@
     IconExternalLinear,
     IconMonitorLinear,
     IconPhoneLinear,
+    IconRefreshLinear,
   } from "#lib/icons.js";
   import { page } from "$app/state";
 
   const asked = page.url.searchParams.get("state") ?? "live";
+  /** The live bench: a real browser behind the view (scripts/takeover-bench.ts). */
+  const real = page.url.searchParams.get("live") === "1";
+  /** Since when the person holds the live bench's browser; null while the agent has it. */
+  let since = $state<number | null>(null);
+  let acting = $state(false);
+  const BenchState = z.object({
+    since: z.number().nullable(),
+    origin: z.string(),
+  });
+  let realOrigin = $state<string | null>(null);
+  /** The live bench's server, asked or told: Take over, Hand back, or where it stands. */
+  async function bench(path: string, method = "GET") {
+    ({ since, origin: realOrigin } = BenchState.parse(
+      await (await fetch(path, { method })).json()
+    ));
+  }
+  if (real && typeof window !== "undefined") {
+    bench("/__bench/state");
+  }
+  async function control() {
+    if (!real) {
+      return;
+    }
+    acting = true;
+    await bench(since ? "/__bench/handback" : "/__bench/takeover", "POST");
+    acting = false;
+  }
+  let view = $state<BrowserView>();
   const phone = new MediaQuery("max-width: 639px");
   /** The stream is drawn: there is a page to take over. */
   let viewing = $state(false);
@@ -84,23 +120,25 @@
     long: "https://pr-2417-billing-settings-preview.staging.northwind-internal.dev",
     unreachable: "https://staging.northwind.dev",
   } as Record<string, string>;
-  const origin = ORIGIN[asked] ?? "https://app.northwind.dev";
+  const origin = $derived(
+    real ? realOrigin : (ORIGIN[asked] ?? "https://app.northwind.dev")
+  );
 
-  const mine = asked === "mine";
+  const mine = $derived(real ? since !== null : asked === "mine");
   /** The browser's own state where the bench's isn't live. */
   const STATE_OF: Record<string, ListedBrowser["state"]> = {
     starting: "starting",
     building: "building",
     failed: "failed",
   };
-  const browser: ListedBrowser = {
-    host: asked === "local" ? "local" : "container",
+  const browser: ListedBrowser = $derived({
+    host: asked === "local" || real ? "local" : "container",
     key: "project:northwind",
     lastUsedAt: Date.now(),
     machineId: "obelisk",
     machineName: "obelisk",
     name: "Northwind's browser",
-    origin,
+    ...(origin ? { origin } : {}),
     projectId: "northwind",
     state: STATE_OF[asked] ?? "live",
     ...(asked === "building"
@@ -111,27 +149,41 @@
           why: "docker: Error response from daemon: pull access denied for cawco/browser, repository does not exist or may require 'docker login'.",
         }
       : {}),
-    takeover: mine ? { by: "", requestId: null, since: Date.now() } : null,
-  };
+    takeover: mine
+      ? { by: "", requestId: null, since: since ?? Date.now() }
+      : null,
+  });
   const machine = {
     machineId: "obelisk",
     name: "obelisk",
     online: asked !== "away",
   };
   /** The layout switch, in the mode's place while the person holds the browser (PreviewPane's rule). */
-  const layoutItems: HeadItem[] = mine
-    ? [
-        {
-          key: "layout",
-          priority: HEAD_PRIORITY.mode,
-          bar: layoutBar,
-          compact: layoutCompact,
-          menu: layoutMenu,
-          group: true,
-          place: "centre",
-        },
-      ]
-    : [];
+  const layoutItems: HeadItem[] = $derived(
+    mine
+      ? [
+          {
+            key: "layout",
+            priority: HEAD_PRIORITY.mode,
+            bar: layoutBar,
+            compact: layoutCompact,
+            menu: layoutMenu,
+            group: true,
+            place: "centre",
+          },
+          ...(real && !phone.current
+            ? [
+                {
+                  key: "reload-page",
+                  priority: HEAD_PRIORITY.reload,
+                  bar: reloadBar,
+                  menu: reloadMenu,
+                },
+              ]
+            : []),
+        ]
+      : []
+  );
   /** What the head holds, on the rule PreviewPane's head stands by. */
   const shows = $derived(
     browserHead(browser, {
@@ -283,7 +335,7 @@
 
   // The hub's view socket, answered here: neko's signaling for a container
   // browser, its peer a stand-in that hands the video a canvas's stream.
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && !real) {
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
@@ -448,14 +500,29 @@
   <Button
     data-slot="browser-take"
     label={mine ? browserWords.handBack : browserWords.takeOver}
-    onclick={() => undefined}
+    onclick={control}
+    pending={acting}
+    pendingLabel={mine ? browserWords.handingBack : browserWords.takingOver}
     shape="capsule"
     variant={mine ? "outline" : "default"}
   />
 {/snippet}
 {#snippet controlMenu()}
-  <DropdownMenu.Item
+  <DropdownMenu.Item onSelect={control}
     >{mine ? browserWords.handBack : browserWords.takeOver}</DropdownMenu.Item
+  >
+{/snippet}
+{#snippet reloadBar()}
+  <BarItem
+    icon={IconRefreshLinear}
+    label={browserWords.reloadPage}
+    onclick={() => view?.reloadPage()}
+  />
+{/snippet}
+{#snippet reloadMenu()}
+  <DropdownMenu.Item onSelect={() => view?.reloadPage()}
+    ><IconRefreshLinear /><span>{browserWords.reloadPage}</span
+    ></DropdownMenu.Item
   >
 {/snippet}
 {#snippet addressBar()}
@@ -561,6 +628,7 @@
     title="Check the billing page after the plan change"
   >
     <BrowserView
+      bind:this={view}
       addressAtFoot={phone.current}
       artifactId="northwind-billing"
       {browser}

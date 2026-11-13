@@ -57,6 +57,8 @@ export type CdpInput =
   | { t: "wheel"; x: number; y: number; dx: number; dy: number }
   | { t: "key"; type: "down" | "up"; key: string; modifiers?: number }
   | { t: "text"; text: string }
+  /** A held finger dragged on: the selection carried to the word under it. */
+  | { t: "select"; x: number; y: number }
   | TakeoverMessage;
 
 /** One open view of the take-over: where its frames, and word of the page's focus, go. */
@@ -301,6 +303,7 @@ const InputSchema: z.ZodType<CdpInput> = z.discriminatedUnion("t", [
     time: z.number(),
   }),
   z.object({ t: z.literal("hold"), ...AT }),
+  z.object({ t: z.literal("select"), ...AT }),
   z.object({ t: z.literal("reload") }),
 ]);
 
@@ -321,6 +324,48 @@ const FOCUS_SCRIPT = `(() => {
   const box = at.getBoundingClientRect();
   return box.width > 0 && box.height > 0 ? [box.x, box.y, box.width, box.height] : null;
 })()`;
+
+/** The world a long press selects in: the take-over's own, beside the page's (`Page.createIsolatedWorld`). */
+const SELECT_WORLD = "cawco-takeover";
+
+/**
+ * Selects the word at (`x`, `y`), a point of the page's picture in its
+ * visual viewport's CSS px (a pinch moves and scales it over the layout
+ * viewport the caret is found in), or with `extend` carries the selection
+ * on to the word there, back or forth from where it started. A word is
+ * Intl.Segmenter's, the one a phone's long press selects.
+ */
+const SELECT_SCRIPT = `(x, y, extend) => {
+  const view = visualViewport;
+  const at = document.caretPositionFromPoint(
+    view.offsetLeft + x / view.scale,
+    view.offsetTop + y / view.scale
+  );
+  const node = at && at.offsetNode;
+  if (!node) return;
+  const offset = at.offset;
+  let start = offset;
+  let end = offset;
+  if (node.nodeType === Node.TEXT_NODE) {
+    const words = new Intl.Segmenter(undefined, { granularity: "word" });
+    for (const part of words.segment(node.data)) {
+      const after = part.index + part.segment.length;
+      if (part.isWordLike && part.index <= offset && offset <= after) {
+        start = part.index;
+        end = after;
+        break;
+      }
+    }
+  }
+  const selection = getSelection();
+  if (extend && selection.anchorNode) {
+    const from = document.createRange();
+    from.setStart(selection.anchorNode, selection.anchorOffset);
+    selection.extend(node, from.comparePoint(node, offset) < 0 ? start : end);
+  } else {
+    selection.setBaseAndExtent(node, start, node, end);
+  }
+}`;
 
 /** How a take-over attaches the pages and frames it lays out: each paused as it opens (Chromium's `waitForDebuggerOnStart`). */
 const PAUSED = {
@@ -373,8 +418,6 @@ export class CdpTakeover {
   #state: CastState = "idle";
   /** The pointer's held button, which a move carries. */
   #held: keyof typeof BUTTON | undefined;
-  /** The clicks the held button's release counts: two after a finger's hold, which selected a word. */
-  #clicks = 1;
   /** A screencast alone: the view's input is dropped. */
   readonly #watch: boolean;
   /** Every page and cross-site frame laid out, by session: the taken page's, each page opened since, and their frames. */
@@ -541,9 +584,10 @@ export class CdpTakeover {
         return;
       case "hold":
         // A finger held still: the word under it selected, as a phone's
-        // long press does, and a drag from there selects on (Chromium's
+        // long press does, and never what is under it activated (Chromium's
         // own long press is not fed by these touches, the sharpness check
-        // §3). Its touch is cancelled first, so the page takes no click.
+        // §3, and a mouse's double press would click on its release). Its
+        // touch is cancelled first, so the page takes no tap either.
         await this.#link
           .call(
             "Input.dispatchTouchEvent",
@@ -551,9 +595,10 @@ export class CdpTakeover {
             page
           )
           .catch(() => undefined);
-        this.#held = "left";
-        this.#clicks = 2;
-        await this.#mouse(page, "mousePressed", input.x, input.y);
+        await this.#select(page, input.x, input.y, false);
+        return;
+      case "select":
+        await this.#select(page, input.x, input.y, true);
         return;
       case "move":
         await this.#mouse(
@@ -583,7 +628,6 @@ export class CdpTakeover {
           input.modifiers
         );
         this.#held = undefined;
-        this.#clicks = 1;
         return;
       case "wheel":
         await this.#link.call(
@@ -656,6 +700,40 @@ export class CdpTakeover {
     );
   }
 
+  /**
+   * The word at a point of the picture (its CSS px) selected in the page's
+   * own Selection, or with `extend` the selection carried on to the word
+   * there: in a world of the take-over's own (`Page.createIsolatedWorld`),
+   * which shares the page's document and none of its scripts, so the page
+   * hears a selection change and no pointer, mouse or click event.
+   */
+  async #select(
+    page: string,
+    x: number,
+    y: number,
+    extend: boolean
+  ): Promise<void> {
+    const tree = await this.#link.call("Page.getFrameTree", {}, page);
+    const frameId = (tree.frameTree as { frame?: { id?: unknown } } | undefined)
+      ?.frame?.id;
+    if (typeof frameId !== "string") {
+      return;
+    }
+    const world = await this.#link.call(
+      "Page.createIsolatedWorld",
+      { frameId, worldName: SELECT_WORLD },
+      page
+    );
+    await this.#link.call(
+      "Runtime.evaluate",
+      {
+        expression: `(${SELECT_SCRIPT})(${x}, ${y}, ${extend})`,
+        contextId: world.executionContextId,
+      },
+      page
+    );
+  }
+
   #mouse(
     page: string,
     type: "mouseMoved" | "mousePressed" | "mouseReleased",
@@ -672,7 +750,7 @@ export class CdpTakeover {
         y,
         modifiers,
         button,
-        ...(type === "mouseMoved" ? {} : { clickCount: this.#clicks }),
+        ...(type === "mouseMoved" ? {} : { clickCount: 1 }),
       },
       page
     );
@@ -1069,21 +1147,14 @@ export class CdpTakeover {
   }
 
   /**
-   * Ends the screencast, every view (with `code` and `why`) and the
-   * connection, which takes every layout it set with it: the agent has the
-   * desktop's own again.
+   * Ends every view (with `code` and `why`) and the connection at once,
+   * which takes the screencast and every layout it set with it (Chromium
+   * drops a session's overrides as its connection closes): the agent has
+   * the desktop's own again. Nothing here waits on Chromium, so a browser
+   * that no longer answers, or a link already gone, ends it all the same.
    */
-  async stop(
-    code = 1001,
-    why = "The person handed the browser back."
-  ): Promise<void> {
-    const cast = this.#cast;
+  stop(code = 1001, why = "The person handed the browser back."): void {
     this.#cast = undefined;
-    if (this.#state === "casting" && cast) {
-      await this.#link
-        .call("Page.stopScreencast", {}, cast)
-        .catch(() => undefined);
-    }
     this.#end(why, code);
     this.#link.close();
   }
