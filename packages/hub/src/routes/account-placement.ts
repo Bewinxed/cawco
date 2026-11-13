@@ -9,10 +9,11 @@ import {
   PLACEMENT_STRATEGIES,
 } from "@cawco/core/accounts/kinds";
 import { DAY_MS } from "@cawco/core/time";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { accountForecasts, carrySequence, historyPoints } from "../forecast";
 import type { HubContext } from "../hub-context";
 import { place as placeAccount } from "../placement";
+
 import { accountProvider } from "../routes/accounts";
 import { harnessSchema } from "../routes/harness-schema";
 
@@ -82,7 +83,7 @@ export const accountPlacementRoutes = ({
           }),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         // Spread and Soonest reset weigh the limits CawCo reads; a provider
         // it reads none for can only be routed Pinned or Fill first.
         const offered = strategiesFor(params.provider);
@@ -95,20 +96,20 @@ export const accountPlacementRoutes = ({
                     ?.name ?? params.provider);
             const asked =
               choice.strategy === "spread" ? "Spread" : "Soonest reset";
-            return status(
-              400,
-              `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`
-            );
+            return problem(400, {
+              code: "cant-route-cawco-reads",
+              detail: `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`,
+            });
           }
           if (
             choice.strategy === "pinned" &&
             choice.pinnedAccountId &&
             !db.accounts.get(choice.pinnedAccountId)
           ) {
-            return status(
-              400,
-              `There is no account ${choice.pinnedAccountId} to pin.`
-            );
+            return problem(400, {
+              code: "no-account-pin",
+              detail: `There is no account ${choice.pinnedAccountId} to pin.`,
+            });
           }
         }
         const saved = db.accounts.routing(params.provider).atLimit;
@@ -202,16 +203,19 @@ export const accountPlacementRoutes = ({
           cwd: t.Optional(t.String()),
         }),
       },
-      async ({ query, status }) => {
+      async ({ query }) => {
         const asked = await askedStart(query);
         if ("refusal" in asked) {
-          return status(asked.status, asked.refusal);
+          return problem(asked.status, {
+            code: "placement-refused",
+            detail: asked.refusal,
+          });
         }
         // Where a start would go says what its start would: a machine
         // that refuses the harness refuses it (`placeSpawn`).
         const refused = refusedHarness(query.machineId, asked.harness);
         if (refused) {
-          return status(400, refused);
+          return problem(400, { code: "harness-refused", detail: refused });
         }
         const input = placementInput(
           query.machineId,
@@ -245,7 +249,7 @@ export const accountPlacementRoutes = ({
         }
         const placed = placeAccount(input);
         if (!placed.ok) {
-          return status(400, placed.refusal);
+          return problem(400, { code: "not-placed", detail: placed.refusal });
         }
         const { ok: _ok, ...explain } = placed;
         return { ...explain, model: resolved } satisfies PlacementPreview;

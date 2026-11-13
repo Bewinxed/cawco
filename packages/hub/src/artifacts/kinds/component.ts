@@ -18,7 +18,9 @@ import {
   type StoryOp,
 } from "@cawco/core/stage";
 import { pageHash } from "@cawco/preview/proxy";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
+
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
@@ -35,7 +37,6 @@ import {
   unseen,
   weightSaid,
 } from "../component";
-import { ArtifactRefusal } from "../refusals";
 import type {
   ArtifactInput,
   ArtifactRead,
@@ -254,19 +255,25 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
    * words, and since the first such read.
    */
   const unreachedWritten = (row: ArtifactRow, error: unknown) => {
-    const status = error instanceof ArtifactRefusal ? error.status : null;
+    const status = error instanceof ElysiaStatus ? error.status : null;
     let down: StageUnreached["down"] = "reach";
     if (status === 409) {
       down = "workspace";
     } else if (status === 503 || status === 504) {
       down = "machine";
     }
+    let why = String(error);
+    if (error instanceof ElysiaStatus) {
+      why = error.response.detail;
+    } else if (error instanceof Error) {
+      why = error.message;
+    }
     docs.transact(row.id, "hub", (doc) => {
       const meta = docMeta(doc);
       const had = meta.get("unreached");
       meta.set("unreached", {
         down,
-        why: error instanceof Error ? error.message : String(error),
+        why,
         since: had?.since ?? new Date().toISOString(),
       } satisfies StageUnreached);
     });
@@ -310,13 +317,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     change: SheetChange,
     by: "agent" | "person",
     ownersRead = true
-  ): Promise<ArtifactRead> => {
+  ) => {
     const sheet = sheetOf(row);
     if (!sheet) {
-      throw new ArtifactRefusal(
-        409,
-        `${row.name} is a ${row.kind}: args and story are for a sheet.`
-      );
+      return problem(409, {
+        code: "artifact-sheet-not-sheet",
+        detail: `${row.name} is a ${row.kind}: args and story are for a sheet.`,
+      });
     }
     const file = join(sheet.dir, sheet.file);
     const edit = await deps.stageWrite(
@@ -325,6 +332,9 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         ? { file, args: change.args }
         : { file, story: change.story }
     );
+    if (edit instanceof ElysiaStatus) {
+      return edit;
+    }
     docs.transact(row.id, "hub", (doc) => {
       const meta = docMeta(doc);
       meta.set("sheet", edit.sheet);
@@ -336,11 +346,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (by === "person") {
       ctx.marked(row.id);
     }
-    return {
+    const read: ArtifactRead = {
       ...ctx.read(db.get(row.id) as ArtifactRow, undefined, ownersRead),
       sheet: edit.sheet,
       edit: { file: edit.file, lines: edit.lines, formatted: edit.formatted },
     };
+    return read;
   };
   /**
    * The agent's write as `artifact_update` answers it (component canvas
@@ -353,7 +364,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     change: SheetChange,
     written: ArtifactRead
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the story the write named, then its frames as the panel redraws them, bounded by a short wait
-  ): Promise<ComponentWritten> => {
+  ) => {
     const name = "args" in change ? change.args.story : storyOfOp(change.story);
     const story = written.sheet?.stories.find((one) => one.name === name);
     const sheet = sheetOf(row);
@@ -362,11 +373,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       const at: StageAt = { workspace: sheet.workspace };
       const deadline = Date.now() + PANEL_DRAW_MS;
       for (;;) {
-        const report = drawnHeld(
-          row,
-          (await deps.stage(at, sheet.files[0] as string, sheet.files)).opened
-            .report
+        const staged = await deps.stage(
+          at,
+          sheet.files[0] as string,
+          sheet.files
         );
+        if (staged instanceof ElysiaStatus) {
+          return staged;
+        }
+        const report = drawnHeld(row, staged.opened.report);
         if (!unseen(report, name)) {
           frames = renderSaid(report).frames.filter(
             (one) => one.story === name
@@ -379,13 +394,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         await Bun.sleep(PANEL_DRAW_POLL_MS);
       }
     }
-    return {
+    const said: ComponentWritten = {
       file: written.edit?.file ?? "",
       lines: written.edit?.lines ?? { from: 0, to: 0 },
       formatted: written.edit?.formatted ?? null,
       story: story ? { name: story.name, args: story.args } : null,
       render: frames,
     };
+    return said;
   };
   /**
    * The report of a canvas just shown or written: the panel's, once its page
@@ -400,7 +416,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     opened: StageOpened,
     shownNow: boolean,
     story?: string
-  ): Promise<Pick<StageRendered, "report" | "undrawn">> => {
+  ) => {
     let { report } = opened;
     const deadline = Date.now() + PANEL_DRAW_MS;
     while (
@@ -409,11 +425,19 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       Date.now() < deadline
     ) {
       await Bun.sleep(PANEL_DRAW_POLL_MS);
-      ({ report } = (await deps.stage(at, files[0] as string, files)).opened);
+      const staged = await deps.stage(at, files[0] as string, files);
+      if (staged instanceof ElysiaStatus) {
+        return staged;
+      }
+      ({ report } = staged.opened);
     }
+    const drawn: Pick<StageRendered, "report" | "undrawn"> = {
+      report,
+      undrawn: [],
+    };
     return unseen(report, story)
       ? await deps.stageRender(at, { files, spec })
-      : { report, undrawn: [] };
+      : drawn;
   };
   /**
    * `report` once the browser drawing its unseen sections has posted them,
@@ -426,47 +450,54 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     at: StageAt,
     files: string[],
     report: RenderReport
-  ): Promise<RenderReport> => {
+  ) => {
     let now = report;
     const deadline = Date.now() + PANEL_DRAW_MS;
     while (drawingUnseen(now).length > 0 && Date.now() < deadline) {
       await Bun.sleep(PANEL_DRAW_POLL_MS);
-      now = drawnHeld(
-        row,
-        (await deps.stage(at, files[0] as string, files)).opened.report
-      );
+      const staged = await deps.stage(at, files[0] as string, files);
+      if (staged instanceof ElysiaStatus) {
+        return staged;
+      }
+      now = drawnHeld(row, staged.opened.report);
     }
     return now;
+  };
+  /** What a component canvas's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
+  const sheetAsked = (input: ArtifactInput) => {
+    const asked = input.file === undefined ? [] : [input.file].flat();
+    if (asked.length === 0) {
+      return problem(400, {
+        code: "artifact-sheet-file-none",
+        detail: `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
+      });
+    }
+    const misfit = canvasProblem(input);
+    if (misfit) {
+      return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
+    }
+    const said = ctx.askedOf(input);
+    return said instanceof ElysiaStatus ? said : { asked, said };
   };
   /**
    * Makes a component canvas in `owner`'s panel (or opens the one of that
    * name) on the stage of its maker's workspace, shows it, and answers what
    * a browser drew of it: the panel's draw, else the daemon's.
    */
-  const createSheet = async (
-    making: Making,
-    input: ArtifactInput
-  ): Promise<Created> => {
+  const createSheet = async (making: Making, input: ArtifactInput) => {
     const { owner, maker } = making;
-    const asked = input.file === undefined ? [] : [input.file].flat();
-    if (asked.length === 0) {
-      throw new ArtifactRefusal(
-        400,
-        `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`
-      );
+    const sheetAsk = sheetAsked(input);
+    if (sheetAsk instanceof ElysiaStatus) {
+      return sheetAsk;
     }
-    const problem = canvasProblem(input);
-    if (problem) {
-      throw new ArtifactRefusal(400, problem);
-    }
+    const { asked, said } = sheetAsk;
     const at: StageAt = { session: maker };
     // A canvas opened on nothing is refused: "Write it, then call again."
-    const { machineId, opened, workspace } = await deps.stage(
-      at,
-      asked[0] as string,
-      asked,
-      true
-    );
+    const staged = await deps.stage(at, asked[0] as string, asked, true);
+    if (staged instanceof ElysiaStatus) {
+      return staged;
+    }
+    const { machineId, opened, workspace } = staged;
     const spec = specOf(input.name, input);
     const files = opened.report.sections.map((one) => one.file);
     const source: PreviewSource = {
@@ -483,7 +514,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const row = before
       ? (db.update(before.id, {
           madeBy: maker.id,
-          ...ctx.askedOf(input),
+          ...said,
           revision: before.revision + 1,
           updatedAt: now,
         }) as ArtifactRow)
@@ -495,7 +526,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           projectId: owner.projectId ?? null,
           kind: "component",
           name: input.name,
-          ...ctx.askedOf(input),
+          ...said,
           machineId,
           source,
           revision: 1,
@@ -512,7 +543,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const shown = await handOver(making, before, row);
     if (!(shown.started || before)) {
       discard(row);
-      throw new ArtifactRefusal(503, shown.why);
+      return problem(503, {
+        code: "artifact-sheet-unshown",
+        detail: shown.why,
+      });
     }
     const owned = sheetOf(row);
     const drawn = await drawnReport(
@@ -522,9 +556,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       opened,
       ctx.openedOf(shown).opened
     );
+    if (drawn instanceof ElysiaStatus) {
+      return drawn;
+    }
     const { undrawn } = drawn;
     const report = drawnHeld(row, drawn.report);
-    return {
+    const made: Created = {
       id: row.id,
       kind: row.kind,
       name: row.name,
@@ -540,6 +577,32 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       errors: errorsSaid(sheetState(row, opened.state).errors),
       hint: READ_HINT,
     };
+    return made;
+  };
+  /**
+   * Sheet `row`'s stage opened on the workspace it was made in, its state
+   * written; undefined, said on the doc ({@link unreachedWritten}), when
+   * the read can't reach it.
+   */
+  const stageRead = async (
+    row: ArtifactRow,
+    sheet: NonNullable<ReturnType<typeof sheetOf>>
+  ) => {
+    try {
+      const staged = await deps.stage(
+        { workspace: sheet.workspace },
+        sheet.files[0] as string,
+        sheet.files
+      );
+      if (staged instanceof ElysiaStatus) {
+        unreachedWritten(row, staged);
+        return;
+      }
+      writeStage(row, staged.opened.state, staged.opened.sheet);
+      return staged.opened;
+    } catch (error) {
+      unreachedWritten(row, error);
+    }
   };
   /**
    * A component canvas as the session reads it (component canvas §4): its
@@ -559,45 +622,45 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     ownersRead = true,
     ask: ComponentReadAsk = {}
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a canvas's read joins its stage, its report, the person's picks and each optional ask in one answer
-  ): Promise<ArtifactRead> => {
+  ) => {
     const sheet = sheetOf(row);
-    let opened: StageOpened | undefined;
-    let report: RenderReport | undefined;
+    const opened = sheet ? await stageRead(row, sheet) : undefined;
+    let report = opened?.report;
     let undrawn: SectionUndrawn[] = [];
     let png: string | undefined;
     if (sheet) {
       const at: StageAt = { workspace: sheet.workspace };
-      try {
-        ({ opened } = await deps.stage(
-          at,
-          sheet.files[0] as string,
-          sheet.files
-        ));
-        writeStage(row, opened.state, opened.sheet);
-        ({ report } = opened);
-      } catch (error) {
-        unreachedWritten(row, error);
-      }
       // A bare story name two states files export reads no one frame: refused, before any draw, with the `file:Story` names to send.
       const ambiguous =
         report && ask.state && stateAmbiguity(report, ask.state.story);
       if (ambiguous) {
-        throw new ArtifactRefusal(409, ambiguous);
+        return problem(409, {
+          code: "artifact-state-ambiguous",
+          detail: ambiguous,
+        });
       }
       // A draw asked of a stage that answered: refused in its own words when it can't be made.
       if (opened && (ask.render || ask.png)) {
-        ({ report, png, undrawn } = await deps.stageRender(at, {
+        const rendered = await deps.stageRender(at, {
           files: sheet.files,
           spec: sheet.spec,
           ...(ask.state ? { state: ask.state } : {}),
           ...(ask.png ? { png: true } : {}),
-        }));
+        });
+        if (rendered instanceof ElysiaStatus) {
+          return rendered;
+        }
+        ({ report, png, undrawn } = rendered);
       }
       if (report) {
         report = drawnHeld(row, report);
       }
       if (report && !(ask.render || ask.png)) {
-        report = await drawnOut(row, at, sheet.files, report);
+        const out = await drawnOut(row, at, sheet.files, report);
+        if (out instanceof ElysiaStatus) {
+          return out;
+        }
+        report = out;
       }
     }
     const meta = docMeta(docs.doc(row.id));
@@ -615,10 +678,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ? sheetNow?.stories.find((one) => one.name === ask.story)
       : undefined;
     if (ask.story && !story) {
-      throw new ArtifactRefusal(
-        404,
-        `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`
-      );
+      return problem(404, {
+        code: "artifact-sheet-story-unknown",
+        detail: `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`,
+      });
     }
     return {
       ...base,
@@ -652,17 +715,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     } as ArtifactRead;
   };
   /** A design system round on component canvas `row`, asked by `requester`: what the ask did. */
-  const askVerify = (
-    requester: InstanceRow,
-    row: ArtifactRow
-  ): Promise<string> => {
+  const askVerify = (requester: InstanceRow, row: ArtifactRow) => {
     const sheet = sheetOf(row);
     if (!sheet) {
-      return Promise.reject(
-        new ArtifactRefusal(
-          409,
-          `${row.name} is a ${row.kind}: verify is a component canvas's.`
-        )
+      return Promise.resolve(
+        problem(409, {
+          code: "artifact-verify-not-sheet",
+          detail: `${row.name} is a ${row.kind}: verify is a component canvas's.`,
+        })
       );
     }
     return deps.verify(requester, {

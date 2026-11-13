@@ -1,6 +1,7 @@
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+
 import { titleProblem } from "../work-items";
 
 export const instanceTitleRenameRoutes = ({
@@ -13,21 +14,24 @@ export const instanceTitleRenameRoutes = ({
     .post(
       "/api/instances/:id/title",
       { ...hidden, body: t.Object({ title: t.String() }) },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         const title = body.title.trim();
-        const problem = titleProblem(title);
-        if (problem) {
-          return status(400, problem);
+        const misfit = titleProblem(title);
+        if (misfit) {
+          return problem(400, { code: "title-invalid", detail: misfit });
         }
         const result = db.nameInstance(params.id, title, "agent");
         if (!result) {
-          return status(404, `no session ${params.id}`);
+          return problem(404, {
+            code: "no-session",
+            detail: `no session ${params.id}`,
+          });
         }
         if (!result.named) {
-          return status(
-            409,
-            `The owner named this session "${result.row.title}", so set_title leaves it alone. Carry on with the task; do not call set_title again.`
-          );
+          return problem(409, {
+            code: "owner-named-session-so",
+            detail: `The owner named this session "${result.row.title}", so set_title leaves it alone. Carry on with the task; do not call set_title again.`,
+          });
         }
         publishInstances(result.row.machineId);
         return `Named this session "${title}".`;

@@ -69,8 +69,9 @@ import type {
   ProjectGate,
   RunsOnCapability,
 } from "@cawco/core/project-gate";
-import { Elysia } from "elysia";
-import { FolderRefusal, readFolderFile, refused } from "./project-folder";
+import { Elysia, ElysiaStatus, problem } from "elysia";
+import { readFolderFile } from "./project-folder";
+
 import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 
 /** The file in the project's folder that declares its gate. */
@@ -270,9 +271,9 @@ const indentedLine = (read: BlockRead, text: string): void => {
   if (read.inCawEdits) {
     return;
   }
-  const problem = optionLine(text, read.steps.at(-1), read.seen);
-  if (problem) {
-    read.problems.push(problem);
+  const misfit = optionLine(text, read.steps.at(-1), read.seen);
+  if (misfit) {
+    read.problems.push(misfit);
   }
 };
 
@@ -346,42 +347,41 @@ const readGate = (content: string): GateReading => {
   return { ok: true, steps, ...(ship ? { ship } : {}) };
 };
 
-/** The project's gate as its folder holds it now. */
-export const projectGate = async (projectId: string): Promise<ProjectGate> => {
+/** The project's gate as its folder holds it now; the folder's refusal when gate.md does not read off it. */
+export const projectGate = async (projectId: string) => {
   const reading = await gateReading(projectId);
-  if (!reading) {
-    return { kind: "none" };
+  if (reading instanceof ElysiaStatus) {
+    return reading;
   }
-  if (!reading.ok) {
-    return { kind: "unreadable", problems: reading.problems };
+  let gate: ProjectGate = { kind: "none" };
+  if (reading?.ok) {
+    gate = { kind: "declared", steps: reading.steps };
+  } else if (reading) {
+    gate = { kind: "unreadable", problems: reading.problems };
   }
-  return { kind: "declared", steps: reading.steps };
+  return gate;
 };
 
-/** gate.md as the project's folder holds it now, read; undefined with no gate.md. */
-const gateReading = async (
-  projectId: string
-): Promise<GateReading | undefined> => {
-  try {
-    const { content } = await readFolderFile(projectId, GATE_FILE);
-    return readGate(content);
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
-      return;
-    }
-    throw error;
+/** gate.md as the project's folder holds it now, read; undefined with no gate.md, the folder's refusal when it does not read off the folder. */
+const gateReading = async (projectId: string) => {
+  const file = await readFolderFile(projectId, GATE_FILE);
+  if (file instanceof ElysiaStatus) {
+    return file.status === 404 ? undefined : file;
   }
+  return readGate(file.content);
 };
 
 /**
  * The project's `Ship:` command, as its gate.md declares it now (ship.ts
  * runs it); undefined when it declares none, or gate.md does not read (no
- * item lands through such a gate).
+ * item lands through such a gate); the folder's refusal when it does not
+ * read off the folder.
  */
-export const projectShip = async (
-  projectId: string
-): Promise<string | undefined> => {
+export const projectShip = async (projectId: string) => {
   const reading = await gateReading(projectId);
+  if (reading instanceof ElysiaStatus) {
+    return reading;
+  }
   return reading?.ok ? reading.ship : undefined;
 };
 
@@ -393,14 +393,17 @@ export const projectShip = async (
  */
 export const gateRoutes = (projectExists: (id: string) => boolean) =>
   new Elysia().get("/api/projects/:id/gate", async ({ params }) => {
-    try {
-      if (!projectExists(params.id)) {
-        throw new FolderRefusal(404, `The hub keeps no project ${params.id}.`);
-      }
-      return { file: GATE_FILE, gate: await projectGate(params.id) };
-    } catch (error) {
-      return refused(error);
+    if (!projectExists(params.id)) {
+      return problem(404, {
+        code: "gate-project-unknown",
+        detail: `The hub keeps no project ${params.id}.`,
+      });
     }
+    const gate = await projectGate(params.id);
+    if (gate instanceof ElysiaStatus) {
+      return gate;
+    }
+    return { file: GATE_FILE, gate };
   });
 
 /** Whether `inputs` covers `path`: the path itself, or one under a folder it names. */

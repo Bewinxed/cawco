@@ -30,7 +30,7 @@
 
 import { detach } from "@cawco/core/detach";
 import { taskLink } from "@cawco/core/references";
-import { Elysia, status, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
@@ -50,7 +50,7 @@ import {
   sameFilesAndChecks,
   TRIAGE_FIELD,
 } from "./jev-placement";
-import { FolderRefusal } from "./project-folder";
+
 import {
   hubActor,
   type TaskEvent,
@@ -159,12 +159,12 @@ export const createJevTasks = ({
    * one filed after it (two filed together are each judged once, the later
    * against the earlier).
    */
-  const openTasks = async (
-    projectId: string,
-    newTask: TaskView
-  ): Promise<TaskView[]> => {
-    const { tasks: all } = await tasks.list(projectId);
-    const open = all
+  const openTasks = async (projectId: string, newTask: TaskView) => {
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    const open = list.tasks
       .filter(
         (task) =>
           task.number < newTask.number &&
@@ -174,24 +174,33 @@ export const createJevTasks = ({
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, DUPLICATE_CANDIDATES_MAX);
-    return await Promise.all(open.map((task) => tasks.get(projectId, task.id)));
+    const read = await Promise.all(
+      open.map((task) => tasks.get(projectId, task.id))
+    );
+    const candidates: TaskView[] = [];
+    for (const task of read) {
+      if (task instanceof ElysiaStatus) {
+        return task;
+      }
+      candidates.push(task);
+    }
+    return candidates;
   };
 
-  /** Drops `task` as a duplicate of `of`, as the hub, saying why. */
+  /** Drops `task` as a duplicate of `of`, as the hub, saying why; the words of its refusal when it was not dropped. */
   const markDuplicate = async (
     projectId: string,
     task: TaskView,
     of: string,
     why: string
   ): Promise<string | undefined> => {
-    try {
-      await tasks.link(projectId, task.id, { duplicateOf: of }, hubActor(why));
-    } catch (error) {
-      if (error instanceof FolderRefusal) {
-        return error.message;
-      }
-      throw error;
-    }
+    const linked = await tasks.link(
+      projectId,
+      task.id,
+      { duplicateOf: of },
+      hubActor(why)
+    );
+    return linked instanceof ElysiaStatus ? linked.response.detail : undefined;
   };
 
   /** Duplicates with Jev on: Jev compares; a yes drops the task. */
@@ -257,11 +266,18 @@ export const createJevTasks = ({
     projectId: string,
     task: TaskView,
     filer: "session" | "none"
-  ): Promise<DuplicateOutcome> => {
+  ) => {
     const jev = key();
     const candidates = await openTasks(projectId, task);
+    if (candidates instanceof ElysiaStatus) {
+      return candidates;
+    }
     if (candidates.length === 0) {
-      return { by: jev ? "jev" : "rule", duplicateOf: null };
+      const none: DuplicateOutcome = {
+        by: jev ? "jev" : "rule",
+        duplicateOf: null,
+      };
+      return none;
     }
     if (jev) {
       return await duplicateByJev(jev, projectId, task, candidates);
@@ -306,22 +322,28 @@ export const createJevTasks = ({
   };
 
   /** Triage with Jev on, for a task just filed: its `triage` field, written as the hub. */
-  const triage = async (projectId: string, id: string): Promise<void> => {
+  const triage = async (projectId: string, id: string) => {
     const jev = key();
     if (!jev) {
       return;
     }
     const task = await tasks.get(projectId, id);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     if (task.kind === "done" || task.kind === "dropped") {
       return;
     }
     const state = await jevTriage(jev, projectId, task);
-    await tasks.update(
+    const triaged = await tasks.update(
       projectId,
       id,
       { fields: { [TRIAGE_FIELD]: state } },
       hubActor(`Jev triaged it ${state}`)
     );
+    if (triaged instanceof ElysiaStatus) {
+      return triaged;
+    }
     console.log(`[tasks] ${id} in ${projectId}: Jev triaged it ${state}`);
   };
 
@@ -370,7 +392,7 @@ export const createJevTasks = ({
     newest: ReturnType<DbShape["projectAttempts"]>[number],
     row: SessionRow,
     text: string
-  ): Promise<"attach" | "continue" | "fresh" | "failed"> => {
+  ) => {
     const { warm, idle } = warmth(row);
     const cache = warm ? "warm" : "cold";
     const jev = key();
@@ -390,13 +412,13 @@ export const createJevTasks = ({
       if (!(error instanceof JevFailed)) {
         throw error;
       }
-      await tasks.comment(
+      const said = await tasks.comment(
         projectId,
         task.id,
         `${error.message} Nothing was started for your comment: continue its last attempt's session or start a new attempt yourself.`,
         hubActor("Attach or fresh")
       );
-      return "failed";
+      return said instanceof ElysiaStatus ? said : "failed";
     }
   };
 
@@ -412,31 +434,31 @@ export const createJevTasks = ({
     newest: ReturnType<DbShape["projectAttempts"]>[number],
     row: SessionRow,
     yours: string
-  ): Promise<void> => {
-    const notStarted = async (why: string): Promise<void> => {
+  ) => {
+    const notStarted = async (why: string) => {
       console.warn(
         `[tasks] ${task.id} in ${projectId}: its last attempt ${newest.id.slice(0, 8)} did not continue compressed: ${why}`
       );
-      await tasks.comment(
+      const said = await tasks.comment(
         projectId,
         task.id,
         `Its last attempt's session could not go on compressed: ${why} Nothing was started for your comment: continue its last attempt's session or start a new attempt yourself.`,
         hubActor("Attach or fresh")
       );
+      return said instanceof ElysiaStatus ? said : undefined;
     };
     let started: Awaited<ReturnType<typeof continueAttempt>>;
     try {
       started = await continueAttempt(row, task.id, yours);
     } catch (error) {
-      await notStarted(words(error));
-      return;
+      return await notStarted(words(error));
     }
     console.log(
       `[tasks] ${task.id} in ${projectId}: it continues compressed: ${row.id.slice(0, 8)}'s history goes on in new session ${started.targetInstanceId.slice(0, 8)} in its workspace, opening on your comment`
     );
     const stopped = await started.ended;
     if (stopped) {
-      await notStarted(stopped);
+      return await notStarted(stopped);
     }
   };
 
@@ -446,11 +468,7 @@ export const createJevTasks = ({
    * fresh attempt starts. A task never attempted, or closed, starts
    * nothing: the comment waits in its file for the next brief.
    */
-  const commented = async (
-    projectId: string,
-    id: string,
-    text: string
-  ): Promise<void> => {
+  const commented = async (projectId: string, id: string, text: string) => {
     const [newest] = db
       .projectAttempts(projectId)
       .filter((item) => item.taskId === id);
@@ -458,40 +476,68 @@ export const createJevTasks = ({
       return;
     }
     const [row] = db.getInstancesByIds([newest.instanceId]);
-    const yours = `A comment on ${id}, your task:\n\n${text}`;
-    const comment: PersonsSend = {
-      by: "you",
-      words: text,
-      note: `It is a comment on ${id}, your task.`,
-    };
     if (isLive(newest.state)) {
       if (row) {
-        sendYours(row, comment);
+        sendYours(row, commentSend(id, text));
       }
       return;
     }
+    return await toEnded(projectId, id, newest, row, text);
+  };
+
+  /** Your comment on task `id`, as your words to its attempt's session. */
+  const commentSend = (id: string, text: string): PersonsSend => ({
+    by: "you",
+    words: text,
+    note: `It is a comment on ${id}, your task.`,
+  });
+
+  /** {@link commented} for a task whose newest attempt has ended: its session takes it, goes on compressed with it, or a fresh attempt starts. */
+  const toEnded = async (
+    projectId: string,
+    id: string,
+    newest: ReturnType<DbShape["projectAttempts"]>[number],
+    row: SessionRow | undefined,
+    text: string
+  ) => {
     const task = await tasks.get(projectId, id);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     if (task.kind === "done" || task.kind === "dropped") {
       return;
     }
     const placed = await continuing(projectId, task, newest, row, text);
-    if (placed === "failed") {
-      return;
+    if (placed === "failed" || placed instanceof ElysiaStatus) {
+      return placed === "failed" ? undefined : placed;
     }
     if (placed?.to === "attach") {
-      sendYours(placed.row, comment);
+      sendYours(placed.row, commentSend(id, text));
       return;
     }
     if (placed?.to === "continue") {
-      await continueCompressed(projectId, task, newest, placed.row, yours);
-      return;
+      return await continueCompressed(
+        projectId,
+        task,
+        newest,
+        placed.row,
+        `A comment on ${id}, your task:\n\n${text}`
+      );
     }
+    return await freshFor(projectId, task);
+  };
+
+  /** A fresh attempt for your comment: a retry when the last one failed or was stopped, else a start. */
+  const freshFor = async (projectId: string, task: TaskView) => {
     const started =
       task.lastAttemptFailed || task.lastAttemptStopped
-        ? await dispatcher.retryFor(projectId, id, undefined)
-        : await dispatcher.startFor(projectId, id, undefined);
+        ? await dispatcher.retryFor(projectId, task.id, undefined)
+        : await dispatcher.startFor(projectId, task.id, undefined);
+    if (started instanceof ElysiaStatus) {
+      return started;
+    }
     console.log(
-      `[tasks] ${id} in ${projectId}: a fresh attempt for your comment: ${started.text.split("\n")[0]}`
+      `[tasks] ${task.id} in ${projectId}: a fresh attempt for your comment: ${started.text.split("\n")[0]}`
     );
   };
 
@@ -508,9 +554,7 @@ export const createJevTasks = ({
     newest: ReturnType<DbShape["projectAttempts"]>[number],
     row: SessionRow | undefined,
     text: string
-  ): Promise<
-    { to: "attach" | "continue"; row: SessionRow } | undefined | "failed"
-  > => {
+  ) => {
     const blocked = row ? refused(row) : "its session is gone";
     if (blocked || !row) {
       offLine(
@@ -521,10 +565,17 @@ export const createJevTasks = ({
       return;
     }
     const placed = await attachOrFresh(projectId, task, newest, row, text);
-    if (placed === "failed") {
-      return "failed";
+    if (placed === "failed" || placed instanceof ElysiaStatus) {
+      return placed;
     }
-    return placed === "fresh" ? undefined : { to: placed, row };
+    if (placed === "fresh") {
+      return;
+    }
+    const to: { row: SessionRow; to: "attach" | "continue" } = {
+      to: placed,
+      row,
+    };
+    return to;
   };
 
   /**
@@ -539,18 +590,31 @@ export const createJevTasks = ({
         // A session's filing is compared in task_create, where it reads the answer.
         if (!bySession) {
           const task = await tasks.get(event.projectId, event.id);
+          if (task instanceof ElysiaStatus) {
+            return task;
+          }
           const outcome = await filed(event.projectId, task, "none");
+          if (outcome instanceof ElysiaStatus) {
+            return outcome;
+          }
           if ("duplicateOf" in outcome && outcome.duplicateOf) {
             return;
           }
         }
-        await triage(event.projectId, event.id);
+        return await triage(event.projectId, event.id);
       };
+      const unjudged = (why: string) =>
+        console.warn(
+          `[tasks] ${event.id} in ${event.projectId} was filed; its duplicates and triage were not judged: ${why}`
+        );
       detach(
-        work().catch((error: unknown) =>
-          console.warn(
-            `[tasks] ${event.id} in ${event.projectId} was filed; its duplicates and triage were not judged: ${words(error)}`
-          )
+        work().then(
+          (answer) => {
+            if (answer) {
+              unjudged(answer.response.detail);
+            }
+          },
+          (error: unknown) => unjudged(words(error))
         ),
         "task filed"
       );
@@ -564,11 +628,18 @@ export const createJevTasks = ({
     ) {
       const { id, projectId } = event;
       const { text } = event.comment;
+      const unreached = (why: string) =>
+        console.warn(
+          `[tasks] your comment on ${id} in ${projectId} did not reach an attempt: ${why}`
+        );
       detach(
-        commented(projectId, id, text).catch((error: unknown) =>
-          console.warn(
-            `[tasks] your comment on ${id} in ${projectId} did not reach an attempt: ${words(error)}`
-          )
+        commented(projectId, id, text).then(
+          (answer) => {
+            if (answer) {
+              unreached(answer.response.detail);
+            }
+          },
+          (error: unknown) => unreached(words(error))
         ),
         "task comment"
       );
@@ -576,23 +647,24 @@ export const createJevTasks = ({
   };
 
   /** The task a phone request is about, named or picked; refused when there is none. */
-  const named = (picked: string | undefined, action: PhoneAction): string => {
-    if (!picked) {
-      throw new FolderRefusal(
-        409,
-        `Jev read the request as “${action}” but it names no task the project has.`
-      );
-    }
-    return picked;
-  };
+  const named = (picked: string | undefined, action: PhoneAction) =>
+    picked
+      ? picked
+      : problem(409, {
+          code: "phone-task-unnamed",
+          detail: `Jev read the request as “${action}” but it names no task the project has.`,
+        });
 
   /** Your sentence from the phone, to the project's conversation as your words. */
   const toLead = async (
     projectId: string,
     sentence: string,
     about: string | undefined
-  ): Promise<void> => {
+  ) => {
     const task = about ? await tasks.get(projectId, about) : undefined;
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     const woke = await caw.tell(projectId, {
       by: "you",
       kind: "person-request",
@@ -615,6 +687,12 @@ export const createJevTasks = ({
       tasks.stages(projectId),
       tasks.list(projectId),
     ]);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
     const decided = await jevPhone(jev, projectId, sentence, {
       stages: stages.stages.map((stage) => ({
         name: stage.name,
@@ -634,86 +712,133 @@ export const createJevTasks = ({
     return { ...decided, about };
   };
 
+  /** An attempt started or retried for a phone request, as its answer. */
+  const phoneStarted = (
+    action: "retry" | "start",
+    started: Awaited<ReturnType<Dispatcher["startFor"]>>
+  ) => {
+    if (started instanceof ElysiaStatus) {
+      return started;
+    }
+    const done: PhoneDone = {
+      decidedBy: "jev",
+      action,
+      task: started.task,
+      text: started.text,
+    };
+    return done;
+  };
+
   /** Each action Jev can read a phone sentence as, done as you. */
-  const PHONE_DOES: Record<
-    PhoneAction,
-    (
+  const PHONE_DOES = {
+    start: async (
       projectId: string,
-      sentence: string,
-      about: string | undefined,
-      stage: string | undefined
-    ) => Promise<PhoneDone>
-  > = {
-    start: async (projectId, _sentence, about) => {
-      const started = await dispatcher.startFor(
-        projectId,
-        named(about, "start"),
-        undefined
-      );
-      return {
-        decidedBy: "jev",
-        action: "start",
-        task: started.task,
-        text: started.text,
-      };
+      _sentence: string,
+      about?: string,
+      _stage?: string
+    ) => {
+      const ref = named(about, "start");
+      return ref instanceof ElysiaStatus
+        ? ref
+        : phoneStarted(
+            "start",
+            await dispatcher.startFor(projectId, ref, undefined)
+          );
     },
-    retry: async (projectId, _sentence, about) => {
-      const started = await dispatcher.retryFor(
-        projectId,
-        named(about, "retry"),
-        undefined
-      );
-      return {
-        decidedBy: "jev",
-        action: "retry",
-        task: started.task,
-        text: started.text,
-      };
+    retry: async (
+      projectId: string,
+      _sentence: string,
+      about?: string,
+      _stage?: string
+    ) => {
+      const ref = named(about, "retry");
+      return ref instanceof ElysiaStatus
+        ? ref
+        : phoneStarted(
+            "retry",
+            await dispatcher.retryFor(projectId, ref, undefined)
+          );
     },
-    move: async (projectId, _sentence, about, stage) => {
+    move: async (
+      projectId: string,
+      _sentence: string,
+      about?: string,
+      stage?: string
+    ) => {
       if (!stage) {
-        throw new FolderRefusal(
-          409,
-          "Jev read the request as a move, but the project has no stages."
-        );
+        return problem(409, {
+          code: "phone-no-stages",
+          detail:
+            "Jev read the request as a move, but the project has no stages.",
+        });
+      }
+      const ref = named(about, "move");
+      if (ref instanceof ElysiaStatus) {
+        return ref;
       }
       const moved = await tasks.move(
         projectId,
-        named(about, "move"),
+        ref,
         stage,
         YOU_ACTOR,
         "asked from the phone"
       );
-      return {
+      if (moved instanceof ElysiaStatus) {
+        return moved;
+      }
+      const done: PhoneDone = {
         decidedBy: "jev",
         action: "move",
         task: moved.id,
         stage: moved.stage,
         text: `${moved.id} is in ${moved.stage}.`,
       };
+      return done;
     },
-    comment: async (projectId, sentence, about) => {
+    comment: async (
+      projectId: string,
+      sentence: string,
+      about?: string,
+      _stage?: string
+    ) => {
+      const ref = named(about, "comment");
+      if (ref instanceof ElysiaStatus) {
+        return ref;
+      }
       const commentedOn = await tasks.comment(
         projectId,
-        named(about, "comment"),
+        ref,
         sentence,
         YOU_WRITING
       );
-      return {
+      if (commentedOn instanceof ElysiaStatus) {
+        return commentedOn;
+      }
+      const done: PhoneDone = {
         decidedBy: "jev",
         action: "comment",
         task: commentedOn.id,
         text: `Noted on ${commentedOn.id}.`,
       };
+      return done;
     },
-    caw: async (projectId, sentence, about) => {
-      await toLead(projectId, sentence, about);
-      return {
+    caw: async (
+      projectId: string,
+      sentence: string,
+      about?: string,
+      _stage?: string
+    ) => {
+      const told = await toLead(projectId, sentence, about);
+      if (told) {
+        return told;
+      }
+      const done: PhoneDone = {
         decidedBy: "jev",
         action: "caw",
         ...(about ? { task: about } : {}),
         text: "Caw reads it.",
       };
+      return done;
     },
   };
 
@@ -726,12 +851,18 @@ export const createJevTasks = ({
     projectId: string,
     text: string,
     taskId: string | undefined
-  ): Promise<PhoneDone> => {
+  ) => {
     const sentence = text.trim();
     if (!sentence) {
-      throw new FolderRefusal(400, "A request needs words.");
+      return problem(400, {
+        code: "phone-request-empty",
+        detail: "A request needs words.",
+      });
     }
     const task = taskId ? await tasks.get(projectId, taskId) : undefined;
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     const jev = key();
     if (!jev) {
       offLine(
@@ -739,14 +870,21 @@ export const createJevTasks = ({
         projectId,
         `the project's conversation reads the sentence${task ? ` about ${task.id}` : ""}`
       );
-      await toLead(projectId, sentence, task?.id);
-      return {
+      const told = await toLead(projectId, sentence, task?.id);
+      if (told) {
+        return told;
+      }
+      const done: PhoneDone = {
         decidedBy: "conversation",
         action: "conversation",
         text: "Caw reads it.",
       };
+      return done;
     }
     const decided = await phoneByJev(jev, projectId, sentence, task);
+    if (decided instanceof ElysiaStatus) {
+      return decided;
+    }
     return await PHONE_DOES[decided.action](
       projectId,
       sentence,
@@ -770,13 +908,11 @@ export const phoneRequestRoutes = (jevTasks: JevTasks) =>
     async ({ params, body, request, server }) => {
       // Starting an attempt, or Caw, can take a while.
       server?.timeout(request, 0);
+      // What fails beyond a refusal is Jev's or Caw's, not the hub's.
       try {
         return await jevTasks.phoneRequest(params.id, body.text, body.taskId);
       } catch (error) {
-        if (error instanceof FolderRefusal) {
-          return status(error.status, error.message);
-        }
-        return status(502, words(error));
+        return problem(502, { code: "jev-folder", detail: words(error) });
       }
     }
   );

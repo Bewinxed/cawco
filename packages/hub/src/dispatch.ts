@@ -137,7 +137,7 @@ import type {
 } from "@cawco/core/task-views";
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
-import { Elysia, status, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -158,7 +158,8 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
-import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
+import { ProjectRefusal } from "./project-refusal";
+
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
@@ -195,7 +196,11 @@ export interface DispatchDeps {
   readonly briefing: (request: WorkItemRequest) => string | undefined;
   /**
    * The brief's project context for an attempt at `task` (memory.ts
-   * `contextFor`): AGENTS.md and the knowledge files it needs, or "".
+   * `contextFor`): AGENTS.md and the knowledge files it needs, or "". Typed
+   * here, not from memory.ts, whose import would close a cycle back to
+   * this file (memory → presenters/project → ingress → dispatch); the
+   * folder's refusal is thrown on as a ProjectRefusal (server.ts), which
+   * {@link failure} answers.
    */
   readonly context: (projectId: string, task: TaskView) => Promise<string>;
   /**
@@ -372,9 +377,6 @@ const NO_LEAD =
 const SAFETY_MS = 5 * 60_000;
 const MAX_ATTEMPTS_LIMIT = 20;
 const REVIEW_LIMIT_LIMIT = 100;
-const refuse = (code: FolderRefusalStatus, message: string): never => {
-  throw new FolderRefusal(code, message);
-};
 
 const short = (id: string): string => id.slice(0, 8);
 
@@ -798,22 +800,16 @@ const columnsOf = ({
 });
 
 /**
- * An attempt a session briefed, held until it reads the fleet's briefing
- * guidance for its delegate (briefings.ts): the call answers with the
- * guide, and the same call made again goes out.
+ * A failure a start throws, as the words a caller reads and the status a
+ * route answers: work-items' refusal (work-item-state.ts), a project's
+ * folder refusal workspaces still throw (project-refusal.ts), and anything
+ * else, the machine's.
  */
-class GuidanceFirst extends WorkItemRefusal {
-  constructor(guide: string) {
-    super(409, guide);
-  }
-}
-
-/** A failure to start, as the words a caller reads and the status a route answers. */
 const failure = (
   error: unknown
-): { code: FolderRefusalStatus | 502; message: string } => {
+): { code: ProjectRefusal["status"] | 502; message: string } => {
   const message = error instanceof Error ? error.message : String(error);
-  if (error instanceof FolderRefusal) {
+  if (error instanceof ProjectRefusal) {
     return { code: error.status, message };
   }
   if (error instanceof WorkItemRefusal) {
@@ -865,9 +861,16 @@ export const createDispatcher = ({
   const liveAttempts = (projectId: string): WorkItemRow[] =>
     db.projectAttempts(projectId).filter((item) => isLive(item.state));
 
-  const projectOf = (projectId: string): ProjectRow =>
-    db.project(projectId) ??
-    refuse(404, `The hub keeps no project ${projectId}.`);
+  /** The project the hub keeps as `projectId`; refused when it keeps none. */
+  const projectOf = (projectId: string) => {
+    const project = db.project(projectId);
+    return project
+      ? project
+      : problem(404, {
+          code: "dispatch-project-unknown",
+          detail: `The hub keeps no project ${projectId}.`,
+        });
+  };
 
   const instance = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
@@ -901,7 +904,7 @@ export const createDispatcher = ({
     task: TaskView,
     parent: InstanceRow,
     previous: WorkItemRow | undefined
-  ): Pick<WorkItemRequest, "cwd" | "machineId" | "reuse" | "reuseOn"> => {
+  ) => {
     const runsOn = task.runsOn ?? project.runsOn;
     const place = workPlace(project, {
       runsOn,
@@ -911,9 +914,12 @@ export const createDispatcher = ({
     if (place.kind === "none" && (runsOn || !previous)) {
       const message = `${capitalized(place.why)}, so this task's attempt starts nowhere: ${place.fix}.`;
       note(project.id, task, message);
-      refuse(409, message);
+      return problem(409, { code: "dispatch-nowhere", detail: message });
     }
-    return {
+    const placed: Pick<
+      WorkItemRequest,
+      "cwd" | "machineId" | "reuse" | "reuseOn"
+    > = {
       ...(place.kind === "none"
         ? {}
         : { cwd: place.cwd, machineId: place.machineId }),
@@ -924,6 +930,7 @@ export const createDispatcher = ({
           }
         : {}),
     };
+    return placed;
   };
 
   /** Remembers why a start failed, against the task file as it was read. */
@@ -936,22 +943,22 @@ export const createDispatcher = ({
     console.warn(`[dispatch] ${task.id} in project ${projectId}: ${message}`);
   };
 
-  /** Refuses an attempt at a task that has a live one, or is done or dropped. */
-  const startable = (projectId: string, task: TaskView): void => {
+  /** The refusal of an attempt at a task that has a live one, or is done or dropped. */
+  const startable = (projectId: string, task: TaskView) => {
     const live = liveAttempts(projectId).find(
       (item) => item.taskId === task.id
     );
     if (live) {
-      refuse(
-        409,
-        `This task has a live attempt already: ${sessionLink(live.instanceId, task.title)} is ${live.state}. Message its session, or wait for its report.`
-      );
+      return problem(409, {
+        code: "dispatch-attempt-live",
+        detail: `This task has a live attempt already: ${sessionLink(live.instanceId, task.title)} is ${live.state}. Message its session, or wait for its report.`,
+      });
     }
     if (task.kind === "done" || task.kind === "dropped") {
-      refuse(
-        409,
-        `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`
-      );
+      return problem(409, {
+        code: "dispatch-task-closed",
+        detail: `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`,
+      });
     }
   };
 
@@ -964,16 +971,19 @@ export const createDispatcher = ({
     projectId: string,
     task: TaskView,
     stage: Stage | undefined
-  ): Promise<Stage | undefined> => {
+  ) => {
     if (stage) {
       return stage;
     }
     const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     if (stages.problems.length > 0) {
-      refuse(
-        409,
-        `stages.md does not read, so the hub cannot tell where an attempt moves this task. ${stages.problems.join(" ")}`
-      );
+      return problem(409, {
+        code: "dispatch-stages-unread",
+        detail: `stages.md does not read, so the hub cannot tell where an attempt moves this task. ${stages.problems.join(" ")}`,
+      });
     }
     return task.kind === "active"
       ? stages.stages.find((each) => each.name === task.stage)
@@ -981,30 +991,34 @@ export const createDispatcher = ({
   };
 
   /**
-   * Refuses a session's start whose move of the task into `active` the
-   * project's moves do not give a session (stages.ts `moveProblem`, its own
-   * sentence): a start moves the task as its starter would. The person's
-   * starts and the hub's own (dispatch, a hook) are not a session's; a task
-   * already in `active` moves nowhere.
+   * The refusal of a session's start whose move of the task into `active`
+   * the project's moves do not give a session (stages.ts `moveProblem`, its
+   * own sentence): a start moves the task as its starter would. The
+   * person's starts and the hub's own (dispatch, a hook) are not a
+   * session's; a task already in `active` moves nowhere.
    */
   const refuseSessionMove = async (
     projectId: string,
     task: TaskView,
     active: Stage | undefined
-  ): Promise<void> => {
+  ) => {
     if (!active || active.name === task.stage) {
       return;
     }
-    const problem = moveProblem(
-      await tasks.stages(projectId),
+    const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
+    const misfit = moveProblem(
+      stages,
       task.id,
       task.stage,
       active.name,
       "session"
     );
-    if (problem) {
-      refuse(409, problem);
-    }
+    return misfit
+      ? problem(409, { code: "dispatch-move-not-session", detail: misfit })
+      : undefined;
   };
 
   /**
@@ -1068,21 +1082,28 @@ export const createDispatcher = ({
    * `ready: yes` (with events off, the ones with a check), in board order,
    * which is the conversation's ranks, then the rest by number.
    */
-  const readyInOrder = async (
-    project: ProjectRow,
-    frontier: string[]
-  ): Promise<string[]> => {
-    const { tasks: all } = await tasks.list(project.id);
-    const byId = new Map(all.map((each) => [each.id, each]));
+  const readyInOrder = async (project: ProjectRow, frontier: string[]) => {
+    const list = await tasks.list(project.id);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    const byId = new Map(list.tasks.map((each) => [each.id, each]));
     const triaged = frontier
       .filter((id) => {
         const state = byId.get(id)?.fields[TRIAGE_FIELD];
         return !state || state === "ready-for-agent";
       })
       .slice(0, DISPATCH_ASKED_MAX);
-    const views = await Promise.all(
+    const read = await Promise.all(
       triaged.map((id) => tasks.get(project.id, id))
     );
+    const views: TaskView[] = [];
+    for (const task of read) {
+      if (task instanceof ElysiaStatus) {
+        return task;
+      }
+      views.push(task);
+    }
     const access = placement.access();
     return access
       ? await readyByJev(project, access, views)
@@ -1215,8 +1236,12 @@ export const createDispatcher = ({
     task: TaskView,
     lands: LandsMode,
     { asked, previous }: { asked?: string; previous?: WorkItemRow }
-  ): Promise<(design: string) => string> => {
-    const { tasks: all } = await tasks.list(project.id);
+  ) => {
+    const list = await tasks.list(project.id);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    const all = list.tasks;
     const retry = previous
       ? {
           workItemId: previous.id,
@@ -1234,7 +1259,7 @@ export const createDispatcher = ({
         )
       : [];
     const known = await context(project.id, task);
-    return (design) =>
+    return (design: string) =>
       briefOf({
         project,
         task,
@@ -1254,7 +1279,10 @@ export const createDispatcher = ({
    * again when that clone is still there. `origin` is whose work it is
    * (work-items `origin`); left out, its parent's. What a `delegate` naming
    * the task `asked` goes over the task's own: its brief above the task
-   * file, and each setting it gives.
+   * file, and each setting it gives. A brief a session wrote waits for the
+   * fleet's briefing guidance it has yet to read for its delegate
+   * (briefings.ts): the call answers with the guide, and the same call made
+   * again goes out.
    */
   const launch = async (
     project: ProjectRow,
@@ -1266,8 +1294,11 @@ export const createDispatcher = ({
       origin,
       previous,
     }: { asked?: AttemptAsk; origin?: Origin; previous?: WorkItemRow }
-  ): Promise<WorkItemStart> => {
+  ) => {
     const placed = placementOf(project, task, parent, previous);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
+    }
     const type =
       asked?.type ?? typeOf(task, active) ?? (await chosenType(project, task));
     const lands = asked?.lands ?? landsOf(project, task, type);
@@ -1276,6 +1307,10 @@ export const createDispatcher = ({
         asked: asked?.prompt,
         previous,
       });
+      if (brief instanceof ElysiaStatus) {
+        note(project.id, task, brief.response.detail);
+        return brief;
+      }
       const request: WorkItemRequest = {
         parentInstanceId: parent.id,
         prompt: brief(""),
@@ -1303,15 +1338,13 @@ export const createDispatcher = ({
       // as any delegate's does; no problem of the task's.
       const guide = asked ? briefing(request) : undefined;
       if (guide) {
-        throw new GuidanceFirst(guide);
+        return problem(409, { code: "dispatch-guidance-first", detail: guide });
       }
       const started = await start(request);
       problems.delete(keyOf(project.id, task.id));
       return started;
     } catch (error) {
-      if (!(error instanceof GuidanceFirst)) {
-        note(project.id, task, failure(error).message);
-      }
+      note(project.id, task, failure(error).message);
       throw error;
     }
   };
@@ -1326,6 +1359,12 @@ export const createDispatcher = ({
     if (!active || active.name === task.stage) {
       return task.stage;
     }
+    const unmoved = (why: string) => {
+      console.warn(
+        `[dispatch] ${task.id}'s attempt ${item.id} started, but the task did not move to ${active.name}: ${why}`
+      );
+      return task.stage;
+    };
     try {
       const moved = await tasks.move(
         projectId,
@@ -1333,12 +1372,11 @@ export const createDispatcher = ({
         active.name,
         hubActor(`attempt ${short(item.id)} started`)
       );
-      return moved.stage;
+      return moved instanceof ElysiaStatus
+        ? unmoved(moved.response.detail)
+        : moved.stage;
     } catch (error) {
-      console.warn(
-        `[dispatch] ${task.id}'s attempt ${item.id} started, but the task did not move to ${active.name}: ${failure(error).message}`
-      );
-      return task.stage;
+      return unmoved(failure(error).message);
     }
   };
 
@@ -1356,70 +1394,104 @@ export const createDispatcher = ({
     projectId: string,
     ref: string,
     parent: InstanceRow,
-    { stage, retry = false, origin, asked }: AttemptHow = {}
-  ): Promise<AttemptStart> => {
+    how: AttemptHow = {}
+  ) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const unfit = parentProblem(parent, projectId, parent.id);
     if (unfit) {
-      refuse(403, unfit);
+      return problem(403, { code: "dispatch-parent-unfit", detail: unfit });
     }
     const task = await tasks.get(projectId, ref);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     const key = keyOf(projectId, task.id);
     if (starting.has(key)) {
-      refuse(409, "An attempt at this task is starting already.");
+      return problem(409, {
+        code: "dispatch-starting",
+        detail: "An attempt at this task is starting already.",
+      });
     }
     // From here to its work item being filed, the start holds the task.
     starting.add(key);
     try {
-      startable(projectId, task);
-      const previous = retry ? retryable(projectId, task) : undefined;
-      const active = await activeFor(projectId, task, stage);
-      // No origin: a session asked (task_start, task_retry, a delegate naming it).
-      if (origin === undefined) {
-        await refuseSessionMove(projectId, task, active);
-      }
-      let started: WorkItemStart;
-      try {
-        started = await launch(project, task, parent, active, {
-          asked,
-          origin,
-          previous,
-        });
-      } catch (error) {
-        if (!(error instanceof OwnsOverlap)) {
-          throw error;
-        }
-        return queuedForOwns(project, task, parent, stage, error, {
-          asked,
-          retry,
-          origin,
-        });
-      }
-      // Asked for now: a hook's start that waited for a slot is not needed.
-      db.dropQueuedTaskStart(projectId, task.id);
-      const now = await moveIn(projectId, task, active, started.item);
-      const opening = startedLine(
-        taskLink(projectId, task.id, task.title),
-        started,
-        previous
-      );
-      console.log(
-        `[dispatch] ${project.name}: ${task.id} attempt ${started.item.id} ${previous ? "retried" : "started"} (lands ${started.item.lands}), reporting to ${parent.id}`
-      );
-      return {
-        task: task.id,
-        stage: now,
-        queued: false,
-        type: started.item.type,
-        lands: started.item.lands,
-        workItemId: started.item.id,
-        workspaceId: started.workspace.id,
-        instanceId: started.item.instanceId,
-        text: `${opening} It is now in ${now || "no stage"}, and lands ${started.item.lands}. ${started.text}`,
-      };
+      return await startHeld(project, task, parent, how);
     } finally {
       starting.delete(key);
     }
+  };
+
+  /** {@link startAttempt} once the start holds the task: checked, launched, and its task moved in. */
+  const startHeld = async (
+    project: ProjectRow,
+    task: TaskView,
+    parent: InstanceRow,
+    { stage, retry = false, origin, asked }: AttemptHow
+  ) => {
+    const projectId = project.id;
+    const closed = startable(projectId, task);
+    if (closed) {
+      return closed;
+    }
+    const previous = retry ? retryable(projectId, task) : undefined;
+    if (previous instanceof ElysiaStatus) {
+      return previous;
+    }
+    const active = await activeFor(projectId, task, stage);
+    if (active instanceof ElysiaStatus) {
+      return active;
+    }
+    // No origin: a session asked (task_start, task_retry, a delegate naming it).
+    const moveRefused =
+      origin === undefined
+        ? await refuseSessionMove(projectId, task, active)
+        : undefined;
+    if (moveRefused) {
+      return moveRefused;
+    }
+    const started = await launch(project, task, parent, active, {
+      asked,
+      origin,
+      previous,
+    }).catch((error: unknown) => {
+      if (!(error instanceof OwnsOverlap)) {
+        throw error;
+      }
+      return queuedForOwns(project, task, parent, stage, error, {
+        asked,
+        retry,
+        origin,
+      });
+    });
+    if (started instanceof ElysiaStatus || "queued" in started) {
+      return started;
+    }
+    // Asked for now: a hook's start that waited for a slot is not needed.
+    db.dropQueuedTaskStart(projectId, task.id);
+    const now = await moveIn(projectId, task, active, started.item);
+    const opening = startedLine(
+      taskLink(projectId, task.id, task.title),
+      started,
+      previous
+    );
+    console.log(
+      `[dispatch] ${project.name}: ${task.id} attempt ${started.item.id} ${previous ? "retried" : "started"} (lands ${started.item.lands}), reporting to ${parent.id}`
+    );
+    const attempt: AttemptStart = {
+      task: task.id,
+      stage: now,
+      queued: false,
+      type: started.item.type,
+      lands: started.item.lands,
+      workItemId: started.item.id,
+      workspaceId: started.workspace.id,
+      instanceId: started.item.instanceId,
+      text: `${opening} It is now in ${now || "no stage"}, and lands ${started.item.lands}. ${started.text}`,
+    };
+    return attempt;
   };
 
   /**
@@ -1486,25 +1558,31 @@ export const createDispatcher = ({
       : `Retried ${link} in a new workspace: the last attempt's clone is gone.`;
   };
 
-  /** The attempt a retry follows: the task's newest, which failed or was cancelled. */
-  const retryable = (projectId: string, task: TaskView): WorkItemRow => {
+  /** The attempt a retry follows: the task's newest, which failed or was cancelled; refused otherwise. */
+  const retryable = (projectId: string, task: TaskView) => {
     const [previous] = db
       .projectAttempts(projectId)
       .filter((item) => item.taskId === task.id);
-    if (!(previous && (task.lastAttemptFailed || task.lastAttemptStopped))) {
-      return refuse(
-        409,
-        previous
-          ? `This task's last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`
-          : "This task has no attempt to retry; start one with task_start."
-      );
+    if (!previous) {
+      return problem(409, {
+        code: "dispatch-retry-unattempted",
+        detail: "This task has no attempt to retry; start one with task_start.",
+      });
     }
-    return previous;
+    return task.lastAttemptFailed || task.lastAttemptStopped
+      ? previous
+      : problem(409, {
+          code: "dispatch-retry-not-ended",
+          detail: `This task's last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`,
+        });
   };
 
   /** What the dispatcher would do for a project now. */
-  const viewOf = async (project: ProjectRow): Promise<DispatchView> => {
+  const viewOf = async (project: ProjectRow) => {
     const list = await tasks.list(project.id);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
     const live = liveAttempts(project.id).length + startingIn(project.id);
     const review = list.tasks.filter((task) => task.kind === "you").length;
     const frontier = list.tasks.filter(onFrontier).map((task) => task.id);
@@ -1513,7 +1591,7 @@ export const createDispatcher = ({
       review,
       live,
     });
-    return {
+    const view: DispatchView = {
       budget: project.budget,
       dispatch: project.dispatch,
       lands: project.lands,
@@ -1527,6 +1605,7 @@ export const createDispatcher = ({
       frontier,
       queued: db.queuedTaskStarts(project.id).map((each) => each.taskId),
     };
+    return view;
   };
 
   /**
@@ -1539,67 +1618,94 @@ export const createDispatcher = ({
    * dispatch now, or has nothing ready. Judged before the project's conversation is started:
    * nothing ready wakes nobody.
    */
-  const lookAt = async (
-    projectId: string
-  ): Promise<
-    { live: number; project: ProjectRow; ready: string[] } | undefined
-  > => {
+  const lookAt = async (projectId: string) => {
     const project = db.project(projectId);
     if (!(project?.dispatch && project.eventsOn)) {
       return;
     }
     const view = await viewOf(project);
+    if (view instanceof ElysiaStatus) {
+      return view;
+    }
     if (view.paused || view.frontier.length === 0 || pauses(projectId)) {
       return;
     }
     const ready = await readyInOrder(project, view.frontier);
+    if (ready instanceof ElysiaStatus) {
+      return ready;
+    }
     return ready.length > 0 ? { project, live: view.live, ready } : undefined;
   };
 
-  const dispatchOnce = async (projectId: string): Promise<void> => {
+  const dispatchOnce = async (projectId: string) => {
     const look = await lookAt(projectId);
-    if (!look) {
-      return;
+    if (!look || look instanceof ElysiaStatus) {
+      return look;
     }
     const { project, ready } = look;
-    let slots = project.maxAttempts - look.live;
+    const slots = project.maxAttempts - look.live;
     let reportsTo: InstanceRow | undefined;
     try {
       reportsTo = await conversationOf(project);
     } catch (error) {
-      // The tasks this look would have started say why they did not.
-      const why = failure(error).message;
-      const waiting = await Promise.all(
-        ready.slice(0, slots).map((id) => tasks.get(projectId, id))
+      return await unreported(
+        projectId,
+        ready.slice(0, slots),
+        failure(error).message
       );
-      for (const task of waiting) {
-        note(
-          projectId,
-          task,
-          `It is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
-        );
+    }
+    if (reportsTo) {
+      await startReady(project, ready, slots, reportsTo);
+    }
+  };
+
+  /** The tasks a look would have started, each saying why it did not: Caw, who takes their reports, did not start. */
+  const unreported = async (projectId: string, ids: string[], why: string) => {
+    const waiting = await Promise.all(
+      ids.map((id) => tasks.get(projectId, id))
+    );
+    const read: TaskView[] = [];
+    for (const task of waiting) {
+      if (task instanceof ElysiaStatus) {
+        return task;
       }
-      return;
+      read.push(task);
     }
-    if (!reportsTo) {
-      return;
+    for (const task of read) {
+      note(
+        projectId,
+        task,
+        `It is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
+      );
     }
+  };
+
+  /** A look's ready tasks started in order, reporting to `reportsTo`, until its `slots` are taken; one that does not start says why in the log. */
+  const startReady = async (
+    project: ProjectRow,
+    ready: string[],
+    slots: number,
+    reportsTo: InstanceRow
+  ) => {
+    let left = slots;
     for (const id of ready) {
-      if (slots <= 0) {
+      if (left <= 0) {
         break;
       }
+      const unstarted = (why: string) =>
+        console.warn(`[dispatch] ${project.name}: ${id} did not start: ${why}`);
       try {
-        const started = await startAttempt(projectId, id, reportsTo, {
+        const started = await startAttempt(project.id, id, reportsTo, {
           origin: "event",
         });
-        // One queued for owned files took no slot.
-        if (!started.queued) {
-          slots -= 1;
+        if (started instanceof ElysiaStatus) {
+          unstarted(started.response.detail);
+        } else if (!started.queued) {
+          // One queued for owned files took no slot.
+          left -= 1;
         }
       } catch (error) {
-        console.warn(
-          `[dispatch] ${project.name}: ${id} did not start: ${failure(error).message}`
-        );
+        unstarted(failure(error).message);
       }
     }
   };
@@ -1665,12 +1771,17 @@ export const createDispatcher = ({
         return;
       }
       db.dropQueuedTaskStart(projectId, queued.taskId);
-      try {
-        await runQueued(project, queued);
-      } catch (error) {
+      const unrun = (why: string) =>
         console.warn(
-          `[dispatch] ${project.name}: ${queued.taskId}'s queued start did not run: ${failure(error).message}`
+          `[dispatch] ${project.name}: ${queued.taskId}'s queued start did not run: ${why}`
         );
+      try {
+        const ran = await runQueued(project, queued);
+        if (ran instanceof ElysiaStatus) {
+          unrun(ran.response.detail);
+        }
+      } catch (error) {
+        unrun(failure(error).message);
       }
     }
   };
@@ -1685,11 +1796,13 @@ export const createDispatcher = ({
   const runQueued = async (
     project: ProjectRow,
     queued: ReturnType<DispatchDeps["db"]["queuedTaskStarts"]>[number]
-  ): Promise<void> => {
+  ) => {
     const owns = queued.why === "owns";
-    const stages = await tasks.stages(project.id);
-    const stage = stages.stages.find((each) => each.name === queued.stage);
-    const task = await tasks.get(project.id, queued.taskId);
+    const now = await queuedNow(project, queued);
+    if (now instanceof ElysiaStatus) {
+      return now;
+    }
+    const { stage, task } = now;
     const hook = stage?.kind === "active" && !!stage.hooks.runs;
     if (!(hook || owns) || task.stage !== queued.stage || task.liveAttempt) {
       console.log(
@@ -1706,13 +1819,27 @@ export const createDispatcher = ({
     if (!parent) {
       return;
     }
-    await startAttempt(project.id, task.id, parent, {
+    return await startAttempt(project.id, task.id, parent, {
       ...(stage?.kind === "active" ? { stage } : {}),
       retry: queued.retry,
       ...(queued.origin ? { origin: queued.origin } : {}),
       // Written by queuedForOwns from an AttemptAsk alone.
       ...(queued.asked ? { asked: queued.asked as AttemptAsk } : {}),
     });
+  };
+
+  /** A queued start's stage as the project's stages read it now, and its task. */
+  const queuedNow = async (
+    project: ProjectRow,
+    queued: ReturnType<DispatchDeps["db"]["queuedTaskStarts"]>[number]
+  ) => {
+    const stages = await tasks.stages(project.id);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
+    const stage = stages.stages.find((each) => each.name === queued.stage);
+    const task = await tasks.get(project.id, queued.taskId);
+    return task instanceof ElysiaStatus ? task : { stage, task };
   };
 
   /**
@@ -1731,7 +1858,10 @@ export const createDispatcher = ({
         again.delete(projectId);
         try {
           await drainQueued(projectId);
-          await dispatchOnce(projectId);
+          const refused = await dispatchOnce(projectId);
+          if (refused) {
+            console.warn(`[dispatch] ${projectId}: ${refused.response.detail}`);
+          }
         } catch (error) {
           console.warn(`[dispatch] ${projectId}: ${failure(error).message}`);
         }
@@ -1760,20 +1890,25 @@ export const createDispatcher = ({
     id: string,
     to: string,
     why: string
-  ): Promise<void> => {
-    const waiting = waitingStageOf(await tasks.stages(projectId), to);
+  ) => {
+    const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
+    const waiting = waitingStageOf(stages, to);
     if (!waiting) {
       console.warn(
         `[dispatch] ${id} entered ${to} and ${why}; the project has no todo stage, so it stays.`
       );
       return;
     }
-    await tasks.move(
+    const moved = await tasks.move(
       projectId,
       id,
       waiting.name,
       hubActor(`nothing works on it: ${why}`)
     );
+    return moved instanceof ElysiaStatus ? moved : undefined;
   };
 
   /**
@@ -1808,19 +1943,24 @@ export const createDispatcher = ({
       );
       return;
     }
-    try {
-      // A move or filing in is someone's ask: not capped.
-      const origin = HOOK_ORIGIN[actor.mover];
-      await startAttempt(project.id, task.id, parent, {
-        stage,
-        ...(origin ? { origin } : {}),
-      });
-    } catch (error) {
-      const why = failure(error).message;
+    const unstarted = (why: string) => {
       console.warn(
         `[dispatch] ${task.id}: ${how}, and it did not start: ${why}`
       );
       return why;
+    };
+    try {
+      // A move or filing in is someone's ask: not capped.
+      const origin = HOOK_ORIGIN[actor.mover];
+      const started = await startAttempt(project.id, task.id, parent, {
+        stage,
+        ...(origin ? { origin } : {}),
+      });
+      if (started instanceof ElysiaStatus) {
+        return unstarted(started.response.detail);
+      }
+    } catch (error) {
+      return unstarted(failure(error).message);
     }
   };
 
@@ -1837,11 +1977,17 @@ export const createDispatcher = ({
     id: string;
     projectId: string;
     to: string;
-  }): Promise<void> => {
+  }) => {
     const { projectId, id, to, actor } = event;
     const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     const stage = stages.stages.find((each) => each.name === to);
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     // The hub's own moves never reach here but a tracker's (taskChanged).
     const held = actor.tracker === undefined;
     const { runs } = stage?.hooks ?? {};
@@ -1852,6 +1998,9 @@ export const createDispatcher = ({
       return;
     }
     const task = await tasks.get(projectId, id);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     if (task.liveAttempt) {
       return;
     }
@@ -1865,7 +2014,7 @@ export const createDispatcher = ({
         : `It entered ${to}, and ${project.name} starts attempts on its own`
     );
     if (held && failed) {
-      await nobodyOn(
+      return await nobodyOn(
         projectId,
         id,
         to,
@@ -1905,15 +2054,17 @@ export const createDispatcher = ({
     projectId: string,
     taskId: string,
     item: WorkItemRow
-  ): Promise<void> => {
-    if (item.state === "done" && item.error) {
-      await tasks.comment(
-        projectId,
-        taskId,
-        `Attempt ${short(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
-        hubActor(`attempt ${short(item.id)}'s follow-up ended`)
-      );
+  ) => {
+    if (!(item.state === "done" && item.error)) {
+      return;
     }
+    const noted = await tasks.comment(
+      projectId,
+      taskId,
+      `Attempt ${short(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
+      hubActor(`attempt ${short(item.id)}'s follow-up ended`)
+    );
+    return noted instanceof ElysiaStatus ? noted : undefined;
   };
 
   /**
@@ -1921,7 +2072,7 @@ export const createDispatcher = ({
    * stage, a pull request to the first `you` stage (staying put without one),
    * otherwise back to the first todo stage.
    */
-  const settle = async (item: WorkItemRow): Promise<void> => {
+  const settle = async (item: WorkItemRow) => {
     const { projectId, taskId } = item;
     if (!(projectId && taskId && db.project(projectId))) {
       return;
@@ -1934,6 +2085,9 @@ export const createDispatcher = ({
       return;
     }
     const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     if (stages.problems.length > 0) {
       console.warn(
         `[dispatch] ${taskId}'s attempt ${item.id} is ${item.state}, and stages.md does not read, so the task stays where it is.`
@@ -1941,12 +2095,18 @@ export const createDispatcher = ({
       return;
     }
     const task = await tasks.get(projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     // You closed it while the attempt ran: that stands.
     if (task.kind === "done" || task.kind === "dropped") {
       return;
     }
-    await noteFollowUp(projectId, taskId, item);
-    await (task.parts.length > 0
+    const noted = await noteFollowUp(projectId, taskId, item);
+    if (noted) {
+      return noted;
+    }
+    return await (task.parts.length > 0
       ? settleWhole(projectId, task, item, stages)
       : settleOne(projectId, task, item, stages));
   };
@@ -1957,10 +2117,13 @@ export const createDispatcher = ({
     task: TaskView,
     item: WorkItemRow,
     stages: { stages: readonly Stage[] }
-  ): Promise<void> => {
+  ) => {
     const taskId = task.id;
     const criteria = criteriaOf(task.acceptance);
     const judged = await kindAfterJudged(projectId, task, criteria, item);
+    if (judged instanceof ElysiaStatus) {
+      return judged;
+    }
     // The project's conversation judges, or Jev did not answer: the task
     // stays where it is.
     if (judged === "conversation" || judged === "stays") {
@@ -1975,17 +2138,19 @@ export const createDispatcher = ({
       );
       return;
     }
-    if (target && target.name !== task.stage) {
-      // Closed because Jev showed its criteria met: the same write ticks them.
-      await tasks.move(
-        projectId,
-        taskId,
-        target.name,
-        hubActor(movedBecause(item, judged, kind, criteria.length)),
-        undefined,
-        { tickCriteria: closedMet(judged, kind, criteria.length) }
-      );
+    if (!target || target.name === task.stage) {
+      return;
     }
+    // Closed because Jev showed its criteria met: the same write ticks them.
+    const moved = await tasks.move(
+      projectId,
+      taskId,
+      target.name,
+      hubActor(movedBecause(item, judged, kind, criteria.length)),
+      undefined,
+      { tickCriteria: closedMet(judged, kind, criteria.length) }
+    );
+    return moved instanceof ElysiaStatus ? moved : undefined;
   };
 
   /**
@@ -2000,10 +2165,13 @@ export const createDispatcher = ({
     task: TaskView,
     item: WorkItemRow,
     stages: { stages: readonly Stage[] }
-  ): Promise<void> => {
-    const { tasks: all } = await tasks.list(projectId);
+  ) => {
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
     const closed = task.parts.every((id) => {
-      const kind = all.find((each) => each.id === id)?.kind;
+      const kind = list.tasks.find((each) => each.id === id)?.kind;
       return kind === "done" || kind === "dropped";
     });
     // A coordinator that finished with parts open leaves the whole where it is.
@@ -2015,7 +2183,7 @@ export const createDispatcher = ({
     if (!target || target.name === task.stage || target.hooks.by === "action") {
       return;
     }
-    await tasks.move(
+    const moved = await tasks.move(
       projectId,
       task.id,
       target.name,
@@ -2025,6 +2193,7 @@ export const createDispatcher = ({
           : `its coordinator ${short(item.id)} ${item.state}`
       )
     );
+    return moved instanceof ElysiaStatus ? moved : undefined;
   };
 
   /**
@@ -2037,7 +2206,7 @@ export const createDispatcher = ({
     task: TaskView,
     criteria: string[],
     item: WorkItemRow
-  ): Promise<"conversation" | "done" | "stays" | "todo" | "you"> => {
+  ) => {
     const kind = kindAfter(item);
     return kind === "done" && criteria.length > 0
       ? await judgeCriteria(projectId, task, criteria, item)
@@ -2111,52 +2280,11 @@ export const createDispatcher = ({
     task: TaskView,
     criteria: string[],
     item: WorkItemRow
-  ): Promise<"conversation" | "done" | "stays" | "todo" | "you"> => {
+  ) => {
     const report = attemptReport(item);
     const access = placement.access();
-    const about = hubActor(`attempt ${short(item.id)} judged`);
     if (access) {
-      try {
-        const judged = await jevJudged(
-          access,
-          projectId,
-          task,
-          criteria,
-          report
-        );
-        const unmet = judged.filter((each) => !each.met);
-        if (unmet.length === 0) {
-          return "done";
-        }
-        await tasks.comment(
-          projectId,
-          task.id,
-          judgedWords.notShownMet(
-            attemptNamed(item, task),
-            unmet
-              .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
-              .join("\n")
-          ),
-          about
-        );
-        db.markAttemptUnmet(item.id);
-        return "todo";
-      } catch (error) {
-        if (!(error instanceof JevFailed)) {
-          throw error;
-        }
-        await tasks.comment(
-          projectId,
-          task.id,
-          judgedWords.notJudged(
-            error.message,
-            attemptNamed(item, task),
-            task.stage
-          ),
-          about
-        );
-        return "stays";
-      }
+      return await judgedByJev(access, projectId, task, criteria, item);
     }
     if (db.project(projectId)?.eventsOn) {
       offLine(
@@ -2181,6 +2309,66 @@ export const createDispatcher = ({
   };
 
   /**
+   * {@link judgeCriteria} with Jev on: done when Jev shows every criterion
+   * met; else back to todo, with a comment naming the ones it does not and
+   * the attempt stamped unmet; `stays`, with a comment, when Jev does not
+   * answer.
+   */
+  const judgedByJev = async (
+    access: JevAccess,
+    projectId: string,
+    task: TaskView,
+    criteria: string[],
+    item: WorkItemRow
+  ) => {
+    const about = hubActor(`attempt ${short(item.id)} judged`);
+    try {
+      const judged = await jevJudged(
+        access,
+        projectId,
+        task,
+        criteria,
+        attemptReport(item)
+      );
+      const unmet = judged.filter((each) => !each.met);
+      if (unmet.length === 0) {
+        return "done";
+      }
+      const said = await tasks.comment(
+        projectId,
+        task.id,
+        judgedWords.notShownMet(
+          attemptNamed(item, task),
+          unmet
+            .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
+            .join("\n")
+        ),
+        about
+      );
+      if (said instanceof ElysiaStatus) {
+        return said;
+      }
+      db.markAttemptUnmet(item.id);
+      return "todo";
+    } catch (error) {
+      if (!(error instanceof JevFailed)) {
+        throw error;
+      }
+      const said = await tasks.comment(
+        projectId,
+        task.id,
+        judgedWords.notJudged(
+          error.message,
+          attemptNamed(item, task),
+          task.stage
+        ),
+        about
+      );
+      return said instanceof ElysiaStatus ? said : "stays";
+    }
+  };
+
+  /**
    * Who an attempt you start from the dashboard reports to: the session
    * named, or the project's Caw, started for it on or off (it is your work);
    * refused when neither can take reports.
@@ -2188,23 +2376,31 @@ export const createDispatcher = ({
   const reporter = async (
     projectId: string,
     parentInstanceId: string | undefined
-  ): Promise<InstanceRow> => {
+  ) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     if (!parentInstanceId) {
-      return (
-        (await conversationOf(project, "you")) ??
-        refuse(409, `Nobody can take this attempt's report. ${NO_LEAD}`)
-      );
+      const conversation = await conversationOf(project, "you");
+      return conversation
+        ? conversation
+        : problem(409, {
+            code: "dispatch-no-reporter",
+            detail: `Nobody can take this attempt's report. ${NO_LEAD}`,
+          });
     }
     const parent = instance(parentInstanceId);
     const unfit = parentProblem(parent, projectId, parentInstanceId);
-    if (unfit || !parent) {
-      return refuse(
-        parent ? 409 : 404,
-        unfit ?? `No session ${parentInstanceId}.`
-      );
+    if (!parent) {
+      return problem(404, {
+        code: "dispatch-parent-unknown",
+        detail: unfit ?? `No session ${parentInstanceId}.`,
+      });
     }
-    return parent;
+    return unfit
+      ? problem(409, { code: "dispatch-parent-unfit", detail: unfit })
+      : parent;
   };
 
   /**
@@ -2223,11 +2419,18 @@ export const createDispatcher = ({
       }
       return;
     }
+    const unmoved = (why: string) =>
+      console.warn(
+        `[dispatch] ${item.taskId}'s attempt ${item.id} ended ${item.state}, and the task did not move: ${why}`
+      );
     settle(item)
-      .catch((error: unknown) =>
-        console.warn(
-          `[dispatch] ${item.taskId}'s attempt ${item.id} ended ${item.state}, and the task did not move: ${failure(error).message}`
-        )
+      .then(
+        (refused) => {
+          if (refused) {
+            unmoved(refused.response.detail);
+          }
+        },
+        (error: unknown) => unmoved(failure(error).message)
       )
       .finally(() => evaluate(projectId));
   };
@@ -2247,9 +2450,7 @@ export const createDispatcher = ({
    * a todo stage while its newest attempt is done, landed whole (no
    * follow-up `error`) and not stamped yet.
    */
-  const leadSentBack = async (
-    event: Extract<TaskEvent, { kind: "moved" }>
-  ): Promise<void> => {
+  const leadSentBack = async (event: Extract<TaskEvent, { kind: "moved" }>) => {
     const { actor, projectId, id, to } = event;
     if (
       actor.mover !== "session" ||
@@ -2265,10 +2466,16 @@ export const createDispatcher = ({
       return;
     }
     const stages = await tasks.stages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     if (stages.stages.find((each) => each.name === to)?.kind !== "todo") {
       return;
     }
     const task = await tasks.get(projectId, id);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     if (criteriaOf(task.acceptance).length === 0) {
       return;
     }
@@ -2288,23 +2495,49 @@ export const createDispatcher = ({
       (event.actor.mover !== "hub" || event.actor.tracker !== undefined)
     ) {
       const entered = event.kind === "moved" ? event.to : event.stage;
+      const said = (how: string) => (why: string) =>
+        console.warn(`[dispatch] ${event.id} ${how} ${entered}: ${why}`);
+      const moved = said("moved to");
+      const hookedIn = said("entered");
       // The lead's verdict is stamped before the project is looked at again.
       (event.kind === "moved" ? leadSentBack(event) : Promise.resolve())
-        .catch((error: unknown) =>
-          console.warn(
-            `[dispatch] ${event.id} moved to ${entered}: ${failure(error).message}`
-          )
+        .then(
+          (refused) => {
+            if (refused) {
+              moved(refused.response.detail);
+            }
+          },
+          (error: unknown) => moved(failure(error).message)
         )
         .then(() => hooked({ ...event, to: entered }))
-        .catch((error: unknown) =>
-          console.warn(
-            `[dispatch] ${event.id} entered ${entered}: ${failure(error).message}`
-          )
+        .then(
+          (refused) => {
+            if (refused) {
+              hookedIn(refused.response.detail);
+            }
+          },
+          (error: unknown) => hookedIn(failure(error).message)
         )
         .finally(() => evaluate(event.projectId));
       return;
     }
     evaluate(event.projectId);
+  };
+
+  /** A runs_on as a settings change writes it: empty clears it, as null does; refused when it names no capability and no machine the hub knows. */
+  const runsOnOf = (written: string | null | undefined) => {
+    const runsOn =
+      written?.trim() || (written === undefined ? undefined : null);
+    if (!runsOn) {
+      return runsOn;
+    }
+    const checked = runsOnValue(runsOn, db.listAgents());
+    return "value" in checked
+      ? checked.value
+      : problem(400, {
+          code: "dispatch-runs-on-unknown",
+          detail: checked.problem,
+        });
   };
 
   return {
@@ -2319,11 +2552,7 @@ export const createDispatcher = ({
      * else in a new one, briefed with the failure and the to-dos as they
      * stand, reporting to `parent`. Not capped: a person asked for it.
      */
-    retryAttempt(
-      projectId: string,
-      ref: string,
-      parent: InstanceRow
-    ): Promise<AttemptStart> {
+    retryAttempt(projectId: string, ref: string, parent: InstanceRow) {
       return startAttempt(projectId, ref, parent, { retry: true });
     },
 
@@ -2332,13 +2561,14 @@ export const createDispatcher = ({
       projectId: string,
       ref: string,
       parentInstanceId: string | undefined
-    ): Promise<AttemptStart> {
-      return startAttempt(
-        projectId,
-        ref,
-        await reporter(projectId, parentInstanceId),
-        { retry: true, origin: "you" }
-      );
+    ) {
+      const parent = await reporter(projectId, parentInstanceId);
+      return parent instanceof ElysiaStatus
+        ? parent
+        : await startAttempt(projectId, ref, parent, {
+            retry: true,
+            origin: "you",
+          });
     },
 
     /**
@@ -2348,22 +2578,26 @@ export const createDispatcher = ({
      * is. Answers where the task is now, or undefined when no attempt this
      * hub knows opened that pull request.
      */
-    async pullRequestMerged(
-      url: string
-    ): Promise<{ projectId: string; stage: string; task: string } | undefined> {
+    async pullRequestMerged(url: string) {
       const item = db.workItemByPrUrl(url);
       const { projectId, taskId } = item ?? {};
       if (!(item && projectId && taskId && db.project(projectId))) {
         return;
       }
       const stages = await tasks.stages(projectId);
+      if (stages instanceof ElysiaStatus) {
+        return stages;
+      }
       if (stages.problems.length > 0) {
-        refuse(
-          409,
-          `${url} merged, but stages.md does not read, so ${taskId} stays where it is. ${stages.problems.join(" ")}`
-        );
+        return problem(409, {
+          code: "dispatch-merged-stages-unread",
+          detail: `${url} merged, but stages.md does not read, so ${taskId} stays where it is. ${stages.problems.join(" ")}`,
+        });
       }
       const task = await tasks.get(projectId, taskId);
+      if (task instanceof ElysiaStatus) {
+        return task;
+      }
       const target = stages.stages.find((each) => each.kind === "done");
       if (
         task.kind === "done" ||
@@ -2381,7 +2615,9 @@ export const createDispatcher = ({
         target.name,
         hubActor(`pull request merged: ${url}`)
       );
-      return { projectId, task: taskId, stage: moved.stage };
+      return moved instanceof ElysiaStatus
+        ? moved
+        : { projectId, task: taskId, stage: moved.stage };
     },
 
     /** Why the hub last could not start an attempt at a task, while the task file is as it was then. */
@@ -2389,8 +2625,8 @@ export const createDispatcher = ({
       projectId: string,
       task: { hash: string; id: string }
     ): string | null {
-      const problem = problems.get(keyOf(projectId, task.id));
-      return problem?.hash === task.hash ? problem.message : null;
+      const misfit = problems.get(keyOf(projectId, task.id));
+      return misfit?.hash === task.hash ? misfit.message : null;
     },
 
     /**
@@ -2419,32 +2655,32 @@ export const createDispatcher = ({
     },
 
     /** The project's dispatch settings and what the dispatcher would do now. */
-    view(projectId: string): Promise<DispatchView> {
-      return viewOf(projectOf(projectId));
+    async view(projectId: string) {
+      const project = projectOf(projectId);
+      return project instanceof ElysiaStatus ? project : await viewOf(project);
     },
 
     /** Changes a project's dispatch settings, then looks at it again. */
-    async configure(
-      projectId: string,
-      change: DispatchChange
-    ): Promise<DispatchView> {
-      projectOf(projectId);
-      const problem = dispatchProblem(change);
-      if (problem) {
-        refuse(400, problem);
+    async configure(projectId: string, change: DispatchChange) {
+      const project = projectOf(projectId);
+      if (project instanceof ElysiaStatus) {
+        return project;
       }
-      // Empty clears it, as null does.
-      let runsOn =
-        change.runsOn?.trim() ||
-        (change.runsOn === undefined ? undefined : null);
-      if (runsOn) {
-        const checked = runsOnValue(runsOn, db.listAgents());
-        runsOn =
-          "value" in checked ? checked.value : refuse(400, checked.problem);
+      const misfit = dispatchProblem(change);
+      if (misfit) {
+        return problem(400, {
+          code: "dispatch-settings-unfit",
+          detail: misfit,
+        });
+      }
+      const runsOn = runsOnOf(change.runsOn);
+      if (runsOn instanceof ElysiaStatus) {
+        return runsOn;
       }
       db.setProjectDispatch(projectId, columnsOf({ ...change, runsOn }));
       evaluate(projectId);
-      return await viewOf(projectOf(projectId));
+      const now = projectOf(projectId);
+      return now instanceof ElysiaStatus ? now : await viewOf(now);
     },
 
     /**
@@ -2455,13 +2691,11 @@ export const createDispatcher = ({
       projectId: string,
       ref: string,
       parentInstanceId: string | undefined
-    ): Promise<AttemptStart> {
-      return startAttempt(
-        projectId,
-        ref,
-        await reporter(projectId, parentInstanceId),
-        { origin: "you" }
-      );
+    ) {
+      const parent = await reporter(projectId, parentInstanceId);
+      return parent instanceof ElysiaStatus
+        ? parent
+        : await startAttempt(projectId, ref, parent, { origin: "you" });
     },
 
     /** Starts the safety net: a look at every dispatching project every few minutes. */
@@ -2486,18 +2720,17 @@ export const createDispatcher = ({
 
 export type Dispatcher = ReturnType<typeof createDispatcher>;
 
-/** A refusal or failure as the route's answer. */
-const answer = (error: unknown) => {
-  const { code, message } = failure(error);
-  return status(code, message);
-};
-
-/** Runs a route's work, a failure answered with its status. */
-const answered = async <T>(work: () => T | Promise<T>) => {
+/**
+ * A start's failure that work-items or a machine threw ({@link failure}),
+ * as the route's answer with its status, until work-items returns its
+ * refusals; the dispatcher's own refusals are returned, as they are.
+ */
+const startAnswered = async <T>(work: () => Promise<T>) => {
   try {
     return await work();
   } catch (error) {
-    return answer(error);
+    const { code, message } = failure(error);
+    return problem(code, { code: "dispatch-start-failed", detail: message });
   }
 };
 
@@ -2511,7 +2744,7 @@ const ATTEMPT_FROM = t.Object({ parentInstanceId: t.Optional(t.String()) });
 export const dispatchRoutes = (dispatcher: Dispatcher) =>
   new Elysia()
     .get("/api/projects/:id/dispatch", ({ params }) =>
-      answered(() => dispatcher.view(params.id))
+      dispatcher.view(params.id)
     )
     // Where a project's work lands is changed with its other details
     // (`PATCH /api/projects/:id`, project-edit.ts), which every dashboard hears.
@@ -2526,8 +2759,7 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
           runsOn: t.Optional(t.Nullable(t.String())),
         }),
       },
-      ({ params, body }) =>
-        answered(() => dispatcher.configure(params.id, body))
+      ({ params, body }) => dispatcher.configure(params.id, body)
     )
     .post(
       "/api/projects/:id/tasks/:taskId/attempts",
@@ -2535,7 +2767,7 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
       ({ params, body, request, server }) => {
         // A workspace is cut on a machine; that can take a while.
         server?.timeout(request, 0);
-        return answered(() =>
+        return startAnswered(() =>
           dispatcher.startFor(params.id, params.taskId, body.parentInstanceId)
         );
       }
@@ -2547,7 +2779,7 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
       { body: ATTEMPT_FROM },
       ({ params, body, request, server }) => {
         server?.timeout(request, 0);
-        return answered(() =>
+        return startAnswered(() =>
           dispatcher.retryFor(params.id, params.taskId, body.parentInstanceId)
         );
       }

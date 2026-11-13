@@ -10,8 +10,10 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { ChangedItem, MetaMap } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
+import type { problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
 import type { BuiltProgram } from "../../decision-program";
+
 import type { createAccess } from "../access";
 import type { ArtifactServiceDeps } from "../deps";
 import type { createMarks } from "../marks";
@@ -36,16 +38,26 @@ export interface KindContext {
       before: Record<string, unknown>;
       tested: ReadonlySet<string>;
     }
-  ) => void;
-  askedOf: (input: Pick<ArtifactInput, "does" | "ask" | "title">) => {
-    ask: string;
-    does: ArtifactDoes;
-    title: string;
-  };
+  ) =>
+    | ReturnType<
+        typeof problem<409, { code: "artifact-answers-stand"; detail: string }>
+      >
+    | undefined;
+  askedOf: (
+    input: Pick<ArtifactInput, "does" | "ask" | "title">
+  ) =>
+    | { ask: string; does: ArtifactDoes; title: string }
+    | ReturnType<
+        typeof problem<422, { code: "artifact-create-shape"; detail: string }>
+      >;
   brokenBy: (
     page: { id: string | undefined; name: string; projectId: string | null },
     cards: DecisionCard[]
-  ) => Promise<PageBroken | undefined>;
+  ) => Promise<
+    | PageBroken
+    | undefined
+    | Awaited<ReturnType<ArtifactServiceDeps["afterLinks"]>>
+  >;
   cardLinks: (
     id: string,
     cards: readonly DecisionCard[]
@@ -72,13 +84,36 @@ export interface KindContext {
     items: ChangedItem[],
     revision: (meta: MetaMap) => number
   ) => ChangedItem[];
-  mediaHeld: (owner: InstanceRow, program: BuiltProgram) => void;
+  mediaHeld: (
+    owner: InstanceRow,
+    program: BuiltProgram
+  ) =>
+    | ReturnType<
+        typeof problem<422, { code: "artifact-media-unfit"; detail: string }>
+      >
+    | undefined;
   mediaSeen: (page: ArtifactRow, id: string) => ArtifactRow | undefined;
   namedFor: ReturnType<typeof createAccess>["namedFor"];
   ofTree: ReturnType<typeof createAccess>["ofTree"];
   openedOf: (shown: Opened) => Opened;
   openNextFirst: ReturnType<typeof createVersions>["openNextFirst"];
-  ownerFor: (maker: InstanceRow, input: ArtifactInput) => InstanceRow;
+  ownerFor: (
+    maker: InstanceRow,
+    input: ArtifactInput
+  ) =>
+    | InstanceRow
+    | ReturnType<
+        typeof problem<
+          400,
+          { code: "artifact-draft-to-parent"; detail: string }
+        >
+      >
+    | ReturnType<
+        typeof problem<409, { code: "artifact-no-parent"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<404, { code: "artifact-parent-gone"; detail: string }>
+      >;
   pagesShowing: () => Map<string, ArtifactRow[]>;
   pendingFor: (row: ArtifactRow) => ArtifactPending | null;
   personChangedAfter: (
@@ -103,7 +138,7 @@ export interface KindContext {
     id: string,
     cards: DecisionCard[],
     all: DecisionCard[]
-  ) => Promise<Record<string, string>>;
+  ) => ReturnType<ArtifactServiceDeps["decides"]["routed"]>;
   stampMeta: (row: ArtifactRow, given: string | null) => void;
   store: ReturnType<typeof createPageStore>;
   waitsOnPerson: (row: ArtifactRow) => boolean;

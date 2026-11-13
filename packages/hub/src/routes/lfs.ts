@@ -2,7 +2,7 @@
  * Where a project's large files live, answered to machines holding a place of it, and the refusals it reports back.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
@@ -26,13 +26,16 @@ export const lfsRoutes = ({
     .get(
       "/api/lfs/projects/:id",
       { ...hidden, params: t.Object({ id: t.String() }) },
-      ({ params, request, server, status }) => {
+      ({ params, request, server }) => {
         const project = lfsMachineProject(
           params.id,
           hubAuth.callerOf(request, addressOf(server, request))
         );
         if ("refused" in project) {
-          return status(project.status, project.refused);
+          return problem(project.status, {
+            code: "lfs-refused",
+            detail: project.refused,
+          });
         }
         const { lfsUrl, lfsConnection } = project.row;
         if (!(lfsUrl && lfsConnection)) {
@@ -46,10 +49,10 @@ export const lfsRoutes = ({
             },
           };
         } catch (error) {
-          return status(
-            409,
-            `${project.row.name}'s large files live at ${lfsUrl}, but its connection can't sign in there: ${error instanceof Error ? error.message : String(error)}`
-          );
+          return problem(409, {
+            code: "large-files-live-but",
+            detail: `${project.row.name}'s large files live at ${lfsUrl}, but its connection can't sign in there: ${error instanceof Error ? error.message : String(error)}`,
+          });
         }
       }
     )
@@ -70,11 +73,14 @@ export const lfsRoutes = ({
           machineId: t.String({ minLength: 1, maxLength: 200 }),
         }),
       },
-      ({ body, params, request, server, status }) => {
+      ({ body, params, request, server }) => {
         const caller = hubAuth.callerOf(request, addressOf(server, request));
         const project = lfsMachineProject(params.id, caller);
         if ("refused" in project) {
-          return status(project.status, project.refused);
+          return problem(project.status, {
+            code: "lfs-refused",
+            detail: project.refused,
+          });
         }
         if (!db.lfsOffers.refused(params.id, body.endpoint)) {
           return { ok: true };
