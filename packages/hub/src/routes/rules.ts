@@ -10,7 +10,7 @@ import {
   ruleProblem,
 } from "@cawco/core/rules";
 import { areaWords } from "@cawco/core/words/areas";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { DbShape } from "../db";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
@@ -82,15 +82,15 @@ export const ruleRoutes = ({
       rules: ruleRowsOf(db.listRules()),
       templates: RULE_TEMPLATES,
     }))
-    .post("/api/rules", { body: ruleBody }, ({ body, status }) => {
+    .post("/api/rules", { body: ruleBody }, ({ body }) => {
       const draft = body as unknown as RuleDraft;
       const first = firstRuleProblem(draft);
       if (first) {
-        return status(400, first);
+        return problem(400, { code: "rule-invalid", detail: first });
       }
       const misplaced = ruleScopeProblem(db, draft);
       if (misplaced) {
-        return status(400, misplaced);
+        return problem(400, { code: "rule-misplaced", detail: misplaced });
       }
       // The hub mints the id: the client never invents identity, it asks for it.
       const rule: Rule = {
@@ -102,21 +102,24 @@ export const ruleRoutes = ({
       ruleEngine.reload();
       return rule;
     })
-    .put("/api/rules/:id", { body: ruleBody }, ({ params, body, status }) => {
+    .put("/api/rules/:id", { body: ruleBody }, ({ params, body }) => {
       const draft = body as unknown as RuleDraft;
       const first = firstRuleProblem(draft);
       if (first) {
-        return status(400, first);
+        return problem(400, { code: "rule-invalid", detail: first });
       }
       // Strictly an edit: an id this hub never minted is a caller's mistake,
       // not an invitation to upsert.
       const existing = db.getRule(params.id);
       if (!existing) {
-        return status(404, `there is no rule ${params.id} to edit`);
+        return problem(404, {
+          code: "no-rule-edit",
+          detail: `there is no rule ${params.id} to edit`,
+        });
       }
       const misplaced = ruleScopeProblem(db, draft);
       if (misplaced) {
-        return status(400, misplaced);
+        return problem(400, { code: "rule-misplaced", detail: misplaced });
       }
       const rule: Rule = {
         ...draft,
@@ -128,13 +131,16 @@ export const ruleRoutes = ({
       return rule;
     })
     // The rule stops at once, into the trash with every session's standing.
-    .delete("/api/rules/:id", ({ params, status }) => {
+    .delete("/api/rules/:id", ({ params }) => {
       const trashed = db.trash.put(
         { kind: "rule", key: params.id },
         Date.now()
       );
       if (trashed === undefined) {
-        return status(404, `there is no rule ${params.id}`);
+        return problem(404, {
+          code: "no-rule",
+          detail: `there is no rule ${params.id}`,
+        });
       }
       ruleEngine.reload();
       return undoable(trashed);
@@ -147,10 +153,13 @@ export const ruleActivityRoutes = ({ db }: Pick<HubContext, "db">) =>
      * each session is still pending on it. A session never sees the rule's
      * fire count, so this listing is the only window onto it.
      */
-    .get("/api/rules/:id/activity", ({ params, status }) => {
+    .get("/api/rules/:id/activity", ({ params }) => {
       const rule = db.getRule(params.id);
       if (!rule) {
-        return status(404, "That rule no longer exists.");
+        return problem(404, {
+          code: "rule-no-longer-exists",
+          detail: "That rule no longer exists.",
+        });
       }
       const states = db.ruleStatesFor(params.id);
       const named = new Map(

@@ -33,18 +33,11 @@ import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { decidesWords } from "@cawco/core/words/decides";
-import { Elysia, status, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
-import {
-  FolderRefusal,
-  MESSAGE_LIMIT,
-  refused,
-  writeFolderFile,
-  YOU,
-} from "./project-folder";
-import { StatusRefusal } from "./refusal";
+import { MESSAGE_LIMIT, writeFolderFile, YOU } from "./project-folder";
 
 /** A harness on the fleet, as the page draws setup from it. */
 export interface HarnessOffer {
@@ -95,21 +88,6 @@ export interface DecidesDeps {
   }[];
 }
 
-/** A refusal in Who decides' words, with its status. */
-class DecidesRefusal extends StatusRefusal<403 | 404 | 409 | 422> {}
-
-/** A route's work, its refusal answered in its status and words. */
-const answered = async <T>(work: () => T | Promise<T>) => {
-  try {
-    return await work();
-  } catch (error) {
-    if (error instanceof DecidesRefusal) {
-      return status(error.status, error.message);
-    }
-    return refused(error);
-  }
-};
-
 const AGENT = t.Object({
   harness: t.UnionEnum(HARNESSES),
   model: t.String({ minLength: 1 }),
@@ -130,30 +108,44 @@ interface AgentBody {
 const HEAR = t.UnionEnum(HEARS);
 const HUE = t.Integer({ minimum: 1, maximum: 8 });
 
-/** The first of `ids` the fleet knows no member by, refused. */
-const knownMembers = (fleet: FleetDecides, ids: string[]): void => {
+/** The refusal of the first of `ids` the fleet knows no member by; none when it knows them all. */
+const unknownMembers = (fleet: FleetDecides, ids: string[]) => {
   const unknown = ids.find((id) => !memberOf(fleet, id));
-  if (unknown !== undefined) {
-    throw new DecidesRefusal(422, decidesWords.unknownMember(unknown));
-  }
+  return unknown === undefined
+    ? undefined
+    : problem(422, {
+        code: "decides-routed-member-unknown",
+        detail: decidesWords.unknownMember(unknown),
+      });
 };
 
-/** The first of `ids` the fleet knows no kind by, refused. */
-const knownKinds = (fleet: FleetDecides, ids: string[]): void => {
+/** The refusal of the first of `ids` the fleet knows no kind by; none when it knows them all. */
+const unknownKinds = (fleet: FleetDecides, ids: string[]) => {
   const unknown = ids.find((id) => !kindOf(fleet, id));
-  if (unknown !== undefined) {
-    throw new DecidesRefusal(422, decidesWords.unknownKind(unknown));
-  }
+  return unknown === undefined
+    ? undefined
+    : problem(422, {
+        code: "decides-routed-kind-unknown",
+        detail: decidesWords.unknownKind(unknown),
+      });
 };
+
+/** The refusal of `routes` naming a kind or a member the fleet does not know; none when it knows them all. */
+const unknownRoutes = (
+  fleet: FleetDecides,
+  routes: Record<string, string | null>
+) =>
+  unknownKinds(fleet, Object.keys(routes)) ??
+  unknownMembers(
+    fleet,
+    Object.values(routes).filter((id): id is string => id !== null)
+  );
 
 /** A project's decides.md as read now: its own lines and its text; undefined when it has none or it doesn't read. */
-const projectOwn = async (
-  projectId: string,
-  fleet: FleetDecides
-): Promise<{ own: DecidesOwn; text: string } | undefined> => {
+const projectOwn = async (projectId: string, fleet: FleetDecides) => {
   const text = await decidesText(projectId);
-  if (text === undefined) {
-    return;
+  if (text === undefined || text instanceof ElysiaStatus) {
+    return text;
   }
   const reading = readDecides(text, fleet);
   return reading.ok
@@ -164,42 +156,49 @@ const projectOwn = async (
 export const decidesRoutes = (deps: DecidesDeps) => {
   const { db, types } = deps;
 
-  /** The project `id`, refused when the hub keeps none. */
-  const known = (id: string) => {
-    const project = deps.project(id);
-    if (!project) {
-      throw new FolderRefusal(404, `The hub keeps no project ${id}.`);
-    }
-    return project;
-  };
+  /** The refusal of a project the hub does not keep; none for one it does. */
+  const unknownProject = (id: string) =>
+    deps.project(id)
+      ? undefined
+      : problem(404, {
+          code: "decides-project-unknown",
+          detail: `The hub keeps no project ${id}.`,
+        });
   /** The area a project sits in, for its table (decides-file.ts); null: none. */
   const areaOf = (id: string): string | null =>
     deps.project(id)?.areaId ?? null;
 
+  /** The member `id`, or its problem: the fleet has none. */
+  const known = (id: string) =>
+    memberOf(db.fleet(), id) ??
+    problem(404, {
+      code: "decides-member-unknown",
+      detail: decidesWords.unknownMember(id),
+    });
+
   /** A member he added, or refused: unknown, or built in. */
-  const added = (id: string): Member => {
-    const member = memberOf(db.fleet(), id);
-    if (!member) {
-      throw new DecidesRefusal(404, decidesWords.unknownMember(id));
+  const added = (id: string) => {
+    const member = known(id);
+    if (member instanceof ElysiaStatus) {
+      return member;
     }
     if (member.builtIn) {
-      throw new DecidesRefusal(403, decidesWords.builtInMember);
+      return problem(403, {
+        code: "decides-member-built-in",
+        detail: decidesWords.builtInMember,
+      });
     }
     return member;
   };
 
   /** The agent body as the fleet delegate type `name`, refused when its harness runs nowhere or the type doesn't read. */
-  const typeOf = (
-    name: string,
-    agent: AgentBody,
-    was?: DelegateType
-  ): DelegateType => {
+  const typeOf = (name: string, agent: AgentBody, was?: DelegateType) => {
     const offer = deps.harnesses().find((one) => one.id === agent.harness);
     if (!offer || offer.machines.length === 0) {
-      throw new DecidesRefusal(
-        422,
-        decidesWords.noMachine(offer?.name ?? agent.harness)
-      );
+      return problem(422, {
+        code: "decides-harness-runs-nowhere",
+        detail: decidesWords.noMachine(offer?.name ?? agent.harness),
+      });
     }
     const type: DelegateType = {
       ...was,
@@ -216,22 +215,31 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         : (was?.mayStart?.filter((kept) => kept !== ANY_TYPE) ?? []),
     };
     if (!type.description.trim()) {
-      throw new DecidesRefusal(422, decidesWords.instructionsMissing);
+      return problem(422, {
+        code: "decides-instructions-missing",
+        detail: decidesWords.instructionsMissing,
+      });
     }
     return type;
   };
 
   /** A member whose settings he changes here, or refused: unknown, Caw (his are the project's), You or The agent (none). */
-  const editable = (id: string): Member => {
-    const member = memberOf(db.fleet(), id);
-    if (!member) {
-      throw new DecidesRefusal(404, decidesWords.unknownMember(id));
+  const editable = (id: string) => {
+    const member = known(id);
+    if (member instanceof ElysiaStatus) {
+      return member;
     }
     if (member.type === "caw") {
-      throw new DecidesRefusal(403, decidesWords.cawRunsOn);
+      return problem(403, {
+        code: "decides-caw-runs-on",
+        detail: decidesWords.cawRunsOn,
+      });
     }
     if (member.type === "you" || member.type === "asker") {
-      throw new DecidesRefusal(403, decidesWords.builtInMember);
+      return problem(403, {
+        code: "decides-member-built-in",
+        detail: decidesWords.builtInMember,
+      });
     }
     return member;
   };
@@ -240,9 +248,12 @@ export const decidesRoutes = (deps: DecidesDeps) => {
   const saveMember = (
     member: Member,
     body: { agent: AgentBody; hear: Hear; hue?: number; job?: string }
-  ): Member => {
+  ) => {
     const typeName = member.delegateType as string;
     const type = typeOf(typeName, body.agent, types.get(typeName));
+    if (type instanceof ElysiaStatus) {
+      return type;
+    }
     if (member.type === "advisor" || member.type === "practice") {
       types.put(type);
       db.setBuiltIn({ hear: { [member.type]: body.hear } });
@@ -250,7 +261,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     }
     const row = db.members().find((one) => one.id === member.id);
     if (!row) {
-      throw new DecidesRefusal(404, decidesWords.unknownMember(member.id));
+      return problem(404, {
+        code: "decides-member-unknown",
+        detail: decidesWords.unknownMember(member.id),
+      });
     }
     db.putMember(
       {
@@ -269,11 +283,14 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     fleet: FleetDecides,
     body: { example: string; name: string },
     except?: string
-  ): { example: string; name: string } => {
+  ) => {
     const name = body.name.trim();
     const example = body.example.trim();
     if (!(name && slugOf(name) && example)) {
-      throw new DecidesRefusal(422, decidesWords.kindFields);
+      return problem(422, {
+        code: "decides-kind-fields-missing",
+        detail: decidesWords.kindFields,
+      });
     }
     const taken = fleet.kinds.some(
       (one) =>
@@ -282,25 +299,36 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           (except === undefined && one.id === slugOf(name)))
     );
     if (taken) {
-      throw new DecidesRefusal(409, decidesWords.kindTaken(name));
+      return problem(409, {
+        code: "decides-kind-taken",
+        detail: decidesWords.kindTaken(name),
+      });
     }
     return { name, example };
   };
 
   /** Kind `id` as one he may remove into `moveTo`, or refused: unknown, built in, or moved into itself or no kind. */
-  const removable = (fleet: FleetDecides, id: string, moveTo: string): Kind => {
+  const removable = (fleet: FleetDecides, id: string, moveTo: string) => {
     const kind = kindOf(fleet, id);
     if (!kind) {
-      throw new DecidesRefusal(404, decidesWords.unknownKind(id));
+      return problem(404, {
+        code: "decides-kind-unknown",
+        detail: decidesWords.unknownKind(id),
+      });
     }
     if (kind.builtIn) {
-      throw new DecidesRefusal(403, decidesWords.builtInKind);
+      return problem(403, {
+        code: "decides-kind-built-in",
+        detail: decidesWords.builtInKind,
+      });
     }
     if (moveTo === kind.id) {
-      throw new DecidesRefusal(422, decidesWords.moveToSelf);
+      return problem(422, {
+        code: "decides-kind-moved-to-itself",
+        detail: decidesWords.moveToSelf,
+      });
     }
-    knownKinds(fleet, [moveTo]);
-    return kind;
+    return unknownKinds(fleet, [moveTo]) ?? kind;
   };
 
   /** Every open card under kind `from` refiled as `to`, page by page; answers how many moved and the projects they are in. */
@@ -333,14 +361,18 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     projectId: string,
     fleet: FleetDecides,
     routes: Record<string, string | null>
-  ): Promise<string> => {
-    const text = (await decidesText(projectId)) ?? null;
+  ) => {
+    const read = await decidesText(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const text = read ?? null;
     const reading = text === null ? undefined : readDecides(text, fleet);
     if (reading && !reading.ok) {
-      throw new DecidesRefusal(
-        409,
-        decidesWords.fileUnread(reading.problems.join(" "))
-      );
+      return problem(409, {
+        code: "decides-file-unread",
+        detail: decidesWords.fileUnread(reading.problems.join(" ")),
+      });
     }
     const own = { ...(reading?.routes ?? {}) };
     for (const [kind, member] of Object.entries(routes)) {
@@ -357,29 +389,42 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     );
   };
 
-  /** Writes each project's decides.md that `change` rewrites, one commit each; answers the projects written. */
+  /** Each project's decides.md as `change` rewrites it, for one commit each ({@link writeRewrites}); a project it leaves is not among them. */
   const rewriteProjects = async (
     fleet: FleetDecides,
-    change: (own: DecidesOwn) => DecidesOwn | undefined,
-    message: string
-  ): Promise<{ id: string; write: () => Promise<unknown> }[]> => {
-    const writes: { id: string; write: () => Promise<unknown> }[] = [];
+    change: (own: DecidesOwn) => DecidesOwn | undefined
+  ) => {
+    const rewrites: { content: string; id: string }[] = [];
     for (const project of deps.projects()) {
       const read = await projectOwn(project.id, fleet);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
       const next = read ? change(read.own) : undefined;
       if (read && next) {
-        const content = decidesFileOf(next, fleet.kinds, read.text);
-        writes.push({
+        rewrites.push({
           id: project.id,
-          write: () =>
-            writeFolderFile(project.id, DECIDES_FILE, content, {
-              author: YOU,
-              message,
-            }),
+          content: decidesFileOf(next, fleet.kinds, read.text),
         });
       }
     }
-    return writes;
+    return rewrites;
+  };
+
+  /** Writes each of {@link rewriteProjects}' files, one commit each, under `message`; stops at the first the folder refuses. */
+  const writeRewrites = async (
+    rewrites: { content: string; id: string }[],
+    message: string
+  ) => {
+    for (const one of rewrites) {
+      const written = await writeFolderFile(one.id, DECIDES_FILE, one.content, {
+        author: YOU,
+        message,
+      });
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
+    }
   };
 
   return (
@@ -393,14 +438,14 @@ export const decidesRoutes = (deps: DecidesDeps) => {
       .put(
         "/api/decides/routes",
         { body: t.Object({ routes: t.Record(t.String(), t.String()) }) },
-        ({ body }) =>
-          answered(() => {
-            const fleet = db.fleet();
-            knownKinds(fleet, Object.keys(body.routes));
-            knownMembers(fleet, Object.values(body.routes));
-            db.setRoutes(body.routes);
-            return db.fleet();
-          })
+        ({ body }) => {
+          const unknown = unknownRoutes(db.fleet(), body.routes);
+          if (unknown) {
+            return unknown;
+          }
+          db.setRoutes(body.routes);
+          return db.fleet();
+        }
       )
       .post(
         "/api/decides/members",
@@ -413,38 +458,47 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             agent: AGENT,
           }),
         },
-        ({ body }) =>
-          answered(() => {
-            const name = body.name.trim();
-            const id = slugOf(name);
-            if (!(name && id)) {
-              throw new DecidesRefusal(422, decidesWords.nameMissing);
-            }
-            const fleet = db.fleet();
-            if (
-              memberOf(fleet, id) ||
-              (BUILT_IN_MEMBERS as readonly string[]).includes(id) ||
-              types.get(id) ||
-              !DECIDES_ID.test(id)
-            ) {
-              throw new DecidesRefusal(409, decidesWords.nameTaken(name));
-            }
-            db.putMember(
-              {
-                id,
-                type: "agent",
-                name,
-                job: body.job.trim(),
-                subject: name,
-                hue: body.hue,
-                hear: body.hear,
-                delegateType: id,
-                reach: null,
-              },
-              typeOf(id, body.agent)
-            );
-            return memberOf(db.fleet(), id) as Member;
-          })
+        ({ body }) => {
+          const name = body.name.trim();
+          const id = slugOf(name);
+          if (!(name && id)) {
+            return problem(422, {
+              code: "decides-member-name-missing",
+              detail: decidesWords.nameMissing,
+            });
+          }
+          const fleet = db.fleet();
+          if (
+            memberOf(fleet, id) ||
+            (BUILT_IN_MEMBERS as readonly string[]).includes(id) ||
+            types.get(id) ||
+            !DECIDES_ID.test(id)
+          ) {
+            return problem(409, {
+              code: "decides-member-name-taken",
+              detail: decidesWords.nameTaken(name),
+            });
+          }
+          const type = typeOf(id, body.agent);
+          if (type instanceof ElysiaStatus) {
+            return type;
+          }
+          db.putMember(
+            {
+              id,
+              type: "agent",
+              name,
+              job: body.job.trim(),
+              subject: name,
+              hue: body.hue,
+              hear: body.hear,
+              delegateType: id,
+              reach: null,
+            },
+            type
+          );
+          return memberOf(db.fleet(), id) as Member;
+        }
       )
       .put(
         "/api/decides/members/:id",
@@ -456,8 +510,12 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             agent: AGENT,
           }),
         },
-        ({ params, body }) =>
-          answered(() => saveMember(editable(params.id), body))
+        ({ params, body }) => {
+          const member = editable(params.id);
+          return member instanceof ElysiaStatus
+            ? member
+            : saveMember(member, body);
+        }
       )
       .put(
         "/api/decides/members/:id/picture",
@@ -469,79 +527,79 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             t.Object({ hue: HUE }),
           ]),
         },
-        ({ params, body }) =>
-          answered(() => {
-            const member = memberOf(db.fleet(), params.id);
-            if (!member) {
-              throw new DecidesRefusal(
-                404,
-                decidesWords.unknownMember(params.id)
-              );
-            }
-            if ("pose" in body) {
-              if (member.pose === null) {
-                throw new DecidesRefusal(
-                  422,
-                  decidesWords.wearsMark(member.name)
-                );
-              }
-              db.setBuiltIn({
-                pictures: { [member.id as FlockMember]: body.pose },
+        ({ params, body }) => {
+          const member = known(params.id);
+          if (member instanceof ElysiaStatus) {
+            return member;
+          }
+          if ("pose" in body) {
+            if (member.pose === null) {
+              return problem(422, {
+                code: "decides-member-wears-mark",
+                detail: decidesWords.wearsMark(member.name),
               });
-            } else {
-              const row = db.members().find((one) => one.id === member.id);
-              if (!row) {
-                throw new DecidesRefusal(
-                  422,
-                  decidesWords.wearsPose(member.name)
-                );
-              }
-              db.putMember({ ...row, hue: body.hue }, null);
             }
-            return memberOf(db.fleet(), member.id) as Member;
-          })
+            db.setBuiltIn({
+              pictures: { [member.id as FlockMember]: body.pose },
+            });
+          } else {
+            const row = db.members().find((one) => one.id === member.id);
+            if (!row) {
+              return problem(422, {
+                code: "decides-member-wears-pose",
+                detail: decidesWords.wearsPose(member.name),
+              });
+            }
+            db.putMember({ ...row, hue: body.hue }, null);
+          }
+          return memberOf(db.fleet(), member.id) as Member;
+        }
       )
-      .delete("/api/decides/members/:id", ({ params }) =>
-        answered(async () => {
-          const member = added(params.id);
-          const fleet = db.fleet();
-          const writes = await rewriteProjects(
-            fleet,
-            (own) => {
-              const kinds = Object.keys(own.routes).filter(
-                (kind) => own.routes[kind] === member.id
-              );
-              return kinds.length > 0
-                ? {
-                    ...own,
-                    routes: {
-                      ...own.routes,
-                      ...Object.fromEntries(kinds.map((kind) => [kind, "you"])),
-                    },
-                  }
-                : undefined;
-            },
-            decidesWords.removedCommit(
-              member.name,
-              fleet.kinds
-                .filter((kind) => fleet.routes[kind.id] === member.id)
-                .map((kind) => kind.name)
-            )
+      .delete("/api/decides/members/:id", async ({ params }) => {
+        const member = added(params.id);
+        if (member instanceof ElysiaStatus) {
+          return member;
+        }
+        const fleet = db.fleet();
+        const rewrites = await rewriteProjects(fleet, (own) => {
+          const kinds = Object.keys(own.routes).filter(
+            (kind) => own.routes[kind] === member.id
           );
-          // Its delegate type goes to the trash, as a type's delete does.
-          if (member.delegateType) {
-            deps.trashType(member.delegateType);
-          }
-          const kindsReturned = db.removeMember(member.id);
-          for (const one of writes) {
-            await one.write();
-          }
-          return {
-            kindsReturned,
-            projectsRewritten: writes.map((one) => one.id),
-          };
-        })
-      )
+          return kinds.length > 0
+            ? {
+                ...own,
+                routes: {
+                  ...own.routes,
+                  ...Object.fromEntries(kinds.map((kind) => [kind, "you"])),
+                },
+              }
+            : undefined;
+        });
+        if (rewrites instanceof ElysiaStatus) {
+          return rewrites;
+        }
+        // Its delegate type goes to the trash, as a type's delete does.
+        if (member.delegateType) {
+          deps.trashType(member.delegateType);
+        }
+        const kindsReturned = db.removeMember(member.id);
+        const written = await writeRewrites(
+          rewrites,
+          decidesWords.removedCommit(
+            member.name,
+            fleet.kinds
+              .filter((kind) => fleet.routes[kind.id] === member.id)
+              .map((kind) => kind.name)
+          )
+        );
+        if (written instanceof ElysiaStatus) {
+          return written;
+        }
+        return {
+          kindsReturned,
+          projectsRewritten: rewrites.map((one) => one.id),
+        };
+      })
       .post(
         "/api/decides/kinds",
         {
@@ -551,129 +609,141 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             to: t.String(),
           }),
         },
-        ({ body }) =>
-          answered(() => {
-            const fleet = db.fleet();
-            const { name, example } = kindFields(fleet, body);
-            const id = slugOf(name);
-            knownMembers(fleet, [body.to]);
-            const kind: Kind = {
-              id,
-              name,
-              example,
-              builtIn: false,
-              position:
-                fleet.kinds.reduce(
-                  (most, one) => Math.max(most, one.position),
-                  -1
-                ) + 1,
-            };
-            db.putKind(kind);
-            db.setRoutes({ ...fleet.routes, [id]: body.to });
-            return kind;
-          })
+        ({ body }) => {
+          const fleet = db.fleet();
+          const fields = kindFields(fleet, body);
+          if (fields instanceof ElysiaStatus) {
+            return fields;
+          }
+          const unknown = unknownMembers(fleet, [body.to]);
+          if (unknown) {
+            return unknown;
+          }
+          const { name, example } = fields;
+          const id = slugOf(name);
+          const kind: Kind = {
+            id,
+            name,
+            example,
+            builtIn: false,
+            position:
+              fleet.kinds.reduce(
+                (most, one) => Math.max(most, one.position),
+                -1
+              ) + 1,
+          };
+          db.putKind(kind);
+          db.setRoutes({ ...fleet.routes, [id]: body.to });
+          return kind;
+        }
       )
       .put(
         "/api/decides/kinds/:id",
         { body: t.Object({ name: t.String(), example: t.String() }) },
-        ({ params, body }) =>
-          answered(() => {
-            const fleet = db.fleet();
-            const kind = kindOf(fleet, params.id);
-            if (!kind) {
-              throw new DecidesRefusal(
-                404,
-                decidesWords.unknownKind(params.id)
-              );
-            }
-            const { name, example } = kindFields(fleet, body, kind.id);
-            const renamed = { ...kind, name, example };
-            db.putKind(renamed);
-            return renamed;
-          })
+        ({ params, body }) => {
+          const fleet = db.fleet();
+          const kind = kindOf(fleet, params.id);
+          if (!kind) {
+            return problem(404, {
+              code: "decides-kind-unknown",
+              detail: decidesWords.unknownKind(params.id),
+            });
+          }
+          const fields = kindFields(fleet, body, kind.id);
+          if (fields instanceof ElysiaStatus) {
+            return fields;
+          }
+          const renamed = { ...kind, ...fields };
+          db.putKind(renamed);
+          return renamed;
+        }
       )
       .delete(
         "/api/decides/kinds/:id",
         { body: t.Object({ moveTo: t.String() }) },
-        ({ params, body }) =>
-          answered(async () => {
-            const fleet = db.fleet();
-            const kind = removable(fleet, params.id, body.moveTo);
-            // Read every project's file while the kind still reads in it.
-            const writes = await rewriteProjects(
-              fleet,
-              (own) => {
-                if (!(kind.id in own.routes)) {
-                  return;
-                }
-                const { [kind.id]: _gone, ...routes } = own.routes;
-                return { ...own, routes };
-              },
-              decidesWords.kindRemovedCommit(kind.name)
-            );
-            const { moved, projects } = await refileAll(kind.id, body.moveTo);
-            db.removeKind(kind.id, body.moveTo);
-            for (const one of writes) {
-              await one.write();
-              projects.add(one.id);
+        async ({ params, body }) => {
+          const fleet = db.fleet();
+          const kind = removable(fleet, params.id, body.moveTo);
+          if (kind instanceof ElysiaStatus) {
+            return kind;
+          }
+          // Read every project's file while the kind still reads in it.
+          const rewrites = await rewriteProjects(fleet, (own) => {
+            if (!(kind.id in own.routes)) {
+              return;
             }
-            return { moved, projects: [...projects] };
-          })
+            const { [kind.id]: _gone, ...routes } = own.routes;
+            return { ...own, routes };
+          });
+          if (rewrites instanceof ElysiaStatus) {
+            return rewrites;
+          }
+          const { moved, projects } = await refileAll(kind.id, body.moveTo);
+          db.removeKind(kind.id, body.moveTo);
+          const written = await writeRewrites(
+            rewrites,
+            decidesWords.kindRemovedCommit(kind.name)
+          );
+          if (written instanceof ElysiaStatus) {
+            return written;
+          }
+          for (const one of rewrites) {
+            projects.add(one.id);
+          }
+          return { moved, projects: [...projects] };
+        }
       )
-      .get("/api/decides/kinds/:id/waiting", ({ params }) =>
-        answered(() => {
-          const pages = deps.waitingUnder(params.id);
-          return {
-            count: pages.reduce((sum, page) => sum + page.cards.length, 0),
-            projects: [
-              ...new Set(
-                pages.flatMap((page) =>
-                  page.row.projectId ? [page.row.projectId] : []
-                )
-              ),
-            ],
-          };
-        })
-      )
+      .get("/api/decides/kinds/:id/waiting", ({ params }) => {
+        const pages = deps.waitingUnder(params.id);
+        return {
+          count: pages.reduce((sum, page) => sum + page.cards.length, 0),
+          projects: [
+            ...new Set(
+              pages.flatMap((page) =>
+                page.row.projectId ? [page.row.projectId] : []
+              )
+            ),
+          ],
+        };
+      })
       .get(
         "/api/decides/members/:id/record",
         { query: t.Object({ project: t.Optional(t.String()) }) },
-        ({ params, query }) =>
-          answered(() => {
-            const member = memberOf(db.fleet(), params.id);
-            if (!member) {
-              throw new DecidesRefusal(
-                404,
-                decidesWords.unknownMember(params.id)
-              );
-            }
-            const record = db.record(params.id);
-            const month = new Date();
-            month.setDate(1);
-            month.setHours(0, 0, 0, 0);
-            // Caw, asked from a project's page: that project's conversations.
-            const caw =
-              member.type === "caw" && query.project !== undefined
-                ? deps.cawRecord(known(query.project).id, month)
-                : null;
-            return {
-              caw: caw && {
-                spendUsd: caw.spendUsd,
-                threads: caw.threads,
-                lastTurnAt:
-                  caw.lastTurnAt === null
-                    ? null
-                    : new Date(caw.lastTurnAt).toISOString(),
-              },
-              decided: record.decided,
-              lastAt: record.lastAt?.toISOString() ?? null,
-              takenBack: record.takenBack,
-              waiting: record.open.filter((row) =>
-                row.workItemId ? deps.live(row.workItemId) : row.signed === null
-              ).length,
-              spendUsd: deps.spend(record.instances, month),
-            };
-          })
+        ({ params, query }) => {
+          const member = known(params.id);
+          if (member instanceof ElysiaStatus) {
+            return member;
+          }
+          const record = db.record(params.id);
+          const month = new Date();
+          month.setDate(1);
+          month.setHours(0, 0, 0, 0);
+          // Caw, asked from a project's page: that project's conversations.
+          const asked = member.type === "caw" ? query.project : undefined;
+          const unknown =
+            asked === undefined ? undefined : unknownProject(asked);
+          if (unknown) {
+            return unknown;
+          }
+          const caw = asked === undefined ? null : deps.cawRecord(asked, month);
+          return {
+            caw: caw && {
+              spendUsd: caw.spendUsd,
+              threads: caw.threads,
+              lastTurnAt:
+                caw.lastTurnAt === null
+                  ? null
+                  : new Date(caw.lastTurnAt).toISOString(),
+            },
+            decided: record.decided,
+            lastAt: record.lastAt?.toISOString() ?? null,
+            takenBack: record.takenBack,
+            waiting: record.open.filter((row) =>
+              row.workItemId ? deps.live(row.workItemId) : row.signed === null
+            ).length,
+            spendUsd: deps.spend(record.instances, month),
+          };
+        }
       )
       // Where each card of a decision page went (card_settlings), for the
       // signature its surface draws: the member it went to, the line a card
@@ -690,18 +760,19 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           takenBackAt: row.takenBackAt?.toISOString() ?? null,
         })),
       }))
-      .get("/api/projects/:id/decides", ({ params }) =>
-        answered(async () => {
-          known(params.id);
-          return {
-            file: DECIDES_FILE,
-            decides: await decidesTable(
-              { projectId: params.id, areaId: areaOf(params.id) },
-              db.fleet()
-            ),
-          };
-        })
-      )
+      .get("/api/projects/:id/decides", async ({ params }) => {
+        const unknown = unknownProject(params.id);
+        if (unknown) {
+          return unknown;
+        }
+        const decides = await decidesTable(
+          { projectId: params.id, areaId: areaOf(params.id) },
+          db.fleet()
+        );
+        return decides instanceof ElysiaStatus
+          ? decides
+          : { file: DECIDES_FILE, decides };
+      })
       .put(
         "/api/projects/:id/decides",
         {
@@ -710,31 +781,32 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
           }),
         },
-        ({ params, body }) =>
-          answered(async () => {
-            known(params.id);
-            const fleet = db.fleet();
-            knownKinds(fleet, Object.keys(body.routes));
-            knownMembers(
-              fleet,
-              Object.values(body.routes).filter(
-                (id): id is string => id !== null
-              )
-            );
-            await writeFolderFile(
-              params.id,
-              DECIDES_FILE,
-              await projectFile(params.id, fleet, body.routes),
-              { author: YOU, message: body.message }
-            );
-            return {
-              file: DECIDES_FILE,
-              decides: await decidesTable(
-                { projectId: params.id, areaId: areaOf(params.id) },
-                db.fleet()
-              ),
-            };
-          })
+        async ({ params, body }) => {
+          const fleet = db.fleet();
+          const unknown =
+            unknownProject(params.id) ?? unknownRoutes(fleet, body.routes);
+          if (unknown) {
+            return unknown;
+          }
+          const file = await projectFile(params.id, fleet, body.routes);
+          if (file instanceof ElysiaStatus) {
+            return file;
+          }
+          const written = await writeFolderFile(params.id, DECIDES_FILE, file, {
+            author: YOU,
+            message: body.message,
+          });
+          if (written instanceof ElysiaStatus) {
+            return written;
+          }
+          const decides = await decidesTable(
+            { projectId: params.id, areaId: areaOf(params.id) },
+            db.fleet()
+          );
+          return decides instanceof ElysiaStatus
+            ? decides
+            : { file: DECIDES_FILE, decides };
+        }
       )
   );
 };

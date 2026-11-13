@@ -20,6 +20,7 @@ import {
   type WorkspaceChanges,
   type WorkspaceConflict,
 } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { LandingPhase } from "./db/schema";
@@ -53,7 +54,6 @@ import { CommandStopped, WouldWait } from "./machine-pause";
 import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
-  type FolderCommits,
   projectRoot,
   writeFolderFiles,
 } from "./project-folder";
@@ -1410,12 +1410,13 @@ export const createLandingRun = ({
   /**
    * The item's outputs, declared and in `$TMPDIR/outputs/`, read from its
    * workspace and written into its project's folder under its assets folder
-   * in one commit (project-folder.ts); null when there are none.
+   * in one commit (project-folder.ts); null when there are none; the
+   * folder's refusal of the commit.
    */
   const copyOutputs = async (
     workspace: WorkspaceRow,
     item: WorkItemRow & { projectId: string }
-  ): Promise<FolderCommits | null> => {
+  ) => {
     const folder = outputsFolder(item);
     const files: { path: string; content: Uint8Array }[] = [];
     for (const output of item.outputs ?? []) {
@@ -1452,27 +1453,35 @@ export const createLandingRun = ({
         : { ok: true, line: "", paths: [] };
     }
     const folder = outputsFolder(item);
+    const uncollected = (reason: string) => ({
+      ok: false,
+      line: `\n\nOutputs not collected into ${folder}/: ${reason}`,
+      paths: [],
+    });
     try {
       const written = await copyOutputs(workspace, { ...item, projectId });
       if (!written) {
         return { ok: true, line: "", paths: [] };
       }
+      if (written instanceof ElysiaStatus) {
+        return uncollected(written.response.detail);
+      }
       // Absolute, as the project's workspaces on the hub's machine read them
       // (core workspace-policy.ts `projectFolder`); a delegate on any machine
       // reads them by the folder path with `folder_read`.
       const root = projectRoot(projectId);
+      if (root instanceof ElysiaStatus) {
+        return uncollected(root.response.detail);
+      }
       return {
         ok: true,
         paths: written.paths,
         line: `\n\nOutputs, copied into the project's folder ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}, readable by the project's delegates (on the hub's machine at these paths, on any machine with folder_read and the path after ${root}/):\n${written.paths.map((path) => `- ${root}/${path}`).join("\n")}`,
       };
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      return {
-        ok: false,
-        line: `\n\nOutputs not collected into ${folder}/: ${reason}`,
-        paths: [],
-      };
+      return uncollected(
+        error instanceof Error ? error.message : String(error)
+      );
     }
   };
   /**
@@ -1640,6 +1649,11 @@ export const createLandingRun = ({
       return "Not shipped: only work that lands on main ships, and this item put nothing there.";
     }
     const ship = item.projectId ? await projectShip(item.projectId) : undefined;
+    if (ship instanceof ElysiaStatus) {
+      // The landing's failure, as its other failures are thrown: its words
+      // are what finish_item answers.
+      throw new Error(ship.response.detail);
+    }
     if (!(ship && item.projectId)) {
       return `Not shipped: this project's ${GATE_FILE} declares no Ship: command, so the hub has nothing to ship it with. The nightly ships it.`;
     }

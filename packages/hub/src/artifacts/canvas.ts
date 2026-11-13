@@ -29,10 +29,12 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
 import { injectOverlay } from "@cawco/preview/proxy";
+import { problem } from "elysia";
+import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
+
 import { type ArtifactDocs, elementsOf } from "./docs";
-import { ArtifactRefusal } from "./refusals";
 
 /**
  * A canvas's host page, served by the hub as a page is: the page with the
@@ -66,7 +68,10 @@ export async function serveCanvas(
   const file = pathname.startsWith(CANVAS_ASSETS)
     ? await canvasHostFile(pathname.slice(CANVAS_ASSETS.length))
     : null;
-  return file ?? new Response("Not found", { status: 404 });
+  return (
+    file ??
+    problemResponse({ status: 404, code: "not-found", detail: "Not found" })
+  );
 }
 
 /** The canvas's elements as their entries hold them, in scene order. */
@@ -179,9 +184,12 @@ export const convertOnScreen = async (
   artifactId: string,
   kind: CanvasRequestKind,
   payload: CanvasRequestPayload
-): Promise<string[]> => {
+) => {
   if (docs.screens(artifactId) === 0) {
-    throw new ArtifactRefusal(503, NO_SCREEN);
+    return problem(503, {
+      code: "artifact-canvas-no-screen",
+      detail: NO_SCREEN,
+    });
   }
   const id = crypto.randomUUID();
   const doc = docs.doc(artifactId);
@@ -218,18 +226,18 @@ export const convertOnScreen = async (
         result = drawn.value;
         break;
       case "unanswered":
-        throw new ArtifactRefusal(
-          504,
-          `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`
-        );
+        return problem(504, {
+          code: "artifact-canvas-undrawn",
+          detail: `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`,
+        });
       default:
         unhandled("read", drawn);
     }
     if ("error" in result) {
-      throw new ArtifactRefusal(
-        422,
-        `The canvas wasn't changed: ${result.error} Fix it, then try again.`
-      );
+      return problem(422, {
+        code: "artifact-canvas-unconverted",
+        detail: `The canvas wasn't changed: ${result.error} Fix it, then try again.`,
+      });
     }
     return result.ids;
   } finally {

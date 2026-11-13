@@ -2,10 +2,11 @@
  * Work items and the landing gate: starting, waiting on, finishing and reading them.
  */
 
-import { Elysia, t, ValidationError } from "elysia";
+import { Elysia, problem, t, ValidationError } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { FolderRefusal } from "../project-folder";
+import { ProjectRefusal } from "../project-refusal";
+
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
 import { workItemCalls } from "../work-item-calls";
@@ -13,8 +14,10 @@ import {
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
   WorkItemRefusal,
+  workItemProblem,
 } from "../work-item-state";
 import { SESSION_TITLE_DESCRIPTION } from "../work-items";
+import { workItemOut } from "../work-out";
 import { harnessSchema } from "./harness-schema";
 import { sessionCallerRefusal } from "./session-caller";
 
@@ -72,19 +75,28 @@ export const workItemRoutes = (
             t.Object({ replacedBy: t.String({ minLength: 1 }) }),
           ]),
         },
-        ({ params, body, status }) => {
+        ({ params, body }) => {
           const why = "reason" in body ? { reason: body.reason.trim() } : body;
           if ("reason" in why && !why.reason) {
-            return status(400, "Say why it is no longer owed.");
+            return problem(400, {
+              code: "say-why-no-longer",
+              detail: "Say why it is no longer owed.",
+            });
           }
           try {
             const item = workItems.dismiss(params.id, why);
-            return item ?? status(404, `no work item ${params.id}`);
-          } catch (error) {
-            return status(
-              409,
-              error instanceof Error ? error.message : String(error)
+            return (
+              item ??
+              problem(404, {
+                code: "no-work-item",
+                detail: `no work item ${params.id}`,
+              })
             );
+          } catch (error) {
+            return problem(409, {
+              code: "work-item-not-dismissed",
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
         }
       )
@@ -92,15 +104,19 @@ export const workItemRoutes = (
       // session, through the one send path, which reopens the same item once
       // its process reads it (workItems.reopen). Answers when the send has
       // been read (the item running again) or has failed, with why.
-      .post("/api/work-items/:id/retry", async ({ params, status }) => {
+      .post("/api/work-items/:id/retry", async ({ params }) => {
         const item = workItems.item(params.id);
         if (!item) {
-          return status(404, `no work item ${params.id}`);
+          return problem(404, {
+            code: "no-work-item",
+            detail: `no work item ${params.id}`,
+          });
         }
         const refused = await retryFromTray(item);
         return refused
-          ? status(409, refused)
-          : (workItems.summary(item.id) ?? status(404, "gone"));
+          ? problem(409, { code: "work-item-not-retried", detail: refused })
+          : (workItems.summary(item.id) ??
+              problem(404, { code: "no-work-item", detail: "gone" }));
       })
       // Delegation: one work item, in a new workspace or as the follow-up in
       // an existing one. The hub validates, files and spawns it all here —
@@ -139,7 +155,7 @@ export const workItemRoutes = (
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.
-          error({ error, status }) {
+          error({ error }) {
             if (error instanceof ValidationError) {
               const first = firstValidationIssue(error);
               // A missing field has no path of its own; its name is in params.
@@ -147,23 +163,23 @@ export const workItemRoutes = (
                 first?.params?.requiredProperties?.[0] ??
                 first?.path.slice(1) ??
                 "";
-              return status(
-                400,
-                field === "title"
-                  ? `title is required: ${SESSION_TITLE_DESCRIPTION}`
-                  : `${field || "body"}: ${first?.message ?? error.message}`
-              );
+              return problem(400, {
+                code: "title-required",
+                detail:
+                  field === "title"
+                    ? `title is required: ${SESSION_TITLE_DESCRIPTION}`
+                    : `${field || "body"}: ${first?.message ?? error.message}`,
+              });
             }
           },
         },
-        async ({ body, request, status, server }) => {
+        async ({ body, request, server }) => {
           server?.timeout(request, 0);
           const stranger = sessionCallerRefusal(
             identities,
             request,
             body.parentInstanceId,
-            "Session credential does not belong to the work item's parent",
-            status
+            "Session credential does not belong to the work item's parent"
           );
           if (stranger !== undefined) {
             return stranger;
@@ -175,11 +191,12 @@ export const workItemRoutes = (
               error instanceof Error ? error.message : String(error);
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
-            return status(
-              error instanceof WorkItemRefusal || error instanceof FolderRefusal
+            return problem(
+              error instanceof WorkItemRefusal ||
+                error instanceof ProjectRefusal
                 ? error.status
                 : 502,
-              message
+              { code: "work-item-refused", detail: message }
             );
           }
         }
@@ -199,19 +216,21 @@ export const workItemRoutes = (
             },
             { additionalProperties: false }
           ),
-          error({ error, status }) {
+          error({ error }) {
             if (error instanceof ValidationError) {
-              return status(400, WAIT_ITEM_LIMIT);
+              return problem(400, {
+                code: "wait-item-limit",
+                detail: WAIT_ITEM_LIMIT,
+              });
             }
           },
         },
-        ({ body, request, status }) => {
+        ({ body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
             body.instanceId,
-            "Session credential does not belong to the waiting instanceId",
-            status
+            "Session credential does not belong to the waiting instanceId"
           );
           if (stranger !== undefined) {
             return stranger;
@@ -225,10 +244,7 @@ export const workItemRoutes = (
               ),
             };
           } catch (error) {
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              error instanceof Error ? error.message : String(error)
-            );
+            return workItemProblem(error);
           }
         }
       )
@@ -252,13 +268,12 @@ export const workItemRoutes = (
             ship: t.Optional(t.Object({ notes: t.String({ minLength: 1 }) })),
           }),
         },
-        async ({ body, status, request, server }) => {
+        async ({ body, request, server }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
             body.instanceId,
-            "Session credential does not belong to the finishing instanceId",
-            status
+            "Session credential does not belong to the finishing instanceId"
           );
           if (stranger !== undefined) {
             return stranger;
@@ -268,12 +283,7 @@ export const workItemRoutes = (
           try {
             return { text: await workItems.finishItem(instanceId, finished) };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )
@@ -289,13 +299,12 @@ export const workItemRoutes = (
             instanceId: t.String({ minLength: 1 }),
           }),
         },
-        ({ body, request, status }) => {
+        ({ body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
             body.from,
-            "Session credential does not belong to the stop's requester",
-            status
+            "Session credential does not belong to the stop's requester"
           );
           if (stranger !== undefined) {
             return stranger;
@@ -305,7 +314,10 @@ export const workItemRoutes = (
             return calls.stop(body.from, body.instanceId);
           } catch (error) {
             if (error instanceof WorkItemRefusal) {
-              return status(error.status, error.message);
+              return problem(error.status, {
+                code: "work-item-refused",
+                detail: error.message,
+              });
             }
             throw error;
           }
@@ -322,13 +334,12 @@ export const workItemRoutes = (
             target: t.String({ minLength: 1 }),
           }),
         },
-        ({ body, request, status }) => {
+        ({ body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
             body.from,
-            "Session credential does not belong to the withdraw's requester",
-            status
+            "Session credential does not belong to the withdraw's requester"
           );
           if (stranger !== undefined) {
             return stranger;
@@ -336,32 +347,37 @@ export const workItemRoutes = (
           try {
             const text = workItems.withdrawQueued(body.from, body.target);
             return text === undefined
-              ? status(404, `no queued delegate ${body.target}`)
+              ? problem(404, {
+                  code: "no-queued-delegate",
+                  detail: `no queued delegate ${body.target}`,
+                })
               : { text };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )
-      .get("/api/work-items/:id", hidden, ({ params, status }) => {
+      .get("/api/work-items/:id", hidden, ({ params }) => {
         const item = workItems.item(params.id);
-        return item ?? status(404, `no work item ${params.id}`);
+        return item
+          ? workItemOut(item)
+          : problem(404, {
+              code: "no-work-item",
+              detail: `no work item ${params.id}`,
+            });
       })
       // What the item's workspace holds on no remote now (workspaces.ts
       // `unlandedOf`), or why it could not be read: what `stop_delegate`
       // answers its caller about the hold its stop leaves.
-      .get(
-        "/api/work-items/:id/unlanded",
-        hidden,
-        async ({ params, status }) => {
-          const read = await calls.unlandedOf(params.id);
-          return read ?? status(404, `no work item ${params.id}`);
-        }
-      )
+      .get("/api/work-items/:id/unlanded", hidden, async ({ params }) => {
+        const read = await calls.unlandedOf(params.id);
+        return (
+          read ??
+          problem(404, {
+            code: "no-work-item",
+            detail: `no work item ${params.id}`,
+          })
+        );
+      })
   );
 };

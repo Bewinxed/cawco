@@ -20,6 +20,7 @@
 import { ACT_ORIGIN } from "@cawco/core/harness/kinds";
 import { taskLink } from "@cawco/core/references";
 import { noticeWords } from "@cawco/core/words/notices";
+import { ElysiaStatus } from "elysia";
 import type { Caw, YourAct, YourWords } from "./caw";
 import type { DbShape } from "./db";
 import type { TaskEvent, Tasks } from "./tasks";
@@ -129,16 +130,19 @@ export const createTaskInput = ({
     { timer: ReturnType<typeof setTimeout>; written: Written[] }
   >();
 
-  /** Tells the conversation one task's pieces, unless the project's switch is off; what did not go is logged. */
+  /** Tells the conversation one task's pieces, unless the project's switch is off; what did not go is logged; the task's refused read. */
   const send = async (
     projectId: string,
     taskId: string,
     written: Written[]
-  ): Promise<void> => {
+  ) => {
     if (!db.project(projectId)?.hearsTasks) {
       return;
     }
     const task = await tasks.get(projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     const told = await caw.tell(
       projectId,
       inputEvent(projectId, task, written)
@@ -164,10 +168,14 @@ export const createTaskInput = ({
     const written = [...(held?.written ?? []), ...found.written];
     const timer = setTimeout(() => {
       gathering.delete(key);
-      send(event.projectId, found.taskId, written).catch((error: unknown) =>
+      const unsent = (why: string) =>
         console.warn(
-          `[tasks] what you wrote on ${found.taskId} in ${event.projectId} did not reach its conversation: ${error instanceof Error ? error.message : String(error)}`
-        )
+          `[tasks] what you wrote on ${found.taskId} in ${event.projectId} did not reach its conversation: ${why}`
+        );
+      send(event.projectId, found.taskId, written).then(
+        (refused) => refused && unsent(refused.response.detail),
+        (error: unknown) =>
+          unsent(error instanceof Error ? error.message : String(error))
       );
     }, quietMs);
     gathering.set(key, { timer, written });

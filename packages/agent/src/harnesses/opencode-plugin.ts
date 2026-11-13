@@ -754,7 +754,11 @@ export default {
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + held.credential },
         body: JSON.stringify({ name: ${JSON.stringify(OPEN_ITEMS_TOOL)}, arguments: {} }),
       });
-      if (!response.ok) throw new Error("the hub answered " + response.status + ": " + (await response.text().catch(() => "")));
+      if (!response.ok) {
+        // A refusal is the hub's problem: its sentence is its \`detail\`.
+        const problem = await response.json().catch(() => null);
+        throw new Error("the hub answered " + response.status + (typeof problem?.detail === "string" ? ": " + problem.detail : ""));
+      }
       const answer = await response.json();
       const text = (answer.content ?? []).flatMap((part) => (part?.type === "text" ? [part.text] : [])).join("\\n");
       if (answer.isError) throw new Error(text);

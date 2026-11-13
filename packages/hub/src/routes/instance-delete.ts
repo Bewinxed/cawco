@@ -1,8 +1,9 @@
 import type { SessionCustody } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
-import { Elysia } from "elysia";
+import { Elysia, problem } from "elysia";
 import type { HubContext } from "../hub-context";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
+
 import { unreachable } from "../unreachable";
 
 export const instanceDeleteRoutes = ({
@@ -36,16 +37,20 @@ export const instanceDeleteRoutes = ({
     // transcript is there is its machine's to say: the row's key only says
     // one was named once.
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one refusal-checked removal covers live custody, transcript presence, and the persisted end decision
-    .delete("/api/instances/:id", async ({ params, status }) => {
+    .delete("/api/instances/:id", async ({ params }) => {
       const [row] = db.getInstancesByIds([params.id]);
       if (!row) {
-        return status(404, "No session with that id on this hub.");
+        return problem(404, {
+          code: "no-session",
+          detail: "No session with that id on this hub.",
+        });
       }
       if (moves.holds(row.id)) {
-        return status(
-          409,
-          "This session's project is still moving. Cancel the move in its pane instead."
-        );
+        return problem(409, {
+          code: "sessions-project-still-moving",
+          detail:
+            "This session's project is still moving. Cancel the move in its pane instead.",
+        });
       }
       if (
         ["running", "starting"].includes(row.status) ||
@@ -59,7 +64,10 @@ export const instanceDeleteRoutes = ({
         heldSessions.has(row.id) ||
         inCustody.has(row.id)
       ) {
-        return status(409, "This session is still running. Stop it first");
+        return problem(409, {
+          code: "session-still-running-stop",
+          detail: "This session is still running. Stop it first",
+        });
       }
       if (row.sessionId) {
         const stored = await readAgent(
@@ -71,35 +79,37 @@ export const instanceDeleteRoutes = ({
         );
         switch (stored.kind) {
           case "unanswered":
-            return status(
-              409,
-              "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back."
-            );
+            return problem(409, {
+              code: "sessions-machine-not-answering",
+              detail:
+                "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back.",
+            });
           case "answered":
             if (!stored.value.ok) {
-              return status(
-                502,
-                `The machine could not check this session's transcript: ${stored.value.error ?? "no reason given"}`
-              );
+              return problem(502, {
+                code: "machine-could-not-check",
+                detail: `The machine could not check this session's transcript: ${stored.value.error ?? "no reason given"}`,
+              });
             }
             break;
           default:
             throw unreachable(stored);
         }
         if (stored.value.result) {
-          return status(
-            409,
-            "This session has a transcript. Delete the transcript instead."
-          );
+          return problem(409, {
+            code: "session-has-transcript-delete",
+            detail:
+              "This session has a transcript. Delete the transcript instead.",
+          });
         }
       }
       try {
         endSession(row.id, "delete", { kind: "person" });
       } catch (error) {
-        return status(
-          409,
-          error instanceof Error ? error.message : String(error)
-        );
+        return problem(409, {
+          code: "session-not-deleted",
+          detail: error instanceof Error ? error.message : String(error),
+        });
       }
       forgetInstances([row.id]);
       publishInstances(row.machineId);

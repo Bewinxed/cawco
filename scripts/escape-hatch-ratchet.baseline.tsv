@@ -105,8 +105,7 @@ as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/ro
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
 as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
-as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	1
-as-unknown-as	Record<string, unknown>	packages/hub/src/server.ts	1
+as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
@@ -148,8 +147,6 @@ catch-drops-reason	block	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	block	packages/agent/src/keepers.ts	1
 catch-drops-reason	block	packages/agent/src/place-push.ts	2
 catch-drops-reason	block	packages/agent/src/stage-host/host.ts	2
-catch-drops-reason	block	packages/hub/src/artifacts/kinds/canvas.ts	1
-catch-drops-reason	block	packages/hub/src/browser-routes.ts	1
 catch-drops-reason	block	packages/hub/src/fleet-mcp-relay.ts	2
 catch-drops-reason	block	packages/hub/src/ssh-tunnels.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/address/Confetti.svelte	1
@@ -167,7 +164,6 @@ catch-drops-reason	CallExpression	packages/agent/src/keepers.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/provider-accounts.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/session-containers.ts	1
 catch-drops-reason	CallExpression	packages/hub/src/git-remote.ts	1
-catch-drops-reason	CallExpression	packages/hub/src/tasks.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/changes.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/pins.ts	2
 catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
@@ -203,7 +199,7 @@ catch-drops-reason	empty	packages/hub/src/project-stops.ts	1
 catch-drops-reason	empty	packages/hub/src/tailnet-door.ts	1
 catch-drops-reason	empty	packages/sessiond/src/cgroup.ts	2
 catch-drops-reason	empty	packages/sessiond/src/server.ts	1
-catch-drops-reason	noop	packages/hub/src/project-folder.ts	10
+catch-drops-reason	noop	packages/hub/src/project-folder.ts	8
 catch-drops-reason	TemplateExpression	apps/dashboard/src/lib/cawco/preview/pass.ts	1
 empty-catch		apps/dashboard/serve.js	1
 empty-catch		apps/dashboard/src/lib/cawco/blocks/arrangement.svelte.ts	1
@@ -428,11 +424,8 @@ suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/work
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte	1
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/platform/motion/spring.ts	4
 suppression	biome-ignore lint/style/useErrorCause	packages/core/src/state-file.ts	1
-suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/artifacts/access.ts	1
-suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/browsers.ts	1
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/connections.ts	5
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/fleet-mcp.ts	2
-suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/project-delete.ts	1
 suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/lib/cawco/spawnPrefs.svelte.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/agent/src/redaction.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/hooks.ts	2
@@ -465,7 +458,6 @@ suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/preview/src
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/preview/src/overlay/page.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/lint/switch-exhaustiveness.ts	1
 suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/core/src/process-identity.ts	1
-suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/hub/src/areas.ts	1
 suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/hub/src/project-edit.ts	1
 suppression	biome-ignore lint/suspicious/noDuplicateSelectors	apps/dashboard/src/design.css	2
 suppression	biome-ignore lint/suspicious/noDuplicateSelectors	apps/dashboard/src/lib/cawco/spawn/ns-theme.css	3
