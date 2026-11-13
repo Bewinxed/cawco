@@ -106,6 +106,10 @@ import type {
   V2Event,
 } from "@opencode/client";
 import { z } from "zod";
+import type {
+  OpencodeAccountsHost,
+  OpencodeOwnCredential,
+} from "../agent-ports";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import { gitIn, infoExcludeOf } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
@@ -148,7 +152,6 @@ import { gaugeTables } from "../memory";
 import { probeStarted } from "../probe-count";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import {
-  type OpencodeOwnCredential,
   onAccountCredential,
   opencodeAccountEnv,
   opencodeCredentialsOf,
@@ -157,7 +160,6 @@ import {
   opencodeOwnIntegrations,
   opencodeOwnSignInTypes,
   readHeld,
-  setOpencodeAccountsHost,
 } from "../provider-accounts";
 import { withAccountReads } from "../provider-usage";
 import { fenced } from "../restart";
@@ -195,9 +197,10 @@ import {
   opencodeModels,
 } from "./opencode-models";
 import {
-  buildPluginSource,
+  buildPlugin,
   OPENCODE_DIR,
   OPENCODE_QUIET_DIR,
+  pluginSource,
   prunePlugins,
   retireV1Plugins,
   writePlugin,
@@ -339,7 +342,7 @@ const serverLaunch = async (
     },
   },
   flags: {
-    [GATE_FORM_ENV]: gateForm("opencode", buildPluginSource()),
+    [GATE_FORM_ENV]: gateForm("opencode", pluginSource(await buildPlugin())),
     [PLUGIN_FLAG]: pluginDir,
     [CONFIG_FLAG]: `${diskHash ?? "none"}/${createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 16)}`,
   },
@@ -1905,10 +1908,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   readonly #views = new Map<string, ServerSlot>();
   #recorded: Promise<void> | null = null;
   /** An account's server being replaced or verified by the config watcher: one at a time. */
-  #accountApplyingValue = false;
-  get #accountApplying(): boolean {
-    return this.#accountApplyingValue;
-  }
+  #accountApplying: boolean;
   #accountCatalogs: Record<string, ModelInfo[]> | undefined;
   /** The 1.x servers ended and the 1.x database kept, once, before the first 2.0 server starts. */
   #cutover: Promise<void> | null = null;
@@ -2125,10 +2125,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     string,
     { parent: OpencodeSession; callID: string; identity: ServerIdentity }
   >();
-  #disposedValue = false;
-  get #disposed(): boolean {
-    return this.#disposedValue;
-  }
+  #disposed: boolean;
   /**
    * The one subscription loop each server generation has, by the controller
    * that ends it. A loop runs only while it is the one on record here:
@@ -2147,7 +2144,14 @@ class OpencodeHarness implements Harness<"opencode"> {
   /** Session moves between servers in flight, by OpenCode session id: one at a time each. */
   readonly #moves = new Map<string, Promise<void>>();
 
+  /** What provider accounts reach OpenCode's own sign-ins and servers through (daemon.ts hands it to them). */
+  readonly accountsHost: OpencodeAccountsHost;
+
   constructor() {
+    this.#accountApplying = false;
+    this.#disposed = false;
+    this.#converging = false;
+    this.#passReadsSpentSaid = false;
     gaugeTables("opencode", {
       slots: this.#accounts,
       sessions: this.#sessions,
@@ -2181,7 +2185,7 @@ class OpencodeHarness implements Harness<"opencode"> {
         );
       }
     });
-    setOpencodeAccountsHost({
+    this.accountsHost = {
       carryOut: (account) => this.#carryOut(account),
       ownCredentials: () => ownCredentials(),
       removeOwnCredential: async (id) => {
@@ -2193,7 +2197,7 @@ class OpencodeHarness implements Harness<"opencode"> {
           `the removal of credential ${id}`
         );
       },
-    });
+    };
   }
 
   /**
@@ -2239,10 +2243,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   #checkingPublication = false;
   #retryConfigAt = 0;
   /** Whether this agent keeps the server converged; see {@link readsThisConfig}. */
-  #convergingValue = false;
-  get #converging(): boolean {
-    return this.#convergingValue;
-  }
+  #converging: boolean;
 
   /** Lock held while a config change is applied: spawns queue behind it. */
   #applyGate: { promise: Promise<void>; resolve: () => void } | null = null;
@@ -2776,7 +2777,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (this.#accountApplying || this.#applyGate || fenced()) {
       return;
     }
-    this.#accountApplyingValue = true;
+    this.#accountApplying = true;
     try {
       for (const slot of [
         ...this.#accounts.values(),
@@ -2809,7 +2810,7 @@ class OpencodeHarness implements Harness<"opencode"> {
         }
       }
     } finally {
-      this.#accountApplyingValue = false;
+      this.#accountApplying = false;
     }
   }
 
@@ -4087,7 +4088,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       this.#desiredHash = await this.#hashConfig();
       this.#desiredVersion = version;
     }
-    this.#convergingValue = true;
+    this.#converging = true;
     this.#startConfigWatcher();
   }
 
@@ -4108,7 +4109,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (!this.#ready) {
       // A spawn after a dispose is a revival: the adapter is a module
       // singleton, the server it attaches to outlived the teardown.
-      this.#disposedValue = false;
+      this.#disposed = false;
       this.#machine.starting = true;
       this.#ready = (async () => {
         await this.#prepareStart();
@@ -4138,7 +4139,7 @@ class OpencodeHarness implements Harness<"opencode"> {
           this.#verifiedProcId !== identity.procId &&
           (await isMachineAgent())
         ) {
-          this.#convergingValue = await readsThisConfig(client);
+          this.#converging = await readsThisConfig(client);
         }
         if (this.#converging && this.#verifiedProcId !== identity.procId) {
           const origin = `active generation ${identity.procId}/${identity.pid}`;
@@ -4634,7 +4635,8 @@ class OpencodeHarness implements Harness<"opencode"> {
   #pluginWrite: Promise<string> | null = null;
 
   #plugin(): Promise<string> {
-    this.#pluginWrite ??= writePlugin(buildPluginSource())
+    this.#pluginWrite ??= buildPlugin()
+      .then(writePlugin)
       .then((dir) => {
         this.#pluginDir = dir;
         return dir;
@@ -6394,8 +6396,8 @@ class OpencodeHarness implements Harness<"opencode"> {
    */
   // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous
   async dispose(): Promise<void> {
-    this.#disposedValue = true;
-    this.#convergingValue = false;
+    this.#disposed = true;
+    this.#converging = false;
     this.#lifetime.abort();
     this.#lifetime = new AbortController();
     this.#stopConfigWatcher();
@@ -6724,10 +6726,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   }
 
   /** Whether the end of the passes' reads was said for the backoff running now ({@link #mendLater}). */
-  #passReadsSpentSaidValue = false;
-  get #passReadsSpentSaid(): boolean {
-    return this.#passReadsSpentSaidValue;
-  }
+  #passReadsSpentSaid: boolean;
 
   /**
    * Schedules the next pass ({@link #mendFleetMcp}): `restart` from the first
@@ -6744,7 +6743,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     if (restart) {
       this.#mendAttempt = 0;
-      this.#passReadsSpentSaidValue = false;
+      this.#passReadsSpentSaid = false;
       if (this.#mendTimer) {
         clearTimeout(this.#mendTimer);
         this.#mendTimer = null;
@@ -6755,7 +6754,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     if (this.#mendAttempt >= MCP_PASS_READS && this.#livePlaces().size === 0) {
       if (!this.#passReadsSpentSaid) {
-        this.#passReadsSpentSaidValue = true;
+        this.#passReadsSpentSaid = true;
         console.info(
           `[opencode] fleet MCP pass: ${MCP_PASS_READS} passes read a fleet server unsettled and no session runs here; its reading stands until the fleet's servers or OpenCode's generation change`
         );
@@ -7321,4 +7320,6 @@ function slotName(slot: ServerSlot): string {
     : `account ${slot.account}'s`;
 }
 
-export const opencodeHarness: Harness<"opencode"> = new OpencodeHarness();
+const harness = new OpencodeHarness();
+export const opencodeHarness: Harness<"opencode"> = harness;
+export const opencodeAccounts = harness.accountsHost;

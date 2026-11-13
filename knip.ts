@@ -318,6 +318,8 @@ export default {
         "src/canvas-host/host.tsx",
         // The file viewer's Bun.build entrypoint: packages/core/src/file-viewer.ts `buildViewerScript`.
         "src/file-viewer/viewer.ts",
+        // CawCo's OpenCode plugin, a Bun.build entrypoint (src/harnesses/opencode-plugin.ts, scripts/build-binary.ts) that OpenCode loads from a directory.
+        "src/harnesses/opencode-plugin-module.ts",
       ],
     },
     "packages/preview": {

@@ -30,7 +30,7 @@
  *   checkout's story file ({@link copyBack}), in the same turn as the
  *   mirror, so neither undoes the other;
  * - filed with the hub as a workspace of the stage kind on each use
- *   ({@link setStageCloneSink}), so the hub's retire sweep settles it like
+ *   ({@link AgentPorts.stageClone}), so the hub's retire sweep settles it like
  *   any workspace once its stage sleeps: what it holds that the checkout
  *   lacks keeps it ({@link sameAsCheckout} names what it does not), and the
  *   next sheet cuts it again.
@@ -64,12 +64,13 @@ import {
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { STAGE_CLONE_GIT_MS, type StageCloneFrame } from "@cawco/core/stage";
+import { STAGE_CLONE_GIT_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
+import type { AgentPorts } from "./agent-ports";
 import { stopWorkspaceBoundary } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
 import { expandHome } from "./fs";
@@ -108,13 +109,6 @@ const KEPT = "stage-clone.json";
 /** Whether workspace `id` is a place's stage clone this machine cut. */
 export const isStageClone = (id: string): boolean =>
   existsSync(join(workspaceStateDir(id), KEPT));
-
-let filed: (frame: StageCloneFrame) => void = () => undefined;
-
-/** Where each clone's word goes: the daemon's socket to the hub, which files it as a workspace. */
-export const setStageCloneSink = (send: (frame: StageCloneFrame) => void) => {
-  filed = send;
-};
 
 /** Each clone's cut, mirror or write-back under way: one at a time per clone. */
 const turns = new Map<string, Promise<unknown>>();
@@ -497,9 +491,12 @@ const recordedPath = async (id: string): Promise<string | undefined> =>
  * Place `place`'s stage clone, cut when it has none whole (or one of an
  * earlier form, or of another repository), and brought in step with the
  * checkout: where its stage runs. The hub hears of it each time
- * ({@link setStageCloneSink}).
+ * ({@link AgentPorts.stageClone}).
  */
-export const stageCloneOf = (place: WorkspaceRef): Promise<StageClone> => {
+export const stageCloneOf = (
+  place: WorkspaceRef,
+  { stageClone }: Pick<AgentPorts, "stageClone">
+): Promise<StageClone> => {
   const id = stageCloneId(place.id);
   return inCloneTurn(id, async () => {
     const repo = await repoOf(place.path);
@@ -522,7 +519,7 @@ export const stageCloneOf = (place: WorkspaceRef): Promise<StageClone> => {
       copied.delete(id);
       await cut(boundary, repo, place);
     }
-    filed({
+    stageClone({
       kind: "stage-clone",
       id,
       place: place.id,
