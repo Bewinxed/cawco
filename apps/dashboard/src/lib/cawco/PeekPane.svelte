@@ -58,29 +58,13 @@
     UNKNOWN_LABEL,
   } from "./activity";
   import ContextMeter from "./ContextMeter.svelte";
-  import {
-    answeredOr,
-    cawco,
-    isFailed,
-    isResumable,
-    isStale,
-    openSession,
-    type PendingPermission,
-    type PermissionAnswer,
-    permissionAnswer,
-    readTranscript,
-    refreshContext,
-    setPeeked,
-    showContext,
-    submitCommand,
-    takeOverBrowser,
-  } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
+  import { answeredOr } from "./hub/control";
   import { conversationHref } from "./links";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
-  import { planProgress } from "./plan/PlanPane.svelte";
-  import PlanTree, { stepsTree, todosTree } from "./plan/PlanTree.svelte";
+  import { planProgress, stepsTree, todosTree } from "./plan";
+  import PlanTree from "./plan/PlanTree.svelte";
   import RowFault from "./RowFault.svelte";
   import { refusals } from "./refusals.svelte";
   import SessionMark from "./SessionMark.svelte";
@@ -88,6 +72,27 @@
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
+  import {
+    asksStore,
+    type PermissionAnswer,
+    permissionAnswer,
+  } from "./stores/asks.svelte";
+  import {
+    boardStore,
+    isFailed,
+    isResumable,
+    isStale,
+  } from "./stores/board.svelte";
+  import { takeOverBrowser } from "./stores/browsers.svelte";
+  import { submitCommand } from "./stores/commands.svelte";
+  import { plansStore } from "./stores/plans.svelte";
+  import { refreshContext, showContext } from "./stores/session-detail.svelte";
+  import {
+    type PendingPermission,
+    sessionsStore,
+  } from "./stores/sessions.svelte";
+  import { openSession, setPeeked } from "./stores/subscriptions.svelte";
+  import { readTranscript } from "./stores/transcript-reads.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
@@ -118,15 +123,17 @@
     const id = target.viewId;
     untrack(() => {
       openSession(id);
-      const held = cawco.session(id);
+      const held = sessionsStore.session(id);
       if (!(held?.initialized && held.messages.length > 0)) {
         detach(readTranscript(id), "readTranscript");
       }
     });
   });
 
-  const session = $derived(cawco.session(target.viewId) ?? null);
-  const row = $derived(cawco.instanceIndex.byId.get(target.viewId) ?? null);
+  const session = $derived(sessionsStore.session(target.viewId) ?? null);
+  const row = $derived(
+    boardStore.instanceIndex.byId.get(target.viewId) ?? null
+  );
 
   const failed = $derived(row ? isFailed(row) : false);
   const sleeping = $derived(row ? isResumable(row) : false);
@@ -135,7 +142,7 @@
   const running = $derived(
     row?.status === "running" || row?.status === "starting"
   );
-  const activity = $derived(cawco.activityOf(target.viewId));
+  const activity = $derived(asksStore.activityOf(target.viewId));
   /** What was asked of it and is on its way, or did not go (session-acts). */
   const act = $derived(row ? sessionAct(row.id) : undefined);
   /** The state word's status ink: failed in crimson, needs you in spark's. */
@@ -166,7 +173,7 @@
     }
     return ACTIVITY_LABEL[activity];
   });
-  const tool = $derived(cawco.currentToolOf(target.viewId));
+  const tool = $derived(asksStore.currentToolOf(target.viewId));
   /**
    * A tool by the name the transcript gives it (@cawco/core `describeTool`'s
    * `tool-name` rule: an MCP tool's own name past its server, in words), not
@@ -178,7 +185,7 @@
   const machine = $derived.by(() => {
     const machineId = session?.machineId || row?.machineId || "";
     return (
-      cawco.machines.find((entry) => entry.machineId === machineId) ?? null
+      boardStore.machines.find((entry) => entry.machineId === machineId) ?? null
     );
   });
 
@@ -219,7 +226,7 @@
       forked,
       "whether the fork started is not known"
     );
-    await goto(conversationHref(instanceId, cawco.instanceIndex));
+    await goto(conversationHref(instanceId, boardStore.instanceIndex));
   }
 
   /**
@@ -241,7 +248,7 @@
     untrack(() => detach(refreshContext(id, machineId), "refreshContext"));
   });
   // The meter draws the peeked session's reading while it runs: its turns'
-  // ends read it again only while one does (client.svelte.ts `showContext`).
+  // ends read it again only while one does (stores/session-detail.svelte.ts `showContext`).
   $effect(() => {
     const id = target.viewId;
     if (running) {
@@ -251,7 +258,7 @@
 
   // The hub's plan, live: a peeked session is streamed (`setPeeked`), and the
   // hub sends its streamers the plan whole on subscribe, then its deltas.
-  const plan = $derived(cawco.planOf(target.viewId));
+  const plan = $derived(plansStore.planOf(target.viewId));
   const progress = $derived(plan ? planProgress(plan) : null);
   /** Its steps, else (a task attempt that wrote none) its task's to-dos. */
   const planRows = $derived(

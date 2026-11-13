@@ -33,13 +33,13 @@
   } from "@cawco/core/find";
   import type { SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
   import {
     askPlacesWith,
     findIn,
   } from "#lib/cawco/find/conversation-find.svelte.js";
   import type { Read } from "#lib/cawco/find/find-client.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -115,7 +115,7 @@
     session.harness = "claude";
     session.messages = history(id, id === MAIN ? SAID : OTHER);
     session.initialized = true;
-    debug.state.sessions[id] = session;
+    debug.sessionsState.sessions[id] = session;
     debug.frame({
       kind: "pulse",
       instanceId: id,
@@ -198,7 +198,7 @@
     find.leave();
     find.whose = "all";
     if (findState === "live") {
-      const session = debug.state.sessions[MAIN];
+      const session = debug.sessionsState.sessions[MAIN];
       session.busy = true;
       session.streaming =
         "The push probe passes on Wi-Fi. On the switch to cellular its socket closed with ECONNRESET as the phone left Wi-Fi, and the relay retried";

@@ -1,5 +1,9 @@
 <script lang="ts" module>
-  import { QUESTION_STANDING } from "../question";
+  import {
+    QUESTION_STANDING,
+    questionAnswer,
+    questionDismissal,
+  } from "../question";
 
   /**
    * An answer (or a dismissal) given from inside a question's card: the
@@ -77,18 +81,14 @@
   } from "#lib/icons.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
-  import {
-    cawco,
-    commandRecord,
-    isStale,
-    type PendingPermission,
-    permissionAnswer,
-    takeOverBrowser,
-  } from "../client.svelte";
   import { hubSeam } from "../hub-live";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
-  import { questionAnswer, questionDismissal } from "../question";
+  import { permissionAnswer } from "../stores/asks.svelte";
+  import { boardStore, isStale } from "../stores/board.svelte";
+  import { takeOverBrowser } from "../stores/browsers.svelte";
+  import { commandRecord } from "../stores/ledger.svelte";
+  import type { PendingPermission } from "../stores/sessions.svelte";
   import SetChangeTable from "./SetChangeTable.svelte";
 
   let {
@@ -515,7 +515,7 @@
   let pressed = $state<Choice | null>(null);
   /** A take-over on its way (`takeOverBrowser`), which goes out as no command. */
   let taking = $state(false);
-  const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
+  const row = $derived(boardStore.instanceIndex.byId.get(request.instanceId));
   /** The session's machine is offline: the ask stands, its answer waits. */
   const offline = $derived(row ? isStale(row) : false);
   /** The hub as this card reads it: the live client's, or a states file's stand-in. */

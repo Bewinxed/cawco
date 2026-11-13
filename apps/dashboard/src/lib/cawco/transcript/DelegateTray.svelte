@@ -5,7 +5,7 @@
   /**
    * The delegate tray: one compact chip per child this session has working
    * (its delegates, and the sessions it started with `start_session`,
-   * client.svelte.ts `trayOf`), in a row standing on the composer, so the
+   * stores/delegates.svelte.ts `trayOf`), in a row standing on the composer, so the
    * reader scrolled far from a child's card still sees what it is doing. A
    * chip enters the first time its card leaves the view (tray.svelte.ts),
    * shows what the child is doing in words and one mark, opens a panel with
@@ -67,12 +67,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
   import { stopWords } from "../accounts/switch.svelte";
-  import {
-    cawco,
-    dismissWorkItem,
-    retryWorkItem,
-    type TrayChild,
-  } from "../client.svelte";
+
   import { age } from "../find/find-rows";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
@@ -80,6 +75,10 @@
   import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
   import { sessionPlace } from "../session-names.svelte";
+  import { boardStore } from "../stores/board.svelte";
+  import { delegatesStore, type TrayChild } from "../stores/delegates.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
+  import { dismissWorkItem, retryWorkItem } from "../stores/work-items.svelte";
   import { composerLayerOf } from "./composer-layer.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { layoutScale } from "./grown";
@@ -161,10 +160,10 @@
   /** Delegates that existed before this tray: their chips are simply there. */
   const mountedAt = Date.now();
 
-  const items = $derived(cawco.trayOf(parentId));
+  const items = $derived(delegatesStore.trayOf(parentId));
 
   const toChip = (item: TrayChild): Chip => {
-    const pending = cawco.session(item.instanceId)?.pending ?? [];
+    const pending = sessionsStore.session(item.instanceId)?.pending ?? [];
     const own = pending.filter((each) => !each.routedTo);
     const routed = pending.filter((each) => each.routedTo === "parent");
     // Its own cards in Needs you wait on you as its own asks do (core
@@ -321,7 +320,7 @@
 
   /** The delegate's newest report in this session's transcript. */
   const reportOf = (item: TrayChild) =>
-    (cawco.session(parentId)?.messages ?? []).findLast(
+    (sessionsStore.session(parentId)?.messages ?? []).findLast(
       (m) =>
         m.type === "user.peer" &&
         m.metadata?.reportKind !== undefined &&
@@ -644,7 +643,7 @@
     // Its account's limit stopped it: where or when it continues, by itself,
     // and the way out its row says (switch.svelte.ts `stopWords`).
     if (chip.item.stalled) {
-      const row = cawco.instanceIndex.byId.get(chip.item.instanceId);
+      const row = boardStore.instanceIndex.byId.get(chip.item.instanceId);
       return (row && stopWords(row)) ?? chip.item.stalled;
     }
     switch (chip.tone) {
@@ -667,7 +666,7 @@
   const questionWords = (n: number) =>
     n === 1 ? "1 question" : `${n} questions`;
   const hrefOf = (item: TrayChild) =>
-    conversationHref(item.instanceId, cawco.instanceIndex);
+    conversationHref(item.instanceId, boardStore.instanceIndex);
 
   /* ---- what the tray says out loud ------------------------------------ */
 
