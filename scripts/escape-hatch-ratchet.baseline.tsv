@@ -12,6 +12,23 @@ as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; projectsStat
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; sessionsState: { s	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
 as-unknown-as	{ __cawcoDebug: { sessionsState: { sessions: Record<string, SessionState	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: Bench }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
+as-unknown-as	{ __answers: unknown[] }	scripts/probe-kit/specs/graph-stage.ts	5
+as-unknown-as	{ __boot: { at: Record<string, number>; held: [number, number][]; styles	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __boot: typeof clock }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __boot?: { at: Record<string, number> } }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __calls?: number; __frames?: Clock["longFrames"]; __long?: [number, nu	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __canvas: Element | null }	scripts/probe-kit/specs/composer-canvas.ts	5
+as-unknown-as	{ __cawcoCanvas: { reports: number } }	scripts/probe-kit/specs/web/stage-focus.ts	1
+as-unknown-as	{ __cawcoCanvas: { reports: number; sweepAt: unknown }; }	scripts/probe-kit/specs/web/stage-focus.ts	1
+as-unknown-as	{ __cawcoCanvas?: { pose?: (key: string) => Promise<{ h: number; w: numb	scripts/probe-kit/specs/stage-width.ts	1
+as-unknown-as	{ __cawcoCanvas?: { report: { sections: { frames: { parts: { file: strin	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __cawcoCanvas?: { report: RenderReport | null } }	scripts/probe-kit/specs/preview-burst.ts	1
+as-unknown-as	{ __cawcoCanvas?: { report: RenderReport | null }; }	scripts/probe-kit/specs/preview-burst.ts	1
+as-unknown-as	{ __cawcoCanvas?: { report?: { sections: { file: string; frames: { state	scripts/probe-kit/specs/sheet-weight.ts	1
+as-unknown-as	{ __cawcoCanvas?: { report?: { sections: { file: string; frames: Frame[]	scripts/probe-kit/specs/composer-weight.ts	2
+as-unknown-as	{ __cawcoCanvas?: { report?: { sections: { frames: { state: string }[] }	scripts/probe-kit/specs/canvas-preload.ts	1
+as-unknown-as	{ __cawcoCanvas?: { reports: number } }	scripts/probe-kit/specs/sheet-weight.ts	1
+as-unknown-as	{ __cawcoCanvas?: { swept?: boolean }; }	scripts/probe-kit/specs/web/stage-focus.ts	1
 as-unknown-as	{ __cawcoDeliver: (data: unknown) => void }	packages/agent/src/chromium.ts	1
 as-unknown-as	{ __cawcoGraph: CanvasGraph }	packages/agent/src/stage-host/canvas/embed.ts	1
 as-unknown-as	{ __cawcoGraph?: CanvasGraph }	packages/agent/src/stage-host/canvas/stage.ts	1
@@ -19,6 +36,144 @@ as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overla
 as-unknown-as	{ __find: unknown }	apps/dashboard/src/routes/(app)/motion/find/+page.svelte	1
 as-unknown-as	{ __rbReal?: Real }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-unknown-as	{ __skeletonBench: { load: () => void; wait: () => void }; }	apps/dashboard/src/routes/(app)/motion/skeleton/+page.svelte	1
+as-unknown-as	{ __cawWell: Set<string> }	scripts/probe-kit/specs/setup-send.ts	2
+as-unknown-as	{ __census: () => Census[] }	scripts/probe-kit/specs/canvas-cost.ts	3
+as-unknown-as	{ __changed: Changed[] }	scripts/probe-kit/specs/two-pane-perf.ts	2
+as-unknown-as	{ __checkEls?: Element[] }	scripts/probe-kit/rendered-checks.ts	3
+as-unknown-as	{ __checkLayers?: Map< Element, { bottom: number; height: number; top: n	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __checkPlace: unknown }	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __checkPlace?: { focus: Element | null; kept: [Element, number, number	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __compares?: { show?: string }[] }	scripts/probe-kit/specs/graph-stage.ts	1
+as-unknown-as	{ __cost: { drawnAt: number | null; fetchedAt: number | null }; }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __cost: { drawnAt: number | null; fetchedAt: number | null; raf: numbe	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __cost: { raf: number } }	scripts/probe-kit/specs/canvas-cost.ts	4
+as-unknown-as	{ __cost: { sites: object } }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __cost: { sites: Record<string, number> } }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __cost: Cost }	scripts/probe-kit/specs/preview-bound.ts	4
+as-unknown-as	{ __cost: Cost }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __cost: Cost }	scripts/probe-kit/specs/two-pane-perf.ts	2
+as-unknown-as	{ __cost?: { drawnAt: number | null } }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __fade: { on: boolean; rafs: number[] } }	scripts/probe-kit/specs/web/edge-fade-perf.ts	1
+as-unknown-as	{ __fade: { on: boolean; rafs: number[] }; }	scripts/probe-kit/specs/web/edge-fade-perf.ts	2
+as-unknown-as	{ __firstFrame: object }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __firstFrame?: Record<string, string> }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __firstRows: FirstRows | null }	scripts/probe-kit/specs/live-perf.ts	1
+as-unknown-as	{ __firstRows: FirstRows | null; __paints: [number, string][]; }	scripts/probe-kit/specs/live-perf.ts	1
+as-unknown-as	{ __frameAt: number }	scripts/probe-kit/specs/artifact-tab-cold.ts	1
+as-unknown-as	{ __frameAt: number | null }	scripts/probe-kit/specs/artifact-tab-cold.ts	2
+as-unknown-as	{ __frames: [number, number][]; __reorders: Reorder[]; }	scripts/probe-kit/specs/held-reorder.ts	1
+as-unknown-as	{ __frames: [number, number][]; __sample: (on: boolean) => void; }	scripts/probe-kit/specs/held-reorder.ts	1
+as-unknown-as	{ __gaps: [number, number][] }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __gaps?: [number, number][] }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __ghostClaims?: number }	scripts/probe-kit/specs/canvas.ts	3
+as-unknown-as	{ __glyphRuns: GlyphRun[] }	scripts/probe-kit/specs/canvas.ts	1
+as-unknown-as	{ __glyphRuns: GlyphRun[]; __glyphWatch?: boolean; }	scripts/probe-kit/specs/canvas.ts	1
+as-unknown-as	{ __heard: string[] }	scripts/probe-kit/specs/canvas.ts	2
+as-unknown-as	{ __heard: string[] }	scripts/probe-kit/specs/web/safari-long-ask.ts	2
+as-unknown-as	{ __heard?: string[]; __opens?: number }	scripts/probe-kit/specs/preview-socket.ts	1
+as-unknown-as	{ __heldRuns?: number }	scripts/probe-kit/specs/held-reorder.ts	1
+as-unknown-as	{ __hiddenRemovals: { read: () => { count: number; what: string }[] }; }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __hiddenRemovals: { read: () => { count: number; what: string }[]; sta	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __hiddenRemovals: { start: () => void } }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __hold: () => void }	scripts/probe-kit/specs/web/traffic-longtask.ts	1
+as-unknown-as	{ __holder: { failed: string[] } }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __holder: { failed: string[]; said: number; settledAt: number | null; 	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __holder: { failed: string[]; settledAt: number | null }; }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __holder: { intervals: number[]; said: number }; }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __hot: { send: (event: string, data: string) => void }; }	scripts/probe-kit/specs/preview-socket.ts	1
+as-unknown-as	{ __hot?: object; __navigation?: number; __pongs?: string[]; }	scripts/probe-kit/specs/preview-socket.ts	1
+as-unknown-as	{ __inserted: number; __insertWatch?: MutationObserver; }	scripts/probe-kit/specs/tab-return.ts	2
+as-unknown-as	{ __jsonrpc: string[] }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __jsonrpc?: string[] }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __kit: Watched }	scripts/probe-kit/frames.ts	4
+as-unknown-as	{ __kitAnswered: number[] }	scripts/probe-kit/specs/web/states-mount.ts	2
+as-unknown-as	{ __kitBefore?: true }	scripts/probe-kit/specs/embed-reload.ts	2
+as-unknown-as	{ __kitFrame?: (seen: string) => void }	scripts/probe-kit/crash-watch.ts	1
+as-unknown-as	{ __kitLook?: { held: Held[]; over: Animation[] }; }	scripts/probe-kit/anim.ts	1
+as-unknown-as	{ __kitPaints?: Record<string, { address?: number; painted?: number }>; 	scripts/probe-kit/specs/canvas-parallel.ts	1
+as-unknown-as	{ __kitPaints?: Record<string, { painted?: number }>; }	scripts/probe-kit/specs/canvas-parallel.ts	1
+as-unknown-as	{ __kitPaints?: typeof paints }	scripts/probe-kit/specs/canvas-parallel.ts	1
+as-unknown-as	{ __kitSaid: { at: number; height?: number; why?: string }[]; }	scripts/probe-kit/specs/web/states-mount.ts	1
+as-unknown-as	{ __kitSaid: unknown[] }	scripts/probe-kit/specs/web/states-mount.ts	2
+as-unknown-as	{ __kitTook: boolean }	scripts/probe-kit/kit.ts	2
+as-unknown-as	{ __kitWaits: typeof waits }	scripts/probe-kit/kit.ts	1
+as-unknown-as	{ __kitWaits?: { run: Animation; settled: boolean }[]; }	scripts/probe-kit/kit.ts	1
+as-unknown-as	{ __land: () => void }	scripts/probe-kit/specs/web/traffic-longtask.ts	1
+as-unknown-as	{ __lastSize?: (el: Element) => { px: number; text: number } | null; }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __later: { at: number; line: string }[] }	scripts/probe-kit/specs/two-pane-perf.ts	1
+as-unknown-as	{ __later: typeof later }	scripts/probe-kit/specs/two-pane-perf.ts	1
+as-unknown-as	{ __loads: number }	scripts/probe-kit/specs/artifacts.ts	2
+as-unknown-as	{ __loads: number; __sockets: number }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __loads?: number; __sockets?: number }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __marks: Record< string, { differed: string[]; frames: number; now: nu	scripts/probe-kit/specs/page-marks.ts	1
+as-unknown-as	{ __marks: Record<string, Tally> }	scripts/probe-kit/specs/page-marks.ts	1
+as-unknown-as	{ __marksAt: string }	scripts/probe-kit/specs/page-marks.ts	1
+as-unknown-as	{ __morph: { to: (value: string) => Promise<boolean> }; }	scripts/probe-kit/specs/morph-letters.ts	1
+as-unknown-as	{ __moved: number; __watching: boolean }	scripts/probe-kit/specs/comments.ts	2
+as-unknown-as	{ __offscreenRuns: typeof said }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __offscreenRuns?: [number, string][] }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __onScreen?: Record<string, number>; __bounds?: Record<string, { pane:	scripts/probe-kit/specs/two-pane-perf.ts	2
+as-unknown-as	{ __onScreen?: Record<string, number>; __bounds?: Record<string, unknown	scripts/probe-kit/specs/two-pane-perf.ts	1
+as-unknown-as	{ __page?: string }	scripts/probe-kit/specs/sheet-weight.ts	1
+as-unknown-as	{ __paints?: [number, string][] }	scripts/probe-kit/specs/live-perf.ts	1
+as-unknown-as	{ __pens: string[] }	scripts/probe-kit/specs/comments.ts	2
+as-unknown-as	{ __perf: PerfState }	scripts/probe-kit/live-page.ts	3
+as-unknown-as	{ __perf: PerfState & { attrib?: Attributed } }	scripts/probe-kit/live-page.ts	1
+as-unknown-as	{ __perf: PerfState & { done: boolean; phases: [string, number, number, 	scripts/probe-kit/live-page.ts	1
+as-unknown-as	{ __perf?: PerfState }	scripts/probe-kit/live-page.ts	1
+as-unknown-as	{ __pf: { perfReset: (f: boolean, m: boolean) => number; wheel: ( px: nu	scripts/probe-kit/live-page.ts	1
+as-unknown-as	{ __pinWorking?: Record<string, () => void>; }	scripts/probe-kit/specs/web/pin-working.ts	1
+as-unknown-as	{ __posts: number[] }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __posts?: number[] }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __press: number; __pressFrames: number[]; __pressShown: number; __pres	scripts/probe-kit/specs/tab-return.ts	2
+as-unknown-as	{ __press?: { heard: number | null; scrolled: number | null }; }	scripts/probe-kit/specs/graph-stage.ts	1
+as-unknown-as	{ __press?: unknown }	scripts/probe-kit/specs/graph-stage.ts	1
+as-unknown-as	{ __presses: Record<string, unknown>[] }	scripts/probe-kit/specs/canvas.ts	1
+as-unknown-as	{ __presses: unknown[] }	scripts/probe-kit/specs/canvas.ts	1
+as-unknown-as	{ __probeKept: boolean }	scripts/probe-kit/specs/preview-bound.ts	1
+as-unknown-as	{ __probeKept?: boolean }	scripts/probe-kit/specs/preview-bound.ts	1
+as-unknown-as	{ __reaches: unknown[] }	scripts/probe-kit/specs/graph-stage.ts	1
+as-unknown-as	{ __readyAt: number[] }	scripts/probe-kit/specs/artifacts.ts	2
+as-unknown-as	{ __reference: (name: string) => Promise<void>; }	scripts/probe-kit/specs/web/traffic-longtask.ts	1
+as-unknown-as	{ __rehearsal: { hidden: boolean; joined: boolean; shown: boolean }[]; }	scripts/probe-kit/specs/web/webkit-caw.ts	1
+as-unknown-as	{ __rehearsal: typeof states }	scripts/probe-kit/specs/web/webkit-caw.ts	1
+as-unknown-as	{ __reorders: Run[] }	scripts/probe-kit/specs/held-reorder.ts	1
+as-unknown-as	{ __ringBefore?: Map<Element, string>; __ringRoot?: Element; }	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __ringWas?: { el: Element | null; visible: boolean }; __ringOpen?: num	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __rootSeen: { changes: string[] } }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
+as-unknown-as	{ __rootSeen: typeof seen }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
+as-unknown-as	{ __runs: boolean }	scripts/probe-kit/specs/tab-return.ts	2
+as-unknown-as	{ __sample: (on: boolean) => void }	scripts/probe-kit/specs/held-reorder.ts	2
+as-unknown-as	{ __seen: { drawn: number } }	scripts/probe-kit/specs/canvas-cost.ts	3
+as-unknown-as	{ __seen: { samples: number; waiting: number; empty: string[] }; }	scripts/probe-kit/specs/canvas-cost.ts	2
+as-unknown-as	{ __seen: typeof seen }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ __setAttribute: typeof Element.prototype.setAttribute; __slowSets: { a	scripts/probe-kit/specs/two-pane-perf.ts	1
+as-unknown-as	{ __setAttribute: typeof set; __slowSets: typeof slow; }	scripts/probe-kit/specs/two-pane-perf.ts	1
+as-unknown-as	{ __sizes: typeof seen; __lastSize: (el: Element) => { px: number; text:	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __sizes?: { at: number; key: string; pane: string; was: number | null;	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __sizes?: { key: string; pane: string; px: number }[]; }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __skeletonBench: Record<"load" | "wait", () => void>; }	scripts/probe-kit/specs/web/safari-blurs.ts	1
+as-unknown-as	{ __snaps: { id?: string }[] }	scripts/probe-kit/specs/canvas.ts	2
+as-unknown-as	{ __stateShape?: { els: Element[]; rest: Map<Element, Map<string, string	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __stateShape?: { rings?: Element[] }; __ringWas?: { el: Element | null	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __stateShape?: { rings?: HTMLElement[] }; __ringBefore?: Map<Element, 	scripts/probe-kit/rendered-checks.ts	1
+as-unknown-as	{ __stayed: boolean }	scripts/probe-kit/specs/preview-lock.ts	1
+as-unknown-as	{ __stayed: boolean }	scripts/probe-kit/specs/session-sheet.ts	3
+as-unknown-as	{ __stayed?: boolean }	scripts/probe-kit/specs/preview-lock.ts	1
+as-unknown-as	{ __stayed?: boolean }	scripts/probe-kit/specs/session-sheet.ts	3
+as-unknown-as	{ __strokeEnds: number; __docLog: string[][]; __docEls: Record<string, P	scripts/probe-kit/specs/canvas.ts	2
+as-unknown-as	{ __swapSeen: { first: { shape: number; ghost: number | null } | null; g	scripts/probe-kit/specs/canvas.ts	1
+as-unknown-as	{ __swapSeen: typeof seen }	scripts/probe-kit/specs/canvas.ts	1
+as-unknown-as	{ __themesHeard: unknown[] }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __themesHeard?: unknown[] }	scripts/probe-kit/specs/artifacts.ts	1
+as-unknown-as	{ __thumbs: { captures: number } }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
+as-unknown-as	{ __thumbs: { png: string; scheme: string } }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
+as-unknown-as	{ __thumbs: typeof seen }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
+as-unknown-as	{ __ticks?: number }	scripts/probe-kit/specs/preview-bound.ts	1
+as-unknown-as	{ __traffic: { landed: () => boolean } }	scripts/probe-kit/specs/web/traffic-longtask.ts	1
+as-unknown-as	{ __traffic: { load: (blocks: unknown[]) => void; patch: (next: Record<s	scripts/probe-kit/specs/web/traffic-longtask.ts	1
+as-unknown-as	{ __traffic: Bench }	scripts/probe-kit/specs/web/seek-words.ts	3
+as-unknown-as	{ __traffic: Record<string, never> }	scripts/probe-kit/specs/web/safari-blurs.ts	1
 as-unknown-as	{ __transcriptBuilds?: Record<string, number>; }	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
@@ -51,6 +206,9 @@ as-unknown-as	{ webkit?: { messageHandlers?: { cawco?: unknown } }; }	packages/p
 as-unknown-as	AbstractType< YEvent<AbstractType<unknown>> >	packages/hub/src/artifacts/docs.ts	2
 as-unknown-as	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/block-fixture.ts	1
 as-unknown-as	AskRecord	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
+as-unknown-as	ArtifactRead	scripts/probe-kit/specs/answered-pages.ts	1
+as-unknown-as	ArtifactsDb	scripts/probe-kit/specs/answered-pages.ts	1
+as-unknown-as	ArtifactsDb	scripts/probe-kit/specs/web/page-faults.ts	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
 as-unknown-as	Buffer	packages/agent/src/browser/relay.ts	1
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
@@ -75,6 +233,9 @@ as-unknown-as	Heard	packages/agent/src/artifact-picture.ts	2
 as-unknown-as	HookDraft	packages/hub/src/server.ts	1
 as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	InstanceRow	apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data.ts	2
+as-unknown-as	HubLifetimeShape	scripts/probe-kit/specs/answered-pages.ts	1
+as-unknown-as	HubLifetimeShape	scripts/probe-kit/specs/web/page-faults.ts	1
+as-unknown-as	InstanceRow	scripts/probe-kit/specs/recap-waits.ts	1
 as-unknown-as	Libc	packages/agent/src/layer.ts	1
 as-unknown-as	Libc	packages/core/src/flock.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
@@ -101,15 +262,14 @@ as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
+as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
 as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
-as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
@@ -121,7 +281,6 @@ as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Shared	apps/dashboard/src/lib/platform/frame-observer.ts	1
 as-unknown-as	Skeleton[]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
-as-unknown-as	StateCard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services.ts	1
 as-unknown-as	string[]	packages/agent/src/stage-host/canvas/measure.ts	1
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
@@ -430,7 +589,6 @@ suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/l
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/agent/src/redaction.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/hooks.ts	2
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/rules.ts	1
-suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/dev-debug.ts	1
 suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/hub/socket.svelte.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/cawco/mark.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/platform/id.ts	2

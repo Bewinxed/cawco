@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { graphWords as words } from "@cawco/core/words/graph";
   /**
    * A curve drawn to be bent (his pick on animation-face-questions: the
    * Curve chip lets him draw his own, as Jitter's easing popover does):
@@ -7,7 +8,7 @@
    * control points, each dragged with the pointer or moved with the arrow
    * keys (0.05, Shift 0.01). Letting go hands the four numbers back.
    */
-  import { graphWords as words } from "@cawco/core/words/graph";
+  import type { PointerEventHandler } from "svelte/elements";
 
   let {
     at = [0, 0, 1, 1],
@@ -66,21 +67,26 @@
     );
     return next;
   };
-  const fromPointer = (event: PointerEvent): [number, number] => {
-    const r = (box as HTMLElement).getBoundingClientRect();
+  const fromPointer = (
+    event: PointerEvent,
+    from: HTMLElement
+  ): [number, number] => {
+    const r = from.getBoundingClientRect();
     return [
       (event.clientX - r.left) / r.width,
       HIGH - ((event.clientY - r.top) / r.height) * (HIGH - LOW),
     ];
   };
-  const take = (point: 0 | 1) => (event: PointerEvent) => {
-    event.preventDefault();
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    dragging = point;
-  };
+  const take =
+    (point: 0 | 1): PointerEventHandler<HTMLElement> =>
+    (event) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragging = point;
+    };
   const drag = (event: PointerEvent) => {
     if (dragging !== null && box) {
-      held = { for: at, at: place(dragging, ...fromPointer(event)) };
+      held = { for: at, at: place(dragging, ...fromPointer(event, box)) };
     }
   };
   const letGo = () => {

@@ -72,9 +72,18 @@
     wordsOf,
   } from "./fixture";
 
-  type State =
-    "finding" | "nothing" | "unreached" | "outdated" | "live" | "closed";
-  const findState = (page.url.searchParams.get("state") ?? "finding") as State;
+  const STATES = [
+    "finding",
+    "nothing",
+    "unreached",
+    "outdated",
+    "live",
+    "closed",
+  ] as const;
+  type State = (typeof STATES)[number];
+  const findState: State =
+    STATES.find((one) => one === page.url.searchParams.get("state")) ??
+    "finding";
   const inCaw = page.url.searchParams.get("in") === "caw";
   const WORDS = findState === "nothing" ? "ETIMEDOUT" : "ECONNRESET";
   /** How the machine took the places read, by the state drawn. */
@@ -175,7 +184,7 @@
   draft.text = "Check the push probe next";
 
   const find = findIn(MAIN);
-  (globalThis as unknown as { __find: unknown }).__find = find;
+  window.__find = find;
 
   onMount(() => {
     // The frame reads no hub: the shell's hub band, which would say so over
