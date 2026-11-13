@@ -80,7 +80,7 @@ export const CAWCO_PLUGIN_ID = "cawco.context";
 /**
  * The prompt metadata key that marks a send as the person's own words (core
  * `byPerson`): CawCo's plugin moves the session's running shell commands
- * aside for it, so it is read at the turn's next step (opencode-plugin.ts).
+ * aside for it, so it is read at the turn's next step (opencode-plugin-module.ts).
  */
 export const SEND_NOW_METADATA = "cawcoSendNow";
 

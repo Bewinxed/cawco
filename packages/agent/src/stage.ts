@@ -38,7 +38,7 @@
  *   to start again at its port ({@link carryStages}, {@link resumeStages}):
  *   an agent's restart, an update's included, leaves it serving.
  *
- * Each change goes to the hub as a {@link StageFrame} ({@link setStageSink}),
+ * Each change goes to the hub as a {@link StageFrame} ({@link AgentPorts.stage}),
  * which the hub keeps in the doc of each sheet the stage serves.
  *
  * A workspace preview's server (core `ServeSpec`, `artifact_create(kind:
@@ -72,10 +72,8 @@ import {
   type DesignQuery,
   HEALTH_PATH,
   REPORT_PATH,
-  type ReportAnswer,
   SERVE_COMMAND_LIMIT,
   type ServeSpec,
-  type SheetRead,
   type SheetWeight,
   type SheetWrite,
   type SheetWritten,
@@ -87,7 +85,6 @@ import {
   STORIES_PATH,
   STORY_FILE,
   type StageError,
-  type StageFrame,
   type StageFramework,
   type StageOpened,
   type StageState,
@@ -98,12 +95,20 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { readRecord, writeStateFileSync } from "@cawco/core/state-file";
-import { StageErrorSchema } from "@cawco/core/stored-shapes";
+import {
+  DesignMapSchema,
+  ReportAnswerSchema,
+  SheetReadSchema,
+  SheetWeightSchema,
+  SheetWrittenSchema,
+  StageErrorSchema,
+} from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { sheetWords } from "@cawco/core/words/sheet";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
+import type { AgentPorts } from "./agent-ports";
 import { ensureBoundary } from "./boundary/ensure";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { agentServerStarted } from "./boundary/work";
@@ -126,13 +131,13 @@ import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
 /** The package each framework a sheet mounts is installed as, in the order a project's are read. */
-const FRAMEWORK_PACKAGES: Record<StageFramework, string> = {
-  svelte: "svelte",
-  vue: "vue",
-  solid: "solid-js",
-  preact: "preact",
-  react: "react",
-};
+const FRAMEWORK_PACKAGES: readonly (readonly [StageFramework, string])[] = [
+  ["svelte", "svelte"],
+  ["vue", "vue"],
+  ["solid", "solid-js"],
+  ["preact", "preact"],
+  ["react", "react"],
+];
 
 /** Where the host is written, in the toolchain root: git-excluded, never the project's. */
 const HOST_DIR = ".cawco/stage";
@@ -175,7 +180,11 @@ const stagePort = (hash: number): number => {
       ports.push(port);
     }
   }
-  return ports[hash % ports.length] as number;
+  const port = ports[hash % ports.length];
+  if (port === undefined) {
+    throw new Error("No port is free for a stage.");
+  }
+  return port;
 };
 
 /** How long a health look waits for its answer. Ours. */
@@ -277,6 +286,9 @@ type Runs =
     }
   | { readonly command: string; readonly kind: "serve" };
 
+/** Where a stage's changes go (its own, and its clone's when a place has one): the hub, through the daemon. */
+type StagePorts = Pick<AgentPorts, "stage" | "stageClone">;
+
 interface Stage {
   /** The boundary it runs in: its workspace's own, or its place's stage clone's (`stage-clone.ts`). */
   readonly boundary: WorkspaceRef;
@@ -293,6 +305,8 @@ interface Stage {
   /** A place's sheet stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
   mirror?: ReturnType<typeof setInterval>;
   readonly port: number;
+  /** Where its changes are told. */
+  readonly ports: StagePorts;
   /** Settles once it is `live`, or rejects with why it is not. */
   ready?: Promise<void>;
   restarts: number;
@@ -319,13 +333,17 @@ interface Stage {
 interface Tree {
   readonly boundary: WorkspaceRef;
   readonly folder: string;
+  readonly ports: StagePorts;
   readonly ref: WorkspaceRef;
 }
 
-const treeOf = async (workspace: WorkspaceRef): Promise<Tree> =>
+const treeOf = async (
+  workspace: WorkspaceRef,
+  ports: StagePorts
+): Promise<Tree> =>
   isPlace(workspace.id)
-    ? { ref: workspace, ...(await stageCloneOf(workspace)) }
-    : { ref: workspace, folder: workspace.path, boundary: workspace };
+    ? { ref: workspace, ports, ...(await stageCloneOf(workspace, ports)) }
+    : { ref: workspace, ports, folder: workspace.path, boundary: workspace };
 
 /**
  * The project of the toolchain root at or above `from` installed by its own
@@ -367,7 +385,7 @@ const projectOf = (stage: Stage): ProjectAt => ({
  */
 const installFor = async (stage: Stage): Promise<void> => {
   if (isPlace(stage.workspace.id)) {
-    const clone = await stageCloneOf(stage.workspace);
+    const clone = await stageCloneOf(stage.workspace, stage.ports);
     await installStage(stage.workspace, clone, stage.root);
     return;
   }
@@ -447,13 +465,6 @@ export const networkOf = (source: {
 
 const stages = new Map<string, Stage>();
 
-let sink: (frame: StageFrame) => void = () => undefined;
-
-/** Where each stage's changes go: the daemon's socket to the hub. */
-export const setStageSink = (send: (frame: StageFrame) => void): void => {
-  sink = send;
-};
-
 const stateOf = (stage: Stage): StageState => {
   const state = {
     status: stage.status,
@@ -475,7 +486,7 @@ const stageWords = (stage: Stage): string =>
 
 /** Sends the hub where the stage is now. */
 const sendState = (stage: Stage) => {
-  sink({
+  stage.ports.stage({
     kind: "stage",
     workspace: stage.workspace.id,
     port: stage.port,
@@ -494,7 +505,7 @@ const tell = (stage: Stage) => {
 /**
  * Every stage told again where it is now, as the daemon registers with the
  * hub: a frame sent while no connection was open was dropped (daemon.ts
- * `supervisor.emit`), and the docs it was owed to are set right here. Sent,
+ * `HubLine`), and the docs it was owed to are set right here. Sent,
  * not logged: no stage changed, and a line each would read as a second
  * start of a stage the agent's restart was starting as it registered.
  */
@@ -527,8 +538,31 @@ const readJson = (file: string): Record<string, unknown> | null => {
   }
 };
 
+/** The name of every package the `package.json` files from `root` up to `top` depend on, in any section. */
+const dependencyNames = (root: string, top: string): Set<string> => {
+  const names = new Set<string>();
+  for (const at of upFrom(root, top)) {
+    const pkg = readJson(join(at, "package.json"));
+    for (const section of [
+      pkg?.devDependencies,
+      pkg?.dependencies,
+      pkg?.peerDependencies,
+    ]) {
+      if (typeof section === "object" && section !== null) {
+        for (const name of Object.keys(section)) {
+          names.add(name);
+        }
+      }
+    }
+  }
+  return names;
+};
+
 /** The toolchain a dir names, by its files, among `named`. */
-const namedIn = (dir: string, named: [RegExp, string][]): string | null => {
+const namedIn = <Name extends string>(
+  dir: string,
+  named: [RegExp, Name][]
+): Name | null => {
   let entries: string[] = [];
   try {
     entries = readdirSync(dir);
@@ -583,7 +617,7 @@ const writtenFirst = (tree: Tree, stories: string[]): void => {
 
 /** The toolchain whose root `dir` is, by its config file; null when it is none's. */
 const toolchainAt = (dir: string): StageToolchain | null =>
-  namedIn(dir, TOOLCHAINS) as StageToolchain | null;
+  namedIn(dir, TOOLCHAINS);
 
 /** A package's `version` as the project installed it, from `root` up (a workspace's packages hoist); null when it isn't. */
 const installed = (name: string, root: string, top: string): string | null => {
@@ -631,6 +665,11 @@ type StagePlace = Omit<
   | "viewers"
 >;
 
+/** A preview server's place: the command it runs, known. */
+type ServedPlace = StagePlace & {
+  readonly runs: Extract<Runs, { kind: "serve" }>;
+};
+
 /** A stage at `found`, new and not yet started, kept in `stages`. */
 function newStage(found: StagePlace): Stage {
   const stage: Stage = {
@@ -675,21 +714,8 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
     );
   }
   const dir = relative(top, root) || ".";
-  const deps = Object.assign(
-    {},
-    ...upFrom(root, top)
-      .reverse()
-      .map((at) => readJson(join(at, "package.json")))
-      .flatMap((pkg) => [
-        pkg?.devDependencies,
-        pkg?.dependencies,
-        pkg?.peerDependencies,
-      ])
-      .filter(Boolean)
-  ) as Record<string, string>;
-  const framework = (Object.keys(FRAMEWORK_PACKAGES) as StageFramework[]).find(
-    (name) => FRAMEWORK_PACKAGES[name] in deps
-  );
+  const deps = dependencyNames(root, top);
+  const framework = FRAMEWORK_PACKAGES.find(([, name]) => deps.has(name))?.[0];
   if (!framework) {
     throw new StageRefusal(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
@@ -711,7 +737,7 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
   if (!runtime) {
     throw new StageRefusal(sheetWords.noBun);
   }
-  const kit = "@sveltejs/kit" in deps;
+  const kit = deps.has("@sveltejs/kit");
   // SvelteKit narrows Vite's served files to `src/` and its own folders: a
   // story file anywhere else would load as a 403 (the spike's LibProbe).
   if (!rootOnly && kit && relative(join(root, "src"), story).startsWith("..")) {
@@ -735,6 +761,7 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
       toolchain,
     },
     port: stagePort(hash),
+    ports: tree.ports,
   };
 }
 
@@ -747,7 +774,11 @@ const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
  * The stage a preview's server runs as: `cwd` inside the workspace's clone
  * and a folder, the command one bounded line; refused with why otherwise.
  */
-function servedFor(workspace: WorkspaceRef, serve: ServeSpec): StagePlace {
+function servedFor(
+  workspace: WorkspaceRef,
+  serve: ServeSpec,
+  ports: StagePorts
+): ServedPlace {
   const command = serve.command.trim();
   if (command.length === 0 || command.length > SERVE_COMMAND_LIMIT) {
     throw new StageRefusal(
@@ -774,6 +805,7 @@ function servedFor(workspace: WorkspaceRef, serve: ServeSpec): StagePlace {
     dir: inside || ".",
     runs: { kind: "serve", command },
     port: serve.port,
+    ports,
   };
 }
 
@@ -819,6 +851,15 @@ async function askStage<T>(
 /** How long a sheet's read or write may take on its stage: the first read of a component runs its docgen, under 2 s measured. Ours. */
 const READ_WAIT_MS = 15_000;
 
+/** The refusal in words a stage's failed answer carries (`{ error }`); none when it carries none. */
+const refusalIn = (answer: unknown): string | undefined =>
+  typeof answer === "object" &&
+  answer !== null &&
+  "error" in answer &&
+  typeof answer.error === "string"
+    ? answer.error
+    : undefined;
+
 /**
  * The stage's JSON answer to `path`, a refusal in its own words, or that it
  * did not answer within `waitMs`.
@@ -828,6 +869,7 @@ async function answerOf<T>(
   path: string,
   waitMs: number,
   what: string,
+  shape: z.ZodType<T>,
   body?: object
 ): Promise<T> {
   const read = await askStage(
@@ -835,13 +877,14 @@ async function answerOf<T>(
     path,
     waitMs,
     async (response) => {
-      const answer = (await response.json()) as T & { error?: string };
+      const answer: unknown = await response.json();
       if (!response.ok) {
         throw new StageRefusal(
-          answer.error ?? `The stage could not ${what} (${response.status}).`
+          refusalIn(answer) ??
+            `The stage could not ${what} (${response.status}).`
         );
       }
-      return answer as T;
+      return shape.parse(answer);
     },
     body
   );
@@ -1424,13 +1467,14 @@ async function storyStage(
  * `opening`, when a states file it names isn't written.
  */
 export async function ensureStage(
+  ports: StagePorts,
   workspace: WorkspaceRef,
   file: string,
   /** Every states file of the canvas (from the clone's root), whose report is read; omitted, `file` alone. */
   files: string[] = [file],
   opening = false
 ): Promise<StageOpened> {
-  const tree = await treeOf(workspace);
+  const tree = await treeOf(workspace, ports);
   const story = storyPath(tree, file);
   const stories = files.map((one) => storyPath(tree, one));
   if (opening) {
@@ -1440,18 +1484,20 @@ export async function ensureStage(
   const rel = relative(stage.root, story);
   const all = stories.map((one) => relative(stage.root, one));
   const [sheet, weight, { errors, ...report }] = await Promise.all([
-    answerOf<SheetRead>(
+    answerOf(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
       READ_WAIT_MS,
-      `read ${rel}'s stories`
+      `read ${rel}'s stories`,
+      SheetReadSchema
     ),
     sheetWeight(stage, rel),
-    answerOf<ReportAnswer>(
+    answerOf(
       stage,
       `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
       READ_WAIT_MS,
-      "read what a browser drew"
+      "read what a browser drew",
+      ReportAnswerSchema
     ),
   ]);
   // The host's problems as of this answer (a states file it found missing
@@ -1477,11 +1523,12 @@ async function sheetWeight(
   stage: Stage,
   rel: string
 ): Promise<SheetWeight | null> {
-  const { weight } = await answerOf<{ weight: SheetWeight | null }>(
+  const { weight } = await answerOf(
     stage,
     `${WEIGHT_PATH}?file=${encodeURIComponent(rel)}`,
     READ_WAIT_MS,
-    `read what ${rel} loads`
+    `read what ${rel} loads`,
+    z.object({ weight: SheetWeightSchema.nullable() })
   );
   return weight;
 }
@@ -1496,18 +1543,26 @@ async function sheetWeight(
  * the story file as the sheet shows it, and no mirror undoes the write.
  */
 export async function writeSheet(
+  ports: StagePorts,
   workspace: WorkspaceRef,
   write: SheetWrite
 ): Promise<SheetWritten> {
-  const tree = await treeOf(workspace);
+  const tree = await treeOf(workspace, ports);
   const story = storyPath(tree, write.file);
   const stage = await storyStage(tree, story, "a write");
   const rel = relative(stage.root, story);
   const written = () =>
-    answerOf<SheetWritten>(stage, WRITE_PATH, READ_WAIT_MS, `write ${rel}`, {
-      ...write,
-      file: rel,
-    });
+    answerOf(
+      stage,
+      WRITE_PATH,
+      READ_WAIT_MS,
+      `write ${rel}`,
+      SheetWrittenSchema,
+      {
+        ...write,
+        file: rel,
+      }
+    );
   const done = isPlace(workspace.id)
     ? await inCloneTurn(tree.boundary.id, async () => {
         const made = await written();
@@ -1526,15 +1581,17 @@ export async function writeSheet(
  * toolchain root, the one stage a canvas page is served from.
  */
 export async function renderStage(
+  ports: StagePorts,
   workspace: WorkspaceRef,
   ask: RenderAsk
 ): Promise<Rendered> {
-  const tree = await treeOf(workspace);
+  const tree = await treeOf(workspace, ports);
   const stories = ask.files.map((file) => storyPath(tree, file));
-  const stage = await stageAtRoot(
-    stageFor(tree, stories[0] as string),
-    "a render"
-  );
+  const [first] = stories;
+  if (first === undefined) {
+    throw new StageRefusal("A render names the states files to draw.");
+  }
+  const stage = await stageAtRoot(stageFor(tree, first), "a render");
   const files = stories.map((story) => relative(stage.root, story));
   const outside = files.find((file) => file.startsWith(".."));
   if (outside) {
@@ -1605,11 +1662,12 @@ function walkedAsEmbed(stage: Stage, files: string[]): Promise<void> {
  * sees; the Preview's own open says the stage's state as it always has.
  */
 export async function warmStage(
+  ports: StagePorts,
   workspace: WorkspaceRef,
   warm: StageWarm
 ): Promise<void> {
   try {
-    const tree = await treeOf(workspace);
+    const tree = await treeOf(workspace, ports);
     const canvases = warm.canvases.map((files) =>
       files.map((file) => storyPath(tree, file))
     );
@@ -1640,11 +1698,12 @@ export async function warmStage(
  * has.
  */
 export async function stageComponents(
+  ports: StagePorts,
   workspace: WorkspaceRef,
   ask: DesignQuery = {}
 ): Promise<DesignMap> {
   const dir = ask.dir ?? ".";
-  const tree = await treeOf(workspace);
+  const tree = await treeOf(workspace, ports);
   const abs = inTree(tree, dir, "name a folder in it.");
   if (!statSync(abs, { throwIfNoEntry: false })?.isDirectory()) {
     throw new StageRefusal(
@@ -1681,11 +1740,12 @@ export async function stageComponents(
       query.set(key, value);
     }
   }
-  const map = await answerOf<DesignMap>(
+  const map = await answerOf(
     stage,
     `${COMPONENTS_PATH}?${query}`,
     READ_WAIT_MS * 4,
-    "map its components"
+    "map its components",
+    DesignMapSchema
   );
   // Every file from the clone's root, as the session names them.
   const fromClone = (file: string) => join(stage.dir, file);
@@ -1805,16 +1865,16 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
  * runs on.
  */
 export async function ensureServed(
+  ports: StagePorts,
   workspace: WorkspaceRef,
   serve: ServeSpec,
   by = "artifact_create's serve"
 ): Promise<StageState> {
-  const found = servedFor(workspace, serve);
+  const found = servedFor(workspace, serve, ports);
   let stage = stages.get(found.key);
   if (
     stage?.runs.kind === "serve" &&
-    (stage.runs.command !== (found.runs as { command: string }).command ||
-      stage.dir !== found.dir)
+    (stage.runs.command !== found.runs.command || stage.dir !== found.dir)
   ) {
     stopOne(stage);
     stage = undefined;
@@ -1852,6 +1912,7 @@ const keyOf = (source: PreviewSource): string | null => {
  * the server's command. Nothing for a source no stage serves.
  */
 export async function wakeSource(
+  ports: StagePorts,
   source: PreviewSource,
   navigation: boolean
 ): Promise<void> {
@@ -1866,9 +1927,9 @@ export async function wakeSource(
   }
   const ref = await sourceWorkspace(source.workspace);
   if (source.stage) {
-    await ensureStage(ref, join(source.stage.dir, source.stage.file));
+    await ensureStage(ports, ref, join(source.stage.dir, source.stage.file));
   } else if (source.serve) {
-    await ensureServed(ref, { ...source.serve, port: source.port });
+    await ensureServed(ports, ref, { ...source.serve, port: source.port });
   }
 }
 
@@ -2041,6 +2102,7 @@ const RESUMED_BY = "the agent's restart";
 
 /** One carried stage started again at its port, its last use kept; nothing when its workspace is gone, or it started since. */
 async function resumeOne(
+  ports: StagePorts,
   carried: CarriedStage,
   refs: WorkspaceRef[]
 ): Promise<void> {
@@ -2056,13 +2118,14 @@ async function resumeOne(
     if (stages.has(sheetKey(ref.id, carried.dir))) {
       return;
     }
-    const tree = await treeOf(ref);
+    const tree = await treeOf(ref, ports);
     stage = await rootStage(tree, join(tree.folder, carried.dir), RESUMED_BY);
   } else {
     if (stages.has(serveKey(ref.id, carried.port))) {
       return;
     }
     await ensureServed(
+      ports,
       ref,
       { command: carried.command, cwd: carried.cwd, port: carried.port },
       RESUMED_BY
@@ -2090,7 +2153,7 @@ async function resumeOne(
  * stays asleep: its next use wakes it. One that cannot start is in `error`
  * as any start's failure is, and said.
  */
-export async function resumeStages(): Promise<void> {
+export async function resumeStages(ports: StagePorts): Promise<void> {
   const carried = (await carriedStages()).filter(
     (one) => Date.now() - one.lastUse <= IDLE_MS
   );
@@ -2100,7 +2163,7 @@ export async function resumeStages(): Promise<void> {
   const refs = await workspaceRefs();
   await Promise.all(
     carried.map((one) =>
-      resumeOne(one, refs).catch((error: unknown) =>
+      resumeOne(ports, one, refs).catch((error: unknown) =>
         console.warn(
           `[stage] ${one.workspace.slice(0, 8)} ${one.kind === "sheet" ? one.dir : `port ${one.port}`}: not started again after the agent's restart: ${error instanceof Error ? error.message : String(error)}`
         )

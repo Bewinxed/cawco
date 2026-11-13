@@ -405,7 +405,7 @@ export const keeperChildren = async (): Promise<SessiondProcInfo[]> => {
     [...openClients].map((client) =>
       client.list().then(
         (welcome) => welcome.procs,
-        () => [] as SessiondProcInfo[]
+        (): SessiondProcInfo[] => []
       )
     )
   );
@@ -858,7 +858,7 @@ export class SessiondClient {
         this.#acks.delete(message.commandId);
         this.#holds.get(message.commandId)?.();
         this.#holds.delete(message.commandId);
-        reject(error as Error);
+        reject(error);
       }
     });
   }
@@ -1220,6 +1220,10 @@ const parseRingLine = (
  * `Query` drives it like one it spawned, mid-turn or not, and nothing the
  * child runs is interrupted.
  */
+/** What a bridged child tells the SDK that drives it (its `SpawnedProcess`): how it exited, or why it cannot be followed. */
+type ExitHandler = (code: number | null, signal: NodeJS.Signals | null) => void;
+type ErrorHandler = (error: Error) => void;
+
 export const sessiondBridge = (
   client: SessiondClient,
   procId: string,
@@ -1505,6 +1509,31 @@ export const sessiondBridge = (
     once: true,
   });
 
+  function on(event: "exit", handler: ExitHandler): void;
+  function on(event: "error", handler: ErrorHandler): void;
+  function on(
+    event: "exit" | "error",
+    handler: ExitHandler | ErrorHandler
+  ): void {
+    events.on(event, handler);
+  }
+  function once(event: "exit", handler: ExitHandler): void;
+  function once(event: "error", handler: ErrorHandler): void;
+  function once(
+    event: "exit" | "error",
+    handler: ExitHandler | ErrorHandler
+  ): void {
+    events.once(event, handler);
+  }
+  function off(event: "exit", handler: ExitHandler): void;
+  function off(event: "error", handler: ErrorHandler): void;
+  function off(
+    event: "exit" | "error",
+    handler: ExitHandler | ErrorHandler
+  ): void {
+    events.off(event, handler);
+  }
+
   return {
     stdin,
     stdout,
@@ -1518,14 +1547,8 @@ export const sessiondBridge = (
       return signalCode;
     },
     kill,
-    on: (event: "exit" | "error", handler: (...args: never[]) => void) => {
-      events.on(event, handler as (...args: unknown[]) => void);
-    },
-    once: (event: "exit" | "error", handler: (...args: never[]) => void) => {
-      events.once(event, handler as (...args: unknown[]) => void);
-    },
-    off: (event: "exit" | "error", handler: (...args: never[]) => void) => {
-      events.off(event, handler as (...args: unknown[]) => void);
-    },
-  } as import("@anthropic-ai/claude-agent-sdk").SpawnedProcess;
+    on,
+    once,
+    off,
+  };
 };
