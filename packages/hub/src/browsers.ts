@@ -60,6 +60,7 @@ import {
   type BrowserState,
   isBrowserKey,
   type ListedBrowser,
+  type PasskeyRelayCapability,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
 import { DAY_MS } from "@cawco/core/time";
@@ -182,6 +183,8 @@ export const createBrowsers = (deps: BrowsersDeps) => {
   const { db } = deps;
   /** Each browser's live facts, by machine and key, from its machine's latest frame or answer. */
   const live = new Map<string, LiveBrowserFacts>();
+  /** Each machine's passkey relay capability, from its latest browser frame. */
+  const passkeyRelayOf = new Map<string, PasskeyRelayCapability>();
   const liveKey = (machineId: string, key: BrowserKey): string =>
     `${machineId}\u0000${key}`;
   const noteLive = (machineId: string, row: BrowserRow): void => {
@@ -363,6 +366,11 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       for (const row of frame.browsers) {
         noteLive(machineId, row);
+      }
+      if (frame.passkeyRelay) {
+        passkeyRelayOf.set(machineId, frame.passkeyRelay);
+      } else {
+        passkeyRelayOf.delete(machineId);
       }
       told();
     },
@@ -579,11 +587,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
 
     /** Every browser of the fleet, for Settings, the project page and every browser view. */
     list(): ListedBrowser[] {
-      return db.browsers.list().map((row) => ({
-        ...row,
-        machineName: deps.machineName(row.machineId),
-        ...live.get(liveKey(row.machineId, row.key)),
-      }));
+      return db.browsers.list().map((row) => {
+        const relay = passkeyRelayOf.get(row.machineId);
+        return {
+          ...row,
+          machineName: deps.machineName(row.machineId),
+          ...live.get(liveKey(row.machineId, row.key)),
+          ...(relay ? { passkeyRelay: relay } : {}),
+        };
+      });
     },
   };
   return browsers;

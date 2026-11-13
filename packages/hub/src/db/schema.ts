@@ -3476,6 +3476,18 @@ export const sessionLimits = sqliteTable("session_limits", {
 });
 
 /**
+ * The fleet's passkey relay settings — one row, keyed `'passkey'`,
+ * following the {@link spendSettings} precedent: whether the relay is
+ * enabled across the fleet. No row reads as disabled.
+ */
+export const passkeySettings = sqliteTable("passkey_settings", {
+  /** Always `'passkey'`. */
+  id: text("id").primaryKey(),
+  /** Whether passkey relay is enabled fleet-wide. */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+});
+
+/**
  * The fleet's Who decides (core decides.ts) — one row, keyed `'decides'`,
  * following the {@link spendSettings} precedent: every kind's member across
  * the fleet (a kind it leaves out goes to `you`), what the person changed of

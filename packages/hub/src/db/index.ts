@@ -238,6 +238,7 @@ import {
   openrouterConnection,
   type PriorConversation,
   parkedAsks,
+  passkeySettings,
   planChanges,
   plugins,
   presenceClients,
@@ -1760,6 +1761,8 @@ export interface DbShape {
     readonly list: () => Envelope[];
     readonly save: (requestId: string, envelope: Envelope) => void;
   };
+  /** Whether passkey relay is enabled fleet-wide; false before any is set. */
+  readonly passkeyRelayEnabled: () => boolean;
   readonly patchInstance: (
     id: string,
     patch: {
@@ -2361,6 +2364,8 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** Whether passkey relay is enabled fleet-wide. */
+  readonly setPasskeyRelay: (enabled: boolean) => void;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
@@ -3806,6 +3811,14 @@ const make = async (path: string): Promise<DbShape> => {
       .from(spendSettings)
       .where(eq(spendSettings.id, "spend"))
       .get()?.onCap ?? "both";
+
+  /** Whether passkey relay is enabled across the fleet (`passkey_settings`): false until set. */
+  const fleetPasskeyRelay = (): boolean =>
+    db
+      .select({ enabled: passkeySettings.enabled })
+      .from(passkeySettings)
+      .where(eq(passkeySettings.id, "passkey"))
+      .get()?.enabled ?? false;
 
   /**
    * What stands above the projects read: their areas (`areaIds`, else every
@@ -8629,6 +8642,12 @@ const make = async (path: string): Promise<DbShape> => {
     setProjectCap: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
+    setPasskeyRelay: (enabled: boolean) => {
+      db.insert(passkeySettings)
+        .values({ id: "passkey", enabled })
+        .onConflictDoUpdate({ target: passkeySettings.id, set: { enabled } })
+        .run();
+    },
     setSpendOnCap: (onCap) => {
       db.insert(spendSettings)
         .values({ id: "spend", onCap })
@@ -8658,6 +8677,7 @@ const make = async (path: string): Promise<DbShape> => {
         ...(cpuPercent === undefined ? {} : { cpuPercent }),
       };
     },
+    passkeyRelayEnabled: fleetPasskeyRelay,
     spendOnCap: fleetOnCap,
     projectSpentSince: (projectId, since) =>
       db

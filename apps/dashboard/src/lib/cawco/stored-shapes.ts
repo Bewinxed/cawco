@@ -23,6 +23,7 @@ import type {
   BrowserKey as BrowserKeyType,
   BrowserState as BrowserStateType,
   ListedBrowser as ListedBrowserType,
+  PasskeyRelayCapability as PasskeyRelayCapabilityType,
 } from "@cawco/core/browser";
 import type {
   CommentAttachment as CommentAttachmentType,
@@ -412,6 +413,11 @@ const BrowserAskFrameShape = z.object({
 
 const BrowserHostKindShape = z.enum(["container", "local"]);
 
+const PasskeyRelayCapabilityShape = z.object({
+  hasBle: z.boolean(),
+  hasVhci: z.boolean(),
+});
+
 const BrowserStateShape = z.enum([
   "pulling",
   "building",
@@ -430,6 +436,7 @@ const ListedBrowserShape = z.object({
   machineName: z.string(),
   name: z.string(),
   origin: z.string().optional(),
+  passkeyRelay: PasskeyRelayCapabilityShape.optional(),
   progress: z
     .object({ done: z.number(), total: z.number(), what: z.literal("image") })
     .optional(),
@@ -1049,6 +1056,10 @@ prove<
     Same<z.output<typeof BrowserKeyShape>, BrowserKeyType>,
     Same<z.output<typeof BrowserAskFrameShape>, BrowserAskFrameType>,
     Same<z.output<typeof BrowserHostKindShape>, BrowserHostKindType>,
+    Same<
+      z.output<typeof PasskeyRelayCapabilityShape>,
+      PasskeyRelayCapabilityType
+    >,
     Same<z.output<typeof BrowserStateShape>, BrowserStateType>,
     Same<z.output<typeof ListedBrowserShape>, ListedBrowserType>,
     Same<z.output<typeof ArtifactKindShape>, ArtifactKindType>,

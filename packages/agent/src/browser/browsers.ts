@@ -58,6 +58,7 @@ import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { startHubProxy } from "./hub-proxy";
 import { LocalHost } from "./local-host";
+import { detectPasskeyRelay } from "./passkey-detect";
 import { relayKeyOf } from "./relay-urls";
 import { findRuntime, type Runtime } from "./runtime";
 import {
@@ -179,12 +180,17 @@ export const browserRows = async (): Promise<BrowserRow[]> =>
     .map(rowOf);
 
 /** The runtime and every browser of the machine, whole, as its records hold them now. */
-export const browserFrame = async (): Promise<BrowserFrame> => ({
-  kind: "browsers",
-  machineId,
-  runtime: runtimeRow(await browserRuntime()),
-  browsers: await browserRows(),
-});
+export const browserFrame = async (): Promise<BrowserFrame> => {
+  const relay = detectPasskeyRelay();
+  const hasRelay = relay.hasBle || relay.hasVhci;
+  return {
+    kind: "browsers",
+    machineId,
+    ...(hasRelay ? { passkeyRelay: relay } : {}),
+    runtime: runtimeRow(await browserRuntime()),
+    browsers: await browserRows(),
+  };
+};
 
 /** Tells the hub the runtime and every browser, when anything of it changed. */
 const tell = async (): Promise<void> => {

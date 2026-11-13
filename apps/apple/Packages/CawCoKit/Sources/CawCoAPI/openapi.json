@@ -39685,6 +39685,10 @@
             "description": "The origin of the page the person's view shows; absent while it shows none.",
             "type": "string"
           },
+          "passkeyRelay": {
+            "$ref": "#/components/schemas/PasskeyRelayCapability",
+            "description": "What this browser's machine can do for passkey relay; absent when neither is available."
+          },
           "progress": {
             "description": "How far an image build is, while `state` is `pulling` or `building`.",
             "type": "object",
@@ -39776,6 +39780,24 @@
             "type": "string",
             "pattern": "^machine:.*$"
           }
+        ]
+      },
+      "PasskeyRelayCapability": {
+        "description": "What a machine can do for passkey relay.",
+        "type": "object",
+        "properties": {
+          "hasBle": {
+            "description": "Has a BLE adapter for capturing FIDO adverts.",
+            "type": "boolean"
+          },
+          "hasVhci": {
+            "description": "Has /dev/vhci for injecting adverts into containers.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hasBle",
+          "hasVhci"
         ]
       },
       "BrowserState": {
@@ -65025,6 +65047,10 @@
           "machineId": {
             "type": "string"
           },
+          "passkeyRelay": {
+            "$ref": "#/components/schemas/PasskeyRelayCapability",
+            "description": "What this machine can do for passkey relay; absent when neither is available."
+          },
           "runtime": {
             "$ref": "#/components/schemas/BrowserRuntime"
           }
@@ -68260,6 +68286,7 @@
           "git",
           "node",
           "opencode",
+          "passkey-relay",
           "pi",
           "public-address",
           "service-manager",
