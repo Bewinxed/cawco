@@ -43,9 +43,6 @@ function parse(raw: string | null): Partial<Choices> {
     } else if (name === "answer") {
       picked.answer =
         OPTIONS.answer.find((one) => one === value) ?? picked.answer;
-    } else if (name === "finished") {
-      picked.finished =
-        OPTIONS.finished.find((one) => one === value) ?? picked.finished;
     }
   }
   return picked;

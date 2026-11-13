@@ -524,8 +524,8 @@
               icon={IconListRowsLinear}
               label={transcriptWords.sessionDetails}
               onclick={cardPress}
-              onpointerenter={(event: PointerEvent) => {
-                cardAnchor = event.currentTarget as HTMLElement;
+              onpointerenter={(event) => {
+                cardAnchor = event.currentTarget;
                 cardRest(event);
               }}
               onpointerleave={cardLeave}
@@ -566,7 +566,7 @@
               label={conversationWords.hidePanel}
               onclick={() => {
                 lead.open = false;
-                lead.anchor?.focus({ focusVisible: false } as FocusOptions);
+                lead.anchor?.focus({ focusVisible: false });
               }}
             />
           </BarGlass>

@@ -86,7 +86,7 @@
   }
 
   const isMethod = (value: string): value is CompactMethod =>
-    (COMPACT_METHODS as readonly string[]).includes(value);
+    COMPACT_METHODS.some((one) => one === value);
 </script>
 
 <div class="@container flex flex-col">

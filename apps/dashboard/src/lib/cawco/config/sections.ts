@@ -82,8 +82,13 @@ export const SECTIONS: ConfigSection[] = CONFIG_SECTIONS.map((section) => ({
   hue: `var(--color-${section.hue})`,
 }));
 
-export const sectionOf = (slug: SectionSlug): ConfigSection =>
-  SECTIONS.find((section) => section.slug === slug) as ConfigSection;
+export const sectionOf = (slug: SectionSlug): ConfigSection => {
+  const section = SECTIONS.find((one) => one.slug === slug);
+  if (!section) {
+    throw new Error(`Configure has no section "${slug}".`);
+  }
+  return section;
+};
 
 /** The rail's groups, in order, each with its sections. */
 export const GROUPS = CONFIG_GROUPS.map((group) => ({
