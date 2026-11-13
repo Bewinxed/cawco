@@ -16420,7 +16420,7 @@ export const createServer = (
     db.previews,
     db.previewPasses,
     tailnetHttps,
-    { listens: serves, after: lifetime.after }
+    { listens: serves, after: lifetime.after, lend: hubAuth.lend }
   );
   /** Each machine preview origin's upstream, following its artifact's row (preview-service.ts). */
   const previewService = createPreviewService({
