@@ -133,15 +133,16 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * what it leaves out (worker 30,641 measured).
  * 2026-11-13: call mechanics the owner's memory documents carried move into
  * the tools they are about: a fork's workspace is cut from the default
- * branch, the merge checks are the project's gate.md, a wait may be on the
- * parent's check, the rest of $TMPDIR goes with a workspace, ship notes are
- * for someone updating, a delegate's ask reaches its parent, delegate_list
- * says which session is warm, find reaches a delegate's commits (worker
- * 30,712, delegate 11,327, curator 1,206 measured).
+ * branch or where `from` says, the merge checks are the project's gate.md, a
+ * wait may be on the parent's check and ends when its minutes run out or a
+ * message arrives, everything else in $TMPDIR is deleted with a workspace,
+ * ship notes tell the person updating what changed, delegate_list shows
+ * which session is warm, find reaches unlanded work (worker 30,692, delegate
+ * 11,331, curator 1,209 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_720,
-  delegate: 11_330,
+  worker: 30_700,
+  delegate: 11_340,
   overseer: 770,
   "web-facing": 3400,
   curator: 1210,

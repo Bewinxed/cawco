@@ -231,7 +231,7 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
   const back =
     " A failed check or a conflict comes back with its output: fix, commit, call again.";
   const outputs =
-    " In a project, $TMPDIR/outputs/ and your declared outputs are copied to its folder's assets/; the report names each path. The rest of $TMPDIR goes with the workspace.";
+    " In a project, $TMPDIR/outputs/ and your declared outputs are copied to its folder's assets/; the report names each path. Everything else in $TMPDIR is deleted with the workspace.";
   const close =
     " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
   switch (lands) {
@@ -264,7 +264,7 @@ const handoffDescription = (startsNone: boolean): string =>
   startsNone
     ? `Message another session: your parent, or a session that already owns the work. ${HANDOFF_DELIVERY}`
     : "Message another session: guide your delegate while it works, or brief a session that already owns the work; for new standalone work, delegate. " +
-      "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless that session is warm (delegate_list says). " +
+      "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless delegate_list shows that session warm. " +
       HANDOFF_DELIVERY;
 
 /** `handoff`'s target and message, every session's. */
@@ -635,7 +635,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate",
-      "Run bounded work in a new session with its own workspace and fresh context. It reports back, quoting the output of the commands that prove it, once its work passes the merge checks its project's gate.md names, which the hub runs at every landing.\n\n" +
+      "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks (its project's gate.md lists them), quoting the output of the commands that prove it.\n\n" +
         "A delegate costs a whole session: it reads the code again from nothing, its workspace is cut and its checks run, and you wait for its report. " +
         "That pays off for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs, independent pieces run at once. " +
         "It does not for one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, or what the user wants to watch: do those yourself.\n\n" +
@@ -692,7 +692,7 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Start as a copy of this conversation, on this session's harness and model. Its workspace is cut from the default branch, not this session's; `from` starts it at an ended delegate's commits."
+            "Start as a copy of this conversation, on this session's harness and model. Only the conversation is copied: its workspace is cut from the default branch, or where `from` says."
           ),
         clean: z
           .boolean()
@@ -839,7 +839,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "wait_item",
-      "Declare a bounded wait on a command you started or a check your parent runs for you, then end your turn: the hub shows your parent what you wait for and wakes you when it ends, or sooner at a message. Any tool call but a CawCo read ends it.",
+      "Declare a bounded wait on a command you started or a check your parent is running for you, then end your turn: the hub shows your parent what you wait for and wakes you when the wait's minutes run out or a message arrives. Any tool call but a CawCo read ends the wait.",
       {
         minutes: z
           .number({ error: WAIT_ITEM_LIMIT })
@@ -882,7 +882,7 @@ export function handoffTools(deps: HandoffDeps) {
           .object({ notes: z.string().trim().min(1) })
           .optional()
           .describe(
-            "Release it once it lands on main, with notes for someone updating, saying what changed for them: the project's gate.md Ship: command runs it. Your call."
+            "Release it once it lands on main, with notes telling the person updating what changed for them: the project's gate.md Ship: command runs it. Your call."
           ),
       },
       (request) => actions.finishItem(request),

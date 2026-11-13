@@ -215,7 +215,7 @@ export type FindInput = z.infer<typeof SCHEMA> & {
 };
 
 const DESCRIPTION =
-  "Find anything said or made across the fleet (a delegate's commits and files too, landed or not), and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
+  "Find anything said or made across the fleet, unlanded work included, and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
 
 /** A refusal: what was wrong, and one call that works. */
 class FindToolRefusal extends Error {}
