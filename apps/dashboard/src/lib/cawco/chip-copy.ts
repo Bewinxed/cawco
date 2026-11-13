@@ -71,8 +71,9 @@ function oncopy(event: ClipboardEvent): void {
     return;
   }
   const scope = root instanceof Element ? root : root.parentElement;
-  const chips = [...(scope?.querySelectorAll(`[${COPIES}]`) ?? [])].filter(
-    (chip) => range.intersectsNode(chip)
+  const chips = [...(scope?.querySelectorAll(`[${COPIES}]`) ?? [])].flatMap(
+    (chip) =>
+      chip instanceof HTMLElement && range.intersectsNode(chip) ? [chip] : []
   );
   if (chips.length === 0) {
     return;
@@ -83,7 +84,7 @@ function oncopy(event: ClipboardEvent): void {
   const to = chipAt(range.endContainer);
   const swapped: [Text, string][] = [];
   for (const chip of chips) {
-    (chip as HTMLElement).style.setProperty("display", "inline");
+    chip.style.setProperty("display", "inline");
     const words = chip.querySelector('[data-slot="label"]')?.firstChild;
     if (words instanceof Text) {
       swapped.push([words, words.data]);
@@ -115,7 +116,7 @@ function oncopy(event: ClipboardEvent): void {
     ...chips,
     ...holder.querySelectorAll<HTMLElement>(`[${COPIES}]`),
   ]) {
-    unstyle(chip as HTMLElement);
+    unstyle(chip);
   }
   const back = document.createRange();
   back.setStart(...start);

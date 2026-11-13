@@ -15,7 +15,7 @@ export function holdStyle(
   node: HTMLElement,
   values: Record<`--${string}`, string | null>
 ): () => void {
-  const entries = Object.entries(values) as [string, string | null][];
+  const entries = Object.entries(values);
   const hold = () => {
     for (const [name, value] of entries) {
       const now = node.style.getPropertyValue(name);

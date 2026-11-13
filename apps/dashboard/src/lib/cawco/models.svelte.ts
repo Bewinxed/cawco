@@ -52,14 +52,17 @@ const RECENT_LIMIT = 5;
  */
 export const MODEL_DEFAULT = "";
 
-const store = $state({
+const store = $state<{
+  claudeWindows: Record<string, number>;
+  recent: Record<string, string[]>;
+}>({
   /**
    * Claude models' context windows as the hub last saw a turn report them —
    * claude's own catalog carries none. Keyed by wire id.
    */
-  claudeWindows: {} as Record<string, number>,
+  claudeWindows: {},
   /** Typed-in ids by the harness they were typed for, newest first. */
-  recent: {} as Record<string, string[]>,
+  recent: {},
 });
 
 // Read once as the module loads rather than from a getter — a read that
