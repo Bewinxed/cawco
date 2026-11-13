@@ -31,8 +31,9 @@
   import ProjectPage from "../project/ProjectPage.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
-  import Composer, { type TrayRow } from "../transcript/Composer.svelte";
+  import Composer from "../transcript/Composer.svelte";
   import { composerFleet } from "../transcript/composer-fleet";
+  import type { TrayRow } from "../transcript/offer-stack.svelte";
   import {
     type ComposerBinding,
     composerBindings,
