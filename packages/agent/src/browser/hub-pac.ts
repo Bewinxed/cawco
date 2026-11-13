@@ -12,7 +12,7 @@ import { hubPorts } from "../hub-ports";
  * Port 1 on 127.0.0.1 is the container's own loopback, where nothing listens:
  * the connection is refused. Preview ports and names stay `DIRECT`.
  */
-export const hubPac = (): string => {
+const hubPac = (): string => {
   const ports = JSON.stringify(hubPorts().map(String));
   return `function FindProxyForURL(url, host) {
   var m = /^[a-z][a-z0-9+.-]*:\\/\\/[^\\/?#]*:(\\d+)(?:[\\/?#]|$)/i.exec(url);
