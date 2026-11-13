@@ -147,7 +147,7 @@
       preventScroll: true,
       // After a press, no ring: a script's focus would draw it.
       ...(barGlass.byPointer && card !== "jump" ? { focusVisible: false } : {}),
-    } as FocusOptions);
+    });
   }
   /** Focus into a face that came in by a swap; Caw's a task after its frame. */
   function focusSwapped(card: Card, node: HTMLElement) {

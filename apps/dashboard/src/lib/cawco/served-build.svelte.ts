@@ -22,6 +22,7 @@
  * it while the toast stands, and asks on each snapshot until the dashboard
  * serves the new build (hub/socket.svelte.ts `olderThanHub`).
  */
+import { z } from "zod";
 import { version } from "$app/env";
 
 let newer = $state<string | null>(null);
@@ -37,7 +38,7 @@ async function runningBuild(): Promise<string | null> {
   if (!response?.ok) {
     return null;
   }
-  return ((await response.json()) as { version: string }).version;
+  return z.object({ version: z.string() }).parse(await response.json()).version;
 }
 
 /** The ask on its way: a page on an older wire asks on every snapshot, and one ask at a time is enough. */

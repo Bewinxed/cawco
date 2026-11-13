@@ -73,13 +73,11 @@ const probe = (
         done(refused ? "refused" : "unreachable");
       }
     };
-    peer.onicecandidateerror = (event) => {
-      if (
-        (event as RTCPeerConnectionIceErrorEvent).errorCode === UNAUTHORIZED
-      ) {
+    peer.addEventListener("icecandidateerror", (event) => {
+      if (event.errorCode === UNAUTHORIZED) {
         refused = true;
       }
-    };
+    });
     peer.createDataChannel("cawco-relay-proof");
     peer
       .createOffer()
@@ -118,9 +116,9 @@ const seenBy = (turnUrl: string): Promise<string | null> =>
   });
 
 /** This screen's proof running now: the card draws its step as checking. */
-const relayProof = $state({
+const relayProof = $state<{ refusal: string | null; running: boolean }>({
   running: false,
-  refusal: null as string | null,
+  refusal: null,
 });
 
 /** The URLs this page proved by itself, so the start's tick proves once per page. */

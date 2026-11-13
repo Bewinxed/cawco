@@ -2,10 +2,13 @@
  * The tasks picked for a bulk change, shared by the board's cards, the
  * table's rows and the bar that acts on them.
  */
-export const selection = $state({
-  ids: [] as string[],
+export const selection = $state<{
   /** The last row ticked, for a shift-click range. */
-  anchor: null as string | null,
+  anchor: string | null;
+  ids: string[];
+}>({
+  ids: [],
+  anchor: null,
 });
 
 export const isPicked = (id: string): boolean => selection.ids.includes(id);
