@@ -59,6 +59,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
@@ -294,18 +295,29 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     };
   };
 
-  const comment = (
+  const comment = async (
     check: Pick<DesignCheckRow, "projectId" | "taskId">,
     text: string,
     why: string
-  ) =>
-    deps.tasks
-      .comment(check.projectId, check.taskId, text, hubActor(why))
-      .catch((error: unknown) =>
-        console.warn(
-          `[design-verify] ${check.taskId}: its comment was not written: ${error instanceof Error ? error.message : String(error)}`
-        )
+  ): Promise<void> => {
+    const unwritten = (words: string) =>
+      console.warn(
+        `[design-verify] ${check.taskId}: its comment was not written: ${words}`
       );
+    try {
+      const written = await deps.tasks.comment(
+        check.projectId,
+        check.taskId,
+        text,
+        hubActor(why)
+      );
+      if (written instanceof ElysiaStatus) {
+        unwritten(written.response.detail);
+      }
+    } catch (error) {
+      unwritten(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   /** The verifier's brief: the work, the system, how to judge, how to answer. */
   const briefOf = (
@@ -412,15 +424,18 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     }
   };
 
-  /** Starts a round on `at` for the builder's item; answers what its finish_item says. */
+  /** Starts a round on `at` for the builder's item; answers what its finish_item says, or its task's refused read. */
   const startRound = async (
     item: WorkItemRow & { projectId: string; taskId: string },
     submission: WorkItemSubmission,
     workspace: { base: string; id: string; machineId: string; path: string },
     at: Snapshot
-  ): Promise<string> => {
+  ) => {
     const project = db.project(item.projectId);
     const task = await deps.tasks.get(item.projectId, item.taskId);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     const check: DesignCheckRow = {
       id: crypto.randomUUID(),
       projectId: item.projectId,
@@ -501,7 +516,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
    * design work, in a workspace whose base branch holds a system (one only
    * its own commits hold, or its own open task landed, is its build, the
    * person's to judge in review).
-   * Its task and workspace when it is.
+   * Its task and workspace when it is; its task's refused read.
    */
   const judged = async (item: WorkItemRow) => {
     const { projectId, taskId } = item;
@@ -510,6 +525,9 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       return;
     }
     const task = await deps.tasks.get(projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     const [workspace] = db.workspacesNamed(item.workspaceId);
     if (!(workspace && designShaped(project.template ?? null, task))) {
       return;
@@ -622,14 +640,11 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   };
 
   return {
-    /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on. */
-    async hold(
-      item: WorkItemRow,
-      submission: WorkItemSubmission
-    ): Promise<string | undefined> {
+    /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on; its task's refused read. */
+    async hold(item: WorkItemRow, submission: WorkItemSubmission) {
       const subject = await judged(item);
-      if (!subject) {
-        return;
+      if (!subject || subject instanceof ElysiaStatus) {
+        return subject;
       }
       const { projectId, taskId, workspace } = subject;
       const latest = db.designChecks.latest(item.id);

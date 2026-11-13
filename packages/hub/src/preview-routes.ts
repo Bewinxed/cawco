@@ -10,16 +10,15 @@
 
 import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROL_NAMES } from "@cawco/core/comments/model";
-import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { ServerWebSocket } from "bun";
-import { Elysia, status, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
+import type { createArtifactPages } from "./artifact-pages";
 import type { ArtifactSocket } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import { projectOrigin } from "./db/previews";
 import { hidden } from "./hidden";
 import type { PreviewListenerDeps, PreviewListeners } from "./preview";
 import { mintTicket, presentedPasses } from "./preview-access";
-import { PreviewRefusal } from "./preview-hosts";
 
 /** A panel asked for an artifact its session doesn't see. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
@@ -35,9 +34,14 @@ export const previewRoutes = (deps: {
    * The origin artifact `id`'s newest version is served on (a next version
    * held for its owner's panel included), its listener started when it has
    * none: a machine's preview or sheet its own, anything else its session's
-   * or its project's. Undefined when no session or project holds it.
+   * or its project's. Undefined when no session or project holds it; the
+   * listeners' refusal when its origin does not open.
    */
-  artifactAddress: (id: string) => PreviewAddress | undefined;
+  artifactAddress: (
+    id: string
+  ) =>
+    | ReturnType<ReturnType<typeof createArtifactPages>["frameOrigin"]>
+    | undefined;
   /** Whether session `instanceId`'s panel may hold artifact `artifactId`: its own, one it made, or its delegation tree's (artifacts/service.ts `panelSees`). */
   panelSees: (instanceId: string, artifactId: string) => boolean;
   listener: PreviewListenerDeps;
@@ -50,12 +54,6 @@ export const previewRoutes = (deps: {
 }) => {
   /** Each pane's doc socket, as the artifact sync code keeps one. */
   const panes = new Map<string, ServerWebSocket<ArtifactSocket>>();
-  const refused = (error: unknown) => {
-    if (error instanceof PreviewRefusal) {
-      return status(error.status, error.message);
-    }
-    throw error;
-  };
   return (
     new Elysia()
       .get("/api/preview-settings", () => deps.listeners.settings())
@@ -71,8 +69,6 @@ export const previewRoutes = (deps: {
         async ({ body }) => {
           try {
             return await deps.listeners.set(body);
-          } catch (error) {
-            return refused(error);
           } finally {
             // Every listener stopped for the change, a refused one too: each
             // shown preview opens again where the mode now standing serves it.
@@ -91,13 +87,12 @@ export const previewRoutes = (deps: {
       // A session's preview origin, its listener started when it has none.
       .post("/api/instances/:id/preview-address", ({ params }) => {
         if (!deps.hasInstance(params.id)) {
-          return new Response("No such session.", { status: 404 });
+          return problem(404, {
+            code: "no-such-session",
+            detail: "No such session.",
+          });
         }
-        try {
-          return deps.listeners.address(params.id);
-        } catch (error) {
-          return refused(error);
-        }
+        return deps.listeners.address(params.id);
       })
       // The names a session's browser opens previews on (artifact_browse),
       // for its machine's browser container to resolve (agent
@@ -135,30 +130,23 @@ export const previewRoutes = (deps: {
       .post(
         "/api/artifacts/:artifact/preview-address",
         hidden,
-        ({ params }) => {
-          try {
-            return (
-              deps.artifactAddress(params.artifact) ??
-              new Response("No session or project holds that artifact.", {
-                status: 404,
-              })
-            );
-          } catch (error) {
-            return refused(error);
-          }
-        }
+        ({ params }) =>
+          deps.artifactAddress(params.artifact) ??
+          problem(404, {
+            code: "no-session-project-holds",
+            detail: "No session or project holds that artifact.",
+          })
       )
       // A project's preview origin, where its pages are served (Projects spec
       // §5.8): one for the project's life, its listener started when it has none.
       .post("/api/projects/:id/preview-address", ({ params }) => {
         if (!deps.hasProject(params.id)) {
-          return new Response("No such project.", { status: 404 });
+          return problem(404, {
+            code: "no-such-project",
+            detail: "No such project.",
+          });
         }
-        try {
-          return deps.listeners.address(projectOrigin(params.id));
-        } catch (error) {
-          return refused(error);
-        }
+        return deps.listeners.address(projectOrigin(params.id));
       })
       // The dashboard's Send of a page's picks (the panel head's, a Needs you
       // row's: `control` names it) from any panel that holds it, sent as the
@@ -189,7 +177,10 @@ export const previewRoutes = (deps: {
                 owner,
                 params.artifact
               )
-            : new Response(NO_SUCH_ARTIFACT, { status: 404 });
+            : problem(404, {
+                code: "no-such-artifact",
+                detail: NO_SUCH_ARTIFACT,
+              });
         }
       )
       // The pane's link to the artifact's document (artifact-doc.ts).

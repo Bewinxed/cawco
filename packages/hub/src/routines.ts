@@ -108,7 +108,7 @@ import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
@@ -125,7 +125,7 @@ import { jevType, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
-import { ROUTINE_ORIGIN } from "./memory";
+import { type Memory, ROUTINE_ORIGIN } from "./memory";
 import {
   routineListWords,
   routineRunWords,
@@ -133,7 +133,7 @@ import {
 } from "./presenters/project";
 import { handle } from "./presenters/words";
 import type { Push } from "./push";
-import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
+
 import { budgetParameter } from "./task-tools";
 import { BUDGET, LANDS, MODE } from "./tasks";
 import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
@@ -205,25 +205,23 @@ A dated question needs no tool: what was true on a day is the lines whose \`sinc
 Nothing you propose changes a file until the person approves it. Finish with finish_item, its headline ${NO_REPLY} when you proposed nothing, else one line naming what you proposed.`;
 
 /** Why a change of target is refused: the memory curator's and the trim routine's stay the hub's. */
-const targetStays = (
-  from: RoutineTarget,
-  to: RoutineTarget
-): string | undefined => {
+const targetStays = (from: RoutineTarget, to: RoutineTarget) => {
   if (from === to) {
     return;
   }
   if (from === "curator" || to === "curator") {
-    return routineToolWords.curatorStays;
+    return problem(400, {
+      code: "routine-curator-stays",
+      detail: routineToolWords.curatorStays,
+    });
   }
   if (from === "trim" || to === "trim") {
-    return routineToolWords.trimStays;
+    return problem(400, {
+      code: "routine-trim-stays",
+      detail: routineToolWords.trimStays,
+    });
   }
 };
-
-/** A refusal, with the status a route answers and the words a tool returns. */
-class RoutineRefusal extends StatusRefusal {}
-
-const refuse = refuser(RoutineRefusal);
 
 /**
  * Where a routine was made: the session whose `routine_create` call made
@@ -351,11 +349,7 @@ export interface RoutineDeps {
    * A curator run's inbox, made ready (memory.ts): `none` when no note is
    * left to curate, else the brief it reads; Jev failing throws.
    */
-  readonly curatorBrief: (
-    projectId: string
-  ) => Promise<
-    { kind: "none"; reason: string } | { kind: "run"; text: string }
-  >;
+  readonly curatorBrief: Memory["curatorBrief"];
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -395,26 +389,32 @@ export interface RoutineDeps {
   readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
 
+/** Why a run of a routine in no project, which a conversation or curator run needs, does not start. */
+const noProject = problem(409, {
+  code: "routine-no-project",
+  detail: "no project",
+});
+
 /** A schedule, parsed; refused with Effect's own words when it does not parse. */
 const parsedCache = new Map<string, Cron.Cron>();
-const cronOf = (expression: string, timeZone: string): Cron.Cron => {
+const cronOf = (expression: string, timeZone: string) => {
   const key = `${expression}\0${timeZone}`;
   const cached = parsedCache.get(key);
   if (cached) {
     return cached;
   }
   if (Option.isNone(DateTime.zoneMakeNamed(timeZone))) {
-    return refuse(
-      400,
-      `“${timeZone}” is not an IANA time zone; name one like Europe/London or America/New_York.`
-    );
+    return problem(400, {
+      code: "routine-time-zone-unknown",
+      detail: `“${timeZone}” is not an IANA time zone; name one like Europe/London or America/New_York.`,
+    });
   }
   const parsed = Cron.parse(expression, timeZone);
   if (Result.isFailure(parsed)) {
-    return refuse(
-      400,
-      `“${expression}” is not a cron schedule: ${parsed.failure.message}. Give five fields (minute hour day month weekday), or six with seconds first.`
-    );
+    return problem(400, {
+      code: "routine-cron-unparsed",
+      detail: `“${expression}” is not a cron schedule: ${parsed.failure.message}. Give five fields (minute hour day month weekday), or six with seconds first.`,
+    });
   }
   parsedCache.set(key, parsed.success);
   return parsed.success;
@@ -442,13 +442,13 @@ const NEXT_RUNS_MAX = 288;
  * `Cron.sequence` on the same parsed cron and zone the hub runs it by
  * (`cronOf`), over the next week and at most `NEXT_RUNS_MAX`, epoch ms.
  */
-export const nextRunsOf = (
-  cron: string,
-  timeZone: string,
-  now: number
-): number[] => {
+export const nextRunsOf = (cron: string, timeZone: string, now: number) => {
+  const parsed = cronOf(cron, timeZone);
+  if (parsed instanceof ElysiaStatus) {
+    return parsed;
+  }
   const runs: number[] = [];
-  for (const at of Cron.sequence(cronOf(cron, timeZone), new Date(now))) {
+  for (const at of Cron.sequence(parsed, new Date(now))) {
     const time = at.getTime();
     if (time >= now + NEXT_RUNS_SPAN_MS || runs.length >= NEXT_RUNS_MAX) {
       break;
@@ -524,12 +524,17 @@ export interface SchedulePreview {
  * dashboard's routine form): parsed as `create` parses it (`cronOf`, refused
  * in the same words), its runs ahead as `nextRunsOf` tells them.
  */
-const schedulePreview = (cron: string, timeZone: string): SchedulePreview => {
+const schedulePreview = (cron: string, timeZone: string) => {
   const [expression, zone] = [cron.trim(), timeZone.trim()];
-  return {
-    nextRuns: nextRunsOf(expression, zone, Date.now()),
+  const nextRuns = nextRunsOf(expression, zone, Date.now());
+  if (nextRuns instanceof ElysiaStatus) {
+    return nextRuns;
+  }
+  const preview: SchedulePreview = {
+    nextRuns,
     words: scheduleWords(expression, zone),
   };
+  return preview;
 };
 
 /** The start of today in `timeZone`, ms. */
@@ -816,14 +821,29 @@ export const createRoutines = ({
   let timer: HubTimer | undefined;
   let started = false;
 
-  const routineOf = (id: string): RoutineRow =>
-    store.get(id) ?? refuse(404, `The hub keeps no routine ${id}.`);
+  const routineOf = (id: string) =>
+    store.get(id) ??
+    problem(404, {
+      code: "routine-unknown",
+      detail: `The hub keeps no routine ${id}.`,
+    });
 
-  const projectOf = (projectId: string): ProjectRow =>
+  const projectOf = (projectId: string) =>
     db.project(projectId) ??
-    refuse(404, `The hub keeps no project ${projectId}.`);
+    problem(404, {
+      code: "routine-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
 
-  const viewOf = (row: RoutineRow): RoutineView => ({
+  /** A routine as its readers see it; its stored schedule's refusal when it no longer parses. */
+  const viewOf = (row: RoutineRow) => {
+    const nextRuns = nextRunsOf(row.cron, row.timeZone, Date.now());
+    return nextRuns instanceof ElysiaStatus
+      ? nextRuns
+      : viewWith(row, nextRuns);
+  };
+
+  const viewWith = (row: RoutineRow, nextRuns: number[]): RoutineView => ({
     id: row.id,
     projectId: row.projectId,
     name: row.name,
@@ -850,7 +870,7 @@ export const createRoutines = ({
     keep: row.keep,
     expiresAt: ms(row.expiresAt),
     lastSlot: ms(row.lastSlot),
-    nextRuns: nextRunsOf(row.cron, row.timeZone, Date.now()),
+    nextRuns,
     nextSlot: row.nextSlot.getTime(),
     schedule: scheduleOf(row),
     createdAt: row.createdAt.getTime(),
@@ -886,14 +906,18 @@ export const createRoutines = ({
     return `No delegate type “${type}”. Available: ${names || "none are configured"}.`;
   };
 
-  /** Refuses a routine that cannot run as written: names the field and how to fix it. */
-  const checked = (routine: Fields): void => {
-    cronOf(routine.cron, routine.timeZone);
-    if (routine.projectId) {
-      projectOf(routine.projectId);
+  /** Refuses a routine that cannot run as written: names the field and how to fix it; its schedule parsed when it can. */
+  const checked = (routine: Fields) => {
+    const cron = cronOf(routine.cron, routine.timeZone);
+    if (cron instanceof ElysiaStatus) {
+      return cron;
+    }
+    const project = routine.projectId ? projectOf(routine.projectId) : null;
+    if (project instanceof ElysiaStatus) {
+      return project;
     }
     const cap = routine.dailyCapUsd;
-    const problem =
+    const misfit =
       titleProblem(routine.name)?.replace("title", "name") ??
       (routine.prompt.trim()
         ? undefined
@@ -907,19 +931,24 @@ export const createRoutines = ({
         : "dailyCapUsd is a number of dollars above 0.") ??
       targetProblem(routine) ??
       typeProblem(routine);
-    if (problem) {
-      refuse(400, problem);
-    }
+    return misfit
+      ? problem(400, { code: "routine-unfit", detail: misfit })
+      : cron;
   };
 
-  /** Refuses `actor` a routine that is not in its project. */
-  const mayTouch = (actor: RoutineActor, row: RoutineRow): void => {
-    if (actor !== "owner" && (actor.projectId ?? null) !== row.projectId) {
-      refuse(
-        403,
-        `Routine “${row.name}” is not one of this session's project's routines.`
-      );
+  /** The routine `id` as `actor` may touch it: refused when there is none, or it is not in its project. */
+  const touchable = (id: string, actor: RoutineActor) => {
+    const row = routineOf(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
     }
+    if (actor !== "owner" && (actor.projectId ?? null) !== row.projectId) {
+      return problem(403, {
+        code: "routine-not-yours",
+        detail: `Routine “${row.name}” is not one of this session's project's routines.`,
+      });
+    }
+    return row;
   };
 
   // --- gates -------------------------------------------------------------------
@@ -1088,13 +1117,15 @@ export const createRoutines = ({
    * no checkout, its folder on the hub); the hub's own checkout for a
    * routine in no project.
    */
-  const placeOf = async (
-    routine: RoutineRow
-  ): Promise<{ cwd: string; machineId: string } | string> => {
+  const placeOf = async (routine: RoutineRow) => {
     if (!routine.projectId) {
       return await hubCheckout();
     }
-    const place = workPlace(projectOf(routine.projectId));
+    const project = projectOf(routine.projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const place = workPlace(project);
     return place.kind === "none"
       ? place.why
       : { cwd: place.cwd, machineId: place.machineId };
@@ -1105,9 +1136,7 @@ export const createRoutines = ({
    * just started fires its catch-up before its machines are back, and a run
    * then waits for its checkout's machine rather than skipping the slot.
    */
-  const placeWithin = async (
-    routine: RoutineRow
-  ): Promise<{ cwd: string; machineId: string } | string> => {
+  const placeWithin = async (routine: RoutineRow) => {
     const deadline = Date.now() + PLACE_WAIT_MS;
     for (;;) {
       const place = await placeOf(routine);
@@ -1136,8 +1165,11 @@ export const createRoutines = ({
       fields: Pick<WorkItemRequest, "role" | "lands" | "mayStart" | "host">;
       noted: string;
     }
-  ): Promise<void> => {
+  ) => {
     const place = await placeWithin(routine);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
     if (typeof place === "string") {
       store.setRun(run.id, {
         state: "skipped",
@@ -1184,7 +1216,7 @@ export const createRoutines = ({
     routine: RoutineRow,
     run: RoutineRunRow,
     as?: { input: string; role: SessionRole }
-  ): Promise<void> =>
+  ) =>
     fireWorkItem(routine, run, {
       lead: "",
       input: as ? `\n\n${as.input}` : inputOf(run),
@@ -1202,10 +1234,7 @@ export const createRoutines = ({
    * outlives whoever made the routine, and its end is read as a delegate
    * run's is.
    */
-  const fireOrchestrator = (
-    routine: RoutineRow,
-    run: RoutineRunRow
-  ): Promise<void> =>
+  const fireOrchestrator = (routine: RoutineRow, run: RoutineRunRow) =>
     fireWorkItem(routine, run, {
       lead: "You orchestrate it: delegate its work, read your delegates' reports, and decide. ",
       input: inputOf(run),
@@ -1219,11 +1248,11 @@ export const createRoutines = ({
    * the conversation's `routine_result` for it, or until the turn that took
    * it ends without one ({@link turnEnded}).
    */
-  const fireLead = async (
-    routine: RoutineRow,
-    run: RoutineRunRow
-  ): Promise<void> => {
-    const projectId = routine.projectId ?? refuse(409, "no project");
+  const fireLead = async (routine: RoutineRow, run: RoutineRunRow) => {
+    const { projectId } = routine;
+    if (!projectId) {
+      return noProject;
+    }
     // Caw starts on a machine of the project's, or the hub's: as a delegate
     // run does, a run just after a hub start waits for one to be back.
     const deadline = Date.now() + PLACE_WAIT_MS;
@@ -1270,12 +1299,15 @@ export const createRoutines = ({
    * A curator run: the inbox sorted first (memory.ts); nothing left to
    * curate ends it silent, else its delegate starts in the `curator` role.
    */
-  const fireCurator = async (
-    routine: RoutineRow,
-    run: RoutineRunRow
-  ): Promise<void> => {
-    const projectId = routine.projectId ?? refuse(409, "no project");
+  const fireCurator = async (routine: RoutineRow, run: RoutineRunRow) => {
+    const { projectId } = routine;
+    if (!projectId) {
+      return noProject;
+    }
     const brief = await curatorBrief(projectId);
+    if (brief instanceof ElysiaStatus) {
+      return brief;
+    }
     if (brief.kind === "none") {
       settle(run.id, {
         outcome: "silent",
@@ -1285,7 +1317,10 @@ export const createRoutines = ({
       });
       return;
     }
-    await fireDelegate(routine, run, { input: brief.text, role: "curator" });
+    return await fireDelegate(routine, run, {
+      input: brief.text,
+      role: "curator",
+    });
   };
 
   /**
@@ -1293,10 +1328,7 @@ export const createRoutines = ({
    * ends it delivered with that said, else its delegate starts in the
    * `trimmer` role.
    */
-  const fireTrim = async (
-    routine: RoutineRow,
-    run: RoutineRunRow
-  ): Promise<void> => {
+  const fireTrim = async (routine: RoutineRow, run: RoutineRunRow) => {
     const brief = trimBrief(routine.projectId);
     if (brief.kind === "none") {
       settle(run.id, {
@@ -1307,30 +1339,43 @@ export const createRoutines = ({
       });
       return;
     }
-    await fireDelegate(routine, run, { input: brief.text, role: "trimmer" });
+    return await fireDelegate(routine, run, {
+      input: brief.text,
+      role: "trimmer",
+    });
   };
 
-  /** Starts a run filed `starting`; one that cannot start ends failed, as any failure. */
-  const fire = (routine: RoutineRow, run: RoutineRunRow): void => {
-    let go: Promise<void>;
+  /** A run started by its routine's target; the refusal that stopped it. */
+  const runStarted = (routine: RoutineRow, run: RoutineRunRow) => {
     if (routine.target === "conversation") {
-      go = fireLead(routine, run);
-    } else if (routine.target === "curator") {
-      go = fireCurator(routine, run);
-    } else if (routine.target === "trim") {
-      go = fireTrim(routine, run);
-    } else if (routine.target === "orchestrator") {
-      go = fireOrchestrator(routine, run);
-    } else {
-      go = fireDelegate(routine, run);
+      return fireLead(routine, run);
     }
-    go.catch((error: unknown) => {
-      const reason = error instanceof Error ? error.message : String(error);
+    if (routine.target === "trim") {
+      return fireTrim(routine, run);
+    }
+    if (routine.target === "curator") {
+      return fireCurator(routine, run);
+    }
+    if (routine.target === "orchestrator") {
+      return fireOrchestrator(routine, run);
+    }
+    return fireDelegate(routine, run);
+  };
+
+  /** Starts a run filed `starting`; one that cannot start, refused or failing, ends failed. */
+  const fire = (routine: RoutineRow, run: RoutineRunRow): void => {
+    const go = runStarted(routine, run);
+    const failed = (reason: string) => {
       console.warn(
         `[routines] ${routine.name} (${run.slot}) did not start: ${reason}`
       );
       settle(run.id, { outcome: "failed", reason, output: null, usd: null });
-    });
+    };
+    go.then(
+      (refused) => refused && failed(refused.response.detail),
+      (error: unknown) =>
+        failed(error instanceof Error ? error.message : String(error))
+    );
   };
 
   /** Files and fires an unscheduled run: a test, a run by hand, a retry. */
@@ -1817,36 +1862,36 @@ export const createRoutines = ({
    * headline is. Refused for a run that is not its project's, not a
    * conversation run, or not going.
    */
-  const leadResult = (
-    actor: InstanceRow,
-    runId: string,
-    result: string
-  ): RoutineRunView => {
+  const leadResult = (actor: InstanceRow, runId: string, result: string) => {
     const run = store.run(runId);
     const routine = run ? store.get(run.routineId) : undefined;
     if (!(run && routine) || routine.projectId !== (actor.projectId ?? null)) {
-      return refuse(
-        404,
-        `Run ${runId} is not a run of this project's routines.`
-      );
+      return problem(404, {
+        code: "routine-run-unknown",
+        detail: `Run ${runId} is not a run of this project's routines.`,
+      });
     }
     if (routine.target !== "conversation") {
-      return refuse(
-        409,
-        `Run ${runId} is a delegate run: its delegate answers with finish_item.`
-      );
+      return problem(409, {
+        code: "routine-run-delegate",
+        detail: `Run ${runId} is a delegate run: its delegate answers with finish_item.`,
+      });
     }
-    if (run.state === "ended" || run.state === "skipped") {
-      return refuse(
-        409,
-        `Run ${runId} has already ended ${run.outcome ?? run.state}.`
-      );
+    const ended =
+      run.state === "ended" || run.state === "skipped"
+        ? `${run.outcome ?? run.state}`
+        : isHeld(run.id) && run.state === "running" && "failed";
+    if (ended) {
+      return problem(409, {
+        code: "routine-run-ended",
+        detail: `Run ${runId} has already ended ${ended}.`,
+      });
     }
     if (run.state !== "running") {
-      return refuse(409, `Run ${runId} has not reached you yet.`);
-    }
-    if (isHeld(run.id)) {
-      return refuse(409, `Run ${runId} has already ended failed.`);
+      return problem(409, {
+        code: "routine-run-unreached",
+        detail: `Run ${runId} has not reached you yet.`,
+      });
     }
     answered(
       run.id,
@@ -2153,14 +2198,12 @@ export const createRoutines = ({
     routine: RoutineRow,
     now: number
   ): RoutineRunRow | undefined => {
-    let cron: Cron.Cron;
-    try {
-      cron = cronOf(routine.cron, routine.timeZone);
-    } catch (error) {
+    const cron = cronOf(routine.cron, routine.timeZone);
+    if (cron instanceof ElysiaStatus) {
       console.warn(
-        `[routines] ${routine.name}: its schedule does not parse: ${error instanceof Error ? error.message : String(error)}`
+        `[routines] ${routine.name}: its schedule does not parse: ${cron.response.detail}`
       );
-      return undefined;
+      return;
     }
     const due = newestDue(cron, now);
     return store.claimSlot({
@@ -2298,11 +2341,7 @@ export const createRoutines = ({
    * when its harness names it); then it is announced to you. Yours (the
    * dashboard) is made by you, with no why and no notice.
    */
-  const create = (
-    input: RoutineInput,
-    by: RoutineActor,
-    callId?: string
-  ): RoutineView => {
+  const create = (input: RoutineInput, by: RoutineActor, callId?: string) => {
     const fields = {
       projectId: input.projectId,
       name: input.name.trim(),
@@ -2316,7 +2355,10 @@ export const createRoutines = ({
       dailyCapUsd: input.dailyCapUsd ?? null,
       mode: input.mode ?? null,
     };
-    checked(fields);
+    const cron = checked(fields);
+    if (cron instanceof ElysiaStatus) {
+      return cron;
+    }
     const now = new Date();
     const agent = by !== "owner";
     const keep = input.keep ?? false;
@@ -2332,7 +2374,7 @@ export const createRoutines = ({
       expiresAt:
         agent && !keep ? new Date(now.getTime() + AGENT_LIFETIME_MS) : null,
       lastSlot: null,
-      nextSlot: Cron.next(cronOf(fields.cron, fields.timeZone), now),
+      nextSlot: Cron.next(cron, now),
       createdAt: now,
     });
     console.log(
@@ -2346,29 +2388,26 @@ export const createRoutines = ({
     return viewOf(store.get(row.id) ?? row);
   };
 
-  const update = (
-    id: string,
-    patch: RoutinePatch,
-    by: RoutineActor
-  ): RoutineView => {
-    const row = routineOf(id);
-    mayTouch(by, row);
-    const next = merged(row, patch);
-    const stays = targetStays(row.target, next.target);
-    if (stays) {
-      refuse(400, stays);
+  const update = (id: string, patch: RoutinePatch, by: RoutineActor) => {
+    const row = touchable(id, by);
+    if (row instanceof ElysiaStatus) {
+      return row;
     }
-    checked(next);
+    const next = merged(row, patch);
+    const cron = targetStays(row.target, next.target) ?? checked(next);
+    if (cron instanceof ElysiaStatus) {
+      return cron;
+    }
     const now = Date.now();
     const keep = patch.keep ?? row.keep;
     const enabled = patch.enabled ?? row.enabled;
     const expired =
       !keep && row.expiresAt !== null && row.expiresAt.getTime() <= now;
     if (enabled && !row.enabled && expired) {
-      refuse(
-        409,
-        `Routine “${row.name}” expired; keep it (keep: true) to turn it back on.`
-      );
+      return problem(409, {
+        code: "routine-expired",
+        detail: `Routine “${row.name}” expired; keep it (keep: true) to turn it back on.`,
+      });
     }
     // A new schedule, or a routine turned back on, starts from now: the
     // slots it was off for, or the old schedule's, never fire.
@@ -2381,9 +2420,7 @@ export const createRoutines = ({
       keep,
       enabled,
       ...(enabled ? { disabledReason: null } : {}),
-      ...(rescheduled
-        ? { nextSlot: Cron.next(cronOf(next.cron, next.timeZone), now) }
-        : {}),
+      ...(rescheduled ? { nextSlot: Cron.next(cron, now) } : {}),
     });
     schedule();
     return viewOf(updated ?? row);
@@ -2394,12 +2431,11 @@ export const createRoutines = ({
    * with it (`event_routes` cascades), each named in the answer, as its
    * route line reads in event_route_list.
    */
-  const remove = (
-    id: string,
-    by: RoutineActor
-  ): { deleted: boolean; routes: string[] } => {
-    const row = routineOf(id);
-    mayTouch(by, row);
+  const remove = (id: string, by: RoutineActor) => {
+    const row = touchable(id, by);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     const routes = row.projectId
       ? db.ingress
           .routes(row.projectId)
@@ -2411,16 +2447,25 @@ export const createRoutines = ({
       : [];
     const deleted = store.delete(id);
     schedule();
-    return { deleted, routes: deleted ? routes : [] };
+    const removed: { deleted: boolean; routes: string[] } = {
+      deleted,
+      routes: deleted ? routes : [],
+    };
+    return removed;
   };
 
-  const runNow = (id: string, by: RoutineActor): RoutineRunView => {
-    const row = routineOf(id);
-    mayTouch(by, row);
-    const run =
-      fireExtra(row, `now:${new Date().toISOString()}`, 1) ??
-      refuse(409, "That run was asked for already.");
-    return runView(run);
+  const runNow = (id: string, by: RoutineActor) => {
+    const row = touchable(id, by);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
+    const run = fireExtra(row, `now:${new Date().toISOString()}`, 1);
+    return run
+      ? runView(run)
+      : problem(409, {
+          code: "routine-run-asked",
+          detail: "That run was asked for already.",
+        });
   };
 
   /**
@@ -2446,8 +2491,12 @@ export const createRoutines = ({
   const hubRoutine = (
     projectId: string | null,
     made: Pick<RoutineRow, "cron" | "name" | "prompt" | "target">
-  ): RoutineRow => {
+  ) => {
     const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+    const cron = cronOf(made.cron, timeZone);
+    if (cron instanceof ElysiaStatus) {
+      return cron;
+    }
     const now = new Date();
     return store.create({
       ...made,
@@ -2469,7 +2518,7 @@ export const createRoutines = ({
       keep: true,
       expiresAt: null,
       lastSlot: null,
-      nextSlot: Cron.next(cronOf(made.cron, timeZone), now),
+      nextSlot: Cron.next(cron, now),
       createdAt: now,
     });
   };
@@ -2482,7 +2531,7 @@ export const createRoutines = ({
    * Makes the project's memory curator routine when it has none (its first
    * inbox note): daily, kept, made by the hub, with no test run.
    */
-  const ensureCurator = (projectId: string): void => {
+  const ensureCurator = (projectId: string) => {
     if (curatorOf(projectId)) {
       return;
     }
@@ -2492,6 +2541,9 @@ export const createRoutines = ({
       target: "curator",
       prompt: CURATOR_PROMPT,
     });
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     console.log(
       `[routines] ${CURATOR_NAME} made for project ${projectId}: ${row.cron} (${row.timeZone})`
     );
@@ -2505,9 +2557,9 @@ export const createRoutines = ({
   /**
    * Makes the trim routine of `projectId` (null: the fleet-level one) when
    * there is none (unused-trim.ts): weekly, kept, made by the hub, with no
-   * test run. Answers it.
+   * test run. Answers it, or its schedule's refusal.
    */
-  const ensureTrim = (projectId: string | null): RoutineRow => {
+  const ensureTrim = (projectId: string | null) => {
     const had = trimOf(projectId);
     if (had) {
       return had;
@@ -2518,6 +2570,9 @@ export const createRoutines = ({
       target: "trim",
       prompt: TRIM_PROMPT,
     });
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     console.log(
       `[routines] ${TRIM_NAME} made for ${projectId ? `project ${projectId}` : "the fleet"}: ${row.cron} (${row.timeZone})`
     );
@@ -2527,10 +2582,14 @@ export const createRoutines = ({
 
   /**
    * Whether Caw suggests the trim routine in `projectId`: the person never
-   * answered his suggestion there and the project has none.
+   * answered his suggestion there and the project has none; the refusal of
+   * a project the hub does not keep.
    */
-  const trimOffered = (projectId: string): boolean => {
-    projectOf(projectId);
+  const trimOffered = (projectId: string) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     return !(db.trim.answerOf(projectId) || trimOf(projectId));
   };
 
@@ -2539,23 +2598,27 @@ export const createRoutines = ({
    * answers it; Not now waves the suggestion away and makes nothing. Either
    * is kept, so he never suggests it there again.
    */
-  const answerTrim = (
-    projectId: string,
-    answer: "on" | "dismissed"
-  ): RoutineView | null => {
+  const answerTrim = (projectId: string, answer: "on" | "dismissed") => {
     if (answer === "on") {
       return trimOn(projectId);
     }
-    projectOf(projectId);
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     db.trim.answer(projectId, answer);
     return null;
   };
 
   /** Turn on: the answer kept, and the routine made; answers it. The page's Turn on and Caw's `routine_update` both. */
-  const trimOn = (projectId: string): RoutineView => {
-    projectOf(projectId);
+  const trimOn = (projectId: string) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     db.trim.answer(projectId, "on");
-    return viewOf(ensureTrim(projectId));
+    const row = ensureTrim(projectId);
+    return row instanceof ElysiaStatus ? row : viewOf(row);
   };
 
   /** The fleet switch: on while the fleet-level trim routine exists. */
@@ -2565,8 +2628,9 @@ export const createRoutines = ({
    * The fleet switch flipped: on makes the fleet-level run and turns the
    * routine on in every project that has none; off deletes the fleet-level
    * run, and each project's stays its own, paused or removed from its row.
+   * The refusal of the schedule the fleet-level run could not take.
    */
-  const setFleetTrim = (on: boolean): boolean => {
+  const setFleetTrim = (on: boolean) => {
     if (!on) {
       const fleet = trimOf(null);
       if (fleet) {
@@ -2575,7 +2639,10 @@ export const createRoutines = ({
       }
       return false;
     }
-    ensureTrim(null);
+    const fleet = ensureTrim(null);
+    if (fleet instanceof ElysiaStatus) {
+      return fleet;
+    }
     everyProjectTrimmed();
     return true;
   };
@@ -2588,7 +2655,12 @@ export const createRoutines = ({
     for (const project of db.listProjects()) {
       if (!trimOf(project.id)) {
         db.trim.answer(project.id, "on");
-        ensureTrim(project.id);
+        const made = ensureTrim(project.id);
+        if (made instanceof ElysiaStatus) {
+          console.warn(
+            `[routines] ${TRIM_NAME} not made for project ${project.id}: ${made.response.detail}`
+          );
+        }
       }
     }
   };
@@ -2613,10 +2685,23 @@ export const createRoutines = ({
     fireExtra(routine, `${INBOX_SLOT}${new Date().toISOString()}`, 1);
   };
 
-  const list = (projectId?: string | null): RoutineView[] =>
-    store.list(projectId).map(viewOf);
+  /** The routines, as their readers see them; the first stored schedule's refusal. */
+  const list = (projectId?: string | null) => {
+    const views: RoutineView[] = [];
+    for (const row of store.list(projectId)) {
+      const view = viewOf(row);
+      if (view instanceof ElysiaStatus) {
+        return view;
+      }
+      views.push(view);
+    }
+    return views;
+  };
 
-  const get = (id: string): RoutineView => viewOf(routineOf(id));
+  const get = (id: string) => {
+    const row = routineOf(id);
+    return row instanceof ElysiaStatus ? row : viewOf(row);
+  };
 
   // --- tools -------------------------------------------------------------------
 
@@ -2669,17 +2754,50 @@ export const createRoutines = ({
    * `enabled: true` alone turns it on as the page's Turn on does
    * (`answerTrim`); any other change is refused until it is on.
    */
-  const turnTrimOn = (
-    projectId: string,
-    change: Record<string, unknown>
-  ): RoutineView => {
+  const turnTrimOn = (projectId: string, change: Record<string, unknown>) => {
     const asked = Object.entries(change).filter(
       ([, value]) => value !== undefined
     );
     if (!(asked.length === 1 && change.enabled === true)) {
-      return refuse(409, routineToolWords.trimFirst(TRIM_NAME));
+      return problem(409, {
+        code: "routine-trim-first",
+        detail: routineToolWords.trimFirst(TRIM_NAME),
+      });
     }
     return trimOn(projectId);
+  };
+
+  /** Caller's routines as `routine_list` answers them, the hub's trim routine named while its project has none. */
+  const listedFor = (caller: InstanceRow) => {
+    const projectId = caller.projectId ?? null;
+    const listed = list(projectId);
+    return listed instanceof ElysiaStatus
+      ? listed
+      : { routines: listed, off: trimOff(projectId) };
+  };
+
+  /** `routine_update` from `caller`: the trim routine its project has none of turned on, else the routine `id` names changed. */
+  const updatedFor = (
+    caller: InstanceRow,
+    id: string,
+    {
+      time_zone,
+      delegate_type,
+      ...fields
+    }: RoutinePatch & {
+      delegate_type?: string | null;
+      time_zone?: string;
+    }
+  ) => {
+    const projectId = caller.projectId ?? null;
+    if (projectId && namesTrimOff(id, projectId)) {
+      return turnTrimOn(projectId, { ...fields, time_zone, delegate_type });
+    }
+    return update(
+      routineNamed(id, caller),
+      { ...fields, timeZone: time_zone, delegateType: delegate_type },
+      caller
+    );
   };
 
   /**
@@ -2688,12 +2806,12 @@ export const createRoutines = ({
    * for discovery.
    */
   const tools = (actor: InstanceRow | undefined, toolUseId?: string) => {
-    const me = (): InstanceRow => {
-      if (!actor) {
-        throw new Error("Discovery cannot execute tools");
-      }
-      return actor;
-    };
+    const me = () =>
+      actor ??
+      problem(409, {
+        code: "routine-tools-discovery",
+        detail: "Discovery cannot execute tools",
+      });
     return [
       tool(
         "routine_create",
@@ -2730,24 +2848,26 @@ export const createRoutines = ({
         (input) => {
           const caller = me();
           return Promise.resolve(
-            create(
-              {
-                projectId: caller.projectId ?? null,
-                name: input.name,
-                prompt: input.prompt,
-                target: input.target,
-                cron: input.cron,
-                timeZone: input.time_zone,
-                delegateType: input.delegate_type ?? null,
-                ...(input.lands ? { lands: input.lands } : {}),
-                budget: input.budget ?? null,
-                dailyCapUsd: input.daily_cap_usd ?? null,
-                keep: input.keep ?? false,
-                ...(input.mode ? { mode: input.mode } : {}),
-              },
-              caller,
-              toolUseId
-            )
+            caller instanceof ElysiaStatus
+              ? caller
+              : create(
+                  {
+                    projectId: caller.projectId ?? null,
+                    name: input.name,
+                    prompt: input.prompt,
+                    target: input.target,
+                    cron: input.cron,
+                    timeZone: input.time_zone,
+                    delegateType: input.delegate_type ?? null,
+                    ...(input.lands ? { lands: input.lands } : {}),
+                    budget: input.budget ?? null,
+                    dailyCapUsd: input.daily_cap_usd ?? null,
+                    keep: input.keep ?? false,
+                    ...(input.mode ? { mode: input.mode } : {}),
+                  },
+                  caller,
+                  toolUseId
+                )
           );
         },
         routineWords
@@ -2757,11 +2877,10 @@ export const createRoutines = ({
         `List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed), and the hub's ${TRIM_NAME} while off.`,
         {},
         () => {
-          const projectId = me().projectId ?? null;
-          return Promise.resolve({
-            routines: list(projectId),
-            off: trimOff(projectId),
-          });
+          const caller = me();
+          return Promise.resolve(
+            caller instanceof ElysiaStatus ? caller : listedFor(caller)
+          );
         },
         routineListWords
       ),
@@ -2783,18 +2902,11 @@ export const createRoutines = ({
         },
         // Left out, a field stays: the patch's own rule (`merged`).
         ({ id, time_zone, delegate_type, ...fields }) => {
-          const projectId = me().projectId ?? null;
-          if (projectId && namesTrimOff(id, projectId)) {
-            return Promise.resolve(
-              turnTrimOn(projectId, { ...fields, time_zone, delegate_type })
-            );
-          }
+          const caller = me();
           return Promise.resolve(
-            update(
-              routineNamed(id, me()),
-              { ...fields, timeZone: time_zone, delegateType: delegate_type },
-              me()
-            )
+            caller instanceof ElysiaStatus
+              ? caller
+              : updatedFor(caller, id, { ...fields, time_zone, delegate_type })
           );
         },
         routineWords
@@ -2803,7 +2915,14 @@ export const createRoutines = ({
         "routine_delete",
         "Delete a routine, its runs and the event routes that feed it.",
         { id: routineRef() },
-        ({ id }) => Promise.resolve(remove(routineNamed(id, me()), me())),
+        ({ id }) => {
+          const caller = me();
+          return Promise.resolve(
+            caller instanceof ElysiaStatus
+              ? caller
+              : remove(routineNamed(id, caller), caller)
+          );
+        },
         ({ deleted, routes }) =>
           deleted ? routineToolWords.deleted(routes) : routineToolWords.notThere
       ),
@@ -2811,7 +2930,14 @@ export const createRoutines = ({
         "routine_run_now",
         "Run a routine once now; skipped while its last run still goes.",
         { id: routineRef() },
-        ({ id }) => Promise.resolve(runNow(routineNamed(id, me()), me())),
+        ({ id }) => {
+          const caller = me();
+          return Promise.resolve(
+            caller instanceof ElysiaStatus
+              ? caller
+              : runNow(routineNamed(id, caller), caller)
+          );
+        },
         routineRunWords
       ),
       tool(
@@ -2825,7 +2951,14 @@ export const createRoutines = ({
             .describe("The run's id, from the message that woke you."),
           result: z.string().describe("The run's output."),
         },
-        ({ run, result }) => Promise.resolve(leadResult(me(), run, result)),
+        ({ run, result }) => {
+          const caller = me();
+          return Promise.resolve(
+            caller instanceof ElysiaStatus
+              ? caller
+              : leadResult(caller, run, result)
+          );
+        },
         routineRunWords
       ),
     ];
@@ -2868,9 +3001,6 @@ const ROUTINE_TOOL_NAMES = [
 ] as const;
 export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
-/** Runs a route's work, a refusal answered with its status. */
-const answered = refusalAttempt(RoutineRefusal);
-
 /** How a routine's runs are made and what they may spend, as a route sets them. */
 const RUN_FIELDS = {
   delegateType: t.Optional(t.Nullable(t.String())),
@@ -2892,7 +3022,7 @@ export const routineRoutes = (routines: Routines) =>
     .get(
       "/api/routines/schedule",
       { query: t.Object({ cron: t.String(), timeZone: t.String() }) },
-      ({ query }) => answered(() => schedulePreview(query.cron, query.timeZone))
+      ({ query }) => schedulePreview(query.cron, query.timeZone)
     )
     .get(
       "/api/routines",
@@ -2924,11 +3054,9 @@ export const routineRoutes = (routines: Routines) =>
           keep: t.Optional(t.Boolean()),
         }),
       },
-      ({ body }) => answered(() => routines.create(body, "owner"))
+      ({ body }) => routines.create(body, "owner")
     )
-    .get("/api/routines/:id", ({ params }) =>
-      answered(() => routines.get(params.id))
-    )
+    .get("/api/routines/:id", ({ params }) => routines.get(params.id))
     .patch(
       "/api/routines/:id",
       {
@@ -2943,19 +3071,19 @@ export const routineRoutes = (routines: Routines) =>
           keep: t.Optional(t.Boolean()),
         }),
       },
-      ({ params, body }) =>
-        answered(() => routines.update(params.id, body, "owner"))
+      ({ params, body }) => routines.update(params.id, body, "owner")
     )
     .delete("/api/routines/:id", ({ params }) =>
-      answered(() => routines.remove(params.id, "owner"))
+      routines.remove(params.id, "owner")
     )
     .post("/api/routines/:id/run", ({ params }) =>
-      answered(() => routines.runNow(params.id, "owner"))
+      routines.runNow(params.id, "owner")
     )
     // Caw's suggestion of the unused skills and servers routine (unused-trim.ts).
-    .get("/api/projects/:id/trim-routine", ({ params }) =>
-      answered(() => ({ offered: routines.trimOffered(params.id) }))
-    )
+    .get("/api/projects/:id/trim-routine", ({ params }) => {
+      const offered = routines.trimOffered(params.id);
+      return offered instanceof ElysiaStatus ? offered : { offered };
+    })
     .post(
       "/api/projects/:id/trim-routine",
       {
@@ -2963,15 +3091,18 @@ export const routineRoutes = (routines: Routines) =>
           answer: t.Union([t.Literal("on"), t.Literal("dismissed")]),
         }),
       },
-      ({ params, body }) =>
-        answered(() => ({
-          routine: routines.answerTrim(params.id, body.answer),
-        }))
+      ({ params, body }) => {
+        const routine = routines.answerTrim(params.id, body.answer);
+        return routine instanceof ElysiaStatus ? routine : { routine };
+      }
     )
     // Its fleet switch (Configure › Skills).
     .get("/api/trim-routine/fleet", () => ({ on: routines.fleetTrim() }))
     .put(
       "/api/trim-routine/fleet",
       { body: t.Object({ on: t.Boolean() }) },
-      ({ body }) => answered(() => ({ on: routines.setFleetTrim(body.on) }))
+      ({ body }) => {
+        const on = routines.setFleetTrim(body.on);
+        return on instanceof ElysiaStatus ? on : { on };
+      }
     );

@@ -12,6 +12,7 @@
  */
 import { programLibraryOf } from "@cawco/core/inline-blocks";
 import { PROGRAM_FILE } from "./decision-program";
+import type { AnyProblem } from "./refusal";
 import { hubActor } from "./tasks";
 
 /** A decision page's folder in a project's folder. */
@@ -66,53 +67,86 @@ const KEPT_BLOCKS_MOVED = "kept_blocks_moved";
 export interface KeptBlocksDeps {
   readonly dataMigrated: (name: string) => boolean;
   /** The folders directly under `dir` in a project's folder; none when it isn't there. */
-  readonly folders: (projectId: string, dir: string) => Promise<string[]>;
+  readonly folders: (
+    projectId: string,
+    dir: string
+  ) => Promise<string[] | AnyProblem>;
   readonly markDataMigrated: (name: string) => void;
   readonly move: (
     projectId: string,
     change: { writes: { content: string; path: string }[]; deletes: string[] },
     options: { author: { name: string }; message: string }
-  ) => Promise<unknown>;
+  ) => Promise<AnyProblem | undefined>;
   readonly projectIds: () => string[];
   /** A file of a project's folder; undefined when it isn't there. */
   readonly read: (
     projectId: string,
     path: string
-  ) => Promise<string | undefined>;
+  ) => Promise<string | undefined | AnyProblem>;
 }
 
-/** One project's blocks filed under `decisions/`, as the move that takes each to `artifacts/`. */
-const blocksIn = async (
-  deps: KeptBlocksDeps,
-  projectId: string
-): Promise<{
-  deletes: string[];
-  names: string[];
-  writes: { content: string; path: string }[];
-}> => {
+/** One project's blocks filed under `decisions/`, as the move that takes each to `artifacts/`; the folder's refusal of a read. */
+const blocksIn = async (deps: KeptBlocksDeps, projectId: string) => {
   const moved = {
     names: [] as string[],
     writes: [] as { content: string; path: string }[],
     deletes: [] as string[],
   };
-  for (const name of await deps.folders(projectId, "decisions")) {
+  const folders = await deps.folders(projectId, "decisions");
+  if (!Array.isArray(folders)) {
+    return folders;
+  }
+  for (const name of folders) {
     const path = `${decisionFolder(name)}/${PROGRAM_FILE}`;
     const program = await deps.read(projectId, path);
-    if (!isBlockProgram(program)) {
+    if (program !== undefined && typeof program !== "string") {
+      return program;
+    }
+    if (!(program !== undefined && isBlockProgram(program))) {
       continue;
     }
     const built = `${decisionFolder(name)}/index.html`;
+    const page = await deps.read(projectId, built);
+    if (page !== undefined && typeof page !== "string") {
+      return page;
+    }
     moved.names.push(name);
     moved.writes.push({
       path: `${blockFolder(name)}/${PROGRAM_FILE}`,
-      content: program as string,
+      content: program,
     });
     moved.deletes.push(path);
-    if ((await deps.read(projectId, built)) !== undefined) {
+    if (page !== undefined) {
       moved.deletes.push(built);
     }
   }
   return moved;
+};
+
+/** One project's kept blocks moved to `artifacts/`, in one commit by the hub; the folder's refusal of a read or of the move. */
+const moveIn = async (deps: KeptBlocksDeps, projectId: string) => {
+  const blocks = await blocksIn(deps, projectId);
+  if ("response" in blocks) {
+    return blocks;
+  }
+  const { names, writes, deletes } = blocks;
+  if (names.length === 0) {
+    return;
+  }
+  const refused = await deps.move(
+    projectId,
+    { writes, deletes },
+    {
+      author: hubActor("artifacts").author,
+      message: `artifacts: kept blocks out of decisions/ (${names.join(", ")})`,
+    }
+  );
+  if (refused) {
+    return refused;
+  }
+  console.info(
+    `[artifacts] project ${projectId}: kept blocks moved to artifacts/: ${names.join(", ")}`
+  );
 };
 
 /**
@@ -128,18 +162,11 @@ export const moveKeptBlocks = async (deps: KeptBlocksDeps): Promise<void> => {
   let whole = true;
   for (const projectId of deps.projectIds()) {
     try {
-      const { names, writes, deletes } = await blocksIn(deps, projectId);
-      if (names.length > 0) {
-        await deps.move(
-          projectId,
-          { writes, deletes },
-          {
-            author: hubActor("artifacts").author,
-            message: `artifacts: kept blocks out of decisions/ (${names.join(", ")})`,
-          }
-        );
-        console.info(
-          `[artifacts] project ${projectId}: kept blocks moved to artifacts/: ${names.join(", ")}`
+      const refused = await moveIn(deps, projectId);
+      if (refused) {
+        whole = false;
+        console.warn(
+          `[artifacts] project ${projectId}'s kept blocks were not moved: ${refused.response.detail}`
         );
       }
     } catch (error) {
