@@ -101,10 +101,7 @@ let hubRows = $state.raw<InstanceRow[]>([]);
  * where the server could not read the hub whole.
  */
 export function servedBoard(): ServedBoard<ProjectRow> | null {
-  return (
-    (servedPage.data as { board?: ServedBoard<ProjectRow> | null }).board ??
-    null
-  );
+  return servedPage.data.board ?? null;
 }
 
 /** The served board while the socket's first snapshot is not in: its rows, pulses and machines are the ones drawn. */

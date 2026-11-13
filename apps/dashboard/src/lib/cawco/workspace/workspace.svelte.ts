@@ -928,7 +928,10 @@ export const workspace = {
       return;
     }
     const kept = leaves.slice(0, max);
-    const into = kept.at(-1) as LeafNode;
+    const into = kept.at(-1);
+    if (!into) {
+      return;
+    }
     for (const extra of leaves.slice(max)) {
       for (const id of extra.tabs) {
         if (!into.tabs.includes(id)) {
