@@ -1,7 +1,7 @@
 /**
  * The words put back from outside (Edit on a failed send, a starter) land
  * with focus and the caret after them, and fade up in the field over
- * --dur-control rather than replacing what was there in one frame. Their
+ * --duration-control rather than replacing what was there in one frame. Their
  * attachments come back with them, and the row that holds those folds
  * open above the field. The caret waits for the tick: the field draws the
  * words in its own effect, and drawing them drops any selection.
@@ -57,7 +57,7 @@ export function landFocusRequests(parts: FieldFocusParts): void {
         parts.mentionField()?.select(parts.draft().text.length)
       );
       el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
+        duration: dur("--duration-control"),
         easing: ease("--ease-out"),
       });
       parts.draft().focusWanted = false;
