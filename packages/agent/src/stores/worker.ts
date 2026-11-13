@@ -10,6 +10,8 @@
  * between them.
  */
 import {
+  type StoreAnswer,
+  type StoreArg,
   type StoreAsk,
   type StoreOp,
   type StoreSaid,
@@ -23,19 +25,22 @@ const say = (said: StoreSaid): void => {
   self.postMessage(said);
 };
 
+const runOp = <K extends StoreOp>(
+  op: K,
+  arg: StoreArg<K>,
+  tell: Tell
+): Promise<StoreAnswer<K>> => storeOps[op](arg, tell);
+
 self.onmessage = async (event: MessageEvent<StoreAsk>) => {
   const { id, op, arg } = event.data;
-  const run = storeOps[op as StoreOp] as (
-    arg: unknown,
-    tell: Tell
-  ) => Promise<unknown>;
   try {
-    const value = await run(arg, (told) =>
+    const value = await runOp(op, arg, (told) =>
       say({ id, kind: "told", value: told })
     );
     say({ id, kind: "answer", value });
   } catch (error) {
-    const { code } = error as { code?: unknown };
+    const code =
+      error instanceof Error && "code" in error ? error.code : undefined;
     say({
       id,
       kind: "failed",

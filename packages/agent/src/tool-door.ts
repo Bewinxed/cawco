@@ -47,6 +47,9 @@ export const socketPlace = async (
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 };
 
+/** Bun's server option that lifts the idle limit; bun-types 1.4.2 declares `idleTimeout` for host:port servers alone, so a unix server takes it from an untyped object. */
+const NO_IDLE_LIMIT: object = { idleTimeout: 0 };
+
 /** A door socket's place ({@link socketPlace}), with a socket an earlier agent left removed. */
 export const prepareDoor = async (path: string): Promise<void> => {
   await socketPlace(path, "the workspace door");
@@ -111,7 +114,7 @@ export const openToolDoor = async (id: string): Promise<string> => {
       // seconds", measured on Bun 1.4.2; `server.timeout(request, 0)` does not
       // lift it), while bun-types 1.4.2 declares `idleTimeout` for host:port
       // servers alone, so it goes in untyped.
-      ...({ idleTimeout: 0 } as object),
+      ...NO_IDLE_LIMIT,
       fetch: (request) =>
         forward(request).catch(
           (error: unknown) =>

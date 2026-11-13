@@ -155,7 +155,6 @@ as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
 as-unknown-as	SentMessage	packages/hub/src/server.ts	1
-as-unknown-as	Server<PreviewSocket>	packages/agent/src/preview.ts	1
 as-unknown-as	ServerWebSocket<ArtifactSocket>	packages/hub/src/preview-routes.ts	1
 as-unknown-as	ServerWebSocket<PreviewSocket>	packages/hub/src/browser-routes.ts	1
 as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1

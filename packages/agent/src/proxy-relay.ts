@@ -528,8 +528,8 @@ const relayOne = (
   };
 
   /** What follows a head, passed to the upstream it went to: false to wait for more. */
-  const body = (): boolean => {
-    const step = stepOf(phase as Exclude<Phase, { kind: "head" }>, pending);
+  const body = (current: Exclude<Phase, { kind: "head" }>): boolean => {
+    const step = stepOf(current, pending);
     if ("wait" in step) {
       return false;
     }
@@ -546,7 +546,7 @@ const relayOne = (
 
   /** Takes what `pending` holds as far as the phase lets it go. */
   const take = (): void => {
-    while (!refused && (phase.kind === "head" ? head() : body())) {
+    while (!refused && (phase.kind === "head" ? head() : body(phase))) {
       // Each step moved `pending` on: read the next.
     }
   };

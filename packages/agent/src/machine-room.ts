@@ -173,7 +173,7 @@ const limitAt = (dir: string): number | undefined => {
   try {
     max = readFileSync(join(dir, "memory.max"), "utf8").trim();
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;
     }
     throw error;

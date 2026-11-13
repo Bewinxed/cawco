@@ -44,7 +44,10 @@ const entriesOf = async (dir: string): Promise<Dirent[]> => {
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (error) {
-    if (isGone(error) || (error as { code?: string }).code === "ENOTDIR") {
+    if (
+      isGone(error) ||
+      (error instanceof Error && "code" in error && error.code === "ENOTDIR")
+    ) {
       return [];
     }
     throw error;
@@ -141,7 +144,11 @@ const relocate = async (from: string, to: string): Promise<void> => {
   try {
     await rename(from, to);
   } catch (error) {
-    if ((error as { code?: string }).code !== "EXDEV") {
+    if (!(
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EXDEV"
+    )) {
       throw error;
     }
     await cp(from, to, {
@@ -306,7 +313,10 @@ const carryNow = async (
   const indexes = await indexAll(valid);
   for (const request of valid) {
     const into = resolve(sessionConfigDir(request));
-    const carried = { entries: 0, from: [] as string[] };
+    const carried: { entries: number; from: string[] } = {
+      entries: 0,
+      from: [],
+    };
     try {
       for (const [dir, index] of indexes) {
         const entries = dir === into ? undefined : index.get(request.sessionId);
