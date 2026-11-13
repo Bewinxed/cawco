@@ -432,8 +432,6 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         instanceId?: string;
         machineId?: string;
         requestId?: string;
-        /** The person's neko session, once their view has one: control is given to it. */
-        viewer?: string;
       }
     ): Promise<{ artifactId: string | null; row: BrowserRow }> {
       const ask = askOf(key, asked.requestId);
@@ -441,7 +439,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       const machineId =
         ask?.machineId ?? machineOf(key, asked.machineId ?? session?.machineId);
       const workspaceId = session ? deps.workspaceOf(session) : undefined;
-      // Sent again (a viewer's neko session now known): the peers were told.
+      // Sent again (a second press, or after the daemon restarted): the peers were told.
       const held = !!db.browsers.get(machineId, key)?.takeover;
       const row = await shield(machineId, {
         key,
@@ -453,7 +451,6 @@ export const createBrowsers = (deps: BrowsersDeps) => {
               targetId: ask.targetId,
             }
           : {}),
-        ...(asked.viewer ? { viewer: asked.viewer } : {}),
       });
       if (asked.requestId) {
         deps.asks().taken(asked.requestId);
@@ -628,7 +625,6 @@ export const browserRoutes = (browsers: Browsers) =>
           machineId: t.Optional(t.String({ minLength: 1 })),
           requestId: t.Optional(t.String({ minLength: 1 })),
           instanceId: t.Optional(t.String({ minLength: 1 })),
-          viewer: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
         }),
       },
       ({ params, body }) =>

@@ -30,7 +30,7 @@
  * binary message, a 4-byte header (the page's viewport width and height in
  * CSS pixels, uint16 big-endian) then the JPEG; where the page's focus
  * stands goes as JSON text (core {@link TakeoverFocus}). It sends
- * {@link CdpInput} as JSON text, its coordinates in those CSS pixels.
+ * core {@link TakeoverInput} as JSON text, its coordinates in those CSS pixels.
  * Frames are made only while a view is attached.
  */
 
@@ -39,27 +39,11 @@ import {
   BROWSER_SCREEN,
   TAKEOVER_SCALE_MOST,
   type TakeoverFocus,
+  type TakeoverInput,
   type TakeoverLayout,
-  type TakeoverMessage,
 } from "@cawco/core/browser";
 import { z } from "zod";
 import { CdpCalls } from "./cdp-calls";
-
-/** What a view sends: the person's pointer, fingers, keys and words, in the page's CSS pixels, and the layout they hold. */
-export type CdpInput =
-  | {
-      t: "move" | "down" | "up";
-      x: number;
-      y: number;
-      button?: "left" | "middle" | "right";
-      modifiers?: number;
-    }
-  | { t: "wheel"; x: number; y: number; dx: number; dy: number }
-  | { t: "key"; type: "down" | "up"; key: string; modifiers?: number }
-  | { t: "text"; text: string }
-  /** A held finger dragged on: the selection carried to the word under it. */
-  | { t: "select"; x: number; y: number }
-  | TakeoverMessage;
 
 /** One open view of the take-over: where its frames, and word of the page's focus, go. */
 export interface CdpViewer {
@@ -264,7 +248,7 @@ const POINTER = {
   modifiers: MODIFIERS,
 };
 
-const InputSchema: z.ZodType<CdpInput> = z.discriminatedUnion("t", [
+const InputSchema: z.ZodType<TakeoverInput> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("move"), ...POINTER }),
   z.object({ t: z.literal("down"), ...POINTER }),
   z.object({ t: z.literal("up"), ...POINTER }),
@@ -307,8 +291,8 @@ const InputSchema: z.ZodType<CdpInput> = z.discriminatedUnion("t", [
   z.object({ t: z.literal("reload") }),
 ]);
 
-/** A view's message as {@link CdpInput}, or undefined when it is none. */
-export const cdpInputOf = (text: string): CdpInput | undefined => {
+/** A view's message as {@link TakeoverInput}, or undefined when it is none. */
+export const cdpInputOf = (text: string): TakeoverInput | undefined => {
   try {
     const read = InputSchema.safeParse(JSON.parse(text));
     return read.success ? read.data : undefined;
@@ -562,11 +546,11 @@ export class CdpTakeover {
    * then its character), and the view sends the next without waiting: run
    * side by side, a word typed after Return went in before Return's newline.
    */
-  input(input: CdpInput): Promise<void> {
+  input(input: TakeoverInput): Promise<void> {
     return this.#queue(() => this.#land(input));
   }
 
-  async #land(input: CdpInput): Promise<void> {
+  async #land(input: TakeoverInput): Promise<void> {
     if (this.#state === "stopped" || this.#watch) {
       return;
     }
@@ -682,7 +666,7 @@ export class CdpTakeover {
    */
   #touch(
     page: string,
-    input: Extract<CdpInput, { t: "touch" }>
+    input: Extract<TakeoverInput, { t: "touch" }>
   ): Promise<unknown> {
     const skew = Date.now() - input.time;
     this.#skew = Math.min(this.#skew ?? skew, skew);

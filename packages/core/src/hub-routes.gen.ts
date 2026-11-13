@@ -1533,7 +1533,6 @@ export interface components {
         instanceId?: string;
         machineId?: string;
         requestId?: string;
-        viewer?: string;
       };
       path: {
         key: string | number;
