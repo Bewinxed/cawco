@@ -23,7 +23,7 @@ import {
 import { fleetPlacedDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
-import type { SetHarnessConfig } from "./fleet-harness-set";
+import type { SetHarnessConfig } from "./fleet-set-rows";
 import { resolveBin, toolEnv } from "./tools";
 
 /** How long one package's `npm install` gets: a first install of a package with its dependencies, as an MCP server's (mcp-install.ts). */
@@ -110,6 +110,9 @@ const PackageJsonSchema = z.object({
 });
 type PackageJson = z.infer<typeof PackageJsonSchema>;
 
+/** A JSON object, whatever it holds. */
+const Dict = z.record(z.string(), z.unknown());
+
 /** The file an ES module import of the package at `root` loads: its `exports["."]` (`import`, else `default`), `module`, `main`, else `index.js`. */
 const packageEntry = async (root: string): Promise<string> => {
   const pkg: PackageJson =
@@ -117,13 +120,11 @@ const packageEntry = async (root: string): Promise<string> => {
   const dot =
     typeof pkg.exports === "string"
       ? pkg.exports
-      : ((pkg.exports as Record<string, unknown> | undefined)?.["."] ??
-        pkg.exports);
-  const conditional =
-    dot && typeof dot === "object"
-      ? ((dot as Record<string, unknown>).import ??
-        (dot as Record<string, unknown>).default)
-      : dot;
+      : (Dict.safeParse(pkg.exports).data?.["."] ?? pkg.exports);
+  const conditions = Dict.safeParse(dot).data;
+  const conditional = conditions
+    ? (conditions.import ?? conditions.default)
+    : dot;
   const file =
     (typeof conditional === "string" ? conditional : undefined) ??
     pkg.module ??
@@ -196,7 +197,7 @@ const pruneUnder = async (
   root: string,
   kept: ReadonlySet<string>
 ): Promise<void> => {
-  const names = await readdir(root).catch(() => [] as string[]);
+  const names = await readdir(root).catch((): string[] => []);
   await Promise.all(
     names
       .map((name) => join(root, name))

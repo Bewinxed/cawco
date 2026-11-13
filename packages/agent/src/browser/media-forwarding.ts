@@ -19,11 +19,11 @@
  * already found. Colima's facts below are from its source, abiosoft/colima.
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { connect } from "node:net";
 import { homedir, networkInterfaces, platform } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
+import { errnoCode, isGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import type { MediaPath } from "@cawco/core/capabilities";
 import { reachableLinks } from "@cawco/core/reachable-links";
@@ -35,9 +35,16 @@ import {
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { parse } from "yaml";
+import { z } from "zod";
 import { MediaMeasurementSchema } from "../stored-shapes";
+import { type ColimaProfile, colimaProfileOf } from "./colima";
 import type { Runtime } from "./runtime";
 import { browsersDir } from "./state";
+
+/** A running Colima's saved settings (colima.yaml), as far as its port forwarder is read; an empty file parses to null. */
+const ColimaState = z
+  .object({ portForwarder: z.unknown().optional() })
+  .nullable();
 
 /** What the runtime forwards to a browser's media port, and when that is short of both, what to tell the person. */
 export interface MediaForwarding {
@@ -78,65 +85,6 @@ export const mediaProtocols = (media: MediaPath): ("udp" | "tcp")[] => {
       return [];
     default:
       unhandled("media", media);
-  }
-};
-
-/**
- * Colima's home, found as Colima finds it (config/files.go `configBaseDir`):
- * `$COLIMA_HOME` when it exists, then `~/.colima` when it exists, then
- * `$XDG_CONFIG_HOME/colima` when that is set, then `~/.config/colima` when it
- * exists, then `~/.colima` on a Mac and `~/.config/colima` elsewhere.
- */
-export const colimaHome = (): string => {
-  const home = homedir();
-  const explicit = process.env.COLIMA_HOME;
-  const dotColima = join(home, ".colima");
-  const xdg = process.env.XDG_CONFIG_HOME;
-  const xdgColima = join(xdg || join(home, ".config"), "colima");
-  if (explicit && existsSync(explicit)) {
-    return explicit;
-  }
-  if (existsSync(dotColima)) {
-    return dotColima;
-  }
-  if (xdg || existsSync(xdgColima)) {
-    return xdgColima;
-  }
-  return platform() === "darwin" ? dotColima : xdgColima;
-};
-
-/** A Colima profile an Engine API socket belongs to. */
-interface ColimaProfile {
-  home: string;
-  /** The profile's short name: `default`, or what `--profile` named. */
-  name: string;
-}
-
-/**
- * The Colima profile whose Docker socket `socket` is, if any: its real path
- * is `<home>/<profile>/docker.sock` (docker.HostSocketFile), or the default
- * profile's `<home>/docker.sock` (LegacyDefaultHostSocketFile, forwarded "for
- * backward compatibility"). A home is Colima's when it is the one this
- * machine's Colima uses, or it holds Colima's `_lima` (a daemon started
- * without the shell's `COLIMA_HOME` still knows the socket it names).
- */
-export const colimaProfileOf = async (
-  socket: string
-): Promise<ColimaProfile | undefined> => {
-  // A socket that went between the ping and this read is judged by its name.
-  const real = await realpath(socket).catch(() => socket);
-  if (basename(real) !== "docker.sock") {
-    return;
-  }
-  const machines = colimaHome();
-  const isHome = (dir: string): boolean =>
-    dir === machines || existsSync(join(dir, "_lima"));
-  const profileDir = dirname(real);
-  if (isHome(dirname(profileDir))) {
-    return { home: dirname(profileDir), name: basename(profileDir) };
-  }
-  if (isHome(profileDir)) {
-    return { home: profileDir, name: "default" };
   }
 };
 
@@ -181,13 +129,11 @@ const colimaForwarding = async (
   };
   let forwarder: unknown;
   try {
-    const settings = parse(await readFile(state, "utf8")) as {
-      portForwarder?: unknown;
-    } | null;
+    const settings = ColimaState.parse(parse(await readFile(state, "utf8")));
     forwarder = settings?.portForwarder || "ssh";
   } catch (error) {
     const why =
-      (error as NodeJS.ErrnoException).code ??
+      errnoCode(error) ??
       (error instanceof Error ? error.message : String(error));
     return {
       ...known,
@@ -356,7 +302,7 @@ const procBinds = async (proto: "udp" | "tcp", port: number) => {
     [proto, `${proto}6`].map((name) =>
       readFile(join("/proc/net", name), "utf8").catch((error: unknown) => {
         // No IPv6 in this kernel: no tcp6/udp6 table.
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        if (isGone(error)) {
           return "";
         }
         throw error;

@@ -43,7 +43,13 @@ import {
   type TakeoverLayout,
 } from "@cawco/core/browser";
 import { z } from "zod";
-import { CdpCalls } from "./cdp-calls";
+import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
+
+/** The page size a screencast frame names (`Page.screencastFrame` metadata). */
+const FrameMetadata = z.object({
+  deviceHeight: z.number().optional(),
+  deviceWidth: z.number().optional(),
+});
 
 /** One open view of the take-over: where its frames, and word of the page's focus, go. */
 export interface CdpViewer {
@@ -140,9 +146,8 @@ export class CdpLink {
   /** The browser-level connection of the Chromium whose DevTools answer at `devtools` (`http://127.0.0.1:<port>`). */
   static async open(devtools: string): Promise<CdpLink> {
     const read = await readWithin(CALL_MS, (signal) =>
-      fetch(`${devtools}/json/version`, { signal }).then(
-        (response) =>
-          response.json() as Promise<{ webSocketDebuggerUrl?: string }>
+      fetch(`${devtools}/json/version`, { signal }).then(async (response) =>
+        DevtoolsVersion.parse(await response.json())
       )
     );
     if (read.kind === "unanswered") {
@@ -1065,10 +1070,7 @@ export class CdpTakeover {
       }
       this.#size = laid;
     } else {
-      const metadata = (params.metadata ?? {}) as {
-        deviceHeight?: number;
-        deviceWidth?: number;
-      };
+      const metadata = FrameMetadata.catch({}).parse(params.metadata);
       const size = {
         width: Math.round(metadata.deviceWidth ?? FRAME.width),
         height: Math.round(metadata.deviceHeight ?? FRAME.height),

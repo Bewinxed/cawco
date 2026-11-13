@@ -88,7 +88,7 @@ const SetHarnessConfigShape = declared(
     settings: z.record(z.string(), z.unknown()).optional(),
   }),
   "SetHarnessConfig",
-  "packages/agent/src/fleet-harness-set.ts"
+  "packages/agent/src/fleet-set-rows.ts"
 );
 export type SetHarnessConfigOutput = z.output<typeof SetHarnessConfigShape>;
 
@@ -102,7 +102,7 @@ const SetHookShape = declared(
     test: HookMatchTestShape,
   }),
   "SetHook",
-  "packages/agent/src/fleet-harness-set.ts"
+  "packages/agent/src/fleet-set-rows.ts"
 );
 export type SetHookOutput = z.output<typeof SetHookShape>;
 

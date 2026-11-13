@@ -126,14 +126,17 @@ const PRIVATE_PREFERENCES = {
 
 type Json = Record<string, unknown>;
 
+const isJson = (value: unknown): value is Json =>
+  typeof value === "object" && value !== null;
+
 /** `base` with `over`'s keys laid in, object by object. */
 const merged = (base: Json, over: Json): Json =>
   Object.fromEntries(
     [...new Set([...Object.keys(base), ...Object.keys(over)])].map((key) => {
       const a = base[key];
       const b = over[key];
-      if (a && b && typeof a === "object" && typeof b === "object") {
-        return [key, merged(a as Json, b as Json)];
+      if (isJson(a) && isJson(b)) {
+        return [key, merged(a, b)];
       }
       return [key, b === undefined ? a : b];
     })
@@ -362,7 +365,7 @@ export class LocalHost implements BrowserHost {
    * profile there. Its next start runs from the moved one.
    */
   async moveKeptFiles(): Promise<void> {
-    const names = await readdir(browsersDir()).catch(() => [] as string[]);
+    const names = await readdir(browsersDir()).catch((): string[] => []);
     for (const name of names) {
       const key = name.replace("-", ":");
       if (!isBrowserKey(key)) {

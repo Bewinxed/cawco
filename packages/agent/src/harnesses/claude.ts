@@ -218,13 +218,13 @@ import {
   configAt,
   type FleetHarnessSet,
   readFleetHarnessSet,
-  type SetHook,
 } from "../fleet-harness-set";
 import { guardedHandler } from "../fleet-hook-guard";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
 import { type FleetPlaceSet, placeSetAt } from "../fleet-place-set";
+import type { SetHook } from "../fleet-set-rows";
 import { sessionGitEnv } from "../git-credential";
 import {
   type CarryHost,

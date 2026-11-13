@@ -4,7 +4,14 @@
  * (the gate's own calls beside its client's) never share an id.
  */
 
+import { z } from "zod";
+
 type Json = Record<string, unknown>;
+
+/** What a Chromium's DevTools answers at `/json/version`, as far as a connection reads it. */
+export const DevtoolsVersion = z.object({
+  webSocketDebuggerUrl: z.string().optional(),
+});
 
 /** A CDP answer, as far as settling a call reads it. */
 interface Answer {
