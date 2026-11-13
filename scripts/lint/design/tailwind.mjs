@@ -103,6 +103,15 @@ function compiled(token) {
   return compiledRules.get(token);
 }
 
+/** Whether Tailwind reads the class as one of its utilities, drawn or not. */
+export function parses(token) {
+  try {
+    return ds.parseCandidate(token).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether Tailwind writes CSS for the class. */
 export const knows = (token) => compiled(token).length > 0;
 

@@ -19,9 +19,10 @@
  * prose) is none of this check's. Neither is a bare root standing alone
  * (`blur`, `shadow`, `rounded`), which prose and code say as words; at a
  * class site the design lint's no-unknown-classes refuses it, as it refuses
- * a misspelled class. A word that is not a class but reads as one to the
- * scanner is told so in the stylesheet, by Tailwind's own
- * `@source not inline("…")`, which this check honours.
+ * a misspelled class. A word that reads as a candidate to the scanner and
+ * is provably not a class in its file is an entry of {@link NOT_CLASSES},
+ * by file and word: never a stylesheet's `@source not inline("…")`, which
+ * would pass the same word written as a class in every other file.
  *
  * Prints `file:line: class` with the token it reads and the tokens of that
  * namespace the house has; exits 1 on any.
@@ -39,6 +40,27 @@ const TOKENS = "apps/dashboard/src/lib/tokens/theme.css";
 const ENTRY = /@import\s+["']tailwindcss["']/u;
 const STYLESHEET = /^apps\/dashboard\/src\/.*\.css$/u;
 const THEME_VAR = /var\((--[\w-]+)/gu;
+
+/**
+ * A word in one file that the scanner reads as a candidate and that is
+ * provably not a class there, by file and word (not line, so an edit above
+ * it keeps it). The same word as a class in any other file still fails.
+ */
+interface NotAClass {
+  file: string;
+  /** What the word is in that file instead. */
+  why: string;
+  word: string;
+}
+const NOT_CLASSES: NotAClass[] = [
+  {
+    file: "apps/dashboard/src/lib/cawco/graph/motion.ts",
+    word: "ease-in",
+    why: "a key of KEYWORDS, CSS's easing keywords as their four numbers",
+  },
+];
+const notAClass = (file: string, word: string): boolean =>
+  NOT_CLASSES.some((n) => n.file === file && n.word === word);
 
 interface Parsed {
   kind: string;
@@ -204,7 +226,10 @@ for (const entry of entries) {
       content,
       extension: extname(source).slice(1),
     })) {
-      if (!wanted.has(candidate)) {
+      if (
+        !wanted.has(candidate) ||
+        notAClass(relative(ROOT, source), candidate)
+      ) {
         continue;
       }
       const line = content.slice(0, position).split("\n").length;
@@ -249,7 +274,7 @@ if (findings.length > 0) {
     );
   }
   console.error(
-    `Use a class whose token exists in ${TOKENS}, or add the token there first. A word that is not a class at all: say so in the stylesheet with @source not inline("<word>").`
+    `Use a class whose token exists in ${TOKENS}, or add the token there first. A word that is not a class in its file: an entry in NOT_CLASSES (scripts/tailwind-draws-check.ts) naming the file, the word and what it is there.`
   );
   process.exit(1);
 }

@@ -462,7 +462,19 @@ const RULES_READ = [
 // The files golar.config.ts lints: its globs, as one pattern.
 const LINTED =
   /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|apps\/dashboard\/scripts\/.*\.ts|apps\/cawrier\/src\/.*\.ts|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte)|packages\/[^/]+\/scripts\/.*\.ts|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
-const linted = [...reached].filter((p) => LINTED.test(p) && present.has(p));
+/** The files the design rules read (golar.config.ts `designed`). */
+const DESIGNED = /^apps\/dashboard\/src\/.*\.(?:ts|svelte)$/u;
+// The design rules judge a class by the dashboard's stylesheets (its theme,
+// its `@utility`s, its class selectors): a change to one re-judges every
+// file they read, or a token taken away leaves its classes drawing nothing
+// unseen.
+const restyled = changed.some((p) => DASHBOARD_CSS.test(p));
+const linted = files.filter(
+  (p) =>
+    LINTED.test(p) &&
+    present.has(p) &&
+    (reached.has(p) || (restyled && DESIGNED.test(p)))
+);
 {
   const key = await keyOf([...linted, ...RULES_READ], everything ? "all" : "");
   if (linted.length === 0 && !everything) {

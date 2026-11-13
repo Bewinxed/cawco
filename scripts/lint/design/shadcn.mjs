@@ -27,7 +27,7 @@
 // what Tailwind compiles it to (tailwind.mjs): every property it sets must
 // be one of them.
 import { calleeName, keyOf, sitesOf, unwrap } from "./classes.mjs";
-import { bindingAt, eachNode } from "./model.mjs";
+import { bindingAt, eachNode, parentOf } from "./model.mjs";
 import { hasRawColor, rawLiteral } from "./raw-values.mjs";
 import {
   classSelectors,
@@ -36,6 +36,7 @@ import {
   isMarkerClass,
   knows,
   normalizeClass,
+  parses,
   splitVariants,
   themeClasses,
 } from "./tailwind.mjs";
@@ -70,8 +71,16 @@ export function unknownClasses(model, { allow = [] } = {}) {
   const allowed = patterns(allow);
   const own = styleClasses(model);
   const findings = [];
+  /** Where a class site's entries stand: a string they come from is judged there. */
+  const judged = [];
+  const local = (token) =>
+    isMarkerClass(token) ||
+    allowed(token) ||
+    themeClasses.has(normalizeClass(token).replace(MODIFIER, "")) ||
+    own.has(normalizeClass(token).replace(MODIFIER, ""));
   for (const site of sitesOf(model, { follow: false })) {
     for (const entry of site.entries) {
+      judged.push(entry.start);
       const token = entry.name;
       const base = normalizeClass(token);
       const bare = base.replace(MODIFIER, "");
@@ -93,10 +102,70 @@ export function unknownClasses(model, { allow = [] } = {}) {
         end: entry.end,
         message: variantOnly
           ? `"${token}" uses a variant this project's Tailwind does not know, so no CSS is generated for it. Use an existing variant, or declare it with @custom-variant in src/app.css.`
-          : `"${token}" is not a class this project's Tailwind knows, so no CSS is generated for it. Fix the spelling, or declare it with @utility in src/app.css.`,
+          : `"${token}" is not a class this project's Tailwind knows, so no CSS is generated for it. Fix the spelling, use a class whose token exists in src/lib/tokens/theme.css (or add the token there first), or declare it with @utility in src/app.css.`,
       });
     }
   }
+  findings.push(...classListStrings(model, judged, local));
+  return findings;
+}
+
+const SPACE = /\s+/u;
+
+/** A string's text when it is a plain string or a template with no values. */
+function plainString(node) {
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return node.value;
+  }
+  if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? null;
+  }
+  return null;
+}
+
+/**
+ * Each class no CSS is written for in a string no class site reads (a
+ * constant a module exports, a map of class lists): a string is a class list
+ * when it holds two words or more, every one a class Tailwind parses or the
+ * project's CSS declares, and Tailwind draws at least one. Prose fails the
+ * first ("the blur radius"), a lone word (an event name, a key) the second.
+ */
+function classListStrings(model, judged, local) {
+  const findings = [];
+  eachNode(model, (node) => {
+    const text = plainString(node);
+    const parent = parentOf(model, node);
+    if (
+      text === null ||
+      (parent?.type === "Property" && parent.key === node) ||
+      parent?.type === "TemplateLiteral" ||
+      judged.some((at) => at >= node.start && at < node.end)
+    ) {
+      return;
+    }
+    const words = text.split(SPACE).filter(Boolean);
+    if (
+      words.length < 2 ||
+      !words.every((w) => parses(w) || local(w)) ||
+      !words.some((w) => knows(w))
+    ) {
+      return;
+    }
+    const source = model.text.slice(node.start, node.end);
+    let from = 0;
+    for (const word of words) {
+      const at = source.indexOf(word, from);
+      from = at + word.length;
+      if (knows(word) || local(word)) {
+        continue;
+      }
+      findings.push({
+        start: node.start + at,
+        end: node.start + at + word.length,
+        message: `"${word}" is not a class this project's Tailwind knows, so no CSS is generated for it. Use a class whose token exists in src/lib/tokens/theme.css, or add the token there first.`,
+      });
+    }
+  });
   return findings;
 }
 
