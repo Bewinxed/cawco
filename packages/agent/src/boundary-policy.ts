@@ -11,6 +11,12 @@ import type {
   FilesystemPathEntry,
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
+import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
+  localDashboardPort,
+  readEnv,
+} from "@cawco/core";
 import { DENIED_RESOLVED_ADDRESSES } from "@cawco/core/boundary-reach";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
@@ -30,6 +36,20 @@ const browserPorts = (): number[] => [
     ),
     browserGatePort(),
   ]),
+];
+
+/**
+ * The hub's API port and the dashboard's port on this machine's loopback (on a
+ * machine that is not the hub's, the latter is the agent's listener carrying
+ * to the hub's dashboard, hub-loopback.ts). A hub that trusts its network
+ * takes a request with no credential as the owner (hub hub-auth.ts
+ * `classify`), so a command must not reach either; a workspace's git, tools
+ * and MCP go through doors and the agent's gateway instead, and previews stay
+ * in their own range.
+ */
+const hubPorts = (): number[] => [
+  Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT),
+  localDashboardPort(),
 ];
 
 const within = (path: string, root: string): boolean =>
@@ -567,7 +587,7 @@ export const seatbeltProfile = (
       (pattern) =>
         `(allow network-outbound (remote unix-socket (path-regex #"${pattern}")))`
     ),
-    ...browserPorts().map(
+    ...[...browserPorts(), ...hubPorts()].map(
       (port) => `(deny network-outbound (remote ip "localhost:${port}"))`
     ),
     "",
