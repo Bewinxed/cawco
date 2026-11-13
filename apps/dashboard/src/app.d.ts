@@ -5,6 +5,8 @@ declare global {
   interface Window {
     /** The decision overlay's bridge, once its script has run (decisions/host/page.svelte.ts). */
     cawco?: import("./lib/cawco/decisions/host/page.svelte.js").Bridge;
+    /** The address preview's handle for the probe (address/flow/Page.svelte). */
+    preview: unknown;
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
   }
@@ -20,6 +22,8 @@ declare global {
     }
     // interface Locals {}
     interface PageData {
+      /** Configure's card heights, as its layout reads them off the cookie (routes/(app)/config/+layout.server.ts). */
+      cards?: import("#lib/cawco/config/cards.js").Cards;
       /** The folder-tab strips' last measured boxes, read from the pref by the app layout (+layout.server.ts). */
       foldBoxes?: Record<
         string,

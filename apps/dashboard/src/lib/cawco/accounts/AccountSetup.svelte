@@ -153,7 +153,7 @@
   const runsOn = (harnesses: HarnessKind[]) =>
     boardStore.machines.filter((machine) =>
       machine.harnesses?.some((entry) =>
-        harnesses.includes(entry.harness as HarnessKind)
+        harnesses.some((kind) => kind === entry.harness)
       )
     );
 
@@ -340,10 +340,8 @@
   let delegates = $state<StrategyChoice>({ strategy: "fill-first" });
   let atLimit = $state(structuredClone(DEFAULT_AT_LIMIT));
   /** Both accounts, the one there was first; the new one goes last. */
-  const pair = $derived(
-    full && existing && account
-      ? ([existing, account] as [Account, Account])
-      : null
+  const pair = $derived<[Account, Account] | null>(
+    full && existing && account ? [existing, account] : null
   );
   /** Fill-first order as dragged here; until then, the one there was first. */
   let dragged = $state<string[] | null>(null);

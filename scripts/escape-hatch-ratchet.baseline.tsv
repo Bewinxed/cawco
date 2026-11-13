@@ -1,8 +1,6 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
-as-unknown-as	[ string, string, string, ]	apps/dashboard/src/lib/cawco/find/MentionField.svelte	1
 as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
-as-unknown-as	[string, string, string]	apps/dashboard/src/lib/cawco/find/mention.svelte.ts	1
 as-unknown-as	{ __buttonBench: { start: () => void; stop: () => void }; }	apps/dashboard/src/routes/(app)/motion/button-pending/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: { boardState: { fleetRead: boolean }; projectsState: { p	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void }; }	apps/dashboard/src/routes/(app)/motion/breath-floor/+page.svelte	1
@@ -22,15 +20,6 @@ as-unknown-as	{ __skeletonBench: { load: () => void; wait: () => void }; }	apps/
 as-unknown-as	{ __transcriptBuilds?: Record<string, number>; }	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
-as-unknown-as	{ cawco?: Bridge }	apps/dashboard/src/lib/cawco/decisions/host/page.svelte.ts	1
-as-unknown-as	{ appHeard: Heard[] }	scripts/probe-kit/specs/app-comment-mode.ts	1
-as-unknown-as	{ assistant: (text: string) => void; compaction: { boundary: (trigger: "	scripts/probe-kit/specs/web/safari-blurs.ts	1
-as-unknown-as	{ bitsEscapeLayers?: Map< { opts?: { ref?: { current?: Element } } }, { 	scripts/probe-kit/specs/graph-stage.ts	1
-as-unknown-as	{ bringBack: () => void }	scripts/probe-kit/specs/canvas-cost.ts	1
-as-unknown-as	{ cardFrames: CardFrames }	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cardFrames: typeof frames }	scripts/probe-kit/specs/comments.ts	1
-as-unknown-as	{ cawco: { send: () => Promise<void> } }	scripts/probe-kit/specs/decision-restart.ts	1
-as-unknown-as	{ cawco: object }	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	{ cawco?: Bridge }	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	{ cawcoArtifact: ArtifactGlobal }	packages/agent/src/canvas-host/replica.ts	1
 as-unknown-as	{ config: object }	packages/hub/src/db/owner-columns.ts	1
@@ -47,7 +36,6 @@ as-unknown-as	{ getTaskOutput?: (taskId: string) => Promise<{ output: string }>;
 as-unknown-as	{ IdleDetector?: IdleDetectorClass }	apps/dashboard/src/lib/cawco/presence.ts	1
 as-unknown-as	{ instance: { content: Node } | null }	apps/dashboard/scripts/outro-reads-check.ts	1
 as-unknown-as	{ message?: { type?: unknown; content?: unknown; message?: unknown }; }	packages/core/src/transcript-rules.ts	1
-as-unknown-as	{ preview: unknown }	apps/dashboard/src/lib/cawco/address/flow/Page.svelte	1
 as-unknown-as	{ raw: RawSocket }	packages/hub/src/browser-routes.ts	1
 as-unknown-as	{ raw: RawSocket }	packages/hub/src/wire-socket.ts	1
 as-unknown-as	{ request: (request: { subtype: "cancel_async_message"; message_uuid: st	packages/agent/src/harnesses/claude.ts	1
@@ -63,7 +51,6 @@ as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
 as-unknown-as	Buffer	packages/agent/src/browser/relay.ts	1
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
 as-unknown-as	CanvasOnPage	packages/agent/src/stage-render.ts	1
-as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/decides/preview/SetupFixture.svelte	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/project/caw-lead.fixture.ts	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
@@ -73,9 +60,6 @@ as-unknown-as	ConstructorParameters<typeof ExcalidrawBinding>[3]	packages/agent/
 as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
 as-unknown-as	Darwin	packages/agent/src/layer.ts	1
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
-as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte	1
-as-unknown-as	DocMeta["drawn"]	scripts/probe-kit/specs/answered-pages.ts	1
-as-unknown-as	DocumentRequests	scripts/probe-kit/specs/canvas-cost.ts	3
 as-unknown-as	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	2
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
 as-unknown-as	FleetMcpConfig	packages/agent/src/harnesses/claude.ts	1
@@ -108,7 +92,6 @@ as-unknown-as	Readiness	packages/agent/src/artifact-picture.ts	1
 as-unknown-as	Readiness & { document: { body: { textContent: string | null } | null; f	packages/agent/src/artifact-picture.ts	1
 as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
-as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
@@ -127,8 +110,6 @@ as-unknown-as	Server<PreviewSocket>	packages/agent/src/preview.ts	1
 as-unknown-as	ServerWebSocket<ArtifactSocket>	packages/hub/src/preview-routes.ts	1
 as-unknown-as	ServerWebSocket<PreviewSocket>	packages/hub/src/browser-routes.ts	1
 as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
-as-unknown-as	Shared	apps/dashboard/src/lib/platform/frame-observer.ts	1
-as-unknown-as	Shift[]	scripts/probe-kit/specs/live-perf.ts	1
 as-unknown-as	Skeleton[]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
 as-unknown-as	StateCard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
