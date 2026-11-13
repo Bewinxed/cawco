@@ -1360,7 +1360,9 @@
         <span
           data-slot="note"
           class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
-          >{questionWords(chip.questions)}</span
+          >{chip.questions > 0
+            ? questionWords(chip.questions)
+            : chip.cards.join(", ")}</span
         >
       {:else if tone === "failed" || tone === "cancelled"}
         <span
