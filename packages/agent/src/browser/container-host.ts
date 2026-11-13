@@ -48,6 +48,8 @@ import { machineId } from "@cawco/core/machine-id";
 import { stunServer } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
+import { z } from "zod";
+import { statusOf } from "./docker-status";
 import { machineNetwork, type Placement, placementOf } from "./egress";
 import { hubPacUrl } from "./hub-pac";
 import { ensureImage } from "./image";
@@ -131,9 +133,15 @@ const labelsOf = (owner: string, key: BrowserKey): Record<string, string> => ({
   [OWNER_LABEL]: owner,
 });
 
+/** What neko answers a login with. */
+const NekoLogin = z.object({
+  id: z.string().optional(),
+  token: z.string().optional(),
+});
+
 /** The runtime's not-found answer, taken as gone. */
 const absent = (error: unknown): void => {
-  if ((error as { statusCode?: number }).statusCode !== 404) {
+  if (statusOf(error) !== 404) {
     throw error;
   }
 };
@@ -337,8 +345,7 @@ const answers = async (url: string, what: string): Promise<void> => {
 };
 
 /** The runtime's not-found answer. */
-const notFound = (error: unknown): boolean =>
-  (error as { statusCode?: number }).statusCode === 404;
+const notFound = (error: unknown): boolean => statusOf(error) === 404;
 
 export class ContainerHost implements BrowserHost {
   readonly kind = "container";
@@ -758,7 +765,7 @@ export class ContainerHost implements BrowserHost {
       .stop({ t: STOP_SECONDS })
       .catch((error: unknown) => {
         // 304: already stopped; 404: gone.
-        const status = (error as { statusCode?: number }).statusCode;
+        const status = statusOf(error);
         if (status !== 304 && status !== 404) {
           throw error;
         }
@@ -830,10 +837,7 @@ export const nekoSession = async (
       `neko refused the ${as} login (HTTP ${response.status}): ${(await response.text()).trim()}`
     );
   }
-  const { id, token } = (await response.json()) as {
-    id?: string;
-    token?: string;
-  };
+  const { id, token } = NekoLogin.parse(await response.json());
   if (!(id && token)) {
     throw new Error(
       `neko answered the ${as} login with no session id or token.`

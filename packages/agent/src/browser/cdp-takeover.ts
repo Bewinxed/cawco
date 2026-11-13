@@ -20,21 +20,34 @@
 import { readWithin } from "@cawco/core/bounded";
 import { BROWSER_SCREEN } from "@cawco/core/browser";
 import { z } from "zod";
-import { CdpCalls } from "./cdp-calls";
+import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 
 /** What a view sends: the person's pointer, keys and words, in the page's CSS pixels. */
-export type CdpInput =
-  | {
-      t: "move" | "down" | "up";
-      x: number;
-      y: number;
-      button?: "left" | "middle" | "right";
-      modifiers?: number;
-    }
-  | { t: "wheel"; x: number; y: number; dx: number; dy: number }
-  | { t: "key"; type: "down" | "up"; key: string; modifiers?: number }
-  | { t: "text"; text: string }
-  | { t: "tap"; x: number; y: number };
+const CdpInputSchema = z.discriminatedUnion("t", [
+  z.object({
+    t: z.enum(["move", "down", "up"]),
+    x: z.number(),
+    y: z.number(),
+    button: z.enum(["left", "middle", "right"]).optional(),
+    modifiers: z.number().optional(),
+  }),
+  z.object({
+    t: z.literal("wheel"),
+    x: z.number(),
+    y: z.number(),
+    dx: z.number(),
+    dy: z.number(),
+  }),
+  z.object({
+    t: z.literal("key"),
+    type: z.enum(["down", "up"]),
+    key: z.string(),
+    modifiers: z.number().optional(),
+  }),
+  z.object({ t: z.literal("text"), text: z.string() }),
+  z.object({ t: z.literal("tap"), x: z.number(), y: z.number() }),
+]);
+export type CdpInput = z.infer<typeof CdpInputSchema>;
 
 /** One open view of the take-over: where its frames go. */
 export interface CdpViewer {
@@ -54,6 +67,12 @@ const MessageSchema = z.object({
   sessionId: z.string().optional(),
 });
 type Message = z.infer<typeof MessageSchema>;
+
+/** The page size a screencast frame names (`Page.screencastFrame` metadata). */
+const FrameMetadata = z.object({
+  deviceHeight: z.number().optional(),
+  deviceWidth: z.number().optional(),
+});
 
 /** A take-over's screencast: none yet, frames being made, or ended. */
 type CastState = "idle" | "casting" | "stopped";
@@ -100,9 +119,8 @@ export class CdpLink {
   /** The browser-level connection of the Chromium whose DevTools answer at `devtools` (`http://127.0.0.1:<port>`). */
   static async open(devtools: string): Promise<CdpLink> {
     const read = await readWithin(CALL_MS, (signal) =>
-      fetch(`${devtools}/json/version`, { signal }).then(
-        (response) =>
-          response.json() as Promise<{ webSocketDebuggerUrl?: string }>
+      fetch(`${devtools}/json/version`, { signal }).then(async (response) =>
+        DevtoolsVersion.parse(await response.json())
       )
     );
     if (read.kind === "unanswered") {
@@ -204,41 +222,14 @@ const keyEvent = (key: string): Json => {
   return { key, windowsVirtualKeyCode: code };
 };
 
-const finite = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
-
 /** A view's message as {@link CdpInput}, or undefined when it is none. */
 export const cdpInputOf = (text: string): CdpInput | undefined => {
-  let value: Json;
   try {
-    value = JSON_OBJECT.parse(JSON.parse(text));
+    const input = CdpInputSchema.safeParse(JSON.parse(text));
+    return input.success ? input.data : undefined;
   } catch {
-    return;
-  }
-  switch (value.t) {
-    case "move":
-    case "down":
-    case "up":
-    case "tap":
-      return finite(value.x) && finite(value.y)
-        ? (value as CdpInput)
-        : undefined;
-    case "wheel":
-      return finite(value.x) &&
-        finite(value.y) &&
-        finite(value.dx) &&
-        finite(value.dy)
-        ? (value as CdpInput)
-        : undefined;
-    case "key":
-      return typeof value.key === "string" &&
-        (value.type === "down" || value.type === "up")
-        ? (value as CdpInput)
-        : undefined;
-    case "text":
-      return typeof value.text === "string" ? (value as CdpInput) : undefined;
-    default:
-      return;
+    // Not JSON: no input.
+    return undefined;
   }
 };
 
@@ -465,10 +456,7 @@ export class CdpTakeover {
       return;
     }
     const params = message.params ?? {};
-    const metadata = (params.metadata ?? {}) as {
-      deviceHeight?: number;
-      deviceWidth?: number;
-    };
+    const metadata = FrameMetadata.catch({}).parse(params.metadata);
     // Acknowledged first: Chromium sends the next frame only after it.
     this.#link
       .call(
