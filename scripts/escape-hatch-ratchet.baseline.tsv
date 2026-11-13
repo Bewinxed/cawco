@@ -1,10 +1,7 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
-as-unknown-as	{ __cawcoDebug: { boardState: { fleetRead: boolean }; projectsState: { p	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: Bench }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
-as-unknown-as	{ __rbReal?: Real }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ credentials?: { store?: { constructor?: unknown } }; }	packages/agent/src/harnesses/pi-accounts.ts	1
@@ -25,16 +22,13 @@ as-unknown-as	{ toolCallId: string; result: { content?: unknown; details?: Recor
 as-unknown-as	{ type?: string; path?: string }[]	packages/agent/src/harnesses/opencode.ts	1
 as-unknown-as	{ webkit?: { messageHandlers?: { cawco?: unknown } }; }	packages/preview/src/overlay/page.ts	1
 as-unknown-as	AbstractType< YEvent<AbstractType<unknown>> >	packages/hub/src/artifacts/docs.ts	2
-as-unknown-as	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/block-fixture.ts	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
-as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/project/caw-lead.fixture.ts	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
-as-unknown-as	FleetMcpConfig	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Freshable[]	packages/core/src/usage/windows.ts	1
 as-unknown-as	HookDraft	packages/hub/src/server.ts	1
 as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
@@ -48,10 +42,7 @@ as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
-as-unknown-as	ProjectDecisions	apps/dashboard/src/lib/cawco/decisions/DecisionsView.stories.ts	1
-as-unknown-as	ProjectRow	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
-as-unknown-as	Radii	apps/dashboard/src/lib/components/ui/highlight/highlight.svelte.ts	1
-as-unknown-as	RawRecord	packages/agent/src/harnesses/claude-transcript.ts	6
+as-unknown-as	RawRecord	packages/agent/src/harnesses/claude-transcript.ts	5
 as-unknown-as	ReadableWritablePair< Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer> >	packages/core/src/compress-answer.ts	1
 as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
@@ -108,7 +99,6 @@ catch-drops-reason	CallExpression	packages/preview/src/overlay/changes.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/pins.ts	2
 catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
 catch-drops-reason	CallExpression	scripts/binary/sign-agent-bundle.ts	1
-catch-drops-reason	CallExpression	scripts/dashboard-build-cache.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/decides/WhoDecides.svelte	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/home/Caw.svelte	3
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/home/home-state.svelte.ts	1
@@ -154,7 +144,6 @@ empty-catch		apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/stores/commands.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/usage/forecast.svelte.ts	1
-empty-catch		apps/dashboard/src/lib/cawco/views/openui/BlockVideo.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/workspace/workspace.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/platform/feel.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/platform/storage.ts	2
@@ -168,7 +157,6 @@ empty-catch		packages/agent/src/fleet-mcp-listing.ts	1
 empty-catch		packages/agent/src/forges/cli-config.ts	1
 empty-catch		packages/agent/src/forges/gitea.ts	3
 empty-catch		packages/agent/src/git/lfs.ts	1
-empty-catch		packages/agent/src/harnesses/claude-stored-run.ts	1
 empty-catch		packages/agent/src/harnesses/claude.ts	2
 empty-catch		packages/agent/src/harnesses/opencode.ts	2
 empty-catch		packages/agent/src/host-lfs.ts	1
@@ -207,10 +195,6 @@ empty-catch		packages/preview/src/overlay/schemes.ts	3
 empty-catch		packages/preview/src/proxy.ts	1
 empty-catch		packages/sessiond/src/server.ts	1
 empty-catch		packages/sessiond/src/tasks.ts	1
-empty-catch		scripts/binary/e2e-start-session.ts	1
-empty-catch		scripts/binary/e2e-stop-session.ts	1
-empty-catch		scripts/binary/smoke-stack.ts	3
-empty-catch		scripts/codemods/tokens-to-theme.proof.ts	1
 empty-catch		scripts/hooks/delegate-nudge.ts	2
 suppression	@ts-expect-error	packages/core/src/hub-request.fixtures.ts	13
 suppression	@ts-expect-error	scripts/lib/tool-call.fixtures.ts	4

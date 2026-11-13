@@ -11,6 +11,7 @@
  * worktree because a release builds from a fresh one; the five newest stay.
  */
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -40,12 +41,15 @@ const git = async (root: string, args: string[]): Promise<string> => {
 const dashboardClosure = async (root: string): Promise<string[]> => {
   const dirs = new Map<string, string>();
   for (const entry of await readdir(join(root, "packages"))) {
-    const manifest = await Bun.file(
-      join(root, "packages", entry, "package.json")
-    )
-      .json()
-      .catch(() => undefined);
-    if (manifest?.name) {
+    // A folder under packages/ with no manifest is no package.
+    const file = Bun.file(join(root, "packages", entry, "package.json"));
+    const manifest: unknown = (await file.exists()) ? await file.json() : null;
+    if (
+      typeof manifest === "object" &&
+      manifest !== null &&
+      "name" in manifest &&
+      typeof manifest.name === "string"
+    ) {
       dirs.set(manifest.name, `packages/${entry}`);
     }
   }
@@ -109,7 +113,7 @@ export const dashboardBuild = async (
     "dashboard-build"
   );
   const entry = join(store, key);
-  if (await stat(entry).catch(() => undefined)) {
+  if (existsSync(entry)) {
     console.log(`dashboard build cache: hit ${key}`);
     await rm(out, { recursive: true, force: true });
     await cp(entry, out, { recursive: true });
@@ -123,9 +127,14 @@ export const dashboardBuild = async (
   const temp = `${entry}.${process.pid}.tmp`;
   await rm(temp, { recursive: true, force: true });
   await cp(out, temp, { recursive: true });
-  await rename(temp, entry).catch(() =>
-    rm(temp, { recursive: true, force: true })
-  );
+  // Another run that built the same key put its copy there first: ours goes.
+  await rename(temp, entry).catch(async (error: unknown) => {
+    await rm(temp, { recursive: true, force: true });
+    const code = error instanceof Error && "code" in error ? error.code : null;
+    if (code !== "ENOTEMPTY" && code !== "EEXIST") {
+      throw error;
+    }
+  });
   const kept = await Promise.all(
     (await readdir(store))
       .filter((name) => !name.endsWith(".tmp"))

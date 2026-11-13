@@ -23,7 +23,6 @@
  * `.claude/settings.local.json`, its `.claude/settings.json`, then the
  * config dir's `settings.json`.
  */
-import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountIdentity,
@@ -38,6 +37,7 @@ import {
 } from "@cawco/core/paths/claude";
 import type { RanFrom, StoredRun } from "@cawco/core/session-messages";
 import { ReverseReader, typeFilter } from "@cawco/jsonl-parser";
+import { z } from "zod";
 
 /** How far back from a transcript's end its mode and model are looked for. Ours: the CLI appends the mode after each turn, and a turn's assistant record is within one tool result of it. */
 const LOOK_BACK_BYTES = 8 * 1024 * 1024;
@@ -52,21 +52,32 @@ const CLAUDE_MODES: ReadonlySet<string> = new Set(
   PERMISSION_MODES.filter((mode) => mode !== "fullSend")
 );
 
-interface Settings {
-  effortLevel?: unknown;
-  model?: unknown;
-  permissions?: { defaultMode?: unknown };
-}
+/** What a settings tier says of a run: read loosely, every value checked where it is used. */
+const SettingsSchema = z.looseObject({
+  effortLevel: z.unknown().optional(),
+  model: z.unknown().optional(),
+  permissions: z
+    .looseObject({ defaultMode: z.unknown().optional() })
+    .optional()
+    .catch(undefined),
+});
+type Settings = z.infer<typeof SettingsSchema>;
 
-/** A settings file as JSON; nothing when it is absent or does not parse. */
+/**
+ * A settings file as JSON; nothing when it is absent. One that does not
+ * read or does not parse sets nothing either, and says why in the log.
+ */
 const settingsAt = async (path: string): Promise<Settings | undefined> => {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    return;
+  }
   try {
-    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-    return parsed && typeof parsed === "object"
-      ? (parsed as Settings)
-      : undefined;
-  } catch {
-    // Absent, unreadable or not JSON: this tier sets nothing.
+    return SettingsSchema.safeParse(JSON.parse(await file.text())).data;
+  } catch (error) {
+    console.warn(
+      `[claude] ${path} sets nothing: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 };
 

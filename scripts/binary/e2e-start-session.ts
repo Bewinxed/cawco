@@ -21,8 +21,11 @@ socket.onmessage = (event) => {
       refused.push(frame.payload.message ?? text.slice(0, 300));
       return;
     }
-  } catch {
-    // Not a frame: read as text below.
+  } catch (error) {
+    // Not a frame (no JSON): read as text below.
+    if (!(error instanceof SyntaxError)) {
+      throw error;
+    }
   }
   if (text.includes('"ok":false') || text.includes("failure")) {
     refused.push(text.slice(0, 300));

@@ -339,10 +339,8 @@ const cornersOf = (style: CSSStyleDeclaration, w: number, h: number): Radii => {
     fit(h, tl[1], bl[1]),
     fit(h, tr[1], br[1])
   );
-  return [tl, tr, br, bl].map(([x, y]): Radius => [
-    x * f,
-    y * f,
-  ]) as unknown as Radii;
+  const scaled = ([x, y]: Radius): Radius => [x * f, y * f];
+  return [scaled(tl), scaled(tr), scaled(br), scaled(bl)];
 };
 
 /** A layer and its parts, and the glide it is on (`draw`). */

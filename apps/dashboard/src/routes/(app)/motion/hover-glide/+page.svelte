@@ -47,35 +47,25 @@
     "sandbox",
     "infra",
   ];
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        boardState: { fleetRead: boolean };
-        projectsState: { projects: ProjectRow[]; projectsRead: boolean };
-      };
-    }
-  ).__cawcoDebug;
-  debug.projectsState.projects = NAMES.map(
-    (name, n) =>
-      ({
-        account: null,
-        accountAtLimit: "wait",
-        cawHarness: "claude",
-        cawModel: null,
-        conversationInstanceId: null,
-        createdAt: "2026-10-01T09:00:00Z",
-        eventsOn: false,
-        id: `p${n}`,
-        lands: "main",
-        lfsConnection: null,
-        lfsUrl: null,
-        links: [],
-        name,
-        places: [],
-        primaryPlaceId: null,
-        review: false,
-      }) as unknown as ProjectRow
-  );
+  const debug = window.__cawcoDebug;
+  debug.projectsState.projects = NAMES.map((name, n): ProjectRow => ({
+    account: null,
+    accountAtLimit: "wait",
+    cawHarness: "claude",
+    cawModel: null,
+    conversationInstanceId: null,
+    createdAt: "2026-10-01T09:00:00Z",
+    eventsOn: false,
+    id: `p${n}`,
+    lands: "main",
+    lfsConnection: null,
+    lfsUrl: null,
+    links: [],
+    name,
+    places: [],
+    primaryPlaceId: null,
+    review: false,
+  }));
   debug.projectsState.projectsRead = true;
   debug.boardState.fleetRead = true;
 
