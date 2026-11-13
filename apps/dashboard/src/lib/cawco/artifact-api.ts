@@ -15,6 +15,7 @@ import type {
   SessionAttachments,
   ShownFailure,
 } from "@cawco/core/protocol";
+import { referenceSetOf } from "@cawco/core/reference-faces";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { goto } from "$app/navigation";
@@ -351,4 +352,26 @@ export async function findArtifact(
     );
   }
   return response.json();
+}
+
+/**
+ * The `cawco:` references artifact `id`'s program names, as the hub read
+ * them off the program it checked and keeps (core reference-faces.ts): the
+ * whole set a frame of it is said faces of and may open. None for an
+ * artifact that keeps no program.
+ */
+export async function artifactReferences(id: string): Promise<string[]> {
+  const response = await hubFetch(
+    hubRequest("GET /api/artifacts/:artifact/references", {
+      path: { artifact: id },
+    })
+  );
+  if (!response.ok) {
+    throw new ArtifactRefused(
+      response.status,
+      (await hubRefusal(response)).message
+    );
+  }
+  const read = (await response.json()) as { references?: unknown };
+  return referenceSetOf(read.references);
 }

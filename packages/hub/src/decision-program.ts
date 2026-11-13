@@ -57,6 +57,7 @@ import {
   undrawn,
 } from "@cawco/core/house-faces";
 import { blockFile, programLibraryOf } from "@cawco/core/inline-blocks";
+import { programReferences } from "@cawco/core/reference-faces";
 import { unhandled } from "@cawco/core/unhandled";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import {
@@ -781,6 +782,46 @@ export const readKept = (program: string): ProgramRead =>
     (programLibraryOf(program) === "block" ? blockParser : parser).parse(
       program
     ).root
+  );
+
+/** Every word a program draws: each string of its tree, but a prop that names rather than draws (an id, a file) and a Diagram's Mermaid. */
+function* drawnWords(
+  value: unknown,
+  prop = "",
+  component = ""
+): Generator<string> {
+  if (typeof value === "string") {
+    if (!(
+      UNDRAWN_PROPS.has(prop) ||
+      (component === "Diagram" && prop === "mermaid")
+    )) {
+      yield value;
+    }
+  } else if (Array.isArray(value)) {
+    for (const each of value) {
+      yield* drawnWords(each, prop, component);
+    }
+  } else if (isElement(value)) {
+    for (const [name, held] of Object.entries(value.props)) {
+      yield* drawnWords(held, name, value.typeName);
+    }
+  }
+}
+
+/**
+ * The `cawco:` references a kept program's words name (core
+ * reference-faces.ts `programReferences`): the whole set of things a page
+ * drawn from it may learn the faces of, and open, through its host. Read
+ * from the program the hub checked and keeps, never from anything the page
+ * says.
+ */
+export const keptReferences = (program: string): string[] =>
+  programReferences(
+    drawnWords(
+      (programLibraryOf(program) === "block" ? blockParser : parser).parse(
+        program
+      ).root
+    )
   );
 
 /** Each statement of a program by its name, as written. */

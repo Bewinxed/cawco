@@ -39,6 +39,11 @@ import {
 } from "@cawco/core/frames";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
+import {
+  isReferenceHref,
+  OPEN_REFERENCE_ASK,
+  REFERENCE_FACES,
+} from "@cawco/core/reference-faces";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { interactionOf } from "@cawco/core/stage";
 import {
@@ -1361,6 +1366,13 @@ declare global {
        * it. Answers the refusal's words, or null once it opened.
        */
       open: (artifact: string) => Promise<string | null>;
+      /**
+       * Opens what a `cawco:` reference in the page's words names, where a
+       * chip of it opens in the dashboard (core reference-faces.ts): only a
+       * reference the page's program names; the host refuses any other.
+       * Answers the refusal's words, or null once it opened.
+       */
+      follow: (href: string) => Promise<string | null>;
     };
   }
 }
@@ -1435,6 +1447,13 @@ Object.defineProperty(window, "cawco", {
     },
     open: async (id: string) => {
       const refused = await askHost("cawco/open-artifact", { artifact: id });
+      return typeof refused === "string" ? refused : null;
+    },
+    follow: async (href: string) => {
+      if (!isReferenceHref(href)) {
+        return null;
+      }
+      const refused = await askHost(OPEN_REFERENCE_ASK, { href });
       return typeof refused === "string" ? refused : null;
     },
   }),
@@ -3580,6 +3599,14 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       for (const said of Object.values(onPage ?? {})) {
         post("cawco:sheet", { sheet: said });
       }
+    },
+    // The host's faces of the references the page's program names (core
+    // reference-faces.ts: the set is the hub's, read off the program), for
+    // the page to draw.
+    [REFERENCE_FACES]: (message) => {
+      dispatchEvent(
+        new CustomEvent(REFERENCE_FACES, { detail: { faces: message.faces } })
+      );
     },
     "cawco:place": (message) => takeInset(message.inset),
     // The host's floating head over the page's top, px (the artifact

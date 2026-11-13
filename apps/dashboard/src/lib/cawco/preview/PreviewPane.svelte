@@ -197,6 +197,7 @@
     type RailList,
     type RailSort,
   } from "./comment-rows";
+  import { FrameReferences } from "./frame-references.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
@@ -956,6 +957,12 @@
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
+  /** The `cawco:` references the page's program names, answered with their faces: a page's only, the hub's set for it, empty for one with no program. */
+  const references = new FrameReferences(
+    post,
+    () => instanceId,
+    () => (artifact?.kind === "page" ? artifact.id : null)
+  );
   /*
    * This view's word to the hub that the artifact is on screen at the open
    * frame's revision, or why it could not be: the agent's artifact_create and
@@ -3327,6 +3334,9 @@
     }
     if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {
       turnedAway();
+      return;
+    }
+    if (references.heard(event.data)) {
       return;
     }
     // A decision page's Open to draw or Open full: the artifact opens where

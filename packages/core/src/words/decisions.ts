@@ -134,6 +134,9 @@ export const decisionsWords = {
   unavailableLine: (project: string, problem: string) =>
     `The decision pages for ${project} could not be read: ${problem}`,
   retry: "Retry",
+  /** A page asked to open a link its own program does not name (dashboard frame-references.svelte.ts). */
+  referenceNotOnPage:
+    "It was not opened: the page's words do not name that link.",
   /** The list's groups, by a page's standing: waiting on picks, sent, decided. */
   needsYou: commonWords.needsYou,
   /** Needs you's line when no page waits on picks. */

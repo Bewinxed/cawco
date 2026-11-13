@@ -7,6 +7,10 @@
  */
 
 import {
+  isReferenceHref,
+  OPEN_REFERENCE_ASK,
+} from "@cawco/core/reference-faces";
+import {
   type PaneKey,
   paneKeyOf,
   type ShellShortcut,
@@ -158,6 +162,22 @@ export function previewOpenArtifact(
     artifact.length <= RPC_ID_MAX
     ? { artifact, id: ask.id }
     : null;
+}
+
+/**
+ * The page's ask to open what a `cawco:` reference in its words names
+ * (`cawco.follow`: a decision page's reference chip, core
+ * reference-faces.ts; opened only when its program names it,
+ * frame-references.svelte.ts): a JSON-RPC `cawco/open-reference` naming its
+ * destination, answered with the refusal's words, or null once it opened.
+ * Null when the message is not one.
+ */
+export function previewOpenReference(
+  value: unknown
+): { href: string; id: number | string } | null {
+  const ask = rpcAsk(value, OPEN_REFERENCE_ASK);
+  const href = ask?.params?.href;
+  return ask && isReferenceHref(href) ? { href, id: ask.id } : null;
 }
 
 /** What the page's `cawco:error` is about: a field or a send carry their own way back; anything else reloads. */

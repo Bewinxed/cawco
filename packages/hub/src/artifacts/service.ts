@@ -189,6 +189,7 @@ import {
   type ArtifactNamed,
   type BuiltProgram,
   keptImagePaths,
+  keptReferences,
   mergeProgram,
   PROGRAM_FILE,
   ProgramRefusal,
@@ -8437,6 +8438,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         instanceId: row.instanceId,
         shown: inPanel(row),
       };
+    },
+
+    /**
+     * The `cawco:` references a page's program names (decision-program.ts
+     * `keptReferences`): every thing a frame of it may learn the face of,
+     * and open, through the dashboard framing it. Read from the program the
+     * hub checked and keeps; none for anything that keeps no program (a
+     * preview, a canvas, an HTML page). 404 for an artifact the hub holds
+     * none of.
+     */
+    references: (id: string): string[] => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+      }
+      const program = join(deps.root, row.id, PROGRAM_FILE);
+      return row.kind === "page" && existsSync(program)
+        ? keptReferences(readFileSync(program, "utf8"))
+        : [];
     },
 
     /**

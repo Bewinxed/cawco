@@ -12,7 +12,6 @@
    * or paint under the panes.
    */
   import { Portal } from "bits-ui";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { ChipPanel } from "./chip-panel.svelte";
   import { cawco } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
@@ -20,6 +19,7 @@
   import { sessionName } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
+  import ReferenceFace, { referenceChipClass } from "./ReferenceFace.svelte";
   import SessionCard from "./SessionCard.svelte";
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf } from "./session-status";
@@ -47,26 +47,21 @@
   aria-controls={panelId}
   aria-expanded={panel.open}
   aria-haspopup="dialog"
-  class={chipVariants({ variant: "inline" })}
+  class={referenceChipClass(true)}
   data-session-chip={id}
   onclick={panel.press}
   type="button"
   bind:this={panel.chip}
 >
-  <span
-    data-slot="mark"
-    aria-hidden="true"
-    class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-    style:--mark-bg="var(--color-mark-{markHue(sessionPlace(id))})"
-    data-box
-  >
-    {#if caw}
-      <CawFace size={14} status={caw} />
-    {:else}
-      <Sprite class="block size-icon-sm text-mark-glyph" />
-    {/if}
-  </span>
-  <span data-slot="label">{title}</span>
+  <ReferenceFace hue={markHue(sessionPlace(id))} words={title}>
+    {#snippet mark()}
+      {#if caw}
+        <CawFace size={14} status={caw} />
+      {:else}
+        <Sprite class="block size-icon-sm text-mark-glyph" />
+      {/if}
+    {/snippet}
+  </ReferenceFace>
 </button><Portal>
   <HoverPanel
     aria-label={title}

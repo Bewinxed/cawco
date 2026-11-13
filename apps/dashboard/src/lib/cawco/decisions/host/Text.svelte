@@ -1,10 +1,12 @@
 <!--
-  Words in one of the house text roles, plain text only: the view library's
+  Words in one of the house text roles, plain text with its `cawco:`
+  references drawn as the dashboard's (Words.svelte): the view library's
   Text by name and shape, each role its type utility (DESIGN.md, The Role,
   Not Size Rule), a title balanced and running text pretty.
 -->
 <script lang="ts">
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
+  import Words from "./Words.svelte";
 
   let { props }: OpenUIRenderProps<{ text: unknown; variant?: unknown }> =
     $props();
@@ -23,5 +25,5 @@
 </script>
 
 <p class={["wrap-anywhere", ROLES[role]]} data-role={role} data-slot="text">
-  {String(props.text ?? "")}
+  <Words text={String(props.text ?? "")} />
 </p>

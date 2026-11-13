@@ -9311,6 +9311,33 @@
         }
       }
     },
+    "/api/artifacts/{artifact}/references": {
+      "get": {
+        "parameters": [
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiArtifactsByArtifactReferences",
+        "responses": {
+          "200": {
+            "description": "getApiArtifactsByArtifactReferences 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiArtifactsByArtifactReferences200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/artifacts/{artifact}/thumbnail/{scheme}": {
       "get": {
         "parameters": [
@@ -32483,6 +32510,20 @@
               "shown"
             ]
           }
+        ]
+      },
+      "getApiArtifactsByArtifactReferences200": {
+        "type": "object",
+        "properties": {
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "references"
         ]
       },
       "getApiPush200": {
