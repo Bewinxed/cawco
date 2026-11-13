@@ -34,6 +34,7 @@ import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import type { Envelope } from "@cawco/core/protocol";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
+import { z } from "zod";
 import { delegationHubUrl } from "./delegation";
 import { gauge } from "./memory";
 
@@ -174,8 +175,9 @@ const escaped = (text: string): string =>
  * between two branches still matches as the text holds it.
  */
 const trieSource = (values: string[]): string => {
-  if (values.length === 1) {
-    return escaped(values[0] as string);
+  const [only] = values;
+  if (values.length === 1 && only !== undefined) {
+    return escaped(only);
   }
   let ends = false;
   const byFirst = new Map<string, string[]>();
@@ -184,7 +186,7 @@ const trieSource = (values: string[]): string => {
       ends = true;
       continue;
     }
-    const first = value[0] as string;
+    const first = value.charAt(0);
     const rest = byFirst.get(first);
     if (rest) {
       rest.push(value.slice(1));
@@ -195,9 +197,10 @@ const trieSource = (values: string[]): string => {
   const branches = [...byFirst].map(
     ([first, rest]) => `${escaped(first)}${trieSource(rest)}`
   );
+  const [single] = branches;
   const body =
-    branches.length === 1
-      ? (branches[0] as string)
+    branches.length === 1 && single !== undefined
+      ? single
       : `(?:${branches.join("|")})`;
   // A value that ends here, where longer ones go on: the longer is tried first.
   return ends ? `(?:${body})?` : body;
@@ -211,32 +214,41 @@ export const redactText = (text: string): string => {
 
 type DeltaField = "text" | "thinking" | "partial_json";
 
+/** A streamed content-block delta frame as the harness sent it; any other key it carries is kept. */
+const DeltaPayload = z.looseObject({
+  kind: z.literal("frame"),
+  message: z.looseObject({
+    type: z.literal("stream_event"),
+    event: z.looseObject({
+      type: z.literal("content_block_delta"),
+      index: z.unknown(),
+      delta: z.record(z.string(), z.unknown()),
+    }),
+  }),
+});
+type DeltaPayload = z.infer<typeof DeltaPayload>;
+
 interface Delta {
   delta: Record<string, unknown>;
   field: DeltaField;
   index: unknown;
+  payload: DeltaPayload;
 }
 
 /** A streamed piece of one content block, if `envelope` is one. */
 const deltaOf = (envelope: Envelope): Delta | undefined => {
-  const payload = envelope.payload as
-    { kind?: string; message?: { type?: string; event?: unknown } } | undefined;
-  if (
-    envelope.verb !== "frames" ||
-    payload?.kind !== "frame" ||
-    payload.message?.type !== "stream_event"
-  ) {
+  if (envelope.verb !== "frames") {
     return undefined;
   }
-  const event = payload.message.event as
-    | { type?: string; index?: unknown; delta?: Record<string, unknown> }
-    | undefined;
-  if (event?.type !== "content_block_delta" || !event.delta) {
+  const parsed = DeltaPayload.safeParse(envelope.payload);
+  if (!parsed.success) {
     return undefined;
   }
+  const payload = parsed.data;
+  const { event } = payload.message;
   for (const field of ["text", "thinking", "partial_json"] as const) {
     if (typeof event.delta[field] === "string") {
-      return { delta: event.delta, field, index: event.index };
+      return { delta: event.delta, field, index: event.index, payload };
     }
   }
   return undefined;
@@ -244,9 +256,7 @@ const deltaOf = (envelope: Envelope): Delta | undefined => {
 
 /** The same delta envelope, carrying `text` instead. */
 const withText = (envelope: Envelope, delta: Delta, text: string): Envelope => {
-  const payload = envelope.payload as {
-    message: { event: Record<string, unknown> };
-  };
+  const { payload } = delta;
   return {
     ...envelope,
     payload: {
@@ -259,7 +269,7 @@ const withText = (envelope: Envelope, delta: Delta, text: string): Envelope => {
         },
       },
     },
-  } as Envelope;
+  };
 };
 
 /** How much of `text`'s end could be the start of `credential`. */
@@ -368,7 +378,7 @@ export const outbound = (envelope: Envelope): OutboundMessage[] => {
     return out;
   }
   const joined = redactText(
-    `${carries.get(key)?.text ?? ""}${delta.delta[delta.field] as string}`
+    `${carries.get(key)?.text ?? ""}${String(delta.delta[delta.field])}`
   );
   carries.delete(key);
   const hold = heldTail(joined, bySession.get(key));
