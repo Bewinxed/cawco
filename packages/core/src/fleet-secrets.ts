@@ -159,13 +159,18 @@ export const openUrl = (url: string): string => splitUrl(url).open;
 const hasSecretParts = (parts: UrlParts): boolean =>
   parts.query.length > 0 || parts.password !== undefined;
 
-/** Every secret value a server's config holds: each `env` and `headers` value, a URL's password and its secret query values. */
+/** Every secret value a server's config holds: each `env` and `headers` value whose name or shape reads as a credential, a URL's password and its secret query values. */
 export const secretValuesOf = (config: FleetMcpConfig): string[] => {
   const record = config as unknown as Record<string, unknown>;
   const values: string[] = [];
   for (const field of ["env", "headers"]) {
-    for (const value of Object.values(mapOf(record[field]) ?? {})) {
-      if (typeof value === "string") {
+    for (const [name, value] of Object.entries(mapOf(record[field]) ?? {})) {
+      // Only what reads as a credential, by its name or its shape: a
+      // `DEBUG=1` or an `Accept` value is no secret and stays in the text.
+      if (
+        typeof value === "string" &&
+        (SECRET_KEY.test(name) || looksSecret(value))
+      ) {
         values.push(value);
       }
     }
