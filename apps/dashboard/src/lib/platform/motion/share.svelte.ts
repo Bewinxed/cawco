@@ -279,6 +279,17 @@ function moveFrames(rtl: boolean, from: DOMRect, to: DOMRect): Keyframe[] {
   ];
 }
 
+/** The box of a `grow` destination's anchor: the part of it the source is. */
+function anchorBox(node: HTMLElement, anchor: string): DOMRect {
+  const part = node.querySelector(anchor);
+  if (!part) {
+    throw new Error(
+      `A shared element growing into its destination found no anchor "${anchor}" inside it`
+    );
+  }
+  return part.getBoundingClientRect();
+}
+
 function fly(node: HTMLElement, from: Departure, options: LandOptions) {
   const to = restingRect(node);
   if (to.width === 0 || to.height === 0) {
@@ -306,9 +317,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
   if (mode === "grow") {
     // The source's box laid over the anchor, their starts and middles lined
     // up, in the destination's own coordinates.
-    const part = anchor
-      ? (node.querySelector(anchor)?.getBoundingClientRect() ?? to)
-      : to;
+    const part = anchor ? anchorBox(node, anchor) : to;
     const left = part.left - to.left;
     const top = part.top - to.top + (part.height - from.rect.height) / 2;
     const right = to.width - left - from.rect.width;
