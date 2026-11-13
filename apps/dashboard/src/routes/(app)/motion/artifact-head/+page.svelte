@@ -93,7 +93,7 @@
     closePreview: () => undefined,
     folders: {
       list: () =>
-        Promise.resolve({ kind: "answered", value: [] } as Bounded<FsEntry[]>),
+        Promise.resolve<Bounded<FsEntry[]>>({ kind: "answered", value: [] }),
       recent: () => null,
       unanswered: () => "",
     },

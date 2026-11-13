@@ -14,10 +14,7 @@
     STAGE_REACH,
     STAGE_SEEK,
     type StageCompare,
-    type StageDials,
     type StagePlay,
-    type StageReach,
-    type StageSeek,
   } from "@cawco/core/stage-graph";
   import { graphWords } from "@cawco/core/words/graph";
   import { onMount, untrack } from "svelte";
@@ -263,7 +260,7 @@
     () => inspector
   );
   const spec = $derived<CanvasSpec>({
-    dials: dials as CanvasSpec["dials"],
+    dials,
   });
 
   /** The story the stand-in stage stands at, and the width the view picked. */
@@ -326,10 +323,14 @@
   /** A story's values the form shows, by part: its draft's own, one level down. */
   const valuesOf = (name: string): Map<string, string> => {
     const args = file.stories.find((each) => each.name === name)?.args ?? {};
-    const draft = (args.draft ?? {}) as Record<string, unknown>;
+    const draft = new Map<string, unknown>(
+      typeof args.draft === "object" && args.draft !== null
+        ? Object.entries(args.draft)
+        : []
+    );
     return new Map(
       Object.entries(PARTS).map(([key, part]) => {
-        const value = draft[key];
+        const value = draft.get(key);
         const words =
           value === undefined || value === null ? "" : String(value);
         return [part, words.length > 48 ? `${words.slice(0, 47)}…` : words];
@@ -350,54 +351,48 @@
       }));
   };
 
-  const link = new StageLink((message: object) => {
-    const said = message as { type: string };
-    if (said.type === STAGE_REACH) {
-      const reach = message as StageReach & { type: string };
-      standing = reach.to.story;
+  const link = new StageLink((message) => {
+    if (message.type === STAGE_REACH) {
+      standing = message.to.story;
       stop();
       move =
-        reach.play && reach.from
-          ? moveInto(reach.from.story, reach.to.story)
+        message.play && message.from
+          ? moveInto(message.from.story, message.to.story)
           : null;
       requestAnimationFrame(() => {
-        link.reached = { ask: reach.ask, move, on: reach.to };
+        link.reached = { ask: message.ask, move, on: message.to };
         if (move) {
           clock = move.length;
           tell(clock, false);
         }
       });
-    } else if (said.type === STAGE_COMPARE) {
-      const asked = message as StageCompare & { type: string };
-      compared = asked.against ? asked : null;
-      if (asked.against) {
-        const found = differencesOf(standing, asked.against.story);
+    } else if (message.type === STAGE_COMPARE) {
+      compared = message.against ? message : null;
+      if (message.against) {
+        const found = differencesOf(standing, message.against.story);
         requestAnimationFrame(() => {
           link.heardDifferences({
-            ask: asked.ask,
+            ask: message.ask,
             beside: false,
             found,
             same: found.length === 0,
           });
         });
       }
-    } else if (said.type === STAGE_PLAY) {
-      play(message as StagePlay & { type: string });
-    } else if (said.type === STAGE_PAUSE) {
+    } else if (message.type === STAGE_PLAY) {
+      play(message);
+    } else if (message.type === STAGE_PAUSE) {
       stop();
       tell(clock, false);
-    } else if (said.type === STAGE_SEEK) {
+    } else if (message.type === STAGE_SEEK) {
       stop();
-      clock = (message as StageSeek & { type: string }).t;
+      clock = message.t;
       tell(clock, false);
-    } else if (said.type === "cawco:canvas-view") {
-      const { view } = message as {
-        view: { widths: number[] | null; scheme: "light" | "dark" };
-      };
-      picked = view.widths?.[0] ?? null;
-      dark = view.scheme === "dark";
-    } else if (said.type === STAGE_DIALS) {
-      set = (message as StageDials).values;
+    } else if (message.type === "cawco:canvas-view") {
+      picked = message.view.widths?.[0] ?? null;
+      dark = message.view.scheme === "dark";
+    } else if (message.type === STAGE_DIALS) {
+      set = message.values;
     }
   });
 

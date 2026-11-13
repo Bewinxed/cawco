@@ -572,7 +572,7 @@ interface ScratchWorktreeFrame {
   worktree: import("./protocol").ScratchWorktree;
 }
 
-export interface PulseFrame {
+interface PulseFrame {
   instanceId: string;
   /** Daemon-originated: a session's coarse now-state, throttled to about once per second. */
   kind: "pulse";

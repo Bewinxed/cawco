@@ -8,15 +8,10 @@
  * server alone has: the usage store's bench view, and the client's own word
  * that the limits were read.
  */
-import type { StagedUsage } from "#lib/cawco/usage/forecast.svelte.js";
 import { claudeRings, openCodeRing } from "#lib/cawco/usage/rings.js";
 import { stagedData } from "./stage-data";
 
-const debug = () =>
-  globalThis.__cawcoDebug as {
-    usageState: { usageLimitsRead: boolean };
-    usage: { staged: StagedUsage | null };
-  };
+const debug = () => window.__cawcoDebug;
 
 /**
  * Stands the staged forecast in for the hub's: `n` Claude accounts (6 or
