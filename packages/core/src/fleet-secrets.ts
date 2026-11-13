@@ -20,7 +20,8 @@
  *
  * - a key left out of `env` or `headers` (or the whole map left out), or
  *   written as {@link SECRET_SET}, is not sent: the server keeps its value;
- * - a string replaces it (an empty string for a held key keeps it: a form's "not retyped");
+ * - a string replaces it (an empty string for a held key keeps it: a form's "not retyped";
+ *   for any other key it is refused, as is any value that is no string);
  * - `null` clears it;
  * - a secret part written into `url` replaces its own, the others stay, and
  *   `urlSecret: null` clears every one.
@@ -158,6 +159,39 @@ export const openUrl = (url: string): string => splitUrl(url).open;
 const hasSecretParts = (parts: UrlParts): boolean =>
   parts.query.length > 0 || parts.password !== undefined;
 
+/** Every secret value a server's config holds: each `env` and `headers` value, a URL's password and its secret query values. */
+export const secretValuesOf = (config: FleetMcpConfig): string[] => {
+  const record = config as unknown as Record<string, unknown>;
+  const values: string[] = [];
+  for (const field of ["env", "headers"]) {
+    for (const value of Object.values(mapOf(record[field]) ?? {})) {
+      if (typeof value === "string") {
+        values.push(value);
+      }
+    }
+  }
+  if (typeof record.url === "string") {
+    const parts = splitUrl(record.url);
+    if (parts.password) {
+      values.push(parts.password, decoded(parts.password));
+    }
+    for (const part of parts.query) {
+      const value = part.slice(part.indexOf("=") + 1);
+      values.push(value, decoded(value));
+    }
+  }
+  return values.filter((value) => value !== "");
+};
+
+/** `text` with every one of `secrets` cut out, so a status line never carries a server's value. */
+export const withoutSecrets = (
+  text: string,
+  secrets: readonly string[]
+): string =>
+  [...new Set(secrets)]
+    .sort((a, b) => b.length - a.length)
+    .reduce((said, secret) => said.split(secret).join("(hidden)"), text);
+
 const allSet = (record: Record<string, unknown>): Record<string, SecretSet> =>
   Object.fromEntries(Object.keys(record).map((key) => [key, SECRET_SET]));
 
@@ -283,7 +317,9 @@ const applyNamed = (
   held: Record<string, unknown>,
   named: Record<string, unknown>,
   written: (value: unknown) => unknown
-): { values: Record<string, unknown> } | { missing: string } => {
+):
+  | { values: Record<string, unknown> }
+  | { key: string; refused: "empty" | "missing" | "notText" } => {
   const values = { ...held };
   for (const [key, value] of Object.entries(named)) {
     if (value === null) {
@@ -292,10 +328,14 @@ const applyNamed = (
       // The mark, or an empty value for a held key, keeps what is held: an
       // empty string is how a form says "not retyped", never a new secret.
       if (!(key in values)) {
-        return { missing: key };
+        return { key, refused: "missing" };
       }
-    } else {
+    } else if (value === "") {
+      return { key, refused: "empty" };
+    } else if (typeof value === "string") {
       values[key] = written(value);
+    } else {
+      return { key, refused: "notText" };
     }
   }
   return { values };
@@ -333,13 +373,18 @@ const carriesHeld = (
 /**
  * The config a write names, carrying every secret it does not name from
  * `held` (the config the server has now). A secret said to be set that the
- * server holds none of is a problem, in the words `problem` gives.
+ * server holds none of, a value that is no string and an empty one are
+ * problems, in the words `refusals` gives.
  */
 export const mergeMcpSecrets = (
   sent: Record<string, unknown>,
   held: FleetMcpConfig | undefined,
-  problem: (field: string, key: string) => string,
-  dropped: (field: string, keys: string[]) => string
+  refusals: {
+    dropped: (field: string, keys: string[]) => string;
+    empty: (field: string, key: string) => string;
+    missing: (field: string, key: string) => string;
+    notText: (field: string, key: string) => string;
+  }
 ): KeptMcpSecrets => {
   const heldRecord = held as Record<string, unknown> | undefined;
   const sentUrl = typeof sent.url === "string" ? sent.url : undefined;
@@ -367,7 +412,7 @@ export const mergeMcpSecrets = (
       lost.push("url");
     }
     if (lost.length > 0) {
-      return { ok: false, problem: dropped(field, lost) };
+      return { ok: false, problem: refusals.dropped(field, lost) };
     }
   }
   if (writes) {
@@ -376,8 +421,11 @@ export const mergeMcpSecrets = (
       named ?? {},
       (value) => value
     );
-    if ("missing" in applied) {
-      return { ok: false, problem: problem(field, applied.missing) };
+    if ("refused" in applied) {
+      return {
+        ok: false,
+        problem: refusals[applied.refused](field, applied.key),
+      };
     }
     withField(out, field, applied.values);
   }

@@ -37,7 +37,9 @@ const permissionOf = (
 const MCP_SERVERS_WRITE = /^(?:mcp__cawco__|cawco_)?admin_mcp_servers_write$/u;
 
 /** A connector write's `config.url` with its secret parts cut, as every read says it. */
-const withOpenUrl = (input: Record<string, unknown>): Record<string, unknown> => {
+const withOpenUrl = (
+  input: Record<string, unknown>
+): Record<string, unknown> => {
   const { config } = input;
   if (
     typeof config !== "object" ||

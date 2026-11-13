@@ -35359,8 +35359,12 @@ export const createServer = (
           const settled = mergeMcpSecrets(
             written,
             body.fromMachine ? undefined : held,
-            mcpWords.secretNotHeld,
-            mcpWords.secretsLeft
+            {
+              dropped: mcpWords.secretsLeft,
+              empty: mcpWords.secretEmpty,
+              missing: mcpWords.secretNotHeld,
+              notText: mcpWords.secretNotText,
+            }
           );
           if (!settled.ok) {
             return status(400, settled.problem);

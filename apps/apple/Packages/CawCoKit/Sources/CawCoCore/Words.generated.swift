@@ -4098,6 +4098,16 @@ public enum Words {
             "\(key) in \(field) is marked as set, but this server holds no value for it. Send the value."
         }
 
+        /// What the hub answers a write that names a secret as something other than a string, null or the set mark.
+        public static func secretNotText(field: String, key: String) -> String {
+            "\(key) in \(field) must be a string. Send its value as text, or null to clear it."
+        }
+
+        /// What the hub answers a write that names an empty value for a secret the server holds none of.
+        public static func secretEmpty(field: String, key: String) -> String {
+            "\(key) in \(field) is empty, and a secret is never empty. Send the value, or leave \(key) out."
+        }
+
         /// Under the name of a server that holds secrets, renamed: the new server would hold none.
         public static let renameLeavesKeys = "This server holds keys, and a new name makes a new server without them. Keep the name, or add the server again under the new one."
 

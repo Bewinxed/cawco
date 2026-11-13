@@ -161,6 +161,7 @@ import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import { detach } from "@cawco/core/detach";
 import { readingLines, shortDetail } from "@cawco/core/fleet-fault-reason";
 import type { FleetItemKind } from "@cawco/core/fleet-items";
+import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
 import { ARTIFACT_PICTURE } from "@cawco/core/frames";
 import { inFlight } from "@cawco/core/loop-watch";
 import { measureMemoryRoom } from "@cawco/core/machine-room";
@@ -6439,6 +6440,39 @@ export class SessionSupervisor {
         .map((adapter) => adapter.kind)
     );
     const mcpFailures = new Map<HarnessKind, string>();
+    // What a status line may not carry: the values of each server's secrets
+    // (core fleet-secrets.ts), cut out where the line is made.
+    const secretsByName = new Map<string, string[]>();
+    for (const row of [
+      ...(incoming?.mcp ?? this.#desired.config().mcp),
+      ...(incoming?.placedMcp ??
+        Object.values(this.#desired.config().projects).flatMap(
+          (rows) => rows.mcp
+        )),
+    ]) {
+      secretsByName.set(row.name, [
+        ...(secretsByName.get(row.name) ?? []),
+        ...secretValuesOf(row.config),
+      ]);
+    }
+    const allSecrets = [...secretsByName.values()].flat();
+    const withoutValues = (
+      rows: Record<string, State>
+    ): Record<string, State> =>
+      Object.fromEntries(
+        Object.entries(rows).map(([name, item]) => [
+          name,
+          item.detail
+            ? {
+                ...item,
+                detail: withoutSecrets(
+                  item.detail,
+                  secretsByName.get(name) ?? []
+                ),
+              }
+            : item,
+        ])
+      );
     const marketplaces: FleetSyncReport["marketplaces"] = {};
     const plugins: FleetSyncReport["plugins"] = {};
     const skills: Record<string, State> = {};
@@ -6497,7 +6531,8 @@ export class SessionSupervisor {
       if ("error" in outcome) {
         const { error } = outcome;
         warn(`${which} on ${adapter.kind} failed: ${error}`);
-        const short = shortDetail(String(error)) ?? "failed";
+        const short =
+          shortDetail(withoutSecrets(String(error), allSecrets)) ?? "failed";
         mcpFailures.set(adapter.kind, short);
         mcpByHarness[adapter.kind] = Object.fromEntries(
           (config?.mcp ?? []).map((row) => [
@@ -6512,7 +6547,7 @@ export class SessionSupervisor {
         continue;
       }
       const { report } = outcome;
-      mcpByHarness[adapter.kind] = report.mcp;
+      mcpByHarness[adapter.kind] = withoutValues(report.mcp);
       Object.assign(marketplaces, report.marketplaces);
       Object.assign(plugins, report.plugins);
       // A skill lives in more than one harness's directory, so its row is
@@ -6588,7 +6623,7 @@ export class SessionSupervisor {
         continue;
       }
       for (const [name, state] of this.#mcpLauncherStates) {
-        report[name] = state;
+        report[name] = withoutValues({ [name]: state })[name] as State;
       }
     }
     for (const name of names) {
