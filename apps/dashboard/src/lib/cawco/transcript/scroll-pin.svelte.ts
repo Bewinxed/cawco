@@ -470,7 +470,7 @@ export class ScrollPin {
    * A PINNED TRANSCRIPT STAYS PINNED. While the reader is at the tail, the
    * tail is where the view is, every frame: what arrives there moves by its
    * own entrance (a row's reserve and cascade), not by the scroll. The
-   * follow used to ride to a new tail over --dur-panel, which left every
+   * follow used to ride to a new tail over --duration-panel, which left every
    * landing up to 24px short for a quarter of a second — on 450 streamed
    * frames, 16 of them more than a pixel off. It yields to the reader in
    * `onscroll`: any scroll that moves what is on screen lets go.

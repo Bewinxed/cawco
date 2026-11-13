@@ -14,7 +14,7 @@ import { type Motion, type Ticket, watchedSessions } from "./arrivals.svelte";
 import { LIVE_KINDS, tailStart } from "./row-build.svelte";
 import type { Fold, Row } from "./rows";
 
-/** Rows that land together cascade --dur-stagger apart, and no more than five deep. */
+/** Rows that land together cascade --duration-stagger apart, and no more than five deep. */
 const STAGGER_ROWS = 5;
 
 /** A tool call's id to the ledger: the run it sits in is not what arrives. */
@@ -164,7 +164,7 @@ export class ArrivalLedger {
     }
     return {
       kind: "arrive",
-      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--dur-stagger"),
+      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--duration-stagger"),
       start: null,
     };
   }
