@@ -68,7 +68,6 @@ as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.
 as-unknown-as	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	2
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
 as-unknown-as	FleetMcpConfig	packages/agent/src/harnesses/claude.ts	1
-as-unknown-as	FleetMcpConfig	packages/core/src/fleet-secrets.ts	1
 as-unknown-as	Freshable[]	packages/core/src/usage/windows.ts	1
 as-unknown-as	Heard	packages/agent/src/artifact-picture.ts	2
 as-unknown-as	HookDraft	packages/hub/src/server.ts	1
@@ -103,8 +102,6 @@ as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSe
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
 as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
-as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
-as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1

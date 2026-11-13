@@ -4,6 +4,7 @@
 
 import {
   type ConfigInspection,
+  type FleetMcpConfig,
   INSPECT_CONFIG,
   MCP_PLATFORMS,
 } from "@cawco/core/fleet";
@@ -41,6 +42,16 @@ const mcpProblem = (
     ? undefined
     : "a stdio MCP server needs a command";
 };
+
+/** A config that names what starts it, as a fleet server holds it: a stdio server's command, a remote one's url and its type, http or sse. */
+const startable = (
+  config: Record<string, unknown>
+): config is Record<string, unknown> & FleetMcpConfig =>
+  "url" in config || config.type === "http" || config.type === "sse"
+    ? (config.type === "http" || config.type === "sse") &&
+      typeof config.url === "string"
+    : typeof config.command === "string" &&
+      (config.type === undefined || config.type === "stdio");
 
 /** What the CLI will take as an MCP server name — it keys `~/.claude.json` by it. */
 const MCP_NAME = /^[A-Za-z0-9_-]+$/u;
@@ -107,7 +118,7 @@ export const fleetMcpRoutes = (
       (row) => row.name === name && !row.managed
     );
     return found
-      ? { config: found.config as unknown as Record<string, unknown> }
+      ? { config: { ...found.config } }
       : problem(404, {
           code: "mcp-unmanaged-unknown",
           detail: `${machineName(machineId)} has no unmanaged MCP server ${name}`,
@@ -205,15 +216,21 @@ export const fleetMcpRoutes = (
               detail: settled.problem,
             });
           }
-          const config = settled.config as unknown as Record<string, unknown>;
+          const { config } = settled;
           const misfit = mcpWriteProblem(params.name, config, body);
           if (misfit) {
             return problem(400, { code: "mcp-server-invalid", detail: misfit });
           }
+          if (!startable(config)) {
+            return problem(400, {
+              code: "mcp-server-invalid",
+              detail: "a remote MCP server's type is http or sse",
+            });
+          }
 
           db.putMcpServer({
             name: params.name,
-            config: settled.config,
+            config,
             enabled: body.enabled,
             projectId: body.projectId,
             areaId: body.areaId,
