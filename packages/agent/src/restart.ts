@@ -8,7 +8,7 @@
  * process: the tool calls it relays, the image generations and commands it
  * runs, a session it is starting, a message it is handing to a harness. Each
  * is held here while it is in flight ({@link holdRestart}); the supervisor
- * adds what only it can see ({@link setRestartSource}).
+ * adds what only it can see ({@link SupervisorHolds}).
  *
  * The fence is named per owner and lapses on its own: whoever raises it says
  * for how long, so a restart that never comes cannot leave it up.
@@ -69,18 +69,17 @@ export function fenced(): boolean {
 
 /**
  * What the supervisor alone can see: custody still being taken over, starts
- * and image generations in flight, each harness's own operations. Unset until
- * the daemon has a supervisor, and then nothing can be known yet: an agent
- * that is still starting is one taking custody.
+ * and image generations in flight, each harness's own operations. Nothing
+ * while the daemon has no supervisor, and then nothing can be known yet: an
+ * agent that is still starting is one taking custody.
  */
-let source: (() => RestartHold[]) | undefined;
-export function setRestartSource(read: (() => RestartHold[]) | undefined) {
-  source = read;
-}
+export type SupervisorHolds = () => RestartHold[] | undefined;
 
-export function restartReadiness(): RestartReadiness {
+export function restartReadiness(
+  supervisorHolds: SupervisorHolds
+): RestartReadiness {
   const holding = mergeHolds(
-    source?.() ?? [{ reason: "custody", ids: ["agent"] }],
+    supervisorHolds() ?? [{ reason: "custody", ids: ["agent"] }],
     [...holds.values()].map(({ reason, id }) => ({ reason, ids: [id] }))
   );
   return { ready: holding.length === 0, holds: holding };

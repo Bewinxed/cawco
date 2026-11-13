@@ -2,6 +2,7 @@ import type {
   ImageProviderId,
   ImageQuality,
 } from "@cawco/core/image-generation";
+import type { AgentPorts } from "../agent-ports";
 
 /** One reference image, admitted through the workspace's gate and read. */
 export interface ReferenceImage {
@@ -53,7 +54,7 @@ type Readiness =
 export interface ImageProvider {
   id: ImageProviderId;
   /** Spends nothing: whether this machine can make an image here now, and if not, why. */
-  readiness: () => Promise<Readiness>;
+  readiness: (ports: Pick<AgentPorts, "borrowAsk">) => Promise<Readiness>;
   /** The most reference images it takes; 0 takes none. */
   references: number;
 }

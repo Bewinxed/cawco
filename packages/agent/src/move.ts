@@ -47,6 +47,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
+import type { AgentPorts } from "./agent-ports";
 import { holdingRemote, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, hubRepo, hubRepoOf } from "./git/hub-remote";
 import { LFS_FILTERS } from "./git/lfs";
@@ -55,14 +56,6 @@ import { notAProject, placeSettled, placeTurn } from "./place-repo";
 import { remoteWithoutCredential } from "./remote-credential";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
-
-/** Where progress frames go: the daemon's socket. */
-let sendProgress: (frame: MoveProgressFrame) => void = () => undefined;
-export const setMoveProgress = (
-  send: (frame: MoveProgressFrame) => void
-): void => {
-  sendProgress = send;
-};
 
 /** git's environment for a command that reaches the hub's repository `key`. */
 const hubEnv = (
@@ -77,14 +70,13 @@ const hubEnv = (
  * git's environment for anything else. `GIT_OPTIONAL_LOCKS=0`: a read
  * (`git status`) leaves the folder's index as it found it, byte for byte.
  */
-const plainEnv = (extra: [string, string][] = []): Record<string, string> =>
-  ({
-    ...hostEnvironment(),
-    ...GIT_LOCALE,
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_OPTIONAL_LOCKS: "0",
-    ...configEnv(extra),
-  }) as Record<string, string>;
+const plainEnv = (extra: [string, string][] = []): Record<string, string> => ({
+  ...hostEnvironment(),
+  ...GIT_LOCALE,
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_OPTIONAL_LOCKS: "0",
+  ...configEnv(extra),
+});
 
 /**
  * git's environment for a command that reaches the outside remote at `url`
@@ -151,24 +143,43 @@ interface Run {
   stage: string;
 }
 
+/**
+ * One kind of step a move runs here, by its name, with what it answers
+ * (`T`) and, per job, the run in flight and the answer kept so a hub that
+ * missed the answer hears it.
+ */
+class Step<T> {
+  readonly answered = new Map<string, { at: number; result: T }>();
+  readonly flights = new Map<string, Promise<T>>();
+  readonly stage: string;
+
+  constructor(stage: string) {
+    this.stage = stage;
+  }
+}
+
+const PREPARE = new Step<{ commit: string | null }>("prepare");
+const SNAPSHOT = new Step<MoveSnapshotResult>("snapshot");
+const CLONE = new Step<MoveLfsResult>("clone");
+const LFS = new Step<MoveLfsResult>("lfs");
+
 /** The step running for each job here. */
 const runs = new Map<string, Run>();
-/** What each job's steps answered, kept so a hub that missed the answer hears it. */
-const answered = new Map<string, { at: number; result: unknown }>();
 const ANSWER_KEPT_MS = HOUR_MS;
 
 const runStep = <T>(
+  { stage, answered, flights }: Step<T>,
   jobId: string,
-  stage: string,
   work: (run: Run) => Promise<T>
 ): Promise<T> => {
   const running = runs.get(jobId);
   const job = jobId.slice(0, 8);
-  if (running?.stage === stage) {
+  const inFlight = flights.get(jobId);
+  if (inFlight) {
     console.info(
       `[move] ${job} ${stage}: asked again, waiting on the run in flight`
     );
-    return running.promise as Promise<T>;
+    return inFlight;
   }
   if (running) {
     return Promise.reject(
@@ -177,10 +188,9 @@ const runStep = <T>(
       )
     );
   }
-  const key = `${jobId}:${stage}`;
-  const kept = answered.get(key);
+  const kept = answered.get(jobId);
   if (kept && Date.now() - kept.at < ANSWER_KEPT_MS) {
-    return Promise.resolve(kept.result as T);
+    return Promise.resolve(kept.result);
   }
   const run: Run = {
     stage,
@@ -195,7 +205,7 @@ const runStep = <T>(
       if (run.cancelled) {
         throw new MoveCancelled();
       }
-      answered.set(key, { at: Date.now(), result });
+      answered.set(jobId, { at: Date.now(), result });
       console.info(`[move] ${job} ${stage}: done`);
       return result;
     } catch (error) {
@@ -205,10 +215,12 @@ const runStep = <T>(
       throw error;
     } finally {
       runs.delete(jobId);
+      flights.delete(jobId);
     }
   })();
   run.promise = promise;
   runs.set(jobId, run);
+  flights.set(jobId, promise);
   return promise;
 };
 
@@ -780,7 +792,7 @@ export const moveRemoteCredential = async (
 export const movePrepare = (
   request: MovePrepareRequest
 ): Promise<{ commit: string | null }> =>
-  runStep(request.jobId, "prepare", (run) =>
+  runStep(PREPARE, request.jobId, (run) =>
     placeTurn(request.path, () => prepareNow(run, request))
   );
 
@@ -990,7 +1002,7 @@ const hubOf = (snapshot: MoveSnapshotResult): HubRepoKey => {
 export const moveSnapshot = (
   request: MoveSnapshotRequest
 ): Promise<MoveSnapshotResult> =>
-  runStep(request.jobId, "snapshot", async (run) => {
+  runStep(SNAPSHOT, request.jobId, async (run) => {
     const { path, branch } = request;
     const scratch = scratchOf(request.jobId);
     await mkdir(scratch, { recursive: true });
@@ -1218,16 +1230,22 @@ const clonedBefore = async (path: string, jobId: string): Promise<boolean> =>
     await readFile(join(path, ".git", MARKER), "utf8").catch(() => "")
   ).trim() === jobId;
 
-export const moveClone = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
-  holdingRemote(request.remoteBasic, () => cloneStep(request));
+export const moveClone = (
+  request: MoveCloneRequest,
+  ports: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
+  holdingRemote(request.remoteBasic, () => cloneStep(request, ports));
 
 /**
  * The clone itself. An outside remote's URL carries no credential, so the
  * clone's `origin` is the bare URL; its credential, when it has one, reaches
  * git through the environment for this one command.
  */
-const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
-  runStep(request.jobId, "clone", async (run) => {
+const cloneStep = (
+  request: MoveCloneRequest,
+  { moveProgress }: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
+  runStep(CLONE, request.jobId, async (run) => {
     const { path, jobId, snapshot } = request;
     if (await clonedBefore(path, jobId)) {
       return lfsOf(path, snapshot.commit);
@@ -1243,7 +1261,7 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
     await mkdir(dirname(path), { recursive: true });
     await enoughSpace(dirname(path), request.bytes, request.machine);
     const fromHub = request.cloneUrl === undefined;
-    const feed = throttled(sendProgress);
+    const feed = throttled(moveProgress);
     let received = 0;
     try {
       const cloned = await exec(
@@ -1295,7 +1313,7 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
       }
       await rename(scratch, path);
       const whole = Math.max(received, request.bytes);
-      sendProgress({
+      moveProgress({
         kind: "move_progress",
         jobId,
         stage: "clone",
@@ -1428,8 +1446,11 @@ const fromHubLfs = async (
  * not on that remote: they come from the hub first, and the pull from the
  * remote finds them already here.
  */
-export const moveLfs = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
-  holdingRemote(request.remoteBasic, () => lfsStep(request));
+export const moveLfs = (
+  request: MoveLfsRequest,
+  ports: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
+  holdingRemote(request.remoteBasic, () => lfsStep(request, ports));
 
 /** git's environment for the pull: the hub's, or the clone's own `origin` with its credential. */
 const pullEnv = async (
@@ -1447,8 +1468,11 @@ const pullEnv = async (
   return outsideEnv(origin.trim(), request.remoteBasic);
 };
 
-const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
-  runStep(request.jobId, "lfs", async (run) => {
+const lfsStep = (
+  request: MoveLfsRequest,
+  { moveProgress }: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
+  runStep(LFS, request.jobId, async (run) => {
     const { path, jobId, snapshot } = request;
     const wanted = await pointersIn(path, snapshot.commit);
     const stage = total(wanted);
@@ -1462,7 +1486,7 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
       ...(await pullEnv(request)),
       GIT_LFS_PROGRESS: progressFile,
     };
-    const feed = throttled(sendProgress);
+    const feed = throttled(moveProgress);
     const progress = progressTail(progressFile);
     const tail = async () => {
       await progress.read();
@@ -1508,7 +1532,7 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
           lastLine(pulled.stderr) || lastLine(pulled.stdout)
         );
       }
-      sendProgress({
+      moveProgress({
         kind: "move_progress",
         jobId,
         stage: "lfs",

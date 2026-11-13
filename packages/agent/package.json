@@ -63,6 +63,7 @@
   "devDependencies": {
     "@cawco/hub": "workspace:*",
     "@jridgewell/trace-mapping": "0.3.31",
+    "@opencode/plugin": "2.0.29",
     "@types/bun": "^1.4.3",
     "@types/dockerode": "4.0.2",
     "@types/react": "19.3.0",
