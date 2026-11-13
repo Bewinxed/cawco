@@ -168,8 +168,8 @@ a {
 }
 /* Send, the page's coral action (DESIGN.md, Buttons; Coral Action: the
    `action-surface` gradient over `action-solid`, `on-action` words): 36px,
-   10px radius, 14px padding, 8px gap; 44px under a finger, the lg button
-   (The 44 Touch Rule). A press scales it to 0.97 (The Press Rule). */
+   10px radius, 14px padding, 8px gap; 44px under a finger, the lg button.
+   A press scales it to 0.97. */
 .dp-send {
   position: relative;
   isolation: isolate;
@@ -249,8 +249,8 @@ a {
   }
 }
 /* A pane's padding is past its radius, so whatever a mockup draws at its
-   foot stands clear of the pane's curve (DESIGN.md, The Concentric Rule:
-   it binds only inside the curve); a pane's mockups take any corners. */
+   foot stands clear of the pane's curve (this binds only inside
+   the curve); a pane's mockups take any corners. */
 .dp-pane {
   margin: 0;
   background: var(--color-surface-recess);
@@ -323,8 +323,7 @@ a {
   min-inline-size: 0;
   font-weight: var(--font-weight-medium);
 }
-/* The Mark Line Rule (DESIGN.md; app.css .mark-line): the label's words
-   are trimmed to their x-height band and given the trimmed room back as
+/* The label's words are trimmed to their x-height band and given the trimmed room back as
    padding, so centring the line puts their x-height's middle on the
    keycap's. The keycap is a box, centred as one. */
 .dp-opt b > :not(.dp-kc) {
@@ -348,8 +347,7 @@ a {
   line-height: 1;
   /* The chosen treatment arrives where the option stands, a colour change
      over --duration-control on ease-out with the chip's edge and fill (and
-     Recommended's fill): a colour fade, so it runs with reduced motion too
-     (DESIGN.md, The Reduced Motion Rule). */
+     Recommended's fill): a colour fade, so it runs with reduced motion too. */
   transition:
     background-color var(--duration-control) var(--ease-out),
     color var(--duration-control) var(--ease-out);
@@ -394,7 +392,7 @@ a {
   background: var(--color-action-solid);
   color: var(--color-chip-chosen-ink);
 }
-/* The Press Rule (DESIGN.md): an option chip stands taller than 44px, so a
+/* An option chip stands taller than 44px, so a
    press tints it to surface-fill and moves nothing. */
 .dp-opt:active {
   background: var(--color-surface-fill);

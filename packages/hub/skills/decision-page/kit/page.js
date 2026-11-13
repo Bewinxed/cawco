@@ -164,7 +164,7 @@
   render();
 })();
 
-/** Option `label`'s keycap digit `n`, once; the words beside it an element (The Mark Line Rule: page.css trims them to their x-height). */
+/** Option `label`'s keycap digit `n`, once; the words beside it an element (page.css trims them to their x-height). */
 function keycap(label, n) {
   if (label.querySelector(".dp-kc")) {
     return;

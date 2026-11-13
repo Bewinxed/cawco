@@ -18,6 +18,7 @@ import { join, relative } from "node:path";
 import {
   type AgentRow,
   ARTIFACT_NAME,
+  CAWCO_HUB_PORT,
   type ArtifactChoices,
   type ArtifactDoes,
   type ArtifactHit,
@@ -45,6 +46,7 @@ import {
   decisionReference,
   fileHash,
   type InstanceRow,
+  localDashboardPort,
   machineLabel,
   noteText,
   PICTURE_VIEW,
@@ -2014,6 +2016,8 @@ export interface ArtifactServiceDeps {
   looked: (id: string) => void;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
+  /** The machine the hub runs on; undefined before it is read. */
+  hubMachine: () => string | undefined;
   /**
    * Something an artifact's Needs-you item is read from moved (its row, its
    * ask, the person's look): the lane is read again and every screen told.
@@ -4387,6 +4391,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         404,
         `No machine named ${input.machine} is known to this hub.`
       );
+    }
+    // CawCo's own ports: the dashboard's on every machine (the agent's
+    // loopback carries it), the hub's API on the hub's machine.
+    if (
+      input.port !== undefined &&
+      (input.port === localDashboardPort() ||
+        (input.port === CAWCO_HUB_PORT && machineId === deps.hubMachine()))
+    ) {
+      throw new ArtifactRefusal(400, artifactToolWords.previewOfOwnPort);
     }
     return {
       machineId,

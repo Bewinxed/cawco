@@ -84,6 +84,9 @@ export const artifactToolWords = {
   inItsSession: (name: string) =>
     `${name} is in its own session's panel, which opens beside this one.`,
   /** An `artifact_list` cursor that no page of it gave. */
+  /** A preview of a port CawCo itself serves (the dashboard's, the hub's): the dashboard would act on a preview's calls as the owner. */
+  previewOfOwnPort:
+    'That port is CawCo\'s own dashboard. A preview carries no CawCo sign-in, so the dashboard has no access through it. To look at a CawCo screen, draw its component: kind "component" with its states file (component-canvas skill).',
   notListCursor: (cursor: string) =>
     `"${cursor}" is not a cursor artifact_list gave. Pass a page's next_cursor for the page after it, or none for the newest page.`,
   /** Where a stage or a served preview runs, `dir` from its clone's root ("." the root itself): "Its server at the repo's root: live." */

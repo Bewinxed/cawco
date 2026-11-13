@@ -15460,6 +15460,7 @@ export const createServer = (
     // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.listAgents(),
+    hubMachine: () => ownMachineIdRead,
     // A page is the hub's: its target names no machine.
     open: async (artifact, panel = artifact.instanceId, again = false) => {
       if (panel === null) {
