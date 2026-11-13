@@ -335,6 +335,8 @@ export default {
       // Knip does not follow (it follows require.resolve and
       // import.meta.resolve: knip.dev/explanations/entry-files).
       ignoreDependencies: ["@iconify-json/solar"],
+      // bluetoothctl is a system binary from BlueZ, spawned by src/browser/passkey-capture.ts to scan for BLE advertisements.
+      ignoreBinaries: ["bluetoothctl"],
     },
     "apps/cawrier": {
       // `cloudflare:workers` (src/pairing.ts, src/seats.ts) is a workerd
