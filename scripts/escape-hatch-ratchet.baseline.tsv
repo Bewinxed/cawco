@@ -87,8 +87,9 @@ as-unknown-as	number	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pictures	packages/agent/src/frame-picture.ts	5
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
+as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PinPeekFrame.stories.ts	4
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
+as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	ProjectDecisions	apps/dashboard/src/lib/cawco/decisions/DecisionsView.stories.ts	1
 as-unknown-as	ProjectRow	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
@@ -107,9 +108,6 @@ as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runti
 as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
-as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
-as-unknown-as	Record<string, unknown>	scripts/probe-kit/frames.ts	1
-as-unknown-as	Redraw	scripts/probe-kit/specs/comments.ts	3
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
@@ -135,7 +133,7 @@ as-unknown-as	WebSocketHandler<ListenerSocket>	packages/hub/src/preview.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/connect/installs.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte	1
-catch-drops-reason	block	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+catch-drops-reason	block	apps/dashboard/src/lib/cawco/preview/preview-frame.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/spawn/NewSessionForm.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/tab-icon/tab-icon.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/transcript/LiveRow.svelte	1
@@ -331,7 +329,7 @@ suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/co
 suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/platform/motion/Rail.svelte	1
 suppression	biome-ignore lint/a11y/useValidAnchor	apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-sub-button.svelte	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/connect/words.ts	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/page-wire.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/stores/transcripts.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/deck.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/gesture.svelte.ts	1
