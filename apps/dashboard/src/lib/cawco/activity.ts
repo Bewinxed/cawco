@@ -34,7 +34,7 @@ export function activityOf(session: {
 }
 
 /**
- * What a session's row, tab and seat say it is doing (client.svelte.ts
+ * What a session's row, tab and seat say it is doing (stores/asks.svelte.ts
  * `activityNow`), from what this page holds of it. Needs you is core
  * `waitingOnYou`'s alone (`waiting`): nothing else here raises it. The
  * daemon's pulse says `blocked` for every ask its harness parked, one
@@ -73,7 +73,7 @@ export function sessionActivity(sources: {
 }
 
 /** How many of a session's subagents are still going — 0 for a session with none. */
-export function runningSubagents(
+function runningSubagents(
   subagents: Record<string, { status: string }> | undefined
 ): number {
   if (!subagents) {

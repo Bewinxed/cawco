@@ -18,7 +18,6 @@
   import { IconDownload, IconWarningTriangle } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { appear } from "#lib/platform/motion/curves.svelte.js";
-  import { didntAnswer } from "./client.svelte";
   import {
     fixHarness,
     followHarness,
@@ -26,6 +25,7 @@
     offersPress,
     harnessWords as words,
   } from "./harness-block.svelte";
+  import { didntAnswer } from "./hub/control";
   import { TRY_AGAIN } from "./unanswered";
 
   let {

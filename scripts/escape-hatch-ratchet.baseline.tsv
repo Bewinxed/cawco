@@ -4,13 +4,13 @@ as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[string, string, string]	apps/dashboard/src/lib/cawco/find/mention.svelte.ts	1
 as-unknown-as	{ __buttonBench: { start: () => void; stop: () => void }; }	apps/dashboard/src/routes/(app)/motion/button-pending/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { boardState: { fleetRead: boolean }; projectsState: { p	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void }; }	apps/dashboard/src/routes/(app)/motion/breath-floor/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; adoptInstances: (r	apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; state: { projects:	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; state: { sessions:	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; state: { status: s	apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { state: { fleetRead: boolean; projects: ProjectRow[]; p	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { state: { sessions: Record<string, SessionState> } }; }	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; connectionState: {	apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; projectsState: { p	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; sessionsState: { s	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
+as-unknown-as	{ __cawcoDebug: { sessionsState: { sessions: Record<string, SessionState	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: Bench }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-unknown-as	{ __cawcoDeliver: (data: unknown) => void }	packages/agent/src/chromium.ts	1
 as-unknown-as	{ __cawcoGraph: CanvasGraph }	packages/agent/src/stage-host/canvas/embed.ts	1
@@ -83,7 +83,7 @@ as-unknown-as	NativeClass	apps/dashboard/src/lib/platform/frame-observer.ts	1
 as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
 as-unknown-as	Node[]	packages/agent/src/stage-host/story-file.ts	1
-as-unknown-as	number	apps/dashboard/src/lib/cawco/client.svelte.ts	1
+as-unknown-as	number	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pictures	packages/agent/src/frame-picture.ts	5
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
@@ -109,8 +109,8 @@ as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/server.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
-as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/client.svelte.ts	1
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
@@ -154,12 +154,12 @@ catch-drops-reason	block	packages/hub/src/browser-routes.ts	1
 catch-drops-reason	block	packages/hub/src/fleet-mcp-relay.ts	2
 catch-drops-reason	block	packages/hub/src/ssh-tunnels.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/address/Confetti.svelte	1
-catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/client.svelte.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/home/caw-still.svelte.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/home/Caw.svelte	2
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/preview/browser-stream.ts	1
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/relay/relay.svelte.ts	2
 catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/StopTrayView.svelte	2
+catch-drops-reason	CallExpression	apps/dashboard/src/lib/cawco/stores/stored.svelte.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/browser/gate.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/claude-transcript.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/harnesses/opencode-session.ts	1
@@ -209,7 +209,6 @@ catch-drops-reason	noop	packages/hub/src/project-folder.ts	10
 catch-drops-reason	TemplateExpression	apps/dashboard/src/lib/cawco/preview/pass.ts	1
 empty-catch		apps/dashboard/serve.js	1
 empty-catch		apps/dashboard/src/lib/cawco/blocks/arrangement.svelte.ts	1
-empty-catch		apps/dashboard/src/lib/cawco/client.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/config/ConnectionsSection.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/error-report.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/home/areas.svelte.ts	1
@@ -219,6 +218,7 @@ empty-catch		apps/dashboard/src/lib/cawco/preview/browser-stream.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/project/project-board.svelte.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/project/ProjectPage.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte	1
+empty-catch		apps/dashboard/src/lib/cawco/stores/commands.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/usage/forecast.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/views/openui/BlockVideo.svelte	1
@@ -334,9 +334,9 @@ suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/co
 suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/components/ui/input-group/input-group.svelte	1
 suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/platform/motion/Rail.svelte	1
 suppression	biome-ignore lint/a11y/useValidAnchor	apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-sub-button.svelte	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/client.svelte.ts	2
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/connect/words.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/stores/transcripts.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/deck.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/gesture.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/fleet-converger.ts	1
@@ -439,8 +439,8 @@ suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/l
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/agent/src/redaction.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/hooks.ts	2
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/rules.ts	1
-suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/client.svelte.ts	6
 suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/dev-debug.ts	1
+suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/hub/socket.svelte.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/cawco/mark.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/platform/id.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/boundary-host.ts	1

@@ -39,12 +39,12 @@
   } from "../../platform/motion/branch.svelte";
   import { echoBeat } from "../../platform/motion/echo.svelte";
   import { regroup, regroupPrimer } from "../../platform/motion/share.svelte";
-  import { type BoardRow, isFailed } from "../client.svelte";
-  import { rowHref, sessionTitle } from "../links";
+  import { type BoardRow, rowHref, sessionTitle } from "../links";
   import { olderOut } from "../OlderRows.svelte";
   import { type Reading, runningIds } from "../older";
   import { openTrees, type TreeList } from "../open-trees.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
+  import { isFailed } from "../stores/board.svelte";
   import TreeLine from "../TreeLine.svelte";
   import { type FlatRow, flatTree, lineAttrs } from "../tree-lines";
   import GroupMenu from "./GroupMenu.svelte";

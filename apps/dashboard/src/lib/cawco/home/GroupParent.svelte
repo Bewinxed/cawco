@@ -20,7 +20,6 @@
    */
   import { IconCalendar, IconLayers } from "#lib/icons.js";
   import { landRegroup } from "../../platform/motion/share.svelte";
-  import { cawco } from "../client.svelte";
   import FolderMenu from "../FolderMenu.svelte";
   import { markHue } from "../mark";
   import OsMark from "../OsMark.svelte";
@@ -29,6 +28,7 @@
   import { folderOf } from "../projects";
   import RailProjectEnd from "../RailProjectEnd.svelte";
   import { newSession } from "../spawn/new-session.svelte";
+  import { projectsStore } from "../stores/projects.svelte";
   import TreeMark from "../TreeMark.svelte";
   import { projectHref } from "../workspace/tabs";
   import { grouping } from "./grouping.svelte";
@@ -58,7 +58,7 @@
   const regroupKey = $derived(`regroup:group:${path}`);
   /** The project a project group stands for; none for the sessions in no project. */
   const project = $derived(
-    by === "project" && groupKey ? cawco.project(groupKey) : undefined
+    by === "project" && groupKey ? projectsStore.project(groupKey) : undefined
   );
   /** The row: an end's tray hands the focus back to it. */
   let rowEl = $state<HTMLElement | null>(null);

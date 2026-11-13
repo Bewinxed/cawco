@@ -7,8 +7,11 @@
  * why ({@link models}`.unread`).
  */
 
-import type { HarnessKind, ModelInfo } from "@cawco/core/harness/kinds";
-import { isEffortLevel } from "@cawco/core/harness/kinds";
+import {
+  type HarnessKind,
+  isEffortLevel,
+  type ModelInfo,
+} from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -21,7 +24,6 @@ import {
 import { z } from "zod";
 import { hubJson } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
-import { cawco } from "./client.svelte";
 import {
   admittedOn,
   covers,
@@ -30,6 +32,8 @@ import {
   modelsForHarness,
   typedOffered,
 } from "./model-catalog";
+import { accountsStore } from "./stores/accounts.svelte";
+import { boardStore } from "./stores/board.svelte";
 import { speakerName } from "./transcript/speaker";
 
 /**
@@ -73,7 +77,7 @@ store.recent = readJson(
  */
 function reported(): HarnessModel[] {
   const rows: HarnessModel[] = [];
-  for (const machine of cawco.machines) {
+  for (const machine of boardStore.machines) {
     for (const report of machine.harnesses ?? []) {
       for (const model of report.models ?? []) {
         rows.push({
@@ -94,7 +98,7 @@ function reported(): HarnessModel[] {
  * chose one; absent until one has.
  */
 function accountRows(): HarnessModel[] {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   if (!view) {
     return [];
   }
@@ -150,7 +154,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
   if (modelsForHarness(catalog(), harness, machineIds).length > 0) {
     return null;
   }
-  const machines = cawco.machines.filter(
+  const machines = boardStore.machines.filter(
     (machine) => !machineIds?.length || machineIds.includes(machine.machineId)
   );
   const said =
@@ -181,7 +185,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
  * on its way); null with none signed in there.
  */
 function claudeUnread(machineIds: string[]): string[] | null {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   const accounts = new Set(
     (view?.signins ?? [])
       .filter(
@@ -205,7 +209,7 @@ function claudeUnread(machineIds: string[]): string[] | null {
  * OpenCode or pi.
  */
 function listingOn(harness: HarnessKind, machineId: string): ModelListing {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   const signedIn = new Set(
     (view?.signins ?? [])
       .filter(
@@ -215,7 +219,7 @@ function listingOn(harness: HarnessKind, machineId: string): ModelListing {
       .map((signin) => signin.accountId)
   );
   return modelListingOn(harness, {
-    report: cawco.machines
+    report: boardStore.machines
       .find((machine) => machine.machineId === machineId)
       ?.harnesses?.find((report) => report.harness === harness),
     catalogs: (view?.catalogs ?? [])
@@ -239,7 +243,7 @@ const listingsOn = (harness: HarnessKind, machineIds?: string[]): ListingsOn =>
       }
     : {
         every: false,
-        listings: cawco.machines.map((machine) =>
+        listings: boardStore.machines.map((machine) =>
           listingOn(harness, machine.machineId)
         ),
       };

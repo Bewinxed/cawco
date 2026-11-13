@@ -5,18 +5,15 @@
  */
 
 import { untrack } from "svelte";
-import {
-  clearRestore,
-  latestCommandFor,
-  pendingRestore,
-} from "../client.svelte";
+import { clearRestore, pendingRestore } from "../stores/commands.svelte";
+import { latestCommandFor } from "../stores/ledger.svelte";
 import type { ComposerDraft } from "./composer-draft.svelte";
 
 /**
  * A pane's draft following its conversation's sends, set up with the pane:
  * once the hub takes a send, the message it carried needs no keeping; "Edit"
  * on a message that never sent puts its words back (the restore slot,
- * client.svelte.ts: the row offering Edit is two components away from the
+ * stores/commands.svelte.ts: the row offering Edit is two components away from the
  * draft, so the store is the channel and this is its far end). `sending`:
  * whether the conversation's last message is out of this tab but not yet
  * taken.
