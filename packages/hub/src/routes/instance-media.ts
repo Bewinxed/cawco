@@ -8,9 +8,10 @@ import {
   imageProviderOf,
 } from "@cawco/core/image-generation";
 import { secondsOf } from "@cawco/core/time";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+
 import { unreachable } from "../unreachable";
 
 export const instanceMediaRoutes = ({
@@ -31,21 +32,25 @@ export const instanceMediaRoutes = ({
           write: t.Any(),
         }),
       },
-      async ({ params, body, status, request, server }) => {
+      async ({ params, body, request, server }) => {
         const [row] = db.listedInstancesByIds([params.id]);
         const write = readForgeAsk({ repo: "-", write: body.write })?.write;
         if (!(row && write)) {
-          return status(
-            row ? 400 : 404,
-            row ? "forge_post takes one write." : "Unknown calling session."
-          );
+          return problem(row ? 400 : 404, {
+            code: "forge-post-refused",
+            detail: row
+              ? "forge_post takes one write."
+              : "Unknown calling session.",
+          });
         }
         server?.timeout(request, 0);
         const answer = await forgePosts.post(row, {
           write,
           ...(body.repo ? { repo: body.repo } : {}),
         });
-        return answer.ok ? answer.text : status(422, answer.text);
+        return answer.ok
+          ? answer.text
+          : problem(422, { code: "forge-post-refused", detail: answer.text });
       }
     )
     .post(
@@ -68,10 +73,13 @@ export const instanceMediaRoutes = ({
           model: t.Optional(t.String()),
         }),
       },
-      async ({ params, body, status, request, server }) => {
+      async ({ params, body, request, server }) => {
         const [row] = db.listedInstancesByIds([params.id]);
         if (!row) {
-          return status(404, "Unknown calling session.");
+          return problem(404, {
+            code: "unknown-calling-session",
+            detail: "Unknown calling session.",
+          });
         }
         server?.timeout(request, 0);
         // The provider the call names wins; else the fleet's default,
@@ -103,18 +111,22 @@ export const instanceMediaRoutes = ({
         switch (answer.kind) {
           case "unanswered":
             return answer.reason === "dead"
-              ? status(
-                  503,
-                  "The session's machine is offline; image generation was not started."
-                )
-              : status(
-                  504,
-                  `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`
-                );
+              ? problem(503, {
+                  code: "sessions-machine-offline-image",
+                  detail:
+                    "The session's machine is offline; image generation was not started.",
+                })
+              : problem(504, {
+                  code: "image-generation-did-not",
+                  detail: `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`,
+                });
           case "answered":
             return answer.value.ok
               ? (answer.value.result as GeneratedImage)
-              : status(422, answer.value.error ?? "Image generation failed.");
+              : problem(422, {
+                  code: "image-not-generated",
+                  detail: answer.value.error ?? "Image generation failed.",
+                });
           default:
             throw unreachable(answer);
         }

@@ -63,19 +63,20 @@ import {
 } from "@cawco/core/find-match";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import {
   cursorAt,
   decodeCursor,
   type Find,
   type FindPage,
-  FindRefusal,
   type HeldMoment,
 } from "./find";
 import { byId, handleId, isHandle } from "./handles";
 import { boardTitle } from "./labels";
 import { tool } from "./mcp-tool";
 import { findWords } from "./presenters/find";
+import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
 import {
   outOfSentenceRanges,
@@ -165,7 +166,7 @@ const listedCursor = (last: ListedAt): string =>
   Buffer.from(JSON.stringify(last), "utf8").toString("base64url");
 
 /** A listing's cursor read back, or the refusal; none for its first page. */
-const listedFrom = (cursor: string | undefined): ListedAt | undefined => {
+const listedFrom = (cursor: string | undefined) => {
   if (!cursor) {
     return;
   }
@@ -174,14 +175,16 @@ const listedFrom = (cursor: string | undefined): ListedAt | undefined => {
       .object({ at: z.number(), doc: z.string() })
       .safeParse(JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")));
     if (read.success) {
-      return read.data;
+      const at: ListedAt = read.data;
+      return at;
     }
   } catch {
     // Not a listing's cursor: refused below.
   }
-  throw new FindToolRefusal(
-    `"${cursor}" is not a cursor a listing gave: pass the next_cursor of the same listing (same by and filters), or none for its newest page. Example: ${LISTING_EXAMPLE}`
-  );
+  return problem(400, {
+    code: "find-listing-cursor-unknown",
+    detail: `"${cursor}" is not a cursor a listing gave: pass the next_cursor of the same listing (same by and filters), or none for its newest page. Example: ${LISTING_EXAMPLE}`,
+  });
 };
 
 /** Newest first; the same instant by record id, highest first: a listing's one order, which its cursor pages through. */
@@ -216,9 +219,6 @@ export type FindInput = z.infer<typeof SCHEMA> & {
 
 const DESCRIPTION =
   "Find anything said or made across the fleet, unlanded work included, and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
-
-/** A refusal: what was wrong, and one call that works. */
-class FindToolRefusal extends Error {}
 
 export interface FindToolDeps {
   find: Find;
@@ -614,7 +614,7 @@ const pick = (
   asked: string,
   things: { id: string; name: string }[],
   example: string
-): string => {
+) => {
   const exact = asked.trim();
   const found =
     things.find((thing) => thing.id === exact) ??
@@ -622,9 +622,10 @@ const pick = (
   if (found) {
     return found.id;
   }
-  throw new FindToolRefusal(
-    `${what} "${asked}" is no ${what} of this fleet. ${what === "project" ? "Projects" : "Machines"}: ${things.map((thing) => thing.name).join(", ") || "none"}. Example: ${example}`
-  );
+  return problem(404, {
+    code: `find-${what}-unknown`,
+    detail: `${what} "${asked}" is no ${what} of this fleet. ${what === "project" ? "Projects" : "Machines"}: ${things.map((thing) => thing.name).join(", ") || "none"}. Example: ${example}`,
+  });
 };
 
 /** One call that works, with `field` set to `value`, for a refusal to give. */
@@ -632,19 +633,17 @@ const exampleWith = (input: FindInput, field: string, value: string) =>
   `{"query": "${clip(input.query ?? "deploy", 40)}", "${field}": "${value}"}`;
 
 /** A day field (`since`, `before`) read as its day's first ms epoch, or the refusal. */
-const dayOf = (
-  input: FindInput,
-  field: "since" | "before"
-): number | undefined => {
+const dayOf = (input: FindInput, field: "since" | "before") => {
   const day = input[field];
   if (day === undefined) {
     return;
   }
   const at = DAY.test(day) ? Date.parse(`${day}T00:00:00Z`) : Number.NaN;
   if (Number.isNaN(at)) {
-    throw new FindToolRefusal(
-      `${field} is "${day}": give a day as YYYY-MM-DD. Example: ${exampleWith(input, field, "2026-10-01")}`
-    );
+    return problem(400, {
+      code: "find-day-unread",
+      detail: `${field} is "${day}": give a day as YYYY-MM-DD. Example: ${exampleWith(input, field, "2026-10-01")}`,
+    });
   }
   return at;
 };
@@ -762,21 +761,30 @@ const listedNote = (
 };
 
 /** A search's words and page size, or the refusal with one call that works. */
-const checked = (input: FindInput): { limit: number; query: string } => {
+const checked = (input: FindInput) => {
   const query = input.query?.trim() ?? "";
   if (!(query || narrowed(input))) {
-    throw new FindToolRefusal(
-      `query is empty and nothing narrows it: give the words to look for, as typed into the dashboard's Find; or a filter (by, since, before, kinds, project, machine) to list what matches it, newest first; or around with a hit's ref. Example: ${EXAMPLE} or ${LISTING_EXAMPLE}`
-    );
+    return problem(400, {
+      code: "find-query-empty",
+      detail: `query is empty and nothing narrows it: give the words to look for, as typed into the dashboard's Find; or a filter (by, since, before, kinds, project, machine) to list what matches it, newest first; or around with a hit's ref. Example: ${EXAMPLE} or ${LISTING_EXAMPLE}`,
+    });
   }
   const limit = Math.trunc(input.limit ?? DEFAULT_LIMIT);
   if (!(limit >= 1 && limit <= MAX_LIMIT)) {
-    throw new FindToolRefusal(
-      `limit is ${input.limit}: give 1 to ${MAX_LIMIT}. Example: {"query": "${clip(query, 40)}", "limit": 20}`
-    );
+    return problem(400, {
+      code: "find-limit-out-of-range",
+      detail: `limit is ${input.limit}: give 1 to ${MAX_LIMIT}. Example: {"query": "${clip(query, 40)}", "limit": 20}`,
+    });
   }
   return { query, limit };
 };
+
+/** The engine's refusal of a cursor it did not give, with one call that works. */
+const withExample = (refused: AnyProblem) =>
+  problem(400, {
+    code: "find-cursor-unknown",
+    detail: `${refused.response.detail} Example: ${EXAMPLE}`,
+  });
 
 export const createFindTool = (deps: FindToolDeps) => {
   /** The project a call narrows to: its own word, else a delegate's own project (`scoped`). */
@@ -795,19 +803,22 @@ export const createFindTool = (deps: FindToolDeps) => {
     if (input.project.trim().toLowerCase() === "all") {
       return {};
     }
-    return {
-      projectId: pick(
-        "project",
-        input.project,
-        projects,
-        exampleWith(input, "project", projects[0]?.name ?? "all")
-      ),
-    };
+    const projectId = pick(
+      "project",
+      input.project,
+      projects,
+      exampleWith(input, "project", projects[0]?.name ?? "all")
+    );
+    return projectId instanceof ElysiaStatus ? projectId : { projectId };
   };
 
   /** The `where` a call narrows to, and the project it was narrowed to unasked. */
   const scopeOf = (actor: InstanceRow, input: FindInput) => {
-    const { projectId, scoped } = projectScope(actor, input);
+    const scope = projectScope(actor, input);
+    if (scope instanceof ElysiaStatus) {
+      return scope;
+    }
+    const { projectId, scoped } = scope;
     const machines = deps.machines();
     const machineId =
       input.machine === undefined
@@ -818,9 +829,18 @@ export const createFindTool = (deps: FindToolDeps) => {
             machines,
             exampleWith(input, "machine", machines[0]?.name ?? "")
           );
+    if (machineId instanceof ElysiaStatus) {
+      return machineId;
+    }
     const since = dayOf(input, "since");
+    if (since instanceof ElysiaStatus) {
+      return since;
+    }
     // Evidence at or before the day: its last millisecond is the last kept.
     const before = dayOf(input, "before");
+    if (before instanceof ElysiaStatus) {
+      return before;
+    }
     return {
       where: {
         unpurged: true as const,
@@ -959,13 +979,17 @@ export const createFindTool = (deps: FindToolDeps) => {
     const centre: Centre = asRef ? centreOf(ref.slice(mark + 1)) : {};
     const target = targetOf(id);
     if (!target) {
-      throw new FindToolRefusal(
-        `around "${ref}" names no session: pass a conversation hit's id or ref (tasks, artifacts and the rest have no turns; read them with their own tools). Example: {"around": "${id || "3f2c9a1e-…"}"}`
-      );
+      return problem(404, {
+        code: "find-around-no-session",
+        detail: `around "${ref}" names no session: pass a conversation hit's id or ref (tasks, artifacts and the rest have no turns; read them with their own tools). Example: {"around": "${id || "3f2c9a1e-…"}"}`,
+      });
     }
     const read = await target.read(centre, side, chars);
     if ("why" in read) {
-      throw new FindToolRefusal(`around "${ref}": ${read.why}.`);
+      return problem(404, {
+        code: "find-around-unread",
+        detail: `around "${ref}": ${read.why}.`,
+      });
     }
     const more = [read.earlier ? "before" : "", read.later ? "after" : ""]
       .filter(Boolean)
@@ -1068,14 +1092,43 @@ export const createFindTool = (deps: FindToolDeps) => {
     });
   };
 
+  /** A search's scope and the offset its cursor starts at, or the refusal of either. */
+  const pagedScope = (actor: InstanceRow, input: FindInput) => {
+    const scope = scopeOf(actor, input);
+    if (scope instanceof ElysiaStatus) {
+      return scope;
+    }
+    const offset = decodeCursor(input.cursor);
+    return offset instanceof ElysiaStatus
+      ? withExample(offset)
+      : { ...scope, offset };
+  };
+
   const search = async (actor: InstanceRow, input: FindInput) => {
-    const { query, limit } = checked(input);
+    const asked = checked(input);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const { query, limit } = asked;
     const { by } = input;
     if (!query && by !== undefined) {
       return await listed(actor, { ...input, by }, limit);
     }
-    const { where, scoped } = scopeOf(actor, input);
-    const offset = decodeCursor(input.cursor);
+    return await searched(actor, input, query, limit);
+  };
+
+  /** A search with words: one page of the engine's ranking, read for secrets. */
+  const searched = async (
+    actor: InstanceRow,
+    input: FindInput,
+    query: string,
+    limit: number
+  ) => {
+    const paged = pagedScope(actor, input);
+    if (paged instanceof ElysiaStatus) {
+      return paged;
+    }
+    const { where, scoped, offset } = paged;
     const page = await deps.find.find({
       q: query,
       caller: `the find tool of session ${actor.id}`,
@@ -1090,6 +1143,9 @@ export const createFindTool = (deps: FindToolDeps) => {
       ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
       ...(input.by ? { author: AUTHOR[input.by] } : {}),
     });
+    if (page instanceof ElysiaStatus) {
+      return withExample(page);
+    }
     const words = wordsOf(query);
     const results = await Promise.all(
       page.results.map((result) => redactedResult(result, words))
@@ -1124,8 +1180,15 @@ export const createFindTool = (deps: FindToolDeps) => {
     input: FindInput & { by: By },
     limit: number
   ) => {
-    const { where, scoped } = scopeOf(actor, input);
+    const scope = scopeOf(actor, input);
+    if (scope instanceof ElysiaStatus) {
+      return scope;
+    }
+    const { where, scoped } = scope;
     const from = listedFrom(input.cursor);
+    if (from instanceof ElysiaStatus) {
+      return from;
+    }
     // The next page is asked from before the last one read, so it reaches
     // past what one listing reads from each machine.
     const before =
@@ -1184,19 +1247,10 @@ export const createFindTool = (deps: FindToolDeps) => {
     format: "concise" | "detailed"
   ) => {
     const input: FindInput = { ...asked, response_format: format };
-    try {
-      if (input.around?.trim()) {
-        return await around(input.around, input.response_format ?? "concise");
-      }
-      return await search(actor, input);
-    } catch (error) {
-      if (error instanceof FindRefusal) {
-        throw new FindToolRefusal(`${error.message} Example: ${EXAMPLE}`, {
-          cause: error,
-        });
-      }
-      throw error;
+    if (input.around?.trim()) {
+      return await around(input.around, input.response_format ?? "concise");
     }
+    return await search(actor, input);
   };
 
   return { call };
@@ -1212,7 +1266,7 @@ export const findToolDefinition = (
   call: (
     input: z.infer<typeof SCHEMA>,
     format: "concise" | "detailed"
-  ) => Promise<Parameters<typeof findWords>[0]>
+  ) => Promise<Parameters<typeof findWords>[0] | AnyProblem>
 ) =>
   tool(FIND_TOOL, DESCRIPTION, INPUT, call, findWords, {
     annotations: {

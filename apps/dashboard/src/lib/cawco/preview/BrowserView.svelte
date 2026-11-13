@@ -64,7 +64,10 @@
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
+  import {
+    IsCoarsePointer,
+    PHONE_HELD_QUERY,
+  } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconKeyboardLinear,
     IconMinimizeLinear,
@@ -178,9 +181,7 @@
   /** A finger, not a cursor: Show keyboard floats at the stream's foot. */
   const coarse = new IsCoarsePointer();
   /** A phone in either hold: a finger, and a screen under the phone line (core `FORMS` tablet) on one side or the other. */
-  const phoneScreen = new MediaQuery(
-    "(pointer: coarse) and ((max-width: 639px) or (max-height: 639px))"
-  );
+  const phoneScreen = new MediaQuery(PHONE_HELD_QUERY);
   /**
    * The person holds a phone: its sheet (`addressAtFoot`), or a phone turned
    * to landscape, whose panel stands beside the conversation. A phone's

@@ -57,10 +57,11 @@ import {
 } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
+import { ElysiaStatus, problem } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
-import { StatusRefusal } from "./refusal";
+
 import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
@@ -148,8 +149,35 @@ export interface StreamRelayDeps {
   renewed: (expiresAt: number) => void;
 }
 
-/** A refusal the routes answer with its status and the sentence. */
-export class RelayRefusal extends StatusRefusal<400 | 404 | 409 | 503> {}
+/** The relay's machine's refusal: away or late (503), or refusing in its own words (409). */
+export type RelayMachineRefusal =
+  | ReturnType<
+      typeof problem<503, { code: "stream-relay-machine-away"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<503, { code: "stream-relay-machine-late"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "stream-relay-machine-refused"; detail: string }
+      >
+    >;
+
+/** Why the relay did not start: its machine's refusal, or a secret that no longer opens. */
+export type RelayStartRefusal =
+  | RelayMachineRefusal
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "stream-relay-secret-unsealed"; detail: string }
+      >
+    >;
+
+/** The fleet has no relay to start or stop. */
+type RelayNone = ReturnType<
+  typeof problem<404, { code: "stream-relay-none"; detail: string }>
+>;
 
 /**
  * Where a machine's relay would be reached: its candidate row, or undefined
@@ -248,20 +276,23 @@ const answered = <T>(
   read: Bounded<{ ok: boolean; result?: unknown; error?: string }>,
   machine: string,
   what: string
-): T => {
+): T | RelayMachineRefusal => {
   if (read.kind === "unanswered") {
-    throw new RelayRefusal(
-      503,
-      read.reason === "dead"
-        ? STREAM_RELAY_WORDS.machineAway(machine)
-        : `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
-    );
+    return read.reason === "dead"
+      ? problem(503, {
+          code: "stream-relay-machine-away",
+          detail: STREAM_RELAY_WORDS.machineAway(machine),
+        })
+      : problem(503, {
+          code: "stream-relay-machine-late",
+          detail: `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`,
+        });
   }
   if (!read.value.ok) {
-    throw new RelayRefusal(
-      409,
-      read.value.error ?? `The stream relay was not ${what}.`
-    );
+    return problem(409, {
+      code: "stream-relay-machine-refused",
+      detail: read.value.error ?? `The stream relay was not ${what}.`,
+    });
   }
   return read.value.result as T;
 };
@@ -275,7 +306,10 @@ interface RelaySetup {
 
 export interface StreamRelay {
   /** `relay.certify` on `machineId`: the certificate's end, or the refusal in its machine's words. */
-  certify: (machineId: string, args: RelayCertifyArgs) => Promise<number>;
+  certify: (
+    machineId: string,
+    args: RelayCertifyArgs
+  ) => Promise<number | RelayMachineRefusal>;
   /** The relay's machine connected: a relay that should run is started again (kept as it is when it runs already). */
   connected: (machineId: string) => void;
   /** A machine's relay frame: the record follows it. */
@@ -286,11 +320,20 @@ export interface StreamRelay {
   progress: () => { done: number; total: number } | undefined;
   /** The fleet's relay, as stored; null with none. */
   read: () => StoredRelay | null;
-  remove: () => Promise<void>;
+  /** The relay gone from its machine and the record; refused, and kept, when its machine would not remove it. */
+  remove: () => Promise<
+    | undefined
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "stream-relay-not-removed"; detail: string }
+        >
+      >
+  >;
   /** The relay set up as the journey picked it, and started; the one before goes from its machine. */
-  setup: (setup: RelaySetup) => Promise<void>;
-  start: () => Promise<void>;
-  stop: () => Promise<void>;
+  setup: (setup: RelaySetup) => Promise<undefined | RelayStartRefusal>;
+  start: () => Promise<undefined | RelayNone | RelayStartRefusal>;
+  stop: () => Promise<undefined | RelayNone | RelayMachineRefusal>;
   /** The health and renewal timers, on the hub's lifetime (lifetime.ts); the returned function ends them. */
   watch: () => () => void;
 }
@@ -304,19 +347,21 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     deps.machines().find((one) => one.machineId === machineId)?.name ??
     machineId;
 
-  const startArgs = (relay: StoredRelay): RelayStartArgs => {
+  const startArgs = (relay: StoredRelay) => {
     if (!relay.secret) {
-      throw new RelayRefusal(
-        409,
-        "The stream relay could not start: its secret no longer opens under the hub's key. Remove it and set it up again."
-      );
+      return problem(409, {
+        code: "stream-relay-secret-unsealed",
+        detail:
+          "The stream relay could not start: its secret no longer opens under the hub's key. Remove it and set it up again.",
+      });
     }
-    return {
+    const args: RelayStartArgs = {
       secret: relay.secret,
       address: relay.address,
       relayRange: STREAM_RELAY_PORTS.relayRange,
       ...(relay.hostname ? { hostname: relay.hostname } : {}),
     };
+    return args;
   };
 
   const update: StreamRelayDb["update"] = (change) => {
@@ -324,40 +369,41 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     changed();
   };
 
-  const send = async (relay: StoredRelay): Promise<void> => {
+  /** The relay's start failed: its refusal stands on the start step. */
+  const failed = (refused: RelayStartRefusal) => {
+    const { detail } = refused.response;
+    const relayNow = db.read();
+    update({
+      state: "failed",
+      why: detail,
+      whyCommand: relayNow?.why === detail ? relayNow.whyCommand : null,
+    });
+    return refused;
+  };
+
+  const send = async (relay: StoredRelay) => {
     update({
       wanted: true,
       state: "starting",
       why: null,
       whyCommand: null,
     });
-    const read = await call(
-      relay.machineId,
-      RELAY_START,
-      [startArgs(relay)],
-      START_MS
-    );
-    try {
-      const frame = answered<RelayFrame>(
-        read,
-        machineName(relay.machineId),
-        "started"
-      );
-      heard(frame);
-    } catch (error) {
-      // A refusal in the machine's words (its frame said the command
-      // already), or the machine away: either stands on the start step.
-      if (error instanceof RelayRefusal) {
-        const relayNow = db.read();
-        update({
-          state: "failed",
-          why: error.message,
-          whyCommand:
-            relayNow?.why === error.message ? relayNow.whyCommand : null,
-        });
-      }
-      throw error;
+    const args = startArgs(relay);
+    if (args instanceof ElysiaStatus) {
+      return failed(args);
     }
+    const read = await call(relay.machineId, RELAY_START, [args], START_MS);
+    const frame = answered<RelayFrame>(
+      read,
+      machineName(relay.machineId),
+      "started"
+    );
+    // A refusal in the machine's words (its frame said the command
+    // already), or the machine away: either stands on the start step.
+    if (frame instanceof ElysiaStatus) {
+      return failed(frame);
+    }
+    heard(frame);
     await check();
   };
 
@@ -399,7 +445,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
   };
 
   /** `stream-relay-renew`: the certificate renewed when certbot says it is due, by DNS with the token the journey keeps. */
-  const renew = async (): Promise<void> => {
+  const renew = async () => {
     const relay = db.read();
     if (!(relay?.wanted && relay.hostname && relay.state === "live")) {
       return;
@@ -425,6 +471,9 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       machineName(relay.machineId),
       "renewed"
     );
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
     if (done.expiresAt) {
       deps.renewed(done.expiresAt);
     }
@@ -459,8 +508,14 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     },
     certify: async (machineId, args) => {
       const read = await call(machineId, RELAY_CERTIFY, [args], CERTIFY_MS);
-      return answered<RelayCertified>(read, machineName(machineId), "issued")
-        .expiresAt;
+      const certified = answered<RelayCertified>(
+        read,
+        machineName(machineId),
+        "issued"
+      );
+      return certified instanceof ElysiaStatus
+        ? certified
+        : certified.expiresAt;
     },
     setup: async ({ machineId, address, hostname }) => {
       const before = db.read();
@@ -482,21 +537,25 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       });
       changed();
       const relay = db.read();
-      if (relay) {
-        await send(relay);
-      }
+      return relay ? await send(relay) : undefined;
     },
     start: async () => {
       const relay = db.read();
       if (!relay) {
-        throw new RelayRefusal(404, "The fleet has no stream relay to start.");
+        return problem(404, {
+          code: "stream-relay-none",
+          detail: "The fleet has no stream relay to start.",
+        });
       }
-      await send(relay);
+      return await send(relay);
     },
     stop: async () => {
       const relay = db.read();
       if (!relay) {
-        throw new RelayRefusal(404, "The fleet has no stream relay to stop.");
+        return problem(404, {
+          code: "stream-relay-none",
+          detail: "The fleet has no stream relay to stop.",
+        });
       }
       const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
       const frame = answered<RelayFrame>(
@@ -504,6 +563,9 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         machineName(relay.machineId),
         "stopped"
       );
+      if (frame instanceof ElysiaStatus) {
+        return frame;
+      }
       update({ wanted: false });
       heard(frame);
     },
@@ -518,11 +580,12 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
       if (read.kind === "answered" && !read.value.ok) {
-        throw new RelayRefusal(
-          409,
-          read.value.error ??
-            "The stream relay was not removed, so it was kept."
-        );
+        return problem(409, {
+          code: "stream-relay-not-removed",
+          detail:
+            read.value.error ??
+            "The stream relay was not removed, so it was kept.",
+        });
       }
       db.forget();
       changed();
@@ -532,11 +595,19 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (!(relay?.wanted && relay.machineId === machineId)) {
         return;
       }
-      send(relay).catch((error: unknown) =>
+      const notStarted = (why: string) =>
         console.warn(
-          `[stream-relay] not started again on ${machineName(machineId)}: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+          `[stream-relay] not started again on ${machineName(machineId)}: ${why}`
+        );
+      send(relay)
+        .then((sent) => {
+          if (sent instanceof ElysiaStatus) {
+            notStarted(sent.response.detail);
+          }
+        })
+        .catch((error: unknown) =>
+          notStarted(error instanceof Error ? error.message : String(error))
+        );
     },
     watch: () => {
       const said = (what: string) => (error: unknown) =>
@@ -547,7 +618,15 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         check().catch(said("health not checked"));
       });
       const renewal = deps.lifetime.every(RENEW_MS, () => {
-        renew().catch(said("stream-relay-renew failed"));
+        renew()
+          .then((renewed) => {
+            if (renewed instanceof ElysiaStatus) {
+              said("stream-relay-renew failed")(
+                new Error(renewed.response.detail)
+              );
+            }
+          })
+          .catch(said("stream-relay-renew failed"));
       });
       return () => {
         deps.lifetime.cancel(health);

@@ -2,7 +2,7 @@ import {
   PAGE_FAULT_TEXT_MAX,
   type PageFaultReport,
 } from "@cawco/core/page-faults";
-import { Elysia, ElysiaStatus, ParseError, status, t } from "elysia";
+import { Elysia, ElysiaStatus, ParseError, problem, status, t } from "elysia";
 
 const BODY_LIMIT = 64 * 1024;
 
@@ -62,10 +62,16 @@ export const dashboardErrorsRoutes = () =>
           error.cause instanceof ElysiaStatus
         ) {
           if (error.cause.status === 413) {
-            return status(413, "Dashboard error report is too large");
+            return problem(413, {
+              code: "dashboard-error-report-too",
+              detail: "Dashboard error report is too large",
+            });
           }
           if (error.cause.status === 415) {
-            return status(415, "Dashboard errors require application/json");
+            return problem(415, {
+              code: "dashboard-errors-require-application",
+              detail: "Dashboard errors require application/json",
+            });
           }
         }
       },
@@ -84,10 +90,16 @@ export const dashboardErrorsRoutes = () =>
             request.headers.get("content-type")?.split(";")[0].trim() !==
             "application/json"
           ) {
-            throw status(415, "Dashboard errors require application/json");
+            throw problem(415, {
+              code: "dashboard-errors-require-application",
+              detail: "Dashboard errors require application/json",
+            });
           }
           if (Number(request.headers.get("content-length")) > BODY_LIMIT) {
-            throw status(413, "Dashboard error report is too large");
+            throw problem(413, {
+              code: "dashboard-error-report-too",
+              detail: "Dashboard error report is too large",
+            });
           }
           const reader = request.body?.getReader();
           if (!reader) {
@@ -105,7 +117,10 @@ export const dashboardErrorsRoutes = () =>
               size += value.byteLength;
               if (size > BODY_LIMIT) {
                 await reader.cancel();
-                throw status(413, "Dashboard error report is too large");
+                throw problem(413, {
+                  code: "dashboard-error-report-too",
+                  detail: "Dashboard error report is too large",
+                });
               }
               text += decoder.decode(value, { stream: true });
             }

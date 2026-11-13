@@ -2,12 +2,19 @@
  * The fleet's MCP servers: adding, removing and signing one in.
  */
 
-import { MCP_PLATFORMS } from "@cawco/core/fleet";
+import {
+  type ConfigInspection,
+  INSPECT_CONFIG,
+  MCP_PLATFORMS,
+} from "@cawco/core/fleet";
 import { mergeMcpSecrets } from "@cawco/core/fleet-secrets";
 import { mcpWords } from "@cawco/core/words/mcp";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
+import type { RouteSet } from "../machine-answers";
+import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
+import { type MachineReadsContext, unansweredStatus } from "../machine-reads";
 import { boundFields } from "./bound-fields";
 
 /**
@@ -47,24 +54,65 @@ const RESERVED_MCP_NAMES = [
   "Claude Browser",
 ];
 
-export const fleetMcpRoutes = ({
-  announceMcp,
-  boundProblem,
-  db,
-  fleetMcp,
-  machineMcpConfig,
-  maskedMcp,
-  sharedProblem,
-}: Pick<
-  HubContext,
-  | "announceMcp"
-  | "boundProblem"
-  | "db"
-  | "fleetMcp"
-  | "machineMcpConfig"
-  | "maskedMcp"
-  | "sharedProblem"
->) => {
+export const fleetMcpRoutes = (
+  ctx: Pick<
+    HubContext,
+    | "announceMcp"
+    | "boundProblem"
+    | "db"
+    | "fleetMcp"
+    | "machineName"
+    | "maskedMcp"
+    | "sharedProblem"
+    | keyof MachineReadsContext
+  >
+) => {
+  const {
+    announceMcp,
+    boundProblem,
+    db,
+    fleetMcp,
+    machineName,
+    maskedMcp,
+    readAgent,
+    sharedProblem,
+  } = ctx;
+  /**
+   * The unmanaged MCP server `name` a machine has, config and keys as it
+   * holds them: what an adoption takes into the fleet. Read here and kept
+   * here, so no screen is sent it (core fleet-secrets.ts).
+   */
+  const machineMcpConfig = async (
+    machineId: string,
+    name: string,
+    cwd: string | undefined,
+    set: RouteSet
+  ) => {
+    const asked = await readAgent(
+      machineId,
+      INSPECT_CONFIG,
+      [cwd],
+      READ_TIMEOUT_MS
+    );
+    if (asked.kind === "unanswered") {
+      return unansweredStatus(ctx, set, machineId, asked);
+    }
+    if (!asked.value.ok) {
+      return problem(400, {
+        code: "config-unread",
+        detail: asked.value.error ?? "the machine could not read its config",
+      });
+    }
+    const found = (asked.value.result as ConfigInspection).mcp.find(
+      (row) => row.name === name && !row.managed
+    );
+    return found
+      ? { config: found.config as unknown as Record<string, unknown> }
+      : problem(404, {
+          code: "mcp-unmanaged-unknown",
+          detail: `${machineName(machineId)} has no unmanaged MCP server ${name}`,
+        });
+  };
   /** Why a server's config and placement cannot be stored, or nothing. */
   const mcpWriteProblem = (
     name: string,
@@ -119,7 +167,7 @@ export const fleetMcpRoutes = ({
             shared: t.Optional(t.Boolean()),
           }),
         },
-        async ({ params, body, set, status }) => {
+        async ({ params, body, set }) => {
           const held = db.getMcpServer(params.name)?.config;
           const read = body.fromMachine
             ? await machineMcpConfig(
@@ -128,16 +176,16 @@ export const fleetMcpRoutes = ({
                 body.cwd,
                 set
               )
-            : { ok: true as const, config: body.config };
-          if (!read.ok) {
-            return status(read.code, read.said);
+            : { config: body.config };
+          if (read instanceof ElysiaStatus) {
+            return read;
           }
           const written = read.config;
           if (!written) {
-            return status(
-              400,
-              "name a config, or the machine to adopt the server from"
-            );
+            return problem(400, {
+              code: "mcp-config-missing",
+              detail: "name a config, or the machine to adopt the server from",
+            });
           }
           // What the write does not name of a secret, the server keeps; an
           // adoption is the machine's config whole.
@@ -151,12 +199,15 @@ export const fleetMcpRoutes = ({
             }
           );
           if (!settled.ok) {
-            return status(400, settled.problem);
+            return problem(400, {
+              code: "mcp-secrets-unsettled",
+              detail: settled.problem,
+            });
           }
           const config = settled.config as unknown as Record<string, unknown>;
-          const problem = mcpWriteProblem(params.name, config, body);
-          if (problem) {
-            return status(400, problem);
+          const misfit = mcpWriteProblem(params.name, config, body);
+          if (misfit) {
+            return problem(400, { code: "mcp-server-invalid", detail: misfit });
           }
 
           db.putMcpServer({
@@ -172,20 +223,25 @@ export const fleetMcpRoutes = ({
           announceMcp();
           const saved = maskedMcp(params.name);
           if (!saved) {
-            return status(404, "MCP server was removed while probing.");
+            return problem(404, {
+              code: "mcp-server-was-removed",
+              detail: "MCP server was removed while probing.",
+            });
           }
           return saved;
         }
       )
       // Into the trash with its sign-in, off every machine at once.
-      // Into the trash with its sign-in, off every machine at once.
-      .delete("/api/fleet/mcp/:name", ({ params, status }) => {
+      .delete("/api/fleet/mcp/:name", ({ params }) => {
         const trashed = db.trash.put(
           { kind: "mcp", key: params.name },
           Date.now()
         );
         if (trashed === undefined) {
-          return status(404, `the fleet keeps no MCP server ${params.name}`);
+          return problem(404, {
+            code: "no-mcp",
+            detail: `the fleet keeps no MCP server ${params.name}`,
+          });
         }
         fleetMcp.forget(params.name);
         announceMcp();
@@ -207,16 +263,17 @@ export const fleetMcpRoutes = ({
             })
           ),
         },
-        async ({ params, body, status }) => {
+        async ({ params, body }) => {
           try {
             return await fleetMcp.start(params.name, body?.access);
           } catch (error) {
-            return status(
-              400,
-              error instanceof Error
-                ? error.message
-                : "Sign-in could not start. Save this server and retry sign-in."
-            );
+            return problem(400, {
+              code: "mcp-server-not-saved",
+              detail:
+                error instanceof Error
+                  ? error.message
+                  : "Sign-in could not start. Save this server and retry sign-in.",
+            });
           }
         }
       )
@@ -229,16 +286,17 @@ export const fleetMcpRoutes = ({
             iss: t.Optional(t.String()),
           }),
         },
-        async ({ body, status }) => {
+        async ({ body }) => {
           try {
             return await fleetMcp.complete(body.code, body.state, body.iss);
           } catch (error) {
-            return status(
-              400,
-              error instanceof Error
-                ? error.message
-                : "Sign-in could not finish. Start sign-in again."
-            );
+            return problem(400, {
+              code: "mcp-server-not-saved",
+              detail:
+                error instanceof Error
+                  ? error.message
+                  : "Sign-in could not finish. Start sign-in again.",
+            });
           }
         }
       )

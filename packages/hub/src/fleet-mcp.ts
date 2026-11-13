@@ -20,6 +20,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
@@ -206,12 +207,12 @@ const refusalWords = (error: unknown, status: number | null): string => {
  * Why a sign-in ended at the token endpoint: its refusal, and the tries of
  * the same renewal that got no answer before it.
  */
-const endedWords = (refusal: string, unanswered: number): string => {
+const endedWords = (said: string, unanswered: number): string => {
   const earlier =
     unanswered > 0
       ? ` ${unanswered} earlier ${unanswered === 1 ? "try" : "tries"} of this renewal got no answer, so the provider may have rotated the refresh token then.`
       : "";
-  return `The token endpoint refused to renew it: ${refusal}.${earlier}`;
+  return `The token endpoint refused to renew it: ${said}.${earlier}`;
 };
 
 const BEARER_ERROR = /\berror="([^"]*)"/u;
@@ -317,10 +318,10 @@ const reachHead = (
  * hub hands every live session the change (`sendMcpChanges` in server.ts).
  */
 const signedOut = () =>
-  new Response(
-    `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
-    { status: 503 }
-  );
+  problem(503, {
+    code: "mcp-signed-out",
+    detail: `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
+  });
 
 export class FleetMcp {
   readonly #db: DbShape;
@@ -1166,9 +1167,9 @@ export class FleetMcp {
     if (response.status !== 401) {
       return response;
     }
-    const refusal = bearerWords(response);
+    const said = bearerWords(response);
     await response.body?.cancel();
-    row = await this.#refused(name, row.tokens?.access_token ?? "", refusal);
+    row = await this.#refused(name, row.tokens?.access_token ?? "", said);
     response = await call(row);
     if (response.status === 401) {
       const again = bearerWords(response);
@@ -1183,11 +1184,20 @@ export class FleetMcp {
     return response;
   }
 
-  async forward(name: string, request: Request): Promise<Response> {
+  async forward(name: string, request: Request) {
     await this.#probing.get(name);
-    const server = this.#server(name);
+    const server = this.#db.getMcpServer(name);
+    if (!server) {
+      return problem(404, {
+        code: "no-mcp-server",
+        detail: "This MCP server no longer exists.",
+      });
+    }
     if (!server.enabled) {
-      return new Response("This server is disabled.", { status: 403 });
+      return problem(403, {
+        code: "mcp-server-disabled",
+        detail: "This server is disabled.",
+      });
     }
     const row = this.#db.getMcpOauth(name);
     if (!(row?.tokens && server.authMode === "oauth")) {
@@ -1204,12 +1214,13 @@ export class FleetMcp {
       if (!this.#db.getMcpOauth(name)?.tokens) {
         return signedOut();
       }
-      return new Response(
-        error instanceof NotNow
-          ? error.message
-          : "The upstream MCP server could not be reached. Retry the request.",
-        { status: 502 }
-      );
+      return problem(502, {
+        code: "mcp-upstream-failed",
+        detail:
+          error instanceof NotNow
+            ? error.message
+            : "The upstream MCP server could not be reached. Retry the request.",
+      });
     }
   }
 }

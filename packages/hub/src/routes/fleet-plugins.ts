@@ -3,7 +3,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 
@@ -50,16 +50,22 @@ export const fleetPluginRoutes = ({
     .patch(
       "/api/fleet/plugins/:id",
       { body: t.Object({ enabled: t.Boolean() }) },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         if (!db.listPlugins().some(({ id }) => id === params.id)) {
-          return status(404, `no plugin ${params.id} in this fleet`);
+          return problem(404, {
+            code: "no-plugin-fleet",
+            detail: `no plugin ${params.id} in this fleet`,
+          });
         }
         db.putPlugin({ id: params.id, enabled: body.enabled });
         fleetChanged();
         const row = db.listPlugins().find(({ id }) => id === params.id);
         return row
           ? pluginRow(row)
-          : status(404, `no plugin ${params.id} in this fleet`);
+          : problem(404, {
+              code: "no-plugin-fleet",
+              detail: `no plugin ${params.id} in this fleet`,
+            });
       }
     )
     // Re-fetch one plugin's bytes. The same verb a skill has, and the way a
@@ -67,10 +73,13 @@ export const fleetPluginRoutes = ({
     // re-resolves on its own, because a plugin that resolved once is a plugin
     // every machine already agrees on. Answers at once, the row marked
     // `fetching`, as the PUT does.
-    .post("/api/fleet/plugins/:id/refresh", ({ params, status }) => {
+    .post("/api/fleet/plugins/:id/refresh", ({ params }) => {
       const row = db.listPlugins().find(({ id }) => id === params.id);
       if (!row) {
-        return status(404, `no plugin ${params.id} in this fleet`);
+        return problem(404, {
+          code: "no-plugin-fleet",
+          detail: `no plugin ${params.id} in this fleet`,
+        });
       }
       // A copy that changed goes to the machines as the item it moved; one
       // that came back the same is sent forced, so every machine online
@@ -89,13 +98,16 @@ export const fleetPluginRoutes = ({
       );
       return pluginRow(row);
     })
-    .delete("/api/fleet/plugins/:id", ({ params, status }) => {
+    .delete("/api/fleet/plugins/:id", ({ params }) => {
       const trashed = db.trash.put(
         { kind: "plugin", key: params.id },
         Date.now()
       );
       if (trashed === undefined) {
-        return status(404, `the fleet installs no plugin ${params.id}`);
+        return problem(404, {
+          code: "no-plugin",
+          detail: `the fleet installs no plugin ${params.id}`,
+        });
       }
       fleetChanged();
       return undoable(trashed);
