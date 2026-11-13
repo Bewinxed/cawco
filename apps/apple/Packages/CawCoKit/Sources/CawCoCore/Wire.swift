@@ -268,6 +268,8 @@ enum Frame {
     case projectOffer(instanceId: String, offer: Components.Schemas.ProjectOfferSummary?)
     /// The hub restarts for an update, and by when it answers again; nil when it took that back.
     case hubRestart(Components.Schemas.HubRestartFrame.RestartPayload?)
+    /// A FIDO hybrid (caBLE) QR code extracted from a browser: the phone starts caBLE.
+    case passkeyQr(Components.Schemas.PasskeyQrFrame)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -325,6 +327,8 @@ enum Frame {
             self = .projectOffer(instanceId: frame.instanceId, offer: frame.offer)
         case .hub_restart(let frame):
             self = .hubRestart(frame.restart)
+        case .passkey_qr(let frame):
+            self = .passkeyQr(frame)
         default:
             self = .ignored
         }
