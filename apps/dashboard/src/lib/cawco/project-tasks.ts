@@ -14,7 +14,6 @@ import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ExternalComment, ExternalRef } from "@cawco/core/external-items";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
-import type { ProjectGate } from "@cawco/core/project-gate";
 import type {
   ProjectStarter,
   StarterGlyph,
@@ -26,7 +25,6 @@ import type {
   StagesView,
   TaskAttempt,
   TaskFlags,
-  TaskHistory,
   TaskHistoryActor,
   TaskList,
   TaskReviewRead,
@@ -34,15 +32,17 @@ import type {
   TaskTimes,
   TaskWait,
 } from "@cawco/core/task-views";
-import type {
-  GithubProjectsView,
-  IssueTracker,
-  TrackerTarget,
-  TrackerView,
-} from "@cawco/core/trackers";
+import type { IssueTracker } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
-import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import { hub, hubPath } from "#lib/platform/hub.js";
+import {
+  hubData,
+  hubDone,
+  hubJson,
+  refusedOf,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 
 export type {
   ProjectStarter,
@@ -55,7 +55,6 @@ export type {
   Stage,
   StagesView,
   TaskAttempt,
-  TaskHistory,
   TaskHistoryEvent,
   TaskList,
   TaskSummary,
@@ -248,10 +247,10 @@ export const listTasks = (projectId: string): Promise<TaskList> =>
   );
 
 /** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
-export const readTracker = (projectId: string): Promise<TrackerView> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/tracker", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
+export const readTracker = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tracker.get(),
+    refusedOrUnreached
   );
 
 /** Binds the project to a connection's repository or team, or `cawco` lets the binding go. */
@@ -269,22 +268,17 @@ export const setTracker = (
         target: string;
         tracker: IssueTracker;
       }
-): Promise<TrackerView> =>
-  hubJson(
-    hubRequest("PUT /api/projects/:id/tracker", {
-      path: { id: projectId },
-      body: binding,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tracker.put(binding),
+    refusedOrUnreached
   );
 
 /** The project's tasks and their issues synced now; answers where the binding stands after. */
-export const syncTracker = (projectId: string): Promise<TrackerView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tracker/sync", {
-      path: { id: projectId },
-    }),
-    { failure: refusedOrUnreached }
+export const syncTracker = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tracker.sync.post(),
+    refusedOrUnreached
   );
 
 /**
@@ -292,37 +286,26 @@ export const syncTracker = (projectId: string): Promise<TrackerView> =>
  * among what it reads are the GitHub links due a read, a link whose last
  * read failed among them.
  */
-export const pollGitHub = async (projectId: string): Promise<void> => {
-  await hubJson(
-    hubRequest("POST /api/projects/:id/ingress/github/poll", {
-      path: { id: projectId },
-    }),
-    { failure: refusedOrUnreached }
+export const pollGitHub = (projectId: string): Promise<void> =>
+  hubDone(
+    hub.api.projects({ id: projectId }).ingress.github.poll.post(),
+    refusedOrUnreached
   );
-};
 
 /** The repositories or teams a connection reaches, for a project to be bound to one. */
-export const trackerTargets = (
-  connection: string
-): Promise<{ targets: TrackerTarget[] }> =>
-  hubJson(
-    hubRequest("GET /api/connections/:name/targets", {
-      path: { name: connection },
-    }),
-    { failure: refusedOrUnreached }
+export const trackerTargets = (connection: string) =>
+  hubData(
+    hub.api.connections({ name: connection }).targets.get(),
+    refusedOrUnreached
   );
 
 /** The GitHub Projects a connection reaches for a repository, or GitHub's words when it may not read them. */
-export const githubProjects = (
-  connection: string,
-  repo: string
-): Promise<GithubProjectsView> =>
-  hubJson(
-    hubRequest("GET /api/connections/:name/github-projects", {
-      path: { name: connection },
-      query: { repo },
-    }),
-    { failure: refusedOrUnreached }
+export const githubProjects = (connection: string, repo: string) =>
+  hubData(
+    hub.api
+      .connections({ name: connection })
+      ["github-projects"].get({ query: { repo } }),
+    refusedOrUnreached
   );
 
 /** The project's archived tasks, instead of the board's. */
@@ -369,32 +352,21 @@ export const listTasksWaiting = async (
     )
   ).tasks;
 
-export const readStages = (projectId: string): Promise<StagesView> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/stages", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
+export const readStages = (projectId: string) =>
+  hubData(hub.api.projects({ id: projectId }).stages.get(), refusedOrUnreached);
 
 /** The project's merge checks as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
-export const readGate = (
-  projectId: string
-): Promise<{ file: string; gate: ProjectGate }> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/gate", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
+export const readGate = (projectId: string) =>
+  hubData(hub.api.projects({ id: projectId }).gate.get(), refusedOrUnreached);
 
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (
   projectId: string,
   pressed: { outcome: "picked" | "edited"; place: StarterPlace; text: string }
-): Promise<{ ok: true }> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/starters/outcome", {
-      path: { id: projectId },
-      body: pressed,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).starters.outcome.post(pressed),
+    refusedOrUnreached
   );
 
 export const readTask = (
@@ -475,15 +447,10 @@ export const linkTask = (
   );
 
 /** Every commit to the task's file, oldest first. */
-export const readHistory = (
-  projectId: string,
-  taskId: string
-): Promise<TaskHistory> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/tasks/:taskId/history", {
-      path: { id: projectId, taskId },
-    }),
-    { failure: refusedOrUnreached }
+export const readHistory = (projectId: string, taskId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks({ taskId }).history.get(),
+    refusedOrUnreached
   );
 
 /**
@@ -553,10 +520,7 @@ export const retryTask = (
 
 /** A file of the project's folder as its bytes, for an image, video or audio output. */
 export const folderRawHref = (projectId: string, path: string): string =>
-  hubRequest("GET /api/projects/:id/folder/raw", {
-    path: { id: projectId },
-    query: { path },
-  }).path;
+  hubPath(hub.api.projects({ id: projectId }).folder.raw, { path });
 
 /**
  * A file of the project's folder as the project page shows it (`?file=`,
@@ -658,10 +622,9 @@ export const outputUrl = (
   taskId: string,
   name: string
 ): string =>
-  hubRequest("GET /api/projects/:id/tasks/:taskId/outputs/file", {
-    path: { id: projectId, taskId },
-    query: { name },
-  }).path;
+  hubPath(hub.api.projects({ id: projectId }).tasks({ taskId }).outputs.file, {
+    name,
+  });
 
 /**
  * An output's words, whole, as the hub served them from `src` (a task's
@@ -671,7 +634,7 @@ export const outputUrl = (
 export async function readOutputText(src: string): Promise<string> {
   const response = await fetch(src);
   if (!response.ok) {
-    throw await refusedOrUnreached(response);
+    throw refusedOrUnreached(await refusedOf(response));
   }
   return response.text();
 }
