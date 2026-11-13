@@ -33,14 +33,18 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import { frameSaid, type PageSays } from "@cawco/core/page-wire";
 import {
   CANVAS_EMBED_FAILED,
   CANVAS_EMBED_FETCHED,
   CANVAS_EMBED_SEEN,
   CANVAS_EMBED_SIZE,
   CANVAS_GRAPH_FETCHED,
-  type CanvasGraph,
 } from "@cawco/core/stage";
+
+/** Says `message` to the page holding the embed. */
+const say = (message: PageSays): void =>
+  window.parent.postMessage(message, "*");
 
 /** What the column answers its teller with. */
 export interface EmbedColumn {
@@ -90,10 +94,11 @@ function longMotionMs(): number {
  * Every page the stage serves carries its graph (host.ts `closureOf`).
  */
 function tellGraphFetched(): void {
-  const graph = (window as unknown as { __cawcoGraph: CanvasGraph })
-    .__cawcoGraph;
-  const tell = () =>
-    window.parent.postMessage({ type: CANVAS_EMBED_FETCHED }, "*");
+  const graph = window.__cawcoGraph;
+  if (!graph) {
+    throw new Error("[cawco] the embed's page carries no graph");
+  }
+  const tell = () => say({ type: CANVAS_EMBED_FETCHED });
   if (graph.whole) {
     tell();
   } else {
@@ -151,10 +156,7 @@ export function tellHolder(column: EmbedColumn): EmbedTeller {
       return;
     }
     saidShape = shape;
-    window.parent.postMessage(
-      { type: CANVAS_EMBED_SIZE, height, width, rest: atRest },
-      "*"
-    );
+    say({ type: CANVAS_EMBED_SIZE, height, width, rest: atRest });
     atRest = false;
   };
 
@@ -166,7 +168,7 @@ export function tellHolder(column: EmbedColumn): EmbedTeller {
     }
     if (saidShape !== `failed ${why}`) {
       saidShape = `failed ${why}`;
-      window.parent.postMessage({ type: CANVAS_EMBED_FAILED, why }, "*");
+      say({ type: CANVAS_EMBED_FAILED, why });
     }
     return true;
   };
@@ -234,7 +236,7 @@ export function tellHolder(column: EmbedColumn): EmbedTeller {
   addEventListener("message", (event) => {
     if (
       event.source === window.parent &&
-      (event.data as { type?: unknown } | null)?.type === CANVAS_EMBED_SEEN
+      frameSaid(event.data)?.type === CANVAS_EMBED_SEEN
     ) {
       seenAt ??= performance.now();
       ask();

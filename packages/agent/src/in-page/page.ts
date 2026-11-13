@@ -142,11 +142,16 @@ export const sweepNow = () => {
 /** The page's host hears what the page says to it: its lock turned it away (`locked` names that message), or the proxy served its down page. */
 export const hearHost = (locked: string): void => {
   window.__cawcoHeard = (data) => {
-    const said = data as { type?: unknown } | null;
-    if (said?.type === locked) {
+    if (typeof data !== "object" || data === null || !("type" in data)) {
+      return;
+    }
+    if (data.type === locked) {
       window.__cawcoLocked = true;
-    } else if (said?.type === "cawco:down") {
-      window.__cawcoDown = said as Window["__cawcoDown"];
+    } else if (data.type === "cawco:down") {
+      window.__cawcoDown = {
+        down: "down" in data ? data.down : undefined,
+        why: "why" in data ? data.why : undefined,
+      };
     }
   };
 };

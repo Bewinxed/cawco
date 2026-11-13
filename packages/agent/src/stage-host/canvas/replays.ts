@@ -13,6 +13,7 @@
  * it stands. A reached state is never held at its move's first frame: a
  * reach makes no replay, only a play or a scrub does.
  */
+import "./window-events";
 import {
   type ClipRead,
   type ClipRepeat,
@@ -96,27 +97,24 @@ export function frameCurveOf(
   if (!(first && last) || keyframes.length < 2) {
     return null;
   }
-  const key = ownKeys(first).find((one) => {
-    const from = figureIn(first, one);
-    const to = figureIn(last, one);
-    return (
-      from !== null &&
-      to !== null &&
-      from !== to &&
-      keyframes.every((frame) => figureIn(frame, one) !== null)
-    );
-  });
-  if (!key) {
-    return null;
+  for (const key of ownKeys(first)) {
+    const from = figureIn(first, key);
+    const to = figureIn(last, key);
+    if (from === null || to === null || from === to) {
+      continue;
+    }
+    const figures = keyframes.flatMap((frame) => figureIn(frame, key) ?? []);
+    if (figures.length !== keyframes.length) {
+      continue;
+    }
+    return keyframes.map((frame, at) => [
+      typeof frame.computedOffset === "number"
+        ? frame.computedOffset
+        : at / (keyframes.length - 1),
+      ((figures[at] ?? from) - from) / (to - from),
+    ]);
   }
-  const from = figureIn(first, key) as number;
-  const to = figureIn(last, key) as number;
-  return keyframes.map((frame, at) => [
-    typeof frame.computedOffset === "number"
-      ? frame.computedOffset
-      : at / (keyframes.length - 1),
-    ((figureIn(frame, key) as number) - from) / (to - from),
-  ]);
+  return null;
 }
 
 /** What a clip animates between, per property: its first frame's value and its last's. */
@@ -239,9 +237,7 @@ function framesOf(held: Held, tuning: Tuning | undefined): Keyframe[] {
     }
   }
   return frames.map((frame) => {
-    const { computedOffset: _drop, ...rest } = frame as Keyframe & {
-      computedOffset?: number;
-    };
+    const { computedOffset: _drop, ...rest } = frame;
     return rest;
   });
 }
@@ -287,7 +283,7 @@ const timingOf = (held: Held, tuning: Tuning | undefined) => {
         ? "linear"
         : (tuning?.easing ?? read.easing),
     ...runsOf(read, tuning?.repeat ?? "once"),
-    fill: "both" as FillMode,
+    fill: "both" as const,
   };
 };
 
@@ -509,10 +505,6 @@ interface MoveAnswers {
   said: (time: StageTime) => void;
 }
 
-/** A window event's detail, read by `read`; null when it is none. */
-const detailOf = <T>(event: Event, read: (value: unknown) => T | null) =>
-  read((event as CustomEvent<unknown>).detail);
-
 /**
  * The Animation face's asks of the stage (core stage-graph.ts), answered on
  * `replays`: Play (or, with reduced motion, its end at once, faded in),
@@ -520,8 +512,8 @@ const detailOf = <T>(event: Event, read: (value: unknown) => T | null) =>
  * a retime, a row's ring.
  */
 export function answerMoves(replays: Replays, page: MoveAnswers): void {
-  addEventListener(STAGE_PLAY, (event) => {
-    const asking = detailOf(event, stagePlayOf);
+  window.addEventListener(STAGE_PLAY, (event) => {
+    const asking = stagePlayOf(event.detail);
     if (!asking) {
       return;
     }
@@ -536,15 +528,15 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
     const { length } = replays;
     page.said({ playing: false, t: length, length, at: performance.now() });
   });
-  addEventListener(STAGE_PAUSE, (event) => {
-    if (detailOf(event, stagePauseOf)) {
+  window.addEventListener(STAGE_PAUSE, (event) => {
+    if (stagePauseOf(event.detail)) {
       replays.pause();
     }
   });
   let seekFrame = 0;
   let seekAt = 0;
-  addEventListener(STAGE_SEEK, (event) => {
-    const asking = detailOf(event, stageSeekOf);
+  window.addEventListener(STAGE_SEEK, (event) => {
+    const asking = stageSeekOf(event.detail);
     if (!asking) {
       return;
     }
@@ -555,8 +547,8 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
       replays.seek(seekAt);
     });
   });
-  addEventListener(STAGE_LET_GO, (event) => {
-    const asking = detailOf(event, stageLetGoOf);
+  window.addEventListener(STAGE_LET_GO, (event) => {
+    const asking = stageLetGoOf(event.detail);
     // Let go on the move's end: the drawing let go, the kept state as it stands; elsewhere the hold stays.
     if (asking && asking.t >= replays.length) {
       cancelAnimationFrame(seekFrame);
@@ -564,8 +556,8 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
       replays.release();
     }
   });
-  addEventListener(STAGE_RETIME, (event) => {
-    const asking = detailOf(event, stageRetimeOf);
+  window.addEventListener(STAGE_RETIME, (event) => {
+    const asking = stageRetimeOf(event.detail);
     if (!asking) {
       return;
     }
@@ -576,8 +568,8 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
       replays.play(asking.replayFrom, false, 0);
     }
   });
-  addEventListener(STAGE_RING, (event) => {
-    const asking = detailOf(event, stageRingOf);
+  window.addEventListener(STAGE_RING, (event) => {
+    const asking = stageRingOf(event.detail);
     if (asking) {
       page.light(asking.thing);
     }
