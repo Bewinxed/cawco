@@ -17,10 +17,24 @@
     body: "type-body text-pretty text-ink-strong",
     meta: "type-meta text-pretty text-ink-muted",
   } as const;
-  const named = $derived(String(props.variant));
-  const role = $derived(
-    named === "title" || named === "label" || named === "meta" ? named : "body"
-  );
+  /** Its role: the library's schema takes one of the four, "body" when left out. */
+  function roleOf(variant: unknown): keyof typeof ROLES {
+    if (variant === undefined) {
+      return "body";
+    }
+    if (
+      variant === "title" ||
+      variant === "label" ||
+      variant === "body" ||
+      variant === "meta"
+    ) {
+      return variant;
+    }
+    throw new Error(
+      `A Text's variant is ${JSON.stringify(variant)}, not one of title, label, body or meta`
+    );
+  }
+  const role = $derived(roleOf(props.variant));
 </script>
 
 <p class={["wrap-anywhere", ROLES[role]]} data-role={role} data-slot="text">
