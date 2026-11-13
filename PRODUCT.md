@@ -112,7 +112,7 @@ Away from a desk, the operator uses the Caw&Co app on iPhone, iPad and Mac, or t
 - **Terminology discipline:** one concept → one canonical term everywhere, enforced by lint.
 - **No humor** in error, warning, destructive-confirm, or permission-approval copy.
 - **Copy authority:** every user-facing string lives in `packages/core/src/words/**`, written to DESIGN.md's Words section (naming, error and empty-state wording, button labels).
-- **Identity constraint (owner-stated):** the action is coral, one per view, on the act the view is for (DESIGN.md: "Coral is the act").
+- **Identity constraints (owner-stated):** every product icon is Solar's bold-duotone cut, and it stays; indigo is never a brand hue; the action is coral, one per view, on the act the view is for (DESIGN.md: "Coral is the act").
 
 ## Evidence on Hand
 
