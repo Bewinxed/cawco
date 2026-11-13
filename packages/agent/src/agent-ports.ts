@@ -10,7 +10,11 @@
  * dropped.
  */
 import type { AccountBorrowFrame } from "@cawco/core/accounts";
-import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
+import type {
+  BrowserFrame,
+  BrowserHandedBackFrame,
+  PasskeyQrFrame,
+} from "@cawco/core/browser";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MoveProgressFrame } from "@cawco/core/move";
 import type { Envelope } from "@cawco/core/protocol";
@@ -28,6 +32,8 @@ export interface AgentPorts {
   readonly emit: (envelope: Envelope) => void;
   /** The machine this agent is: the browsers' and the relay's frames name it. */
   readonly machineId: string;
+  /** A FIDO URI read off a take-over's passkey QR (browser/shield.ts). */
+  readonly passkeyQr: (frame: PasskeyQrFrame) => void;
   /** A project move's progress (move.ts). */
   readonly moveProgress: (frame: MoveProgressFrame) => void;
   /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
