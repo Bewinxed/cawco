@@ -57,7 +57,7 @@ import {
   undrawn,
 } from "@cawco/core/house-faces";
 import { blockFile, programLibraryOf } from "@cawco/core/inline-blocks";
-import { programReferences } from "@cawco/core/reference-faces";
+import { type PageLinks, programReferences } from "@cawco/core/reference-faces";
 import { unhandled } from "@cawco/core/unhandled";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import {
@@ -809,20 +809,22 @@ function* drawnWords(
 }
 
 /**
- * The `cawco:` references a kept program's words name (core
- * reference-faces.ts `programReferences`): the whole set of things a page
- * drawn from it may learn the faces of, and open, through its host. Read
- * from the program the hub checked and keeps, never from anything the page
- * says.
+ * What a kept program links to (core reference-faces.ts `PageLinks`): the
+ * `cawco:` references its words name (`programReferences`), and the
+ * artifacts its Canvas and Preview pieces show (`readProgram`'s
+ * `artifacts`), each once. The whole of what a page drawn from it may
+ * learn the faces of, and ask its host to open. Read from the program the
+ * hub checked and keeps, never from anything the page says.
  */
-export const keptReferences = (program: string): string[] =>
-  programReferences(
-    drawnWords(
-      (programLibraryOf(program) === "block" ? blockParser : parser).parse(
-        program
-      ).root
-    )
-  );
+export const keptLinks = (program: string): PageLinks => {
+  const { root } = (
+    programLibraryOf(program) === "block" ? blockParser : parser
+  ).parse(program);
+  return {
+    references: programReferences(drawnWords(root)),
+    artifacts: [...new Set(readProgram(root).artifacts.map((one) => one.id))],
+  };
+};
 
 /** Each statement of a program by its name, as written. */
 const statementsOf = (program: string): Map<string, string> => {

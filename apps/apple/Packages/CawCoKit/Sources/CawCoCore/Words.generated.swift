@@ -2651,8 +2651,11 @@ public enum Words {
 
         public static let retry = "Retry"
 
-        /// A page asked to open a link its own program does not name (dashboard frame-references.svelte.ts).
+        /// A page asked to open a link its own program does not name (dashboard frame-links.svelte.ts).
         public static let referenceNotOnPage = "It was not opened: the page's words do not name that link."
+
+        /// A page asked to open an artifact none of its own pieces shows (dashboard frame-links.svelte.ts).
+        public static let artifactNotOnPage = "It was not opened: none of the page's pieces shows that artifact."
 
         /// The list's groups, by a page's standing: waiting on picks, sent, decided.
         public static let needsYou = "Needs you"

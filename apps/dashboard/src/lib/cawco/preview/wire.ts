@@ -149,7 +149,8 @@ export function previewPickPlace(value: unknown): number | string | null {
  * The page's ask to open an artifact (`cawco.open`: a decision page's
  * Canvas, Open to draw, or Preview, Open full): a JSON-RPC
  * `cawco/open-artifact` naming it, answered with the refusal's words, or
- * null once it opened. Null when the message is not one.
+ * null once it opened; opened only when one of the page's own pieces shows
+ * it (frame-links.svelte.ts). Null when the message is not one.
  */
 export function previewOpenArtifact(
   value: unknown
@@ -168,7 +169,7 @@ export function previewOpenArtifact(
  * The page's ask to open what a `cawco:` reference in its words names
  * (`cawco.follow`: a decision page's reference chip, core
  * reference-faces.ts; opened only when its program names it,
- * frame-references.svelte.ts): a JSON-RPC `cawco/open-reference` naming its
+ * frame-links.svelte.ts): a JSON-RPC `cawco/open-reference` naming its
  * destination, answered with the refusal's words, or null once it opened.
  * Null when the message is not one.
  */

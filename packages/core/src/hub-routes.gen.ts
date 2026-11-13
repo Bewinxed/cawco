@@ -350,7 +350,7 @@ export interface components {
         artifact: string | number;
       };
     };
-    "GET /api/artifacts/:artifact/references": {
+    "GET /api/artifacts/:artifact/links": {
       path: {
         artifact: string | number;
       };

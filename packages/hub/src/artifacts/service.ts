@@ -143,6 +143,7 @@ import {
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
+import type { PageLinks } from "@cawco/core/reference-faces";
 import type {
   SessionQuestion,
   SessionQuestionsRead,
@@ -189,7 +190,7 @@ import {
   type ArtifactNamed,
   type BuiltProgram,
   keptImagePaths,
-  keptReferences,
+  keptLinks,
   mergeProgram,
   PROGRAM_FILE,
   ProgramRefusal,
@@ -8441,22 +8442,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The `cawco:` references a page's program names (decision-program.ts
-     * `keptReferences`): every thing a frame of it may learn the face of,
-     * and open, through the dashboard framing it. Read from the program the
-     * hub checked and keeps; none for anything that keeps no program (a
-     * preview, a canvas, an HTML page). 404 for an artifact the hub holds
-     * none of.
+     * What a page's program links to (decision-program.ts `keptLinks`): the
+     * `cawco:` references its words name and the artifacts its Canvas and
+     * Preview pieces show, the whole of what a frame of it may learn the
+     * faces of, and ask the dashboard framing it to open. Read from the
+     * program the hub checked and keeps; nothing for anything that keeps no
+     * program (a preview, a canvas, an HTML page). 404 for an artifact the
+     * hub holds none of.
      */
-    references: (id: string): string[] => {
+    links: (id: string): PageLinks => {
       const row = db.get(id);
       if (!row) {
         throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
       }
       const program = join(deps.root, row.id, PROGRAM_FILE);
       return row.kind === "page" && existsSync(program)
-        ? keptReferences(readFileSync(program, "utf8"))
-        : [];
+        ? keptLinks(readFileSync(program, "utf8"))
+        : { references: [], artifacts: [] };
     },
 
     /**
