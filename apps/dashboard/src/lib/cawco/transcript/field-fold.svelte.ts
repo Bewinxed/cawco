@@ -6,9 +6,9 @@
  * A draft of more than one line folds to its first line while the field
  * is not being written in, and opens to its full height, growing upward
  * over the transcript, when the field takes focus. Folding and opening
- * run over --dur-morph (autosize's `data-folding`, on the field while
+ * run over --duration-morph (autosize's `data-folding`, on the field while
  * that height change runs); a typed line grows over the field's own
- * --dur-control. A press on the pill's own send or attach leaves the
+ * --duration-control. A press on the pill's own send or attach leaves the
  * focus in the field (`ctrls`): taken from it as the press went down, the
  * draft folded, the button moved from under the press, its up landed off
  * it, and nothing was sent.
