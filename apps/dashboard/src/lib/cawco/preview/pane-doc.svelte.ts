@@ -163,7 +163,7 @@ export class PaneDoc {
   /** Whether the pane holds the doc yet: until it does, no count or list reads as none. */
   docSync = $state<DocSync>({ state: "reading" });
 
-  /** The first sync has outlasted `--dur-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
+  /** The first sync has outlasted `--duration-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
   readonly readingLong = graceWhile(() => this.docSync.state === "reading");
 
   /** What the Comments list stands on: quiet inside the grace, then reading, the pins once held, or why they weren't. */

@@ -19,26 +19,26 @@ export class PinPeek {
   /**
    * The pill the pointer rests on, its peek beside it: its thread's card
    * holding his words and the latest reply (PinCard `peek`), after
-   * `--dur-peek` the first time, at once while one is up or just went;
+   * `--duration-peek` the first time, at once while one is up or just went;
    * never under a finger. The pointer may leave the pill for the peek: it
-   * goes `--dur-peek` after the pointer left them both.
+   * goes `--duration-peek` after the pointer left them both.
    */
   peekAt = $state<{ id: string; mark: PreviewPinAt["mark"] } | null>(null);
 
   peekTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** When the last peek went: the next within `--dur-peek` comes at once. */
+  /** When the last peek went: the next within `--duration-peek` comes at once. */
   peekWent = 0;
 
   /** The pointer rests on the peek itself. */
   onPeek = false;
 
-  /** The pointer came onto the peek (it stays) or left it (it goes after `--dur-peek`, unless the pointer is back on its pill). */
+  /** The pointer came onto the peek (it stays) or left it (it goes after `--duration-peek`, unless the pointer is back on its pill). */
   restOnPeek = (on: boolean) => {
     this.onPeek = on;
     clearTimeout(this.peekTimer);
     if (!on) {
-      this.peekTimer = setTimeout(this.dropPeek, dur("--dur-peek"));
+      this.peekTimer = setTimeout(this.dropPeek, dur("--duration-peek"));
     }
   };
 
@@ -79,11 +79,11 @@ export class PinPeek {
     if (!(id && mark)) {
       // Off its pill: onto the peek, which stays, or away.
       if (this.peekAt && !this.onPeek) {
-        this.peekTimer = setTimeout(this.dropPeek, dur("--dur-peek"));
+        this.peekTimer = setTimeout(this.dropPeek, dur("--duration-peek"));
       }
       return;
     }
-    const wait = dur("--dur-peek");
+    const wait = dur("--duration-peek");
     if (this.peekAt || performance.now() - this.peekWent < wait) {
       this.peekAt = { id, mark };
       return;
