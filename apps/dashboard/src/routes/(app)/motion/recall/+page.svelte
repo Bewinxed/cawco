@@ -15,10 +15,7 @@
    * was sent, in order.
    */
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import {
-    blankSession,
-    type SessionState,
-  } from "#lib/cawco/stores/sessions.svelte.js";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -39,25 +36,15 @@
     "Check the push probe on the Mac and report back",
   ];
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        sessionsState: { sessions: Record<string, SessionState> };
-      };
-    }
-  ).__cawcoDebug;
+  const debug = window.__cawcoDebug;
   const now = Date.now();
-  const messages = Array.from(
-    { length: SENT },
-    (_, i): Message =>
-      ({
-        id: `recall-sent-${i}`,
-        instanceId: ID,
-        type: "user",
-        content: `${SAID[i % SAID.length]} (${i + 1})`,
-        timestamp: new Date(now - (SENT - i) * 7 * 60_000).toISOString(),
-      }) as Message
-  );
+  const messages = Array.from({ length: SENT }, (_, i): Message => ({
+    id: `recall-sent-${i}`,
+    instanceId: ID,
+    type: "user",
+    content: `${SAID[i % SAID.length]} (${i + 1})`,
+    timestamp: new Date(now - (SENT - i) * 7 * 60_000).toISOString(),
+  }));
   debug.sessionsState.sessions[ID] = { ...blankSession(ID), messages };
 
   /** The session's `/` menu: skills (a plugin's among them) and a built-in. */

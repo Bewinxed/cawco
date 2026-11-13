@@ -16,11 +16,7 @@
 
   let waiting = $state(false);
   onMount(() => {
-    (
-      window as unknown as {
-        __skeletonBench: { load: () => void; wait: () => void };
-      }
-    ).__skeletonBench = {
+    window.__skeletonBench = {
       load: () => {
         waiting = false;
       },
