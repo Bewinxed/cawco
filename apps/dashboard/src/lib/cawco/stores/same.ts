@@ -30,12 +30,7 @@ export function equal(a: unknown, b: unknown): boolean {
   const bk = Object.keys(b);
   return (
     ak.length === bk.length &&
-    ak.every((key) =>
-      equal(
-        (a as Record<string, unknown>)[key],
-        (b as Record<string, unknown>)[key]
-      )
-    )
+    ak.every((key) => equal(Reflect.get(a, key), Reflect.get(b, key)))
   );
 }
 
