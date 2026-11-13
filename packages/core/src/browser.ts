@@ -18,7 +18,8 @@ export type BrowserHostKind = "container" | "local";
 
 /**
  * The agent's ports for browsers: the machine's one DevTools gate first
- * ({@link BROWSER_GATE_PORT}), then three per browser started, in this
+ * ({@link BROWSER_GATE_PORT}), the local host's proxy last
+ * ({@link BROWSER_PROXY_PORT}), and between them three per browser started, in this
  * order: neko's HTTP, Chromium's DevTools, and the media port (UDP and TCP,
  * the same number). The gate, HTTP and DevTools listen on 127.0.0.1 alone;
  * media on every address. The local host uses DevTools only. A browser
@@ -33,10 +34,13 @@ export type BrowserHostKind = "container" | "local";
  * (all read 2026-10-26). scripts/fixed-ports-check.ts holds every port
  * constant out of that range.
  */
-export const BROWSER_PORTS = { first: 14_070, last: 14_130 } as const;
+export const BROWSER_PORTS = { first: 14_070, last: 14_131 } as const;
 
 /** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
 export const BROWSER_GATE_PORT = BROWSER_PORTS.first;
+
+/** The local host's forward proxy (agent `browser/hub-proxy.ts`): the last port of the range, on 127.0.0.1 alone. */
+export const BROWSER_PROXY_PORT = BROWSER_PORTS.last;
 
 /**
  * The port this machine's agent serves its DevTools gate on:
@@ -85,8 +89,9 @@ export const browserPorts = (slot: number): Required<BrowserPorts> => {
 };
 
 /** How many browsers {@link BROWSER_PORTS} holds on one machine. */
-export const BROWSER_SLOTS =
-  (BROWSER_PORTS.last - BROWSER_GATE_PORT) / BROWSER_PORTS_EACH;
+export const BROWSER_SLOTS = Math.floor(
+  (BROWSER_PROXY_PORT - BROWSER_GATE_PORT) / BROWSER_PORTS_EACH
+);
 
 export type BrowserState =
   | "pulling"

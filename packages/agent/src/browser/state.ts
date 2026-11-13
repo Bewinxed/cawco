@@ -92,7 +92,13 @@ export interface BrowserRecord {
   key: BrowserKey;
   lastUsedAt: number;
   /** The local host's Chromium, by its identity, so a later process signals only it. */
-  local?: { bootId?: string; pid: number; procStart: string };
+  local?: {
+    bootId?: string;
+    pid: number;
+    procStart: string;
+    /** The `--proxy-server` it was started with (hub-proxy.ts): one started without it is started again. */
+    proxy?: string;
+  };
   name: string;
   /**
    * The stream relay's credential the hub's last `browser.start` brought: a

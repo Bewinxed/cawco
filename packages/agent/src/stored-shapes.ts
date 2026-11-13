@@ -82,6 +82,7 @@ const BrowserRecordShape = declared(
         bootId: z.string().optional(),
         pid: z.number(),
         procStart: z.string(),
+        proxy: z.string().optional(),
       })
       .optional(),
     name: z.string(),
