@@ -148,7 +148,7 @@ function shownHues(
       used.add(free);
       return free;
     }
-    const repeat = ACCOUNT_HUES[spare % ACCOUNT_HUES.length] as AccountHue;
+    const repeat = ACCOUNT_HUES[spare % ACCOUNT_HUES.length] ?? ACCOUNT_HUES[0];
     spare += 1;
     return repeat;
   });
@@ -473,8 +473,10 @@ export function claudeRings(input: {
       ? undefined
       : spans.slice(stopIndex).find((span) => span.accountId !== null);
   const chain = [
-    ...new Set(spans.map((span) => span.accountId).filter(Boolean)),
-  ] as string[];
+    ...new Set(
+      spans.flatMap((span) => (span.accountId ? [span.accountId] : []))
+    ),
+  ];
   const order = [
     ...chain,
     ...rings.map((r) => r.id).filter((id) => !chain.includes(id)),

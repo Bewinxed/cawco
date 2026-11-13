@@ -23,6 +23,14 @@ as-unknown-as	{ __transcriptBuilds?: Record<string, number>; }	apps/dashboard/sr
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ cawco?: Bridge }	apps/dashboard/src/lib/cawco/decisions/host/page.svelte.ts	1
+as-unknown-as	{ appHeard: Heard[] }	scripts/probe-kit/specs/app-comment-mode.ts	1
+as-unknown-as	{ assistant: (text: string) => void; compaction: { boundary: (trigger: "	scripts/probe-kit/specs/web/safari-blurs.ts	1
+as-unknown-as	{ bitsEscapeLayers?: Map< { opts?: { ref?: { current?: Element } } }, { 	scripts/probe-kit/specs/graph-stage.ts	1
+as-unknown-as	{ bringBack: () => void }	scripts/probe-kit/specs/canvas-cost.ts	1
+as-unknown-as	{ cardFrames: CardFrames }	scripts/probe-kit/specs/comments.ts	1
+as-unknown-as	{ cardFrames: typeof frames }	scripts/probe-kit/specs/comments.ts	1
+as-unknown-as	{ cawco: { send: () => Promise<void> } }	scripts/probe-kit/specs/decision-restart.ts	1
+as-unknown-as	{ cawco: object }	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	{ cawco?: Bridge }	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	{ cawcoArtifact: ArtifactGlobal }	packages/agent/src/canvas-host/replica.ts	1
 as-unknown-as	{ config: object }	packages/hub/src/db/owner-columns.ts	1
@@ -66,6 +74,8 @@ as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
 as-unknown-as	Darwin	packages/agent/src/layer.ts	1
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte	1
+as-unknown-as	DocMeta["drawn"]	scripts/probe-kit/specs/answered-pages.ts	1
+as-unknown-as	DocumentRequests	scripts/probe-kit/specs/canvas-cost.ts	3
 as-unknown-as	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	2
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
 as-unknown-as	FleetMcpConfig	packages/agent/src/harnesses/claude.ts	1
