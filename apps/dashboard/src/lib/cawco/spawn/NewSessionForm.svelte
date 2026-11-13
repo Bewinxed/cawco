@@ -22,7 +22,6 @@
     type PermissionMode,
   } from "@cawco/core/harness/kinds";
   import { traitsOf } from "@cawco/core/harness/traits";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
   import { isGitUrl, repoPath } from "@cawco/core/protocol";
@@ -76,10 +75,11 @@
     IconTerminal as Terminal,
     IconClose as X,
   } from "#lib/icons.js";
+  import { hub } from "#lib/platform/hub.js";
   import {
     awayOf,
     failureWords,
-    hubJson,
+    hubData,
     hubRefusal,
   } from "#lib/platform/hub-read.js";
   import { newId } from "#lib/platform/id.js";
@@ -1431,15 +1431,11 @@
         waits.run(
           "estimate",
           async () =>
-            await hubJson<NonNullable<typeof estimate>>(
-              hubRequest("GET /api/instances/:id/continue", {
-                path: { id: instanceId },
-                ...(asked === "asks" ? { query: { asks: true } } : {}),
+            await hubData(
+              hub.api.instances({ id: instanceId }).continue.get({
+                query: asked === "asks" ? { asks: true } : {},
               }),
-              {
-                failure: async (refused) =>
-                  (await awayOf(refused)) ?? (await hubRefusal(refused)),
-              }
+              (refused) => awayOf(refused) ?? hubRefusal(refused)
             )
         ),
         loadModelWindows(),
