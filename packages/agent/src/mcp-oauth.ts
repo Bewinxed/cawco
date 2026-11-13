@@ -6,6 +6,7 @@ import {
 import { portHolder } from "@cawco/core/live-processes";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
+import type { BrowserPorts } from "./browser/browsers";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { fieldOf } from "./json-field";
@@ -17,6 +18,7 @@ import {
   lowerFence,
   raiseFence,
   restartReadiness,
+  type SupervisorHolds,
 } from "./restart";
 
 const MCP_RELAY_PATH = /^\/mcp\/(?:cawco|fleet\/[^/]+)$/u;
@@ -340,7 +342,10 @@ function notStarted(body: ArrayBuffer | undefined): Response {
  * would cut, and raises its own fence for the moment between its last look
  * and the restart. Never from a page: a browser sends `Origin`.
  */
-async function restartRoute(request: Request): Promise<Response> {
+async function restartRoute(
+  request: Request,
+  supervisorHolds: SupervisorHolds
+): Promise<Response> {
   if (request.headers.has("Origin")) {
     return new Response("Not from a browser.", { status: 403 });
   }
@@ -352,19 +357,13 @@ async function restartRoute(request: Request): Promise<Response> {
       lowerFence("service-restart");
     }
   }
-  return Response.json({ ...restartReadiness(), fenced: fenced() });
+  return Response.json({
+    ...restartReadiness(supervisorHolds),
+    fenced: fenced(),
+  });
 }
 
 /** One stable loopback endpoint every harness reaches the hub's tools through. */
-/** What refreshes a provider account's sign-in; set by the daemon. */
-let freshener: ((accountId: string) => Promise<void>) | undefined;
-
-export const setAccountFreshener = (
-  fresh: (accountId: string) => Promise<void>
-): void => {
-  freshener = fresh;
-};
-
 /**
  * `POST /accounts/<id>/fresh`: a pi session found the account's sign-in near
  * its expiry and asks the agent, its only writer, to refresh it. Answers once
@@ -372,14 +371,12 @@ export const setAccountFreshener = (
  */
 const ACCOUNT_FRESH_PATH = /^\/accounts\/([^/]+)\/fresh$/u;
 
-const freshRoute = async (accountId: string): Promise<Response> => {
-  if (!freshener) {
-    return new Response("The agent is not ready to refresh sign-ins yet.", {
-      status: 503,
-    });
-  }
+const freshRoute = async (
+  accountId: string,
+  freshen: Gateway["freshen"]
+): Promise<Response> => {
   try {
-    await freshener(decodeURIComponent(accountId));
+    await freshen(decodeURIComponent(accountId));
     return new Response(null, { status: 204 });
   } catch (error) {
     return new Response(
@@ -394,13 +391,14 @@ const freshRoute = async (accountId: string): Promise<Response> => {
 /** The account route the machine's harnesses call: a refresh. Undefined for any other path. */
 const accountRoute = (
   url: URL,
-  request: Request
+  request: Request,
+  freshen: Gateway["freshen"]
 ): Promise<Response> | undefined => {
   if (request.method !== "POST") {
     return undefined;
   }
   const fresh = url.pathname.match(ACCOUNT_FRESH_PATH);
-  return fresh?.[1] ? freshRoute(fresh[1]) : undefined;
+  return fresh?.[1] ? freshRoute(fresh[1], freshen) : undefined;
 };
 
 /**
@@ -452,7 +450,8 @@ async function hostedRoute(
 /** A hosted server's request, a shared one's or a workspace gate's; none for any other path. */
 const hostedRoutes = (
   url: URL,
-  request: Request
+  request: Request,
+  ports: BrowserPorts
 ): Promise<Response> | undefined => {
   const shared = url.pathname.match(HOSTED_PATH)?.[1];
   if (shared) {
@@ -463,12 +462,23 @@ const hostedRoutes = (
   const [, gate, gated] = url.pathname.match(GATE_PATH) ?? [];
   return gate && gated
     ? hostedRoute(gated, request, (forward) =>
-        mcpHost.fetchGate(gate, gated, forward)
+        mcpHost.fetchGate(ports, gate, gated, forward)
       )
     : undefined;
 };
 
-export const startMcpGateway = async (hubUrl: () => string) => {
+/** What the gateway answers with that is not its own: the agent's refresh of a provider account's sign-in, and what its supervisor holds a restart for. */
+interface Gateway {
+  /** What a workspace's browser door tells the hub through when it makes a browser's record (browser/door.ts). */
+  readonly browsers: BrowserPorts;
+  readonly freshen: (accountId: string) => Promise<void>;
+  readonly supervisorHolds: SupervisorHolds;
+}
+
+export const startMcpGateway = async (
+  hubUrl: () => string,
+  gateway: Gateway
+) => {
   // Shared servers an agent before this one left running are ended first,
   // and the set it served is served from now, before the first sync.
   await mcpHost.sweep();
@@ -484,13 +494,13 @@ export const startMcpGateway = async (hubUrl: () => string) => {
       async fetch(request) {
         const url = new URL(request.url);
         if (url.pathname === "/restart" || url.pathname === "/restart/fence") {
-          return await restartRoute(request);
+          return await restartRoute(request, gateway.supervisorHolds);
         }
-        const accounts = accountRoute(url, request);
+        const accounts = accountRoute(url, request, gateway.freshen);
         if (accounts) {
           return await accounts;
         }
-        const hosted = hostedRoutes(url, request);
+        const hosted = hostedRoutes(url, request, gateway.browsers);
         if (hosted) {
           return await hosted;
         }

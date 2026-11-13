@@ -201,7 +201,6 @@ const EngineInfo = z.object({
   SecurityOptions: z.array(z.string()).optional(),
 });
 
-
 /** What libpod's `/info` says of its rootless network (libpod/define/info.go `HostInfo.RootlessNetworkCmd`). */
 const LibpodInfoShape = z.object({
   host: z

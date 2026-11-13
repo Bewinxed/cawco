@@ -48,7 +48,6 @@ import {
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTROL_FORGET_CREDENTIALS,
-  INSTALL_SESSION_CREDENTIAL,
   LEAK_ENDED,
   LEAK_FOUND,
   type LeakFound,
@@ -57,7 +56,6 @@ import {
   RATE_LIMIT_READ,
   ROOM_HELD,
   SESSION_DIR_READ,
-  VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -164,6 +162,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { Effect } from "effect";
+import type { AgentPorts } from "./agent-ports";
 import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
 import { boundaryFor } from "./boundary/control";
@@ -213,6 +212,11 @@ import {
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
+import {
+  installCredential,
+  installOf,
+  verifyHeldCredential,
+} from "./harnesses/credential-controls";
 import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
@@ -647,6 +651,18 @@ export const resumableSessions = async (
 /**
  * Owns every live session on this machine and pumps their messages at the hub.
  */
+/** What the supervisor sends through, or hands to the work it starts: a command's queue, a preview's stage and browser. */
+type SupervisorPorts = Pick<
+  AgentPorts,
+  | "borrowAsk"
+  | "browsers"
+  | "commandQueue"
+  | "emit"
+  | "machineId"
+  | "stage"
+  | "stageClone"
+>;
+
 export class SessionSupervisor {
   #stopSequence = 0;
 
@@ -673,7 +689,10 @@ export class SessionSupervisor {
    */
   #custodyHarnesses: Map<string, HarnessKind> | undefined;
 
-  constructor() {
+  readonly #ports: SupervisorPorts;
+
+  constructor(ports: SupervisorPorts) {
+    this.#ports = ports;
     gaugeTables("supervisor", {
       asleep: this.#asleep,
       handed: this.#handed,
@@ -686,7 +705,6 @@ export class SessionSupervisor {
       failures: this.#failures,
       generations: this.#generations,
       placed: this.#placed,
-      keepAlive: this.#keepAlive,
     });
     // Each live session's own tables, summed by name across sessions.
     gaugeGroup("session", () => {
@@ -751,7 +769,6 @@ export class SessionSupervisor {
   /** The sessions this agent carries now, and their pulse (live-sessions.ts). */
   readonly #live = new LiveSessions({
     adopting: (instanceId) => this.#adopting.has(instanceId),
-    keptAlive: (instanceId) => this.#keepAlive.has(instanceId),
     sink: (frame) => this.sink(frame),
     forget: (instanceId) => this.#forgetProcess(instanceId),
   });
@@ -932,7 +949,6 @@ export class SessionSupervisor {
   readonly #turnPending = new Set<string>();
   /** The spin-offs running here, their worktrees and their transcripts (spin-offs.ts). */
   readonly #spinOffs = new SpinOffs({
-    generationOf: (instanceId) => this.#generations.get(instanceId),
     sink: (frame) => this.sink(frame),
     transcriptDeleted: (sessionId) => this.#transcriptDeleted(sessionId),
   });
@@ -971,7 +987,6 @@ export class SessionSupervisor {
   readonly #failOpen = new Set<string>();
   /** Claude processes that ran a manual `/compact`, until the relaunch that replaces them ({@link COMPACT_RELAUNCH}). */
   readonly #compactedHere = new WeakSet<HarnessSession>();
-  readonly #keepAlive = new Map<string, string>();
   /**
    * Each session's run of identical failed turns since its last send: the
    * failure's words and how many times in a row ({@link #watchFailure}).
@@ -1024,11 +1039,14 @@ export class SessionSupervisor {
       call: (_instanceId, cwd, input, bound, project) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : generateImage(cwd as string, input, bound, project),
+          : generateImage(this.#ports, cwd as string, input, bound, project),
     },
     [PREVIEW_START]: {
       call: (options) =>
-        startPreview(options as Parameters<typeof startPreview>[0]),
+        startPreview(
+          options as Parameters<typeof startPreview>[0],
+          this.#ports
+        ),
     },
     [PREVIEW_STOP]: {
       call: (options) =>
@@ -1203,9 +1221,7 @@ export class SessionSupervisor {
     return this.#sinkTo(frame);
   };
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
-  emit: (envelope: Envelope) => void = () => {
-    // replaced once the daemon has a hub connection to emit onto
-  };
+  emit = (envelope: Envelope): void => this.#ports.emit(envelope);
   /**
    * Asks the hub what a launch starting now runs on ({@link LaunchGrant}),
    * through whichever connection is up; the daemon's to fill in. Settles,
@@ -1429,7 +1445,7 @@ export class SessionSupervisor {
     // A command behind another in its folder says so as it queues (folderTurn).
     const folder =
       control?.method === CONTROL_RUN_COMMAND
-        ? folderTurn(control.args, this.#queues.has(key))
+        ? folderTurn(control.args, this.#queues.has(key), this.#ports)
         : undefined;
     const routed = (this.#queues.get(key) ?? Promise.resolve()).then(() => {
       folder?.start();
@@ -2164,7 +2180,6 @@ export class SessionSupervisor {
    */
   #forgetProcess(instanceId: string): void {
     this.#cacheCold.delete(instanceId);
-    this.#keepAlive.delete(instanceId);
     this.#failureRun.delete(instanceId);
     this.#line.delete(instanceId);
     this.#streams.forget(instanceId);
@@ -2359,14 +2374,11 @@ export class SessionSupervisor {
         session,
         (async () => {
           await applyStoredPermissionMode(session, mode);
-          const held = (await session.control(
-            VERIFY_SESSION_CREDENTIAL,
-            []
-          )) as { credential?: string; refused?: boolean } | undefined;
-          if (held?.credential) {
+          const held = await verifyHeldCredential(session);
+          if (held.credential) {
             rememberCredential(instanceId, held.credential);
           }
-          refused = held?.refused === true;
+          ({ refused } = held);
         })(),
         stopped
       );
@@ -2625,7 +2637,8 @@ export class SessionSupervisor {
       } else if (scratch?.worktree) {
         workdir = await this.#spinOffs.addWorktree(
           instanceId,
-          scratch.baseCwd ?? cwd
+          scratch.baseCwd ?? cwd,
+          this.#generations.get(instanceId)
         );
       }
 
@@ -2985,8 +2998,8 @@ export class SessionSupervisor {
         ? undefined
         : () =>
             place
-              ? browserDoor(place.id)
-              : browserDoor(spec.instanceId, spec.projectId),
+              ? browserDoor(this.#ports, place.id)
+              : browserDoor(this.#ports, spec.instanceId, spec.projectId),
       containerEnv,
       hostTmp
     );
@@ -3091,16 +3104,16 @@ export class SessionSupervisor {
         this.#noteFailOpen(instanceId, message);
         this.#noteCompact(adapter.kind, holder.session, message);
         this.#noteRead(instanceId, message);
-        const ping = this.#keepAlive.get(instanceId);
+        const ping = this.#live.keepAlivePing(instanceId);
         if (
           ping &&
           message.type === "system" &&
           message.subtype === MESSAGES_READ &&
           message.read?.some((id) => id !== ping)
         ) {
-          this.#keepAlive.delete(instanceId);
+          this.#live.keepAliveEnded(instanceId);
         }
-        const keepAlive = this.#keepAlive.has(instanceId);
+        const keepAlive = this.#live.keepAlivePing(instanceId) !== undefined;
         this.#observeCacheFrame(instanceId, adapter.kind, message, keepAlive);
         if (keepAlive) {
           message.keepAlive = true;
@@ -3136,7 +3149,7 @@ export class SessionSupervisor {
           ...launchOf(message),
         });
         if (message.type === "result") {
-          this.#keepAlive.delete(instanceId);
+          this.#live.keepAliveEnded(instanceId);
           if (!keepAlive) {
             this.#watchFailure(instanceId, adapter.kind, message, holder);
             this.#askCompactRelaunch(instanceId, holder.session).catch(
@@ -3173,7 +3186,7 @@ export class SessionSupervisor {
         }
         // A keep-alive ping is the hub's maintenance, not the session doing
         // anything: its rest is still counted from its own last turn.
-        if (!this.#keepAlive.has(instanceId)) {
+        if (this.#live.keepAlivePing(instanceId) === undefined) {
           this.#live.touch(instanceId);
         }
         this.#live.emitPulse(instanceId, true);
@@ -3690,7 +3703,7 @@ export class SessionSupervisor {
       throw new Error(`${kind} keeps no children on sessiond to take back`);
     }
     if (spec.keepAliveTurn) {
-      this.#keepAlive.set(spec.instanceId, spec.keepAliveTurn);
+      this.#live.keepAliveStarted(spec.instanceId, spec.keepAliveTurn);
     }
     if (this.#live.sessions.has(spec.instanceId)) {
       return "attached";
@@ -4409,7 +4422,7 @@ export class SessionSupervisor {
       ) {
         throw new Error(harnessWords.keepAliveNotIdle(session.harness));
       }
-      this.#keepAlive.set(instanceId, message.uuid);
+      this.#live.keepAliveStarted(instanceId, message.uuid);
     } else {
       this.#live.touch(instanceId);
       // A send is the reader trying again: whatever failed before it is not
@@ -4915,8 +4928,9 @@ export class SessionSupervisor {
     }
     // A credential the hub installs in a live session is known before the
     // process can print it, as a launch's is ({@link #granted}).
-    if (method === INSTALL_SESSION_CREDENTIAL) {
-      rememberCredential(instanceId, String(args[0]));
+    const installing = installOf(method, args);
+    if (installing) {
+      rememberCredential(instanceId, installing.credential);
     }
     return await session.control(method, args);
   }
@@ -5206,10 +5220,7 @@ async function admit(
 ): Promise<void> {
   try {
     // Remembered for redaction as it was granted ({@link #granted}).
-    await session.control(INSTALL_SESSION_CREDENTIAL, [
-      launched.credential,
-      "initial",
-    ]);
+    await installCredential(session, launched.credential);
   } catch (problem) {
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
     await session.stop().catch(() => {});

@@ -84,6 +84,8 @@ import {
   STREAM_RELAY_TLS_PORT,
 } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
+import { z } from "zod";
+import type { AgentPorts } from "../agent-ports";
 import { browserRuntime } from "./browsers";
 import { placementOf } from "./egress";
 import { pullImage } from "./image";
@@ -156,8 +158,6 @@ const NO_PORTS: RelayPorts = {
   tls: false,
 };
 
-let sink: (frame: RelayFrame) => void = () => undefined;
-let machineId = "";
 let lastSent = "";
 let current: Omit<RelayFrame, "kind" | "machineId"> = {
   state: "stopped",
@@ -166,22 +166,23 @@ let current: Omit<RelayFrame, "kind" | "machineId"> = {
 /** One relay command at a time. */
 let queue: Promise<unknown> = Promise.resolve();
 
-/** Where the daemon sends the relay's frames, and the machine they are of. */
-export const setRelaySink = (
-  id: string,
-  send: (frame: RelayFrame) => void
-): void => {
-  machineId = id;
-  sink = send;
-};
+/** What the relay tells the hub through: its frames, and the machine they are of. */
+export type StreamRelayPorts = Pick<AgentPorts, "machineId" | "relay">;
 
-const tell = (next: Omit<RelayFrame, "kind" | "machineId">): void => {
+const tell = (
+  line: StreamRelayPorts,
+  next: Omit<RelayFrame, "kind" | "machineId">
+): void => {
   current = next;
-  const frame: RelayFrame = { kind: "stream_relay", machineId, ...next };
+  const frame: RelayFrame = {
+    kind: "stream_relay",
+    machineId: line.machineId,
+    ...next,
+  };
   const text = JSON.stringify(frame);
   if (text !== lastSent) {
     lastSent = text;
-    sink(frame);
+    line.relay(frame);
   }
 };
 
@@ -206,7 +207,10 @@ const serial = <T>(work: () => Promise<T>): Promise<T> => {
 
 /** The runtime's not-found answer. */
 const notFound = (error: unknown): boolean =>
-  (error as { statusCode?: number }).statusCode === 404;
+  typeof error === "object" &&
+  error !== null &&
+  "statusCode" in error &&
+  error.statusCode === 404;
 
 /* ------------------------------------------------------------------ */
 /* Who holds a port: the kernel's socket tables and each process's fds */
@@ -337,12 +341,12 @@ const logsOf = async (
   container: Docker.Container,
   window: { tail: number } | { since: number } = { tail: 60 }
 ): Promise<string> => {
-  const raw = (await container.logs({
+  const raw = await container.logs({
     stdout: true,
     stderr: true,
     follow: false,
     ...window,
-  })) as unknown as Buffer;
+  });
   // The Engine API's multiplexed stream: an 8-byte header (stream, 0, 0, 0,
   // size as uint32 big-endian) before each frame, while the container has no TTY.
   const parts: string[] = [];
@@ -354,6 +358,9 @@ const logsOf = async (
   }
   return at === 0 ? raw.toString("utf8") : parts.join("");
 };
+
+/** How a container ended, as the Engine API's wait answers it. */
+const EXIT_SHAPE = z.object({ StatusCode: z.number() });
 
 /**
  * `cmd` run to its end in a certbot container with the certificate volume,
@@ -386,9 +393,8 @@ const runCertbot = async (
   });
   try {
     await container.start();
-    const ended = await readWithin(
-      CERTBOT_MS,
-      () => container.wait() as Promise<{ StatusCode: number }>
+    const ended = await readWithin(CERTBOT_MS, async () =>
+      EXIT_SHAPE.parse(await container.wait())
     );
     if (ended.kind === "unanswered") {
       await container.kill().catch(() => undefined);
@@ -752,8 +758,8 @@ const portsRefusal = async (
 /* The commands                                                         */
 /* ------------------------------------------------------------------ */
 
-const failed = (error: unknown): never => {
-  tell({
+const failed = (line: StreamRelayPorts, error: unknown): never => {
+  tell(line, {
     state: "failed",
     ports: NO_PORTS,
     why: why(error),
@@ -807,27 +813,28 @@ const runningAsAsked = async (
  * while the relay is not live, or when its addresses are the same (`tell`
  * sends a frame only when it changed).
  */
-export const relayReachChanged = (): Promise<void> =>
+export const relayReachChanged = (line: StreamRelayPorts): Promise<void> =>
   serial(async () => {
     if (current.state !== "live") {
       return;
     }
-    tell({ ...current, reach: await reachNow() });
+    tell(line, { ...current, reach: await reachNow() });
   });
 
 /** The relay live: told with the machine's own addresses, and answered as its frame. */
 const liveFrame = async (
+  line: StreamRelayPorts,
   ports: RelayPorts,
   tls: boolean,
   name: string | undefined
 ): Promise<RelayFrame> => {
-  tell({
+  tell(line, {
     state: "live",
     ports,
     reach: await reachNow(),
     ...(tls && name ? { hostname: name } : {}),
   });
-  return { kind: "stream_relay", machineId, ...current };
+  return { kind: "stream_relay", machineId: line.machineId, ...current };
 };
 
 /**
@@ -889,7 +896,10 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
  * A container made with the same settings and running is kept as it is. With
  * a name, its certificate must stand already (`relay.certify`).
  */
-export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
+export const startRelay = (
+  line: StreamRelayPorts,
+  args: RelayStartArgs
+): Promise<RelayFrame> =>
   serial(async () => {
     try {
       const runtime = await readyToStart(args);
@@ -898,20 +908,20 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       const seat = await relaySeat(docker, args.address);
       const running = await runningAsAsked(runtime, kept, args, seat);
       if (running) {
-        return await liveFrame(running.ports, running.tls, args.hostname);
+        return await liveFrame(line, running.ports, running.tls, args.hostname);
       }
       await removeRelayContainer(docker);
       const refused = await portsRefusal(!!args.hostname);
       if (refused) {
         throw new RelayFailed(refused);
       }
-      tell({ state: "pulling", ports: NO_PORTS });
+      tell(line, { state: "pulling", ports: NO_PORTS });
       await pullImage(docker, RELAY_IMAGE, (progress) =>
-        tell({ state: "pulling", ports: NO_PORTS, progress })
+        tell(line, { state: "pulling", ports: NO_PORTS, progress })
       );
       if (args.hostname) {
         await pullImage(docker, CERTBOT_IMAGE, (progress) =>
-          tell({ state: "pulling", ports: NO_PORTS, progress })
+          tell(line, { state: "pulling", ports: NO_PORTS, progress })
         );
         if ((await certificateEnd(runtime, args.hostname)) === undefined) {
           throw new RelayFailed(
@@ -920,15 +930,15 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
         }
       }
       const tls = !!args.hostname;
-      tell({ state: "starting", ports: NO_PORTS });
+      tell(line, { state: "starting", ports: NO_PORTS });
       await createRelay(docker, args, tls, seat);
       const ports = await waitLive(docker, runtime, tls);
       console.info(
         `[relay] live at ${args.address}, coturn at ${seat.media} on ${seat.network}${tls ? ` with TLS for ${args.hostname}` : ""}`
       );
-      return await liveFrame(ports, tls, args.hostname);
+      return await liveFrame(line, ports, tls, args.hostname);
     } catch (error) {
-      return failed(error);
+      return failed(line, error);
     }
   });
 
@@ -945,12 +955,13 @@ const listenerPublished = (
     tls: STREAM_RELAY_TLS_PORT,
   }
 ): { exposed: Record<string, object>; bindings: Docker.PortMap } => {
+  const secure: [string, number][] = tls
+    ? [[`${STREAM_RELAY_TLS_PORT}/tcp`, host.tls]]
+    : [];
   const ports: [string, number][] = [
     [`${STREAM_RELAY_PORT}/udp`, host.plain],
     [`${STREAM_RELAY_PORT}/tcp`, host.plain],
-    ...(tls
-      ? [[`${STREAM_RELAY_TLS_PORT}/tcp`, host.tls] as [string, number]]
-      : []),
+    ...secure,
   ];
   return {
     exposed: Object.fromEntries(ports.map(([one]) => [one, {}])),
@@ -1002,17 +1013,17 @@ const createRelay = async (
 };
 
 /** Stops the relay and removes its container; its certificate stays on its volume. */
-export const stopRelay = (): Promise<RelayFrame> =>
+export const stopRelay = (line: StreamRelayPorts): Promise<RelayFrame> =>
   serial(async () => {
     const found = await browserRuntime();
     if ("missing" in found) {
-      tell({ state: "stopped", ports: NO_PORTS });
-      return { kind: "stream_relay", machineId, ...current };
+      tell(line, { state: "stopped", ports: NO_PORTS });
+      return { kind: "stream_relay", machineId: line.machineId, ...current };
     }
     await removeRelayContainer(found.docker);
-    tell({ state: "stopped", ports: NO_PORTS });
+    tell(line, { state: "stopped", ports: NO_PORTS });
     console.info("[relay] stopped");
-    return { kind: "stream_relay", machineId, ...current };
+    return { kind: "stream_relay", machineId: line.machineId, ...current };
   });
 
 /**
@@ -1020,7 +1031,7 @@ export const stopRelay = (): Promise<RelayFrame> =>
  * certificate volume, so nothing of it stays behind. Stop keeps them; this is Remove relay's, and a relay
  * moved to another machine's.
  */
-export const removeRelay = (): Promise<RelayFrame> =>
+export const removeRelay = (line: StreamRelayPorts): Promise<RelayFrame> =>
   serial(async () => {
     const found = await browserRuntime();
     if (!("missing" in found)) {
@@ -1034,9 +1045,9 @@ export const removeRelay = (): Promise<RelayFrame> =>
           }
         });
     }
-    tell({ state: "stopped", ports: NO_PORTS });
+    tell(line, { state: "stopped", ports: NO_PORTS });
     console.info("[relay] removed, its certificate volume with it");
-    return { kind: "stream_relay", machineId, ...current };
+    return { kind: "stream_relay", machineId: line.machineId, ...current };
   });
 
 /**
@@ -1046,7 +1057,10 @@ export const removeRelay = (): Promise<RelayFrame> =>
  * shortens its certificates to 64 and then 45 days. It renews by DNS with the
  * token the hub hands again, its ini at the path the renewal conf names.
  */
-export const renewRelay = (args: RelayRenewArgs): Promise<RelayRenewed> =>
+export const renewRelay = (
+  line: StreamRelayPorts,
+  args: RelayRenewArgs
+): Promise<RelayRenewed> =>
   serial(async () => {
     const runtime = await relayRuntime();
     const { docker } = runtime;
@@ -1081,7 +1095,7 @@ export const renewRelay = (args: RelayRenewArgs): Promise<RelayRenewed> =>
     if (renewed) {
       await docker.getContainer(RELAY_CONTAINER).restart({ t: 5 });
       const ports = await waitLive(docker, runtime, true);
-      await liveFrame(ports, true, name);
+      await liveFrame(line, ports, true, name);
       console.info(`[relay] certificate for ${name} renewed; coturn restarted`);
     }
     return { renewed, expiresAt: after ?? before ?? 0 };
@@ -1093,7 +1107,7 @@ export const renewRelay = (args: RelayRenewArgs): Promise<RelayRenewed> =>
  * runtime does not do itself), and its frame told. A machine with no relay
  * container says nothing.
  */
-export const watchRelay = async (): Promise<void> => {
+export const watchRelay = async (line: StreamRelayPorts): Promise<void> => {
   const found = await browserRuntime();
   if ("missing" in found) {
     return;
@@ -1107,13 +1121,13 @@ export const watchRelay = async (): Promise<void> => {
   await serial(async () => {
     try {
       if (!kept.State.Running) {
-        tell({ state: "starting", ports: NO_PORTS });
+        tell(line, { state: "starting", ports: NO_PORTS });
         await docker.getContainer(RELAY_CONTAINER).start();
       }
       const ports = await waitLive(docker, found, !!name);
-      await liveFrame(ports, !!name, name);
+      await liveFrame(line, ports, !!name, name);
     } catch (error) {
-      tell({
+      tell(line, {
         state: "failed",
         ports: NO_PORTS,
         why: why(error),

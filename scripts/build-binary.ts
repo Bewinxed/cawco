@@ -185,6 +185,15 @@ const writeWorkFiles = async (copies: [string, string][]): Promise<void> => {
       format: "esm",
       minify: true,
     }),
+    // CawCo's OpenCode plugin, bundled with the parts of core it shares and
+    // written into each server's plugin directory (agent harnesses/opencode-plugin.ts).
+    writeBundle("The OpenCode plugin", join(WORK, "opencode-plugin.js"), {
+      entrypoints: [
+        join(ROOT, "packages/agent/src/harnesses/opencode-plugin-module.ts"),
+      ],
+      target: "bun",
+      format: "esm",
+    }),
     // A workspace's stage (live components): run by the project's own node or
     // bun inside the workspace's boundary, never by cawco (agent stage.ts).
     (async () =>
@@ -281,6 +290,7 @@ export async function prepareAssets(options: {
     ),
     ["pi/package.json", join(pi, "package.json")],
     ["preview/overlay.js", join(WORK, "overlay.js")],
+    ["opencode/plugin.js", join(WORK, "opencode-plugin.js")],
     ["stage/host.mjs", join(WORK, "stage-host.mjs")],
     ...canvas,
     ...decision,

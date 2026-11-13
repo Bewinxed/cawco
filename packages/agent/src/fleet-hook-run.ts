@@ -8,8 +8,8 @@
  * In a workspace each runs inside the boundary, through the shell prefix
  * every shell-form hook of its Claude Code sessions runs through
  * (boundary/hook-judge.ts `claudePrefixScript`), whose stdin reaches the command.
- * CawCo's OpenCode plugin runs the same steps in its own source
- * (opencode-plugin.ts), which loads no module of the agent's.
+ * CawCo's OpenCode plugin runs the same steps with its own env and process
+ * group (opencode-plugin-module.ts), from the same core readings.
  */
 import { spawn } from "node:child_process";
 import {
@@ -23,7 +23,6 @@ import {
 } from "@cawco/core/hooks";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import type { Boundary } from "./boundary/state";
 import { commandLineOf } from "./fleet-hook-guard";
 import type { SetHook } from "./fleet-set-rows";
 
@@ -39,9 +38,11 @@ interface Ran {
 
 /** Where and how a session's hooks run. */
 export interface HookPlace {
-  /** The workspace's boundary, when the session runs in one: each hook runs inside it. */
-  boundary?: Boundary;
+  /** The workspace's boundary, when the session runs in one: each hook runs inside it, through its shell `prefix`. */
+  boundary?: { readonly prefix: string };
   cwd: string;
+  /** What each hook's environment is made of: the host's, with the `CAWCO_*` a session's tools read, unless the harness says. */
+  env?: Readonly<Record<string, string | undefined>>;
   /** The session's abort: a hook still running when it fires is ended. */
   signal?: AbortSignal;
 }
@@ -60,7 +61,7 @@ const runCommand = (
     const child = spawn(file, args, {
       cwd: place.cwd,
       env: {
-        ...sessionEnvironment(process.env),
+        ...(place.env ?? sessionEnvironment(process.env)),
         CLAUDE_PROJECT_DIR: place.cwd,
       },
       detached: true,
@@ -104,7 +105,23 @@ const runCommand = (
 /**
  * Every hook of `event` that `harness` takes, of `hooks`, whose matcher
  * passes `match` (a tool's Claude Code name, a session start's source; none
- * for an event with no matcher), run at once with `input` (the event's JSON
+ * for an event with no matcher).
+ */
+export const dueHooks = (
+  harness: HookHarness,
+  hooks: readonly SetHook[],
+  event: HookEvent,
+  match: string | undefined
+): SetHook[] =>
+  hooks.filter(
+    (hook) =>
+      hook.event === event &&
+      !hookUnsupported(harness, hook) &&
+      (match === undefined || hookTestPasses(hook.test, match))
+  );
+
+/**
+ * {@link dueHooks}, run at once with `input` (the event's JSON
  * after its common fields), as Claude Code runs matching hooks "in
  * parallel". Their verdicts joined: any block blocks, with every reason; an
  * `async` hook runs on and gives none. A hook that failed to start or ended
@@ -118,12 +135,7 @@ export const runFleetHooks = async (
   input: Record<string, unknown>,
   place: HookPlace & { sessionId: string }
 ): Promise<HookVerdict> => {
-  const due = hooks.filter(
-    (hook) =>
-      hook.event === event &&
-      !hookUnsupported(harness, hook) &&
-      (match === undefined || hookTestPasses(hook.test, match))
-  );
+  const due = dueHooks(harness, hooks, event, match);
   if (due.length === 0) {
     return {};
   }

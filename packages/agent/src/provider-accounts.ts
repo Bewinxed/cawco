@@ -20,7 +20,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-  type AccountBorrowFrame,
   type AccountIdentity,
   type AccountJoinedOn,
   type AccountReport,
@@ -51,10 +50,12 @@ import type {
   Credential,
   CredentialInfo,
   CredentialStore,
+  OAuthCredential,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { removeAccountDir } from "./accounts";
+import type { AgentPorts, OpencodeOwnCredential } from "./agent-ports";
 import { storeRead } from "./stores/client";
 import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
@@ -146,11 +147,14 @@ const writeHeld = async (
  * ({@link OpencodeAccountsHost.carryOut}). A session that does not move
  * stops the removal with nothing of the account touched.
  */
-const carryOutOpencode = async (accountId: string): Promise<void> => {
+const carryOutOpencode = async (
+  accountId: string,
+  { opencodeAccounts }: Pick<AgentPorts, "opencodeAccounts">
+): Promise<void> => {
   if (
     existsSync(join(opencodeAccountHome(accountId), "opencode", "opencode.db"))
   ) {
-    await opencodeHostNow().carryOut(accountId);
+    await opencodeAccounts.carryOut(accountId);
   }
 };
 
@@ -224,13 +228,13 @@ class AccountStore implements CredentialStore {
       // Copilot refresh keeps its GitHub token). A new sign-in written over
       // it is someone to be asked about again.
       const kept = was ? keptIdentity(was) : undefined;
-      const sameGrant =
+      const written =
+        kept &&
         was?.type === "oauth" &&
         next?.type === "oauth" &&
-        was.refresh === next.refresh;
-      const written =
-        next !== undefined && kept && sameGrant && !keptIdentity(next)
-          ? ({ ...next, [IDENTITY]: kept } as Credential)
+        was.refresh === next.refresh &&
+        !keptIdentity(next)
+          ? { ...next, [IDENTITY]: kept }
           : next;
       if (written !== undefined) {
         await writeHeld(this.#account, {
@@ -281,6 +285,7 @@ const FRESH_FOR_MS = 15 * 60_000;
  */
 export const freshen = async (
   accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">,
   periodic = false
 ): Promise<void> => {
   const held = readHeld(accountId);
@@ -292,7 +297,13 @@ export const freshen = async (
   }
   const lender = lenderOf(held.credential);
   if (lender) {
-    await borrowFresh(accountId, lender, held.credential.access, periodic);
+    await borrowFresh(
+      accountId,
+      lender,
+      held.credential.access,
+      periodic,
+      ports
+    );
     return;
   }
   const runtime = await runtimeOf(accountId, held.provider);
@@ -300,9 +311,11 @@ export const freshen = async (
 };
 
 /** Keeps every OAuth credential on the machine fresh; a failure is said and tried again next time. */
-export const freshenAll = async (): Promise<void> => {
+export const freshenAll = async (
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<void> => {
   for (const account of credentialAccountIds()) {
-    await freshen(account, true).catch((error: unknown) =>
+    await freshen(account, ports, true).catch((error: unknown) =>
       console.warn(
         `[accounts] ${account}: refresh failed: ${error instanceof Error ? error.message : String(error)}`
       )
@@ -337,17 +350,20 @@ const keyIdentity = (key: string): AccountIdentity =>
  */
 const IDENTITY = "cawcoIdentity";
 
+const KEPT_IDENTITY = z.object({ email: z.string(), organization: z.string() });
+
 const keptIdentity = (credential: Credential): AccountIdentity | undefined => {
-  const kept = (credential as Record<string, unknown>)[IDENTITY] as
-    AccountIdentity | undefined;
-  return kept && typeof kept.email === "string"
-    ? providerIdentity(kept.email, kept.organization)
+  const kept = KEPT_IDENTITY.safeParse(
+    credential.type === "oauth" ? credential[IDENTITY] : undefined
+  );
+  return kept.success
+    ? providerIdentity(kept.data.email, kept.data.organization)
     : undefined;
 };
 
 /** GitHub's host for a Copilot sign-in: github.com, or its Enterprise domain (pi-ai's `normalizeDomain`). */
-const githubDomain = (credential: Credential): string => {
-  const enterprise = (credential as { enterpriseUrl?: unknown }).enterpriseUrl;
+const githubDomain = (credential: OAuthCredential): string => {
+  const enterprise = credential.enterpriseUrl;
   return typeof enterprise === "string" && enterprise.trim()
     ? enterprise.trim().replace(LEADING_SCHEME, "").replace(TRAILING_PATH, "")
     : "github.com";
@@ -364,12 +380,15 @@ const TRAILING_PATH = /\/.*$/u;
  */
 const GITHUB_IDENTITY_MS = 15_000;
 
+/** GitHub's answer to who a token is: the login is all that is read. */
+const GITHUB_USER = z.object({ login: z.unknown() });
+
 const githubIdentity = async (
-  credential: Credential
+  credential: OAuthCredential
 ): Promise<AccountIdentity> => {
   const domain = githubDomain(credential);
-  const token = (credential as { refresh?: unknown }).refresh;
-  if (typeof token !== "string" || !token) {
+  const token = credential.refresh;
+  if (!token) {
     throw new Error("The Copilot sign-in holds no GitHub token.");
   }
   const read = await readWithin(GITHUB_IDENTITY_MS, async (signal) => {
@@ -387,9 +406,9 @@ const githubIdentity = async (
         `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
       );
     }
-    return (await response.json()) as { login?: unknown };
+    return GITHUB_USER.parse(await response.json());
   });
-  let user: { login?: unknown };
+  let user: z.infer<typeof GITHUB_USER>;
   switch (read.kind) {
     case "answered":
       user = read.value;
@@ -420,10 +439,7 @@ const withIdentity = async (
   provider === "github-copilot" &&
   credential.type === "oauth" &&
   !keptIdentity(credential)
-    ? ({
-        ...credential,
-        [IDENTITY]: await githubIdentity(credential),
-      } as Credential)
+    ? { ...credential, [IDENTITY]: await githubIdentity(credential) }
     : credential;
 
 /** Who a credential is, as far as it says. */
@@ -510,29 +526,23 @@ const lenderOf = (credential: Credential): string | undefined => {
   if (credential.type !== "oauth" || credential.refresh !== BORROWED_REFRESH) {
     return undefined;
   }
-  const lender = (credential as Record<string, unknown>)[LENDER];
+  const lender = credential[LENDER];
   return typeof lender === "string" && lender ? lender : undefined;
 };
 
 /** A lent access token as the borrower's store keeps it: no refresh token, ever. */
-const borrowedCredential = (lender: string, lent: LentAccess): Credential =>
-  ({
-    type: "oauth",
-    access: lent.access,
-    refresh: BORROWED_REFRESH,
-    expires: lent.expires,
-    ...(lent.accountId ? { accountId: lent.accountId } : {}),
-    [IDENTITY]: lent.identity,
-    [LENDER]: lender,
-  }) as unknown as Credential;
-
-/** Where a borrower's asks go: the daemon's socket to the hub. */
-let askHub: ((frame: AccountBorrowFrame) => void) | undefined;
-export const setBorrowAsk = (
-  send: (frame: AccountBorrowFrame) => void
-): void => {
-  askHub = send;
-};
+const borrowedCredential = (
+  lender: string,
+  lent: LentAccess
+): OAuthCredential => ({
+  type: "oauth",
+  access: lent.access,
+  refresh: BORROWED_REFRESH,
+  expires: lent.expires,
+  ...(lent.accountId ? { accountId: lent.accountId } : {}),
+  [IDENTITY]: lent.identity,
+  [LENDER]: lender,
+});
 
 /** How long the hub gets to bring a lender's fresh access token. */
 const LEND_WAIT_MS = 60_000;
@@ -564,7 +574,8 @@ const borrowFresh = (
   accountId: string,
   lender: string,
   access: string,
-  periodic: boolean
+  periodic: boolean,
+  { borrowAsk }: Pick<AgentPorts, "borrowAsk">
 ): Promise<void> => {
   const refused = lendRefused.get(accountId);
   if (periodic && refused?.access === access) {
@@ -574,47 +585,41 @@ const borrowFresh = (
   if (under) {
     return under;
   }
-  const send = askHub;
-  const ask = (
-    send
-      ? readWithin(
-          LEND_WAIT_MS,
-          (signal) =>
-            new Promise<void>((resolve, reject) => {
-              const requestId = randomUUID();
-              signal.addEventListener(
-                "abort",
-                () => lendWaits.delete(requestId),
-                { once: true }
-              );
-              lendWaits.set(requestId, {
-                accountId,
-                lender,
-                settle: (outcome) => {
-                  lendWaits.delete(requestId);
-                  if (outcome) {
-                    reject(outcome);
-                  } else {
-                    resolve();
-                  }
-                },
-              });
-              send({ kind: "account_borrow", accountId, lender, requestId });
-            })
-        ).then((read) => {
-          switch (read.kind) {
-            case "answered":
-              return;
-            case "unanswered":
-              throw new Error(
-                `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`
-              );
-            default:
-              unhandled("read", read);
-          }
-        })
-      : Promise.reject(new Error("The agent is not connected to the hub yet."))
+  const ask = readWithin(
+    LEND_WAIT_MS,
+    (signal) =>
+      new Promise<void>((resolve, reject) => {
+        const requestId = randomUUID();
+        signal.addEventListener("abort", () => lendWaits.delete(requestId), {
+          once: true,
+        });
+        lendWaits.set(requestId, {
+          accountId,
+          lender,
+          settle: (outcome) => {
+            lendWaits.delete(requestId);
+            if (outcome) {
+              reject(outcome);
+            } else {
+              resolve();
+            }
+          },
+        });
+        borrowAsk({ kind: "account_borrow", accountId, lender, requestId });
+      })
   )
+    .then((read) => {
+      switch (read.kind) {
+        case "answered":
+          return;
+        case "unanswered":
+          throw new Error(
+            `The hub did not bring a fresh sign-in for account ${accountId} from its lender within ${LEND_WAIT_MS / 1000} s.`
+          );
+        default:
+          unhandled("read", read);
+      }
+    })
     .then(
       () => {
         lendRefused.delete(accountId);
@@ -685,7 +690,10 @@ export const accountLent = async (
  * its expiry (this machine's own refresh, the grant's only refresher), then
  * its access token, its expiry and who it is. Never its refresh token.
  */
-export const lendAccount = async (accountId: string): Promise<LentAccess> => {
+export const lendAccount = async (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<LentAccess> => {
   const held = readHeld(accountId);
   if (!held) {
     throw new Error("This machine holds no sign-in of the account.");
@@ -698,7 +706,7 @@ export const lendAccount = async (accountId: string): Promise<LentAccess> => {
       "This machine's sign-in of the account is itself borrowed."
     );
   }
-  await freshen(accountId);
+  await freshen(accountId, ports);
   const now = readHeld(accountId);
   if (now?.credential.type !== "oauth") {
     throw new Error("The account's sign-in is gone from this machine.");
@@ -948,57 +956,14 @@ export const setProviderKey = async (
 };
 
 /** Signs the account's store out (pi-ai's logout) and deletes its dir. */
-export const forgetProviderAccount = async (
-  accountId: string
-): Promise<void> => {
-  signIns.get(accountId)?.abort.abort();
-  signIns.delete(accountId);
-  await carryOutOpencode(accountId);
-  const held = readHeld(accountId);
-  // A borrowed sign-in is its lender's grant: dropped here, never signed out.
-  if (held && !lenderOf(held.credential)) {
-    await (await runtimeOf(accountId, held.provider)).logout(held.provider);
-  }
-  for (const key of runtimes.keys()) {
-    if (key.startsWith(`${accountId}\u0000`)) {
-      runtimes.delete(key);
-    }
-  }
-  await removeAccount(accountId);
-};
+export const forgetProviderAccount = (
+  accountId: string,
+  ports: Pick<AgentPorts, "opencodeAccounts">
+): Promise<void> => dropStore(accountId, ports, true);
 
 // ── The machine's own stores, and the one-time move out of them ──────────
 
 const piStorePath = (): string => join(getAgentDir(), "auth.json");
-
-/**
- * One of OpenCode's own sign-ins on this machine: a credential on the
- * machine's OpenCode server. 2.0 keeps them in that server's database, not in
- * a file (a 1.x `auth.json` is imported into it when 2.0 first converts the
- * 1.x database).
- */
-export interface OpencodeOwnCredential {
-  id: string;
-  integrationID: string;
-  value: Record<string, unknown>;
-}
-
-/** What the OpenCode harness does for the accounts here, through its servers. */
-export interface OpencodeAccountsHost {
-  /** Every session in the account's server's database moved to the machine's server, and that server ended. */
-  carryOut: (accountId: string) => Promise<void>;
-  /** The credential OpenCode uses for each provider on the machine's server (CawCo's own never). */
-  ownCredentials: () => Promise<OpencodeOwnCredential[]>;
-  /** One of those removed from the machine's server. */
-  removeOwnCredential: (id: string) => Promise<void>;
-}
-
-let opencodeHost: OpencodeAccountsHost | undefined;
-
-/** The OpenCode harness, there for the accounts once it is made. */
-export const setOpencodeAccountsHost = (host: OpencodeAccountsHost): void => {
-  opencodeHost = host;
-};
 
 /**
  * How long a read of OpenCode's own sign-ins is given on the agent's stores
@@ -1143,11 +1108,11 @@ const piCredentialOf = (
       ? undefined
       : { type: "api_key", key: entry.key };
   }
-  return entry.type === "oauth" &&
-    typeof entry.access === "string" &&
-    typeof entry.refresh === "string"
-    ? (entry as unknown as Credential)
-    : undefined;
+  if (entry.type !== "oauth") {
+    return undefined;
+  }
+  const oauth = CredentialSchema.safeParse(entry);
+  return oauth.success ? oauth.data : undefined;
 };
 
 /**
@@ -1174,7 +1139,7 @@ const opencodeCredentialFrom = (
       type: "api_key",
       key: value.key,
       ...(metadata ? { metadata } : {}),
-    } as Credential;
+    };
   }
   if (
     value.type === "oauth" &&
@@ -1190,7 +1155,7 @@ const opencodeCredentialFrom = (
       access: value.access,
       refresh: value.refresh,
       expires: value.expires,
-    } as unknown as Credential;
+    };
   }
   return undefined;
 };
@@ -1208,19 +1173,11 @@ interface StoreEntry {
   drop: () => Promise<boolean>;
 }
 
-/** The host, or why OpenCode's own store cannot be read here. */
-const opencodeHostNow = (): OpencodeAccountsHost => {
-  if (!opencodeHost) {
-    throw new Error("The OpenCode harness is not running in this agent.");
-  }
-  return opencodeHost;
-};
-
 /** The credential OpenCode uses for `integrationID` on the machine's server, as a store entry. */
 const opencodeEntry = async (
-  integrationID: string
+  integrationID: string,
+  { opencodeAccounts: host }: Pick<AgentPorts, "opencodeAccounts">
 ): Promise<StoreEntry | undefined> => {
-  const host = opencodeHostNow();
   const found = (await host.ownCredentials()).find(
     (one) => one.integrationID === integrationID
   );
@@ -1257,7 +1214,10 @@ const readPiEntry = async (
 
 const READ_STORE: Record<
   HomeCredential["store"],
-  (storeProvider: string) => Promise<StoreEntry | undefined>
+  (
+    storeProvider: string,
+    ports: Pick<AgentPorts, "opencodeAccounts">
+  ) => Promise<StoreEntry | undefined>
 > = {
   opencode: opencodeEntry,
   pi: readPiEntry,
@@ -1266,8 +1226,10 @@ const READ_STORE: Record<
 /** One entry of pi's or OpenCode's own store, read now. */
 const readStoreEntry = async (
   store: HomeCredential["store"],
-  storeProvider: string
-): Promise<StoreEntry | undefined> => await READ_STORE[store](storeProvider);
+  storeProvider: string,
+  ports: Pick<AgentPorts, "opencodeAccounts">
+): Promise<StoreEntry | undefined> =>
+  await READ_STORE[store](storeProvider, ports);
 
 /** The account provider an OAuth entry in a store is for, where the store's own id for it differs. */
 const STORE_OAUTH_PROVIDER: Record<
@@ -1295,7 +1257,9 @@ const providerOfEntry = (
  * where it is. One whose provider cannot say who it is (GitHub not
  * answering for a Copilot sign-in) is not listed, and the agent says why.
  */
-export const readHomeCredentials = async (): Promise<HomeCredential[]> => {
+export const readHomeCredentials = async ({
+  opencodeAccounts,
+}: Pick<AgentPorts, "opencodeAccounts">): Promise<HomeCredential[]> => {
   const pi = Object.entries(await readJson(piStorePath())).map(
     ([storeProvider, entry]) => ({
       store: "pi" as const,
@@ -1306,14 +1270,12 @@ export const readHomeCredentials = async (): Promise<HomeCredential[]> => {
   // OpenCode's are in the machine's server's database, read in place; a
   // read that fails lists none of them, and says why, while pi's are listed.
   const opencode = (
-    opencodeHost
-      ? await opencodeHost.ownCredentials().catch((error: unknown) => {
-          moveLog(
-            `OpenCode's own sign-ins are not listed: ${error instanceof Error ? error.message : String(error)}`
-          );
-          return [];
-        })
-      : []
+    await opencodeAccounts.ownCredentials().catch((error: unknown) => {
+      moveLog(
+        `OpenCode's own sign-ins are not listed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return [];
+    })
   ).map((one) => ({
     store: "opencode" as const,
     storeProvider: one.integrationID,
@@ -1367,9 +1329,10 @@ const moveLog = (line: string): void => {
 
 /** A borrowed sign-in answers while its access token, refreshed by its lender only, has time left. */
 const borrowedAnswers = async (
-  accountId: string
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
 ): Promise<string | undefined> => {
-  await freshen(accountId);
+  await freshen(accountId, ports);
   const now = readHeld(accountId);
   return now?.credential.type === "oauth" && now.credential.expires > Date.now()
     ? undefined
@@ -1385,13 +1348,16 @@ const borrowedAnswers = async (
  * endpoint answers for a key without spending it).
  * Undefined when it answers; else why not.
  */
-const answers = async (accountId: string): Promise<string | undefined> => {
+const answers = async (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<string | undefined> => {
   const held = readHeld(accountId);
   if (!held) {
     return "the account's store holds nothing";
   }
   if (held.provider === "openai-codex" && held.credential.type === "oauth") {
-    await freshen(accountId);
+    await freshen(accountId, ports);
     const now = readHeld(accountId);
     if (now?.credential.type !== "oauth") {
       return "the refreshed sign-in is gone";
@@ -1410,7 +1376,7 @@ const answers = async (accountId: string): Promise<string | undefined> => {
     return held.credential.key ? undefined : "the store gave no key back";
   }
   if (lenderOf(held.credential)) {
-    return await borrowedAnswers(accountId);
+    return await borrowedAnswers(accountId, ports);
   }
   const auth = await (
     await runtimeOf(accountId, held.provider)
@@ -1422,6 +1388,9 @@ const answers = async (accountId: string): Promise<string | undefined> => {
     : `pi-ai gives no request auth for ${held.provider} from it`;
 };
 
+/** What a credential's move into an account reaches out through: the hub for a lender's fresh token, and OpenCode's own store. */
+type HomePorts = Pick<AgentPorts, "borrowAsk" | "opencodeAccounts">;
+
 /**
  * Moves one credential out of pi's or OpenCode's own store into an account:
  * written into the account's store, checked to answer, and only then removed
@@ -1431,11 +1400,12 @@ const answers = async (accountId: string): Promise<string | undefined> => {
  */
 export const moveHomeCredential = async (
   accountId: string,
+  ports: HomePorts,
   store: HomeCredential["store"],
   storeProvider: string,
   expected: AccountIdentity
 ): Promise<HomeLoginMoved> => {
-  const entry = await readStoreEntry(store, storeProvider);
+  const entry = await readStoreEntry(store, storeProvider, ports);
   const read = entry?.credential;
   // Already moved: a hub that stopped while the move ran asks for it again.
   const held = read ? undefined : readHeld(accountId);
@@ -1475,7 +1445,7 @@ export const moveHomeCredential = async (
       `${why} Nothing was moved; ${store}'s own ${storeProvider} on this machine is as it was.`
     );
   };
-  const refused = await answers(accountId).catch((error: unknown) =>
+  const refused = await answers(accountId, ports).catch((error: unknown) =>
     error instanceof Error ? error.message : String(error)
   );
   if (refused) {
@@ -1524,13 +1494,14 @@ const dropPiEntry = async (
  */
 export const borrowAccount = async (
   accountId: string,
+  ports: HomePorts,
   lender: string,
   lent: LentAccess,
   store: HomeCredential["store"],
   storeProvider: string,
   expected: AccountIdentity
 ): Promise<HomeLoginMoved> => {
-  const entry = await readStoreEntry(store, storeProvider);
+  const entry = await readStoreEntry(store, storeProvider, ports);
   const read = entry?.credential;
   const held = readHeld(accountId);
   const heldAs = held ? identityOf(held.provider, held.credential) : undefined;
@@ -1578,7 +1549,7 @@ export const borrowAccount = async (
       `${why} Nothing was borrowed; ${store}'s own ${storeProvider} on this machine is as it was.`
     );
   };
-  const refused = await answers(accountId).catch((error: unknown) =>
+  const refused = await answers(accountId, ports).catch((error: unknown) =>
     error instanceof Error ? error.message : String(error)
   );
   if (refused) {
@@ -1593,11 +1564,23 @@ export const borrowAccount = async (
   return { store: "the account's credential file" };
 };
 
-/** Drops an account's store here with nothing signed out: its credential is another account's now. */
-const dropStore = async (accountId: string): Promise<void> => {
+/**
+ * Drops an account's store here: its sign-in signed out (`signOut`), or, when
+ * its credential is another account's now, nothing signed out.
+ */
+const dropStore = async (
+  accountId: string,
+  ports: Pick<AgentPorts, "opencodeAccounts">,
+  signOut: boolean
+): Promise<void> => {
   signIns.get(accountId)?.abort.abort();
   signIns.delete(accountId);
-  await carryOutOpencode(accountId);
+  await carryOutOpencode(accountId, ports);
+  const held = signOut ? readHeld(accountId) : undefined;
+  // A borrowed sign-in is its lender's grant: dropped here, never signed out.
+  if (held && !lenderOf(held.credential)) {
+    await (await runtimeOf(accountId, held.provider)).logout(held.provider);
+  }
   for (const key of runtimes.keys()) {
     if (key.startsWith(`${accountId}\u0000`)) {
       runtimes.delete(key);
@@ -1617,7 +1600,8 @@ const dropStore = async (accountId: string): Promise<void> => {
 export const joinProviderAccount = async (
   from: string,
   into: string,
-  expected: AccountIdentity
+  expected: AccountIdentity,
+  ports: HomePorts
 ): Promise<AccountJoinedOn> => {
   const held = readHeld(from);
   if (!held) {
@@ -1628,14 +1612,14 @@ export const joinProviderAccount = async (
     throw new Error(`The sign-in on this machine is not ${expected.email}.`);
   }
   if (readHeld(into)) {
-    await forgetProviderAccount(from);
+    await forgetProviderAccount(from, ports);
     moveLog(
       `${from} joined ${into}: ${into}'s own sign-in kept, ${from}'s signed out`
     );
     return { outcome: "kept" };
   }
   await serial(into, () => writeHeld(into, held));
-  const refused = await answers(into).catch((error: unknown) =>
+  const refused = await answers(into, ports).catch((error: unknown) =>
     error instanceof Error ? error.message : String(error)
   );
   if (refused) {
@@ -1644,7 +1628,7 @@ export const joinProviderAccount = async (
       `${expected.email}'s sign-in did not answer as ${into}'s: ${refused}. It stays where it was.`
     );
   }
-  await dropStore(from);
+  await dropStore(from, ports, false);
   moveLog(`${from} joined ${into}: its sign-in is ${into}'s here now`);
   return { outcome: "moved" };
 };
@@ -1714,7 +1698,7 @@ const opencodeCredentialUnder = (
 ): OpencodeCredential | undefined => {
   const { credential } = held;
   if (credential.type === "api_key") {
-    const { metadata } = credential as { metadata?: unknown };
+    const metadata = "metadata" in credential ? credential.metadata : undefined;
     return credential.key
       ? {
           integrationID,
@@ -1731,7 +1715,7 @@ const opencodeCredentialUnder = (
     return { integrationID, value: { type: "key", key: credential.access } };
   }
   if (integrationID === "github-copilot") {
-    const { enterpriseUrl } = credential as { enterpriseUrl?: unknown };
+    const { enterpriseUrl } = credential;
     return {
       integrationID,
       value: {
@@ -1837,16 +1821,13 @@ const DEVICE_CODE = new Set([
 export const piProviders = async () => {
   const runtime = await ModelRuntime.create({ refreshOnCreate: false });
   return runtime.getProviders().map((provider) => {
-    const { auth } = provider as {
-      auth?: { oauth?: unknown; apiKey?: unknown };
-    };
-    const oauth = Boolean(auth?.oauth) && provider.id !== "openai";
+    const oauth = Boolean(provider.auth.oauth) && provider.id !== "openai";
     return {
       id: provider.id,
-      name: String((provider as { name?: unknown }).name ?? provider.id),
+      name: provider.name || provider.id,
       oauth,
       deviceCode: oauth && DEVICE_CODE.has(provider.id),
-      key: Boolean(auth?.apiKey),
+      key: Boolean(provider.auth.apiKey),
     };
   });
 };

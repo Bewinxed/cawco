@@ -3,7 +3,9 @@
  * acted on here, on the same records the agent keeps (agent
  * `browser/browsers.ts`), so it works whether the agent runs or not.
  */
+import type { BrowserPorts } from "@cawco/agent/browser";
 import { type BrowserRow, isBrowserKey } from "@cawco/core/browser";
+import { machineId } from "@cawco/core/machine-id";
 
 class BrowserCommandError extends Error {}
 
@@ -41,8 +43,14 @@ export const runBrowser = async (
     );
   }
   const browsers = await import("@cawco/agent/browser");
+  // A terminal has no hub link to tell: the agent's watch of the records
+  // tells the hub what this wrote.
+  const ports: BrowserPorts = {
+    browsers: () => undefined,
+    machineId: await machineId(),
+  };
   try {
-    return await act(browsers, action, key);
+    return await act(browsers, ports, action, key);
   } catch (error) {
     if (error instanceof BrowserCommandError) {
       throw error;
@@ -56,6 +64,7 @@ export const runBrowser = async (
 
 const act = async (
   browsers: typeof import("@cawco/agent/browser"),
+  ports: BrowserPorts,
   action: Action,
   key: string | undefined
 ): Promise<string[]> => {
@@ -76,15 +85,15 @@ const act = async (
   }
   if (action === "start") {
     const began = Date.now();
-    const row = await browsers.startBrowser({ key });
+    const row = await browsers.startBrowser(ports, { key });
     return [
       `${rowLine(row)}  (live in ${((Date.now() - began) / 1000).toFixed(1)} s)`,
     ];
   }
   if (action === "stop") {
-    const row = await browsers.stopBrowser(key);
+    const row = await browsers.stopBrowser(ports, key);
     return [row ? rowLine(row) : `${key}: no such browser on this machine`];
   }
-  await browsers.removeBrowser(key);
+  await browsers.removeBrowser(ports, key);
   return [`${key} removed, its profile with it`];
 };

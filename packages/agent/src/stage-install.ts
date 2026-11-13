@@ -295,7 +295,6 @@ const runInstall = async (
     `command -v ${install.manager} >/dev/null 2>&1 || { echo '${NO_MANAGER}'; exit 127; }\n${command}`,
     STAGE_INSTALL_MS,
     at.boundary,
-    undefined,
     // A heavy run: it waits for one of the machine's heavy-work slots.
     `the stage's install of ${where}@${at.boundary.id.slice(0, 8)}`
   );

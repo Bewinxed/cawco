@@ -44,7 +44,6 @@ as-unknown-as	AbstractType< YEvent<AbstractType<unknown>> >	packages/hub/src/art
 as-unknown-as	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/block-fixture.ts	1
 as-unknown-as	AskRecord	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
-as-unknown-as	Buffer	packages/agent/src/browser/relay.ts	1
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/decides/preview/SetupFixture.svelte	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/project/caw-lead.fixture.ts	1
@@ -53,6 +52,7 @@ as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
 as-unknown-as	Component<ElementProps>	apps/dashboard/src/lib/cawco/references.ts	1
 as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
+as-unknown-as	ConstructorParameters<typeof ExcalidrawBinding>[3]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Darwin	packages/agent/src/layer.ts	1
 as-unknown-as	Db	scripts/probe-kit/specs/preview-query.ts	1
 as-unknown-as	Db	scripts/probe-kit/specs/preview-reclaim.ts	1
