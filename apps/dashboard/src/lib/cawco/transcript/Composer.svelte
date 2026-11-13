@@ -1,65 +1,6 @@
-<script lang="ts" module>
-  import { traitsOf } from "@cawco/core/harness/traits";
-  import type { PermissionResult } from "@cawco/core/session-messages";
-  import { failureWords } from "#lib/platform/hub-read.js";
-  import type { PendingPermission } from "../stores/sessions.svelte";
-
-  /**
-   * What a composer stands over the transcript's foot, in px: `stack`, the
-   * panel with the tray row and what stands on it, or the grown ask when it
-   * reaches higher; `parked`,
-   * what stands higher than the panel and its tray row (0 with nothing).
-   * What floats out of the composer (the tray's shelf and panel, the `/`
-   * and `@` menu, the recall wheel) is in none of them: a layer over the
-   * transcript's foot, never a size the transcript is told.
-   */
-  export interface ComposerFoot {
-    parked: number;
-    stack: number;
-  }
-
-  /**
-   * The ask a conversation has parked on its composer, the first of those
-   * waiting: the composer grows into it until it is answered or withdrawn.
-   */
-  export interface ComposerAsk {
-    /** Who asks, as the conversation names its agent ("Caw" in a project's conversation). */
-    asker: string;
-    /** How many more asks wait behind this one. */
-    more: number;
-    /** Submits its answer; the id of the command it went out as (Prompt). */
-    onanswer: (result: PermissionResult) => string | null;
-    /**
-     * A browser ask taken over from here that a delegate asked: the hub
-     * opened the browser in that delegate's panel, and this takes the
-     * person there (Prompt).
-     */
-    ontaken?: () => void;
-    request: PendingPermission;
-  }
-
-  /**
-   * One conversation's row above the composer: the offer standing on it and
-   * its delegate tray. A composer keeps the row of every conversation it can
-   * be handed (`trayRows`) and draws the one it writes to (`showing`): handed the
-   * next, it shows that one's, already built and laid out, where building it
-   * in the switch put its offer, its tray and their chips into the page
-   * inside the click.
-   */
-  export interface TrayRow {
-    /** The session whose delegates its tray shows; empty for none. */
-    delegatesOf: string;
-    /** The conversation's id: what `showing` names. */
-    id: string;
-    /** What stands on the tray row: an offer, never an ask. */
-    prompts?: Snippet;
-  }
-</script>
-
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import { questionsOf } from "@cawco/core/question";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
@@ -83,7 +24,7 @@
    * each chip in its serialised form (`@<title> <handle>`), so a send, a
    * queued edit, recall and the drafts store carry it as text.
    */
-  import { flushSync, type Snippet, tick, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
@@ -101,34 +42,21 @@
     IconSend,
     IconStop,
   } from "#lib/icons.js";
-  import { felt } from "#lib/platform/feel.svelte.js";
-  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
-  import { newId } from "#lib/platform/id.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { autosize } from "#lib/platform/motion/autosize.svelte.js";
   import {
-    CURVE,
     dur,
-    ease,
-    easeDrawer,
     easeOut,
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
-  import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
-  import { departBox } from "#lib/platform/motion/share.svelte.js";
-  import { msOf } from "#lib/platform/motion/time.js";
-  import { track } from "#lib/platform/track.js";
-  import { handBack, stages } from "../canvas/stage.svelte";
-  import { cleanDetail } from "../command-detail";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
   import FindLine from "../find/FindLine.svelte";
   import MentionField from "../find/MentionField.svelte";
-  import { readAs } from "../find/mention.svelte";
   import { carriesFiles } from "../internal-drag";
-  import { minimizedAsks } from "../minimized-asks.svelte";
   import type { SendExtras } from "../send-store";
   import { skillsOf } from "../skill-chips";
   import {
@@ -136,15 +64,25 @@
     type SuggestCandidate,
     suggestions,
   } from "../suggest.svelte";
-  import type { Message } from "../types";
   import AttachButton from "./AttachButton.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
+  import { CanvasLink } from "./canvas-link.svelte";
   import type { ComposerDraft } from "./composer-draft.svelte";
   import type { ComposerFleet } from "./composer-fleet";
-  import { stand } from "./composer-presence.svelte";
-  import { GrownShape, layoutScale, measureShape } from "./grown";
-  import { sentByReader } from "./recall";
-  import { opensTurn } from "./rows";
+  import { ComposerRecall } from "./composer-recall.svelte";
+  import { ComposerSend } from "./composer-send.svelte";
+  import { type ComposerFoot, DockFoot } from "./dock-foot.svelte";
+  import { FieldFlight } from "./field-flight.svelte";
+  import { landFocusRequests } from "./field-focus.svelte";
+  import { FieldFold } from "./field-fold.svelte";
+  import { FieldHint } from "./field-hint.svelte";
+  import { FindDock } from "./find-dock.svelte";
+  import { type ComposerAsk, GrownAsk } from "./grown-ask.svelte";
+  import { HarnessStart } from "./harness-start.svelte";
+  import { OfferStack, type TrayRow } from "./offer-stack.svelte";
+  import { PressHold } from "./press-hold.svelte";
+  import { QueuedEdit } from "./queued-edit.svelte";
+  import { SlashMenu } from "./slash-menu.svelte";
 
   let {
     draft,
@@ -358,24 +296,16 @@
     mentionField?.select(draft.text.length);
   }
 
-  // On screen, this composer is what the desk's toasts rise above.
-  const presence = {};
-  $effect(() => {
-    if (paneVisible) {
-      return stand(presence, standing);
-    }
+  /** What the composer stands over the transcript's foot, told to the pane it is lent to. */
+  const dockFoot = new DockFoot({
+    askRise: () => grown.askRise,
+    finding: () => findDock.finding,
+    findHeight: () => findDock.findLineH + findDock.findLayerH,
+    onfoot: () => onfoot,
+    paneVisible: () => paneVisible,
+    stack: () => offerStack.stack,
   });
-  // What stands over the transcript's foot, told to the pane it is lent to
-  // (its fade and its "Jump to latest" rest on it).
-  $effect(() => {
-    onfoot?.({
-      stack: standing,
-      // What find grows out of the composer stands over the foot too: its
-      // line on the pill and its places over it, so the transcript's end
-      // reads above them.
-      parked: standing - panel - lift + (finding ? findLineH + findLayerH : 0),
-    });
-  });
+
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
   let field = $state<HTMLDivElement | null>(null);
   let mentionField = $state<ReturnType<typeof MentionField>>();
@@ -386,172 +316,32 @@
   /** A phone's @ menu: its rows wrap, and it drags down to go. */
   const phone = new MediaQuery(NARROW_QUERY);
 
-  /** The field's hint in full, and its first part, which fits any field. */
-  const HINT = $derived(
-    typeof placeholder === "string"
-      ? placeholder
-      : (placeholder?.full ??
-          "Message the agent…  /  for commands, @ to mention")
-  );
-  const HINT_SHORT = $derived(
-    typeof placeholder === "string"
-      ? placeholder
-      : (placeholder?.short ?? "Message the agent…")
-  );
-  /** What the field is called, read out: its hint without the trailing ellipsis. */
-  const FIELD_LABEL = $derived(label ?? HINT_SHORT.replace(/…$/u, ""));
-  /**
-   * The hint the field shows: in full wherever the field's own width holds
-   * it on one line, else its first part. The server draws the short one,
-   * so no first paint shows a hint cut off, and the field's measured width
-   * brings in the full one once it is on the page. It is the field that is
-   * measured, not the viewport: a narrow pane on a wide screen is narrow.
-   */
-  let hint = $state(untrack(() => HINT_SHORT));
-  const fitHint = (node: HTMLElement) => {
-    const probe = document.createElement("span");
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.cssText =
-      "position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;inset-block-start:0;inset-inline-start:-9999px";
-    probe.textContent = HINT;
-    node.after(probe);
-    /** The probe dressed as the field's hint is: its face and its tracking. */
-    let dressed = "";
-    const dress = (font: string, tracking: string) => {
-      dressed = `${font}|${tracking}`;
-      probe.style.font = font;
-      probe.style.letterSpacing = tracking;
-    };
-    /** Which hint the field's room holds, read only: the probe dressed already. */
-    const measure = () => {
-      const style = getComputedStyle(node);
-      const room =
-        node.clientWidth -
-        Number.parseFloat(style.paddingInlineStart) -
-        Number.parseFloat(style.paddingInlineEnd);
-      // Laid out, as the room is: a panel rising out of its scale shows the
-      // probe narrower than the hint will stand.
-      return {
-        font: style.font,
-        tracking: style.getPropertyValue("--hint-track"),
-        hint:
-          probe.getBoundingClientRect().width / layoutScale(node) <= room
-            ? HINT
-            : HINT_SHORT,
-      };
-    };
-    const fit = () => {
-      const style = getComputedStyle(node);
-      dress(style.font, style.getPropertyValue("--hint-track"));
-      ({ hint } = measure());
-    };
-    // Fitted now, so the first frame has its hint. A resize is read inside
-    // the delivery, on the layout the frame has just done, and written in
-    // the next frame (frameObserver `read`): read in the next frame's
-    // callbacks instead, every frame of a rail drag laid the page out for
-    // it. A face that changed since the probe was dressed dresses it there,
-    // and is read again in the next delivery.
-    fit();
-    let measured: ReturnType<typeof measure> | null = null;
-    const sizes = frameObserver(
-      () => {
-        if (!measured) {
-          return;
-        }
-        const { font, tracking } = measured;
-        if (`${font}|${tracking}` !== dressed) {
-          dress(font, tracking);
-          sizes.readNext();
-        }
-        ({ hint } = measured);
-        measured = null;
-      },
-      {
-        read: () => {
-          measured = measure();
-        },
-      }
-    );
-    sizes.observe(node);
-    // The body face may land after the first measure, at a new width.
-    let live = true;
-    document.fonts.ready.then(() => {
-      if (live) {
-        fit();
-      }
-    });
-    return () => {
-      live = false;
-      sizes.disconnect();
-      probe.remove();
-    };
-  };
-  /** How many frames a focus request asks again before it lets go. */
-  const FOCUS_TRIES = 10;
+  /** The field's hint: the full words where its own width holds them, else their first part. */
+  const fieldHint = new FieldHint({
+    label: () => label,
+    placeholder: () => placeholder,
+  });
   /** The suggestion row, for Tab and Shift+Tab. */
   let chips = $state<ReturnType<ComposerFleet["SuggestionChips"]>>();
 
-  /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
-  const TOKEN_WHITESPACE = /\s/u;
-
-  /**
-   * The words put back from outside (Edit on a failed send, a starter) land
-   * with focus and the caret after them, and fade up in the field over
-   * --duration-control rather than replacing what was there in one frame. Their
-   * attachments come back with them, and the row that holds those folds
-   * open above the field. The caret waits for the tick: the field draws the
-   * words in its own effect, and drawing them drops any selection.
-   *
-   * The request holds until the focus has landed: asked before the field is
-   * drawn, it waits for it; refused (the field not yet focusable as its
-   * card comes in), it asks again each frame, a few frames at most.
-   */
-  $effect(() => {
-    const el = field;
-    if (!(draft.focusWanted && el)) {
-      return;
-    }
-    let frame = 0;
-    let tries = 0;
-    const land = () => {
-      // Never scrolled to: a comment's card took the focus as it opened and
-      // the browser scrolled what held the pane, moving the card under the
-      // eye after its first frame (the owner: "it jumps between them before
-      // it settles"). The field stands where its surface puts it.
-      el.focus({ preventScroll: true });
-      if (
-        document.activeElement !== el &&
-        el.isConnected &&
-        tries < FOCUS_TRIES
-      ) {
-        tries += 1;
-        frame = requestAnimationFrame(land);
-        return;
-      }
-      // A field that already held the focus fires no focus event as it is
-      // asked for it again: what it holds is read here, so its fold rule
-      // knows the person is in it.
-      focused = document.activeElement === el;
-      tick().then(() => mentionField?.select(draft.text.length));
-      el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--duration-control"),
-        easing: ease("--ease-out"),
-      });
-      draft.focusWanted = false;
-    };
-    land();
-    return () => cancelAnimationFrame(frame);
+  landFocusRequests({
+    draft: () => draft,
+    field: () => field,
+    focused: (value) => {
+      fieldFold.focused = value;
+    },
+    mentionField: () => mentionField,
   });
 
   /**
    * The composer arriving where a read-only note stood (and back): the two
-   * cross-fade over --duration-control and the composer rises --pop-rise into place.
+   * cross-fade over --dur-control and the composer rises --pop-rise into place.
    * Reduced motion keeps the fade.
    */
   function rise(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -568,34 +358,34 @@
   function glyphOut(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--spacing-space-1) * ${u}))`,
+          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--space-1) * ${u}))`,
     };
   }
   function fade(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--duration-panel-exit) has landed, so the two never stand in one place
+   * fold (--dur-grow-exit) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
    * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
-   * out of a --part-blur blur over --duration-control, as the card's own parts come up
+   * out of a --part-blur blur over --dur-control, as the card's own parts come up
    * (Prompt `.part`). Reduced motion keeps the fade, with no wait.
    */
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--duration-panel-exit"),
-      duration: dur("--duration-control"),
+      delay: still ? 0 : dur("--dur-grow-exit"),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -603,10 +393,10 @@
           : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u}); filter: blur(calc(var(--part-blur) * ${u}))`,
     };
   }
-  /** The bar gives way to the card growing over it: a fade over --duration-exit. */
+  /** The bar gives way to the card growing over it: a fade over --dur-exit. */
   function askedOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-exit"),
+      duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -614,939 +404,59 @@
 
   /* ---- the `/` and `@` menu ------------------------------------------- */
 
-  /** One row of the menu, whichever sigil opened it. */
-  interface Entry {
-    detail?: string;
-    /** Command.Item's value, and what the highlight is tracked by. */
-    id: string;
-    /** What replaces the typed token, sigil included. */
-    insert: string;
-    /** Which `/` family it belongs to — the menu is sectioned by this. */
-    kind?: AvailableCommand["type"];
-    label: string;
-    /** The plugin or MCP server it came from, shown as a quiet origin tag. */
-    source?: string;
-  }
-
-  /** One titled section of the menu. */
-  interface Section {
-    entries: Entry[];
-    heading: string;
-    key: string;
-  }
-
-  /**
-   * Which section a command belongs to. A plugin-heavy session's `/` list is
-   * almost entirely namespaced (`interfaces:better-ui`, `code-foundations:build`)
-   * — grouping by the four coarse families would file them all under one
-   * "Commands" heading, which is the mess. So the section is the command's
-   * SOURCE when it has one: its plugin, or the MCP server that lent it. Skills
-   * and bare built-ins, which carry no namespace, keep their family name.
-   *
-   * `rank` orders the sections: skills first, then plugins (by name), then the
-   * built-ins, then MCP servers (by name).
-   */
-  function sectionMeta(entry: Entry): {
-    key: string;
-    heading: string;
-    rank: number;
-    sub: string;
-  } {
-    if (entry.kind === "skill") {
-      return { key: "skills", heading: "Skills", rank: 0, sub: "" };
-    }
-    if (entry.kind === "mcp") {
-      const server = entry.source ?? "";
-      return {
-        key: `mcp:${server}`,
-        heading: server || "MCP",
-        rank: 3,
-        sub: server,
-      };
-    }
-    if (entry.source) {
-      return {
-        key: `src:${entry.source}`,
-        heading: entry.source,
-        rank: 1,
-        sub: entry.source,
-      };
-    }
-    if (entry.kind === "builtin") {
-      return { key: "builtin", heading: "Built-in", rank: 2, sub: "" };
-    }
-    return { key: "commands", heading: "Commands", rank: 1, sub: "" };
-  }
-
-  /**
-   * The name a row shows. Under a source heading the namespace is redundant, so
-   * `interfaces:better-ui` reads as `/better-ui` beneath "interfaces", and an
-   * MCP prompt drops its `mcp__server__` prefix. The value inserted keeps the
-   * full name — only the label is shortened.
-   */
-  function displayLabel(name: string, source?: string): string {
-    if (name.startsWith("mcp__")) {
-      const rest = name.split("__").slice(2).join("__");
-      return `/${rest || name}`;
-    }
-    if (source && name.startsWith(`${source}:`)) {
-      return `/${name.slice(source.length + 1)}`;
-    }
-    return `/${name}`;
-  }
-
-  /**
-   * The prose a row shows. Plugin descriptions often lead with their own name in
-   * parens — `(code-foundations) Execute…` — which is exactly the section heading
-   * above the row, so it is stripped here rather than printed twice.
-   */
-  /** Where the caret is, so the token under it can be found on every keystroke. */
-  let caret = $state(0);
-  /** Dismissed with Escape: the token is still there, the menu is not. */
-  let dismissed = $state(false);
-  let highlight = $state("");
-
-  /**
-   * A composer handed another conversation's draft starts that draft with
-   * its menu closed: the caret this one last noted was in the other text.
-   */
-  $effect.pre(() => {
-    track(draft);
-    untrack(() => {
-      dismissed = true;
-      caret = draft.text.length;
-    });
+  const menu = new SlashMenu({
+    commands: () => commands,
+    draft: () => draft,
+    field: () => field,
+    mentionField: () => mentionField,
+    onmenu: () => onmenu?.(),
   });
 
-  /**
-   * Another conversation's words take the field's place the way its
-   * transcript does: the words that stood there slide --swap-nudge away from the
-   * incoming tab's side as they fade, and the new ones slide in from that
-   * side and fade up, typed out so the last character lands as the field's
-   * height glide ends: the field holds its height until the transcript has
-   * landed ({@link holdUntil}), then glides on its own transition. Both are
-   * drawn on an overlay laid over the field's text box, each laid out as its
-   * full text with the part not yet typed clear, so every line already
-   * stands where the field will put it and nothing moves vertically. The
-   * field keeps its layout, height tween and focus underneath, its own text
-   * clear. A switch mid-flight sends off what is on screen, from where it
-   * is; the text changing in place (typing, a send, a chip) lands it at once.
-   */
-  interface Flight {
-    dir: number;
-    /** Where the words leaving stand as they start to go. */
-    from: { transform: string; opacity: string };
-    /** The words leaving, and the part of them that was never typed. */
-    out: string;
-    /** How far the words leaving drop from the field's foot ({@link scrollDrop}). */
-    outDrop: number;
-    outRest: string;
-    /** The width the words leaving wrapped at in the field ({@link wrapOf}). */
-    outWrap: number;
-    text: string;
-  }
-  let flight = $state<Flight | null>(null);
-  let typed = $state("");
-  /** How far the words arriving drop from the field's foot ({@link scrollDrop}). */
-  let inDrop = $state(0);
-  /** The width the words arriving wrap at ({@link wrapOf}). */
-  let inWrap = 0;
-  let flightOut = $state<HTMLElement>();
-  let flightIn = $state<HTMLElement>();
-  let flightFrame = 0;
-  /** The text the field last showed, and whose; undefined until it has shown one. */
-  let shown: string | undefined;
-  let shownDraft: ComposerDraft | undefined;
-
-  /** The field's height transition, in the unit the stylesheet wrote it in. */
-  function heightMs(node: HTMLElement): number {
-    const style = getComputedStyle(node);
-    const props = style.transitionProperty.split(",").map((p) => p.trim());
-    const durations = style.transitionDuration.split(",").map((d) => d.trim());
-    const at = props.findIndex((p) => p === "height" || p === "all");
-    if (at < 0) {
-      return 0;
-    }
-    return msOf(durations[at % durations.length]);
-  }
-
-  /**
-   * A layer stands whole on the field's foot, which puts its last line where
-   * a field scrolled to its end shows it. A field scrolled higher shows its
-   * lines lower by the scroll range it has left below, so the layer drops by
-   * that much. A text the field holds whole has none, and stands as it is.
-   */
-  const scrollDrop = (whole: number, box: number, scrolled: number) =>
-    Math.max(0, whole - box - scrolled);
-
-  /**
-   * Where the arriving text will rest once the field has fitted it: the
-   * field's height, the text's drop, and the characters in view, as offsets
-   * into it. The field's own box and scroll at rest are worked out from the
-   * layer, laid out whole at the field's width, and the field's min and max
-   * height; the scroll is the field's own, as its bounds at rest will hold
-   * it.
-   */
-  function restOf(
-    node: HTMLElement,
-    layer: HTMLElement,
-    text: string
-  ): { fitted: number; drop: number; from: number; to: number } {
-    const style = getComputedStyle(node);
-    const padTop = Number.parseFloat(style.paddingTop);
-    const border = node.offsetHeight - node.clientHeight;
-    const whole =
-      layer.offsetHeight + padTop + Number.parseFloat(style.paddingBottom);
-    const least = Number.parseFloat(style.minHeight) || 0;
-    // A field not being written in folds a longer draft to its first line.
-    const folding = folds(whole + border);
-    const cap = folding
-      ? least
-      : Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY;
-    const box = Math.min(Math.max(whole + border, least), cap) - border;
-    const fitted = box + border;
-    if (whole <= box) {
-      return { fitted, drop: 0, from: 0, to: text.length };
-    }
-    const scrolled = folding ? 0 : Math.min(node.scrollTop, whole - box);
-    const [from, to] = inView(layer, text, scrolled - padTop, box);
-    return { fitted, drop: scrollDrop(whole, box, scrolled), from, to };
-  }
-
-  /**
-   * The characters of `text` on the lines a box `box` tall shows from `top`
-   * down, measured on a hidden copy of `layer` holding the whole text.
-   */
-  function inView(
-    layer: HTMLElement,
-    text: string,
-    top: number,
-    box: number
-  ): [number, number] {
-    const probe = layer.cloneNode(false) as HTMLElement;
-    probe.removeAttribute("data-rest");
-    probe.removeAttribute("style");
-    probe.style.visibility = "hidden";
-    probe.textContent = text;
-    layer.after(probe);
-    const glyphs = probe.firstChild as Text;
-    const origin = probe.getBoundingClientRect().top;
-    const range = document.createRange();
-    /** The foot of the line character `at` is on. */
-    const footOf = (at: number) => {
-      range.setStart(glyphs, 0);
-      range.setEnd(glyphs, at + 1);
-      return range.getBoundingClientRect().bottom - origin;
-    };
-    /** The head of the line character `at` is on. */
-    const headOf = (at: number) => {
-      range.setStart(glyphs, at);
-      range.setEnd(glyphs, text.length);
-      return range.getBoundingClientRect().top - origin;
-    };
-    /** The first character from `start` on for which `past` holds; they are in order. */
-    const first = (start: number, past: (at: number) => boolean) => {
-      let lo = start;
-      let hi = text.length;
-      while (lo < hi) {
-        const mid = Math.floor((lo + hi) / 2);
-        if (past(mid)) {
-          hi = mid;
-        } else {
-          lo = mid + 1;
-        }
-      }
-      return lo;
-    };
-    const from = first(0, (at) => footOf(at) > top + 0.5);
-    const to = first(from, (at) => headOf(at) >= top + box - 0.5);
-    probe.remove();
-    return [from, to];
-  }
-
-  /**
-   * When the field's height glide ends, off the glide's own start (the
-   * frame the fit landed in); null until it has started.
-   */
-  function glideEndOf(node: HTMLElement, ms: number): number | null {
-    const run = node
-      .getAnimations()
-      .find(
-        (animation) =>
-          animation instanceof CSSTransition &&
-          animation.transitionProperty === "height"
-      );
-    return typeof run?.startTime === "number" ? run.startTime + ms : null;
-  }
-
-  /**
-   * The width the field's text wraps at: its client width less its inline
-   * padding. The field draws no scrollbar (its stylesheet), so this is its
-   * width in every state; it changes only with the row around it, which is
-   * why the words leaving are read before a switch and the words arriving
-   * after it.
-   */
-  function wrapOf(node: HTMLElement): number {
-    const style = getComputedStyle(node);
-    return (
-      node.clientWidth -
-      Number.parseFloat(style.paddingInlineStart) -
-      Number.parseFloat(style.paddingInlineEnd)
-    );
-  }
-
-  /**
-   * The field's scroll cue, standing in for the scrollbar it does not draw:
-   * `cue-top` while text is scrolled out above, `cue-bottom` while there is
-   * more below, and neither when the text fits. The stylesheet fades that
-   * edge. Kept current as the field scrolls, resizes (a glide, a fold) and
-   * is handed another draft.
-   */
-  let cueTop = $state(false);
-  let cueBottom = $state(false);
-  /**
-   * The field as it was last laid out: how far its text is scrolled past its
-   * drop, and the width its text wraps at. Kept by the cue, which reads the
-   * field wherever it already lays out (its scroll, its resize, the frame
-   * after its text moves), so a switch flies the words leaving off this
-   * (`fly`): read off the field in the switch itself, the page was laid out
-   * in the click with the pane just shown dirty, styling the whole page in
-   * that task.
-   */
-  let laidOut = { drop: 0, wrap: 0 };
-  function scrollCue(node: HTMLElement) {
-    /** The field's scroll and wrap, read only. */
-    const read = () => ({
-      scrollHeight: node.scrollHeight,
-      clientHeight: node.clientHeight,
-      scrollTop: node.scrollTop,
-      wrap: wrapOf(node),
-    });
-    const take = ({
-      scrollHeight,
-      clientHeight,
-      scrollTop,
-      wrap,
-    }: ReturnType<typeof read>) => {
-      const hidden = scrollHeight - clientHeight;
-      cueTop = hidden > 1 && scrollTop > 1;
-      cueBottom = hidden > 1 && scrollTop < hidden - 1;
-      laidOut = {
-        drop: scrollDrop(scrollHeight, clientHeight, scrollTop),
-        wrap,
-      };
-    };
-    const cue = () => take(read());
-    let frame = 0;
-    $effect(() => {
-      track(draft.text);
-      frame = requestAnimationFrame(cue);
-    });
-    // A resize is read inside the delivery, on the layout the frame has
-    // just done, and taken in the next frame (frameObserver `read`): the
-    // cues are the field's edges, drawn on it. Read in the next frame's
-    // callbacks instead, every frame of a rail drag laid the page out for
-    // it. A scroll lays nothing out, and is read at once.
-    let resized: ReturnType<typeof read> | null = null;
-    const sizes = frameObserver(
-      () => {
-        if (resized) {
-          take(resized);
-          resized = null;
-        }
-      },
-      {
-        read: () => {
-          resized = read();
-        },
-      }
-    );
-    sizes.observe(node);
-    node.addEventListener("scroll", cue, { passive: true });
-    return () => {
-      cancelAnimationFrame(frame);
-      sizes.disconnect();
-      node.removeEventListener("scroll", cue);
-    };
-  }
-
-  function endFlight(): void {
-    cancelAnimationFrame(flightFrame);
-    flight = null;
-  }
-
-  /**
-   * The field keeps its height while the transcript's switch motion runs
-   * (`landing`), and glides to the new draft's once it has landed, so the
-   * words being typed in finish with the field (`fly`): from a switch until
-   * that motion lands, or until the text changes in place. A newer switch
-   * holds on to its own landing. The field's further lines stand over the
-   * transcript's foot, so neither its height nor its hold moves a row.
-   */
-  let holding = $state(false);
-  let holdFor: Promise<void> | null = null;
-
-  function holdUntil(done: Promise<void>): void {
-    holding = true;
-    holdFor = done;
-    done.then(() => {
-      if (holdFor === done) {
-        letGo();
-      }
-    });
-  }
-
-  function letGo(): void {
-    holdFor = null;
-    holding = false;
-  }
-
-  function fly(from: string, to: string, dir: number): void {
-    cancelAnimationFrame(flightFrame);
-    const was = flight;
-    let start = { transform: "none", opacity: "1" };
-    let out = from;
-    let outRest = "";
-    // The field still showing the words leaving, as it was last laid out.
-    let outDrop = laidOut.drop;
-    let outWrap = laidOut.wrap;
-    if (was && flightIn) {
-      const style = getComputedStyle(flightIn);
-      start = { transform: style.transform, opacity: style.opacity };
-      out = typed;
-      outRest = was.text.slice(typed.length);
-      outDrop = inDrop;
-      outWrap = inWrap;
-    }
-    for (const node of [flightOut, flightIn]) {
-      for (const running of node?.getAnimations() ?? []) {
-        running.cancel();
-      }
-    }
-    typed = "";
-    inDrop = 0;
-    flight = { dir, out, outDrop, outRest, outWrap, from: start, text: to };
-    flightFrame = requestAnimationFrame((began) => {
-      // Both are on the page: the overlay rendered with the switch.
-      const node = field as HTMLDivElement;
-      const layer = flightIn as HTMLElement;
-      const ms = heightMs(node);
-      // The words arriving wrap where the field, now in its new row, does;
-      // set before the layer is measured.
-      inWrap = wrapOf(node);
-      layer.style.inlineSize = `${inWrap}px`;
-      const rest = restOf(node, layer, to);
-      inDrop = rest.drop;
-      const timing = {
-        duration: ms,
-        easing: CURVE.out,
-        fill: "forwards",
-      } as const;
-      flightOut?.animate(
-        [
-          start,
-          {
-            transform: `translateX(calc(var(--swap-nudge) * ${-dir}))`,
-            opacity: 0,
-          },
-        ],
-        timing
-      );
-      flightIn?.animate(
-        [
-          {
-            transform: `translateX(calc(var(--swap-nudge) * ${dir}))`,
-            opacity: 0,
-          },
-          { transform: "none", opacity: 1 },
-        ],
-        timing
-      );
-      // The typing runs from the slide to the end of the field's glide,
-      // which starts when the transcript lands: until then its end is where
-      // the landing is expected, and once landed it is that frame plus the
-      // glide, or that frame alone when the height does not change.
-      const glide = Math.abs(rest.fitted - node.offsetHeight) > 0.5 ? ms : 0;
-      const expected = began + landing.ms() + glide;
-      let glideEnd: number | null = null;
-      let letGoAt: number | null = null;
-      // The fit runs in the frame the hold lets go or the next; a frame on
-      // with no glide running, the height had nothing to glide to.
-      const endAt = (now: number): number | null => {
-        if (glideEnd !== null || holding) {
-          return glideEnd;
-        }
-        letGoAt ??= now;
-        if (!glide) {
-          return now;
-        }
-        return glideEndOf(node, ms) ?? (now > letGoAt ? now : null);
-      };
-      let count = rest.from;
-      const type = (now: number) => {
-        glideEnd = endAt(now);
-        const end = glideEnd ?? Math.max(expected, now + glide + 1);
-        const landed = glideEnd !== null && now >= glideEnd;
-        const progress =
-          end > began ? Math.min(1, (now - began) / (end - began)) : 1;
-        // Typed across what the field will show; what stands above it is
-        // there from the start, so the typing is never spent out of view.
-        count = Math.max(
-          count,
-          rest.from + Math.floor((rest.to - rest.from) * easeOut(progress))
-        );
-        typed = landed ? to : to.slice(0, count);
-        flightFrame = requestAnimationFrame(landed ? endFlight : type);
-      };
-      type(began);
-    });
-  }
-
-  $effect.pre(() => {
-    const next = draft;
-    const { text } = draft;
-    untrack(() => {
-      if (shown !== undefined && next !== shownDraft) {
-        holdUntil(landing.done);
-        if (motionOk.current && (flight || text !== shown)) {
-          // The words as they read, each chip its `@<label>`.
-          fly(readAs(shown), readAs(text), switchDir);
-        } else {
-          endFlight();
-        }
-      } else if (text !== shown) {
-        endFlight();
-        letGo();
-      }
-      shown = text;
-      shownDraft = next;
-    });
-  });
-
-  $effect(() => () => cancelAnimationFrame(flightFrame));
-
-  /**
-   * The `/…` the caret sits in the middle of, or null. (`@` is the field's
-   * own: MentionField opens the @ menu.)
-   *
-   * A sigil only opens a menu at the start of a word — mid-token it is a path
-   * separator, which the reader is entitled to type without a menu landing
-   * on top of it.
-   */
-  const token = $derived.by((): { query: string; from: number } | null => {
-    const at = Math.min(caret, draft.text.length);
-    const before = draft.text.slice(0, at);
-    const start =
-      Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
-    const word = before.slice(start);
-    // A skill already drawn as its chip is no longer being typed.
-    if (!word.startsWith("/") || mentionField?.chipAt(start)) {
-      return null;
-    }
-    const query = word.slice(1);
-    // A token with whitespace in it is no longer being typed as one.
-    if (TOKEN_WHITESPACE.test(query)) {
-      return null;
-    }
-    return { query, from: start };
-  });
-
-  let slashMenuOpen = false;
-  $effect(() => {
-    const open = token !== null;
-    const rising = open && !slashMenuOpen;
-    slashMenuOpen = open;
-    if (rising) {
-      untrack(() => onmenu?.());
-    }
-  });
-
-  const entries = $derived.by((): Entry[] => {
-    const active = token;
-    if (!active) {
-      return [];
-    }
-    const needle = active.query.toLowerCase();
-    const rows: Entry[] = commands.map((command) => ({
-      id: `/${command.name}`,
-      insert: `/${command.name}`,
-      // The source is the section heading now, so the row shows the short
-      // name, then its prose or argument shape — never the word "builtin"
-      // as a stand-in description.
-      label: displayLabel(command.name, command.source),
-      detail: cleanDetail(
-        command.description,
-        command.argumentHint,
-        command.source
-      ),
-      kind: command.type,
-      source: command.source,
-    }));
-    return (
-      rows
-        .filter(
-          (row) =>
-            !needle ||
-            row.id.toLowerCase().includes(needle) ||
-            row.label.toLowerCase().includes(needle)
-        )
-        // Grouped and scrollable, so the cap only guards a pathological list; a
-        // real session's commands all fit inside it and read under their source.
-        .slice(0, 100)
-    );
-  });
-
-  /**
-   * The entries cut into titled sections, by source — one heading per plugin
-   * and per MCP server, with skills and built-ins under their family name —
-   * ordered skills, plugins (by name), built-ins, MCP servers. A section with
-   * no rows is never emitted.
-   */
-  const sections = $derived.by((): Section[] => {
-    if (entries.length === 0) {
-      return [];
-    }
-    const groups = new Map<
-      string,
-      { heading: string; rank: number; sub: string; entries: Entry[] }
-    >();
-    for (const entry of entries) {
-      const meta = sectionMeta(entry);
-      const bucket = groups.get(meta.key);
-      if (bucket) {
-        bucket.entries.push(entry);
-      } else {
-        groups.set(meta.key, {
-          heading: meta.heading,
-          rank: meta.rank,
-          sub: meta.sub,
-          entries: [entry],
-        });
-      }
-    }
-    return [...groups.values()]
-      .sort(
-        (a, b) =>
-          a.rank - b.rank ||
-          a.sub.localeCompare(b.sub) ||
-          a.heading.localeCompare(b.heading)
-      )
-      .map((group) => ({
-        key: `${group.rank}:${group.heading}`,
-        heading: group.heading,
-        entries: group.entries,
-      }));
-  });
-
-  const menuOpen = $derived(!dismissed && entries.length > 0);
-
-  /**
-   * A DOM id per visible row, so the field can point `aria-activedescendant`
-   * at the highlighted one. A screen reader on a combobox reads the active
-   * descendant, not the input's value — without this the menu is invisible to
-   * it, however well the arrow keys work. Keyed by position in the filtered
-   * list, which is unique where the entry's own id (`/foo`, `@bar`) is not a
-   * safe id token.
-   */
-  const domIds = $derived(
-    new Map(
-      entries.map((entry, index) => [entry.id, `composer-entry-${index}`])
-    )
-  );
-  const activeDescendant = $derived(
-    menuOpen ? domIds.get(highlight) : undefined
-  );
-
-  // The highlight follows the list: a query that filters the selected row away
-  // must not leave Enter pointing at something that is no longer on screen.
-  $effect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    if (!entries.some((entry) => entry.id === highlight)) {
-      highlight = entries[0].id;
-    }
+  /** Another conversation's words take the field's place: flown over it, the field's height held and then glided. */
+  const swap = new FieldFlight({
+    draft: () => draft,
+    field: () => field,
+    folds: (whole) => fieldFold.folds(whole),
+    landing: () => landing,
+    switchDir: () => switchDir,
   });
 
   function noteCaret(event: Event): void {
-    caret = mentionField?.selection()[0] ?? 0;
-    dismissed = false;
+    menu.noteCaret();
     if (event.type === "input") {
-      sendBlock = "";
-      if (room) {
-        room.error = "";
+      sender.sendBlock = "";
+      if (canvas.room) {
+        canvas.room.error = "";
       }
       draft.notice = "";
-      draftNote = "";
+      sender.draftNote = "";
     }
   }
 
-  /** Puts the chosen row where the token was, with a space after it. */
-  function choose(entry: Entry): void {
-    const active = token;
-    if (!active) {
-      return;
-    }
-    const end = Math.min(caret, draft.text.length);
-    draft.text = `${draft.text.slice(0, active.from)}${entry.insert} ${draft.text.slice(end)}`;
-    const next = active.from + entry.insert.length + 1;
-    dismissed = true;
-    // The field draws the new text now, and the caret is set in it before
-    // the next key: set a tick later, a key typed straight after the pick
-    // landed at the field's start.
-    flushSync();
-    field?.focus();
-    mentionField?.select(next);
-    caret = next;
-  }
-
-  function step(by: number): void {
-    if (entries.length === 0) {
-      return;
-    }
-    const at = entries.findIndex((entry) => entry.id === highlight);
-    const next = (at + by + entries.length) % entries.length;
-    highlight = entries[next].id;
-  }
-
-  /** This session's row, while its start failed. */
-  const failedRow = $derived.by(() => {
-    const row =
-      fleet && recallOf
-        ? fleet.boardStore.instanceIndex.byId.get(recallOf)
-        : undefined;
-    return row?.status === "error" && row.harness !== null ? row : undefined;
-  });
-  /**
-   * This session's start was refused for its machine's harness CLI
-   * (harness-block.svelte.ts): the refusal stands over the field with its
-   * fix (Update pi, Install OpenCode 2.0.29; Claude Code's own update, which
-   * CawCo runs by itself), and once that lands the session starts again with
-   * nothing more to press (`relaunchUnblocked`).
-   */
-  const harnessStart = $derived.by(() => {
-    const row = failedRow;
-    if (!(fleet && row?.harness)) {
-      return null;
-    }
-    const machine = fleet.boardStore.machines.find(
-      (one) => one.machineId === row.machineId
-    );
-    const block = machine ? fleet.harnessBlockOf(machine, row.harness) : null;
-    return machine && block ? { machine, block } : null;
-  });
-  /** A start again after its harness was brought up that was refused: said here, with Retry. */
-  const relaunchRefused = $derived(
-    fleet && recallOf && failedRow
-      ? fleet.relaunchRefusalOf(recallOf)
-      : undefined
-  );
-  let retrying = $state(false);
-  async function retryStart(): Promise<void> {
-    if (!(fleet && recallOf) || retrying) {
-      return;
-    }
-    retrying = true;
-    try {
-      await fleet.retryRelaunch(recallOf);
-    } finally {
-      retrying = false;
-    }
-  }
-  // Any session this tab saw refused whose machine's harness now runs goes
-  // again, whichever composer is on screen.
-  $effect(() => {
-    fleet?.relaunchUnblocked(fleet.boardStore.machines);
-  });
-  // A session that went on some other way has no refusal left to say.
-  $effect(() => {
-    if (fleet && recallOf && !failedRow) {
-      fleet.forgetRelaunch(recallOf);
-    }
+  /** A session whose start failed, said over the composer with its way on. */
+  const start = new HarnessStart({
+    fleet: () => fleet,
+    recallOf: () => recallOf,
   });
 
-  let sendBlock = $state("");
-  const sendNotice = $derived(
-    sendError || sendBlock || canvasNotice() || draft.notice
-  );
-  /**
-   * A fleet server this composer opened the sign-in for (`/mcp auth`): over
-   * the composer, it waits for the provider until the hub reports the
-   * server signed in, then says so.
-   */
-  let signingIn = $state<string | null>(null);
-  /** A word about `/mcp auth` that is not a failure ("already signed in"). */
-  let draftNote = $state("");
-  const signInNote = $derived.by(() => {
-    if (signingIn === null) {
-      return draftNote;
-    }
-    const server = (fleet?.mcpServersStore.fleetMcp ?? []).find(
-      (one) => one.name === signingIn
-    );
-    return server?.auth?.state === "signed-in"
-      ? `${signingIn} is signed in for the fleet.`
-      : `Waiting for ${signingIn}: sign in in the tab that opened.`;
+  /** The words sent, and what is said over the field about it. */
+  const sender = new ComposerSend({
+    busy: () => busy,
+    canvasChip: () => canvas.canvasChip,
+    dismissMenu: () => {
+      menu.dismissed = true;
+    },
+    draft: () => draft,
+    field: () => field,
+    fleet: () => fleet,
+    held: () => held,
+    heldWhy: () => heldWhy,
+    onstop,
+    onsubmit,
+    room: () => canvas.room,
+    sendError: () => sendError,
+    sending: () => sending,
   });
-
-  const pending = $derived(sending || canvasWorking());
-
-  /**
-   * The words handed to the session. `cuts` is mod+Enter's "interrupt and
-   * send": on a busy session the turn in flight is stopped first, through
-   * the Stop control's own `onstop`, and the words follow through the same
-   * send Enter uses; on an idle session it is that send and nothing else.
-   * Busy is read here, as the words leave, so a send that waited (a canvas
-   * being drawn) stops the turn running then, and none that has ended.
-   */
-  function deliver(
-    text: string,
-    extras: SendExtras,
-    id: string,
-    cuts: boolean
-  ): void {
-    if (cuts && busy) {
-      onstop();
-    }
-    onsubmit(text, extras, id);
-  }
-
-  /** Sends the draft; `cuts` stops a busy session's turn first ({@link deliver}). */
-  function submit(cuts = false): void {
-    if (held) {
-      sendBlock = heldWhy;
-      return;
-    }
-    if (!draft.hasContent) {
-      sendBlock = "Write a message before sending.";
-      return;
-    }
-    if (draft.uploading) {
-      sendBlock = "Wait for your file to finish uploading.";
-      return;
-    }
-    if (draft.unready) {
-      sendBlock = "A file couldn't upload. Tap it to try again, or remove it.";
-      return;
-    }
-    sendBlock = "";
-    draft.notice = "";
-    draftNote = "";
-    signingIn = null;
-    if (signsIn()) {
-      return;
-    }
-    if (draft.canvas) {
-      sendWithCanvas(cuts);
-      return;
-    }
-    // The text leaves the field for the one row it becomes (motion/share),
-    // keyed by the id the message is sent under. The field is measured
-    // before it redraws empty.
-    const { text, extras } = draft.take();
-    const id = newId();
-    departBox(`sent:${id}`, field as HTMLDivElement);
-    dismissed = true;
-    deliver(text, extras, id, cuts);
-  }
-
-  /**
-   * `/mcp auth <server>` for a fleet server is this browser's own sign-in,
-   * not a message: the agent's machine may have no browser at all (a phone
-   * is the browser here), and the hub holds the credentials either way. Its
-   * words stand over the composer, where it was typed; the session stays
-   * where it is while the provider opens in a tab of its own. True when the
-   * draft was that, and nothing is sent.
-   */
-  function signsIn(): boolean {
-    if (!fleet) {
-      return false;
-    }
-    const intent = fleet.mcpSignInIntent(
-      draft.text,
-      fleet.mcpServersStore.fleetMcp ?? []
-    );
-    if (intent.kind === "go") {
-      const { name } = intent;
-      signingIn = name;
-      fleet.signInToMcp(name).catch((error) => {
-        signingIn = null;
-        sendBlock = failureWords(error);
-      });
-      return true;
-    }
-    if (intent.kind === "say") {
-      signingIn = null;
-      if (intent.level === "error") {
-        sendBlock = intent.message;
-      } else {
-        draftNote = intent.message;
-      }
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * A message carrying the canvas: its picture is drawn now and its file,
-   * outline and picture join the send, through the attachments and images
-   * the send already carries. The canvas's chip flies into the row the
-   * message becomes when no words go with it; the words do otherwise. What
-   * cannot go says why under the chips and nothing is sent.
-   */
-  async function sendWithCanvas(cuts: boolean): Promise<void> {
-    const writing = draft;
-    const { canvas } = draft;
-    const extra = await room?.extras();
-    if (!extra || draft !== writing || draft.canvas !== canvas) {
-      return;
-    }
-    const chip = canvas?.folded ? canvasChip : undefined;
-    const id = newId();
-    if (draft.text.trim() || !chip) {
-      departBox(`sent:${id}`, field as HTMLDivElement);
-    } else {
-      departBox(`sent:${id}`, chip, false);
-    }
-    const { text, extras } = draft.take();
-    dismissed = true;
-    extras.attachments = [
-      ...(extras.attachments ?? []),
-      ...(extra.attachments ?? []),
-    ];
-    extras.images = [...(extras.images ?? []), ...(extra.images ?? [])];
-    deliver(text, extras, id, cuts);
-    if (canvas) {
-      room?.sent(canvas.id);
-    }
-  }
-
-  /**
-   * The `/` and `@` menu owns these keys while it is up — Enter picks a
-   * command rather than sending the half-typed name of one. True when the key
-   * was the menu's.
-   */
-  function menuKey(event: KeyboardEvent): boolean {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      step(event.key === "ArrowDown" ? 1 : -1);
-      return true;
-    }
-    if (event.key === "Enter" || event.key === "Tab") {
-      const picked = entries.find((entry) => entry.id === highlight);
-      if (picked) {
-        event.preventDefault();
-        choose(picked);
-        return true;
-      }
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      dismissed = true;
-      return true;
-    }
-    return false;
-  }
 
   /**
    * Tab adds the most likely suggestion chip, Shift+Tab all of them — only
@@ -1570,10 +480,10 @@
     // While the wheel is up its keys are its own; what it leaves (a key
     // typed into a draft of your own, any key once it is folding away)
     // reaches the field as usual.
-    if (canvasKey(event)) {
+    if (canvas.key(event)) {
       return;
     }
-    if ((recall && wheel?.key(event)) || recallKey(event)) {
+    if ((recalling.recall && recalling.wheel?.key(event)) || recallKey(event)) {
       return;
     }
     // BEFORE the menu: mod+Enter sends what is written as it stands, a
@@ -1583,15 +493,15 @@
     // Enter never stops a turn.
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      submit(true);
+      sender.submit(true);
       return;
     }
-    if (menuOpen ? menuKey(event) : chipKey(event)) {
+    if (menu.open ? menu.key(event) : chipKey(event)) {
       return;
     }
-    if (event.key === "Escape" && canvasUp) {
+    if (event.key === "Escape" && canvas.up) {
       event.preventDefault();
-      room?.fold();
+      canvas.room?.fold();
       return;
     }
     // Escape in the message closes find too, the caret staying where it is.
@@ -1602,7 +512,7 @@
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      submit();
+      sender.submit();
     }
   }
 
@@ -1615,18 +525,18 @@
    * True when the key was recall's.
    */
   function recallKey(event: KeyboardEvent): boolean {
-    if (menuOpen) {
+    if (menu.open) {
       return false;
     }
     if (draft.lifted) {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        replaceLifted(event.ctrlKey || event.metaKey);
+        queued.replaceLifted(event.ctrlKey || event.metaKey);
         return true;
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        returnEdit();
+        queued.returnEdit();
         return true;
       }
       return false;
@@ -1639,20 +549,20 @@
     );
     // The wheel still folding away (it takes no keys then): ↑ brings it
     // straight back up once it has landed, a close caught mid-way turning back.
-    if (recall && event.key === "ArrowUp" && bare) {
+    if (recalling.recall && event.key === "ArrowUp" && bare) {
       event.preventDefault();
-      reopen = true;
+      recalling.reopen = true;
       return true;
     }
-    if (!(event.key === "ArrowUp" && bare && startsRecall())) {
+    if (!(event.key === "ArrowUp" && bare && recalling.startsRecall())) {
       return false;
     }
     event.preventDefault();
-    const queued = draft.hasContent ? null : liftable();
-    if (queued) {
-      liftQueued(queued);
+    const lifting = draft.hasContent ? null : queued.liftable();
+    if (lifting) {
+      queued.liftQueued(lifting);
     } else {
-      openRecall(true);
+      recalling.openRecall(true);
     }
     return true;
   }
@@ -1665,23 +575,23 @@
 
   function onaction(): void {
     // An ask folding back into the pill: nothing is sent until it has landed.
-    if (askOpen && !busy) {
+    if (grown.askOpen && !busy) {
       return;
     }
     if (held) {
-      submit();
+      sender.submit();
       return;
     }
     if (draft.lifted) {
-      replaceLifted();
+      queued.replaceLifted();
     } else if (busy) {
       onstop();
     } else {
-      submit();
+      sender.submit();
     }
   }
 
-  /* ---- recall: what you sent, and your queued message ----------------- */
+  /* ---- the pill ------------------------------------------------------- */
 
   /** The box the pill stands in, which the grown shape and its rows share. */
   let shell = $state<HTMLElement>();
@@ -1689,1478 +599,103 @@
 
   /* ---- the canvas: the draft's drawing, standing over the field -------- */
 
-  /** The composer's box (chips, notice, pill), whose top the canvas stands on. */
-  let column = $state<HTMLElement>();
-  /** The canvas's box over the field, while it stands there. */
-  let canvasSlot = $state<HTMLElement>();
-  /** The canvas's chip, while it is folded. */
-  let canvasChip = $state<HTMLElement>();
-  /** The canvas's room: a conversation's composer has one (`chat`); a comment's reply draws none. */
-  const Room = untrack(() => fleet?.CanvasRoom);
-  const room = Room
-    ? new Room({
-        column: () => column,
-        dock: () => dockEl,
-        draft: () => draft,
-        field: () => field ?? undefined,
-        chip: () => canvasChip,
-        pill: () => pill,
-        session: () => recallOf,
-        shell: () => shell,
-        slot: () => canvasSlot,
-      })
-    : null;
-  /** What went wrong making, reading or sending the canvas, said over the field. */
-  function canvasNotice(): string {
-    return room?.error ?? "";
-  }
-  /** The canvas is being made, or read for a send: Send waits, pending. */
-  function canvasWorking(): boolean {
-    return room?.working ?? false;
-  }
-  /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
-  const canvasUp = $derived(room?.up ?? false);
-  /** Its box over the field is laid out while the draft's canvas stands there. */
-  const canvasStands = $derived(
-    canvasUp && !!draft.canvas && !draft.canvas.folded
-  );
-
-  // The composer handed another conversation's draft: this one's canvas goes,
-  // the new one's stands if it was standing.
-  let canvasDraft: ComposerDraft | undefined;
-  $effect(() => {
-    if (!room) {
-      return;
-    }
-    const next = draft;
-    untrack(() => {
-      if (canvasDraft !== undefined && canvasDraft !== next) {
-        room.rebind();
-      } else if (
-        canvasDraft === undefined &&
-        next.canvas &&
-        !next.canvas.folded
-      ) {
-        room.rebind();
-      }
-      canvasDraft = next;
-    });
+  const canvas = new CanvasLink({
+    askOpen: () => grown.askOpen,
+    dock: () => dockEl,
+    draft: () => draft,
+    field: () => field,
+    fleet: () => fleet,
+    paneVisible: () => paneVisible,
+    pill: () => pill,
+    recalling: () => !!recalling.recall,
+    recallOf: () => recallOf,
+    shell: () => shell,
+    wheelBack: () => recalling.wheel?.back(),
   });
-  // The panel gives a canvas back (Undock, or Done while docked).
-  $effect(() => {
-    const asked = handBack.ask;
-    if (!(room && asked) || asked.instanceId !== recallOf) {
-      return;
-    }
-    untrack(() => {
-      handBack.ask = null;
-      room.takeBack(asked);
-    });
-  });
-  // The panel shows the canvas standing here (picked from its list): it is the panel's.
-  $effect(() => {
-    const id = draft.canvas?.id;
-    const stage = id ? stages.get(id) : undefined;
-    if (room && stage?.at === "panel" && !draft.canvas?.folded) {
-      untrack(() => room.yielded());
-    }
-  });
-  $effect(() => {
-    if (!room) {
-      return;
-    }
-    const refit = () => room.refit();
-    window.addEventListener("resize", refit);
-    return () => {
-      window.removeEventListener("resize", refit);
-      room.destroy();
-    };
-  });
-
-  /** ⌘⇧D (Ctrl+Shift+D): the canvas opens, or folds when it stands. */
-  const isCanvasKey = (event: KeyboardEvent) =>
-    event.shiftKey &&
-    (event.metaKey || event.ctrlKey) &&
-    !event.altKey &&
-    event.key.toLowerCase() === "d";
-
-  function canvasKey(event: KeyboardEvent): boolean {
-    if (!(room && recallOf && isCanvasKey(event)) || askOpen) {
-      return false;
-    }
-    event.preventDefault();
-    if (recall) {
-      wheel?.back();
-    }
-    room.toggle();
-    return true;
-  }
-
-  /**
-   * The key reaches the composer from anywhere in its group: the field,
-   * its chips, the page around it. Escape folds a standing canvas.
-   */
-  function windowKey(event: KeyboardEvent): void {
-    if (event.defaultPrevented || !paneVisible || !dockEl) {
-      return;
-    }
-    const at = document.activeElement;
-    const ours =
-      !at ||
-      at === document.body ||
-      !!dockEl.closest('[data-slot="leaf"]')?.contains(at);
-    if (!ours || at === field) {
-      return;
-    }
-    if (canvasKey(event)) {
-      return;
-    }
-    if (event.key === "Escape" && canvasUp && !recall) {
-      event.preventDefault();
-      room?.fold();
-    }
-  }
   const recalled = $derived(
     fleet && recallOf ? fleet.sessionsStore.session(recallOf) : null
   );
 
-  /**
-   * The wheel, while it is up: whether keys reach it from the field (a held
-   * press leaves the keyboard down), the composer's text when it came up,
-   * and where the caret stood in it.
-   */
-  let recall = $state<{
-    keys: boolean;
-    text: string;
-    caret: [number, number];
-    measured: ReturnType<typeof measureShape>;
-  } | null>(null);
-  /** The pill's buttons, which fold into a deck while the wheel is up. */
-  let ctrls = $state<HTMLElement>();
-  /** The field's box: the draft's row on the wheel. */
-  let fieldWrap = $state<HTMLElement>();
-  let wheel = $state<ReturnType<ComposerFleet["RecallWheel"]>>();
-  /** ↑ pressed while the wheel was folding: it comes up again once folded. */
-  let reopen = false;
-  /** The wheel's row on the field's line, for a screen reader. */
-  let recallActive = $state<string>();
-  /**
-   * The wheel is up and not yet folding: the field has no caret, and a
-   * pick fits the field on the fold's clock once it is off (`.settling`).
-   * The pill's own surface steps aside for as long as the wheel is mounted
-   * (`.recalling`): its shape is the composer until it has folded away.
-   */
-  let wheeling = $state(false);
-  /**
-   * The field's hint fading back in after the wheel has folded away (its
-   * timer while it does): it is not drawn while the wheel is up, where it
-   * would stand doubled under the row on the line.
-   */
-  let hintBack = $state<ReturnType<typeof setTimeout> | 0>(0);
-  const recallId = `recall-${newId()}`;
-  /** What the wheel rolls, read only while it is up. */
-  const sentHere = $derived(
-    recall && recalled ? sentByReader(recalled.messages) : []
-  );
+  /* ---- recall: what you sent, and your queued message ----------------- */
 
-  /**
-   * ↑ starts recall only from an empty field or with the caret at its very
-   * start, so in a draft it still moves the caret, as a shell's does.
-   */
-  function startsRecall(): boolean {
-    if (!(recallOf && field) || recall || draft.lifted || askOpen || canvasUp) {
-      return false;
-    }
-    const [from, to] = mentionField?.selection() ?? [0, 0];
-    return from === to && (draft.text === "" || from === 0);
-  }
-
-  /** Your newest message, when it is queued and can still be edited. */
-  function liftable(): Message | null {
-    const messages = recalled?.messages ?? [];
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (opensTurn(messages[i])) {
-        return fleet?.userTurnActions(messages[i]).edit === "queued"
-          ? messages[i]
-          : null;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Where each of the pill's buttons stands in the deck they fold into
-   * while the wheel is up, read before anything is written: Send in front,
-   * where it is; each one behind it slid toward it until it peeks out by
-   * `--spacing-c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
-   * reads behind the one in front and nothing behind it shows through. With
-   * reduced motion nothing slides: the ones behind fade out, and the deck is
-   * Send alone. Returns each button's place, and where the deck starts
-   * (`deck`) and where its first button stands now (`start`), from the
-   * shell's inline start.
-   */
-  function foldDeck(
-    row: HTMLElement,
-    from: number
-  ): { deck: number; start: number; places: DeckPlace[] } {
-    const style = getComputedStyle(row);
-    const peek = Number.parseFloat(
-      style.getPropertyValue("--spacing-c-deck-peek")
-    );
-    const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
-    const cards = [...row.children]
-      .filter((card): card is HTMLElement => card instanceof HTMLElement)
-      .map((card) => ({ card, box: card.getBoundingClientRect() }))
-      .filter(({ box }) => box.width > 0)
-      .reverse();
-    const [front] = cards;
-    if (!front) {
-      const none = Number.POSITIVE_INFINITY;
-      return { deck: none, start: none, places: [] };
-    }
-    const slide = motionOk.current;
-    let { left } = front.box;
-    // On the device's pixel grid, so each peeking edge is drawn whole, not
-    // smeared across two pixels at a fraction of its contrast.
-    const grid = window.devicePixelRatio || 1;
-    const places = cards.map(({ card, box }, i) => {
-      const s = slide ? scale ** i : 1;
-      // Its leading edge one peek past the edge of the one in front.
-      const edge = Math.round((front.box.left - i * peek) * grid) / grid;
-      const x = slide
-        ? edge + (box.width * s) / 2 - (box.left + box.width / 2)
-        : 0;
-      if (slide) {
-        left = Math.min(left, edge);
-      }
-      return { card, x, s, o: slide ? 1 : Number(i === 0) };
-    });
-    const first = (cards.at(-1)?.box.left ?? left) - from;
-    return { deck: left - from, start: slide ? first : left - from, places };
-  }
-
-  /** One of the pill's buttons, where it stands in the deck. */
-  interface DeckPlace {
-    card: HTMLElement;
-    o: number;
-    s: number;
-    x: number;
-  }
-  /**
-   * The buttons folded into the deck, and their motion, while they are, and
-   * where the first of them stands unfolded (from the shell's inline start).
-   */
-  let decked: { places: DeckPlace[]; runs: Animation[]; start: number } | null =
-    null;
-  /**
-   * The deck's leading edge on the move, from the shell's inline start:
-   * from `from` to `to` on `run`'s clock, the drawer curve. Every button
-   * slides on the same curve, so the first one's edge leads the whole way.
-   */
-  let deckSlide: { from: number; to: number; run: Animation | null } | null =
-    null;
-
-  /**
-   * Where the deck's leading edge stands this frame (from the shell's
-   * inline start), and whether it has stopped: arithmetic off its motion's
-   * clock, no layout read. The wheel's row on the field's line stops short
-   * of it at every frame.
-   */
-  function deckAt(): { at: number; still: boolean } {
-    const slide = deckSlide;
-    if (!slide) {
-      return { at: Number.POSITIVE_INFINITY, still: true };
-    }
-    const { run } = slide;
-    const ms = Number(run?.effect?.getTiming().duration) || 0;
-    const moving = run?.playState === "running" || run?.playState === "paused";
-    const t =
-      run && moving && ms > 0
-        ? Math.min(1, Math.max(0, Number(run.currentTime ?? 0) / ms))
-        : 1;
-    return {
-      at: slide.from + (slide.to - slide.from) * easeDrawer(t),
-      still: t >= 1,
-    };
-  }
-
-  /**
-   * The buttons slide together into the deck on the wheel's own growth:
-   * its --duration-panel on the drawer curve. Transform and opacity only, by the
-   * Web Animations API, so the buttons' own transitions stay theirs.
-   */
-  function deckIn(places: DeckPlace[], from: number, to: number): void {
-    deckOut(0);
-    const timing = {
-      duration: dur("--duration-panel"),
-      easing: CURVE.drawer,
-      fill: "forwards",
-    } as const;
-    const runs = places.map(({ card, x, s, o }) =>
-      card.animate(
-        [
-          { translate: "0 0", scale: "1", opacity: 1 },
-          { translate: `${x.toFixed(2)}px 0`, scale: String(s), opacity: o },
-        ],
-        timing
-      )
-    );
-    const stack = { places, runs, start: from };
-    decked = stack;
-    deckSlide = { from, to, run: runs.at(-1) ?? null };
-    // Landed, each card stands where it is as its own style, not held by a
-    // motion: a held motion's layer is drawn at full size and scaled, which
-    // smears each card's 1px edge across two pixels; standing, it is drawn
-    // at its size, its edge whole.
-    runs[0]?.finished.then(
-      () => {
-        if (decked !== stack) {
-          return;
-        }
-        // Its own end, written out (WebKit's commitStyles() has written a
-        // finished motion's start).
-        for (const [i, { card, x, s, o }] of places.entries()) {
-          card.style.translate = `${x.toFixed(2)}px 0`;
-          card.style.scale = String(s);
-          card.style.opacity = String(o);
-          runs[i]?.cancel();
-        }
-      },
-      () => undefined
-    );
-  }
-
-  /**
-   * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --duration-panel-exit on the drawer curve (`ms`: 0 puts
-   * them back at once).
-   */
-  function deckOut(ms = dur("--duration-panel-exit")): void {
-    const was = decked;
-    decked = null;
-    if (!was) {
-      return;
-    }
-    const edge = deckAt().at;
-    deckSlide = null;
-    // Where each one is drawn now, read before the motion that held it goes.
-    const from = was.places.map(({ card }) => {
-      const style = getComputedStyle(card);
-      return {
-        translate: style.translate,
-        scale: style.scale,
-        opacity: Number(style.opacity),
-      };
-    });
-    for (const run of was.runs) {
-      run.cancel();
-    }
-    for (const { card } of was.places) {
-      for (const property of ["translate", "scale", "opacity"]) {
-        card.style.removeProperty(property);
-      }
-    }
-    if (ms <= 0) {
-      return;
-    }
-    const runs = was.places.map(({ card }, i) =>
-      card.animate([from[i], { translate: "0 0", scale: "1", opacity: 1 }], {
-        duration: ms,
-        easing: CURVE.drawer,
-      })
-    );
-    deckSlide = { from: edge, to: was.start, run: runs.at(-1) ?? null };
-  }
-
-  function openRecall(keys: boolean): void {
-    if (
-      !(recallOf && field && shell && pill && ctrls) ||
-      recall ||
-      draft.lifted ||
-      askOpen ||
-      canvasUp
-    ) {
-      return;
-    }
-    // Every size first, before anything is written: one layout per open.
-    const measured = measureShape(shell, pill, field);
-    const deck = foldDeck(ctrls, shell.getBoundingClientRect().left);
-    deckIn(deck.places, deck.start, deck.deck);
-    recall = {
-      keys,
-      text: draft.text,
-      caret: mentionField?.selection() ?? [0, 0],
-      measured,
-    };
-    wheeling = true;
-    dismissed = true;
-    // Keys reach the wheel from the field.
-    if (keys) {
-      field.focus();
-    }
-  }
-
-  /**
-   * The field's next fit, while a pick taken off the wheel waits on it
-   * (autosize `measured`): it runs in the fit, so whatever moves with the
-   * field's new height starts in the frame the height does.
-   */
-  let onFit: ((whole: number) => void) | null = null;
-
-  /**
-   * The wheel's pick, into the field. Its first line stays where the
-   * wheel's row stood, the words they share in place, and the field fits
-   * it on the wheel's fold (`.settling`): growing, its top carries the
-   * further lines up; shrinking, the text stands as low as the line and
-   * the field's top comes down to it on the same curve. The caret goes
-   * after it once it has landed (`recallDone`). Resolves to the pill's
-   * height, fitted.
-   */
-  function recallTake(text: string): Promise<number> {
-    const node = field;
-    const was = node?.offsetHeight ?? 0;
-    const base = pill?.offsetHeight ?? 0;
-    deckOut();
-    wheeling = false;
-    if (!node || text === draft.text) {
-      draft.text = text;
-      return Promise.resolve(base);
-    }
-    const fitted = new Promise<number>((done) => {
-      onFit = (whole) => {
-        onFit = null;
-        const cap =
-          Number.parseFloat(getComputedStyle(node).maxHeight) ||
-          Number.POSITIVE_INFINITY;
-        const next = folds(whole) ? floor : Math.min(whole, cap);
-        const drop = was - next;
-        if (drop > 0.5 && motionOk.current) {
-          node.animate([{ translate: `0 ${drop}px` }, { translate: "0 0" }], {
-            duration: heightMs(node),
-            easing: CURVE.drawer,
-          });
-        }
-        done(base + next - was);
-      };
-    });
-    draft.text = text;
-    return fitted;
-  }
-
-  /** Back to the draft, the caret where it was, so a key typed lands there. */
-  function recallBack(): void {
-    deckOut();
-    wheeling = false;
-    if (recall && field) {
-      mentionField?.select(...recall.caret);
-    }
-  }
-
-  async function recallDone(send: boolean): Promise<void> {
-    const was = recall;
-    const again = reopen;
-    reopen = false;
-    recall = null;
-    // The field's hint comes back once the rows are gone, never under them.
-    clearTimeout(hintBack);
-    hintBack = setTimeout(() => {
-      hintBack = 0;
-    }, dur("--duration-fade"));
-    await tick();
-    const took = was?.text !== draft.text;
-    // Back to the draft and asked for again: it comes straight back up. A
-    // pick taken or sent stands; the ↑ was too late for it.
-    if (again && !took && !send) {
-      openRecall(was?.keys ?? true);
-      return;
-    }
-    // Back to the field if you were typing in it, or to edit what you took;
-    // a hold put away leaves the keyboard down.
-    if (was?.keys || took) {
-      field?.focus();
-    }
-    if (took && field) {
-      // The caret after the pick, ready to edit. A pick past the field's
-      // ceiling scrolls to its end, gliding rather than jumping there.
-      const from = field.scrollTop;
-      mentionField?.select(draft.text.length);
-      const to = Math.max(0, field.scrollHeight - field.clientHeight);
-      if (to !== from) {
-        field.scrollTop = from;
-        field.scrollTo({
-          top: to,
-          behavior: scrollMotion(motionOk.current),
-        });
-      }
-    }
-    // The wheel sends only on mod+Enter, so its send is mod+Enter's.
-    if (send) {
-      submit(true);
-    }
-  }
-
-  // A composer handed another conversation's draft puts the last one's
-  // wheel away at once: what it rolled was that conversation's.
-  $effect.pre(() => {
-    track(draft);
-    untrack(() => {
-      deckOut(0);
-      recall = null;
-      reopen = false;
-      wheeling = false;
-    });
+  /** The wheel of what you sent, over the pill. */
+  const recalling = new ComposerRecall({
+    askOpen: () => grown.askOpen,
+    canvasUp: () => canvas.up,
+    dismissMenu: () => {
+      menu.dismissed = true;
+    },
+    draft: () => draft,
+    field: () => field,
+    floor: () => fieldFold.floor,
+    folds: (whole) => fieldFold.folds(whole),
+    holding: () => !!press.hold?.live,
+    mentionField: () => mentionField,
+    pill: () => pill,
+    recalled: () => recalled,
+    recallOf: () => recallOf,
+    shell: () => shell,
+    submit: (cuts) => sender.submit(cuts),
+  });
+  /** A held press or a swipe up on a touch screen brings the wheel up. */
+  const press = new PressHold({
+    askOpen: () => grown.askOpen,
+    canvasUp: () => canvas.up,
+    draft: () => draft,
+    field: () => field,
+    openCanvas: () => canvas.room?.open(),
+    openRecall: (keys) => recalling.openRecall(keys),
+    recall: () => recalling.recall,
+    recallOf: () => recallOf,
+    wheel: () => recalling.wheel,
   });
 
-  // While the wheel is up, a press anywhere outside the composer puts it
-  // away, back to the draft. The grown shape is the composer's: a press on
-  // it, around the rows, rolls the wheel as a press on the rows does.
-  $effect(() => {
-    if (!recall) {
-      return;
-    }
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Element;
-      if (!shell?.contains(target)) {
-        wheel?.back();
-      } else if (target.closest('[data-slot="grown-halo"]')) {
-        wheel?.grab(event);
-      }
-    };
-    document.addEventListener("pointerdown", outside, true);
-    return () => document.removeEventListener("pointerdown", outside, true);
+  /** Your queued message, edited in the composer. */
+  const queued = new QueuedEdit({
+    agentName: () => agentName,
+    askOpen: () => grown.askOpen,
+    busy: () => busy,
+    canvasUp: () => canvas.up,
+    draft: () => draft,
+    field: () => field,
+    fleet: () => fleet,
+    mentionField: () => mentionField,
+    natural: () => fieldFold.natural,
+    onstop,
+    pill: () => pill,
+    recalled: () => recalled,
+    recalling: () => !!recalling.recall,
+    recallOf: () => recallOf,
+    say: (words) => {
+      sender.sendBlock = words;
+    },
+    shell: () => shell,
   });
 
-  // A touch the wheel is rolling must not pan the page under it. Pointer
-  // events cannot cancel a pan, and touch-action alone has not always held
-  // on iOS Safari, so the touch's own moves are cancelled while it belongs
-  // to the wheel: one that began on the composer, or the held press that
-  // brought the wheel up mid-touch.
-  $effect(() => {
-    if (!recall) {
-      return;
-    }
-    let ours = untrack(() => !!hold?.live);
-    const began = (event: TouchEvent) => {
-      ours = !!shell?.contains(event.target as Node);
-    };
-    const moved = (event: TouchEvent) => {
-      if (ours && event.cancelable) {
-        event.preventDefault();
-      }
-    };
-    document.addEventListener("touchstart", began, {
-      capture: true,
-      passive: true,
-    });
-    document.addEventListener("touchmove", moved, {
-      capture: true,
-      passive: false,
-    });
-    return () => {
-      document.removeEventListener("touchstart", began, true);
-      document.removeEventListener("touchmove", moved, true);
-    };
-  });
-
-  /*
-   * A held press or a swipe up on a touch screen. With the keyboard down the
-   * composer is a control you can hold: a finger resting on it
-   * --duration-press-hold brings the wheel up under it, and so does one that
-   * swipes up off it; dragging while still down rolls it. A swipe's own
-   * rise is the opening's: the roll starts where the finger turns back
-   * down, so a swipe lifted while still rising leaves the newest message
-   * on the line. Lifting leaves it up: a tap on a row takes it, a tap
-   * outside puts it away. Moving any other way first is a scroll or a
-   * selection; while the field is being typed in (keyboard up) every touch
-   * is the field's: scrolling it, selecting, pasting. The pill takes no pan
-   * while the keyboard is down (`touch-action`), so a swipe on it never
-   * scrolls the page, and a swipe anywhere else is the page's.
-   */
-  const SLOP = 8;
-  let hold = $state.raw<{
-    id: number;
-    x: number;
-    y: number;
-    from: number;
-    live: boolean;
-    /** A swipe that brought the wheel up and is still rising. */
-    rising: boolean;
-    timer: ReturnType<typeof setTimeout>;
-    lastY: number;
-    lastAt: number;
-    flick: number;
-  } | null>(null);
-  let swallowClick = false;
-
-  /**
-   * A pen on the pill (The pen's swipe): a swipe up with it, by the wheel's
-   * own test (past the slop, more up than across), grows the pill into the
-   * canvas. A pen never holds the wheel up; that press is a finger's.
-   */
-  let pen: { id: number; x: number; y: number } | null = null;
-
-  /** The pen on the pill moved: true when the move was the pen's. */
-  function penMoved(event: PointerEvent): boolean {
-    if (!pen || event.pointerId !== pen.id) {
-      return false;
-    }
-    const dx = event.clientX - pen.x;
-    const dy = event.clientY - pen.y;
-    if (dy < -SLOP && -dy > Math.abs(dx)) {
-      pen = null;
-      event.preventDefault();
-      room?.open();
-    } else if (Math.hypot(dx, dy) > SLOP) {
-      pen = null;
-    }
-    return true;
-  }
-
-  function onholddown(event: PointerEvent): void {
-    if (event.pointerType === "pen") {
-      pen =
-        recallOf &&
-        !(recall || draft.lifted || askOpen || canvasUp) &&
-        !(event.target as Element).closest("button, a, input")
-          ? { id: event.pointerId, x: event.clientX, y: event.clientY }
-          : null;
-      return;
-    }
-    if (
-      event.pointerType !== "touch" ||
-      !recallOf ||
-      recall ||
-      draft.lifted ||
-      askOpen ||
-      document.activeElement === field
-    ) {
-      return;
-    }
-    // Its own controls answer a press themselves.
-    if ((event.target as Element).closest("button, a, input")) {
-      return;
-    }
-    const press = {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      from: event.clientY,
-      live: false,
-      rising: false,
-      lastY: event.clientY,
-      lastAt: 0,
-      flick: 0,
-      timer: setTimeout(() => {
-        if (hold?.id !== press.id) {
-          return;
-        }
-        hold.live = true;
-        hold.from = hold.lastY;
-        hold.lastAt = performance.now();
-        felt("hold");
-        openRecall(false);
-      }, dur("--duration-press-hold")),
-    };
-    hold = press;
-  }
-
-  $effect(() => {
-    const moved = (event: PointerEvent) => {
-      if (penMoved(event)) {
-        return;
-      }
-      const press = hold;
-      if (!press || event.pointerId !== press.id) {
-        return;
-      }
-      const now = performance.now();
-      if (!press.live) {
-        const dx = event.clientX - press.x;
-        const dy = event.clientY - press.y;
-        if (dy < -SLOP && -dy > Math.abs(dx)) {
-          // A swipe up: the wheel comes up under the finger.
-          clearTimeout(press.timer);
-          press.live = true;
-          press.rising = true;
-          press.from = event.clientY;
-          press.lastY = event.clientY;
-          press.lastAt = now;
-          felt("hold");
-          openRecall(false);
-        } else if (Math.hypot(dx, dy) > SLOP) {
-          clearTimeout(press.timer);
-          hold = null;
-        } else {
-          press.lastY = event.clientY;
-        }
-        return;
-      }
-      event.preventDefault();
-      if (press.rising) {
-        if (event.clientY <= press.from) {
-          press.from = event.clientY;
-          press.lastY = event.clientY;
-          press.lastAt = now;
-          return;
-        }
-        press.rising = false;
-      }
-      press.flick =
-        (event.clientY - press.lastY) / Math.max(1, now - press.lastAt);
-      press.lastY = event.clientY;
-      press.lastAt = now;
-      wheel?.follow(event.clientY - press.from);
-    };
-    const lifted = (event: PointerEvent) => {
-      if (pen?.id === event.pointerId) {
-        pen = null;
-      }
-      const press = hold;
-      if (!press || event.pointerId !== press.id) {
-        return;
-      }
-      clearTimeout(press.timer);
-      hold = null;
-      if (!press.live) {
-        return;
-      }
-      // The press is spent: no click on what it lifted from, no focus in
-      // the field.
-      swallowClick = true;
-      setTimeout(() => {
-        swallowClick = false;
-      }, dur("--duration-press-hold"));
-      wheel?.release(press.flick);
-    };
-    document.addEventListener("pointermove", moved, { passive: false });
-    document.addEventListener("pointerup", lifted);
-    document.addEventListener("pointercancel", lifted);
-    return () => {
-      document.removeEventListener("pointermove", moved);
-      document.removeEventListener("pointerup", lifted);
-      document.removeEventListener("pointercancel", lifted);
-    };
-  });
-
-  /** iOS still starts its own press gestures under a live hold: the callout, the focus on lift. */
-  function onholdnative(event: Event): void {
-    if (hold?.live || swallowClick) {
-      event.preventDefault();
-    }
-  }
-  function onholdclick(event: MouseEvent): void {
-    if (swallowClick) {
-      event.stopPropagation();
-      event.preventDefault();
-      swallowClick = false;
-    }
-  }
-
-  /*
-   * While a press is held on the composer, and while the wheel it brought
-   * up is up, nothing on the page selects: iOS would otherwise turn the hold
-   * into a text selection and drag it across the page. Only for a hold: the
-   * switch restyles the whole page, which a key or a click has no need of.
-   */
-  $effect(() => {
-    if (!(hold || (recall && !recall.keys))) {
-      return;
-    }
-    const root = document.documentElement;
-    root.dataset.composerHolding = "";
-    getSelection()?.removeAllRanges();
-    const refuse = (event: Event) => event.preventDefault();
-    document.addEventListener("selectstart", refuse);
-    return () => {
-      delete root.dataset.composerHolding;
-      document.removeEventListener("selectstart", refuse);
-    };
-  });
-
-  /*
-   * Your queued message, edited in the composer. Its words lift out of their
-   * bubble into the field (lift.svelte.ts) while the composer grows one row
-   * out of its pill to say so; Enter puts the edit in its place,
-   * Esc (or Keep it, on a touch screen) gives the words back as they were.
-   * What the field held steps aside meanwhile and comes back after. The
-   * edit belongs to its conversation's draft: a switch away leaves it
-   * there, and coming back finds it as it was.
-   */
-  /** The grown row while a queued message is edited, and where it stands. */
-  let edit = $state<{
-    inset: number;
-    base: number;
-    row: number;
-    shown: boolean;
-  } | null>(null);
-  let editShape: GrownShape | null = null;
-  /** The sizes a lift read before it wrote anything, for the row it grows. */
-  let liftSizes: ReturnType<typeof measureShape> | null = null;
-  let editRow = $state<HTMLElement>();
-  /** The field's words are flying: it draws them only once they land. */
-  let wordsLanded = $state(true);
-  /** The flight `wordsLanded` waits for; a newer one owns it. */
-  let landingTurn = 0;
-  function landAfter(done: Promise<void> | number): void {
-    landingTurn += 1;
-    const mine = landingTurn;
-    wordsLanded = false;
-    const land = () => {
-      if (landingTurn === mine) {
-        wordsLanded = true;
-      }
-    };
-    if (typeof done === "number") {
-      setTimeout(land, done);
-    } else {
-      done.then(land);
-    }
-  }
-
-  async function liftQueued(message: Message): Promise<void> {
-    if (
-      !(fleet && field && recallOf) ||
-      draft.lifted ||
-      recall ||
-      askOpen ||
-      canvasUp
-    ) {
-      return;
-    }
-    const { asBubble, asField, bubbleBox, bubbleWords, fieldBox, startFlight } =
-      fleet.lift;
-    // Both ends first, then the change: one layout.
-    if (shell && pill) {
-      liftSizes = measureShape(shell, pill, field);
-    }
-    const words = bubbleWords(message.id);
-    const from = words ? bubbleBox(words) : null;
-    const trip = from && words ? startFlight(asBubble(words), from) : null;
-    draft.lift(message.id, message.instanceId, message.content);
-    felt("take");
-    field.focus();
-    await tick();
-    mentionField?.select(draft.text.length);
-    if (!trip) {
-      field.scrollTop = field.scrollHeight;
-      return;
-    }
-    // The field fits its new words in the frame after they land in it
-    // (motion/autosize): the height it is growing to is read once it has.
-    const flown = new Promise<void>((done) => {
-      requestAnimationFrame(async () => {
-        if (!field) {
-          trip.cancel();
-          done();
-          return;
-        }
-        const height =
-          Number.parseFloat(field.style.height) || field.offsetHeight;
-        // A long message opens scrolled to its end, where the caret is.
-        const to = fieldBox(field, { height, whole: natural });
-        await trip.fly(asField(field, draft.text), to);
-        done();
-        field.scrollTop = field.scrollHeight;
-      });
-    });
-    landAfter(flown);
-  }
-
-  /**
-   * The words go back to their bubble: as they were, or as `replaced` says
-   * they now are. What stepped aside comes back into the field.
-   */
-  async function returnEdit(replaced?: string): Promise<void> {
-    const lift = draft.lifted;
-    if (!(fleet && lift && field)) {
-      return;
-    }
-    const {
-      asBubble,
-      asField,
-      bubbleBox,
-      bubbleWords,
-      fieldBox,
-      LEFT_BY,
-      landing: landingWords,
-      replacing,
-      startFlight,
-    } = fleet.lift;
-    const leaving = draft.text;
-    const from = fieldBox(field);
-    const trip = startFlight(asField(field, leaving), from);
-    // What the field holds again shows once the words leaving it are gone.
-    if (motionOk.current) {
-      landAfter(dur("--duration-panel") * LEFT_BY);
-    }
-    if (replaced !== undefined) {
-      replacing.set(lift.id, replaced);
-    }
-    landingWords.add(lift.id);
-    felt("give back");
-    draft.putBack();
-    field.focus();
-    await tick();
-    const words = bubbleWords(lift.id);
-    if (!words) {
-      trip.cancel();
-      landingWords.delete(lift.id);
-      return;
-    }
-    // The bubble opens from its tag; on a transcript held at its foot it
-    // opens upward, so its words land that much higher than they stand now.
-    const log = words.closest('[role="log"]');
-    const fold = words.parentElement;
-    const atFoot =
-      !!log && log.scrollHeight - log.scrollTop - log.clientHeight < 2;
-    const grows = atFoot && fold ? words.offsetHeight - fold.offsetHeight : 0;
-    const to = bubbleBox(words, grows);
-    if (to) {
-      await trip.fly(asBubble(words), to);
-    } else {
-      trip.cancel();
-    }
-    landingWords.delete(lift.id);
-  }
-
-  /**
-   * Enter while editing: the field's words go in the queued message's place.
-   * `cuts` (mod+Enter) then stops a busy session's turn, so the message is
-   * taken now: the replace goes first, so the turn's end never hands the
-   * session the words as they were. Unchanged words keep the queued message
-   * and stop the turn all the same; a failed replace stops nothing.
-   */
-  async function replaceLifted(cuts = false): Promise<void> {
-    const lift = draft.lifted;
-    const message = recalled?.messages.find((m) => m.id === lift?.id);
-    if (!(fleet && lift && message)) {
-      return;
-    }
-    const { notEdited, watchReplace } = fleet.lift;
-    const words = draft.text.trim();
-    if (!words) {
-      sendBlock = "Write a message before sending.";
-      return;
-    }
-    if (words === lift.words.trim()) {
-      returnEdit();
-      if (cuts && busy) {
-        onstop();
-      }
-      return;
-    }
-    try {
-      const sent = await fleet.replaceQueued(message, words);
-      if (cuts && busy) {
-        onstop();
-      }
-      // Read while the replace was on its way out: the edit is already
-      // back in the field, and the withdraw can only say so again.
-      if (draft.lifted !== lift) {
-        return;
-      }
-      returnEdit(words);
-      watchReplace(draft, {
-        id: lift.id,
-        instanceId: lift.instanceId,
-        withdraw: sent.withdraw,
-        replacement: sent.replacement,
-        words,
-        agent: agentName,
-      });
-    } catch (error) {
-      // The words stay in the field, still the queued message's: Enter
-      // tries again, Esc keeps it as it was.
-      if (draft.lifted === lift) {
-        sendBlock = notEdited(failureWords(error));
-      }
-    }
-  }
-
-  /**
-   * The queued message was read while its words were in the field: it can
-   * no longer be edited, and the edit stays, with why, to send anew.
-   */
-  function settleLift(read: string): void {
-    const edited = draft.putBack();
-    draft.keepEdit(edited);
-    draft.notice = `${read} Your edit is still in the composer.`;
-  }
-
-  $effect(() => {
-    const lift = draft.lifted;
-    if (!(fleet && lift)) {
-      return;
-    }
-    const message = fleet.sessionsStore
-      .session(lift.instanceId)
-      ?.messages.find((m) => m.id === lift.id);
-    if (!(message && fleet.userTurnActions(message).edit === "queued")) {
-      const { readFirst } = fleet.lift;
-      untrack(() => settleLift(readFirst(agentName)));
-    }
-  });
-
-  $effect(() => {
-    if (fleet && recallOf) {
-      return fleet.lift.writesTo(recallOf);
-    }
-  });
-
-  // A row asked to lift its message (its Edit, or a tap on touch): the
-  // composer writing to that conversation takes it.
-  $effect(() => {
-    const liftAsk = fleet?.lift.liftAsk;
-    const asked = liftAsk?.message;
-    if (!(liftAsk && asked) || asked.instanceId !== recallOf) {
-      return;
-    }
-    untrack(() => {
-      liftAsk.message = null;
-      if (draft.lifted?.id !== asked.id) {
-        if (draft.lifted) {
-          returnEdit();
-        }
-        liftQueued(asked);
-      }
-    });
-  });
-
-  /** Grows the editing row out of the pill. */
-  function growEdit(): void {
-    if (!(shell && pill && field)) {
-      return;
-    }
-    if (editShape) {
-      editShape.morphTo(1, editShape.ext, dur("--duration-panel"));
-      if (edit) {
-        edit.shown = true;
-      }
-      return;
-    }
-    // Measured by the lift before it wrote; a draft lifted elsewhere (a
-    // conversation switched to) is measured here.
-    const { size } = liftSizes ?? measureShape(shell, pill, field);
-    liftSizes = null;
-    const { row } = size;
-    const shape = new GrownShape(shell, size, row);
-    editShape = shape;
-    // Inset past the shoulders' curve, so nothing sits against the slope.
-    edit = {
-      inset: Math.round(shape.taper() + size.r + size.headroom),
-      base: size.base,
-      row,
-      shown: false,
-    };
-    growRow(shape, row);
-  }
-
-  /**
-   * The row's entrance: the shape grows `row` up, and its parts come up
-   * partway, once there is room for them: --duration-control into the shape's
-   * own clock, which runs on drawn frames (GrownShape `morphTo`). A lift's
-   * focus that brings up an on-screen keyboard has iOS Safari hold its
-   * frames until the keyboard has risen, and neither the shape nor its
-   * parts spend that wait, so both are seen coming up once frames come.
-   */
-  function growRow(shape: GrownShape, row: number): void {
-    shape.morphTo(1, row, dur("--duration-panel"), shape.base, {
-      ms: motionOk.current ? dur("--duration-control") : 0,
-      run: () => {
-        if (edit && editShape === shape) {
-          edit.shown = true;
-        }
-      },
-    });
-  }
-
-  async function foldEdit(): Promise<void> {
-    const shape = editShape;
-    if (!shape) {
-      return;
-    }
-    if (edit) {
-      edit.shown = false;
-    }
-    await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
-    // Grown again while it folded: it stays.
-    if (editShape === shape && !draft.lifted) {
-      shape.remove();
-      editShape = null;
-      edit = null;
-    }
-  }
-
-  $effect(() => {
-    const lifting = !!draft.lifted;
-    if (!(shell && pill)) {
-      return;
-    }
-    untrack(() => (lifting ? growEdit() : foldEdit()));
-  });
-
-  // The field grows and shrinks as the words are edited: the grown shape and
-  // its row stay on the pill's top edge.
-  $effect(() => {
-    const node = pill;
-    if (!(node && edit)) {
-      return;
-    }
-    // biome-ignore lint/style/noRestrictedGlobals: the grown shape (grown.ts, absolutely placed behind the pill) is redrawn, a path and its own height, which resize no box watched; it stands on the pill in the frame the pill grew
-    const sizes = new ResizeObserver(([entry]) => {
-      const base = entry.borderBoxSize[0].blockSize;
-      if (editShape && edit && Math.abs(base - edit.base) > 0.5) {
-        edit.base = base;
-        editShape.base = base;
-      }
-    });
-    sizes.observe(node, { box: "border-box" });
-    return () => sizes.disconnect();
-  });
-
-  $effect(() => {
-    if (editRow && editShape && edit) {
-      // What it says comes up from inside the shape, never above its edge.
-      editShape.clip(editRow, () => ({
-        left: edit?.inset ?? 0,
-        bottom: edit?.base ?? 0,
-        height: edit?.row ?? 0,
-      }));
-    }
-  });
-
-  $effect(() => () => {
-    editShape?.remove();
-    editShape = null;
-  });
-
-  /*
-   * A parked ask (a permission, a question) is the composer itself while it
-   * waits. The composer grows up out of its pill into the ask's
-   * card: the shape the recall wheel and a queued edit grow (grown.ts), its
-   * sides straight and its top solid, since an ask has no rows leaning back
-   * and no oldest row fading out. What stands over the pill (the delegate
-   * tray, the plan's ring, the suggestion chips, an offer) steps
-   * aside while it is up, so nothing covers it, and so do the pill's own
-   * controls and the attachments: the only controls in the composer are the
-   * ask's. The card stands on the shell's foot, over the pill, so no empty
-   * band is left under it; the shape keeps the pill's measured height as its
-   * foot and reaches the rest of the card's height above it. The draft stays
-   * in the field, unseen and untouched. Answered, dismissed or withdrawn, the
-   * ask folds back into the pill and the draft and its attachments are as they
-   * were;
-   * the next ask waiting takes its place in the grown shape without folding,
-   * its parts staggering in again.
-   *
-   * A question the reader has minimized (minimized-asks.svelte.ts) is not
-   * grown: the shape folds back into the pill exactly as for an answer, the
-   * tray row and the pill's controls come back, and the question stands as a
-   * one-line bar over the tray row (`asked`) until the bar is pressed, when
-   * the composer grows into it again. Nothing is answered either way: the
-   * ask stays parked on the hub, as it does on iOS, where the pill stays
-   * writable under a parked card.
-   */
-  /** The questions the parked ask puts, if it is a question. */
-  const askQuestions = $derived(
-    ask
-      ? questionsOf(
-          ask.request.toolName,
-          ask.request.input as Record<string, unknown>
-        )
-      : null
-  );
-  /** The parked ask can fold to its bar: a question. */
-  const askParks = $derived(!!askQuestions);
-  /** The parked ask is one the reader minimized here. */
-  const minimized = $derived(
-    !!(ask && askParks && minimizedAsks.has(ask.request.requestId))
-  );
-  /** The ask the composer grows into: the parked one, unless it is minimized. */
-  const grownAsk = $derived(minimized ? null : ask);
-  /** The minimized question's bar. */
-  let askedChip = $state<HTMLButtonElement>();
-
-  async function minimizeAsk(): Promise<void> {
-    if (!ask) {
-      return;
-    }
-    // Keys that were in the card follow it onto its bar; a finger's swipe
-    // leaves focus where it was, so no ring is drawn under a touch.
-    const keys = !!askPanel?.contains(document.activeElement);
-    minimizedAsks.set(ask.request.requestId, true);
-    await tick();
-    if (keys) {
-      askedChip?.focus();
-    }
-  }
-
-  function restoreAsk(): void {
-    if (ask) {
-      minimizedAsks.set(ask.request.requestId, false);
-    }
-  }
-
-  /** The ask the shape holds: it trails `ask` while one changes into the next. */
-  let drawnAsk = $state<ComposerAsk | null>(null);
-  /** The composer is an ask, from its growth until its fold has landed. */
-  const askOpen = $derived(!!drawnAsk);
-  /** Find stands open on this composer's conversation: its field is on the pill's top. */
-  const finding = $derived(!!find?.open);
-  /** The find line's drawn height on the pill, and the places' over it: what the transcript's foot grows by while find stands. */
-  let findLineH = $state(0);
-  let findLayerH = $state(0);
-  // Find closed: the caret goes back to the message, as it was left.
-  let messageAsked = untrack(() => find?.messageAsked ?? 0);
-  $effect(() => {
-    const asked = find?.messageAsked ?? 0;
-    if (asked !== messageAsked) {
-      messageAsked = asked;
-      untrack(() => field?.focus());
-    }
-  });
-  /** Grown, or growing, into an ask: what stands over the pill steps aside. */
-  let askRaised = $state(false);
-  /** Whether what stands in the shape is up. */
-  let askShown = $state(false);
-  /**
-   * The grown shape's measures: the pill's height when it grew (the shape's
-   * foot, held for the whole ask), how far over it the card reaches, and the
-   * room the card has.
-   */
-  let askBox = $state<{
-    base: number;
-    ext: number;
-    max: number;
-  } | null>(null);
-  let askPanel = $state<HTMLElement>();
+  /** The dock: the column the composer, its tray row and its offers stand in. */
   let dockEl = $state<HTMLElement>();
-  let askShape: GrownShape | null = null;
-  /** The newest change of ask; an older one still landing leaves it be. */
-  let askTurn = 0;
-  /** The field had the keys when the ask came up: it has them back after. */
-  let askRefocus = false;
-  const askId = $derived(grownAsk?.request.requestId ?? null);
-  const askPlace = $derived(
-    grownAsk && drawnAsk?.request.requestId === grownAsk.request.requestId
-      ? { at: draft.askRun + 1, of: draft.askRun + 1 + grownAsk.more }
-      : null
-  );
 
-  /** The room over the pill the ask can stand in, under the pane's top. */
-  function askRoom(): number {
-    if (!(dockEl && shell)) {
-      return 0;
-    }
-    const gap = Number.parseFloat(
-      getComputedStyle(shell).getPropertyValue("--spacing-space-8")
-    );
-    const { top } = dockEl.getBoundingClientRect();
-    // In the layout's px: the panel may still be rising out of its scale.
-    const over = (shell.getBoundingClientRect().top - top) / layoutScale(shell);
-    return Math.max(0, over - gap);
-  }
+  /** Find on the pill's top: its heights, and the caret back in the message when it closes. */
+  const findDock = new FindDock({ field: () => field, find: () => find });
 
-  /** The shape takes the card's height, from wherever it is drawn. */
-  function fitAsk(ms: number, force = false): void {
-    if (!(askShape && askPanel && askBox)) {
-      return;
-    }
-    const ext = askPanel.offsetHeight - askBox.base;
-    if (!force && Math.abs(ext - askBox.ext) < 0.5) {
-      return;
-    }
-    askBox.ext = ext;
-    askShape.morphTo(1, ext, ms);
-  }
-
-  async function growAsk(next: ComposerAsk, turn: number): Promise<void> {
-    if (!(shell && pill && field)) {
-      return;
-    }
-    // Every size first, before anything is written: one layout per growth.
-    const { size } = measureShape(shell, pill, field);
-    const max = askRoom();
-    // What else grows out of the pill puts itself away: the ask has it.
-    if (recall) {
-      deckOut(0);
-      recall = null;
-      reopen = false;
-      wheeling = false;
-    }
-    if (draft.lifted) {
-      returnEdit();
-    }
-    room?.stepAside();
-    if (document.activeElement === field) {
-      askRefocus = true;
-      field.blur();
-    }
-    // A run goes on through a minimize and a composer drawn again: the
-    // card stood up again is the same question, at the same place in the
-    // same run ("2 of 3", never "1 of 2" on its way back up), its count
-    // kept by its conversation's draft.
-    askBox = { base: size.base, ext: 0, max };
-    drawnAsk = next;
-    askRaised = true;
-    await tick();
-    if (turn !== askTurn || !askPanel) {
-      return;
-    }
-    // The card stands on the shell's foot: the pill's height is its own.
-    const ext = askPanel.offsetHeight - size.base;
-    askBox.ext = ext;
-    const shape = new GrownShape(shell, size, ext, {
-      taper: false,
-      fade: false,
-    });
-    askShape = shape;
-    // The card comes up from inside the shape, never above its edge.
-    shape.clip(askPanel, () => ({
-      left: 0,
-      bottom: 0,
-      height: (askBox?.base ?? 0) + (askBox?.ext ?? 0),
-    }));
-    shape.morphTo(1, ext, dur("--duration-panel"));
-    // Partway up, once there is room for it.
-    setTimeout(
-      () => {
-        if (turn === askTurn) {
-          askShown = true;
-        }
-      },
-      motionOk.current ? dur("--duration-control") : 0
-    );
-  }
-
-  /** The next ask waiting takes the shape's place, grown: no fold between. */
-  async function switchAsk(next: ComposerAsk, turn: number): Promise<void> {
-    const same = drawnAsk?.request.requestId === next.request.requestId;
-    askRaised = true;
-    if (!same) {
-      draft.askRun += 1;
-      askShown = false;
-      if (motionOk.current) {
-        await new Promise((done) => setTimeout(done, dur("--duration-exit")));
+  /** A parked ask is the composer itself while it waits: it grows up out of its pill into the ask's card. */
+  const grown = new GrownAsk({
+    ask: () => ask,
+    dock: () => dockEl,
+    draft: () => draft,
+    field: () => field,
+    pill: () => pill,
+    putAway: () => {
+      if (recalling.recall) {
+        recalling.putAway();
       }
-      if (turn !== askTurn) {
-        return;
+      if (draft.lifted) {
+        queued.returnEdit();
       }
-      drawnAsk = next;
-      await tick();
-      if (turn !== askTurn) {
-        return;
-      }
-    }
-    if (askBox) {
-      askBox.max = askRoom();
-    }
-    fitAsk(dur("--duration-fade"), true);
-    askShown = true;
-  }
-
-  /** Answered, dismissed or withdrawn: back into the pill. */
-  async function foldAsk(turn: number): Promise<void> {
-    askShown = false;
-    askRaised = false;
-    const shape = askShape;
-    if (shape) {
-      // It folds into the pill as it stands now (a long draft folded to its
-      // first line as the field let the keys go): the foot takes the pill's
-      // height and the reach the rest, so the outline holds still meanwhile.
-      if (pill) {
-        const base = pill.offsetHeight;
-        shape.ext += shape.base - base;
-        shape.base = base;
-      }
-      await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
-    }
-    if (turn !== askTurn) {
-      return;
-    }
-    shape?.remove();
-    askShape = null;
-    drawnAsk = null;
-    askBox = null;
-    // Minimized, the run is put down, not ended: its asks still wait.
-    if (!minimized) {
-      draft.askRun = 0;
-    }
-    if (askRefocus) {
-      askRefocus = false;
-      // Once the field's label is no longer inert: focus does not land in
-      // an inert subtree, and the draft would stay folded to its first line.
-      await tick();
-      if (turn !== askTurn) {
-        // Another ask came up meanwhile: its fold gives the keys back.
-        askRefocus = true;
-        return;
-      }
-      field?.focus();
-    }
-  }
-
-  $effect(() => {
-    const id = askId;
-    if (!(shell && pill && field)) {
-      return;
-    }
-    untrack(() => {
-      const drawn = drawnAsk?.request.requestId ?? null;
-      if (id === drawn && (id === null || askRaised)) {
-        return;
-      }
-      askTurn += 1;
-      if (!grownAsk) {
-        // Minimized, the question folds away but is still parked: the
-        // keys stay where the reader put them, on the bar.
-        if (minimized) {
-          askRefocus = false;
-        }
-        foldAsk(askTurn);
-      } else if (drawnAsk) {
-        switchAsk(grownAsk, askTurn);
-      } else {
-        growAsk(grownAsk, askTurn);
-      }
-    });
+      canvas.room?.stepAside();
+    },
+    shell: () => shell,
   });
-
-  // The card grows (a disclosure opened, a refusal said under its buttons)
-  // and the window resizes: the shape follows.
-  $effect(() => {
-    const node = askPanel;
-    if (!node) {
-      return;
-    }
-    // In the next frame (frameObserver): the fit eases the shape to the
-    // card over --duration-fade, which resizes it.
-    const sizes = frameObserver(() => {
-      if (askRaised) {
-        fitAsk(dur("--duration-fade"));
-      }
-    });
-    sizes.observe(node);
-    const remeasure = () => {
-      if (askBox) {
-        askBox.max = askRoom();
-      }
-    };
-    window.addEventListener("resize", remeasure);
-    return () => {
-      sizes.disconnect();
-      window.removeEventListener("resize", remeasure);
-    };
-  });
-
-  $effect(() => () => {
-    askShape?.remove();
-    askShape = null;
-  });
-
-  /** Whose queued sends this harness calls queued, for the wheel's rows. */
-  const queuedWord = $derived(
-    traitsOf(recalled?.harness).queuesSends ? "Queued" : undefined
-  );
 
   /**
    * Files and a long paste join the draft as attachments; other text lands
@@ -3189,54 +724,9 @@
     }
   }
 
-  /**
-   * The field's one-line height and line height, off its stylesheet, and
-   * the height its whole text takes (autosize reports it at each fit).
-   */
-  let floor = $state(0);
-  let lineHeight = $state(0);
-  let natural = $state(0);
-  $effect(() => {
-    if (field) {
-      const style = getComputedStyle(field);
-      floor = Number.parseFloat(style.minHeight);
-      lineHeight = Number.parseFloat(style.lineHeight);
-    }
-  });
-  /** How many lines the draft runs to at the field's width. */
-  const lines = $derived(
-    lineHeight > 0
-      ? Math.max(1, Math.round((natural - floor + lineHeight) / lineHeight))
-      : 1
-  );
-  /**
-   * A draft of more than one line folds to its first line while the field
-   * is not being written in, and opens to its full height, growing upward
-   * over the transcript, when the field takes focus. Folding and opening
-   * run over --duration-morph (autosize's `data-folding`, on the field while
-   * that height change runs); a typed line grows over the field's own
-   * --duration-control. A press on the pill's own send or attach leaves the
-   * focus in the field (`ctrls`): taken from it as the press went down, the
-   * draft folded, the button moved from under the press, its up landed off
-   * it, and nothing was sent.
-   */
-  let focused = $state(false);
-  // The focus the field has as it comes in, which no focus event will say:
-  // given before the page woke, or by a caller on arrival.
-  $effect(() => {
-    if (field && document.activeElement === field) {
-      focused = true;
-    }
-  });
-  const folds = (whole: number) => !focused && whole > floor + 0.5;
-  const folded = $derived(folds(natural));
+  /** The field's fold: its one-line height, the height its whole text takes, and whether it has the focus. */
+  const fieldFold = new FieldFold({ field: () => field });
 
-  /**
-   * The panel's own height, the delegate tray's standing on it, and the
-   * prompt stack's standing on that (what the desk's toasts rise above).
-   * Each of these sizes is read as its box mounts, and a change in the next
-   * frame (frameSize).
-   */
   /**
    * The ground under an open layer (the dock's `layer-ground`): the
    * transcript's recess, solid up to the layer's foot, then dissolving over
@@ -3246,69 +736,14 @@
   const GROUND_BOTTOM = "calc(-1 * var(--dock-foot, 0px))";
   /** As tall as the foot, the composer and the step to the layer, and its dissolve. */
   const GROUND_H =
-    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--spacing-space-8))";
+    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--space-8))";
   const LAYER_GROUND =
-    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--color-surface-recess-clear))";
-  let panel = $state(0);
-  const measurePanel = frameSize(
-    (node: HTMLElement) => node.clientHeight,
-    (value) => {
-      panel = value;
-    }
-  );
-  let lift = $state(0);
-  const measureLift = frameSize(
-    (node: HTMLElement) => node.clientHeight,
-    (value) => {
-      lift = value;
-    }
-  );
-  /** The plan's ring's width: the delegate tray's row keeps clear of it. */
-  let ringWidth = $state(0);
-  const measureRing = frameSize(
-    (node: HTMLElement) => node.clientWidth,
-    (value) => {
-      ringWidth = value;
-    }
-  );
-  /**
-   * Each conversation's offer as it is laid out, by id, kept as it stands
-   * whether shown or not: handed the next conversation, the stack is the
-   * height its offer already has, and no offer moves in or out of the
-   * column to say so.
-   */
-  const offerHeights: Record<string, number> = $state({});
-  const measureOffer = (id: string) =>
-    frameSize(
-      (node: HTMLElement) => node.clientHeight,
-      (value) => {
-        offerHeights[id] = value;
-      }
-    );
-  const stack = $derived(offerHeights[showing] ?? 0);
-
-  /** The rows with an offer to stand on the tray row, and those with a tray. */
-  const offered = $derived(trayRows.filter((row) => row.prompts));
-  const trayed = $derived(trayRows.filter((row) => row.delegatesOf));
-  /** The box the offers stand in: a `reflow` container. */
-  let offers = $state<HTMLElement>();
-  /*
-   * Handed another conversation, the offer drawn changes between two built
-   * already: nothing arrived or left, so nothing to animate, and nothing for
-   * the offers' reflow to read inside the switch (`handOver`). Before the
-   * update writes it, so the change it hears is already its own.
-   */
-  $effect.pre(() => {
-    const box = offers;
-    if (box && showing) {
-      untrack(() => handOver(box));
-    }
+    "linear-gradient(to top, var(--surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
+  /** The offers standing on the tray row: each conversation's, built, the one written to seen. */
+  const offerStack = new OfferStack({
+    showing: () => showing,
+    trayRows: () => trayRows,
   });
-
-  /** How high the grown ask stands over the composer's foot; 0 with none up. */
-  const askRise = $derived(askRaised && askBox ? askBox.base + askBox.ext : 0);
-  /** What the composer stands over the transcript's foot, all told. */
-  const standing = $derived(Math.max(panel + lift + stack, askRise));
 </script>
 
 <!-- The dock is one column from the top of the pane down to the composer's
@@ -3326,7 +761,7 @@
      longer deliver ("ResizeObserver loop completed with undelivered
      notifications", every frame the field grew), and it stood a frame
      behind the panel. -->
-<svelte:window onkeydown={windowKey} />
+<svelte:window onkeydown={canvas.windowKey} />
 
 <!-- What steps aside while an ask holds the composer comes back at once and
      fades in (transition-fade-show). While the composer is grown into an
@@ -3348,9 +783,9 @@
 <div
   data-slot="dock"
   data-find-view={find?.viewId}
-  data-asking={askRaised || undefined}
-  data-drawing={canvasUp || undefined}
-  data-minimized={minimized || undefined}
+  data-asking={grown.askRaised || undefined}
+  data-drawing={canvas.up || undefined}
+  data-minimized={grown.minimized || undefined}
   data-flush={flush || undefined}
   class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
   data-keeps-draft
@@ -3358,10 +793,10 @@
   bind:this={dockEl}
   style:--dock-foot={flush
     ? undefined
-    : "calc(var(--spacing-space-4) + var(--safe-bottom))"}
-  style:--spacing-c-composer-w={flush ? "100%" : undefined}
-  style:--layer-foot="calc({panel}px + var(--spacing-c-tray-row) +
-  var(--spacing-space-2))"
+    : "calc(var(--space-4) + var(--safe-bottom))"}
+  style:--c-composer-w={flush ? "100%" : undefined}
+  style:--layer-foot="calc({dockFoot.panel}px + var(--c-tray-row) +
+  var(--space-2))"
 >
   <!-- The ground under an open layer (the plan, the tray's shelf, the list
        of what waits on the person). Each
@@ -3382,7 +817,7 @@
     style:--ground-bottom={GROUND_BOTTOM}
     style:--ground-h={GROUND_H}
   ></div>
-  {#if offered.length > 0}
+  {#if offerStack.offered.length > 0}
     <!-- The rest of the dock above the panel, cards stood on its bottom
          edge; the gap to the panel is the stack's own bottom padding, so its
          measured height carries it. A parked card keeps the composer's whole
@@ -3392,10 +827,10 @@
     <div
       data-slot="prompts"
       class="grow shrink basis-0 min-h-0 w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
-      inert={askRaised}
-      bind:this={offers}
+      inert={grown.askRaised}
+      bind:this={offerStack.offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
-      style:--prompts-step={"calc(var(--spacing-space-4) - var(--spacing-space-2))"}
+      style:--prompts-step="calc(var(--space-4) - var(--space-2))"
     >
       <!-- Each conversation's offer, built, standing on the stack's foot;
            the one written to is seen, and the stack is as tall as it. What
@@ -3406,9 +841,9 @@
       <div
         data-slot="stack"
         class="relative flex-none"
-        style:block-size="{stack}px"
+        style:block-size="{offerStack.stack}px"
       >
-        {#each offered as row (row.id)}
+        {#each offerStack.offered as row (row.id)}
           <!-- The step under a card parked, on the card's own row; nothing
                under a row with no card. Asked of the row, not of the stack
                past the away offers: a class in a `:has()` before a universal
@@ -3419,7 +854,7 @@
           <div
             data-composer-away={row.id !== showing || undefined}
             class="absolute inset-x-0 bottom-0 pointer-events-auto has-[>*]:pb-space-3 data-composer-away:invisible"
-            {@attach measureOffer(row.id)}
+            {@attach offerStack.measureOffer(row.id)}
           >
             {@render row.prompts?.()}
           </div>
@@ -3428,7 +863,7 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
-       tray's fixed row (app.css `--spacing-c-tray-row`), which a transcript keeps
+       tray's fixed row (app.css `--c-tray-row`), which a transcript keeps
        clear at its foot while something stands in it (SessionPane
        `trayStands`), and the suggestion chips standing on it (out of flow),
        over the transcript's foot. An offer stands on top of both. -->
@@ -3437,10 +872,10 @@
   <div
     data-slot="lift"
     class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
-    inert={askRaised}
-    {@attach measureLift}
+    inert={grown.askRaised}
+    {@attach dockFoot.measureLift}
   >
-    {#if fleet && minimized && ask && askParks}
+    {#if fleet && grown.minimized && ask && grown.askParks}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
            face, what it asks, and the chevron it comes back up by. The
            tray's chips step aside meanwhile, as they do while the card is
@@ -3458,11 +893,11 @@
            a tray chip high, a tray gap off the pill. It stands under the
            grown shape (grown.ts's halo, z 1): brought back, the card grows over
            the bar as it fades. -->
-      {@const [first] = askQuestions ?? []}
+      {@const [first] = grown.askQuestions ?? []}
       <div
         class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none transition-fade-show group-has-slot-waiting/dock:opacity-0 group-has-slot-waiting/dock:invisible group-has-slot-waiting/dock:transition-fade-hide"
         style:--ring-room={planRing
-          ? `calc(${ringWidth}px + var(--spacing-space-2))`
+          ? `calc(${dockFoot.ringWidth}px + var(--space-2))`
           : undefined}
         in:askedIn
         out:askedOut
@@ -3476,9 +911,9 @@
               "touch-hit w-full min-w-0 text-status-attn-ink before:bg-status-attn-bg",
           })}
           data-tray-chip
-          onclick={restoreAsk}
+          onclick={() => grown.restoreAsk()}
           type="button"
-          bind:this={askedChip}
+          bind:this={grown.askedChip}
         >
           <span
             aria-hidden="true"
@@ -3527,17 +962,17 @@
       >
         <div
           class="flex items-end gap-space-2 pointer-events-auto"
-          {@attach measureRing}
+          {@attach dockFoot.measureRing}
         >
           {@render planRing()}
         </div>
       </div>
     {/if}
-    {#if fleet && trayed.length > 0}
+    {#if fleet && offerStack.trayed.length > 0}
       <!-- One conversation's tray over the next while they cross-fade, in a
            column the composer's width: an auto column grew to the chips' own
            width. The slot is the tray's one row from the composer's first
-           render, chips or none (app.css `--spacing-c-tray-row`; a transcript keeps
+           render, chips or none (app.css `--c-tray-row`; a transcript keeps
            it clear while a chip stands, SessionPane `trayStands`), with the
            tray standing on its foot: a chip arriving late fills room already
            laid out, and the suggestion row standing on the slot never moves. The tray's shelf and panel
@@ -3546,7 +981,7 @@
         data-slot="tray-slot"
         class="relative grid grid-cols-1 items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
         style:--ring-room={planRing
-          ? `calc(${ringWidth}px + var(--spacing-space-2))`
+          ? `calc(${dockFoot.ringWidth}px + var(--space-2))`
           : undefined}
       >
         <!-- Each conversation's tray, built, in the slot's one cell: handed
@@ -3554,7 +989,7 @@
              out, so neither the slot nor anything standing on it moves.
              Opacity only, so it runs with or without motion; the one leaving
              is out of reach once it has faded. -->
-        {#each trayed as row (row.id)}
+        {#each offerStack.trayed as row (row.id)}
           <div
             data-slot="tray"
             data-composer-away={row.id !== showing || undefined}
@@ -3571,12 +1006,12 @@
   <div
     data-slot="composer"
     class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
-    bind:this={column}
-    {@attach measurePanel}
+    bind:this={canvas.column}
+    {@attach dockFoot.measurePanel}
     in:rise
     out:fade
   >
-    {#if canvasStands}
+    {#if canvas.stands}
       <!-- The canvas's box over the field: its stage (canvas/) stands on
            it, the grown shape round it and the field. On the composer's top,
            a pixel inside the grown shape's edge; the room writes its height,
@@ -3586,37 +1021,37 @@
         data-slot="canvas-slot"
         aria-hidden="true"
         class="absolute left-px right-px bottom-full pointer-events-none"
-        bind:this={canvasSlot}
+        bind:this={canvas.canvasSlot}
       ></div>
     {/if}
     <!-- The row of attachments is one block above the field, the canvas's
          chip leading it. -->
     <AttachmentChips
-      canvasHidden={room?.chipHidden}
+      canvasHidden={canvas.room?.chipHidden}
       {draft}
-      onopencanvas={() => room?.open()}
-      onremovecanvas={() => room?.remove()}
-      bind:canvasChip
+      onopencanvas={() => canvas.room?.open()}
+      onremovecanvas={() => canvas.room?.remove()}
+      bind:canvasChip={canvas.canvasChip}
     />
 
     <!-- A send that failed says so right over the field it left; the way
          back stands on the line that says what failed, after its words.
          While the canvas stands, it stands in the grown shape over the
          field, above its surface. -->
-    {#if fleet && harnessStart && recallOf}
+    {#if fleet && start.harnessStart && recallOf}
       <div
         data-slot="start-block"
         class="pointer-events-auto px-space-3 group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         transition:unfold
       >
         <fleet.HarnessBlock
-          block={harnessStart.block}
-          machineId={harnessStart.machine.machineId}
-          online={harnessStart.machine.status === "online"}
+          block={start.harnessStart.block}
+          machineId={start.harnessStart.machine.machineId}
+          online={start.harnessStart.machine.status === "online"}
           relaunch={recallOf}
         />
       </div>
-    {:else if relaunchRefused}
+    {:else if start.relaunchRefused}
       <!-- Its harness was brought up, and its start again was refused: the
            machine's words, and the way on. -->
       <div
@@ -3625,32 +1060,32 @@
         role="alert"
         transition:unfold
       >
-        <p class="min-w-0">{relaunchRefused}</p>
+        <p class="min-w-0">{start.relaunchRefused}</p>
         <Button
           label="Retry"
-          onclick={retryStart}
-          pending={retrying}
+          onclick={() => start.retryStart()}
+          pending={start.retrying}
           pendingLabel="Starting…"
           size="sm"
           variant="ghost"
         />
       </div>
-    {:else if sendNotice}
+    {:else if sender.sendNotice}
       <div
         data-slot="send-error"
         class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
-        <p class="min-w-0">{sendNotice}</p>
-        {#if sendAgain && sendError === sendNotice}
+        <p class="min-w-0">{sender.sendNotice}</p>
+        {#if sendAgain && sendError === sender.sendNotice}
           <Button
-            disabled={pending}
-            onclick={() => submit()}
+            disabled={sender.pending}
+            onclick={() => sender.submit()}
             size="sm"
             variant="ghost">{commonWords.sendAgain}</Button
           >
-        {:else if faultAgain && sendError === sendNotice}
+        {:else if faultAgain && sendError === sender.sendNotice}
           <Button
             data-fault-again
             icon={IconRefresh}
@@ -3661,13 +1096,13 @@
           />
         {/if}
       </div>
-    {:else if signInNote}
+    {:else if sender.signInNote}
       <p
         class="pointer-events-auto px-space-3 text-ink-muted text-size-meta font-normal"
         role="status"
         transition:unfold
       >
-        {signInNote}
+        {sender.signInNote}
       </p>
     {:else if note}
       <!-- What a message does here that it does nowhere else, said before
@@ -3688,45 +1123,45 @@
          them moves. -->
     <div
       data-slot="shell"
-      data-rolling={!!recall || undefined}
+      data-rolling={!!recalling.recall || undefined}
       class="relative pointer-events-auto"
       bind:this={shell}
     >
-      {#if find && finding && find.listOpen}
+      {#if find && findDock.finding && find.listOpen}
         <!-- Find's places grow out of the pill's top, at every width, over
              the transcript's foot. -->
         <FindLayer
           {find}
           onheight={(px) => {
-            findLayerH = px;
+            findDock.findLayerH = px;
           }}
         />
       {/if}
-      {#if fleet && recall && shell && fieldWrap}
+      {#if fleet && recalling.recall && shell && recalling.fieldWrap}
         <fleet.RecallWheel
-          deck={deckAt}
-          draft={recall.text}
-          field={fieldWrap}
-          id={recallId}
-          keys={recall.keys}
-          measured={recall.measured}
+          deck={recalling.deckAt}
+          draft={recalling.recall.text}
+          field={recalling.fieldWrap}
+          id={recalling.recallId}
+          keys={recalling.recall.keys}
+          measured={recalling.recall.measured}
           more={!!recalled?.cursor}
           older={() => {
             if (recallOf) {
               detach(fleet?.readOlderPage(recallOf), "readOlderPage");
             }
           }}
-          onback={recallBack}
-          ondone={recallDone}
-          ontake={recallTake}
-          {queuedWord}
-          sent={sentHere}
+          onback={recalling.recallBack}
+          ondone={recalling.recallDone}
+          ontake={recalling.recallTake}
+          queuedWord={recalling.queuedWord}
+          sent={recalling.sentHere}
           {shell}
-          bind:this={wheel}
-          bind:active={recallActive}
+          bind:this={recalling.wheel}
+          bind:active={recalling.recallActive}
         />
       {/if}
-      {#if edit}
+      {#if queued.edit}
         <!-- What is happening, and the two ways out: the keys on a desk, a
            button on a touch screen, which has no Esc. The row the
            composer grows while a queued message is edited, inset past the
@@ -3740,13 +1175,13 @@
            (its own utilities set its display and transition): hidden but
            on a touch screen, which has no Esc. -->
         <div
-          data-composer-shown={edit.shown || undefined}
+          data-composer-shown={queued.edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-stagger)"
-          bind:this={editRow}
-          style:--edit-inset="{edit.inset}px"
-          style:bottom="{edit.base}px"
-          style:height="{edit.row}px"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
+          bind:this={queued.editRow}
+          style:--edit-inset="{queued.edit.inset}px"
+          style:bottom="{queued.edit.base}px"
+          style:height="{queued.edit.row}px"
         >
           <span
             data-slot="what"
@@ -3757,7 +1192,7 @@
              was, and the keys are not shown. -->
           <span
             data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-stagger)"
+            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--dur-stagger)"
           >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -3765,7 +1200,7 @@
           <Button
             class="touch-hit"
             data-keep
-            onclick={() => returnEdit()}
+            onclick={() => queued.returnEdit()}
             size="xs"
             variant="ghost"
           >
@@ -3773,7 +1208,7 @@
           </Button>
         </div>
       {/if}
-      {#if fleet && drawnAsk && askBox}
+      {#if fleet && grown.drawnAsk && grown.askBox}
         <!-- The ask the composer has grown into, on the shell's foot over
              the pill and cut to the shape as it grows and folds, across the
              composer's width: over the pill, as the wheel's rows and the
@@ -3782,19 +1217,21 @@
         <div
           data-slot="ask"
           class="absolute z-3 inset-x-0 bottom-0"
-          inert={!askShown}
-          bind:this={askPanel}
-          style:--ask-max="{askBox.max}px"
+          inert={!grown.askShown}
+          bind:this={grown.askPanel}
+          style:--ask-max="{grown.askBox.max}px"
         >
-          {#key drawnAsk.request.requestId}
+          {#key grown.drawnAsk.request.requestId}
             <fleet.Prompt
-              asker={drawnAsk.asker}
-              onanswer={drawnAsk.onanswer}
-              onminimize={askParks ? minimizeAsk : undefined}
-              ontaken={drawnAsk.ontaken}
-              place={askPlace}
-              request={drawnAsk.request}
-              shown={askShown}
+              asker={grown.drawnAsk.asker}
+              onanswer={grown.drawnAsk.onanswer}
+              onminimize={grown.askParks
+                ? () => grown.minimizeAsk()
+                : undefined}
+              ontaken={grown.drawnAsk.ontaken}
+              place={grown.askPlace}
+              request={grown.drawnAsk.request}
+              shown={grown.askShown}
             />
           {/key}
         </div>
@@ -3802,7 +1239,7 @@
       <!-- With the keyboard down a touch screen's pill is a control to hold
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
-      <!-- One shape, always. --radius-lg outside, --spacing-space-2 of inset, and the
+      <!-- One shape, always. --radius-lg outside, --space-2 of inset, and the
            controls inside carry (panel − inset − edge) so the curves are concentric
            rather than two unrelated roundings stacked. The pill is the
            whole surface of its text field: its caret is its focus, and
@@ -3823,32 +1260,32 @@
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑, the field's aria-keyshortcuts) -->
       <form
         data-slot="cin"
-        data-asking={askOpen || undefined}
-        data-grown={!!edit || askOpen || canvasUp || undefined}
-        data-hint-back={!!hintBack || undefined}
-        data-lead={!!lead || !!also || finding || undefined}
-        data-places={(finding && find?.listOpen) || undefined}
-        data-recalling={!!recall || undefined}
-        data-settling={(!!recall && !wheeling) || undefined}
-        data-wheeling={wheeling || undefined}
+        data-asking={grown.askOpen || undefined}
+        data-grown={!!queued.edit || grown.askOpen || canvas.up || undefined}
+        data-hint-back={!!recalling.hintBack || undefined}
+        data-lead={!!lead || !!also || findDock.finding || undefined}
+        data-places={(findDock.finding && find?.listOpen) || undefined}
+        data-recalling={!!recalling.recall || undefined}
+        data-settling={(!!recalling.recall && !recalling.wheeling) || undefined}
+        data-wheeling={recalling.wheeling || undefined}
         aria-keyshortcuts={recallOf
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
-        aria-label={FIELD_LABEL}
+        aria-label={fieldHint.label}
         class={dockShellVariants({
           class:
             "group/cin relative z-2 data-places:rounded-t-none py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none not-focus-within:touch-none not-focus-within:touch-callout-none",
         })}
-        onclickcapture={onholdclick}
-        oncontextmenu={onholdnative}
-        onpointerdown={onholddown}
+        onclickcapture={press.onholdclick}
+        oncontextmenu={press.onholdnative}
+        onpointerdown={press.onholddown}
         onsubmit={(e) => e.preventDefault()}
-        ontouchend={onholdnative}
+        ontouchend={press.onholdnative}
         bind:this={pill}
-        style:--cin-pad="var(--spacing-c-composer-inset)"
-        style:--cin-ctl="var(--spacing-c-composer-field)"
+        style:--cin-pad="var(--c-composer-inset)"
+        style:--cin-ctl="var(--c-composer-field)"
       >
-        {#if menuOpen}
+        {#if menu.open}
           <!-- Above the input, not over it: the sentence being written stays legible
            while its next word is being chosen. -->
           <!-- Focus never leaves the field: the menu swallows the mousedown that
@@ -3877,16 +1314,16 @@
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
             out:popOut={{ side: "top" }}
-            style:--menu-foot="calc(100% + var(--spacing-space-2))"
+            style:--menu-foot="calc(100% + var(--space-2))"
           >
-            <Command.Root loop shouldFilter={false} bind:value={highlight}>
+            <Command.Root loop shouldFilter={false} bind:value={menu.highlight}>
               <Command.List>
-                {#each sections as section (section.key)}
+                {#each menu.sections as section (section.key)}
                   <Command.Group heading={section.heading}>
                     {#each section.entries as entry (entry.id)}
                       <Command.Item
-                        id={domIds.get(entry.id)}
-                        onSelect={() => choose(entry)}
+                        id={menu.domIds.get(entry.id)}
+                        onSelect={() => menu.choose(entry)}
                         value={entry.id}
                       >
                         <!-- A command, in the code face. -->
@@ -3911,7 +1348,7 @@
           </div>
         {/if}
 
-        {#if find && finding}
+        {#if find && findDock.finding}
           <!-- The find field, grown on the pill's top: its own line, a
                hairline under it, the message's line where it was. It
                unfolds as the composer's other rows grow (`unfold`): a press
@@ -3919,12 +1356,12 @@
           <div
             data-slot="find"
             class="basis-full min-w-0 group-data-asking/dock:invisible"
-            inert={askOpen}
+            inert={grown.askOpen}
             transition:unfold
             {@attach frameSize(
               (node: HTMLElement) => node.offsetHeight,
               (value) => {
-                findLineH = value;
+                findDock.findLineH = value;
               }
             )}
           >
@@ -3939,7 +1376,7 @@
           <div
             data-slot="lead"
             class="flex basis-full min-w-0 transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
-            inert={askOpen}
+            inert={grown.askOpen}
           >
             {@render lead()}
           </div>
@@ -3973,7 +1410,7 @@
         <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <div
-          data-folded={folded || undefined}
+          data-folded={fieldFold.folded || undefined}
           data-slot="composer-field"
           class={[
             "group/field touch-hit relative flex flex-auto min-w-0",
@@ -3981,19 +1418,22 @@
             // so the words keep the pill's width.
             also ? "basis-full" : "group-data-lead/cin:basis-0",
           ]}
-          inert={askOpen}
-          bind:this={fieldWrap}
+          inert={grown.askOpen}
+          bind:this={recalling.fieldWrap}
           style:--roll-move="0 var(--roll-y)"
           style:--roll-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) var(--roll-y))"}
           style:--fold-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
-          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run))"}
-          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-mask-opaque) var(--cue-run))"}
-          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run), var(--color-mask-opaque) calc(100% - var(--cue-run)), transparent)"}
-          style:--fold-fade={"linear-gradient(to right, var(--color-mask-opaque) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
+          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run))"}
+          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--mask-opaque) var(--cue-run))"}
+          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run), var(--mask-opaque) calc(100% - var(--cue-run)), transparent)"}
+          style:--fold-fade={"linear-gradient(to right, var(--mask-opaque) calc(100% - var(--c-composer-more-w) - var(--space-8)), transparent calc(100% - var(--c-composer-more-w)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {
-            if (field && !field.contains(event.target as Node)) {
+            if (
+              field &&
+              !(event.target instanceof Node && field.contains(event.target))
+            ) {
               field.focus();
               mentionField?.select(draft.text.length);
             }
@@ -4006,57 +1446,65 @@
                in it (motion/autosize.svelte.ts), a line at a time over 120ms,
                from one line's worth of the control height to a ceiling, and
                scrolls past that; folding and opening a long draft run over
-               --duration-morph. No scrollbar is drawn, so the text wraps at the
+               --dur-morph. No scrollbar is drawn, so the text wraps at the
                field's full width in every state. While another draft's words
                fly in over it, or an ask's card stands over it, it draws none
                of its own text or caret; while the wheel is up, no caret. -->
           <MentionField
-            aria-activedescendant={recall ? recallActive : activeDescendant}
-            aria-controls={recall ? recallId : "composer-menu"}
-            aria-describedby={recallOf ? `${recallId}-way` : undefined}
-            aria-expanded={menuOpen || !!recall}
+            aria-activedescendant={recalling.recall
+              ? recalling.recallActive
+              : menu.activeDescendant}
+            aria-controls={recalling.recall
+              ? recalling.recallId
+              : "composer-menu"}
+            aria-describedby={recallOf
+              ? `${recalling.recallId}-way`
+              : undefined}
+            aria-expanded={menu.open || !!recalling.recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
-            data-cue-bottom={(cueBottom && !folded) || undefined}
-            data-cue-top={(cueTop && !folded) || undefined}
-            data-flying={flight !== null || !wordsLanded || undefined}
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:data-folding:duration-(--dur-morph) motion-safe:group-data-settling/cin:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--dur-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            data-cue-bottom={(swap.cueBottom && !fieldFold.folded) || undefined}
+            data-cue-top={(swap.cueTop && !fieldFold.folded) || undefined}
+            data-flying={swap.flight !== null ||
+              !queued.wordsLanded ||
+              undefined}
             here={mentionsFrom}
-            label={FIELD_LABEL}
+            label={fieldHint.label}
             menuHost={pill}
             names={mentionsFrom !== null}
             onblur={() => {
-              dismissed = true;
-              focused = false;
+              menu.dismissed = true;
+              fieldFold.focused = false;
             }}
             onclick={noteCaret}
             {ondragover}
             {ondrop}
             onfocus={() => {
-              focused = true;
+              fieldFold.focused = true;
             }}
             oninput={noteCaret}
             {onkeydown}
             onkeyup={noteCaret}
             {onpaste}
             phone={phone.current}
-            placeholder={hint}
+            placeholder={fieldHint.hint}
             {skills}
             tabindex={0}
             bind:this={mentionField}
             bind:editor={field}
             bind:value={draft.text}
             {@attach autosize(() => draft.text, {
-              held: () => holding,
-              fold: folds,
+              held: () => swap.holding,
+              fold: fieldFold.folds,
               measured: (whole) => {
-                natural = whole;
-                onFit?.(whole);
+                fieldFold.natural = whole;
+                recalling.onFit?.(whole);
               },
             })}
-            {@attach fitHint}
-            {@attach scrollCue}
+            {@attach fieldHint.fit}
+            {@attach swap.scrollCue}
           />
-          {#if flight}
+          {#if swap.flight}
             <!-- Each layer is its text and, drawn clear after it, the rest of
                the text it will be (`data-rest`), so it lays out whole. The
                trailing zero-width space holds a final empty line open, as
@@ -4076,43 +1524,45 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
-              style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
+              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-body text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              style:--flight-clip={"inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)))"}
             >
               <span
                 data-slot="flight-text"
                 class="row-start-1 col-start-1 justify-self-box-start after:content-rest after:text-transparent"
-                data-rest="{flight.outRest}&#8203;"
-                bind:this={flightOut}
-                style:inline-size="{flight.outWrap}px"
-                style:opacity={flight.from.opacity}
-                style:transform={flight.from.transform}
-                style:translate="0 {flight.outDrop}px">{flight.out}</span
+                data-rest="{swap.flight.outRest}&#8203;"
+                bind:this={swap.flightOut}
+                style:inline-size="{swap.flight.outWrap}px"
+                style:opacity={swap.flight.from.opacity}
+                style:transform={swap.flight.from.transform}
+                style:translate="0 {swap.flight.outDrop}px"
+                >{swap.flight.out}</span
               >
               <span
                 data-slot="flight-text"
                 class="row-start-1 col-start-1 justify-self-box-start opacity-0 after:content-rest after:text-transparent"
-                data-rest="{flight.text.slice(typed.length)}&#8203;"
-                bind:this={flightIn}
-                style:translate="0 {inDrop}px">{typed}</span
+                data-rest="{swap.flight.text.slice(swap.typed.length)}&#8203;"
+                bind:this={swap.flightIn}
+                style:translate="0 {swap.inDrop}px">{swap.typed}</span
               >
             </span>
           {/if}
-          {#if folded}
+          {#if fieldFold.folded}
             <!-- What the folded field keeps out of sight, over its faded line
                end: standing in the field, it takes none of the field's width,
                so the text wraps as it does unfolded. -->
             <span
               data-slot="more"
               aria-hidden="true"
-              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
-              >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
+              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-c-composer-more-w h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
+              >+{fieldFold.lines - 1}
+              {fieldFold.lines === 2 ? "line" : "lines"}</span
             >
           {/if}
           {#if recallOf}
             <!-- The way to what you sent here, read with the field: ↑ brings
                it up (a held press, on a touch screen). -->
-            <span class="sr-only" id="{recallId}-way"
+            <span class="sr-only" id="{recalling.recallId}-way"
               >Press Up to show what you sent</span
             >
           {/if}
@@ -4135,7 +1585,7 @@
             "group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide",
             also && "ms-auto",
           ]}
-          inert={!!recall}
+          inert={!!recalling.recall}
           onmousedown={(event) => {
             // The field keeps the focus through a press here (`focused`):
             // the draft stays as tall as it is, so the press stays on its button.
@@ -4143,13 +1593,15 @@
               event.preventDefault();
             }
           }}
-          bind:this={ctrls}
+          bind:this={recalling.ctrls}
         >
           {#if attach}
             <AttachButton
               {draft}
               ghost={!!action}
-              ondraw={room && recallOf ? () => room.open() : undefined}
+              ondraw={canvas.room && recallOf
+                ? () => canvas.room?.open()
+                : undefined}
               onfind={find ? () => find.show() : undefined}
             />
           {/if}
@@ -4165,25 +1617,25 @@
                centred. -->
           <button
             data-slot="stop"
-            aria-busy={pending || undefined}
-            aria-disabled={pending || held || undefined}
+            aria-busy={sender.pending || undefined}
+            aria-disabled={sender.pending || held || undefined}
             aria-label={action ??
               (stops ? "Stop the agent" : transcriptWords.sendMessage)}
             class={sendVariants({ class: "group/stop select-none touch-hit" })}
             title={action}
             disabled={!(
               busy ||
-              pending ||
+              sender.pending ||
               (draft.hasContent && !draft.unready)
             )}
-            onclick={whileIdle(() => pending, onaction)}
+            onclick={whileIdle(() => sender.pending, onaction)}
             type="button"
           >
             <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
-            {#key pending ? "wait" : stops}
+            {#key sender.pending ? "wait" : stops}
               <!-- The glyph carrier, not the button: it is content-sized and
                    centred, so scaling it in cannot change the control's box.
                    The one cell of the button's grid: an outgoing glyph and
@@ -4196,7 +1648,7 @@
                 class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-(--optical-nudge) group-enabled/stop:-translate-y-(--optical-nudge)"
                 out:glyphOut
               >
-                {#if pending}
+                {#if sender.pending}
                   <Spinner aria-hidden="true" role="presentation" />
                 {:else if stops}
                   <IconStop />
