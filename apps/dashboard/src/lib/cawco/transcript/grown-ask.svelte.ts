@@ -167,10 +167,10 @@ export class GrownAsk {
         return;
       }
       // In the next frame (frameObserver): the fit eases the shape to the
-      // card over --dur-fade, which resizes it.
+      // card over --duration-fade, which resizes it.
       const sizes = frameObserver(() => {
         if (this.askRaised) {
-          this.#fitAsk(dur("--dur-fade"));
+          this.#fitAsk(dur("--duration-fade"));
         }
       });
       sizes.observe(node);
@@ -222,7 +222,7 @@ export class GrownAsk {
       return 0;
     }
     const gap = Number.parseFloat(
-      getComputedStyle(shell).getPropertyValue("--space-8")
+      getComputedStyle(shell).getPropertyValue("--spacing-space-8")
     );
     const { top } = dockEl.getBoundingClientRect();
     // In the layout's px: the panel may still be rising out of its scale.
@@ -285,7 +285,7 @@ export class GrownAsk {
       bottom: 0,
       height: (this.askBox?.base ?? 0) + (this.askBox?.ext ?? 0),
     }));
-    shape.morphTo(1, ext, dur("--dur-grow"));
+    shape.morphTo(1, ext, dur("--duration-grow"));
     // Partway up, once there is room for it.
     setTimeout(
       () => {
@@ -293,7 +293,7 @@ export class GrownAsk {
           this.askShown = true;
         }
       },
-      motionOk.current ? dur("--dur-control") : 0
+      motionOk.current ? dur("--duration-control") : 0
     );
   }
 
@@ -305,7 +305,7 @@ export class GrownAsk {
       this.#parts.draft().askRun += 1;
       this.askShown = false;
       if (motionOk.current) {
-        await new Promise((done) => setTimeout(done, dur("--dur-exit")));
+        await new Promise((done) => setTimeout(done, dur("--duration-exit")));
       }
       if (turn !== this.#askTurn) {
         return;
@@ -319,7 +319,7 @@ export class GrownAsk {
     if (this.askBox) {
       this.askBox.max = this.#askRoom();
     }
-    this.#fitAsk(dur("--dur-fade"), true);
+    this.#fitAsk(dur("--duration-fade"), true);
     this.askShown = true;
   }
 
@@ -338,7 +338,7 @@ export class GrownAsk {
         shape.ext += shape.base - base;
         shape.base = base;
       }
-      await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+      await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
     }
     if (turn !== this.#askTurn) {
       return;

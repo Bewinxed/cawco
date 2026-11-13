@@ -34,7 +34,7 @@ interface DeckPlace {
  * Where each of the pill's buttons stands in the deck they fold into
  * while the wheel is up, read before anything is written: Send in front,
  * where it is; each one behind it slid toward it until it peeks out by
- * `--c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
+ * `--spacing-c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
  * reads behind the one in front and nothing behind it shows through. With
  * reduced motion nothing slides: the ones behind fade out, and the deck is
  * Send alone. Returns each button's place, and where the deck starts
@@ -46,7 +46,9 @@ function foldDeck(
   from: number
 ): { deck: number; start: number; places: DeckPlace[] } {
   const style = getComputedStyle(row);
-  const peek = Number.parseFloat(style.getPropertyValue("--c-deck-peek"));
+  const peek = Number.parseFloat(
+    style.getPropertyValue("--spacing-c-deck-peek")
+  );
   const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
   const cards = [...row.children]
     .filter((card): card is HTMLElement => card instanceof HTMLElement)
@@ -289,13 +291,13 @@ export class ComposerRecall {
 
   /**
    * The buttons slide together into the deck on the wheel's own growth:
-   * its --dur-grow on the drawer curve. Transform and opacity only, by the
+   * its --duration-grow on the drawer curve. Transform and opacity only, by the
    * Web Animations API, so the buttons' own transitions stay theirs.
    */
   #deckIn(places: DeckPlace[], from: number, to: number): void {
     this.deckOut(0);
     const timing = {
-      duration: dur("--dur-grow"),
+      duration: dur("--duration-grow"),
       easing: CURVE.drawer,
       fill: "forwards",
     } as const;
@@ -335,10 +337,10 @@ export class ComposerRecall {
 
   /**
    * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --dur-grow-exit on the drawer curve (`ms`: 0 puts
+   * wheel's fold: its --duration-grow-exit on the drawer curve (`ms`: 0 puts
    * them back at once).
    */
-  deckOut(ms = dur("--dur-grow-exit")): void {
+  deckOut(ms = dur("--duration-grow-exit")): void {
     const was = this.#decked;
     this.#decked = null;
     if (!was) {
@@ -467,7 +469,7 @@ export class ComposerRecall {
     clearTimeout(this.hintBack);
     this.hintBack = setTimeout(() => {
       this.hintBack = 0;
-    }, dur("--dur-fade"));
+    }, dur("--duration-fade"));
     await tick();
     const took = was?.text !== draft().text;
     // Back to the draft and asked for again: it comes straight back up. A
