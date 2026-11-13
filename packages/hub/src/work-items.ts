@@ -1680,7 +1680,7 @@ const waitClock = (at: Date): string =>
   });
 
 export const WAIT_ITEM_LIMIT =
-  "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason for waiting on a command you started.";
+  "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason saying what you wait for.";
 
 /** A `from` request with what it cannot go with: a new workspace, cut where its source's repository is. */
 const fromProblem = (request: WorkItemRequest): string | undefined => {

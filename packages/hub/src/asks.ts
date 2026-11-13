@@ -96,6 +96,7 @@ export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
 /** The words the model reads for `ask`. */
 const ASK_DESCRIPTION =
   "Ask the person something and carry on. It answers at once and the hub keeps the question; their answer arrives as a message naming it, and wakes you if your turn ended. " +
+  "A delegate's question reaches its parent too, which may answer it. " +
   "Set blocks when going the wrong way would waste work; otherwise say what you'll go ahead with.";
 
 /** The most questions one ask carries, answered one at a time in a row. */

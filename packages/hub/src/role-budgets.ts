@@ -131,13 +131,20 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * and is written (it reads as set and is never read back; the owner approved
  * write-only secrets that day), the one place an agent learns that a put keeps
  * what it leaves out (worker 30,641 measured).
+ * 2026-11-13: call mechanics the owner's memory documents carried move into
+ * the tools they are about: a fork's workspace is cut from the default
+ * branch, the merge checks are the project's gate.md, a wait may be on the
+ * parent's check, the rest of $TMPDIR goes with a workspace, ship notes are
+ * for someone updating, a delegate's ask reaches its parent, delegate_list
+ * says which session is warm, find reaches a delegate's commits (worker
+ * 30,712, delegate 11,327, curator 1,206 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_650,
-  delegate: 11_300,
+  worker: 30_720,
+  delegate: 11_330,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1200,
+  curator: 1210,
   trimmer: 1400,
 };
 

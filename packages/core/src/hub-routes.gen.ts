@@ -4542,7 +4542,7 @@ export interface components {
       clean?: boolean;
       /** @description The repository a new workspace is cut from, an absolute path on `machine`. Default: this session's. With host: the folder it runs in; default the agent user's home. */
       cwd?: string;
-      /** @description Start as a copy of this conversation, on this session's harness and model. */
+      /** @description Start as a copy of this conversation, on this session's harness and model. Its workspace is cut from the default branch, not this session's; `from` starts it at an ended delegate's commits. */
       fork?: boolean;
       /** @description An ended delegate's workspace: the new one is cut at its branch head, its commits included. New or clean-slate work leaves it out. */
       from?: string;
@@ -4737,7 +4737,7 @@ export interface components {
       }[];
       /** @description One or two plain sentences: what changed and whether it passed. No ids or file names. */
       headline: string;
-      /** @description Release it once it lands on main, with end-user notes: the project's gate.md Ship: command runs it. Your call. */
+      /** @description Release it once it lands on main, with notes for someone updating, saying what changed for them: the project's gate.md Ship: command runs it. Your call. */
       ship?: {
         notes: string;
       };
@@ -5405,7 +5405,7 @@ export interface components {
     "tool wait_item": {
       /** @description Whole minutes to wait, from 1 to 120. */
       minutes: number;
-      /** @description What you are waiting for from a command you started. */
+      /** @description What you are waiting for. */
       reason: string;
     };
   };
