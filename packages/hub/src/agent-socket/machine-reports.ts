@@ -179,6 +179,17 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
       });
       return "stop";
     }
+    if (kind === "passkey_qr") {
+      // A FIDO URI read off a take-over's page: every dashboard renders it.
+      const qr = { ...body, machineId: message.machineId };
+      ctx.browsers.heardPasskeyQr(qr);
+      ctx.registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: qr,
+      });
+      return "stop";
+    }
     if (kind === "passkey_advert") {
       const { serviceData, rssi, capturedAt } = body;
       ctx.browsers.relayPasskeyAdvert(message.machineId, {

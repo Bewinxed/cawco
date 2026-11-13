@@ -439,6 +439,18 @@ export interface BrowserHandedBackFrame extends BrowserHandback {
   why: "person" | "unwatched" | "stopped";
 }
 
+/** Daemon → hub: a FIDO URI extracted from a browser's passkey QR code. */
+export interface PasskeyQrFrame {
+  /** ms epoch when extracted. */
+  extractedAt: number;
+  /** The full FIDO:/ URI from the QR code. */
+  fidoUri: string;
+  /** The browser key showing the QR. */
+  key: BrowserKey;
+  kind: "passkey_qr";
+  machineId: string;
+}
+
 /** Whether `value` is a {@link BrowserKey}. */
 export const isBrowserKey = (value: unknown): value is BrowserKey =>
   typeof value === "string" && BROWSER_KEY.test(value);
