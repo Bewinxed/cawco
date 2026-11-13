@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
@@ -225,13 +225,19 @@ export const appleDiagnosticsRoutes = () =>
     .get(
       "/api/diagnostics/apple/:id",
       { ...hidden, query: t.Object({ format: t.Optional(t.Literal("text")) }) },
-      async ({ params, query, status }) => {
+      async ({ params, query }) => {
         if (!ID.test(params.id)) {
-          return status(404, "No such diagnostic.");
+          return problem(404, {
+            code: "no-such-diagnostic",
+            detail: "No such diagnostic.",
+          });
         }
         const file = Bun.file(join(DIR, `${params.id}.json`));
         if (!(await file.exists())) {
-          return status(404, "No such diagnostic.");
+          return problem(404, {
+            code: "no-such-diagnostic",
+            detail: "No such diagnostic.",
+          });
         }
         const record = (await file.json()) as Stored;
         const stack = stackText(record.diagnostic);

@@ -1,4 +1,39 @@
-import { status } from "elysia";
+import {
+  type ElysiaStatus,
+  problem,
+  type ValidationErrorResponse,
+} from "elysia";
+
+/**
+ * Any problem Elysia's `problem(status, { code, detail })` returns, read
+ * structurally: its status box holds one status apart from every other (its
+ * `Code` is `in out`), so code that passes any of them on without answering
+ * it as a route reads it (an approved write's run, a tool's dependency)
+ * reads these members of it. A route answers the problem itself, whose
+ * status and code its type keeps.
+ */
+export interface AnyProblem extends Pick<
+  ElysiaStatus<number, { code: string; detail: string }>,
+  "~status" | "response" | "status"
+> {}
+
+/**
+ * A schema's own refusal, as its `error` (`t.String({ …, error:
+ * schemaRefusal(words) })`): Elysia's validation problem, the sentence the
+ * person reads as its `detail`, where Elysia's own names only the field that
+ * failed (in production, nothing more). Elysia answers it whole, as JSON,
+ * with 422, so the route's typed 422 is what is sent.
+ */
+export const schemaRefusal =
+  (detail: string) =>
+  ({ on }: { on: string }): ValidationErrorResponse => ({
+    type: "validation",
+    code: "validation",
+    title: "Validation Error",
+    status: 422,
+    on,
+    detail,
+  });
 
 /** The statuses a refusal answers with. */
 type RefusalCode = 400 | 403 | 404 | 409;
@@ -29,17 +64,24 @@ const rethrow = (error: unknown): never => {
   throw error;
 };
 
-/** A refusal of `Kind` as the route's answer; anything else goes to `otherwise`, thrown on by default. */
+/** A thrown refusal of `Kind` as the route's {@link refusal}, under `code`; anything else goes to `otherwise`, thrown on by default. */
 export const refusalAnswer =
-  <R = never>(Kind: RefusalKind, otherwise: (error: unknown) => R = rethrow) =>
+  <const Code extends string, R = never>(
+    Kind: RefusalKind,
+    code: Code,
+    otherwise: (error: unknown) => R = rethrow
+  ) =>
   (error: unknown) =>
     error instanceof Kind
-      ? status(error.status, error.message)
+      ? problem(error.status, { code, detail: error.message })
       : otherwise(error);
 
-/** Runs a route's work, answering a refusal of `Kind` with its status. */
-export const refusalAttempt = (Kind: RefusalKind) => {
-  const answer = refusalAnswer(Kind);
+/** Runs a route's work, answering a thrown refusal of `Kind` as {@link refusalAnswer}. */
+export const refusalAttempt = <const Code extends string>(
+  Kind: RefusalKind,
+  code: Code
+) => {
+  const answer = refusalAnswer(Kind, code);
   return async <T>(work: () => T | Promise<T>) => {
     try {
       return await work();

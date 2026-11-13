@@ -21,6 +21,7 @@
  */
 
 import type { Stage } from "@cawco/core/task-views";
+import { ElysiaStatus } from "elysia";
 import type { HubLifetimeShape } from "./lifetime";
 import { hasProjectFolder } from "./project-folder";
 import { movesFrom, type Stages } from "./stages";
@@ -97,13 +98,13 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     }
   };
 
-  /** Why a task held in `stage` may go now; undefined while it is still held. */
+  /** Why a task held in `stage` may go now; undefined while it is still held; its history's refused read. */
   const due = async (
     projectId: string,
     task: { fields: Record<string, string>; id: string; stage: string },
     stage: Stage,
     now: number
-  ): Promise<string | undefined> => {
+  ) => {
     const { until, after, afterMs } = stage.hooks;
     if (until) {
       const at = dateOf(task.fields[until]);
@@ -112,8 +113,11 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       }
     }
     if (after && afterMs) {
-      const { events } = await tasks.history(projectId, task.id);
-      const entered = events.findLast(
+      const history = await tasks.history(projectId, task.id);
+      if (history instanceof ElysiaStatus) {
+        return history;
+      }
+      const entered = history.events.findLast(
         (event) => event.stage?.to === stage.name
       )?.at;
       if (entered !== undefined && entered + afterMs <= now) {
@@ -122,12 +126,15 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     }
   };
 
-  /** Moves every task of one project whose hold in its stage is over. */
-  const lookAt = async (projectId: string): Promise<void> => {
+  /** Moves every task of one project whose hold in its stage is over; the first refused read, which ends the look. */
+  const lookAt = async (projectId: string) => {
     if (!(await hasProjectFolder(projectId))) {
       return;
     }
     const view = await tasks.stages(projectId);
+    if (view instanceof ElysiaStatus) {
+      return view;
+    }
     const holding = new Map(
       view.stages
         .filter((stage) => stage.hooks.until || stage.hooks.after)
@@ -136,25 +143,32 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     if (holding.size === 0) {
       return;
     }
-    const { tasks: rows } = await tasks.list(projectId);
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
     const now = Date.now();
-    for (const task of rows) {
+    for (const task of list.tasks) {
       const stage = holding.get(task.stage);
-      if (stage) {
-        await wake(projectId, view, task, stage, now);
+      const refused = stage && (await wake(projectId, view, task, stage, now));
+      if (refused) {
+        return refused;
       }
     }
   };
 
-  /** Moves one task on when its hold in `stage` is over and the moves say where. */
+  /** Moves one task on when its hold in `stage` is over and the moves say where; its history's refused read. */
   const wake = async (
     projectId: string,
     stages: Stages,
     task: { fields: Record<string, string>; id: string; stage: string },
     stage: Stage,
     now: number
-  ): Promise<void> => {
+  ) => {
     const why = await due(projectId, task, stage, now);
+    if (why instanceof ElysiaStatus) {
+      return why;
+    }
     if (!why) {
       return;
     }
@@ -167,22 +181,28 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       );
       return;
     }
+    const unmoved = (words: string) =>
+      warnOnce(
+        projectId,
+        `${task.id}\0${where.to}`,
+        `${task.id} could not move ${stage.name} → ${where.to}: ${words}`
+      );
     try {
-      await tasks.move(
+      const moved = await tasks.move(
         projectId,
         task.id,
         where.to,
         routineActor(ROUTINE, why)
       );
+      if (moved instanceof ElysiaStatus) {
+        unmoved(moved.response.detail);
+        return;
+      }
       console.info(
         `[waits] ${projectId} ${task.id}: ${why}; moved ${stage.name} → ${where.to}`
       );
     } catch (error) {
-      warnOnce(
-        projectId,
-        `${task.id}\0${where.to}`,
-        `${task.id} could not move ${stage.name} → ${where.to}: ${error instanceof Error ? error.message : String(error)}`
-      );
+      unmoved(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -193,11 +213,13 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       return;
     }
     looking.add(projectId);
+    const failed = (words: string) =>
+      console.warn(`[waits] ${projectId}: ${words}`);
     lookAt(projectId)
-      .catch((error: unknown) =>
-        console.warn(
-          `[waits] ${projectId}: ${error instanceof Error ? error.message : String(error)}`
-        )
+      .then(
+        (refused) => refused && failed(refused.response.detail),
+        (error: unknown) =>
+          failed(error instanceof Error ? error.message : String(error))
       )
       .finally(() => {
         looking.delete(projectId);

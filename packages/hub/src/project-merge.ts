@@ -19,7 +19,9 @@
  * removed. Run once at hub start and whenever a project gains a link;
  * with nothing to fold it does nothing.
  */
+
 import { join } from "node:path";
+import { ElysiaStatus } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
@@ -119,62 +121,90 @@ const duplicates = (
   return groups;
 };
 
+/** The duplicate's task files, read as text; the first the folder refuses. */
+const taskFiles = async (dup: ProjectRow, paths: string[]) => {
+  const reads = await Promise.all(
+    paths.map(async (path) => {
+      const file = await readFolderFile(dup.id, path);
+      return file instanceof ElysiaStatus
+        ? file
+        : { path, content: file.content };
+    })
+  );
+  const tasks: { content: string; path: string }[] = [];
+  for (const read of reads) {
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    tasks.push(read);
+  }
+  return tasks;
+};
+
 /**
  * The duplicate's folder, read whole: its task files as text, every other
- * file as bytes. Undefined when the listing stopped at its cap.
+ * file as bytes. Undefined when the listing stopped at its cap; the
+ * folder's refusal of a read.
  */
-const readWhole = async (
-  dup: ProjectRow
-): Promise<
-  | {
-      others: { bytes: Uint8Array; path: string }[];
-      tasks: { content: string; path: string }[];
-    }
-  | undefined
-> => {
-  if (!(await hasProjectFolder(dup.id))) {
+const readWhole = async (dup: ProjectRow) => {
+  const has = await hasProjectFolder(dup.id);
+  if (has instanceof ElysiaStatus) {
+    return has;
+  }
+  if (!has) {
     return { tasks: [], others: [] };
   }
   const listing = await listFolder(dup.id, "", true);
+  if (listing instanceof ElysiaStatus) {
+    return listing;
+  }
   if (listing.truncated) {
-    return undefined;
+    return;
   }
   const files = listing.entries.filter((entry) => entry.kind === "file");
-  const tasks = await Promise.all(
+  const tasks = await taskFiles(
+    dup,
     files
+      .map((entry) => entry.path)
       .filter(
-        (entry) =>
-          entry.path.startsWith("tasks/") &&
-          fileTaskNumber(entry.path) !== undefined
+        (path) =>
+          path.startsWith("tasks/") && fileTaskNumber(path) !== undefined
       )
-      .map(async (entry) => ({
-        path: entry.path,
-        content: (await readFolderFile(dup.id, entry.path)).content,
-      }))
   );
+  if (tasks instanceof ElysiaStatus) {
+    return tasks;
+  }
+  const root = projectRoot(dup.id);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
   const taken = new Set(tasks.map((task) => task.path));
   const others = await Promise.all(
     files
       .filter((entry) => !taken.has(entry.path))
       .map(async (entry) => ({
         path: entry.path,
-        bytes: await Bun.file(join(projectRoot(dup.id), entry.path)).bytes(),
+        bytes: await Bun.file(join(root, entry.path)).bytes(),
       }))
   );
   return { tasks, others };
 };
 
-/** The duplicate's other files the kept project lacks, copied in one commit; the ones both have are said. */
+/** The duplicate's other files the kept project lacks, copied in one commit; the ones both have are said; the folder's refusal. */
 const copyOthers = async (
   keep: ProjectRow,
   dup: ProjectRow,
   others: { bytes: Uint8Array; path: string }[]
-): Promise<void> => {
-  const kept = (await hasProjectFolder(keep.id))
-    ? new Set(
-        (await listFolder(keep.id, "", true)).entries.map((entry) => entry.path)
-      )
-    : new Set<string>();
+) => {
+  const has = await hasProjectFolder(keep.id);
+  if (has instanceof ElysiaStatus) {
+    return has;
+  }
+  const listed = has ? await listFolder(keep.id, "", true) : undefined;
+  if (listed instanceof ElysiaStatus) {
+    return listed;
+  }
+  const kept = new Set(listed?.entries.map((entry) => entry.path));
   // The kept project's stages stand, its stages.md or, without one, the
   // template it runs on: the duplicate's never replaces them.
   const both = others.filter(
@@ -187,7 +217,7 @@ const copyOthers = async (
   }
   const missing = others.filter((file) => !both.includes(file));
   if (missing.length > 0) {
-    await writeFolderFiles(
+    const written = await writeFolderFiles(
       keep.id,
       missing.map((file) => ({ path: file.path, content: file.bytes })),
       {
@@ -204,16 +234,22 @@ const copyOthers = async (
         ].join("\n"),
       }
     );
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
   }
 };
 
-/** Folds one duplicate into `keep`; false when it was left as it is. */
+/** Folds one duplicate into `keep`; false when it was left as it is; a refusal that stopped it. */
 const fold = async (
   deps: MergeDeps,
   keep: ProjectRow,
   { dup, shared }: Duplicate
-): Promise<boolean> => {
+) => {
   const folder = await readWhole(dup);
+  if (folder instanceof ElysiaStatus) {
+    return folder;
+  }
   if (!folder) {
     log(
       `${dup.name} (${dup.id}) shares ${shared} with ${keep.name}'s projects, but its folder is too large to read whole; it is left as it is.`
@@ -226,11 +262,19 @@ const fold = async (
     hubActor(`${dup.name} shares ${shared} with this project`),
     dup.name
   );
-  await copyOthers(keep, dup, folder.others);
+  if (ids instanceof ElysiaStatus) {
+    return ids;
+  }
+  const uncopied = await copyOthers(keep, dup, folder.others);
+  if (uncopied) {
+    return uncopied;
+  }
   // A task in a stage the kept project does not have is said, to be moved.
-  const named = new Set(
-    (await deps.tasks.stages(keep.id)).stages.map((stage) => stage.name)
-  );
+  const stages = await deps.tasks.stages(keep.id);
+  if (stages instanceof ElysiaStatus) {
+    return stages;
+  }
+  const named = new Set(stages.stages.map((stage) => stage.name));
   for (const [was, now] of ids) {
     const file = folder.tasks.find(
       (task) => `tsk-${fileTaskNumber(task.path)}` === was
@@ -254,7 +298,10 @@ const fold = async (
   if (await hasProjectFolder(dup.id)) {
     // Marked folded, never listed as a forgotten project: its rows live on
     // in the kept one.
-    await trashFoldedFolder(dup.id, keep.id);
+    const trashed = await trashFoldedFolder(dup.id, keep.id);
+    if (trashed instanceof ElysiaStatus) {
+      return trashed;
+    }
     deps.folderMoved();
   }
   log(
@@ -282,12 +329,19 @@ export const mergeSameRemote = async (
   let changed = false;
   for (const { keep, dups } of duplicates(deps.db.listProjects(), remote)) {
     for (const one of dups) {
-      try {
-        changed = (await fold(deps, keep, one)) || changed;
-      } catch (error) {
+      const unfolded = (why: string) =>
         log(
-          `${one.dup.name} (${one.dup.id}) was not folded into ${keep.name}: ${error instanceof Error ? error.message : String(error)}. It is left as it is; the next start tries again.`
+          `${one.dup.name} (${one.dup.id}) was not folded into ${keep.name}: ${why}. It is left as it is; the next start tries again.`
         );
+      try {
+        const folded = await fold(deps, keep, one);
+        if (folded instanceof ElysiaStatus) {
+          unfolded(folded.response.detail);
+        } else {
+          changed = folded || changed;
+        }
+      } catch (error) {
+        unfolded(error instanceof Error ? error.message : String(error));
       }
     }
   }

@@ -62,6 +62,7 @@ import {
   versionedFile,
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { ElysiaStatus, problem } from "elysia";
 import { serveCanvas } from "./artifacts/canvas";
 import {
   ARTIFACT_PATH,
@@ -98,11 +99,11 @@ import {
   labelOf,
   originFor,
   PORT_SUFFIX,
-  PreviewRefusal,
   parsePattern,
 } from "./preview-hosts";
 import { isEmbed } from "./preview-origin";
-import { FolderRefusal, folderPath } from "./project-folder";
+import { folderPath } from "./project-folder";
+
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
@@ -302,18 +303,15 @@ async function servePage(
   const asked = versioned ?? pathname;
   try {
     root = await realpath(join(ARTIFACTS_ROOT, artifactId));
-    file = await realpath(
-      join(
-        root,
-        folderPath(
-          decodeURIComponent(asked === "/" ? "/index.html" : asked).slice(1)
-        )
-      )
+    const rel = folderPath(
+      decodeURIComponent(asked === "/" ? "/index.html" : asked).slice(1)
     );
-  } catch (error) {
-    return error instanceof FolderRefusal
-      ? new Response(error.message, { status: error.status })
-      : new Response("Not found", { status: 404 });
+    if (rel instanceof ElysiaStatus) {
+      return new Response(rel.response.detail, { status: rel.status });
+    }
+    file = await realpath(join(root, rel));
+  } catch {
+    return new Response("Not found", { status: 404 });
   }
   const inside = relative(root, file);
   if (inside === ".." || inside.startsWith(`..${sep}`)) {
@@ -1111,11 +1109,11 @@ const atTheLock = (
   return downResponse("closed", 404);
 };
 /** An origin whose session or project the hub no longer holds: let go, and said, never kept. */
-const ownerGone = (key: string): PreviewRefusal =>
-  new PreviewRefusal(
-    409,
-    `No session or project holds the preview origin ${key} now, so it serves nothing.`
-  );
+const ownerGone = (key: string) =>
+  problem(409, {
+    code: "preview-owner-gone",
+    detail: `No session or project holds the preview origin ${key} now, so it serves nothing.`,
+  });
 /** The port a host pattern's name ends in (`HostPattern.after`), when it names one. */
 const PATTERN_PORT = /:(\d+)$/u;
 /** One name of the pattern's, its port left off: a made-up session's, or the range's first port's. */
@@ -1187,17 +1185,27 @@ export function createPreviewListeners(
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
   /**
-   * Throws, in one sentence, when this hub opens no listener ({@link listens}):
-   * asked before every bind and before any port is moved or taken back.
+   * The refusal, in one sentence, when this hub opens no listener
+   * ({@link listens}): asked before every bind ({@link unheld}) and before
+   * any port is moved or taken back ({@link portFor}).
    */
-  const mayListen = (): void => {
-    if (!listens) {
-      throw new PreviewRefusal(
-        503,
-        "This hub opens no preview listener: it was built only to be read."
-      );
-    }
-  };
+  const unlistened = () =>
+    listens
+      ? undefined
+      : problem(503, {
+          code: "preview-no-listener",
+          detail:
+            "This hub opens no preview listener: it was built only to be read.",
+        });
+  /** A port that would not open for a reason no other port avoids, in one sentence. */
+  const portRefused = (port: number, thrown: unknown) =>
+    problem(503, {
+      code: "preview-port-unopened",
+      detail: `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`,
+    });
+  /** Why a bind refused: no listener on this hub, or a port that would not open. */
+  type Unlistened =
+    NonNullable<ReturnType<typeof unlistened>> | ReturnType<typeof portRefused>;
   /**
    * Each origin's open sockets, by its key: a frame that shows it holds one
    * while it stands (its overlay's doc link, which keeps itself open: core
@@ -1270,14 +1278,14 @@ export function createPreviewListeners(
    * (preview-access.ts): a request needs the browser's pass, WebSocket
    * upgrades too, but the dashboard's ping and the entry that spends a
    * ticket for one. Host mode's names set it on their domain, an origin's
-   * own port on the host it was reached at.
+   * own port on the host it was reached at. Every bind asks {@link unheld}
+   * first, which refuses on a hub that opens no listener.
    */
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
     lock: PassLock
   ): Listener => {
-    mayListen();
     const serve = async (
       request: Request,
       server: Server<ListenerSocket>
@@ -1401,12 +1409,16 @@ export function createPreviewListeners(
    * Where origin `key` stands now, as a browser that reached `at` reaches
    * it: host mode's name for it when `at` was one of the names, else its
    * port on the host `at` named. Its listener is opened when it has none;
-   * throws as {@link portFor} does.
+   * refused as {@link portFor} refuses.
    */
-  const standsAt = (key: string, at: URL, lock: PassLock): string => {
-    const port = isEmbed(key)
-      ? (embeds.get(key) ?? openEmbed(key)).listener.port
+  const standsAt = (key: string, at: URL, lock: PassLock) => {
+    const opened = isEmbed(key)
+      ? (embeds.get(key) ?? openEmbed(key))
       : portOf(key);
+    if (opened instanceof ElysiaStatus) {
+      return opened;
+    }
+    const port = typeof opened === "number" ? opened : opened.listener.port;
     if (lock.domain !== null && hostPattern) {
       return originFor(
         hostPattern,
@@ -1442,6 +1454,26 @@ export function createPreviewListeners(
     lock: PassLock,
     key: string | undefined
   ): Response | null => {
+    const sent = staleSent(request, lock, key);
+    if (sent instanceof ElysiaStatus) {
+      // Its origin can't open now (its owner gone, every port in use): the
+      // lock and this origin answer it as before.
+      previewFailed(
+        HOP,
+        key ?? null,
+        `a stale address stays: ${sent.response.detail}`
+      );
+      return null;
+    }
+    return sent;
+  };
+
+  /** Where {@link movedOn} sends a stale address, or its origin's refusal; null, said, when that throws. */
+  const staleSent = (
+    request: Request,
+    lock: PassLock,
+    key: string | undefined
+  ): Response | null | StaleRefused => {
     const url = new URL(request.url);
     try {
       if (url.pathname === PREVIEW_ENTER_PATH) {
@@ -1451,8 +1483,6 @@ export function createPreviewListeners(
         ? staleTab(request, url, lock, key)
         : null;
     } catch (thrown) {
-      // Its origin can't open now (its owner gone, every port in use): the
-      // lock and this origin answer it as before.
       previewFailed(
         HOP,
         key ?? null,
@@ -1463,11 +1493,7 @@ export function createPreviewListeners(
   };
 
   /** An entry with a session's ticket on a port of none of its origins, sent on to its first origin's entry ({@link movedOn}). */
-  const staleEntry = (
-    url: URL,
-    lock: PassLock,
-    key: string | undefined
-  ): Response | null => {
+  const staleEntry = (url: URL, lock: PassLock, key: string | undefined) => {
     const ticket = url.searchParams.get("ticket") ?? "";
     const scope = sessionTicketScope(ticket);
     const [own] = scope ?? [];
@@ -1475,15 +1501,17 @@ export function createPreviewListeners(
       return null;
     }
     const next = url.searchParams.get("next");
+    const stands = standsAt(own, url, lock);
+    if (stands instanceof ElysiaStatus) {
+      return stands;
+    }
     return Response.redirect(
-      previewEnterUrl(
-        standsAt(own, url, lock),
-        ticket,
-        next === null ? undefined : next
-      ),
+      previewEnterUrl(stands, ticket, next === null ? undefined : next),
       302
     );
   };
+  /** Why a stale address is not sent on: its origin's refusal to open. */
+  type StaleRefused = Exclude<ReturnType<typeof standsAt>, string>;
 
   /** A tab at a page's or a canvas's address on an origin that doesn't serve it, sent on by its pass ({@link movedOn}). */
   const staleTab = (
@@ -1491,7 +1519,7 @@ export function createPreviewListeners(
     url: URL,
     lock: PassLock,
     key: string | undefined
-  ): Response | null => {
+  ) => {
     const paged = url.pathname.match(PAGE_PATH);
     const drawn = paged ? null : url.pathname.match(CANVAS_PATH);
     const artifactId = (paged ?? drawn)?.[1];
@@ -1516,11 +1544,16 @@ export function createPreviewListeners(
     }
     const origin = deps.originOf(artifactId);
     return origin && passOf(request, lock, origin)
-      ? Response.redirect(
-          `${standsAt(origin, url, lock)}${url.pathname}${url.search}`,
-          302
-        )
+      ? redirectTo(origin, url, lock)
       : null;
+  };
+
+  /** `url`'s path and query where origin `key` stands now ({@link standsAt}), or its refusal. */
+  const redirectTo = (key: string, url: URL, lock: PassLock) => {
+    const stands = standsAt(key, url, lock);
+    return stands instanceof ElysiaStatus
+      ? stands
+      : Response.redirect(`${stands}${url.pathname}${url.search}`, 302);
   };
 
   /**
@@ -1592,8 +1625,11 @@ export function createPreviewListeners(
    * connections between the two: a scratch hub beside another took half of
    * an embed's requests that way, its frame left on the browser's error page.
    */
-  const unheld = (port: number): boolean => {
-    mayListen();
+  const unheld = (port: number) => {
+    const refused = unlistened();
+    if (refused) {
+      return refused;
+    }
     try {
       Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
       return true;
@@ -1604,7 +1640,7 @@ export function createPreviewListeners(
       if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
         return false;
       }
-      throw portRefused(port, thrown);
+      return portRefused(port, thrown);
     }
   };
 
@@ -1656,7 +1692,16 @@ export function createPreviewListeners(
       return;
     }
     try {
-      if (!unheld(port)) {
+      const free = unheld(port);
+      if (free instanceof ElysiaStatus) {
+        previewFailed(
+          HOP,
+          null,
+          `port ${port} wasn't held: ${free.response.detail}`
+        );
+        return;
+      }
+      if (!free) {
         return;
       }
       const held = listen(port, () => undefined, portLock);
@@ -1683,14 +1728,14 @@ export function createPreviewListeners(
   /**
    * Serves `instanceId` on `port`: false when another process holds it
    * (EADDRINUSE). Any other refusal is the bind address's, not the port's,
-   * so no other port would open either: it is thrown, in one sentence.
+   * so no other port would open either: it is returned, in one sentence.
    */
-  const serveOn = (instanceId: string, port: number): boolean => {
+  const serveOn = (instanceId: string, port: number) => {
     takeVacant(port);
-    if (!unheld(port)) {
-      return false;
+    const free = unheld(port);
+    if (free instanceof ElysiaStatus || !free) {
+      return free;
     }
-    let refused: unknown;
     try {
       sessions.set(
         instanceId,
@@ -1701,13 +1746,8 @@ export function createPreviewListeners(
       if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
         return false;
       }
-      refused = thrown;
+      return portRefused(port, thrown);
     }
-    throw new PreviewRefusal(
-      503,
-      `Preview port ${port} didn't open on ${hostname} (${causeOf(refused)}).`,
-      { cause: refused }
-    );
   };
 
   /** Why no session may have `port`: one of the fleet's own, or outside the range; null when one may. */
@@ -1820,34 +1860,32 @@ export function createPreviewListeners(
    */
   const portFor = (
     instanceId: string,
-    opens: (port: number) => boolean
-  ): number => {
-    mayListen();
+    opens: (port: number) => boolean | Unlistened
+  ) => {
+    const unopened = unlistened();
+    if (unopened) {
+      return unopened;
+    }
     // An origin whose session or project is gone holds no port: it is let go, never kept.
     if (!db.ownerHeld(instanceId)) {
-      throw ownerGone(instanceId);
+      return ownerGone(instanceId);
     }
-    const held = db.ports();
-    const kept = held.find((row) => row.key === instanceId)?.port;
-    let why = "";
-    if (kept !== undefined) {
-      const refused = barred(kept);
-      if (!refused && opens(kept)) {
-        return kept;
-      }
-      why = refused ?? "another process holds it";
+    const kept = db.ports().find((row) => row.key === instanceId)?.port;
+    const why = kept === undefined ? undefined : keptStays(kept, opens);
+    if (typeof why === "number" || why instanceof ElysiaStatus) {
+      return why;
     }
-    let port = firstOpen(new Set(held.map((row) => row.port)), opens);
-    while (port === undefined && reclaimOne(instanceId) !== undefined) {
-      port = firstOpen(new Set(db.ports().map((row) => row.port)), opens);
+    const port = openOrReclaim(instanceId, opens);
+    if (port instanceof ElysiaStatus) {
+      return port;
     }
     if (port === undefined) {
-      throw everyPortTaken();
+      return everyPortTaken();
     }
     if (!db.keepPort(instanceId, port)) {
       // Its owner went while the listener opened.
       release(instanceId);
-      throw ownerGone(instanceId);
+      return ownerGone(instanceId);
     }
     if (kept !== undefined) {
       console.warn(
@@ -1857,17 +1895,53 @@ export function createPreviewListeners(
     return port;
   };
 
-  /** The lowest port of the range not `taken`, not barred, that `opens`; undefined when none does. */
+  /** Port `kept` while it is still a preview port and `opens`; else why it moves, or the refusal of its opening. */
+  const keptStays = (
+    kept: number,
+    opens: (port: number) => boolean | Unlistened
+  ) => {
+    const refused = barred(kept);
+    if (refused) {
+      return refused;
+    }
+    const opened = opens(kept);
+    if (opened instanceof ElysiaStatus) {
+      return opened;
+    }
+    return opened ? kept : "another process holds it";
+  };
+
+  /** {@link firstOpen} of the ports no origin keeps, an origin that doesn't hold its port let go each time none does ({@link reclaimOne}), until one opens or none is left to let go. */
+  const openOrReclaim = (
+    instanceId: string,
+    opens: (port: number) => boolean | Unlistened
+  ) => {
+    for (;;) {
+      const port = firstOpen(new Set(db.ports().map((row) => row.port)), opens);
+      if (port !== undefined || reclaimOne(instanceId) === undefined) {
+        return port;
+      }
+    }
+  };
+
+  /** The lowest port of the range not `taken`, not barred, that `opens`; undefined when none does, or the refusal of one that refused. */
   const firstOpen = (
     taken: Set<number>,
-    opens: (port: number) => boolean
-  ): number | undefined => {
+    opens: (port: number) => boolean | Unlistened
+  ): number | Unlistened | undefined => {
     for (
       let port = PREVIEW_PORTS.first;
       port <= PREVIEW_PORTS.last;
       port += 1
     ) {
-      if (!(taken.has(port) || barred(port)) && opens(port)) {
+      if (taken.has(port) || barred(port)) {
+        continue;
+      }
+      const opened = opens(port);
+      if (opened instanceof ElysiaStatus) {
+        return opened;
+      }
+      if (opened) {
         return port;
       }
     }
@@ -1878,11 +1952,14 @@ export function createPreviewListeners(
    * another program: said with how many each, and what frees one (core
    * words/preview-ports.ts).
    */
-  const everyPortTaken = (): PreviewRefusal =>
-    new PreviewRefusal(
-      503,
-      previewPortWords.everyPortTaken(PREVIEW_PORTS_TEXT, portHolders())
-    );
+  const everyPortTaken = () =>
+    problem(503, {
+      code: "preview-ports-taken",
+      detail: previewPortWords.everyPortTaken(
+        PREVIEW_PORTS_TEXT,
+        portHolders()
+      ),
+    });
 
   /** What keeps each port of the range, the barred left out: a screen that shows its origin ({@link inUse}), else another program on the hub's machine. */
   const portHolders = (): PortHolders => {
@@ -1924,11 +2001,11 @@ export function createPreviewListeners(
   };
 
   /** Session `instanceId`'s listener on its port. */
-  const bind = (instanceId: string): number =>
+  const bind = (instanceId: string) =>
     portFor(instanceId, (port) => serveOn(instanceId, port));
 
   /** Session `instanceId`'s port, its listener started when it has none. */
-  const portOf = (instanceId: string): number =>
+  const portOf = (instanceId: string) =>
     sessions.get(instanceId)?.port ?? bind(instanceId);
 
   /** The session a Host header names under `pattern`; undefined when it names none, or a port no session holds. */
@@ -1959,11 +2036,9 @@ export function createPreviewListeners(
    * null.
    */
   const startHostMode = (): { held: boolean; why: string } | null => {
-    let pattern: HostPattern;
-    try {
-      pattern = parsePattern(settings.pattern ?? "");
-    } catch (thrown) {
-      const why = `The stored host pattern ${JSON.stringify(settings.pattern)} isn't one: ${causeOf(thrown)}`;
+    const pattern = parsePattern(settings.pattern ?? "");
+    if (pattern instanceof ElysiaStatus) {
+      const why = `The stored host pattern ${JSON.stringify(settings.pattern)} isn't one: ${pattern.response.detail}`;
       previewFailed(HOP, null, why);
       return { held: false, why };
     }
@@ -1980,7 +2055,13 @@ export function createPreviewListeners(
       // socket bound the same way, and that one would take a share of the
       // names' requests past the lock: host mode opens only on a port
       // nothing holds.
-      if (!unheld(PREVIEW_PORTS.first)) {
+      const free = unheld(PREVIEW_PORTS.first);
+      if (free instanceof ElysiaStatus) {
+        const why = `Port ${PREVIEW_PORTS.first} didn't open for host-mode previews (${free.response.detail}): free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
+        previewFailed(HOP, null, why);
+        return { held: false, why };
+      }
+      if (!free) {
         const why = `Port ${PREVIEW_PORTS.first} is held by another listener, so host-mode previews can't take it: free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
         previewFailed(HOP, null, why);
         return { held: true, why };
@@ -2020,25 +2101,18 @@ export function createPreviewListeners(
     });
   };
 
-  /** A port that would not open for a reason no other port avoids, in one sentence. */
-  const portRefused = (port: number, thrown: unknown): PreviewRefusal =>
-    new PreviewRefusal(
-      503,
-      `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`,
-      { cause: thrown }
-    );
-
   /**
    * A machine artifact's listener on the port it keeps ({@link portFor}),
    * so its origin is the same one across the hub's restarts while its
    * artifact lasts ({@link holds}): the port it keeps while that still opens,
    * else the lowest of the range no other origin holds, kept from then on.
    */
-  const openEmbed = (key: string): Embed => {
-    portFor(key, (port) => {
+  const openEmbed = (key: string) => {
+    const kept = portFor(key, (port) => {
       takeVacant(port);
-      if (!unheld(port)) {
-        return false;
+      const free = unheld(port);
+      if (free instanceof ElysiaStatus || !free) {
+        return free;
       }
       try {
         embeds.set(key, {
@@ -2050,14 +2124,13 @@ export function createPreviewListeners(
         if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
           return false;
         }
-        throw portRefused(port, thrown);
+        return portRefused(port, thrown);
       }
     });
-    const opened = embeds.get(key);
-    if (!opened) {
-      throw everyPortTaken();
+    if (kept instanceof ElysiaStatus) {
+      return kept;
     }
-    return opened;
+    return embeds.get(key) ?? everyPortTaken();
   };
 
   /**
@@ -2107,10 +2180,9 @@ export function createPreviewListeners(
         continue;
       }
       try {
-        if (isEmbed(key)) {
-          openEmbed(key);
-        } else {
-          bind(key);
+        const bound = isEmbed(key) ? openEmbed(key) : bind(key);
+        if (bound instanceof ElysiaStatus) {
+          previewFailed(HOP, key, bound.response.detail);
         }
       } catch (thrown) {
         previewFailed(HOP, key, causeOf(thrown));
@@ -2196,10 +2268,11 @@ export function createPreviewListeners(
     /**
      * Session `instanceId`'s preview origin: its port, its listener started
      * when it has none; once host mode stands its whole origin too, named
-     * by its id or by that port.
+     * by its id or by that port. Refused as {@link portFor} refuses.
      */
-    address(instanceId: string): PreviewAddress {
-      return addressAt(instanceId, portOf(instanceId));
+    address(instanceId: string) {
+      const port = portOf(instanceId);
+      return port instanceof ElysiaStatus ? port : addressAt(instanceId, port);
     },
 
     /**
@@ -2221,8 +2294,9 @@ export function createPreviewListeners(
      * Session `instanceId`'s origin as a process on the hub's own machine
      * dials it ({@link loopback}): a canvas's unseen screen (server.ts).
      */
-    local(instanceId: string): string {
-      return loopback(portOf(instanceId));
+    local(instanceId: string) {
+      const port = portOf(instanceId);
+      return port instanceof ElysiaStatus ? port : loopback(port);
     },
 
     loopback,
@@ -2235,8 +2309,11 @@ export function createPreviewListeners(
      * it has none, which the page's origin may frame; in host mode its whole
      * origin too, named by its key or port.
      */
-    embed(key: string, owner: string, pageAt?: URL): PreviewAddress {
+    embed(key: string, owner: string, pageAt?: URL) {
       const held = embeds.get(key) ?? openEmbed(key);
+      if (held instanceof ElysiaStatus) {
+        return held;
+      }
       // The page that shows it, as the browser reached it: that exact origin may frame it.
       const framer = pageAt && pageOrigin(owner, pageAt);
       if (framer) {
@@ -2298,15 +2375,19 @@ export function createPreviewListeners(
      * be set on, whose generated name resolves; a refusal says why and
      * changes nothing.
      */
-    async set(next: {
-      mode: "port" | "host";
-      pattern?: string;
-    }): Promise<PreviewSettings> {
+    async set(next: { mode: "port" | "host"; pattern?: string }) {
       if (next.mode === "host") {
         const pattern = (next.pattern ?? "").trim().toLowerCase();
-        const unreachable = await probePattern(parsePattern(pattern));
+        const parsed = parsePattern(pattern);
+        if (parsed instanceof ElysiaStatus) {
+          return parsed;
+        }
+        const unreachable = await probePattern(parsed);
         if (unreachable) {
-          throw new PreviewRefusal(422, unreachable);
+          return problem(422, {
+            code: "preview-pattern-unresolved",
+            detail: unreachable,
+          });
         }
         const before = settings;
         await stopAll();
@@ -2316,7 +2397,10 @@ export function createPreviewListeners(
           // Nothing changes: the mode before goes on as it was.
           settings = before;
           this.start();
-          throw new PreviewRefusal(503, failed.why);
+          return problem(503, {
+            code: "preview-host-mode-unopened",
+            detail: failed.why,
+          });
         }
         db.setSettings(settings);
         // Its sessions' own ports, which clients reached outside the
