@@ -166,6 +166,8 @@ export const takeServed = (doc: Document): void => {
 /** The bridge, once the overlay put it on the window; null where CawCo does not show the page. */
 export interface Bridge {
   choose: (choice: string, option: string | string[] | null) => Promise<void>;
+  /** Opens what a `cawco:` reference in the page's words names, where a chip of it opens (core reference-faces.ts): the refusal's words, or null once it opened. */
+  follow: (href: string) => Promise<string | null>;
   note: (choice: string, text: string) => Promise<void>;
   on: {
     (

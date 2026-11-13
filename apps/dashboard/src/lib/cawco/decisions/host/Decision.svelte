@@ -66,6 +66,8 @@
     type PieceNames,
     picks,
   } from "./page.svelte.js";
+  import Words from "./Words.svelte";
+  import { plainOf } from "./words";
 
   let {
     props,
@@ -142,7 +144,7 @@
   /** Its id: each option's parts are named under it, ids that hold across revisions. */
   setContext("decision-id", () => id);
   /** Its media name themselves by its question where nothing nearer names them (page.svelte.ts `pieceName`). */
-  setContext<PieceNames>(PIECE_NAME, () => question);
+  setContext<PieceNames>(PIECE_NAME, () => plainOf(question));
   /**
    * The rows every option of the card stands on (the chip, its line, its
    * cost, its builds, then one per piece of media): one track each that any
@@ -447,7 +449,7 @@
     <h2
       class="type-title min-w-0 max-w-c-measure flex-1 text-balance text-ink-strong wrap-anywhere"
     >
-      {question}
+      <Words text={question} />
     </h2>
   </header>
   <div
@@ -456,7 +458,7 @@
     data-slot="decision-body"
   >
     <OptionGroup
-      aria-label={question}
+      aria-label={plainOf(question)}
       bind:value={() => chosen, () => undefined}
       class="w-full"
       disabled={!bridge()}
@@ -522,7 +524,7 @@
         class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
         data-slot="why"
       >
-        {advice}
+        <Words text={advice} />
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}

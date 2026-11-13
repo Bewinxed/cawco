@@ -934,6 +934,15 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // The `cawco:` references its program names: all a dashboard framing it
+    // says faces of to the page, and opens for it (core reference-faces.ts).
+    .get("/api/artifacts/:artifact/references", ({ params }) => {
+      try {
+        return { references: artifacts.references(params.artifact) };
+      } catch (error) {
+        return refused(error);
+      }
+    })
     // An artifact's latest picture in a scheme (Files' cards). The list names
     // it with its `at`, so a new one is a new address and this one never
     // changes under it.

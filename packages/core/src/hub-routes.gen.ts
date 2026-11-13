@@ -350,6 +350,11 @@ export interface components {
         artifact: string | number;
       };
     };
+    "GET /api/artifacts/:artifact/references": {
+      path: {
+        artifact: string | number;
+      };
+    };
     "GET /api/artifacts/:artifact/thumbnail/:scheme": {
       path: {
         artifact: string;
