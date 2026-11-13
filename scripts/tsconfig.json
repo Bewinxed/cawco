@@ -9,7 +9,6 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"]
   },
   "include": ["**/*.ts", "**/*.mts"],
-  "exclude": ["lint/fixtures/biome/hub-types-only"],
   "references": [
     { "path": "../packages/agent" },
     { "path": "../packages/agent/src/canvas-host" },
