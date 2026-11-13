@@ -273,7 +273,7 @@ export class QueuedEdit {
     const trip = startFlight(asField(fieldEl, leaving), from);
     // What the field holds again shows once the words leaving it are gone.
     if (motionOk.current) {
-      this.#landAfter(dur("--dur-lift") * LEFT_BY);
+      this.#landAfter(dur("--duration-lift") * LEFT_BY);
     }
     if (replaced !== undefined) {
       replacing.set(lift.id, replaced);
@@ -383,7 +383,7 @@ export class QueuedEdit {
       return;
     }
     if (this.#editShape) {
-      this.#editShape.morphTo(1, this.#editShape.ext, dur("--dur-grow"));
+      this.#editShape.morphTo(1, this.#editShape.ext, dur("--duration-grow"));
       if (this.edit) {
         this.edit.shown = true;
       }
@@ -408,15 +408,15 @@ export class QueuedEdit {
 
   /**
    * The row's entrance: the shape grows `row` up, and its parts come up
-   * partway, once there is room for them: --dur-control into the shape's
+   * partway, once there is room for them: --duration-control into the shape's
    * own clock, which runs on drawn frames (GrownShape `morphTo`). A lift's
    * focus that brings up an on-screen keyboard has iOS Safari hold its
    * frames until the keyboard has risen, and neither the shape nor its
    * parts spend that wait, so both are seen coming up once frames come.
    */
   #growRow(shape: GrownShape, row: number): void {
-    shape.morphTo(1, row, dur("--dur-grow"), shape.base, {
-      ms: motionOk.current ? dur("--dur-control") : 0,
+    shape.morphTo(1, row, dur("--duration-grow"), shape.base, {
+      ms: motionOk.current ? dur("--duration-control") : 0,
       run: () => {
         if (this.edit && this.#editShape === shape) {
           this.edit.shown = true;
@@ -433,7 +433,7 @@ export class QueuedEdit {
     if (this.edit) {
       this.edit.shown = false;
     }
-    await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+    await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
     // Grown again while it folded: it stays.
     if (this.#editShape === shape && !this.#parts.draft().lifted) {
       shape.remove();
