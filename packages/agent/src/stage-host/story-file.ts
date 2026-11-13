@@ -21,6 +21,8 @@ import {
   FORMS,
   type Form,
   type FormName,
+  formNamed,
+  formNameOf,
   type Story,
   type StoryOp,
 } from "@cawco/core/stage";
@@ -66,17 +68,35 @@ const syntaxOf = (file: string): ("jsx" | "typescript")[] => {
   return TS.test(file) ? ["typescript"] : ["jsx"];
 };
 
+/** Whether `value` is a node of Babel's tree: an object with a type. */
+const isNode = (value: unknown): value is Node =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  typeof value.type === "string";
+
 const parsed = (file: string, text: string): Node[] =>
   parse(text, {
     sourceType: "module",
     plugins: syntaxOf(file),
     tokens: false,
-  }).program.body as unknown as Node[];
+  }).program.body.flatMap((statement) =>
+    isNode(statement) ? [statement] : []
+  );
 
-const child = (node: Node, field: string): Node | null =>
-  (node[field] as Node | null | undefined) ?? null;
-const children = (node: Node, field: string): Node[] =>
-  (node[field] as Node[] | undefined) ?? [];
+const child = (node: Node, field: string): Node | null => {
+  const found = node[field];
+  return isNode(found) ? found : null;
+};
+const children = (node: Node, field: string): Node[] => {
+  const found = node[field];
+  return Array.isArray(found) ? found.filter(isNode) : [];
+};
+/** A node's string field (a name, a literal's value); undefined where it holds none. */
+const textOf = (node: Node | null | undefined, field: string) => {
+  const found = node?.[field];
+  return typeof found === "string" ? found : undefined;
+};
 
 /** An expression under its TypeScript wrappers (`as const`, `satisfies Story`, `!`, parentheses). */
 const bare = (node: Node | null): Node | null => {
@@ -100,9 +120,9 @@ const keyOf = (property: Node): string | null => {
   }
   const key = child(property, "key");
   if (key?.type === "Identifier") {
-    return key.name as string;
+    return textOf(key, "name") ?? null;
   }
-  return key?.type === "StringLiteral" ? (key.value as string) : null;
+  return key?.type === "StringLiteral" ? (textOf(key, "value") ?? null) : null;
 };
 
 /**
@@ -184,7 +204,14 @@ function literal(
       return children(at, "expressions").length === 0
         ? {
             value: children(at, "quasis")
-              .map((quasi) => (quasi.value as { cooked: string }).cooked)
+              .map((quasi) => {
+                const { value } = quasi;
+                return typeof value === "object" &&
+                  value !== null &&
+                  "cooked" in value
+                  ? value.cooked
+                  : "";
+              })
               .join(""),
           }
         : undefined;
@@ -293,7 +320,7 @@ function flatten(
     case "ObjectExpression":
       return flattenObject(reading, expr, env, via, depth);
     case "Identifier": {
-      const name = expr.name as string;
+      const name = textOf(expr, "name") ?? "";
       const declared = reading.scope.get(name);
       return declared && declared.type !== "FunctionDeclaration"
         ? flatten(reading, { node: declared, env: NO_ENV }, via, depth + 1)
@@ -422,7 +449,7 @@ function bindings(
     }
     const fallback =
       param.type === "AssignmentPattern" ? child(param, "right") : null;
-    inner.set(left.name as string, {
+    inner.set(textOf(left, "name") ?? "", {
       node: arg ?? fallback ?? { type: "Identifier", name: "undefined" },
       env: arg || !fallback ? env : inner,
     });
@@ -514,7 +541,7 @@ const propertyOf = (object: Node | null, key: string): Node | undefined =>
 /** An identifier's name, when the expression is one. */
 const identifier = (node: Node | null): string | null => {
   const at = bare(node);
-  return at?.type === "Identifier" ? (at.name as string) : null;
+  return at?.type === "Identifier" ? (textOf(at, "name") ?? null) : null;
 };
 
 /** One story export: its name, the statement it stands in, its value (null for a function story), its object literal when its value is one, its name's place. */
@@ -586,7 +613,7 @@ function exportedBy(node: Node, local: Map<string, Export>): Export[] {
   }
   for (const specifier of children(node, "specifiers")) {
     const exported = child(specifier, "exported");
-    const name = (exported?.name ?? exported?.value) as string | undefined;
+    const name = textOf(exported, "name") ?? textOf(exported, "value");
     if (
       specifier.type === "ExportSpecifier" &&
       specifier.exportKind !== "type" &&
@@ -630,7 +657,7 @@ function importsOf(body: Node[]): Map<string, string> {
     if (node.type !== "ImportDeclaration" || node.importKind === "type") {
       continue;
     }
-    const source = (child(node, "source")?.value as string | undefined) ?? "";
+    const source = textOf(child(node, "source"), "value") ?? "";
     for (const specifier of children(node, "specifiers")) {
       const name = identifier(child(specifier, "local"));
       if (name) {
@@ -657,7 +684,7 @@ const COMMENT_STAR = /^\s*\*+\s?/u;
  * last block when several stand apart. Null when it has none.
  */
 function labelOf(text: string, statement: Node): string | null {
-  const comments = (statement.leadingComments as Node[] | undefined) ?? [];
+  const comments = children(statement, "leadingComments");
   // The comments that touch the statement: a blank line ends the run.
   const run: Node[] = [];
   let next = statement.start ?? 0;
@@ -746,12 +773,14 @@ function formOf(reading: Reading, parameters: Bound | null): FormRead {
     return { form: namedForm(value) };
   }
   if (value && typeof value === "object") {
-    const one = value as { defaultViewport?: unknown; width?: unknown };
-    if (typeof one.width === "number") {
-      return { form: width(one.width) };
+    const wide = "width" in value ? value.width : undefined;
+    if (typeof wide === "number") {
+      return { form: width(wide) };
     }
-    if (typeof one.defaultViewport === "string") {
-      return { form: namedForm(one.defaultViewport) };
+    const preset =
+      "defaultViewport" in value ? value.defaultViewport : undefined;
+    if (typeof preset === "string") {
+      return { form: namedForm(preset) };
     }
   }
   return { form: null };
@@ -768,7 +797,8 @@ function ownViewport(parameters: Bound): Entry | null {
   const at = properties.findLastIndex(
     (one) => one.type === "ObjectProperty" && keyOf(one) === "viewport"
   );
-  const value = at < 0 ? null : child(properties[at] as Node, "value");
+  const written = properties[at];
+  const value = written ? child(written, "value") : null;
   return value &&
     !properties.slice(at + 1).some((one) => one.type === "SpreadElement")
     ? { key: "viewport", value, env, via: null }
@@ -820,17 +850,15 @@ const STORYBOOK_VIEWPORTS: Record<string, FormName> = {
 };
 
 const namedForm = (name: string): Form | null => {
-  const preset = name in FORMS ? (name as FormName) : STORYBOOK_VIEWPORTS[name];
+  const preset = formNameOf(name) ?? STORYBOOK_VIEWPORTS[name];
   return preset ? { name: preset, width: FORMS[preset] } : null;
 };
 
 /** A width as its preset when it is one, else its own. */
-const presetOf = (width: number): Form => {
-  const preset = (Object.keys(FORMS) as FormName[]).find(
-    (name) => FORMS[name] === width
-  );
-  return { name: preset ?? "custom", width };
-};
+const presetOf = (width: number): Form => ({
+  name: formNamed(width) ?? "custom",
+  width,
+});
 
 /** `Story.play = …` and `Story.from = …` assignments at the top of the file, by story. */
 function assignedOf(body: Node[]): Map<string, Map<string, Node>> {
@@ -847,9 +875,10 @@ function assignedOf(body: Node[]): Map<string, Map<string, Node>> {
     }
     const story = identifier(child(target, "object"));
     const field = identifier(child(target, "property"));
-    if (story && field) {
+    const right = expression ? child(expression, "right") : null;
+    if (story && field && right) {
       const fields = found.get(story) ?? new Map<string, Node>();
-      fields.set(field, child(expression as Node, "right") as Node);
+      fields.set(field, right);
       found.set(story, fields);
     }
   }
@@ -1295,7 +1324,7 @@ function printed(value: unknown, style: Style): string {
     return `[${value.map((one) => printed(one, style)).join(", ")}]`;
   }
   if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
+    const entries = Object.entries(value);
     return entries.length === 0
       ? "{}"
       : `{ ${entries.map(([key, one]) => `${keyText(key, style)}: ${printed(one, style)}`).join(", ")} }`;
@@ -1435,7 +1464,7 @@ function storyNamed(
   if (!story.object) {
     throw new StoryRefusal(reasons.notWritable(name, file));
   }
-  return story as Export & { object: Node };
+  return { ...story, object: story.object };
 }
 
 /**
@@ -1531,7 +1560,7 @@ function argsSplices(
 
 /** A statement's whole text from the start of its first line, with the comments right above it, to the end of its line. */
 function block(text: string, statement: Node): { from: number; to: number } {
-  const comments = (statement.leadingComments as Node[] | undefined) ?? [];
+  const comments = children(statement, "leadingComments");
   const first = comments[0]?.start ?? statement.start ?? 0;
   const from = text.lastIndexOf("\n", first - 1) + 1;
   const lineEnd = text.indexOf("\n", statement.end ?? 0);
