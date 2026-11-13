@@ -74,14 +74,14 @@ export class PaneClose {
       width: `${rect.width}px`,
       height: `${rect.height}px`,
       borderRadius: "var(--radius-lg)",
-      background: "var(--surface-raised)",
+      background: "var(--color-surface-raised)",
       boxShadow: "var(--shadow-drawer)",
       pointerEvents: "none",
       zIndex: "var(--layer-flight)",
     });
     document.body.append(stand);
     const done = () => stand.remove();
-    const flight = closeInto(stand, row, dur("--dur-panel"));
+    const flight = closeInto(stand, row, dur("--duration-panel"));
     if (flight) {
       flight.finished.then(done, done);
     } else {
