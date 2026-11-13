@@ -38169,6 +38169,9 @@
             "$ref": "#/components/schemas/BrowserListFrame"
           },
           {
+            "$ref": "#/components/schemas/PasskeyQrFrame"
+          },
+          {
             "$ref": "#/components/schemas/RelayFrame"
           },
           {
@@ -38238,6 +38241,7 @@
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
             "passkey_relay": "#/components/schemas/PasskeyRelayFrame",
             "browser_list": "#/components/schemas/BrowserListFrame",
+            "passkey_qr": "#/components/schemas/PasskeyQrFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
             "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
             "stored": "#/components/schemas/StoredFrame",
@@ -67543,6 +67547,40 @@
         "required": [
           "browsers",
           "kind"
+        ]
+      },
+      "PasskeyQrFrame": {
+        "description": "Daemon → hub: a FIDO URI extracted from a browser's passkey QR code.",
+        "type": "object",
+        "properties": {
+          "extractedAt": {
+            "description": "ms epoch when extracted.",
+            "type": "number"
+          },
+          "fidoUri": {
+            "description": "The full FIDO:/ URI from the QR code.",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser key showing the QR."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_qr"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "extractedAt",
+          "fidoUri",
+          "key",
+          "kind",
+          "machineId"
         ]
       },
       "RelayFrame": {

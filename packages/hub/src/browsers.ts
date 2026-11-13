@@ -63,6 +63,7 @@ import {
   isBrowserKey,
   type ListedBrowser,
   PASSKEY_ADVERT_MAX_AGE_MS,
+  type PasskeyQrFrame,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
@@ -174,6 +175,7 @@ const rowFrom = (row: BrowserRow): Omit<StoredBrowser, "machineId"> => ({
 });
 
 export const createBrowsers = (deps: BrowsersDeps) => {
+  const passkeyQrs = new Map<BrowserKey, PasskeyQrFrame>();
   const { db } = deps;
   /** Each browser's live facts, by machine and key, from its machine's latest frame or answer. */
   const live = new Map<string, LiveBrowserFacts>();
@@ -412,8 +414,19 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       told();
     },
 
+    /** A passkey QR extracted from a browser's page: kept per browser key, so a dashboard that connects later gets the latest. */
+    heardPasskeyQr(frame: PasskeyQrFrame): void {
+      passkeyQrs.set(frame.key, frame);
+    },
+
+    /** The latest passkey QR of each browser that has one. */
+    passkeyQrs(): PasskeyQrFrame[] {
+      return [...passkeyQrs.values()];
+    },
+
     /** A take-over its machine ended, whichever way: told before the record's frame, with the page's origin. */
     heardHandback(frame: BrowserHandedBackFrame): void {
+      passkeyQrs.delete(frame.key);
       console.info(
         `[browser] ${frame.key} on ${deps.machineName(frame.machineId)} handed back (${HANDED_BACK_BY[frame.why]})`
       );

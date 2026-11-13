@@ -492,6 +492,8 @@ routeFrames([
   ...hubOnly("browsers"),
   // A machine's passkey relay capability travels machine → hub only.
   ...hubOnly("passkey_relay"),
+  // A passkey QR travels machine → hub → dashboard; the takeover view reads it, not session state.
+  ...hubOnly("passkey_qr"),
   // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
   ...hubOnly("browser_handback"),
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
