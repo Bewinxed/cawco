@@ -27,10 +27,13 @@
   let {
     origin,
     mine,
+    connecting = false,
     as = "bar",
   }: {
     /** The page in front's origin; null while it shows none. */
     origin: string | null;
+    /** The stream is not drawn yet: with no origin, what the page is is not known, so the address says it connects rather than that no page is open. */
+    connecting?: boolean;
     /** The person holds the browser. */
     mine: boolean;
     /** In the head (or over the stream's foot), or as More's line. */
@@ -44,7 +47,11 @@
       : browserWords.agentDriving
   );
   const place = $derived(origin ? placeOf(origin) : null);
-  const name = $derived(`${origin ?? browserWords.noPage}, ${control}`);
+  /** What stands for the origin when there is none: no page is open, once that is known. */
+  const none = $derived(
+    connecting ? browserWords.connecting : browserWords.noPage
+  );
+  const name = $derived(`${origin ?? none}, ${control}`);
 </script>
 
 {#snippet glyph()}
@@ -64,7 +71,7 @@
     <span class="mark-line flex items-center gap-space-2" title={control}>
       {@render glyph()}
       <span class="min-w-0 wrap-anywhere" data-slot="browser-origin"
-        >{#if place}{place.scheme}{place.lead}{place.domain}{:else}{browserWords.noPage}{/if}</span
+        >{#if place}{place.scheme}{place.lead}{place.domain}{:else}{none}{/if}</span
       >
       {@render held()}
     </span>
@@ -99,7 +106,7 @@
             >{place.lead}</span
           ><span class="flex-none whitespace-nowrap">{place.domain}</span>
         {:else}
-          <span class="whitespace-nowrap">{browserWords.noPage}</span>
+          <span class="whitespace-nowrap">{none}</span>
         {/if}
       </span>
       {@render held()}

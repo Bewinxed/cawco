@@ -26,14 +26,14 @@ export const browserWords = {
   layout: "Layout",
   phoneLayout: "Phone layout",
   deskLayout: "Desktop layout",
-  toPhoneLayout: "Desktop layout: switch to phone",
-  toDeskLayout: "Phone layout: switch to desktop",
+  toPhoneLayout: "Switch to phone layout",
+  toDeskLayout: "Switch to desktop layout",
   /** In the head's More while you have control: the page loaded again in the layout you're in. */
   reloadPage: "Reload page",
   /** The desktop layout on a phone: the whole page in view, and back to reading size. */
   fitPage: "Fit the page",
-  /** The desktop layout on a phone, zoomed in: the whole page in small, the part in view marked. */
-  overview: "Where you are on the page",
+  /** The desktop layout on a phone, zoomed in: the whole page in small, the part in view marked; a press there, or an arrow key, moves the view. */
+  overview: "Move the view on the page",
   /** The field the phone's keyboard types into, for a screen reader. */
   keyboardField: "Type into the browser",
   /** The head's buttons, and while they go. */

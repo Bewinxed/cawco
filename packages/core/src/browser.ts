@@ -314,14 +314,18 @@ export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;
 
 /**
  * The layout the person takes the browser over in (agent cdp-takeover.ts):
- * the desktop's, {@link BROWSER_SCREEN} with a mouse, as the agent drives
- * it; or a phone's, the page laid out at `width` × `height` CSS px (the
- * room the view has for it), drawn at `scale` device px to each, and
- * driven by touch. Only the page's shape and its input change, never the
- * browser's identity (its user agent and client hints stay the desktop's).
+ * the desktop's, driven by a mouse; or a phone's, the page laid out at
+ * `width` × `height` CSS px (the room the view has for it), drawn at
+ * `scale` device px to each, and driven by touch. The desktop's with no
+ * `height` is the browser's own viewport, the page laid out as it is
+ * watched, so nothing moves as control changes hands at a desk; with
+ * `height`, the page is {@link BROWSER_SCREEN}'s width by `height` CSS px:
+ * a phone's room at the picture's opening zoom, so the picture fills it.
+ * Only the page's shape and its input change, never the browser's
+ * identity (its user agent and client hints stay the desktop's).
  */
 export type TakeoverLayout =
-  | { form: "desk" }
+  | { form: "desk"; height?: number }
   | {
       form: "phone";
       width: number;
@@ -344,8 +348,11 @@ export interface TakeoverTouchPoint {
  * epoch: the page's fling takes its speed from the fingers' spacing), a
  * finger held still on it (`hold`), which selects the word under it and
  * activates nothing, that finger dragged on (`select`), which carries the
- * selection to the word under it, and the page loaded again (`reload`: a
- * site that chose its markup by touch as it loaded takes the layout's).
+ * selection to the word under it, the page loaded again (`reload`: a
+ * site that chose its markup by touch as it loaded takes the layout's),
+ * and where the page's focus stands asked (`askFocus`: the daemon answers
+ * a {@link TakeoverFocus} when the page has one), for the desktop layout's
+ * zoom to open on it.
  */
 export type TakeoverMessage =
   | { t: "layout"; layout: TakeoverLayout }
@@ -357,7 +364,8 @@ export type TakeoverMessage =
     }
   | { t: "hold"; x: number; y: number }
   | { t: "select"; x: number; y: number }
-  | { t: "reload" };
+  | { t: "reload" }
+  | { t: "askFocus" };
 
 /**
  * Everything a take-over's view sends its daemon, as JSON text (agent
@@ -377,7 +385,7 @@ export type TakeoverInput =
   | { t: "text"; text: string }
   | TakeoverMessage;
 
-/** What a take-over's daemon tells its view beside the frames: where the page's focus stands, in its CSS px, once a desktop layout is laid out. */
+/** What a take-over's daemon tells its view beside the frames: where the page's focus stands, in its CSS px, once a desktop layout is laid out, and when the view asks. */
 export interface TakeoverFocus {
   height: number;
   t: "focus";

@@ -356,6 +356,8 @@ const PATCH_MOST = 0.25;
 
 /** The local browser's frames, or a take-over's on either host: a view that also says the layout it holds and its fingers. */
 export interface TakeoverStream extends BrowserStream, StreamInput {
+  /** Where the page's focus stands, asked: the daemon tells it as on a desktop layout's opening. */
+  askFocus: () => void;
   /** A finger held still at a point: the word there selected, and nothing under it activated. */
   hold: (x: number, y: number) => void;
   /** The layout the person holds: sent now, and first on every connection; frames of another size are dropped until the layout's come. */
@@ -373,10 +375,17 @@ export interface TakeoverStream extends BrowserStream, StreamInput {
 }
 
 /** The CSS size a layout's frames come at. */
-const laidSize = (layout: TakeoverLayout): { width: number; height: number } =>
-  layout.form === "phone"
-    ? { width: layout.width, height: layout.height }
-    : BROWSER_SCREEN;
+/** The CSS size a layout lays the page out at; none for the browser's own viewport (core `TakeoverLayout`). */
+const laidSize = (
+  layout: TakeoverLayout
+): { width: number; height: number } | null => {
+  if (layout.form === "phone") {
+    return { width: layout.width, height: layout.height };
+  }
+  return layout.height === undefined
+    ? null
+    : { width: BROWSER_SCREEN.width, height: layout.height };
+};
 
 /**
  * A changed region between two frames' pixels, or null when none changed.
@@ -436,6 +445,8 @@ export const cdpStream = (
   let next: ArrayBuffer | null = null;
   /** The layout the person holds; null while watching. */
   let held: TakeoverLayout | null = null;
+  /** The size of the layout held before the browser's own viewport: its frames still on their way are dropped. */
+  let left: { width: number; height: number } | null = null;
   /** The canvas holds a sharp picture, patched since by soft frames at most. */
   let sharp = false;
   /** The last soft frame, and its pixels once read: what a patch is measured against. */
@@ -526,19 +537,27 @@ export const cdpStream = (
     return true;
   };
 
+  /**
+   * A frame of the layout before the one asked for, still on its way as the
+   * layout changed: it would draw a desktop page in a phone's box. Into the
+   * browser's own viewport, whose size is the frames' own, one of the
+   * layout left is.
+   */
+  const stale = (width: number, height: number): boolean => {
+    const expected = held ? laidSize(held) : null;
+    if (expected) {
+      return width !== expected.width || height !== expected.height;
+    }
+    return left !== null && width === left.width && height === left.height;
+  };
+
   const draw = async (frame: ArrayBuffer) => {
     decoding = true;
     try {
       const header = new DataView(frame, 0, 4);
       const width = header.getUint16(0);
       const height = header.getUint16(2);
-      const expected = held ? laidSize(held) : null;
-      // A frame of the layout before the one asked for (still on its way
-      // as the layout changed) would draw a desktop page in a phone's box.
-      if (
-        expected &&
-        (width !== expected.width || height !== expected.height)
-      ) {
+      if (stale(width, height)) {
         return;
       }
       const picture = await createImageBitmap(
@@ -640,6 +659,7 @@ export const cdpStream = (
     },
     size: () => size,
     layout: (layout) => {
+      left = held ? laidSize(held) : null;
       held = layout;
       sharp = false;
       soft?.picture.close();
@@ -652,6 +672,7 @@ export const cdpStream = (
     hold: (x, y) => send({ t: "hold", x, y }),
     select: (x, y) => send({ t: "select", x, y }),
     reload: () => send({ t: "reload" }),
+    askFocus: () => send({ t: "askFocus" }),
     move: (x, y) => send({ t: "move", x, y }),
     button: (x, y, button, down) =>
       send({

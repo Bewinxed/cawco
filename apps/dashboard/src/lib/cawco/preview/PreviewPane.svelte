@@ -86,11 +86,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import {
-    BarGlass,
-    BarItem,
-    BarSegments,
-  } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem, BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -4333,21 +4329,20 @@
     value={browserForm}
   />
 {/snippet}
-<!-- Where the head has no room for both segments: the layout the page is
-     in, one glyph, which switches to the other. -->
+<!-- Where the head has no room for both segments: one bare symbol in the
+     head's glass (SideSurface puts a compact centre control there), the
+     glyph and the name of the layout a press gives. -->
 {#snippet layoutCompact()}
-  <BarGlass form="group">
-    <BarItem
-      icon={browserForm === "phone" ? IconPhoneLinear : IconMonitorLinear}
-      label={browserForm === "phone"
-        ? browserWords.toDeskLayout
-        : browserWords.toPhoneLayout}
-      onclick={() => {
-        browserForm = browserForm === "phone" ? "desk" : "phone";
-      }}
-      props={{ "data-slot": "browser-layout" }}
-    />
-  </BarGlass>
+  <BarItem
+    icon={browserForm === "phone" ? IconMonitorLinear : IconPhoneLinear}
+    label={browserForm === "phone"
+      ? browserWords.toDeskLayout
+      : browserWords.toPhoneLayout}
+    onclick={() => {
+      browserForm = browserForm === "phone" ? "desk" : "phone";
+    }}
+    props={{ "data-slot": "browser-layout" }}
+  />
 {/snippet}
 {#snippet layoutMenu()}
   <DropdownMenu.Group>
@@ -4386,6 +4381,7 @@
 <!-- A browser's address, in the head's centre (BrowserAddress). -->
 {#snippet addressBar()}
   <BrowserAddress
+    connecting={!browserViewing}
     mine={!!browserRow?.takeover}
     origin={browserRow?.origin ?? null}
   />
@@ -4393,6 +4389,7 @@
 {#snippet addressMenu()}
   <BrowserAddress
     as="menu"
+    connecting={!browserViewing}
     mine={!!browserRow?.takeover}
     origin={browserRow?.origin ?? null}
   />

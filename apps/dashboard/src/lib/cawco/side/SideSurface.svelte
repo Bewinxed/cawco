@@ -645,13 +645,15 @@
          past the name on every side (the negative margin takes it back). It
          is the HIG's bar title: Headline, plain text (the row role, 16px at
          500, the house's ceiling). What describes it stands as its
-         description, never a line under it. -->
+         description, never a line under it. Led by an item after it (a
+         browser's address), its end keeps its ring's room, so the words
+         stand a step clear of the item rather than at the head's gap. -->
     <div
       data-slot="identity"
       data-led={inLead.some((one) => stands(one.key)) || undefined}
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher && switcherAt === "start" ? "" : undefined}
-      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 *:max-w-full data-led:flex-initial data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
+      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 *:max-w-full data-led:me-0 data-led:flex-initial data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
       style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >
