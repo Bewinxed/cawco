@@ -81,21 +81,34 @@ const server = (): Server => {
   return proxy;
 };
 
+const RETRY_MS = 1000;
+
 let started: Promise<void> | undefined;
 
-/** Starts the proxy once for the agent's life; a port held already is another agent's, whose proxy serves the same rule. */
+/**
+ * Starts the proxy once for the agent's life. A port held already is an older
+ * agent's, whose proxy serves the same rule: this resolves at once, and the
+ * binding goes on in the background, every second, until this process holds
+ * the port, so the proxy is not lost when the older agent ends (an update's
+ * handover). Any other listen error rejects.
+ */
 export const startHubProxy = (): Promise<void> => {
   started ??= new Promise<void>((resolve, reject) => {
     const proxy = server();
-    proxy.once("error", (error: NodeJS.ErrnoException) => {
-      started = undefined;
+    const bind = (): void => {
+      proxy.listen(BROWSER_PROXY_PORT, "127.0.0.1");
+    };
+    proxy.on("error", (error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") {
         resolve();
-      } else {
-        reject(error);
+        setTimeout(bind, RETRY_MS).unref();
+        return;
       }
+      started = undefined;
+      reject(error);
     });
-    proxy.listen(BROWSER_PROXY_PORT, "127.0.0.1", () => resolve());
+    proxy.on("listening", () => resolve());
+    bind();
   });
   return started;
 };

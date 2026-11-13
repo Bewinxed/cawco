@@ -56,6 +56,7 @@ import {
 } from "./egress";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
+import { startHubProxy } from "./hub-proxy";
 import { LocalHost } from "./local-host";
 import { relayKeyOf } from "./relay-urls";
 import { findRuntime, type Runtime } from "./runtime";
@@ -380,6 +381,11 @@ const gatesNow = async (): Promise<void> => {
   const records = await allBrowsers();
   for (const record of records) {
     gateFor(record);
+  }
+  // A running local browser has its pages through the proxy (hub-proxy.ts),
+  // whether or not a session starts one again after this agent did.
+  if (records.some((record) => record.local)) {
+    await startHubProxy();
   }
   const kept = new Set(records.map((record) => record.key));
   for (const key of servedGates()) {
