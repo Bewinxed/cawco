@@ -21,6 +21,7 @@ import { createSocket } from "node:dgram";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_SLOTS,
@@ -202,7 +203,7 @@ export const browserOwner = async (): Promise<string> => {
     return made;
   } catch (error) {
     const first = await keptBrowserOwner(browsersDir());
-    if ((error as { code?: string }).code === "EEXIST" && first) {
+    if (errnoCode(error) === "EEXIST" && first) {
       return first;
     }
     throw error;
@@ -261,7 +262,7 @@ export const forgetBrowser = async (key: BrowserKey): Promise<void> => {
 
 /** Every browser this machine keeps a record of. */
 export const allBrowsers = async (): Promise<BrowserRecord[]> => {
-  const names = await readdir(browsersDir()).catch(() => [] as string[]);
+  const names = await readdir(browsersDir()).catch((): string[] => []);
   const keys = names
     .map((name) => name.replace("-", ":"))
     .filter((key): key is BrowserKey => isBrowserKey(key));

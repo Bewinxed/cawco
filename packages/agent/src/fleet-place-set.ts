@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { type FleetMcpConfig, placeKeyOf } from "@cawco/core/fleet";
 import { fleetPlacesDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import type { SetHarnessConfig, SetHook } from "./fleet-harness-set";
+import type { SetHarnessConfig, SetHook } from "./fleet-set-rows";
 import { FleetPlaceSetShape } from "./stored-shapes";
 
 /** What CawCo's sessions in one place take of its project's rows. */
@@ -94,7 +94,7 @@ export const dropPlaceSet = (cwd: string): Promise<void> => {
 
 /** Every place's file on this machine. */
 export const placeSets = async (): Promise<FleetPlaceSet[]> => {
-  const names = await readdir(fleetPlacesDir()).catch(() => [] as string[]);
+  const names = await readdir(fleetPlacesDir()).catch((): string[] => []);
   const sets = await Promise.all(
     names
       .filter((name) => name.endsWith(EXT))
