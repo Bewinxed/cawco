@@ -11,6 +11,8 @@ import type {
   BrowserKey,
   BrowserListFrame,
   ListedBrowser,
+  PasskeyAdvertFrame,
+  PasskeyRelayFrame,
 } from "./browser";
 import type { CommandQueueFrame, CutCommand } from "./commands/controls";
 import type {
@@ -874,6 +876,10 @@ export type FramePayload =
   | BrowserFrame
   /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
   | BrowserHandedBackFrame
+  /** Daemon-originated: this machine's passkey relay capability changed. */
+  | PasskeyRelayFrame
+  /** Daemon-originated: a FIDO BLE advertisement captured on this machine, for the hub to relay. */
+  | PasskeyAdvertFrame
   /** Hub-originated: every browser of the fleet, whole, on each change. */
   | BrowserListFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */

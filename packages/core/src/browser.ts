@@ -501,5 +501,11 @@ export interface PasskeyRelayFrame {
   scanning: boolean;
 }
 
+/** Daemon-originated: a FIDO BLE advertisement this machine captured, for the hub to relay. */
+export interface PasskeyAdvertFrame extends BrowserPasskeyAdvertArgs {
+  instanceId?: undefined;
+  kind: "passkey_advert";
+}
+
 /** How old a relayed advert may be before the inject end drops it. */
 export const PASSKEY_ADVERT_MAX_AGE_MS = 5000;
