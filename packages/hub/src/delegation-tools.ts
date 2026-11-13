@@ -63,7 +63,7 @@ import type {
 } from "./delegation-actions";
 import { decodeCursor } from "./find";
 import { handedInputsListed } from "./handed-input";
-import { type McpToolOn, type Presenter, sentence, toolOn } from "./mcp-tool";
+import { type Presenter, sentence, toolOn } from "./mcp-tool";
 import {
   type AskChanged,
   artifactBrowsedWords,
@@ -428,7 +428,7 @@ const headWritten = async (
   };
 };
 
-export function handoffTools(view: ToolView): McpToolOn<HandoffOn>[] {
+export function handoffTools(view: ToolView) {
   const all = [
     handoffTool(
       "generate_image",

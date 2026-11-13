@@ -48,7 +48,6 @@ import {
 } from "@cawco/agent/service-manager/keeper-job";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
 import { AwakeTime } from "@cawco/core/awake-time";
-import { type HealthProblem, probeHealth } from "@cawco/core/binary-health";
 import {
   binaryRoot,
   currentDirectory,
@@ -118,6 +117,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
 import { recordApply } from "./apply-record";
+import { type HealthProblem, probeHealth } from "./binary-health";
 import { binaryLayout } from "./binary-install";
 import { service } from "./service";
 
@@ -976,7 +976,7 @@ class TrialWatch {
   /**
    * The healthy streak: how long it has held, when the last healthy answer
    * came, and whether the hub has fallen silent since. A stretch the hub
-   * says nothing in (core binary-health.ts `hubSilent`: no answer, no
+   * says nothing in (cli binary-health.ts `hubSilent`: no answer, no
    * connection, an answer not about the row) is the hub's, never the
    * build's: it pauses the streak, and from the last healthy answer to the
    * next counts neither toward the hold nor against it. A problem that is
