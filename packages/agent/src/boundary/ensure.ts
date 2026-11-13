@@ -885,6 +885,13 @@ const launch = async (
 /** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
 const watchedHosts = new Map<string, SessiondClient>();
 
+/** One restart in a host's record (protocol.ts `HOST_FILES.restarts`): when the host did it by its own clock, the init of the sandbox it stopped and the path that changed. */
+const HostRestart = z.object({
+  at: z.number(),
+  inner: z.unknown(),
+  path: z.unknown(),
+});
+
 /**
  * Records each restart of generation `held`'s sandbox its srt host recorded
  * (protocol.ts `HOST_FILES.restarts`) that workspace `id`'s decisions do not hold
@@ -914,21 +921,19 @@ const recordHostRestarts = async (
         : []
     )
   );
-  for (const one of restarts as ({
-    at?: unknown;
-    inner?: unknown;
-    path?: unknown;
-  } | null)[]) {
-    if (!one || typeof one.at !== "number" || known.has(one.at)) {
+  for (const entry of restarts) {
+    const one = HostRestart.safeParse(entry);
+    if (!one.success || known.has(one.data.at)) {
       continue;
     }
-    known.add(one.at);
+    const { at, inner, path } = one.data;
+    known.add(at);
     await recordDecision(id, {
       ...decided(held),
       decision: "host-restarted",
-      hostAt: one.at,
-      inner: typeof one.inner === "number" ? one.inner : null,
-      path: typeof one.path === "string" ? one.path : "",
+      hostAt: at,
+      inner: typeof inner === "number" ? inner : null,
+      path: typeof path === "string" ? path : "",
     });
   }
 };
@@ -1728,7 +1733,7 @@ const readWorkspaces = async (): Promise<{
   const ids = await readdir(workspacesDir()).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") {
-        return [] as string[];
+        return [];
       }
       throw error;
     }
