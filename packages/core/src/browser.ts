@@ -382,3 +382,59 @@ const BROWSER_KEY = /^(?:project|machine):[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 
 /** A key as a name the runtime and the filesystem take: `project:abc` → `project-abc`. */
 export const browserSlug = (key: BrowserKey): string => key.replace(":", "-");
+
+/**
+ * Daemon → hub: a FIDO caBLE BLE advertisement captured on this machine.
+ * The hub forwards it to every other machine with a live browser whose
+ * take-over is active or whose passkey relay is enabled. The service data
+ * is the raw 20-byte payload from the BLE advertisement under UUID
+ * 0000fff9-0000-1000-8000-00805f9b34fb, base64-encoded.
+ */
+export const BROWSER_PASSKEY_ADVERT = "browser.passkeyAdvert";
+export interface BrowserPasskeyAdvertArgs {
+  /** ms epoch when the advert was captured. */
+  capturedAt: number;
+  /** The RSSI of the captured advertisement (informational). */
+  rssi: number;
+  /** The raw 20-byte BLE service data, base64-encoded. */
+  serviceData: string;
+}
+
+/**
+ * Hub → daemon: inject this relayed FIDO BLE advertisement into the
+ * browser of `key`, so its Chromium's caBLE discovery sees it as a local
+ * BLE device. The service data and metadata are as the capture machine
+ * sent them.
+ */
+export const BROWSER_INJECT_ADVERT = "browser.injectAdvert";
+export interface BrowserInjectAdvertArgs {
+  /** ms epoch when the advert was captured on the source machine. */
+  capturedAt: number;
+  key: BrowserKey;
+  /** The RSSI of the original advertisement. */
+  rssi: number;
+  /** The raw 20-byte BLE service data, base64-encoded. */
+  serviceData: string;
+  /** The machine that captured it. */
+  sourceMachineId: string;
+}
+
+/** Whether passkey relay is enabled on a machine: capture, inject, or both. */
+export type PasskeyRelayRole = "capture" | "inject" | "both" | "none";
+
+/**
+ * Daemon-originated: this machine's passkey relay capability changed.
+ * Sent with the browser frame when the machine's BLE adapter is present
+ * (capture) or when its browsers can accept injected adverts (inject).
+ */
+export interface PasskeyRelayFrame {
+  instanceId?: undefined;
+  kind: "passkey_relay";
+  machineId: string;
+  role: PasskeyRelayRole;
+  /** Whether BLE scanning is active right now. */
+  scanning: boolean;
+}
+
+/** How old a relayed advert may be before the inject end drops it. */
+export const PASSKEY_ADVERT_MAX_AGE_MS = 5000;

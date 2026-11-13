@@ -38168,6 +38168,9 @@
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
+            "$ref": "#/components/schemas/PasskeyRelayFrame"
+          },
+          {
             "$ref": "#/components/schemas/BrowserListFrame"
           },
           {
@@ -38238,6 +38241,7 @@
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
+            "passkey_relay": "#/components/schemas/PasskeyRelayFrame",
             "browser_list": "#/components/schemas/BrowserListFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
             "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
@@ -67484,6 +67488,44 @@
           "kind",
           "lender",
           "requestId"
+        ]
+      },
+      "PasskeyRelayFrame": {
+        "description": "Daemon-originated: this machine's passkey relay capability changed.\nSent with the browser frame when the machine's BLE adapter is present\n(capture) or when its browsers can accept injected adverts (inject).",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_relay"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/PasskeyRelayRole"
+          },
+          "scanning": {
+            "description": "Whether BLE scanning is active right now.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "machineId",
+          "role",
+          "scanning"
+        ]
+      },
+      "PasskeyRelayRole": {
+        "description": "Whether passkey relay is enabled on a machine: capture, inject, or both.",
+        "type": "string",
+        "enum": [
+          "both",
+          "capture",
+          "inject",
+          "none"
         ]
       },
       "BrowserListFrame": {

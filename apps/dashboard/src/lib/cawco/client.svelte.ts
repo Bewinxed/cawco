@@ -4056,6 +4056,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "fleet_report" || frame.kind === "fleet_converge") {
     return;
   }
+  // A machine's passkey relay capability travels machine → hub only.
+  if (frame.kind === "passkey_relay") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 
