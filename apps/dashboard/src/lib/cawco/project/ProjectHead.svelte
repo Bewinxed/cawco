@@ -215,8 +215,8 @@
    * His slot opens and closes over --duration-panel on --ease-in-out as he comes
    * and goes; the capsule beside it slides with its width.
    */
-  function slot(node: Element) {
-    const width = (node as HTMLElement).offsetWidth;
+  function slot(node: HTMLElement) {
+    const width = node.offsetWidth;
     if (!motionOk.current) {
       return {
         duration: dur("--duration-fade"),
@@ -431,8 +431,7 @@
           icon={IconForkLinear}
           label={projectWords.spinOff}
           layout="wide"
-          onclick={(event: MouseEvent) =>
-            spinOff(event.currentTarget as HTMLElement)}
+          onclick={(event) => spinOff(event.currentTarget)}
         />
       {/if}
       <!-- Full size: the tab fills the window, the rail and the tabs put

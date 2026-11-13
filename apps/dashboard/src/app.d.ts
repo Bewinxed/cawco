@@ -22,6 +22,8 @@ declare global {
     cawco?: import("./lib/cawco/decisions/host/page.svelte.js").Bridge;
     /** Chromium's Idle Detection (wicg.github.io/idle-detection), where the browser has it (lib/cawco/presence.ts). */
     IdleDetector?: IdleDetectorClass;
+    /** The address preview's handle for the probe (address/flow/Page.svelte). */
+    preview: unknown;
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
   }
@@ -45,6 +47,8 @@ declare global {
     }
     // interface Locals {}
     interface PageData {
+      /** Configure's card heights, as its layout reads them off the cookie (routes/(app)/config/+layout.server.ts). */
+      cards?: import("#lib/cawco/config/cards.js").Cards;
       /** The folder-tab strips' last measured boxes, read from the pref by the app layout (+layout.server.ts). */
       foldBoxes?: Record<
         string,

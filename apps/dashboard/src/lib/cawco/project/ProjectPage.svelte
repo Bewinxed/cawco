@@ -47,6 +47,7 @@
   import { onMount, type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { z } from "zod";
   import {
     isBlockPage,
     ProjectBlocks,
@@ -870,8 +871,11 @@
    */
   /** A refusal's closing stop, dropped so it sits inside the sentence. */
   const REASON_STOP = /\.$/u;
-  type ViewAct =
-    { act: "keep" | "discard" } | { act: "place"; on: BlockPageId };
+  const ViewActSchema = z.discriminatedUnion("act", [
+    z.object({ act: z.enum(["keep", "discard"]) }),
+    z.object({ act: z.literal("place"), on: z.enum(SHOWN_BLOCK_PAGES) }),
+  ]);
+  type ViewAct = z.output<typeof ViewActSchema>;
   /** Where a view's refused act is said: kept through a reload (refusals.svelte.ts). */
   const viewKey = (name: string) => `view:${projectId}:${name}`;
   /** The refused act's words and its Try again, for the view `name`. */
@@ -882,7 +886,7 @@
     if (!said) {
       return null;
     }
-    const asked = said.asked as ViewAct;
+    const asked = ViewActSchema.parse(said.asked);
     const again = (): Promise<void> => {
       if (asked.act === "place") {
         return placeView(name, asked.on);
@@ -1360,7 +1364,7 @@
       name: project.name,
       named: project.name !== projectWords.placeholderName,
       open: setupAsks.map((one) => ({
-        blocks: (one.request.input as { blocks?: unknown }).blocks === true,
+        blocks: one.request.input.blocks === true,
       })),
       // Handed over once the page holds his draft and he is not writing
       // it: he writes it early and adds to it as he drafts (project-setup
@@ -1433,7 +1437,7 @@
                 .querySelector<HTMLElement>(
                   `[data-slot="draft-bar"] button, [data-slot="setup-asks"] :is(${QUESTION_KEYS})`
                 )
-                ?.focus({ focusVisible: true } as FocusOptions)
+                ?.focus({ focusVisible: true })
             : lead.ask(setupWords.askSetupWords, "board"),
       };
     }
@@ -1616,7 +1620,7 @@
           data-wide
           layout="wide"
           press="pressable"
-          onclick={(event) => ask(event.currentTarget as HTMLElement)}
+          onclick={(event) => ask(event.currentTarget)}
           size="sm"
           title={viewsWords.ask}
           variant="ghost"

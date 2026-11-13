@@ -492,11 +492,10 @@ export class AddressFlow extends NetworkDevice {
   /** The page's moments: any state on any network, held still. */
   jump(moment: MomentId): void {
     this.#hold();
-    const failed = moment.startsWith("failed:");
-    const cause = failed ? (moment.slice(7) as Cause) : null;
-    const on = cause
-      ? CAUSES.find((one) => one.id === cause)?.on
-      : PLACES[moment as StepMoment].on;
+    const failure = CAUSES.find((one) => `failed:${one.id}` === moment);
+    const cause = failure?.id ?? null;
+    const step = MOMENTS.find((one) => one.id === moment)?.id;
+    const on = failure ? failure.on : step && PLACES[step].on;
     if (on && on.length > 0 && !on.includes(this.network)) {
       this.network = on[0];
     }
@@ -516,8 +515,8 @@ export class AddressFlow extends NetworkDevice {
       this.cause = cause;
       this.step = "failed";
       this.certs = cause === "certs-off" ? false : this.certs;
-    } else {
-      const place = PLACES[moment as StepMoment];
+    } else if (step) {
+      const place = PLACES[step];
       this.step = place.step;
       this.phoneOpened = place.phoneOpened ?? null;
       this.certs = place.certs ?? this.certs;

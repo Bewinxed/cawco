@@ -1,5 +1,6 @@
 import type { Deleted } from "@cawco/core/fleet";
 import { hubRequest } from "@cawco/core/hub-request";
+import { z } from "zod";
 import {
   failureClause,
   hubFetch,
@@ -19,11 +20,12 @@ import { refusals } from "../refusals.svelte";
 const KEY = "undo:";
 
 /** What a kept refused Undo holds: the trash entry to ask for again. */
-interface Asked {
-  deleted: Deleted;
-  name: string;
-  section: string;
-}
+const AskedSchema = z.object({
+  deleted: z.object({ restorableForMs: z.number(), restore: z.number() }),
+  name: z.string(),
+  section: z.string(),
+});
+type Asked = z.output<typeof AskedSchema>;
 
 /** The refused Undo's key: its section, then its Undo's id. */
 const keyOf = (section: string, id: string): string =>
@@ -84,7 +86,7 @@ export function unrestoredOn(
   reread: () => unknown
 ): Unrestored[] {
   return refusals.under(`${KEY}${section}\u0000`).map(([key, said]) => {
-    const asked = said.asked as Asked;
+    const asked = AskedSchema.parse(said.asked);
     return {
       key,
       reason: said.reason,
