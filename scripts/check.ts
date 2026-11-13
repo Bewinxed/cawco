@@ -59,7 +59,7 @@
  */
 import "../packages/core/src/git-repository-env";
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
@@ -69,6 +69,7 @@ import {
   runInBackground,
   takeSlot,
 } from "../packages/core/src/heavy-slots";
+import { filesOf, inputsOf } from "./lib/check-inputs";
 import { type Check, runChecks } from "./lib/checks";
 import { diskRoomOrExit } from "./lib/disk-room";
 import { repoFiles } from "./lib/repo-files";
@@ -167,7 +168,6 @@ const EVERYTHING = [
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 const TSCONFIG = /(^|\/)tsconfig[^/]*\.json$/u;
 const MANIFEST = /(^|\/)package\.json$/u;
-const DASHBOARD_CSS = /^apps\/dashboard\/src\/.*\.css$/u;
 const TYPESCRIPT_FILE = /\.[cm]?tsx?$/u;
 const STEM = /(?:\.d)?\.[cm]?[jt]sx?$/u;
 const SPECIFIER =
@@ -317,6 +317,27 @@ const under = (...prefixes: string[]): string[] =>
     )
   );
 
+/**
+ * What the scripts `entries` read: their import closure, the files their
+ * `checkReads` exports name, and the lockfile when they load an installed
+ * package (lib/check-inputs.ts). `more` names files beside them, for a check
+ * with no script of its own.
+ */
+const inputsFor = (
+  entries: readonly string[],
+  more: readonly string[] = []
+): { declared: string[]; files: string[] } => {
+  const inputs = inputsOf(entries, present);
+  inputs.declared.push(...more);
+  return {
+    declared: inputs.declared,
+    files: [
+      ...filesOf(inputs, files),
+      ...(inputs.packages && present.has("bun.lock") ? ["bun.lock"] : []),
+    ],
+  };
+};
+
 /* ---------------------------------------------------------- the plan */
 
 const SYNC = "svelte-kit sync";
@@ -371,18 +392,17 @@ if (TSC) {
 }
 
 /* Lint: Golar's rules, then Biome, over the affected files. */
-const RULES_READ = [
-  "golar.config.ts",
-  "bun.lock",
-  ...under("scripts/lint/", "patches/", "apps/dashboard/src/app.css"),
-  ...files.filter((p) => DASHBOARD_CSS.test(p)),
-];
+/** Golar's lint run: the script and what it reads (its config, rules, patches and stylesheets declare theirs). */
+const GOLAR_LINT = "scripts/lint/golar-lint.ts";
 // The files golar.config.ts lints: its globs, as one pattern.
 const LINTED =
   /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|apps\/dashboard\/scripts\/.*\.ts|apps\/cawrier\/src\/.*\.ts|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte)|packages\/[^/]+\/scripts\/.*\.ts|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
 const linted = [...reached].filter((p) => LINTED.test(p) && present.has(p));
 {
-  const key = await keyOf([...linted, ...RULES_READ], everything ? "all" : "");
+  const key = await keyOf(
+    [...linted, ...inputsFor([GOLAR_LINT]).files],
+    everything ? "all" : ""
+  );
   if (linted.length === 0 && !everything) {
     skipped.push("golar lint (no file it reads changed)");
   } else if (await passed("golar-lint", key)) {
@@ -391,7 +411,7 @@ const linted = [...reached].filter((p) => LINTED.test(p) && present.has(p));
     checks.push({
       name: `golar lint (${linted.length} files)`,
       dir: ROOT,
-      argv: [BUN, "scripts/lint/golar-lint.ts"],
+      argv: [BUN, GOLAR_LINT],
       env: everything ? {} : { CAWCO_CHECK_FILES: linted.join("\n") },
       after: SYNC,
       stamp: { file: stampFile("golar-lint"), key },
@@ -403,20 +423,13 @@ const BIOME_READS =
 const biomed = [...reached].filter(
   (p) => BIOME_READS.test(p) && present.has(p)
 );
-/** What gives Biome a `node_modules` it reads a package's types through (lib/real-modules.ts). */
+/** What gives Biome a `node_modules` it reads a package's types through (lib/real-modules.ts), and declares what Biome reads. */
 const REAL_MODULES_RUN = "scripts/real-modules.ts";
-const REAL_MODULES = [REAL_MODULES_RUN, "scripts/lib/real-modules.ts"];
 {
   // "package types": a pass from before Biome read them in a workspace is
   // none of this one's.
   const key = await keyOf(
-    [
-      ...biomed,
-      "biome.jsonc",
-      "bun.lock",
-      "apps/dashboard/src/app.css",
-      ...REAL_MODULES,
-    ],
+    [...biomed, ...inputsFor([REAL_MODULES_RUN]).files],
     everything ? "all" : "",
     "package types"
   );
@@ -446,7 +459,7 @@ const REAL_MODULES = [REAL_MODULES_RUN, "scripts/lib/real-modules.ts"];
   }
 }
 
-/* The house and artifact checks, by the files each reads. */
+/* The house and artifact checks, each keyed by what its script reads. */
 interface Gated {
   /**
    * The check it starts after, when not the sync: one whose output it reads
@@ -457,259 +470,180 @@ interface Gated {
   after?: string;
   argv: string[];
   dir?: string;
-  /** Folders (ending `/`) and files it reads, beside its own script. */
-  inputs: string[];
-  /** A key of its own, in place of the inputs' contents. */
-  key?: () => Promise<string>;
+  /** The scripts it runs: its inputs are their import closure and what they declare with `export const checkReads = [...]` (lib/check-inputs.ts). */
+  entries: string[];
+  /** A state beside its files that its verdict depends on, as text. */
+  extra?: (declared: string[]) => Promise<string[]>;
+  /** Files beside its scripts', for a check that is a tool with no script of its own (or that reads the tree's shape). */
+  files?: () => string[];
   name: string;
 }
-const DASH = ["apps/dashboard/", "design/", "DESIGN.md"];
-const PKG = ["packages/"];
-const ALL_FILES = ["./"];
-const bun = (script: string, inputs: string[], ...rest: string[]): Gated => ({
+const bun = (script: string, ...rest: string[]): Gated => ({
   name: [script, ...rest].join(" "),
   argv: [BUN, script, ...rest],
-  inputs: [script, "scripts/lib/", ...inputs],
+  entries: [script],
 });
 /** A dashboard script, run from the dashboard. */
 const inDashboard = (script: string, ...rest: string[]): Gated => ({
   name: [`${DASHBOARD}/${script}`, ...rest].join(" "),
   dir: DASHBOARD,
   argv: [BUN, script, ...rest],
-  inputs: [...DASH, "scripts/lib/"],
+  entries: [`${DASHBOARD}/${script}`],
 });
-const run = (dir: string, name: string, inputs: string[]): Gated => ({
-  name: `${dir} ${name}`,
-  dir,
-  argv: [BUN, "run", name],
-  inputs: [`${dir}/`, "scripts/lib/", ...inputs],
-});
+/** A package script (`bun run <name>`): the scripts its manifest's command runs, and the manifest. */
+const run = (dir: string, name: string): Gated => {
+  const manifest = `${dir}/package.json`;
+  const command = (
+    JSON.parse(readFileSync(join(ROOT, manifest), "utf8")) as {
+      scripts: Record<string, string>;
+    }
+  ).scripts[name] as string;
+  return {
+    name: `${dir} ${name}`,
+    dir,
+    argv: [BUN, "run", name],
+    entries: [
+      manifest,
+      ...(command.match(/[\w./-]+\.ts\b/gu) ?? []).map((script) =>
+        join(dir, script)
+      ),
+    ],
+  };
+};
 const tsconfigs = files.filter((p) => TSCONFIG.test(p));
 const manifests = files.filter((p) => MANIFEST.test(p));
 const gated: Gated[] = [
   {
-    ...bun("scripts/case-clash-check.ts", []),
+    ...bun("scripts/case-clash-check.ts"),
     // Its input is the list of paths alone.
-    key: () => keyOf(["scripts/case-clash-check.ts"], files.join("\n")),
+    extra: async () => [files.join("\n")],
   },
   // Imports run one way: no cycle, and the kit reaches no module that
   // itself reaches the kit (what a specifier alone says is Biome's).
-  bun("scripts/import-rules-check.ts", [
-    "apps/dashboard/",
-    "apps/cawrier/",
-    "packages/",
-    "scripts/",
-    "site/",
-    "package.json",
-  ]),
+  bun("scripts/import-rules-check.ts"),
   // Each file's swallowed failures, casts around the type checker and
   // silenced checks may fall, never rise.
-  bun("scripts/escape-hatch-ratchet.ts", [
-    "apps/dashboard/",
-    "apps/cawrier/",
-    "packages/",
-    "scripts/",
-    "site/",
-    "biome.jsonc",
-  ]),
+  bun("scripts/escape-hatch-ratchet.ts"),
   // A comment names files and symbols that are there. It reads every code
   // file's identifiers and the platform's types, which bun.lock pins.
-  bun("scripts/stale-references-check.ts", [
-    "apps/dashboard/",
-    "apps/cawrier/",
-    "packages/",
-    "scripts/",
-    "site/",
-    "biome.jsonc",
-    "knip.ts",
-    "golar.config.ts",
-    "ARCHITECTURE.md",
-    "README.md",
-    "bun.lock",
-  ]),
-  bun("scripts/css-scope-check.ts", DASH),
-  bun("scripts/browser-core-check.ts", [
-    "apps/dashboard/src/",
-    "packages/core/src/",
-  ]),
-  bun("scripts/runtime-bundles-check.ts", [
-    ...DASH,
-    "packages/agent/src/",
-    "packages/core/src/",
-  ]),
-  bun("apps/dashboard/scripts/mark-line-check.ts", DASH),
-  bun("apps/dashboard/scripts/outro-reads-check.ts", DASH),
-  bun("apps/dashboard/scripts/specificity-trap.ts", DASH),
-  bun("apps/dashboard/scripts/lib-import-check.ts", DASH),
-  bun("apps/dashboard/scripts/svelte-unused-css.ts", DASH),
+  bun("scripts/stale-references-check.ts"),
+  bun("scripts/css-scope-check.ts"),
+  bun("scripts/browser-core-check.ts"),
+  bun("scripts/runtime-bundles-check.ts"),
+  bun("apps/dashboard/scripts/mark-line-check.ts"),
+  bun("apps/dashboard/scripts/outro-reads-check.ts"),
+  bun("apps/dashboard/scripts/specificity-trap.ts"),
+  bun("apps/dashboard/scripts/lib-import-check.ts"),
+  bun("apps/dashboard/scripts/svelte-unused-css.ts"),
   // The release build's layers guard, over the house's sheets unbundled.
-  bun("apps/dashboard/scripts/css-layers-check.ts", [
-    ...DASH,
-    "packages/core/src/css-layers.ts",
-    "bun.lock",
-  ]),
-  bun("apps/dashboard/scripts/spacing-ratchet.ts", DASH),
+  bun("apps/dashboard/scripts/css-layers-check.ts"),
+  bun("apps/dashboard/scripts/spacing-ratchet.ts"),
   inDashboard("scripts/role-order.ts"),
   inDashboard("scripts/build-variants.ts", "--check"),
-  bun("packages/hub/scripts/skills-check.ts", ["packages/hub/"]),
-  bun(
-    "scripts/house-faces.ts",
-    [
-      "packages/core/",
-      "scripts/fmt.ts",
-      "assets/",
-      "apps/dashboard/src/house-faces/",
-    ],
-    "--check"
-  ),
-  bun("scripts/style-residual-check.ts", DASH),
-  bun("scripts/relics-check.ts", DASH),
-  bun("scripts/style-greps.ts", DASH),
-  bun("scripts/tool-answer-check.ts", [...DASH, ...PKG, "scripts/"]),
-  bun("scripts/route-families-check.ts", ["packages/hub/src/routes/"]),
-  bun("scripts/icon-imports-check.ts", ALL_FILES),
-  bun("scripts/docker-client-check.ts", PKG),
-  bun("scripts/browser-image-check.ts", ["packages/agent/browser/"]),
-  bun("scripts/fixed-ports-check.ts", PKG),
-  bun("scripts/border-width-check.ts", [
-    ...DASH,
-    "packages/agent/src/canvas-host/",
-    "packages/hub/skills/decision-page/kit/",
-  ]),
-  bun("scripts/patched-dependencies-check.ts", [
-    "package.json",
-    "bun.lock",
-    "patches/",
-  ]),
+  bun("packages/hub/scripts/skills-check.ts"),
+  bun("scripts/house-faces.ts", "--check"),
+  bun("scripts/style-residual-check.ts"),
+  bun("scripts/relics-check.ts"),
+  bun("scripts/style-greps.ts"),
+  bun("scripts/tool-answer-check.ts"),
+  bun("scripts/route-families-check.ts"),
+  bun("scripts/icon-imports-check.ts"),
+  bun("scripts/docker-client-check.ts"),
+  bun("scripts/browser-image-check.ts"),
+  bun("scripts/fixed-ports-check.ts"),
+  bun("scripts/border-width-check.ts"),
+  bun("scripts/patched-dependencies-check.ts"),
   // Each Biome plugin reports its planted mistakes and nothing else.
-  bun("scripts/lint/biome-plugins.ts", [
-    "scripts/lint/",
-    "biome.jsonc",
-    "bun.lock",
-  ]),
-  bun("scripts/token-contrast-check.ts", [
-    ...DASH,
-    "packages/design-tokens/src/design-tokens.ts",
-    "packages/design-tokens/src/design-css.ts",
-    "packages/design-tokens/src/dtcg-values.ts",
-    "packages/design-tokens/src/dtcg-resolver.ts",
-    "packages/core/src/",
-  ]),
-  bun("scripts/page-imports-check.ts", DASH),
-  bun("scripts/preview-switcher-check.ts", [
-    "design-previews/",
-    "apps/dashboard/src/lib/cawco/address/flow/",
-  ]),
-  bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),
-  bun("scripts/setup-draft-check.ts", ["apps/dashboard/src/lib/cawco/"]),
-  run("packages/hub", "openapi:check", [
-    ...PKG,
-    "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/",
-    "bun.lock",
-    "tsconfig.base.json",
-    "package.json",
-  ]),
+  bun("scripts/lint/biome-plugins.ts"),
+  bun("scripts/token-contrast-check.ts"),
+  bun("scripts/page-imports-check.ts"),
+  bun("scripts/preview-switcher-check.ts"),
+  bun("scripts/surface-briefs-check.ts"),
+  bun("scripts/setup-draft-check.ts"),
+  run("packages/hub", "openapi:check"),
   // What every hub route takes, for core's request door (hub-request.ts):
   // read off the same in-process hub, so the same inputs.
-  run("packages/hub", "route-types:check", [
-    ...PKG,
-    "bun.lock",
-    "tsconfig.base.json",
-    "package.json",
-  ]),
-  run("packages/hub", "migrations:check", []),
+  run("packages/hub", "route-types:check"),
+  run("packages/hub", "migrations:check"),
   // The types it reads come through packages/hub/tsconfig.json, which
   // extends tsconfig.base.json, which extends tsconfig.paths.json, and from
   // the installed packages (TypeScript, @types/node, the MCP SDK, zod),
   // which bun.lock pins.
-  run("packages/hub", "stored-shapes:check", [
-    ...PKG,
-    "apps/dashboard/src/",
-    "tsconfig.base.json",
-    "tsconfig.paths.json",
-    "bun.lock",
-  ]),
-  run("packages/hub", "roles:check", PKG),
-  run("packages/core", "openui:check", []),
-  bun("scripts/claude-paths-check.ts", [...DASH, ...PKG]),
-  bun("scripts/machine-paths-check.ts", [...DASH, ...PKG]),
-  bun("scripts/signal-check.ts", ALL_FILES),
-  bun("scripts/duplicate-lists-check.ts", [
-    "packages/",
-    "apps/dashboard/",
-    "apps/cawrier/",
-    "scripts/",
-  ]),
-  bun("scripts/apple-ops-check.ts", ["apps/apple/", ...PKG]),
-  bun("scripts/protocol-sweep.ts", ["packages/core/src/"]),
-  bun("scripts/git-door-words-check.ts", [
-    "packages/agent/src/",
-    "packages/core/src/",
-  ]),
+  run("packages/hub", "stored-shapes:check"),
+  run("packages/hub", "roles:check"),
+  run("packages/core", "openui:check"),
+  bun("scripts/claude-paths-check.ts"),
+  bun("scripts/machine-paths-check.ts"),
+  bun("scripts/signal-check.ts"),
+  bun("scripts/duplicate-lists-check.ts"),
+  bun("scripts/apple-ops-check.ts"),
+  bun("scripts/protocol-sweep.ts"),
+  bun("scripts/git-door-words-check.ts"),
   // Every body a shell script sends the hub, against the hub's own routes.
-  bun("scripts/shell-bodies-check.ts", [
-    ...PKG,
-    "scripts/",
-    "apps/apple/scripts/",
-    "apps/mac-helper/scripts/",
-    "mocks/",
-    "bun.lock",
-  ]),
+  bun("scripts/shell-bodies-check.ts"),
   {
-    ...bun("scripts/typecheck-coverage.ts", []),
+    ...bun("scripts/typecheck-coverage.ts"),
     // Which files there are, and the projects that hold them.
-    key: () =>
-      keyOf(tsconfigs, files.filter((p) => TYPESCRIPT_FILE.test(p)).join("\n")),
+    files: () => tsconfigs,
+    extra: async () => [
+      files.filter((p) => TYPESCRIPT_FILE.test(p)).join("\n"),
+    ],
   },
   {
-    ...bun("scripts/resolution-check.ts", []),
+    ...bun("scripts/resolution-check.ts"),
     // `golar tsc --listFilesOnly` resolves a project's references to the
     // declarations the type check writes under `.tsbuild/` (the only two
     // checks of a run that open anything there, read under strace).
     after: TSC,
     // What resolves: the lockfile, every tsconfig and manifest, and every
     // file's import specifiers.
-    key: () =>
-      keyOf(
-        ["bun.lock", ...tsconfigs, ...manifests],
-        [...specifiers]
-          .map(([file, named]) => `${file}:${named.join(",")}`)
-          .sort()
-          .join("\n")
-      ),
+    files: () => ["bun.lock", ...tsconfigs, ...manifests],
+    extra: async () => [
+      [...specifiers]
+        .map(([file, named]) => `${file}:${named.join(",")}`)
+        .sort()
+        .join("\n"),
+    ],
   },
   {
     // Dead files, exports, types and dependencies (knip.ts), over every
     // workspace at once; after the sync, for the dashboard's `$app/tsconfig`.
     name: "knip",
     argv: [join(ROOT, "node_modules/.bin/knip")],
-    inputs: [],
+    entries: [],
     // What it reads: the code, every manifest and tsconfig, the lockfile and its config.
-    key: () =>
-      keyOf([
-        ...files.filter((p) => CODE.test(p) || p.endsWith(".css")),
-        ...tsconfigs,
-        ...manifests,
-        "bun.lock",
-        "knip.ts",
-      ]),
+    files: () => [
+      ...files.filter((p) => CODE.test(p) || p.endsWith(".css")),
+      ...tsconfigs,
+      ...manifests,
+      "bun.lock",
+      "knip.ts",
+    ],
   },
   {
     // Duplicated code (.jscpd.json: threshold 0).
     name: "jscpd",
     argv: [join(ROOT, "node_modules/.bin/jscpd")],
-    inputs: ["packages/", "apps/dashboard/", ".jscpd.json"],
+    entries: [],
+    files: () => under("packages/", "apps/dashboard/", ".jscpd.json"),
   },
   // Its own oxlint: Biome leaves the package out (biome.jsonc).
-  run("packages/jsonl-parser", "lint", []),
+  {
+    ...run("packages/jsonl-parser", "lint"),
+    files: () => under("packages/jsonl-parser/"),
+  },
   // And its own oxfmt, check-only (`bun run format` there writes).
-  run("packages/jsonl-parser", "format:check", []),
+  {
+    ...run("packages/jsonl-parser", "format:check"),
+    files: () => under("packages/jsonl-parser/"),
+  },
 ];
 for (const check of gated) {
-  const inputs = check.inputs.includes("./")
-    ? files
-    : under(...check.inputs.filter(Boolean));
-  const key = check.key ? await check.key() : await keyOf(inputs);
+  const inputs = inputsFor(check.entries, check.files?.() ?? []);
+  const key = await keyOf(
+    inputs.files,
+    ...(await (check.extra?.(inputs.declared) ?? []))
+  );
   if (await passed(check.name, key)) {
     skipped.push(check.name);
     continue;

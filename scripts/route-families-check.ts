@@ -9,6 +9,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/hub/src/routes/"];
+
 const MOST_NAMES = 20;
 const ROUTES = new URL("../packages/hub/src/routes/", import.meta.url).pathname;
 const PICK = /Pick<\s*HubContext,\s*([^>]+)>/gu;

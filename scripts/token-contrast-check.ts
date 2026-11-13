@@ -39,6 +39,9 @@ const THEME = join(
   import.meta.dir,
   "../apps/dashboard/src/lib/tokens/theme.css"
 );
+
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/lib/tokens/theme.css"];
 const TEXT = 4.5;
 const UI = 3;
 
