@@ -16,6 +16,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUNDLED_SKILLS, TEMPLATE_SKILLS } from "../src/bundled-skills";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/hub/"];
+
 /** Claude Code's longest skill description. */
 const DESCRIPTION_LIMIT = 1024;
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/u;

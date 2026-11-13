@@ -11,6 +11,17 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CODE_ROOTS, ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/*/src/",
+  "packages/*/src/",
+  "apps/*/bench/",
+  "packages/*/bench/",
+  "apps/*/scripts/",
+  "packages/*/scripts/",
+  "scripts/",
+];
+
 /** The brand's own module, the one place that may make it, and this check. */
 const ALLOWED = new Set([
   "packages/core/src/machine-path.ts",

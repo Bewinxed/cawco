@@ -16,6 +16,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/lib/cawco/"];
+
 const ROOT = join(import.meta.dir, "..");
 const CAWCO = "apps/dashboard/src/lib/cawco";
 /** The host's old folder of stage rows: nothing may stand there again. */

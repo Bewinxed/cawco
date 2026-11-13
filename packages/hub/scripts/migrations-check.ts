@@ -52,6 +52,9 @@ import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
 import { storedRows, storedRowsReport } from "./stored-rows";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/hub/"];
+
 /** Every page doc's picks read as the hub reads them (core `choiceEntryProblem`): how many, and each one that is not a choice. */
 const docChoices = (
   dbPath: string
