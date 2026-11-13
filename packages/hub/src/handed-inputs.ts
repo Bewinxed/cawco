@@ -15,20 +15,22 @@
  * One that names nothing, or nothing the caller may read, is refused in
  * words that name it.
  */
+
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
-import { ArtifactRefusal } from "./artifacts/refusals";
+import { ElysiaStatus, problem } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { HandedReceiver } from "./artifacts/shapes";
 import type { WorkItemRow } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
-import { FolderRefusal, readFolderBytes } from "./project-folder";
+import { listFolder, readFolderBytes } from "./project-folder";
+import type { AnyProblem } from "./refusal";
 
 /**
  * One file the hub writes into `inputs/`: its name there, what it was handed
@@ -48,10 +50,11 @@ export interface HandedInputDeps {
   artifacts: Pick<Artifacts, "commentRead" | "handed">;
   /** A session's attachments, newest first (server.ts `sessionAttachments`); throws in words when its transcript can't be read. */
   attachments: (instanceId: string) => Promise<SessionAttachment[]>;
-  /** The turns around a `find` hit, as `find` answers them detailed (find-tool.ts): the hub's whole record. */
-  find: (actor: InstanceRow, input: { around: string }) => Promise<unknown>;
-  /** Every file at any depth under a folder of a project's folder, by path from its root; none when it is not there. */
-  folderFiles: (projectId: string, dir: string) => Promise<string[]>;
+  /** The turns around a `find` hit, as `find` answers them detailed (find-tool.ts): the hub's whole record; or why it gave none, in its words. */
+  find: (
+    actor: InstanceRow,
+    input: { around: string }
+  ) => Promise<{ turns: unknown } | { why: string }>;
   instance: (id: string) => InstanceRow | undefined;
   /** The folder an item's outputs landed in (workspaces.ts `outputsFolder`). */
   outputsFolder: (item: WorkItemRow) => string;
@@ -68,9 +71,6 @@ export interface HandedInputDeps {
   /** A text file of a workspace, by path from its clone's root, read inside its boundary; throws in the machine's words. */
   workspaceText: (workspaceId: string, path: string) => Promise<string>;
 }
-
-/** A refusal of one handed input, in words that name it. */
-export class HandedInputRefusal extends Error {}
 
 const short = (id: string) => id.slice(0, 8);
 
@@ -99,16 +99,48 @@ const readOrNull = (path: string): Buffer | null => {
   }
 };
 
+/** Why one handed input reads nothing, under its cause's code, in words that name it (`entry`, as it was handed). */
+const unhanded = <const Status extends number, const Code extends string>(
+  status: Status,
+  code: Code,
+  entry: string,
+  words: string
+) => problem(status, { code, detail: `${entry}: ${words}` });
+
+/** A thrown failure's words. */
+const failure = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * Every file at any depth under `dir` of a project's folder, by path from
+ * its root; none when it is not there; the folder's refusal, or one when it
+ * holds more than one listing reads. (Names read of a file are none, not a
+ * refusal: a walk that took a refusal for a file took every file for an
+ * empty folder.)
+ */
+const folderFiles = async (projectId: string, dir: string) => {
+  const listed = await listFolder(projectId, dir, true);
+  if (listed instanceof ElysiaStatus) {
+    return listed.status === 404 ? [] : listed;
+  }
+  if (listed.truncated) {
+    return problem(413, {
+      code: "handed-folder-too-large",
+      detail: `${dir}/ holds more entries than one listing reads; hand its files by path`,
+    });
+  }
+  return listed.entries.flatMap((entry) =>
+    entry.kind === "file" ? [entry.path] : []
+  );
+};
+
 export const createHandedInputs = (deps: HandedInputDeps) => {
-  /** `read` through the one way a tool reads an id (handles.ts), its refusal in the input's words. */
-  const handled = <T>(entry: string, read: () => T): T => {
+  /** `read` through the one way a tool reads an id (handles.ts), which throws its refusal: in the input's words. */
+  const handled = <T>(entry: string, read: () => T) => {
     try {
       return read();
     } catch (error) {
-      throw new HandedInputRefusal(
-        `${entry}: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      );
+      return unhanded(404, "handed-name-unmatched", entry, failure(error));
     }
   };
 
@@ -117,11 +149,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
    * HandedInputDeps.reachable}): by its own id or its session's, whole or
    * by handle (handles.ts); refused when none or several are.
    */
-  const itemOf = (
-    caller: InstanceRow,
-    asked: string,
-    kind: string
-  ): WorkItemRow => {
+  const itemOf = (caller: InstanceRow, asked: string, kind: string) => {
     // Each item by its id and by its session's; a session's newest item stands for it.
     const named = new Map<string, WorkItemRow>();
     for (const item of deps.reachable(caller)) {
@@ -131,7 +159,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         }
       }
     }
-    return handled(`{ ${kind}: "${asked}" }`, () =>
+    const found = handled(`{ ${kind}: "${asked}" }`, () =>
       byHandle(
         asked,
         [...named],
@@ -142,18 +170,25 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         },
         "work item"
       )
-    )[1];
+    );
+    return found instanceof ElysiaStatus ? found : found[1];
   };
 
-  const report = (caller: InstanceRow, id: string): HandedFile[] => {
+  const report = (caller: InstanceRow, id: string) => {
     const item = itemOf(caller, id, "report");
+    if (item instanceof ElysiaStatus) {
+      return item;
+    }
     const body =
       item.result ??
       item.summary ??
       (item.error ? `It ${item.state}: ${item.error}` : null);
     if (!body) {
-      throw new HandedInputRefusal(
-        `{ report: "${id}" }: ${item.title} (${short(item.id)}) is ${item.state} and has no report yet; hand it once it has finished`
+      return unhanded(
+        409,
+        "handed-report-none",
+        `{ report: "${id}" }`,
+        `${item.title} (${short(item.id)}) is ${item.state} and has no report yet; hand it once it has finished`
       );
     }
     const text = [
@@ -165,80 +200,79 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       body,
       "",
     ].join("\n");
-    return [
+    const files: HandedFile[] = [
       {
         name: `report-${short(item.id)}.md`,
         bytes: Buffer.from(text),
         from: `report of ${item.title} (${short(item.id)})`,
       },
     ];
+    return files;
   };
 
-  /** An artifact refusal in the input's words. */
-  const artifactRead = async <T>(
-    entry: string,
-    read: () => T | Promise<T>
-  ): Promise<T> => {
-    try {
-      return await read();
-    } catch (error) {
-      if (error instanceof ArtifactRefusal) {
-        throw new HandedInputRefusal(`${entry}: ${error.message}`, {
-          cause: error,
-        });
-      }
-      throw error;
-    }
-  };
+  /** The artifacts' refusal of what the input names, in the input's words. */
+  const artifactRefused = (entry: string, { status, response }: AnyProblem) =>
+    unhanded(status, "handed-artifact-refused", entry, response.detail);
 
   /**
    * An artifact's files (artifacts/service.ts `handed`); a component
    * canvas's with each of its states files, read from its workspace.
    */
-  const artifact = async (
-    caller: InstanceRow,
-    id: string
-  ): Promise<HandedFile[]> => {
+  const artifact = async (caller: InstanceRow, id: string) => {
     const entry = `{ artifact: "${id}" }`;
-    const { files, row, states } = await artifactRead(entry, () =>
-      deps.artifacts.handed(caller.id, id)
-    );
+    const handed = await deps.artifacts.handed(caller.id, id);
+    if (handed instanceof ElysiaStatus) {
+      return artifactRefused(entry, handed);
+    }
+    const { files, row, states } = handed;
     const from = `${row.kind} ${row.name}`;
-    const sources = await Promise.all(
-      (states?.files ?? []).map(async (path): Promise<HandedFile> => {
+    const reads = await Promise.all(
+      (states?.files ?? []).map(async (path) => {
         try {
-          return {
+          const source: HandedFile = {
             name: `artifact-${row.name}-${inputFileName(path)}`,
             bytes: Buffer.from(
               await deps.workspaceText(states?.workspace as string, path)
             ),
             from: `${path}, a states file of ${from}`,
           };
+          return source;
         } catch (error) {
-          throw new HandedInputRefusal(
-            `${entry}: its states file ${path} can't be read from workspace ${states?.workspace}: ${error instanceof Error ? error.message : String(error)}`,
-            { cause: error }
+          return unhanded(
+            502,
+            "handed-states-unread",
+            entry,
+            `its states file ${path} can't be read from workspace ${states?.workspace}: ${failure(error)}`
           );
         }
       })
     );
-    return [...files.map((file) => ({ ...file, from })), ...sources];
+    const sources: HandedFile[] = [];
+    for (const read of reads) {
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      sources.push(read);
+    }
+    const all: HandedFile[] = [
+      ...files.map((file) => ({ ...file, from })),
+      ...sources,
+    ];
+    return all;
   };
 
-  const pins = async (
-    caller: InstanceRow,
-    id: string
-  ): Promise<HandedFile[]> => {
-    const read = await artifactRead(`{ pins: "${id}" }`, () =>
-      deps.artifacts.commentRead(caller.id, {
-        artifact: id,
-        filter: "all",
-        bySession: false,
-      })
-    );
+  const pins = (caller: InstanceRow, id: string) => {
+    const read = deps.artifacts.commentRead(caller.id, {
+      artifact: id,
+      filter: "all",
+      bySession: false,
+    });
+    if (read instanceof ElysiaStatus) {
+      return artifactRefused(`{ pins: "${id}" }`, read);
+    }
     const [one] = read.artifacts;
     const name = one?.name ?? short(id);
-    return [
+    const files: HandedFile[] = [
       {
         name: `pins-${name}.json`,
         bytes: Buffer.from(
@@ -247,28 +281,25 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         from: `pins on ${name}, with their threads`,
       },
     ];
+    return files;
   };
 
-  const find = async (
-    caller: InstanceRow,
-    ref: string
-  ): Promise<HandedFile[]> => {
-    let turns: unknown;
-    try {
-      turns = await deps.find(caller, { around: ref });
-    } catch (error) {
-      throw new HandedInputRefusal(
-        `{ find: "${ref}" }: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      );
+  const find = async (caller: InstanceRow, ref: string) => {
+    const entry = `{ find: "${ref}" }`;
+    const found = await deps
+      .find(caller, { around: ref })
+      .catch((error: unknown) => ({ why: failure(error) }));
+    if ("why" in found) {
+      return unhanded(404, "handed-find-none", entry, found.why);
     }
-    return [
+    const files: HandedFile[] = [
       {
         name: `find-${inputFileName(ref)}.json`,
-        bytes: Buffer.from(`${JSON.stringify(turns, null, 2)}\n`),
+        bytes: Buffer.from(`${JSON.stringify(found.turns, null, 2)}\n`),
         from: `the turns around find ref ${ref}`,
       },
     ];
+    return files;
   };
 
   /** One attachment's bytes, or why the hub holds none. */
@@ -305,7 +336,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     caller: InstanceRow,
     session: string | undefined,
     entry: string
-  ): InstanceRow => {
+  ) => {
     if (!session) {
       return caller;
     }
@@ -332,14 +363,16 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     own: boolean,
     named: string,
     entry: string
-  ): Promise<SessionAttachment> => {
+  ) => {
     let all: SessionAttachment[];
     try {
       all = await deps.attachments(holder.id);
     } catch (error) {
-      throw new HandedInputRefusal(
-        `${entry}: its session's transcript can't be read: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
+      return unhanded(
+        502,
+        "handed-transcript-unread",
+        entry,
+        `its session's transcript can't be read: ${failure(error)}`
       );
     }
     const wanted = named.trim().toLowerCase();
@@ -349,8 +382,11 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     if (!one) {
       const names = all.slice(0, 12).map((each) => `"${each.name}"`);
       const where = own ? "your session" : `session ${short(holder.id)}`;
-      throw new HandedInputRefusal(
-        `${entry}: no attachment of that id or name in ${where}; ${names.length > 0 ? `its newest are ${names.join(", ")}` : "it has none"}`
+      return unhanded(
+        404,
+        "handed-attachment-unknown",
+        entry,
+        `no attachment of that id or name in ${where}; ${names.length > 0 ? `its newest are ${names.join(", ")}` : "it has none"}`
       );
     }
     return one;
@@ -378,7 +414,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     own: boolean,
     picture: { hash: string; extension: string },
     entry: string
-  ): HandedFile[] => {
+  ) => {
     const name = deps
       .sentPictures(holder.id)
       .find(
@@ -387,17 +423,23 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       );
     const where = own ? "your session" : `session ${short(holder.id)}`;
     if (!name) {
-      throw new HandedInputRefusal(
-        `${entry}: no picture by that name was sent to ${where}; use a name an "Attached picture:" line gave`
+      return unhanded(
+        404,
+        "handed-picture-unknown",
+        entry,
+        `no picture by that name was sent to ${where}; use a name an "Attached picture:" line gave`
       );
     }
     const bytes = mediaBytes(name);
     if (!bytes) {
-      throw new HandedInputRefusal(
-        `${entry}: the picture was sent to ${where}, but the hub's media store no longer holds its bytes`
+      return unhanded(
+        404,
+        "handed-picture-gone",
+        entry,
+        `the picture was sent to ${where}, but the hub's media store no longer holds its bytes`
       );
     }
-    return [
+    const files: HandedFile[] = [
       {
         name: `attachment-${pictureName(name)}`,
         bytes: Buffer.from(bytes),
@@ -405,15 +447,19 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
         from: `a picture sent to ${own ? "your parent" : `session ${short(holder.id)}`}`,
       },
     ];
+    return files;
   };
 
   const attachment = async (
     caller: InstanceRow,
     named: string,
     session: string | undefined
-  ): Promise<HandedFile[]> => {
+  ) => {
     const entry = `{ attachment: "${named}"${session ? `, session: "${session}"` : ""} }`;
     const holder = attachmentHolder(caller, session, entry);
+    if (holder instanceof ElysiaStatus) {
+      return holder;
+    }
     const picture = pictureNamed(named);
     if (picture) {
       return namedPicture(holder, holder.id === caller.id, picture, entry);
@@ -424,74 +470,105 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       named,
       entry
     );
+    if (one instanceof ElysiaStatus) {
+      return one;
+    }
     const bytes = attachmentBytes(one);
     if (typeof bytes === "string") {
-      throw new HandedInputRefusal(`${entry}: ${one.name}: ${bytes}`);
+      return unhanded(
+        404,
+        "handed-attachment-bytes-gone",
+        entry,
+        `${one.name}: ${bytes}`
+      );
     }
-    return [
+    const files: HandedFile[] = [
       {
         name: attachmentFileName(one),
         bytes,
         from: `${one.name}, attached by the ${one.who}${one.at ? ` at ${one.at}` : ""}`,
       },
     ];
+    return files;
   };
 
-  /** An item's assets, each read only when its reader asks for the next: a reader past its budget reads no more. */
-  async function* assets(
-    caller: InstanceRow,
-    id: string
-  ): AsyncGenerator<HandedFile> {
+  /** The files an item's assets hand, by path in its project's folder, and the folder they are in; refused in the input's words. */
+  const assetPaths = async (caller: InstanceRow, id: string) => {
+    const entry = `{ assets: "${id}" }`;
     const item = itemOf(caller, id, "assets");
+    if (item instanceof ElysiaStatus) {
+      return item;
+    }
     const folder = deps.outputsFolder(item);
     if (!item.projectId) {
-      throw new HandedInputRefusal(
-        `{ assets: "${id}" }: ${item.title} (${short(item.id)}) is in no project, so there is no ${folder}/ to copy from`
+      return unhanded(
+        409,
+        "handed-assets-no-project",
+        entry,
+        `${item.title} (${short(item.id)}) is in no project, so there is no ${folder}/ to copy from`
       );
     }
-    const { projectId } = item;
-    const folderRead = async <T>(read: () => Promise<T>): Promise<T> => {
-      try {
-        return await read();
-      } catch (error) {
-        if (error instanceof FolderRefusal) {
-          throw new HandedInputRefusal(
-            `{ assets: "${id}" }: ${error.message}`,
-            { cause: error }
-          );
-        }
-        throw error;
-      }
-    };
-    const paths = await folderRead(() => deps.folderFiles(projectId, folder));
+    const paths = await folderFiles(item.projectId, folder);
+    if (paths instanceof ElysiaStatus) {
+      return unhanded(
+        paths.status,
+        "handed-assets-unread",
+        entry,
+        paths.response.detail
+      );
+    }
     if (paths.length === 0) {
-      throw new HandedInputRefusal(
-        `{ assets: "${id}" }: ${folder}/ in its project's folder holds no file at any depth; its outputs land there once it has finished`
+      return unhanded(
+        404,
+        "handed-assets-none",
+        entry,
+        `${folder}/ in its project's folder holds no file at any depth; its outputs land there once it has finished`
       );
     }
+    return { projectId: item.projectId, paths };
+  };
+
+  /**
+   * An item's assets, each read only when its reader asks for the next: a
+   * reader past its budget reads no more. A file the folder refuses is
+   * yielded as its refusal, in the input's words, and ends them.
+   */
+  async function* assets(projectId: string, id: string, paths: string[]) {
     // Each lands at its path in the project's folder, its folders kept:
     // `inputs/assets/<item>/design-briefs/brief.md`.
     for (const path of paths) {
-      const { bytes } = await folderRead(() =>
-        readFolderBytes(projectId, path, ASSET_LIMIT)
-      );
-      yield {
+      const read = await readFolderBytes(projectId, path, ASSET_LIMIT);
+      if (read instanceof ElysiaStatus) {
+        yield unhanded(
+          read.status,
+          "handed-assets-unread",
+          `{ assets: "${id}" }`,
+          read.response.detail
+        );
+        return;
+      }
+      const file: HandedFile = {
         name: path,
-        bytes: Buffer.from(bytes),
+        bytes: Buffer.from(read.bytes),
         from: `${path} in the project's folder`,
       };
+      yield file;
     }
   }
 
+  /** An item's assets: their files one by one ({@link assets}), or why there are none to hand. */
+  const assetsOf = async (caller: InstanceRow, id: string) => {
+    const found = await assetPaths(caller, id);
+    return found instanceof ElysiaStatus
+      ? found
+      : assets(found.projectId, id, found.paths);
+  };
+
   /**
-   * `input` as the files it lands as, read for `caller`; a {@link
-   * HandedInputRefusal} in words naming it when it names nothing the
-   * caller may read.
+   * `input` as the files it lands as, read for `caller`; refused in words
+   * naming it when it names nothing the caller may read.
    */
-  const resolve = (
-    caller: InstanceRow,
-    input: HeldInput
-  ): AsyncGenerator<HandedFile> | Promise<HandedFile[]> | HandedFile[] => {
+  const resolve = (caller: InstanceRow, input: HeldInput) => {
     if ("report" in input) {
       return report(caller, input.report);
     }
@@ -508,28 +585,37 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       return attachment(caller, input.attachment, input.session);
     }
     if ("assets" in input) {
-      return assets(caller, input.assets);
+      return assetsOf(caller, input.assets);
     }
     if ("text" in input) {
-      return [
+      const words: HandedFile[] = [
         {
           name: input.name,
           bytes: Buffer.from(input.text),
           from: "your parent's words",
         },
       ];
+      return words;
     }
     const bytes = Buffer.from(input.blob, "base64");
     if (
       bytes.toString("base64").replace(BASE64_PADDING, "") !==
       input.blob.replace(SPACE, "").replace(BASE64_PADDING, "")
     ) {
-      throw new HandedInputRefusal(
-        `{ blob, name: "${input.name}" }: blob is not base64; hand words as { text, name }`
+      return unhanded(
+        400,
+        "handed-blob-not-base64",
+        `{ blob, name: "${input.name}" }`,
+        "blob is not base64; hand words as { text, name }"
       );
     }
-    return [{ name: input.name, bytes, from: "bytes your parent held" }];
+    const held: HandedFile[] = [
+      { name: input.name, bytes, from: "bytes your parent held" },
+    ];
+    return held;
   };
 
   return { resolve };
 };
+
+export type HandedInputs = ReturnType<typeof createHandedInputs>;

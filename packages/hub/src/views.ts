@@ -45,7 +45,7 @@ import {
 import { viewToolInput } from "@cawco/core/views-library";
 import { askWords } from "@cawco/core/words/asks";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
 import { fileOr } from "./memory";
@@ -54,16 +54,15 @@ import {
   changeFolderFiles,
   deleteFolderFile,
   type FolderAuthor,
-  FolderRefusal,
   lastCommitOf,
   listFolder,
   moveFolderFile,
   readFolderFile,
   readFolderFileAt,
-  refused,
   writeFolderFile,
 } from "./project-folder";
-import { type Applies, appliesNow } from "./proposal-base";
+import { appliesNow } from "./proposal-base";
+
 import { nextRunsOf, slotLabel } from "./routines";
 import type { Tasks } from "./tasks";
 import { unrecognizedKeys } from "./unrecognized-keys";
@@ -77,15 +76,13 @@ const EXT = ".oui";
 const ISO_DATE =
   /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/u;
 
-const nameOf = (raw: string): string =>
+const nameOf = (raw: string) =>
   VIEW_NAME.test(raw)
     ? raw
-    : (() => {
-        throw new FolderRefusal(
-          400,
-          `“${raw}” is not a view name: lowercase letters, digits and dashes, like weekly-review.`
-        );
-      })();
+    : problem(400, {
+        code: "view-name-unfit",
+        detail: `“${raw}” is not a view name: lowercase letters, digits and dashes, like weekly-review.`,
+      });
 
 /** A task's dates as a view reads them: its own, its newest attempt's, and its file's ISO date fields. */
 const datesOf = (task: TaskSummary): Record<string, number> => {
@@ -150,53 +147,87 @@ export const createViews = ({
 }: ViewsDeps) => {
   /** Drafts being kept (`project\0name`): nothing else closes them meanwhile. */
   const keeping = new Set<string>();
-  const known = (projectId: string): string =>
-    projectName(projectId) ??
-    (() => {
-      throw new FolderRefusal(404, `The hub keeps no project ${projectId}.`);
-    })();
+  /** The project's name, or the refusal of a project the hub does not keep. */
+  const known = (projectId: string) => {
+    const name = projectName(projectId);
+    if (name === undefined) {
+      return problem(404, {
+        code: "view-project-unknown",
+        detail: `The hub keeps no project ${projectId}.`,
+      });
+    }
+    return name;
+  };
+  /** The view name `rawName` in project `projectId`, or the refusal of either. */
+  const knownName = (projectId: string, rawName: string) => {
+    const project = known(projectId);
+    return project instanceof ElysiaStatus ? project : nameOf(rawName);
+  };
 
   /** The `.oui` files of one views folder, by name; none when the folder is not there yet. */
-  const filesIn = async (projectId: string, dir: string): Promise<string[]> => {
-    try {
-      const { entries } = await listFolder(projectId, dir);
-      return entries
-        .filter((entry) => entry.kind === "file" && entry.path.endsWith(EXT))
-        .map((entry) => entry.path.slice(dir.length + 1, -EXT.length))
-        .filter((name) => VIEW_NAME.test(name));
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
-        return [];
-      }
-      throw error;
+  const filesIn = async (projectId: string, dir: string) => {
+    const listed = await listFolder(projectId, dir);
+    if (listed instanceof ElysiaStatus) {
+      return listed.status === 404 ? [] : listed;
     }
+    return listed.entries
+      .filter((entry) => entry.kind === "file" && entry.path.endsWith(EXT))
+      .map((entry) => entry.path.slice(dir.length + 1, -EXT.length))
+      .filter((name) => VIEW_NAME.test(name));
   };
 
   /** One view file, as written, with what it drops. */
-  const readOne = async (
-    projectId: string,
-    name: string,
-    draft: boolean
-  ): Promise<ProjectView> => {
-    const { content } = await readFolderFile(
+  const readOne = async (projectId: string, name: string, draft: boolean) => {
+    const file = await readFolderFile(
       projectId,
       draft ? draftPath(name) : keptPath(name)
     );
-    return { name, draft, source: content, ...readView(content) };
+    if (file instanceof ElysiaStatus) {
+      return file;
+    }
+    const view: ProjectView = {
+      name,
+      draft,
+      source: file.content,
+      ...readView(file.content),
+    };
+    return view;
+  };
+
+  /** Each of `names`' views, read together; the first refusal among them is answered. */
+  const readAll = async (
+    projectId: string,
+    names: string[],
+    draft: boolean
+  ) => {
+    const read = await Promise.all(
+      names.map((name) => readOne(projectId, name, draft))
+    );
+    const views: ProjectView[] = [];
+    for (const one of read) {
+      if (one instanceof ElysiaStatus) {
+        return one;
+      }
+      views.push(one);
+    }
+    return views;
   };
 
   /** One kept view, as written; refused when the project keeps no view by that name. */
-  const keptView = async (
-    projectId: string,
-    rawName: string
-  ): Promise<ProjectView> => {
-    known(projectId);
-    const name = nameOf(rawName);
-    if (!(await filesIn(projectId, KEPT)).includes(name)) {
-      throw new FolderRefusal(
-        404,
-        `The project keeps no view “${name}”; a draft is kept or discarded first.`
-      );
+  const keptView = async (projectId: string, rawName: string) => {
+    const name = knownName(projectId, rawName);
+    if (name instanceof ElysiaStatus) {
+      return name;
+    }
+    const kept = await filesIn(projectId, KEPT);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    if (!kept.includes(name)) {
+      return problem(404, {
+        code: "view-not-kept",
+        detail: `The project keeps no view “${name}”; a draft is kept or discarded first.`,
+      });
     }
     return await readOne(projectId, name, false);
   };
@@ -206,10 +237,16 @@ export const createViews = ({
   const taskRows = async (
     projectId: string,
     filter: { kind?: StageKind; label?: string; stage?: string }
-  ): Promise<ViewTaskRow[]> => {
-    known(projectId);
-    const { tasks: rows } = await tasks.list(projectId);
-    return rows
+  ) => {
+    const unknown = known(projectId);
+    if (unknown instanceof ElysiaStatus) {
+      return unknown;
+    }
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    const viewed: ViewTaskRow[] = list.tasks
       .filter(
         (row) =>
           (filter.stage === undefined || row.stage === filter.stage) &&
@@ -217,14 +254,26 @@ export const createViews = ({
           (filter.label === undefined || row.labels.includes(filter.label))
       )
       .map((row) => ({ ...row, dates: datesOf(row) }));
+    return viewed;
   };
 
-  const stagesOf = async (projectId: string): Promise<ViewStagesOutput> => {
+  const stagesOf = async (projectId: string) => {
     const name = known(projectId);
-    const [{ tasks: rows }, { stages }] = await Promise.all([
+    if (name instanceof ElysiaStatus) {
+      return name;
+    }
+    const [list, view] = await Promise.all([
       tasks.list(projectId),
       tasks.stages(projectId),
     ]);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    if (view instanceof ElysiaStatus) {
+      return view;
+    }
+    const { tasks: rows } = list;
+    const { stages } = view;
     const byKind = Object.fromEntries(
       STAGE_KINDS.map((kind) => [kind, 0])
     ) as Record<StageKind, number>;
@@ -233,7 +282,7 @@ export const createViews = ({
         byKind[row.kind] += 1;
       }
     }
-    return {
+    const staged: ViewStagesOutput = {
       project: { id: projectId, name },
       stages: stages.map((stage) => ({
         name: stage.name,
@@ -243,12 +292,21 @@ export const createViews = ({
       byKind,
       total: rows.length,
     };
+    return staged;
   };
 
-  const routinesOf = (projectId: string, runs = 5): ViewRoutinesOutput => {
-    known(projectId);
-    return {
-      rows: db.routines.list(projectId).map((row) => ({
+  const routinesOf = (projectId: string, runs = 5) => {
+    const unknown = known(projectId);
+    if (unknown instanceof ElysiaStatus) {
+      return unknown;
+    }
+    const rows: ViewRoutinesOutput["rows"] = [];
+    for (const row of db.routines.list(projectId)) {
+      const nextRuns = nextRunsOf(row.cron, row.timeZone, Date.now());
+      if (nextRuns instanceof ElysiaStatus) {
+        return nextRuns;
+      }
+      rows.push({
         id: row.id,
         name: row.name,
         target: row.target,
@@ -257,7 +315,7 @@ export const createViews = ({
         cron: row.cron,
         timeZone: row.timeZone,
         nextSlot: row.nextSlot.getTime(),
-        nextRuns: nextRunsOf(row.cron, row.timeZone, Date.now()),
+        nextRuns,
         lastSlot: row.lastSlot?.getTime() ?? null,
         runs: db.routines.runs(row.id, runs).map((run) => ({
           slot: slotLabel(run.slot, row.timeZone),
@@ -268,15 +326,20 @@ export const createViews = ({
           endedAt: run.endedAt?.getTime() ?? null,
           usd: run.usd,
         })),
-      })),
-    };
+      });
+    }
+    const routines: ViewRoutinesOutput = { rows };
+    return routines;
   };
 
-  const spendOf = (projectId: string, days = 30): ViewSpendOutput => {
-    known(projectId);
+  const spendOf = (projectId: string, days = 30) => {
+    const unknown = known(projectId);
+    if (unknown instanceof ElysiaStatus) {
+      return unknown;
+    }
     const until = Date.now();
     const since = until - days * DAY_MS;
-    return {
+    const spend: ViewSpendOutput = {
       since,
       until,
       byRoutine: db.routines.list(projectId).map((row) => ({
@@ -286,10 +349,14 @@ export const createViews = ({
       })),
       byType: db.projectSpendByType(projectId, since),
     };
+    return spend;
   };
 
-  const eventsOf = (projectId: string, limit = 20): ViewEventsOutput => {
-    known(projectId);
+  const eventsOf = (projectId: string, limit = 20) => {
+    const unknown = known(projectId);
+    if (unknown instanceof ElysiaStatus) {
+      return unknown;
+    }
     const names = new Map<string, string>([
       // A route to the project's conversation (ingress.ts `TO_CONVERSATION`) is Caw's.
       ["conversation", "Caw"],
@@ -297,7 +364,7 @@ export const createViews = ({
         .list(projectId)
         .map((row): [string, string] => [row.id, row.name]),
     ]);
-    return {
+    const events: ViewEventsOutput = {
       rows: db.ingress.events(projectId, limit).map((row) => ({
         id: row.id,
         source: row.source,
@@ -310,6 +377,7 @@ export const createViews = ({
         handledAt: row.handledAt?.getTime() ?? null,
       })),
     };
+    return events;
   };
 
   /** One view tool's call, its arguments checked against its input schema. */
@@ -323,21 +391,26 @@ export const createViews = ({
       // A key the tool doesn't take, named as the draft check and the
       // route name it (core `viewToolInput`, one strict schema at every door).
       const unknown = unrecognizedKeys(parsed.error.issues);
-      throw new FolderRefusal(
-        unknown.length ? 422 : 400,
-        unknown.length
-          ? hubFailureWords.unknownArguments(
+      return unknown.length
+        ? problem(422, {
+            code: "view-tool-arguments-unknown",
+            detail: hubFailureWords.unknownArguments(
               `Query("${tool}", …)`,
               tool,
               unknown
-            )
-          : `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`
-      );
+            ),
+          })
+        : problem(400, {
+            code: "view-tool-arguments-unfit",
+            detail: `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`,
+          });
     }
     const input = parsed.data as Record<string, never>;
     switch (tool) {
       case "tasks":
-        return taskRows(projectId, input).then((rows) => ({ rows }));
+        return taskRows(projectId, input).then((rows) =>
+          rows instanceof ElysiaStatus ? rows : { rows }
+        );
       case "stages":
         return stagesOf(projectId);
       case "routines":
@@ -347,10 +420,10 @@ export const createViews = ({
       case "events":
         return eventsOf(projectId, (input as { limit?: number }).limit);
       default:
-        throw new FolderRefusal(
-          404,
-          `No view tool “${String(tool)}”; the tools are ${VIEW_TOOLS.join(", ")}.`
-        );
+        return problem(404, {
+          code: "view-tool-unknown",
+          detail: `No view tool “${String(tool)}”; the tools are ${VIEW_TOOLS.join(", ")}.`,
+        });
     }
   };
 
@@ -364,22 +437,29 @@ export const createViews = ({
     projectId: string,
     name: string,
     source: string
-  ): Promise<{ applies: Applies; session: string }> => {
+  ) => {
     const last = await lastCommitOf(
       projectId,
       draftPath(name),
       SESSION_TRAILER
     );
-    const before = last
-      ? ((await readFolderFileAt(projectId, last.sha, keptPath(name))) ?? "")
+    if (last instanceof ElysiaStatus) {
+      return last;
+    }
+    const was = last
+      ? await readFolderFileAt(projectId, last.sha, keptPath(name))
       : "";
-    return {
-      applies: await appliesNow(
-        [{ path: keptPath(name), before, content: source }],
-        (path) => fileOr(projectId, path)
-      ),
-      session: last?.trailer ?? "",
-    };
+    if (was instanceof ElysiaStatus) {
+      return was;
+    }
+    const applies = await appliesNow(
+      [{ path: keptPath(name), before: was ?? "", content: source }],
+      (path) => fileOr(projectId, path)
+    );
+    if (applies instanceof ElysiaStatus) {
+      return applies;
+    }
+    return { applies, session: last?.trailer ?? "" };
   };
 
   /**
@@ -392,10 +472,10 @@ export const createViews = ({
     projectId: string,
     name: string,
     session: string
-  ): Promise<void> => {
+  ) => {
     const path = keptPath(name);
     const why = askWords.proposalClosed(path);
-    await changeFolderFiles(
+    const closed = await changeFolderFiles(
       projectId,
       { writes: [], deletes: [draftPath(name)] },
       {
@@ -403,6 +483,9 @@ export const createViews = ({
         message: `views: the draft ${name} closed: ${why}`,
       }
     );
+    if (closed instanceof ElysiaStatus) {
+      return closed;
+    }
     unproposed(projectId, name);
     const told = session
       ? tellClosed(
@@ -418,36 +501,57 @@ export const createViews = ({
 
   return {
     /** Every view of the project: kept ones, then drafts, each in name order. */
-    async list(projectId: string): Promise<ProjectView[]> {
-      known(projectId);
+    async list(projectId: string) {
+      const unknown = known(projectId);
+      if (unknown instanceof ElysiaStatus) {
+        return unknown;
+      }
       const [kept, drafts] = await Promise.all([
         filesIn(projectId, KEPT),
         filesIn(projectId, DRAFTS),
       ]);
-      return await Promise.all([
-        ...kept.map((name) => readOne(projectId, name, false)),
-        ...drafts.map((name) => readOne(projectId, name, true)),
+      if (kept instanceof ElysiaStatus) {
+        return kept;
+      }
+      if (drafts instanceof ElysiaStatus) {
+        return drafts;
+      }
+      const [keptViews, draftViews] = await Promise.all([
+        readAll(projectId, kept, false),
+        readAll(projectId, drafts, true),
       ]);
+      if (keptViews instanceof ElysiaStatus) {
+        return keptViews;
+      }
+      if (draftViews instanceof ElysiaStatus) {
+        return draftViews;
+      }
+      return [...keptViews, ...draftViews];
     },
 
     /** The names of the project's kept views: what may stand as a block (blocks.ts). */
-    kept(projectId: string): Promise<string[]> {
-      known(projectId);
-      return filesIn(projectId, KEPT);
+    async kept(projectId: string) {
+      const unknown = known(projectId);
+      return unknown instanceof ElysiaStatus
+        ? unknown
+        : await filesIn(projectId, KEPT);
     },
 
     /** One kept view, as written; refused when the project keeps no view by that name. */
     view: keptView,
 
     /** Removes a kept view: its file is deleted as a commit, yours. */
-    async remove(
-      projectId: string,
-      rawName: string
-    ): Promise<{ file: string; sha: string; view: string }> {
+    async remove(projectId: string, rawName: string) {
       const kept = await keptView(projectId, rawName);
+      if (kept instanceof ElysiaStatus) {
+        return kept;
+      }
       const deleted = await deleteFolderFile(projectId, keptPath(kept.name), {
         message: `Remove the view ${kept.name}`,
       });
+      if (deleted instanceof ElysiaStatus) {
+        return deleted;
+      }
       return { view: kept.name, file: deleted.path, sha: deleted.sha };
     },
 
@@ -465,19 +569,34 @@ export const createViews = ({
       raw: string,
       author: FolderAuthor,
       session: string
-    ): Promise<ProjectView> {
-      known(projectId);
-      const name = nameOf(rawName);
-      const { source, dropped } = checkView(raw);
-      await writeFolderFile(projectId, draftPath(name), source, {
-        author,
-        message: `${
-          dropped.length
-            ? `Draft the view ${name}, which drops ${dropped.join(", ")}`
-            : `Draft the view ${name}`
-        }\n\n${SESSION_TRAILER}: ${session}`,
-      });
-      return { name, draft: true, source, dropped };
+    ) {
+      const name = knownName(projectId, rawName);
+      if (name instanceof ElysiaStatus) {
+        return name;
+      }
+      const checked = checkView(raw);
+      if (checked instanceof ElysiaStatus) {
+        return checked;
+      }
+      const { source, dropped } = checked;
+      const written = await writeFolderFile(
+        projectId,
+        draftPath(name),
+        source,
+        {
+          author,
+          message: `${
+            dropped.length
+              ? `Draft the view ${name}, which drops ${dropped.join(", ")}`
+              : `Draft the view ${name}`
+          }\n\n${SESSION_TRAILER}: ${session}`,
+        }
+      );
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
+      const drafted: ProjectView = { name, draft: true, source, dropped };
+      return drafted;
     },
 
     /**
@@ -488,38 +607,56 @@ export const createViews = ({
      * press), it closes then ({@link closeDraft}) and Keep is refused
      * saying so.
      */
-    async keep(projectId: string, rawName: string): Promise<ProjectView> {
-      known(projectId);
-      const name = nameOf(rawName);
+    async keep(projectId: string, rawName: string) {
+      const name = knownName(projectId, rawName);
+      if (name instanceof ElysiaStatus) {
+        return name;
+      }
       const key = `${projectId}\0${name}`;
       if (keeping.has(key)) {
-        throw new FolderRefusal(
-          409,
-          `The draft ${name} is being kept already.`
-        );
+        return problem(409, {
+          code: "view-draft-being-kept",
+          detail: `The draft ${name} is being kept already.`,
+        });
       }
       keeping.add(key);
       try {
         const draft = await readOne(projectId, name, true);
-        const { dropped } = checkView(draft.source);
-        const { applies, session } = await draftApplies(
-          projectId,
-          name,
-          draft.source
-        );
+        if (draft instanceof ElysiaStatus) {
+          return draft;
+        }
+        const checked = checkView(draft.source);
+        if (checked instanceof ElysiaStatus) {
+          return checked;
+        }
+        const { dropped } = checked;
+        const read = await draftApplies(projectId, name, draft.source);
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
+        const { applies, session } = read;
         if ("stale" in applies) {
-          await closeDraft(projectId, name, session);
-          throw new FolderRefusal(
-            409,
-            askWords.proposalClosedOnAnswer(keptPath(name))
-          );
+          const closed = await closeDraft(projectId, name, session);
+          if (closed instanceof ElysiaStatus) {
+            return closed;
+          }
+          return problem(409, {
+            code: "view-draft-closed",
+            detail: askWords.proposalClosedOnAnswer(keptPath(name)),
+          });
         }
         const source = applies.writes[0]?.content ?? draft.source;
-        await moveFolderFile(projectId, draftPath(name), keptPath(name), {
-          message: `Keep the view ${name}`,
-          content: source,
-        });
-        return { name, draft: false, source, dropped };
+        const moved = await moveFolderFile(
+          projectId,
+          draftPath(name),
+          keptPath(name),
+          { message: `Keep the view ${name}`, content: source }
+        );
+        if (moved instanceof ElysiaStatus) {
+          return moved;
+        }
+        const kept: ProjectView = { name, draft: false, source, dropped };
+        return kept;
       } finally {
         keeping.delete(key);
       }
@@ -530,11 +667,12 @@ export const createViews = ({
      * change to a kept view it touched is read again, and one that no
      * longer applies closes ({@link closeDraft}).
      */
-    async folderCommitted(
-      projectId: string,
-      paths: ReadonlySet<string>
-    ): Promise<void> {
-      const drafts = (await filesIn(projectId, DRAFTS)).filter(
+    async folderCommitted(projectId: string, paths: ReadonlySet<string>) {
+      const all = await filesIn(projectId, DRAFTS);
+      if (all instanceof ElysiaStatus) {
+        return all;
+      }
+      const drafts = all.filter(
         (name) =>
           paths.has(keptPath(name)) && !keeping.has(`${projectId}\0${name}`)
       );
@@ -542,27 +680,33 @@ export const createViews = ({
         const draft = await readOne(projectId, name, true).catch(
           () => undefined
         );
-        if (!draft) {
+        if (!draft || draft instanceof ElysiaStatus) {
           continue;
         }
-        const { applies, session } = await draftApplies(
-          projectId,
-          name,
-          draft.source
-        );
+        const read = await draftApplies(projectId, name, draft.source);
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
+        const { applies, session } = read;
         if ("stale" in applies && !keeping.has(`${projectId}\0${name}`)) {
-          await closeDraft(projectId, name, session);
+          const closed = await closeDraft(projectId, name, session);
+          if (closed instanceof ElysiaStatus) {
+            return closed;
+          }
         }
       }
     },
 
     /** Discards a draft: its file is deleted as a commit, yours. */
-    async discard(projectId: string, rawName: string): Promise<void> {
-      known(projectId);
-      const name = nameOf(rawName);
-      await deleteFolderFile(projectId, draftPath(name), {
+    async discard(projectId: string, rawName: string) {
+      const name = knownName(projectId, rawName);
+      if (name instanceof ElysiaStatus) {
+        return name;
+      }
+      const deleted = await deleteFolderFile(projectId, draftPath(name), {
         message: `Discard the draft view ${name}`,
       });
+      return deleted instanceof ElysiaStatus ? deleted : undefined;
     },
 
     query,
@@ -604,26 +748,19 @@ export const viewRoutes = (
   blocks: Pick<Blocks, "discarded" | "kept" | "pageOf" | "removed">
 ) =>
   new Elysia()
-    .get("/api/projects/:id/views", async ({ params }) => {
-      try {
-        return await views.list(params.id);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/projects/:id/views", ({ params }) => views.list(params.id))
     // Keep: the draft becomes the view; a draft proposed on a page is
     // placed there, where it asked to stand.
     .post(
       "/api/projects/:id/views/:name/keep",
       { params: VIEW_NAME_PARAM },
       async ({ params }) => {
-        try {
-          const kept = await views.keep(params.id, params.name);
-          await blocks.kept(params.id, kept.name);
+        const kept = await views.keep(params.id, params.name);
+        if (kept instanceof ElysiaStatus) {
           return kept;
-        } catch (error) {
-          return refused(error);
         }
+        const page = await blocks.kept(params.id, kept.name);
+        return page instanceof ElysiaStatus ? page : kept;
       }
     )
     // Discard, a proposed block's Remove: the draft goes, and its proposal.
@@ -631,50 +768,47 @@ export const viewRoutes = (
       "/api/projects/:id/views/drafts/:name",
       { params: VIEW_NAME_PARAM },
       async ({ params }) => {
-        try {
-          await views.discard(params.id, params.name);
-          blocks.discarded(params.id, params.name);
-          return { ok: true as const };
-        } catch (error) {
-          return refused(error);
+        const refused = await views.discard(params.id, params.name);
+        if (refused) {
+          return refused;
         }
+        blocks.discarded(params.id, params.name);
+        return { ok: true as const };
       }
     )
     // What removing a kept view does, for the confirm that asks first.
     .get(
       "/api/projects/:id/views/:name/removal",
       { params: VIEW_NAME_PARAM },
-      async ({ params }): Promise<ViewRemoval | ReturnType<typeof refused>> => {
-        try {
-          const kept = await views.view(params.id, params.name);
-          return removalOf(
-            kept.name,
-            views.fileOf(kept.name),
-            blocks.pageOf(params.id, kept.name)
-          );
-        } catch (error) {
-          return refused(error);
-        }
+      async ({ params }) => {
+        const kept = await views.view(params.id, params.name);
+        return kept instanceof ElysiaStatus
+          ? kept
+          : removalOf(
+              kept.name,
+              views.fileOf(kept.name),
+              blocks.pageOf(params.id, kept.name)
+            );
       }
     )
     // A kept view removed: its file deleted as a commit, its block off its page.
     .delete(
       "/api/projects/:id/views/:name",
       { params: VIEW_NAME_PARAM },
-      async ({ params }): Promise<ViewRemoved | ReturnType<typeof refused>> => {
-        try {
-          const removed = await views.remove(params.id, params.name);
-          const page = blocks.removed(params.id, removed.view);
-          return {
-            view: removed.view,
-            file: removed.file,
-            commit: removed.sha,
-            page,
-            said: `Removed “${viewTitle(removed.view)}”: ${removed.file} is deleted as your commit ${removed.sha.slice(0, 9)}, and ${page ? `its block left the ${BLOCK_PAGE_TITLES[page]} page` : "its tab is gone"}.`,
-          };
-        } catch (error) {
-          return refused(error);
+      async ({ params }) => {
+        const removed = await views.remove(params.id, params.name);
+        if (removed instanceof ElysiaStatus) {
+          return removed;
         }
+        const page = blocks.removed(params.id, removed.view);
+        const answer: ViewRemoved = {
+          view: removed.view,
+          file: removed.file,
+          commit: removed.sha,
+          page,
+          said: `Removed “${viewTitle(removed.view)}”: ${removed.file} is deleted as your commit ${removed.sha.slice(0, 9)}, and ${page ? `its block left the ${BLOCK_PAGE_TITLES[page]} page` : "its tab is gone"}.`,
+        };
+        return answer;
       }
     )
     // The view tools: one route each, its body the tool's arguments, held
@@ -687,60 +821,33 @@ export const viewRoutes = (
         body: viewToolInput("tasks"),
       },
       async ({ params, body }) => {
-        try {
-          return { rows: await views.tasks(params.id, body) };
-        } catch (error) {
-          return refused(error);
-        }
+        const rows = await views.tasks(params.id, body);
+        return rows instanceof ElysiaStatus ? rows : { rows };
       }
     )
     .post(
       "/api/projects/:id/view-tools/stages",
       { body: viewToolInput("stages") },
-      async ({ params }) => {
-        try {
-          return await views.stages(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => views.stages(params.id)
     )
     .post(
       "/api/projects/:id/view-tools/routines",
       {
         body: viewToolInput("routines"),
       },
-      ({ params, body }) => {
-        try {
-          return views.routines(params.id, body.runs);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => views.routines(params.id, body.runs)
     )
     .post(
       "/api/projects/:id/view-tools/spend",
       {
         body: viewToolInput("spend"),
       },
-      ({ params, body }) => {
-        try {
-          return views.spend(params.id, body.days);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => views.spend(params.id, body.days)
     )
     .post(
       "/api/projects/:id/view-tools/events",
       {
         body: viewToolInput("events"),
       },
-      ({ params, body }) => {
-        try {
-          return views.events(params.id, body.limit);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => views.events(params.id, body.limit)
     );

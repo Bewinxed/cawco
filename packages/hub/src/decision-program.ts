@@ -69,7 +69,8 @@ import {
   split,
   tokenize,
 } from "@openuidev/lang-core";
-import { StatusRefusal } from "./refusal";
+import { ElysiaStatus, problem } from "elysia";
+import type { AnyProblem } from "./refusal";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
@@ -107,20 +108,19 @@ interface CheckedProgram {
   read: ProgramRead;
 }
 
-/** A program that could not be kept, every reason in a sentence. */
-export class ProgramRefusal extends StatusRefusal<422> {
-  constructor(message: string) {
-    super(422, message);
-  }
-}
-
-const refuse = (problems: string[]): never => {
+/** A program that could not be kept, under the code of its cause, every reason in a sentence. */
+const programRefusal = <const Code extends string>(
+  code: Code,
+  problems: string[]
+) => {
   const unique = [...new Set(problems)];
-  throw new ProgramRefusal(
-    unique.length === 1
-      ? (unique[0] ?? "")
-      : `The program has ${unique.length} problems:\n- ${unique.slice(0, MAX_PROBLEMS).join("\n- ")}`
-  );
+  return problem(422, {
+    code,
+    detail:
+      unique.length === 1
+        ? (unique[0] ?? "")
+        : `The program has ${unique.length} problems:\n- ${unique.slice(0, MAX_PROBLEMS).join("\n- ")}`,
+  });
 };
 
 const isElement = (value: unknown): value is ElementNode =>
@@ -160,9 +160,9 @@ const unsafeWords = (root: ElementNode | null, library: Library): string[] => {
   const found: string[] = [];
   const look = (value: unknown, prop: string, component: string): void => {
     if (typeof value === "string") {
-      const problem = wordProblem(value, prop, component, library);
-      if (problem) {
-        found.push(problem);
+      const misfit = wordProblem(value, prop, component, library);
+      if (misfit) {
+        found.push(misfit);
       }
     } else if (Array.isArray(value)) {
       for (const each of value) {
@@ -267,11 +267,11 @@ const undrawnWords = (root: ElementNode | null): string[] => {
     at: WordsAt
   ): void => {
     if (typeof value === "string") {
-      const problem = UNDRAWN_PROPS.has(prop)
+      const misfit = UNDRAWN_PROPS.has(prop)
         ? null
         : glyphProblem(value, prop, component, at);
-      if (problem) {
-        found.push(problem);
+      if (misfit) {
+        found.push(misfit);
       }
     } else if (Array.isArray(value)) {
       for (const each of value) {
@@ -467,10 +467,23 @@ const afterProblems = (
 
 /**
  * The artifact an id names, whole: the artifacts service's resolver
- * (service.ts `whole`, handles.ts), throwing in words when it names none or
- * several.
+ * (access.ts `whole`, handles.ts), its refusal in words when it names none
+ * or several.
  */
-export type ArtifactNamed = (asked: string) => string;
+export type ArtifactNamed = (asked: string) => string | AnyProblem;
+
+/** `artifact`'s whole id for `id`, or why it names none: its refusal's words, or what it threw. */
+const wholeOf = (
+  artifact: ArtifactNamed,
+  id: string
+): string | { why: string } => {
+  try {
+    const full = artifact(id);
+    return typeof full === "string" ? full : { why: full.response.detail };
+  } catch (error) {
+    return { why: error instanceof Error ? error.message : String(error) };
+  }
+};
 
 /** What its Images name: a file each. */
 const mediaProblems = (read: ProgramRead): string[] =>
@@ -496,13 +509,9 @@ const wholeArtifacts = (
   const problems: string[] = [];
   let whole = program;
   for (const { component, id } of artifact ? read.artifacts : []) {
-    let full: string;
-    try {
-      full = (artifact as ArtifactNamed)(id);
-    } catch (error) {
-      problems.push(
-        `${component}("${id}"): ${error instanceof Error ? error.message : String(error)}`
-      );
+    const full = artifact ? wholeOf(artifact, id) : id;
+    if (typeof full !== "string") {
+      problems.push(`${component}("${id}"): ${full.why}`);
       continue;
     }
     if (full !== id) {
@@ -618,14 +627,15 @@ interface ParsedWords {
 }
 
 /**
- * `result` refused with every reason, in `words` and the parser's own
+ * `result`'s refusal with every reason, in `words` and the parser's own
  * (its unknown components are dropped, never refused), then its words
- * that reach out, hold markup, or hold a character the house face lacks.
+ * that reach out, hold markup, or hold a character the house face lacks;
+ * null when it passes.
  */
-const refuseParsed = (
+const parsedRefusal = (
   result: ReturnType<typeof parser.parse>,
   words: ParsedWords
-): void => {
+) => {
   const problems = [
     ...result.queryStatements.map(
       (query) => `${query.statementId} = Query(…): ${words.query}`
@@ -646,15 +656,16 @@ const refuseParsed = (
     problems.push(words.nothing);
   }
   if (problems.length > 0) {
-    refuse(problems);
+    return programRefusal("program-unparsed", problems);
   }
   const unsafe = [
     ...unsafeWords(result.root, words.library),
     ...undrawnWords(result.root),
   ];
   if (unsafe.length > 0) {
-    refuse(unsafe);
+    return programRefusal("program-unsafe-words", unsafe);
   }
+  return null;
 };
 
 /**
@@ -666,18 +677,18 @@ const refuseParsed = (
  * and Audio name is one it may show (core `blockFile`), and each Preview
  * names its artifact whole, as `artifact` resolves it.
  */
-const checkBlock = (
-  program: string,
-  artifact: ArtifactNamed | undefined
-): CheckedProgram => {
+const checkBlock = (program: string, artifact: ArtifactNamed | undefined) => {
   const result = blockParser.parse(program);
-  refuseParsed(result, {
+  const refused = parsedRefusal(result, {
     library: "block",
     query: "a block holds its data as you wrote it.",
     mutation: "a block runs none.",
     state: "A block keeps no $variables: write its values as they are.",
     nothing: `The block draws nothing: it needs root = ${blocksSpec.root}(…), reaching every part of it.`,
   });
+  if (refused) {
+    return refused;
+  }
   const read = readProgram(result.root);
   const whole = wholeArtifacts(program, read, artifact);
   const problems = [
@@ -687,9 +698,9 @@ const checkBlock = (
     ...whole.problems,
   ];
   if (problems.length > 0) {
-    refuse(problems);
+    return programRefusal("block-files-unfit", problems);
   }
-  return {
+  const checked: CheckedProgram = {
     program: whole.program,
     read:
       whole.program === program
@@ -697,10 +708,11 @@ const checkBlock = (
         : readProgram(blockParser.parse(whole.program).root),
     dropped: droppedIn(result),
   };
+  return checked;
 };
 
 /**
- * `raw` as a decision page's program, or a {@link ProgramRefusal} with every
+ * `raw` as a decision page's program, or its refusal with every
  * reason: its size and code first, then the parser's mistakes, then its ids,
  * each Canvas's and Preview's resolved whole by `artifact` when given.
  */
@@ -708,19 +720,19 @@ const checkProgram = (
   raw: string,
   kinds: readonly Kind[],
   artifact?: ArtifactNamed
-): CheckedProgram => {
+) => {
   const program = `${raw.trim()}\n`;
   const block = programLibraryOf(program) === "block";
   if (program.length > PROGRAM_MAX) {
     const kib = Math.round(program.length / 1024);
-    refuse([
+    return programRefusal("program-too-large", [
       block
         ? transcriptWords.blockTooLarge(kib, PROGRAM_MAX / 1024)
         : `The program is ${kib} KiB; a decision page's is ${PROGRAM_MAX / 1024} KiB at most. Split the page.`,
     ]);
   }
   if (program.includes(CLOUD_MARKER)) {
-    refuse([
+    return programRefusal("program-cloud-markers", [
       block
         ? transcriptWords.blockCloudMarkers
         : "The program carries OpenUI Cloud markers: a decision page is a program alone, and runs no scripts.",
@@ -738,17 +750,17 @@ const checkProgram = (
         : `@${token.v} is an action: a decision page runs none.`
     );
   if (actions.length > 0) {
-    refuse(actions);
+    return programRefusal("program-runs-actions", actions);
   }
   const unclosed = unclosedProblem(program);
   if (unclosed) {
-    refuse([unclosed]);
+    return programRefusal("program-left-open", [unclosed]);
   }
   if (block) {
     return checkBlock(program, artifact);
   }
   const result = parser.parse(program);
-  refuseParsed(result, {
+  const refused = parsedRefusal(result, {
     library: "decisions",
     query:
       "a decision page holds your words and the person's picks, never data.",
@@ -757,6 +769,9 @@ const checkProgram = (
       "A decision page keeps no $variables: the person's picks are kept by decision id.",
     nothing: `The program draws nothing: it needs root = ${spec.root}(…), reaching every part of it.`,
   });
+  if (refused) {
+    return refused;
+  }
   const read = readProgram(result.root);
   const whole = wholeArtifacts(program, read, artifact);
   const ids = [
@@ -766,9 +781,9 @@ const checkProgram = (
     ...whole.problems,
   ];
   if (ids.length > 0) {
-    refuse(ids);
+    return programRefusal("program-ids-unfit", ids);
   }
-  return {
+  const checked: CheckedProgram = {
     program: whole.program,
     read:
       whole.program === program
@@ -776,6 +791,7 @@ const checkProgram = (
         : readProgram(parser.parse(whole.program).root),
     dropped: droppedIn(result),
   };
+  return checked;
 };
 
 /** A program read without checks: what the hub draws from a page it already keeps. */
@@ -925,27 +941,22 @@ export interface StatementChange {
  * open are refused as written ({@link unclosedProblem}), before the merge
  * can carry the open tail into a statement of the page's.
  */
-export const mergeProgram = (
-  existing: string,
-  statements: string
-): { change: StatementChange; merged: string } => {
+export const mergeProgram = (existing: string, statements: string) => {
   const unclosed = unclosedProblem(statements);
   if (unclosed) {
-    refuse([unclosed]);
+    return programRefusal("program-left-open", [unclosed]);
   }
   const merged = `${mergeStatements(existing, statements, "root").trim()}\n`;
   const before = statementsOf(existing);
   const after = statementsOf(merged);
-  return {
-    merged,
-    change: {
-      added: [...after.keys()].filter((name) => !before.has(name)),
-      replaced: [...after.keys()].filter(
-        (name) => before.has(name) && before.get(name) !== after.get(name)
-      ),
-      removed: [...before.keys()].filter((name) => !after.has(name)),
-    },
+  const change: StatementChange = {
+    added: [...after.keys()].filter((name) => !before.has(name)),
+    replaced: [...after.keys()].filter(
+      (name) => before.has(name) && before.get(name) !== after.get(name)
+    ),
+    removed: [...before.keys()].filter((name) => !after.has(name)),
   };
+  return { merged, change };
 };
 
 const ESCAPES: Record<string, string> = {
@@ -1005,15 +1016,18 @@ export const buildProgram = async (
   image: (file: string) => Promise<ImageRead>,
   artifact: ArtifactNamed,
   kinds: readonly Kind[]
-): Promise<BuiltProgram> => {
+) => {
   const checked = checkProgram(raw, kinds, artifact);
+  if (checked instanceof ElysiaStatus) {
+    return checked;
+  }
   const names = imageNames(checked.read);
   const reads = await Promise.all(names.map(image));
   const problems = reads.flatMap((read, index) =>
     "problem" in read ? [`Image("${names[index]}"): ${read.problem}`] : []
   );
   if (problems.length > 0) {
-    refuse(problems);
+    return programRefusal("program-image-unread", problems);
   }
   const files = names.map((name, index) => ({
     path: imagePath(name, index),
@@ -1022,11 +1036,12 @@ export const buildProgram = async (
   const addresses = Object.fromEntries(
     names.map((name, index) => [name, files[index]?.path ?? ""])
   );
-  return {
+  const built: BuiltProgram = {
     ...checked,
     files,
     html: programHost(checked.program, checked.read.title, addresses),
   };
+  return built;
 };
 
 /** A JSON value in a script tag, nothing in it able to close the tag. */

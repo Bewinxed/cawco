@@ -69,7 +69,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
 import { configurePage } from "@cawco/core/words/configure";
 import { taskLinkWords } from "@cawco/core/words/task-links";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
 import type { ProjectEvent } from "./caw";
@@ -99,7 +99,6 @@ import {
   pollWords,
   routeWords,
 } from "./presenters/project";
-import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import type { Routines } from "./routines";
 import type { GitHubWaitState } from "./task-waits";
 import { MODE } from "./tasks";
@@ -166,11 +165,6 @@ const REGEX_MAX = 200;
 const INBOX_SHOWN = 30;
 /** Events an ingress view lists. */
 const EVENTS_SHOWN = 50;
-
-/** What a route answers and a tool says when ingress refuses. */
-class IngressRefusal extends StatusRefusal {}
-
-const refuse = refuser(IngressRefusal);
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 /** What a character cut in half decodes to, at the end of a cut. */
@@ -596,24 +590,40 @@ export const createIngress = ({
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
-    refuse(404, `The hub keeps no project ${projectId}.`);
+    problem(404, {
+      code: "ingress-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
 
   /** The project `actor` may act in: its own, refused without one. */
-  const scopeOf = (actor: IngressActor, projectId?: string | null): string => {
+  const scopeOf = (actor: IngressActor, projectId?: string | null) => {
     if (actor === "owner") {
-      return projectOf(projectId ?? refuse(400, "Name the project.")).id;
+      if (!projectId) {
+        return problem(400, {
+          code: "ingress-project-unnamed",
+          detail: "Name the project.",
+        });
+      }
+      const project = projectOf(projectId);
+      return project instanceof ElysiaStatus ? project : project.id;
     }
     return (
       actor.projectId ??
-      refuse(403, "This session is in no project, so it has no inbound events.")
+      problem(403, {
+        code: "ingress-no-project",
+        detail: "This session is in no project, so it has no inbound events.",
+      })
     );
   };
 
-  const mayTouch = (actor: IngressActor, projectId: string, what: string) => {
-    if (actor !== "owner" && actor.projectId !== projectId) {
-      refuse(403, `That ${what} is not one of this session's project's.`);
-    }
-  };
+  /** Why `actor` may not touch a `what` of project `projectId`; nothing when it may. */
+  const notYours = (actor: IngressActor, projectId: string, what: string) =>
+    actor !== "owner" && actor.projectId !== projectId
+      ? problem(403, {
+          code: "ingress-not-yours",
+          detail: `That ${what} is not one of this session's project's.`,
+        })
+      : undefined;
 
   // --- the one door ----------------------------------------------------------
 
@@ -790,20 +800,27 @@ export const createIngress = ({
       ),
       "route an inbound event"
     );
+    const unlinked = (why: string) =>
+      console.warn(
+        `[ingress] ${row.source} ${row.deliveryKey} did not reach its task links: ${why}`
+      );
     detach(
-      externalItems
-        .applyEvent(projectId, event)
-        .catch((error: unknown) =>
-          console.warn(
-            `[ingress] ${row.source} ${row.deliveryKey} did not reach its task links: ${wordsOf(error)}`
-          )
-        ),
+      externalItems.applyEvent(projectId, event).then(
+        (refused) => refused && unlinked(refused.response.detail),
+        (error: unknown) => unlinked(wordsOf(error))
+      ),
       "apply an inbound event to task links"
     );
     const { url } = event;
     if (event.kind === "pr.merged" && url) {
       detach(
         dispatcher.pullRequestMerged(url).then((moved) => {
+          if (moved instanceof ElysiaStatus) {
+            console.warn(
+              `[pull request ${url} merged] failed: ${moved.response.detail}`
+            );
+            return;
+          }
           if (moved) {
             console.log(
               `[ingress] ${url} merged: ${moved.task} is in ${moved.stage}`
@@ -1189,8 +1206,11 @@ export const createIngress = ({
 
   // --- the GitHub poller's setting and the view ---------------------------------------
 
-  const githubOf = (projectId: string): IngressView["github"] => {
+  const githubOf = (projectId: string) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const repos = githubReposOf(project.links);
     const poller = store.githubPoller(projectId);
     const connection = poller?.connection ?? null;
@@ -1205,7 +1225,7 @@ export const createIngress = ({
     } else {
       state = `Polling ${named} every 60 s with ${connection}.`;
     }
-    return {
+    const github: IngressView["github"] = {
       repos,
       repo: repos.length > 0 ? named : null,
       connection,
@@ -1215,16 +1235,22 @@ export const createIngress = ({
       polledAt: poller?.polledAt?.getTime() ?? null,
       resumeAt: poller?.resumeAt?.getTime() ?? null,
     };
+    return github;
   };
 
-  const view = (projectId: string): IngressView => {
+  const view = (projectId: string) => {
+    const github = githubOf(projectId);
+    if (github instanceof ElysiaStatus) {
+      return github;
+    }
     const delivered = deliveredBy(store.deliveries(projectId));
-    return {
-      github: githubOf(projectId),
+    const seen: IngressView = {
+      github,
       routes: store.routes(projectId).map((row) => routeView(row, delivered)),
       connectorPolls: store.connectorPolls(projectId).map(pollView),
       events: store.events(projectId, EVENTS_SHOWN).map(eventView),
     };
+    return seen;
   };
 
   /** Names the connection a project's repository is polled with; null stops it. */
@@ -1272,19 +1298,23 @@ export const createIngress = ({
   };
 
   /** Polls a project's repository now, unless GitHub's rate limit holds it. */
-  const pollGitHubNow = async (projectId: string): Promise<IngressView> => {
-    projectOf(projectId);
-    const poller =
-      store.githubPoller(projectId) ??
-      refuse(
-        409,
-        `This project has no GitHub connection, so its repository isn't polled. Grant it one in ${configurePage("connections")}.`
-      );
+  const pollGitHubNow = async (projectId: string) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const poller = store.githubPoller(projectId);
+    if (!poller) {
+      return problem(409, {
+        code: "ingress-github-unpolled",
+        detail: `This project has no GitHub connection, so its repository isn't polled. Grant it one in ${configurePage("connections")}.`,
+      });
+    }
     if ((poller.resumeAt?.getTime() ?? 0) > Date.now()) {
-      refuse(
-        409,
-        `GitHub's rate limit holds polls until ${poller.resumeAt?.toISOString()}.`
-      );
+      return problem(409, {
+        code: "ingress-github-rate-limited",
+        detail: `GitHub's rate limit holds polls until ${poller.resumeAt?.toISOString()}.`,
+      });
     }
     await once(`github:${projectId}`, () => pollGitHub(projectId));
     return view(projectId);
@@ -1293,32 +1323,51 @@ export const createIngress = ({
   // --- routes --------------------------------------------------------------------
 
   /** Refuses a route that cannot run as written. */
-  const checkedRoute = (projectId: string, input: RouteInput): void => {
+  const checkedRoute = (projectId: string, input: RouteInput) => {
     const routine = db.routines.get(input.routineId);
     if (!routine || routine.projectId !== projectId) {
-      refuse(404, `The project has no routine ${input.routineId}.`);
+      return problem(404, {
+        code: "ingress-routine-unknown",
+        detail: `The project has no routine ${input.routineId}.`,
+      });
     }
     if (!input.source.trim()) {
-      refuse(
-        400,
-        "source is a source or a pattern, like github:* or conn:linear:*."
-      );
+      return problem(400, {
+        code: "ingress-source-unfit",
+        detail:
+          "source is a source or a pattern, like github:* or conn:linear:*.",
+      });
     }
-    const problem = input.regex ? regexProblem(input.regex) : undefined;
-    if (problem) {
-      refuse(400, problem);
-    }
+    const misfit = input.regex ? regexProblem(input.regex) : undefined;
+    return misfit
+      ? problem(400, { code: "ingress-regex-unfit", detail: misfit })
+      : undefined;
   };
 
-  const routeOf = (id: string) =>
-    store.route(id) ?? refuse(404, `There is no event route ${id}.`);
+  /** The event route `id` as `by` may touch it. */
+  const routeFor = (id: string, by: IngressActor) => {
+    const row = store.route(id);
+    if (!row) {
+      return problem(404, {
+        code: "ingress-route-unknown",
+        detail: `There is no event route ${id}.`,
+      });
+    }
+    return notYours(by, row.projectId, "route") ?? row;
+  };
 
   const createRoute = (
     input: RouteInput & { projectId?: string | null },
     by: IngressActor
-  ): EventRouteView => {
+  ) => {
     const projectId = scopeOf(by, input.projectId);
-    checkedRoute(projectId, input);
+    if (projectId instanceof ElysiaStatus) {
+      return projectId;
+    }
+    const unfit = checkedRoute(projectId, input);
+    if (unfit) {
+      return unfit;
+    }
     const row = store.createRoute({
       id: crypto.randomUUID(),
       projectId,
@@ -1337,41 +1386,54 @@ export const createIngress = ({
     console.log(
       `[ingress] route ${row.id} (${row.source}) → routine ${row.routineId}, by ${row.createdBy}`
     );
-    return routeView(row, deliveredBy(store.deliveries(row.projectId)));
+    const made: EventRouteView = routeView(
+      row,
+      deliveredBy(store.deliveries(row.projectId))
+    );
+    return made;
   };
+
+  /** A route's fields with `patch` laid over them. */
+  const patched = (row: EventRouteRow, patch: Partial<RouteInput>) => ({
+    source: patch.source ?? row.source,
+    kinds: patch.kinds ?? row.kinds,
+    author:
+      patch.author === undefined ? row.author : patch.author?.trim() || null,
+    label: patch.label === undefined ? row.label : patch.label?.trim() || null,
+    branch:
+      patch.branch === undefined ? row.branch : patch.branch?.trim() || null,
+    regex: patch.regex === undefined ? row.regex : patch.regex || null,
+    routineId: patch.routineId ?? row.routineId,
+    enabled: patch.enabled ?? row.enabled,
+    mode: patch.mode === undefined ? row.mode : patch.mode,
+  });
 
   const updateRoute = (
     id: string,
     patch: Partial<RouteInput>,
     by: IngressActor
-  ): EventRouteView => {
-    const row = routeOf(id);
-    mayTouch(by, row.projectId, "route");
-    const next = {
-      source: patch.source ?? row.source,
-      kinds: patch.kinds ?? row.kinds,
-      author:
-        patch.author === undefined ? row.author : patch.author?.trim() || null,
-      label:
-        patch.label === undefined ? row.label : patch.label?.trim() || null,
-      branch:
-        patch.branch === undefined ? row.branch : patch.branch?.trim() || null,
-      regex: patch.regex === undefined ? row.regex : patch.regex || null,
-      routineId: patch.routineId ?? row.routineId,
-      enabled: patch.enabled ?? row.enabled,
-      mode: patch.mode === undefined ? row.mode : patch.mode,
-    };
-    checkedRoute(row.projectId, next);
-    return routeView(
+  ) => {
+    const row = routeFor(id, by);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
+    const next = patched(row, patch);
+    const unfit = checkedRoute(row.projectId, next);
+    if (unfit) {
+      return unfit;
+    }
+    const updated: EventRouteView = routeView(
       store.updateRoute(id, next) ?? row,
       deliveredBy(store.deliveries(row.projectId))
     );
+    return updated;
   };
 
   const deleteRoute = (id: string, by: IngressActor) => {
-    const row = routeOf(id);
-    mayTouch(by, row.projectId, "route");
-    return { deleted: store.deleteRoute(id) };
+    const row = routeFor(id, by);
+    return row instanceof ElysiaStatus
+      ? row
+      : { deleted: store.deleteRoute(id) };
   };
 
   // --- connector polls ----------------------------------------------------------------
@@ -1386,58 +1448,84 @@ export const createIngress = ({
     projectId: string,
     input: ConnectorPollInput,
     by: IngressActor
-  ): Promise<void> => {
+  ) => {
     if (
       by !== "owner" &&
       !db.connections.namesForProject(projectId).includes(input.connection)
     ) {
-      refuse(
-        403,
-        `The project does not grant the connection ${input.connection}; the owner adds it to the project first.`
-      );
+      return problem(403, {
+        code: "ingress-connection-ungranted",
+        detail: `The project does not grant the connection ${input.connection}; the owner adds it to the project first.`,
+      });
     }
     if (
       !Number.isInteger(input.intervalS) ||
       input.intervalS < CONNECTOR_MIN_S
     ) {
-      refuse(
-        400,
-        `interval_s is a whole number of seconds, ${CONNECTOR_MIN_S} or more.`
-      );
+      return problem(400, {
+        code: "ingress-interval-unfit",
+        detail: `interval_s is a whole number of seconds, ${CONNECTOR_MIN_S} or more.`,
+      });
     }
     if (!(input.idPath.trim() && input.versionPath.trim())) {
-      refuse(
-        400,
-        "id_path and version_path name where each item keeps its id and its version, like id and updated_at."
-      );
+      return problem(400, {
+        code: "ingress-paths-unfit",
+        detail:
+          "id_path and version_path name where each item keeps its id and its version, like id and updated_at.",
+      });
     }
     let tools: Awaited<ReturnType<Connections["listConnectionTools"]>>;
     try {
       tools = await connections.listConnectionTools(input.connection);
     } catch (error) {
-      return refuse(409, wordsOf(error));
+      return problem(409, {
+        code: "ingress-connection-unlisted",
+        detail: wordsOf(error),
+      });
     }
     const found = tools.find((each) => each.name === input.tool);
     if (!found) {
-      refuse(404, `${input.connection} has no tool ${input.tool}.`);
+      return problem(404, {
+        code: "ingress-tool-unknown",
+        detail: `${input.connection} has no tool ${input.tool}.`,
+      });
     }
-    if (!(found && readsOnly(found))) {
-      refuse(
-        400,
-        `${input.connection}/${input.tool} is not marked read-only, and a poll calls it every interval: poll a read tool.`
-      );
+    if (!readsOnly(found)) {
+      return problem(400, {
+        code: "ingress-tool-not-read-only",
+        detail: `${input.connection}/${input.tool} is not marked read-only, and a poll calls it every interval: poll a read tool.`,
+      });
     }
   };
 
   const pollOf = (id: string) =>
-    store.connectorPoll(id) ?? refuse(404, `There is no connector poll ${id}.`);
+    store.connectorPoll(id) ??
+    problem(404, {
+      code: "ingress-poll-unknown",
+      detail: `There is no connector poll ${id}.`,
+    });
+
+  /** The connector poll `id` as `by` may touch it. */
+  const pollFor = (id: string, by: IngressActor) => {
+    const row = pollOf(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
+    return notYours(by, row.projectId, "connector poll") ?? row;
+  };
 
   const createPoll = async (
     input: ConnectorPollInput & { projectId?: string | null },
     by: IngressActor
-  ): Promise<ConnectorPollView> => {
+  ) => {
     const projectId = scopeOf(by, input.projectId);
-    await checkedPoll(projectId, input, by);
+    if (projectId instanceof ElysiaStatus) {
+      return projectId;
+    }
+    const unfit = await checkedPoll(projectId, input, by);
+    if (unfit) {
+      return unfit;
+    }
     const row = store.createConnectorPoll({
       id: crypto.randomUUID(),
       projectId,
@@ -1458,7 +1546,8 @@ export const createIngress = ({
     console.log(
       `[ingress] connector poll ${row.id}: ${row.connection}/${row.tool} every ${row.intervalS} s, by ${row.createdBy}`
     );
-    return pollView(row);
+    const made: ConnectorPollView = pollView(row);
+    return made;
   };
 
   /** Edits of one poll under way, by its id: one at a time each. */
@@ -1473,7 +1562,7 @@ export const createIngress = ({
     id: string,
     patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
     by: IngressActor
-  ): Promise<ConnectorPollView> => {
+  ) => {
     const before = editing.get(id) ?? Promise.resolve();
     const edit = before
       .catch(() => undefined)
@@ -1490,9 +1579,11 @@ export const createIngress = ({
     id: string,
     patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
     by: IngressActor
-  ): Promise<ConnectorPollView> => {
-    const row = pollOf(id);
-    mayTouch(by, row.projectId, "connector poll");
+  ) => {
+    const row = pollFor(id, by);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     const next = {
       connection: row.connection,
       tool: row.tool,
@@ -1503,7 +1594,10 @@ export const createIngress = ({
       versionPath: patch.versionPath?.trim() ?? row.versionPath,
       enabled: patch.enabled ?? row.enabled,
     };
-    await checkedPoll(row.projectId, next, by);
+    const unfit = await checkedPoll(row.projectId, next, by);
+    if (unfit) {
+      return unfit;
+    }
     // What it lists or keys by moved: its next call only looks again.
     const relook =
       JSON.stringify([
@@ -1513,25 +1607,31 @@ export const createIngress = ({
         next.versionPath,
       ]) !==
       JSON.stringify([row.args, row.itemsPath, row.idPath, row.versionPath]);
-    return pollView(
+    const edited: ConnectorPollView = pollView(
       store.updateConnectorPoll(id, {
         ...next,
         ...(relook ? { seenAt: null } : {}),
       }) ?? row
     );
+    return edited;
   };
 
   const deletePoll = (id: string, by: IngressActor) => {
-    const row = pollOf(id);
-    mayTouch(by, row.projectId, "connector poll");
-    return { deleted: store.deleteConnectorPoll(id) };
+    const row = pollFor(id, by);
+    return row instanceof ElysiaStatus
+      ? row
+      : { deleted: store.deleteConnectorPoll(id) };
   };
 
   /** Calls a connector poll now. */
-  const pollConnectorNow = async (id: string): Promise<ConnectorPollView> => {
-    pollOf(id);
+  const pollConnectorNow = async (id: string) => {
+    const known = pollOf(id);
+    if (known instanceof ElysiaStatus) {
+      return known;
+    }
     await once(`conn:${id}`, () => pollConnector(id));
-    return pollView(pollOf(id));
+    const after = pollOf(id);
+    return after instanceof ElysiaStatus ? after : pollView(after);
   };
 
   // --- tools -------------------------------------------------------------------------
@@ -1573,39 +1673,37 @@ export const createIngress = ({
       }
       return actor;
     };
-    const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
-      try {
-        return await work();
-      } catch (error) {
-        if (error instanceof IngressRefusal) {
-          throw new Error(error.message, { cause: error });
-        }
-        throw error;
-      }
-    };
     /** The id of the caller's project's route `asked` names: its id or handle (handles.ts). */
-    const routeNamed = (asked: string): string =>
-      byHandle(
-        asked,
-        store.routes(scopeOf(me())),
-        {
-          id: (one) => one.id,
-          said: (one) => `${one.source} ${one.id.slice(0, 8)}`,
-        },
-        "event route"
-      ).id;
+    const routeNamed = (asked: string) => {
+      const projectId = scopeOf(me());
+      return projectId instanceof ElysiaStatus
+        ? projectId
+        : byHandle(
+            asked,
+            store.routes(projectId),
+            {
+              id: (one) => one.id,
+              said: (one) => `${one.source} ${one.id.slice(0, 8)}`,
+            },
+            "event route"
+          ).id;
+    };
     /** The id of the caller's project's connector poll `asked` names. */
-    const pollNamed = (asked: string): string =>
-      byHandle(
-        asked,
-        store.connectorPolls(scopeOf(me())),
-        {
-          id: (poll) => poll.id,
-          said: (poll) =>
-            `${poll.connection}:${poll.tool} ${poll.id.slice(0, 8)}`,
-        },
-        "connector poll"
-      ).id;
+    const pollNamed = (asked: string) => {
+      const projectId = scopeOf(me());
+      return projectId instanceof ElysiaStatus
+        ? projectId
+        : byHandle(
+            asked,
+            store.connectorPolls(projectId),
+            {
+              id: (poll) => poll.id,
+              said: (poll) =>
+                `${poll.connection}:${poll.tool} ${poll.id.slice(0, 8)}`,
+            },
+            "connector poll"
+          ).id;
+    };
     return [
       tool(
         "event_route_create",
@@ -1619,14 +1717,19 @@ export const createIngress = ({
             .describe("Its run's start mode; the routine's when left out."),
         },
         ({ routine, ...rest }) =>
-          run(() => createRoute({ ...rest, routineId: routine }, me())),
+          Promise.resolve(createRoute({ ...rest, routineId: routine }, me())),
         routeWords
       ),
       tool(
         "event_route_list",
         "Your project's event routes, whether its GitHub repo is polled (and why not), its connector polls and newest inbound events.",
         {},
-        () => run(() => view(scopeOf(me()))),
+        () => {
+          const projectId = scopeOf(me());
+          return Promise.resolve(
+            projectId instanceof ElysiaStatus ? projectId : view(projectId)
+          );
+        },
         ingressWords
       ),
       tool(
@@ -1640,21 +1743,30 @@ export const createIngress = ({
           enabled: z.boolean().optional(),
           mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
         },
-        ({ id, routine, ...rest }) =>
-          run(() =>
-            updateRoute(
-              routeNamed(id),
-              defined({ ...rest, routineId: routine }),
-              me()
-            )
-          ),
+        ({ id, routine, ...rest }) => {
+          const named = routeNamed(id);
+          return Promise.resolve(
+            named instanceof ElysiaStatus
+              ? named
+              : updateRoute(
+                  named,
+                  defined({ ...rest, routineId: routine }),
+                  me()
+                )
+          );
+        },
         routeWords
       ),
       tool(
         "event_route_delete",
         "Delete an event route.",
         { id: ref() },
-        ({ id }) => run(() => deleteRoute(routeNamed(id), me())),
+        ({ id }) => {
+          const named = routeNamed(id);
+          return Promise.resolve(
+            named instanceof ElysiaStatus ? named : deleteRoute(named, me())
+          );
+        },
         deletedWords("event route")
       ),
       tool(
@@ -1667,22 +1779,20 @@ export const createIngress = ({
             .describe("The tool's own name on the connection's server."),
           ...pollFields,
         },
-        (input) =>
-          run(() =>
-            createPoll(
-              {
-                connection: input.connection,
-                tool: input.tool,
-                intervalS: input.interval_s,
-                idPath: input.id_path,
-                versionPath: input.version_path,
-                ...(input.args ? { args: input.args } : {}),
-                ...(input.items_path === undefined
-                  ? {}
-                  : { itemsPath: input.items_path }),
-              },
-              me()
-            )
+        async (input) =>
+          await createPoll(
+            {
+              connection: input.connection,
+              tool: input.tool,
+              intervalS: input.interval_s,
+              idPath: input.id_path,
+              versionPath: input.version_path,
+              ...(input.args ? { args: input.args } : {}),
+              ...(input.items_path === undefined
+                ? {}
+                : { itemsPath: input.items_path }),
+            },
+            me()
           ),
         pollWords
       ),
@@ -1690,7 +1800,14 @@ export const createIngress = ({
         "connector_poll_list",
         "Your project's connector polls, each with what its last call saw or why it failed.",
         {},
-        () => run(() => store.connectorPolls(scopeOf(me())).map(pollView)),
+        () => {
+          const projectId = scopeOf(me());
+          return Promise.resolve(
+            projectId instanceof ElysiaStatus
+              ? projectId
+              : store.connectorPolls(projectId).map(pollView)
+          );
+        },
         pollListWords
       ),
       tool(
@@ -1705,28 +1822,35 @@ export const createIngress = ({
           version_path: pollFields.version_path.optional(),
           enabled: z.boolean().optional(),
         },
-        (input) =>
-          run(() =>
-            updatePoll(
-              pollNamed(input.id),
-              defined({
-                args: input.args,
-                intervalS: input.interval_s,
-                itemsPath: input.items_path,
-                idPath: input.id_path,
-                versionPath: input.version_path,
-                enabled: input.enabled,
-              }),
-              me()
-            )
-          ),
+        async (input) => {
+          const named = pollNamed(input.id);
+          return named instanceof ElysiaStatus
+            ? named
+            : await updatePoll(
+                named,
+                defined({
+                  args: input.args,
+                  intervalS: input.interval_s,
+                  itemsPath: input.items_path,
+                  idPath: input.id_path,
+                  versionPath: input.version_path,
+                  enabled: input.enabled,
+                }),
+                me()
+              );
+        },
         pollWords
       ),
       tool(
         "connector_poll_delete",
         "Delete a connector poll.",
         { id: ref() },
-        ({ id }) => run(() => deletePoll(pollNamed(id), me())),
+        ({ id }) => {
+          const named = pollNamed(id);
+          return Promise.resolve(
+            named instanceof ElysiaStatus ? named : deletePoll(named, me())
+          );
+        },
         deletedWords("connector poll")
       ),
     ];
@@ -1788,8 +1912,6 @@ export const INGRESS_TOOLS: ReadonlySet<string> = new Set([
   "connector_poll_delete",
 ]);
 
-const attempt = refusalAttempt(IngressRefusal);
-
 const ROUTE_FIELDS = {
   source: t.String(),
   kinds: t.Optional(t.Array(t.String())),
@@ -1814,25 +1936,22 @@ const POLL_FIELDS = {
 /** The dashboard's routes for a project's ingress: its GitHub poller follows the connections that name the project, never a route of its own. */
 export const ingressRoutes = (ingress: Ingress) =>
   new Elysia()
-    .get("/api/projects/:id/ingress", ({ params }) =>
-      attempt(() => ingress.view(params.id))
-    )
+    .get("/api/projects/:id/ingress", ({ params }) => ingress.view(params.id))
     .post("/api/projects/:id/ingress/github/poll", ({ params }) =>
-      attempt(() => ingress.pollGitHubNow(params.id))
+      ingress.pollGitHubNow(params.id)
     )
     .post(
       "/api/event-routes",
       { body: t.Object({ projectId: t.String(), ...ROUTE_FIELDS }) },
-      ({ body }) => attempt(() => ingress.createRoute(body, "owner"))
+      ({ body }) => ingress.createRoute(body, "owner")
     )
     .patch(
       "/api/event-routes/:id",
       { body: t.Partial(t.Object(ROUTE_FIELDS)) },
-      ({ params, body }) =>
-        attempt(() => ingress.updateRoute(params.id, body, "owner"))
+      ({ params, body }) => ingress.updateRoute(params.id, body, "owner")
     )
     .delete("/api/event-routes/:id", ({ params }) =>
-      attempt(() => ingress.deleteRoute(params.id, "owner"))
+      ingress.deleteRoute(params.id, "owner")
     )
     .post(
       "/api/connector-polls",
@@ -1844,17 +1963,16 @@ export const ingressRoutes = (ingress: Ingress) =>
           ...POLL_FIELDS,
         }),
       },
-      ({ body }) => attempt(() => ingress.createPoll(body, "owner"))
+      ({ body }) => ingress.createPoll(body, "owner")
     )
     .patch(
       "/api/connector-polls/:id",
       { body: t.Partial(t.Object(POLL_FIELDS)) },
-      ({ params, body }) =>
-        attempt(() => ingress.updatePoll(params.id, body, "owner"))
+      ({ params, body }) => ingress.updatePoll(params.id, body, "owner")
     )
     .delete("/api/connector-polls/:id", ({ params }) =>
-      attempt(() => ingress.deletePoll(params.id, "owner"))
+      ingress.deletePoll(params.id, "owner")
     )
     .post("/api/connector-polls/:id/poll", ({ params }) =>
-      attempt(() => ingress.pollConnectorNow(params.id))
+      ingress.pollConnectorNow(params.id)
     );

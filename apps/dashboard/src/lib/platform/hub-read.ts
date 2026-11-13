@@ -10,15 +10,14 @@ import { z } from "zod";
 
 /**
  * A refused read: the status, and why, without its closing stop
- * ({@link hubFailure}). `type` and `title` are the hub's problem
- * fields when it sent them (RFC 9457), for a caller that tells causes
- * apart; never shown as they are.
+ * ({@link hubFailure}). `code` is the hub's stable name for the cause (its
+ * problem's `code`: every route's refusal carries one), for a caller that
+ * tells causes apart; never shown as it is.
  */
 export interface HubFailure {
+  code?: string;
   detail: string;
   status: number;
-  title?: string;
-  type?: string;
 }
 
 export type HubRead<T> = { ok: true; value: T } | ({ ok: false } & HubFailure);
@@ -157,14 +156,10 @@ export function awayOf(
 /**
  * THE ONE READER of a refused response, everywhere the dashboard asks the
  * hub: what it said, its reason as the hub wrote it without its closing
- * stop, and never the body as it came. The hub's problem (`type`, `title`, `status`,
- * `detail`; RFC 9457) gives its `detail`, else its `title`; the older
- * `{ error }` and `{ message }` shapes read the same; a plain-text answer
- * is the hub's own sentence. A proxy's page in front of the hub (a
- * tunnel's HTML 502), an empty body, or anything that is not a reason in
- * prose is the hub not answering: that, with its status
- * ({@link noAnswer}). Read from the body and its type alone: a universal
- * load may not read other headers SvelteKit does not serialise.
+ * stop, and never the body as it came. Every refusal of the hub is an RFC
+ * 9457 problem (Elysia's `problem()`): its `detail`, else its `title`, and its
+ * `code`. Anything else (a proxy's page in front of the hub, an empty body)
+ * is the hub not answering: that, with its status ({@link noAnswer}).
  */
 export function hubFailure(refused: Refused): HubFailure;
 /** A refused `response` as {@link hubFailure} reads it, its body read first. */
@@ -176,21 +171,15 @@ export function hubFailure(
     return refusedOf(input).then((read) => hubFailure(read));
   }
   const refused = input;
-  const { status, headers } = refusedAnswer(refused);
-  const kind = headers.get("content-type") ?? "";
-  const value = kind.includes("html") ? "" : refused.error.value;
-  const problem = problemOf(value);
-  const said = problem
-    ? (problem.detail ?? problem.title ?? problem.error ?? problem.message)
-    : unquoted(textOf(value));
+  const { status } = refusedAnswer(refused);
+  const problem = problemOf(refused.error.value);
   return {
     status,
     detail:
-      problem?.type === PARSE_PROBLEM
+      problem?.code === PARSE_PROBLEM
         ? hubFailureWords.unreadRequest
-        : (sentenceOf(said) ?? noAnswer(status)),
-    ...(problem?.type ? { type: problem.type } : {}),
-    ...(problem?.title ? { title: problem.title } : {}),
+        : (sentenceOf(problem?.detail ?? problem?.title) ?? noAnswer(status)),
+    ...(problem?.code ? { code: problem.code } : {}),
   };
 }
 
@@ -381,38 +370,23 @@ export const failureSentence = (failure: HubFailure): string =>
   `${refusalClause(failure)}.`;
 
 /**
- * The problem type the hub's framework writes when a request's body does not
+ * The problem code the hub's framework writes when a request's body does not
  * parse as the type it came with (Elysia's `ParseError`, code `parse`, thrown
  * before any route of the hub runs). Its detail is the parser's exception
  * ("Unexpected end of JSON input"), and in production there is none, so it is
  * never a reason a person reads; core `hubFailureWords.unreadRequest` stands
- * for it. No route of the hub writes this type.
+ * for it. No route of the hub writes this code.
  */
 const PARSE_PROBLEM = "parse";
 
 /** That the hub didn't answer, naming the status that came instead, without a closing stop. */
 const { noAnswer } = hubFailureWords;
 
-/** Elysia's refusal as a JSON string (`"No such rule"`) read as its words; any other text as it is. */
-function unquoted(text: string): string {
-  if (!text.startsWith('"')) {
-    return text;
-  }
-  try {
-    const words: unknown = JSON.parse(text);
-    return typeof words === "string" ? words : text;
-  } catch {
-    return text;
-  }
-}
-
 /** A problem's fields that are strings, from a body Eden read as an object; null for any other body. */
 function problemOf(value: unknown): {
+  code?: string;
   detail?: string;
-  error?: string;
-  message?: string;
   title?: string;
-  type?: string;
 } | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
@@ -423,20 +397,10 @@ function problemOf(value: unknown): {
     return typeof one === "string" && one !== "" ? one : undefined;
   };
   return {
+    code: field("code"),
     detail: field("detail"),
-    error: field("error"),
-    message: field("message"),
     title: field("title"),
-    type: field("type"),
   };
-}
-
-/** A body Eden read that is no object, as the text it came as. */
-function textOf(value: unknown): string {
-  if (value === undefined) {
-    return "";
-  }
-  return (typeof value === "string" ? value : JSON.stringify(value)).trim();
 }
 
 /** A sentence's closing stop, dropped so the hub's words sit inside ours. */

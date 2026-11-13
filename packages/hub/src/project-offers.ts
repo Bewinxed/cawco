@@ -31,15 +31,15 @@ import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import type { ProjectOfferRow, ProjectRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
-import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote } from "./projects";
+import type { AnyProblem } from "./refusal";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
@@ -54,21 +54,28 @@ const READ_MS = 10_000;
 type InstanceShape = ReturnType<DbShape["listInstances"]>[number];
 
 export interface ProjectOffersDeps {
-  /** Makes the project with Caw, or joins the one that has the folder's remote (server.ts, POST /api/projects). */
+  /**
+   * Makes the project with Caw, or joins the one that has the folder's
+   * remote (project-joining.ts `createOrJoinProject`), or its refusal.
+   * Plain-typed: typing it from there closes project-offers →
+   * project-joining → hub-context → project-offers.
+   */
   createProject: (asked: {
     name: string;
     checkout: { machineId: string; cwd: string };
     caw: true;
-  }) => Promise<{ project: ProjectRow; placeAdded: boolean; joined: boolean }>;
+  }) => Promise<
+    { project: ProjectRow; placeAdded: boolean; joined: boolean } | AnyProblem
+  >;
   db: DbShape;
   /** Sessions moved into a project: their machines' rails are published again. */
   moved: (machineIds: string[]) => void;
   online: (machineId: string) => boolean;
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
-   * CawCo's list.
+   * CawCo's list; or its refusal.
    */
-  planSteps: (instanceId: string) => Promise<PlanStep[]>;
+  planSteps: (instanceId: string) => Promise<PlanStep[] | AnyProblem>;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
   run: (
@@ -163,9 +170,12 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 
   /** The session's open plan steps, in plan order; none when its plan cannot be read now. */
   const openSteps = async (id: string): Promise<PlanStep[]> =>
-    (await deps.planSteps(id).catch(() => [])).filter(
-      (step) => step.status !== "completed"
-    );
+    (
+      await deps.planSteps(id).then(
+        (steps) => (Array.isArray(steps) ? steps : []),
+        () => []
+      )
+    ).filter((step) => step.status !== "completed");
 
   /** Files a plan's open steps as proposed tasks, in plan order; the ones the project refused, with why. */
   const filePlan = async (
@@ -189,7 +199,11 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
           { title, labels: [PROPOSED_LABEL] },
           actor
         );
-        filed.push({ id: task.id, title: task.title });
+        if (task instanceof ElysiaStatus) {
+          unfiled.push({ title, why: task.response.detail });
+        } else {
+          filed.push({ id: task.id, title: task.title });
+        }
       } catch (error) {
         unfiled.push({
           title,
@@ -308,12 +322,37 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     );
   };
 
-  const answerable = (id: string): InstanceShape => {
-    const row = rowOf(id);
-    if (!row) {
-      throw new FolderRefusal(404, "No session with that id on this hub.");
+  /** The session `id`, or its refusal (project-offer-session-unknown). */
+  const answerable = (id: string) =>
+    rowOf(id) ??
+    problem(404, {
+      code: "project-offer-session-unknown",
+      detail: "No session with that id on this hub.",
+    });
+
+  /** Why session `row` can't be made a project, in the hub's words, or nothing. */
+  const unmakeable = (row: InstanceShape) => {
+    if (row.projectId) {
+      return problem(409, {
+        code: "project-offer-in-project",
+        detail:
+          "This session is already in a project; there is nothing to make.",
+      });
     }
-    return row;
+    if (row.parentInstanceId || row.workItemId) {
+      return problem(409, {
+        code: "project-offer-delegate",
+        detail:
+          "A delegate belongs to the session that started it. Make that session the project.",
+      });
+    }
+    // Its `cwd` may be a folder its CLI wandered into, not its checkout.
+    if (row.launchDir === "unknown") {
+      return problem(409, {
+        code: "project-offer-folder-unknown",
+        detail: `${sessionLabel(row).name}'s conversation is no longer on its machine, so its folder is unknown and it can't be made a project.`,
+      });
+    }
   };
 
   return {
@@ -335,9 +374,12 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         .map(summaryOf);
     },
 
-    /** "Not now": recorded, so it is never offered again. */
-    dismiss(instanceId: string): void {
+    /** "Not now": recorded, so it is never offered again; the session's refusal. */
+    dismiss(instanceId: string) {
       const row = answerable(instanceId);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       db.answerProjectOffer(instanceId, "dismissed");
       deps.publish(row, null);
     },
@@ -347,32 +389,27 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
      * the one that already has its repository), the session and its
      * delegates in it, and its open plan items as proposed tasks.
      */
-    async accept(instanceId: string, actor: TaskActor): Promise<AcceptResult> {
+    async accept(instanceId: string, actor: TaskActor) {
       const row = answerable(instanceId);
-      if (row.projectId) {
-        throw new FolderRefusal(
-          409,
-          "This session is already in a project; there is nothing to make."
-        );
+      if (row instanceof ElysiaStatus) {
+        return row;
       }
-      if (row.parentInstanceId || row.workItemId) {
-        throw new FolderRefusal(
-          409,
-          "A delegate belongs to the session that started it. Make that session the project."
-        );
+      const unmade = unmakeable(row);
+      if (unmade) {
+        return unmade;
       }
-      // Its `cwd` may be a folder its CLI wandered into, not its checkout.
-      if (row.launchDir === "unknown") {
-        throw new FolderRefusal(
-          409,
-          `${sessionLabel(row).name}'s conversation is no longer on its machine, so its folder is unknown and it can't be made a project.`
-        );
-      }
-      const { project, joined } = await deps.createProject({
+      const made = await deps.createProject({
         name: leafOf(row.cwd),
         checkout: { machineId: row.machineId, cwd: row.cwd },
         caw: true,
       });
+      if ("response" in made) {
+        return problem(made.status, {
+          code: "project-offer-not-made",
+          detail: made.response.detail,
+        });
+      }
+      const { project, joined } = made;
       const moving = [row, ...descendants(row.id, db.listInstances())];
       db.setInstancesProject(
         moving.map((r) => r.id),
@@ -398,7 +435,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
               ? `Its plan is on the board as ${plural(filed.length, "proposed task", "proposed tasks")}: ${filed.map((task) => task.id).join(", ")}.`
               : "",
           });
-      return {
+      const accepted: AcceptResult = {
         joined,
         project: { id: project.id, name: project.name },
         sessions: moving.map((r) => r.id),
@@ -406,6 +443,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         unfiled,
         ...(conversation ? { conversation } : {}),
       };
+      return accepted;
     },
   };
 };
@@ -416,21 +454,13 @@ export type ProjectOffers = ReturnType<typeof createProjectOffers>;
 export const projectOfferRoutes = (offers: ProjectOffers, you: TaskActor) =>
   new Elysia()
     .get("/api/project-offers", () => offers.open())
-    .post("/api/project-offers/:instanceId/dismiss", ({ params }) => {
-      try {
-        offers.dismiss(params.instanceId);
-        return { ok: true };
-      } catch (error) {
-        return refused(error);
-      }
-    })
-    .post("/api/project-offers/:instanceId/accept", async ({ params }) => {
-      try {
-        return await offers.accept(params.instanceId, you);
-      } catch (error) {
-        return refused(error);
-      }
-    });
+    .post(
+      "/api/project-offers/:instanceId/dismiss",
+      ({ params }) => offers.dismiss(params.instanceId) ?? { ok: true }
+    )
+    .post("/api/project-offers/:instanceId/accept", ({ params }) =>
+      offers.accept(params.instanceId, you)
+    );
 
 /** The MCP tool's name: Caw proposes it in conversation, and you say yes. */
 export const PROJECT_FROM_SESSION = "project_from_session";
@@ -440,7 +470,9 @@ export const PROJECT_FROM_SESSION = "project_from_session";
  * dashboard's "Create project", on the calling session. Without `accept` it is
  * the listing's copy, which runs nothing.
  */
-export const projectFromSessionTool = (accept?: () => Promise<AcceptResult>) =>
+export const projectFromSessionTool = (
+  accept?: () => ReturnType<ProjectOffers["accept"]>
+) =>
   tool(
     PROJECT_FROM_SESSION,
     "Make this session a project: its machine and folder become the project's place (or it joins the project that already has this repository), this session and its delegates move into it, and its open plan items are filed as tasks labelled `proposed`. Offer it in conversation when the work has outgrown one session (it runs for days, starts delegates, leaves follow-ups), and call it only after the operator says yes.",
