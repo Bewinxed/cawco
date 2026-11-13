@@ -1,26 +1,9 @@
 <script lang="ts" module>
-  import { type SessionPlan, todoProgress } from "@cawco/core/plan";
+  import type { SessionPlan } from "@cawco/core/plan";
   import { planWords } from "@cawco/core/words/plan";
   import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
-  import { stepsTree, todosTree } from "./PlanTree.svelte";
-  /** How far a plan has got: its steps, else its task's agreed to-dos. */
-  export function planProgress(plan: SessionPlan): {
-    done: number;
-    total: number;
-  } {
-    if (plan.steps.length > 0) {
-      return {
-        done: plan.steps.filter((step) => step.status === "completed").length,
-        total: plan.steps.length,
-      };
-    }
-    return todoProgress(plan.todos ?? []);
-  }
-
-  /** The plan has something to show: steps, a spec, or a task's agreed to-dos. */
-  export const planShows = (plan: SessionPlan | undefined): boolean =>
-    !!plan &&
-    (plan.steps.length > 0 || !!plan.spec || todosTree(plan).length > 0);
+  import { stepsTree, todosTree } from "../plan";
+  import { boardStore } from "../stores/board.svelte";
 
   /**
    * A task's to-dos and nothing else (an attempt that has written no steps
@@ -69,9 +52,10 @@
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import MessageBody from "../MessageBody.svelte";
   import { planAsked, takePlan } from "../reference-things.svelte";
+  import { plansStore } from "../stores/plans.svelte";
   import {
     holdComposerLayer,
     roomOver,
@@ -88,13 +72,13 @@
     onclose: () => void;
   } = $props();
 
-  const plan = $derived(cawco.planOf(instanceId));
+  const plan = $derived(plansStore.planOf(instanceId));
   const steps = $derived(stepsTree(plan));
   const todos = $derived(todosTree(plan));
   const todosOnly = $derived(onlyTodos(plan));
   const cardTitle = $derived(planTitle(plan));
   const projectId = $derived(
-    cawco.instanceIndex.byId.get(instanceId)?.projectId ?? null
+    boardStore.instanceIndex.byId.get(instanceId)?.projectId ?? null
   );
   const showsTodos = $derived(todos.length > 0 && !!plan?.taskId);
   /** The steps are named once another part stands beside them. */

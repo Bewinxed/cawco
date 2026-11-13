@@ -1,9 +1,7 @@
 <script lang="ts" module>
-  import { cawco } from "./client.svelte";
-
   /** How many machines are online: the phone sidebar's count. */
   export const machinesOnline = (): number =>
-    cawco.machines.filter((machine) => machine.status === "online").length;
+    boardStore.machines.filter((machine) => machine.status === "online").length;
 </script>
 
 <script lang="ts">
@@ -28,6 +26,7 @@
   import { barGlass } from "./bar-glass.svelte";
   import { connect } from "./connect/installs.svelte";
   import { home } from "./home/home-state.svelte";
+  import { boardStore } from "./stores/board.svelte";
 
   /**
    * Machines being added that the fleet does not list yet: counted with
@@ -38,20 +37,22 @@
     connect.installs.filter(
       (one) =>
         one.state === "running" &&
-        !cawco.machines.some((machine) => machine.machineId === one.returning)
+        !boardStore.machines.some(
+          (machine) => machine.machineId === one.returning
+        )
     ).length
   );
   /** Installs that ended badly and wait on the person. */
   const unsettled = $derived(
     connect.band.filter((one) => one.state !== "running").length
   );
-  const count = $derived(cawco.machines.length + adding);
+  const count = $derived(boardStore.machines.length + adding);
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
   const tone = $derived.by(() => {
     if (home.exceptions.length === 0) {
       return unsettled > 0 ? "attn" : undefined;
     }
-    return cawco.machines.some((machine) => machine.status !== "online")
+    return boardStore.machines.some((machine) => machine.status !== "online")
       ? "fail"
       : "attn";
   });
@@ -79,7 +80,7 @@
     const byFault = Map.groupBy(home.exceptions, ({ text }) => text);
     const clauses = [...byFault].map(([text, entries]) => {
       const who = entries.map(({ machineId }) => {
-        const machine = cawco.machines.find(
+        const machine = boardStore.machines.find(
           (entry) => entry.machineId === machineId
         );
         return machine ? machineLabel(machine.hostname) : machineId;

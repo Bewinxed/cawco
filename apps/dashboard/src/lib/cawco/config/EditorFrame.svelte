@@ -30,7 +30,8 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
   import { page } from "$app/state";
-  import { cawco } from "../client.svelte";
+  import { connectionStore } from "../hub/socket.svelte";
+
   import { type Cards, rememberCard } from "./cards";
   import EditorFooter, { type EditorQuestion } from "./EditorFooter.svelte";
   import { hubDown } from "./hub.svelte";
@@ -151,7 +152,7 @@
       class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-c-config-max-w pt-space-6 px-space-7 rounded-lg bg-surface-raised"
       bind:this={body}
       style:min-height={card === null ? undefined : `${card}px`}
-      {@attach cawco.hub === "connected" && !settling
+      {@attach connectionStore.hub === "connected" && !settling
         ? rememberCard(page.url.pathname)
         : undefined}
     >

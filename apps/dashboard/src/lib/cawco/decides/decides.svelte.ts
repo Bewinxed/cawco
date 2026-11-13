@@ -6,6 +6,7 @@
  * `asking`; a refusal stands as `fault` with the hub's sentence and its way
  * to try again.
  */
+
 import type {
   CawPoseId,
   DecidesTable,
@@ -18,9 +19,10 @@ import { unhandled } from "@cawco/core/unhandled";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { decidesWords } from "@cawco/core/words/decides";
 import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
-import type { ProjectRow } from "#lib/cawco/client.svelte.js";
 import { modelLabel } from "#lib/cawco/models.svelte.js";
 import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+import type { ProjectRow } from "#lib/cawco/projects.js";
+
 import { failureWords } from "#lib/platform/hub-read.js";
 import {
   type AgentBody,

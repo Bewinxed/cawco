@@ -16,14 +16,11 @@
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords as messageOf } from "#lib/platform/hub-read.js";
-import {
-  answeredOr,
-  cawco,
-  machineControl,
-  renameInstance,
-  stopSession,
-} from "./client.svelte";
+import { answeredOr } from "./hub/control";
 import { instanceForSession } from "./links";
+import { boardStore } from "./stores/board.svelte";
+import { machineControl } from "./stores/machines";
+import { renameInstance, stopSession } from "./stores/row-acts.svelte";
 
 export interface RowFaultState {
   again?: () => unknown;
@@ -151,7 +148,7 @@ export async function renameSession(
     return;
   }
   const { info, machineId } = target;
-  const row = instanceForSession(cawco.instanceIndex, info.sessionId, {
+  const row = instanceForSession(boardStore.instanceIndex, info.sessionId, {
     machineId,
     cwd: info.cwd,
   });

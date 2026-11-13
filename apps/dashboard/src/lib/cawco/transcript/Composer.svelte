@@ -2,7 +2,7 @@
   import { traitsOf } from "@cawco/core/harness/traits";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import type { PendingPermission } from "../client.svelte";
+  import type { PendingPermission } from "../stores/sessions.svelte";
 
   /**
    * What a composer stands over the transcript's foot, in px: `stack`, the
@@ -121,7 +121,6 @@
   import { msOf } from "#lib/platform/motion/time.js";
   import { track } from "#lib/platform/track.js";
   import { handBack, stages } from "../canvas/stage.svelte";
-  import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
@@ -130,6 +129,7 @@
   import { readAs } from "../find/mention.svelte";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
+  import type { SendExtras } from "../send-store";
   import { skillsOf } from "../skill-chips";
   import {
     loadSuggestSetting,
@@ -1313,7 +1313,7 @@
   const failedRow = $derived.by(() => {
     const row =
       fleet && recallOf
-        ? fleet.cawco.instanceIndex.byId.get(recallOf)
+        ? fleet.boardStore.instanceIndex.byId.get(recallOf)
         : undefined;
     return row?.status === "error" && row.harness !== null ? row : undefined;
   });
@@ -1329,7 +1329,7 @@
     if (!(fleet && row?.harness)) {
       return null;
     }
-    const machine = fleet.cawco.machines.find(
+    const machine = fleet.boardStore.machines.find(
       (one) => one.machineId === row.machineId
     );
     const block = machine ? fleet.harnessBlockOf(machine, row.harness) : null;
@@ -1356,7 +1356,7 @@
   // Any session this tab saw refused whose machine's harness now runs goes
   // again, whichever composer is on screen.
   $effect(() => {
-    fleet?.relaunchUnblocked(fleet.cawco.machines);
+    fleet?.relaunchUnblocked(fleet.boardStore.machines);
   });
   // A session that went on some other way has no refusal left to say.
   $effect(() => {
@@ -1381,7 +1381,7 @@
     if (signingIn === null) {
       return draftNote;
     }
-    const server = (fleet?.cawco.fleetMcp ?? []).find(
+    const server = (fleet?.mcpServersStore.fleetMcp ?? []).find(
       (one) => one.name === signingIn
     );
     return server?.auth?.state === "signed-in"
@@ -1464,7 +1464,7 @@
     }
     const intent = fleet.mcpSignInIntent(
       draft.text,
-      fleet.cawco.fleetMcp ?? []
+      fleet.mcpServersStore.fleetMcp ?? []
     );
     if (intent.kind === "go") {
       const { name } = intent;
@@ -1821,7 +1821,7 @@
     }
   }
   const recalled = $derived(
-    fleet && recallOf ? fleet.cawco.session(recallOf) : null
+    fleet && recallOf ? fleet.sessionsStore.session(recallOf) : null
   );
 
   /**
@@ -2692,7 +2692,7 @@
     if (!(fleet && lift)) {
       return;
     }
-    const message = fleet.cawco
+    const message = fleet.sessionsStore
       .session(lift.instanceId)
       ?.messages.find((m) => m.id === lift.id);
     if (!(message && fleet.userTurnActions(message).edit === "queued")) {

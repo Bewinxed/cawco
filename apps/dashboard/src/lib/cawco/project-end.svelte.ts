@@ -17,13 +17,10 @@ import { projectEndWords } from "@cawco/core/words/project-ends";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { toast } from "#lib/platform/toasts.js";
 import { goto } from "$app/navigation";
-import {
-  type ProjectRow,
-  restoreProject,
-  StandingRefusal,
-} from "./client.svelte";
+import type { ProjectRow } from "./projects";
 import { refusals } from "./refusals.svelte";
 import type { EndKind } from "./stop-work.svelte";
+import { restoreProject, StandingRefusal } from "./stores/projects.svelte";
 
 let asked = $state<{
   at: string;
