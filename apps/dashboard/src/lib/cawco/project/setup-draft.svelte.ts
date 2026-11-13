@@ -15,11 +15,7 @@
  */
 
 import spec from "@cawco/core/decisions-spec";
-import {
-  createParser,
-  type ElementNode,
-  type LibraryJSONSchema,
-} from "@openuidev/lang-core";
+import { createParser, type ElementNode } from "@openuidev/lang-core";
 import { sendDecision } from "#lib/cawco/decisions/decisions-api.js";
 import {
   type ArtifactDoc,
@@ -27,6 +23,7 @@ import {
 } from "#lib/cawco/preview/artifact-doc.js";
 import {
   draftedOf,
+  isElement,
   type SetupDelegate,
   type SetupDrafted,
   type Stage,
@@ -47,12 +44,7 @@ export interface SetupPageRow {
 /** The setup page's program in the project's folder (hub decision-program.ts `PROGRAM_FILE`). */
 const PROGRAM = "decisions/setup/page.oui";
 
-const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
-
-const isElement = (value: unknown): value is ElementNode =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { type?: unknown }).type === "element";
+const parser = createParser(spec.schema, spec.root);
 
 /** The program's one Setup, its props as data, and the ids of the cards beside it; null when it has no Setup. */
 function setupIn(
@@ -67,9 +59,10 @@ function setupIn(
     if (isElement(node) && node.typeName === "Setup") {
       return node;
     }
-    for (const value of Object.values(
-      isElement(node) ? node.props : (node as Record<string, unknown>)
-    )) {
+    const children: unknown[] = Object.values(
+      isElement(node) ? node.props : node
+    );
+    for (const value of children) {
       const found = Array.isArray(value)
         ? value.map(find).find(Boolean)
         : find(value);
@@ -90,14 +83,15 @@ function setupIn(
     }
     seen.add(node);
     if (isElement(node) && node.typeName === "Decision") {
-      const { id } = node.props as { id?: unknown };
+      const { id } = node.props;
       if (typeof id === "string") {
         cards.push(id);
       }
     }
-    for (const value of Object.values(
-      isElement(node) ? node.props : (node as Record<string, unknown>)
-    )) {
+    const children: unknown[] = Object.values(
+      isElement(node) ? node.props : node
+    );
+    for (const value of children) {
       if (Array.isArray(value)) {
         value.forEach(walk);
       } else {
@@ -108,7 +102,7 @@ function setupIn(
   walk(root);
   return setup
     ? {
-        drafted: draftedOf(setup.props as Record<string, unknown>),
+        drafted: draftedOf(setup.props),
         cards: [...new Set(cards)],
       }
     : null;
@@ -143,7 +137,7 @@ export class SetupDraftSource {
   get stages(): Stage[] {
     const kept = this.kept.stages;
     return Array.isArray(kept)
-      ? kept.map((one) => stageOf(one as Record<string, unknown>))
+      ? kept.map((one) => stageOf(one))
       : (this.drafted?.stages ?? []);
   }
   /** The delegate types it proposes, less those the person removed. */
@@ -209,8 +203,11 @@ export class SetupDraftSource {
   }
 
   /** Keeps a change of the person's on the page; the hub writes nothing into the project yet. */
-  keep(key: "aim" | "stages" | "delegates", value: unknown): void {
-    const stored = key === "stages" ? storedStages(value as Stage[]) : value;
+  keep(
+    ...[key, value]:
+      ["aim", string] | ["stages", Stage[]] | ["delegates", string[]]
+  ): void {
+    const stored = key === "stages" ? storedStages(value) : value;
     this.kept = { ...this.kept, [key]: stored };
     const problem = this.#doc?.keep(key, stored) ?? null;
     if (problem) {

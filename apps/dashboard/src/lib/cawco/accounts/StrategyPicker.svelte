@@ -95,9 +95,8 @@
     ];
     if (event.key === "Enter" || event.key === " ") {
       if (
-        (event.target as HTMLElement).matches(
-          '[data-slot="strategy-picker-card"]'
-        )
+        event.target instanceof Element &&
+        event.target.matches('[data-slot="strategy-picker-card"]')
       ) {
         event.preventDefault();
         choose(offered[at]);
@@ -106,8 +105,9 @@
     }
     if (
       by === undefined ||
-      !(event.target as HTMLElement).matches(
-        '[data-slot="strategy-picker-card"]'
+      !(
+        event.target instanceof Element &&
+        event.target.matches('[data-slot="strategy-picker-card"]')
       )
     ) {
       return;
@@ -140,11 +140,10 @@
         class="group flex min-w-0 flex-col gap-space-3 rounded-md border border-border-control select-none bg-transparent p-space-3 text-start transition-[border-color,background-color] duration-(--duration-fade) ease-out not-aria-checked:hover:border-border-control aria-checked:border-focus-ring aria-checked:bg-strategy-card-picked focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
         style:--card-press="scale(var(--press-scale))"
         onclick={(event) => {
-          if (
-            !(event.target as HTMLElement).closest(
-              'select, [data-slot="order"]'
-            )
-          ) {
+          if (!(
+            event.target instanceof Element &&
+            event.target.closest('select, [data-slot="order"]')
+          )) {
             choose(strategy);
           }
         }}
@@ -190,8 +189,7 @@
                 onchange={(event) => {
                   onchoice({
                     strategy: "pinned",
-                    pinnedAccountId: (event.currentTarget as HTMLSelectElement)
-                      .value,
+                    pinnedAccountId: event.currentTarget.value,
                   });
                 }}
                 value={pinned?.id}

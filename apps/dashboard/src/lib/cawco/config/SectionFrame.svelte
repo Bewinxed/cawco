@@ -24,7 +24,7 @@
 
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
-  import { type Cards, rememberCard } from "./cards";
+  import { rememberCard } from "./cards";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
   import type { ConfigSection } from "./sections";
@@ -68,9 +68,7 @@
    */
   let holding = $state(untrack(() => !ready));
   const card = $derived(
-    holding && !problem
-      ? ((page.data.cards as Cards | undefined)?.[page.url.pathname] ?? null)
-      : null
+    holding && !problem ? (page.data.cards?.[page.url.pathname] ?? null) : null
   );
   /** Attachment on the arrived rows, once nothing more is on its way: lets go once they keep still for 300ms. */
   const settleThen = (node: HTMLElement) => {
