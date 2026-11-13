@@ -592,6 +592,9 @@ const gated: Gated[] = [
     "bun.lock",
   ]),
   bun("apps/dashboard/scripts/spacing-ratchet.ts", DASH),
+  // A class stock Tailwind draws and the house theme draws nothing for;
+  // bun.lock pins the Tailwind that judges it.
+  bun("scripts/tailwind-draws-check.ts", [...DASH, "bun.lock"]),
   inDashboard("scripts/role-order.ts"),
   inDashboard("scripts/build-variants.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts", ["packages/hub/"]),
