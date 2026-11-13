@@ -3384,10 +3384,12 @@ export interface components {
     "PUT /api/fleet/mcp/:name": {
       body: {
         areaId?: string | null;
-        config: {
+        config?: {
           [key: string]: unknown;
         };
+        cwd?: string;
         enabled?: boolean;
+        fromMachine?: string;
         platforms?: ("darwin" | "linux" | "win32")[] | null;
         projectId?: string | null;
         shared?: boolean;
@@ -3858,7 +3860,7 @@ export interface components {
       action: "put" | "remove";
       /** @description Every project in one area instead (its id or name), as the area holds them when read. null: none. */
       areaId?: string | null;
-      /** @description Required for put. stdio: { command, args? }; remote: { type: "http"|"sse", url }. */
+      /** @description Required for put. stdio: { command, args? }; remote: { type: "http"|"sse", url }. A secret reads as {secret:"set"}. In a put a string replaces it, null clears it, left out keeps it. */
       config?: {
         [key: string]: unknown;
       };

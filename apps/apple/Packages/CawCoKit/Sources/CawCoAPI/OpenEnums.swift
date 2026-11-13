@@ -3459,8 +3459,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/FleetMcpServerMode`.
-    public enum FleetMcpServerMode: OpenEnum {
+    /// `#/components/schemas/FleetMcpServerViewMode`.
+    public enum FleetMcpServerViewMode: OpenEnum {
         case direct
         case oauth
         /// A value this app does not know: a newer hub's.
@@ -3497,8 +3497,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/FleetMcpServerState`.
-    public enum FleetMcpServerState: OpenEnum {
+    /// `#/components/schemas/FleetMcpServerViewState`.
+    public enum FleetMcpServerViewState: OpenEnum {
         case failed
         case needsAuth
         case signedIn

@@ -1,10 +1,10 @@
 import type {
   FleetAgent,
   FleetMarketplace,
-  FleetMcpServer,
   FleetPlugin,
   FleetSkillMeta,
 } from "@cawco/core/fleet";
+import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
 import type { RuleRow } from "@cawco/core/rules";
 import { configureWords } from "@cawco/core/words/configure";
 import { type DelegateType, removeDelegateType } from "../delegate-types";
@@ -227,8 +227,8 @@ export function deleteMcpServer(
   const at = (store.fleet.value?.config.mcp ?? []).findIndex(
     (row) => row.name === name
   );
-  const same = (row: FleetMcpServer) => row.name === name;
-  return deleteRow<FleetMcpServer>(
+  const same = (row: FleetMcpServerView) => row.name === name;
+  return deleteRow<FleetMcpServerView>(
     store,
     {
       remove: () => removeMcpServer(name),

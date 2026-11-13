@@ -97,6 +97,20 @@ export const mcpWords = {
   envKey: "API_KEY",
   // biome-ignore lint/suspicious/noTemplateCurlyInString: an example of the `${VAR}` a machine expands in its environment.
   envValue: "${MY_API_KEY}",
+  /** A secret the hub holds, in its value's place: the hub never says it, so typing replaces it and removing the line clears it. */
+  secretSet: "Set · type to replace",
+  /** Under the URL of a server whose address carries a key (a query parameter or a password). */
+  urlKeyHeld:
+    "Key held for this address. Type a new one in the address to replace it.",
+  urlKeyClear: "Clear key",
+  urlKeyCleared: "Key cleared when you save.",
+  urlKeyKeep: "Keep key",
+  /** What the hub answers a write that names a secret it holds none of. */
+  secretNotHeld: (field: string, key: string) =>
+    `${key} in ${field} is marked as set, but this server holds no value for it. Send the value.`,
+  /** The admin tool's note on `config`: how a secret is read and written. */
+  secretToolNote:
+    'A secret reads as {secret:"set"}. In a put a string replaces it, null clears it, left out keeps it.',
   addPair: "Add",
   removePair: (key: string) => `Remove ${key}`,
   where: "Where it applies",

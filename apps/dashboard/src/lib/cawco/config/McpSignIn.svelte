@@ -13,7 +13,7 @@
    * back by its start's `expiresAt` can no longer finish, and is said under
    * the button, which tries again; so is a start the hub refused.
    */
-  import type { FleetMcpServer } from "@cawco/core/fleet";
+  import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
   import { mcpWords as words } from "@cawco/core/words/mcp";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -25,7 +25,7 @@
     server,
     // No fallback: the page binds a record's entry, unset until a press.
     waiting = $bindable(),
-  }: { server: FleetMcpServer; waiting?: boolean } = $props();
+  }: { server: FleetMcpServerView; waiting?: boolean } = $props();
   /** The hub is asked to start one: the press's own work. */
   let starting = $state(false);
   let problem = $state<string | null>(null);

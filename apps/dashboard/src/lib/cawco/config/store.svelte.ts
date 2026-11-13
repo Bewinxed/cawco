@@ -1,9 +1,9 @@
 import type {
   FleetAgent,
-  FleetConfig,
   FleetSkillMeta,
   MarketplaceLink,
 } from "@cawco/core/fleet";
+import type { FleetConfigRead } from "@cawco/core/fleet-secrets";
 import type { FleetFetchFrame } from "@cawco/core/frames";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { RuleRow } from "@cawco/core/rules";
@@ -64,7 +64,7 @@ class Slot<T> {
 
 export interface FleetState {
   agents: FleetAgent[];
-  config: FleetConfig;
+  config: FleetConfigRead;
   /** Marketplace links with no row yet: under way, or refused (fleet.ts `FleetSnapshot`). */
   links: MarketplaceLink[];
   memory: FleetMemoryRow | null;

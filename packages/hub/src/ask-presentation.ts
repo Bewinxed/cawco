@@ -18,6 +18,7 @@ import {
   type SetStanding,
   type SourceFacts,
 } from "@cawco/core";
+import { maskMcpConfig } from "@cawco/core/fleet-secrets";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
 import { boardTitle } from "./labels";
@@ -128,7 +129,8 @@ export const createAskPresenter = (
         const row = db.getMcpServer(key);
         return (
           row && {
-            config: row.config,
+            // As a read says it: a held secret is never in a card.
+            config: maskMcpConfig(row.config),
             enabled: row.enabled,
             projectId: row.projectId,
           }

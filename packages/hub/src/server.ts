@@ -30,7 +30,6 @@ import type {
   FleetConvergeFrame,
   FleetHeld,
   FleetHook,
-  FleetMcpConfig,
   FleetMcpTakeAnswer,
   FleetPlugin,
   FleetReportFrame,
@@ -508,6 +507,11 @@ import { everyOf } from "@cawco/core/every-of";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
 import {
+  maskInspection,
+  maskMcpServer,
+  mergeMcpSecrets,
+} from "@cawco/core/fleet-secrets";
+import {
   CONTROL_FORGE_POST,
   type ForgeVerdict,
   readForgeAsk,
@@ -597,6 +601,7 @@ import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
+import { mcpWords } from "@cawco/core/words/mcp";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
@@ -23688,9 +23693,79 @@ export const createServer = (
     registry.broadcast({
       verb: "frames",
       machineId: "",
-      payload: { kind: "fleet_mcp", servers },
+      // What a screen is told says every secret as set (core fleet-secrets.ts);
+      // the machines are sent the real values by the sync above.
+      payload: { kind: "fleet_mcp", servers: servers.map(maskMcpServer) },
     } satisfies Envelope<FramePayload>);
     fleetChanged();
+  };
+  /**
+   * The unmanaged MCP server `name` a machine has, config and keys as it holds
+   * them: what an adoption takes into the fleet. Read here and kept here, so
+   * no screen is sent it (core fleet-secrets.ts).
+   */
+  const machineMcpConfig = async (
+    machineId: string,
+    name: string,
+    cwd: string | undefined,
+    set: RouteSet
+  ): Promise<
+    | { ok: true; config: Record<string, unknown> }
+    | { ok: false; code: 400 | 404 | 503 | 504; said: string }
+  > => {
+    const asked = await readAgent(
+      machineId,
+      INSPECT_CONFIG,
+      [cwd],
+      READ_TIMEOUT_MS
+    );
+    if (asked.kind === "unanswered") {
+      const away = unansweredStatus(set, machineId, asked);
+      return { ok: false, ...away };
+    }
+    if (!asked.value.ok) {
+      return {
+        ok: false,
+        code: 400,
+        said: asked.value.error ?? "the machine could not read its config",
+      };
+    }
+    const found = (
+      asked.value.result as import("@cawco/core").ConfigInspection
+    ).mcp.find((row) => row.name === name && !row.managed);
+    return found
+      ? { ok: true, config: found.config as unknown as Record<string, unknown> }
+      : {
+          ok: false,
+          code: 404,
+          said: `${machineName(machineId)} has no unmanaged MCP server ${name}`,
+        };
+  };
+  /** Why a server's config and placement cannot be stored, or nothing. */
+  const mcpWriteProblem = (
+    name: string,
+    config: Record<string, unknown>,
+    body: Parameters<typeof boundProblem>[0] & { shared?: boolean }
+  ): string | undefined => {
+    const held = db.getMcpServer(name);
+    return (
+      mcpProblem(name, config) ??
+      boundProblem(body) ??
+      sharedProblem(
+        name,
+        config,
+        body.projectId === undefined && body.areaId === undefined
+          ? (held?.projectId ?? held?.areaId)
+          : (body.projectId ?? body.areaId),
+        body.shared ?? held?.shared ?? false
+      )
+    );
+  };
+
+  /** A fleet server as a read says it (core fleet-secrets.ts): every secret as set. */
+  const maskedMcp = (name: string) => {
+    const row = db.fleetConfig().mcp.find((one) => one.name === name);
+    return row && maskMcpServer(row);
   };
   // A sign-in that ended without the person is pushed, routed by presence;
   // the next sign-in takes that push down.
@@ -32874,7 +32949,7 @@ export const createServer = (
       case "mcp":
         await fleetMcp.probe(key);
         announceMcp();
-        return db.fleetConfig().mcp.find((row) => row.name === key) ?? null;
+        return maskedMcp(key) ?? null;
       case "delegateType":
         return delegateTypes.get(key) ?? null;
       case "memory":
@@ -34173,8 +34248,11 @@ export const createServer = (
             }
             case "answered":
               return answer.value.ok
-                ? (answer.value
-                    .result as import("@cawco/core").ConfigInspection)
+                ? // A machine's own connectors carry their keys: said as set.
+                  maskInspection(
+                    answer.value
+                      .result as import("@cawco/core").ConfigInspection
+                  )
                 : status(
                     500,
                     answer.value.error ??
@@ -35193,7 +35271,8 @@ export const createServer = (
           // needs both — a plugin the hub could not fetch and a plugin a machine
           // would not install are different faults with different fixes.
           config: {
-            mcp,
+            // Every secret said as set, never its value (core fleet-secrets.ts).
+            mcp: mcp.map(maskMcpServer),
             marketplaces,
             plugins: db.listPlugins().map(pluginRow),
           },
@@ -35213,9 +35292,16 @@ export const createServer = (
         "/api/fleet/mcp/:name",
         {
           body: t.Object({
-            // Stored and written verbatim, so the schema only asks that it be an
-            // object; `mcpProblem` checks the one field that makes it startable.
-            config: t.Record(t.String(), t.Unknown()),
+            // Stored as written once its secrets are settled (core
+            // fleet-secrets.ts `mergeMcpSecrets`), so the schema only asks that
+            // it be an object; `mcpProblem` checks the one field that makes it
+            // startable. Left out with `fromMachine`: the config that machine
+            // has under the name.
+            config: t.Optional(t.Record(t.String(), t.Unknown())),
+            /** Adopt the unmanaged server the machine has under this name (its config is read here, never sent to a screen). */
+            fromMachine: t.Optional(t.String()),
+            /** The checkout a project-scoped server was discovered in. */
+            cwd: t.Optional(t.String()),
             enabled: t.Optional(t.Boolean()),
             /**
              * One project's only: placed at each of its checkouts and
@@ -35243,26 +35329,45 @@ export const createServer = (
             shared: t.Optional(t.Boolean()),
           }),
         },
-        async ({ params, body, status }) => {
-          const problem =
-            mcpProblem(params.name, body.config) ??
-            boundProblem(body) ??
-            sharedProblem(
-              params.name,
-              body.config,
-              body.projectId === undefined && body.areaId === undefined
-                ? (db.getMcpServer(params.name)?.projectId ??
-                    db.getMcpServer(params.name)?.areaId)
-                : (body.projectId ?? body.areaId),
-              body.shared ?? db.getMcpServer(params.name)?.shared ?? false
+        async ({ params, body, set, status }) => {
+          const held = db.getMcpServer(params.name)?.config;
+          const read = body.fromMachine
+            ? await machineMcpConfig(
+                body.fromMachine,
+                params.name,
+                body.cwd,
+                set
+              )
+            : { ok: true as const, config: body.config };
+          if (!read.ok) {
+            return status(read.code, read.said);
+          }
+          const written = read.config;
+          if (!written) {
+            return status(
+              400,
+              "name a config, or the machine to adopt the server from"
             );
+          }
+          // What the write does not name of a secret, the server keeps; an
+          // adoption is the machine's config whole.
+          const settled = mergeMcpSecrets(
+            written,
+            body.fromMachine ? undefined : held,
+            mcpWords.secretNotHeld
+          );
+          if (!settled.ok) {
+            return status(400, settled.problem);
+          }
+          const config = settled.config as unknown as Record<string, unknown>;
+          const problem = mcpWriteProblem(params.name, config, body);
           if (problem) {
             return status(400, problem);
           }
 
           db.putMcpServer({
             name: params.name,
-            config: body.config as unknown as FleetMcpConfig,
+            config: settled.config,
             enabled: body.enabled,
             projectId: body.projectId,
             areaId: body.areaId,
@@ -35271,9 +35376,7 @@ export const createServer = (
           });
           await fleetMcp.probe(params.name);
           announceMcp();
-          const saved = db
-            .fleetConfig()
-            .mcp.find((row) => row.name === params.name);
+          const saved = maskedMcp(params.name);
           if (!saved) {
             return status(404, "MCP server was removed while probing.");
           }
@@ -41558,7 +41661,10 @@ export const createServer = (
               sendFrame(ws, {
                 verb: "frames",
                 machineId: "",
-                payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
+                payload: {
+                  kind: "fleet_mcp",
+                  servers: db.fleetConfig().mcp.map(maskMcpServer),
+                },
               } satisfies Envelope<FramePayload>);
             }),
             "fleet snapshot"

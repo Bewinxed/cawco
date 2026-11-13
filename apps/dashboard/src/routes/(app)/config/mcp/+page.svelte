@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FleetMcpServer } from "@cawco/core/fleet";
+  import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
   import { mcpWords as words } from "@cawco/core/words/mcp";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
@@ -49,7 +49,7 @@
   let syncing = $state(false);
   let syncFailed = $state(false);
 
-  function landed(row: FleetMcpServer) {
+  function landed(row: FleetMcpServerView) {
     const fleet = store.fleet.value;
     if (fleet) {
       upsert(fleet.config.mcp, row, (other) => other.name === row.name);
@@ -63,7 +63,7 @@
    * Remove: at once, from every machine, with Undo in the toast for as long
    * as the hub holds it, sign-in and all (deletes.ts).
    */
-  const acts = new RowActs<FleetMcpServer>("/config/mcp", {
+  const acts = new RowActs<FleetMcpServerView>("/config/mcp", {
     key: (row) => row.name,
     remove: (row) => deleteMcpServer(store, row.name),
     toggle: async (row, enabled) => {

@@ -23735,7 +23735,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigInspection"
+                  "$ref": "#/components/schemas/ConfigInspectionView"
                 }
               }
             }
@@ -25375,6 +25375,12 @@
                       "^.*$": {}
                     }
                   },
+                  "fromMachine": {
+                    "type": "string"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
                   "enabled": {
                     "type": "boolean"
                   },
@@ -25407,10 +25413,7 @@
                   "shared": {
                     "type": "boolean"
                   }
-                },
-                "required": [
-                  "config"
-                ]
+                }
               }
             }
           }
@@ -25422,7 +25425,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FleetMcpServer"
+                  "$ref": "#/components/schemas/FleetMcpServerView"
                 }
               }
             }
@@ -25453,6 +25456,26 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiFleetMcpByName 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiFleetMcpByName 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -34244,7 +34267,7 @@
               "mcp": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/FleetMcpServer"
+                  "$ref": "#/components/schemas/FleetMcpServerView"
                 }
               },
               "plugins": {
@@ -53241,234 +53264,108 @@
           "state"
         ]
       },
-      "ConfigInspection": {
-        "description": "What a session started in `cwd` would actually see, and what a machine has\noutside any project when `cwd` is absent. The answer to two questions the\ndashboard asks: \"what is on this machine that cawco does not manage?\" and\n\"what will this folder give me?\" — asked the moment a folder is chosen.",
-        "type": "object",
-        "properties": {
-          "at": {
-            "type": "number"
-          },
-          "cwd": {
-            "description": "Absent for a machine-wide read.",
-            "type": "string"
-          },
-          "marketplaces": {
-            "description": "Linked marketplaces, by name.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "mcp": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DiscoveredMcp"
-            }
-          },
-          "memory": {
-            "description": "The machine's own user CLAUDE.md, or null when it has none. `managed` says\ncawco wrote what is there — an unmanaged one is worth adopting. `docs`\nis whatever the machine has under `~/.claude/memories/`, read the same way.",
+      "ConfigInspectionView": {
+        "description": "What a machine has, as a read says it ({@link ConfigInspection}).",
+        "allOf": [
+          {
             "type": "object",
             "properties": {
-              "hash": {
-                "type": "string"
-              },
-              "bytes": {
+              "at": {
                 "type": "number"
               },
-              "managed": {
-                "type": "boolean"
+              "cwd": {
+                "description": "Absent for a machine-wide read.",
+                "type": "string"
               },
-              "docs": {
+              "skills": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "path": {
-                      "type": "string"
-                    },
-                    "hash": {
-                      "type": "string"
-                    },
-                    "bytes": {
-                      "type": "number"
-                    },
-                    "managed": {
-                      "type": "boolean"
-                    }
+                  "$ref": "#/components/schemas/DiscoveredSkill"
+                }
+              },
+              "memory": {
+                "description": "The machine's own user CLAUDE.md, or null when it has none. `managed` says\ncawco wrote what is there — an unmanaged one is worth adopting. `docs`\nis whatever the machine has under `~/.claude/memories/`, read the same way.",
+                "type": "object",
+                "properties": {
+                  "hash": {
+                    "type": "string"
                   },
-                  "required": [
-                    "bytes",
-                    "hash",
-                    "managed",
-                    "path"
-                  ]
+                  "bytes": {
+                    "type": "number"
+                  },
+                  "managed": {
+                    "type": "boolean"
+                  },
+                  "docs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "hash": {
+                          "type": "string"
+                        },
+                        "bytes": {
+                          "type": "number"
+                        },
+                        "managed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "bytes",
+                        "hash",
+                        "managed",
+                        "path"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "bytes",
+                  "docs",
+                  "hash",
+                  "managed"
+                ]
+              },
+              "plugins": {
+                "description": "Enabled plugin ids, as `plugin@marketplace`.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "marketplaces": {
+                "description": "Linked marketplaces, by name.",
+                "type": "array",
+                "items": {
+                  "type": "string"
                 }
               }
             },
             "required": [
-              "bytes",
-              "docs",
-              "hash",
-              "managed"
+              "at",
+              "marketplaces",
+              "plugins",
+              "skills"
             ]
           },
-          "plugins": {
-            "description": "Enabled plugin ids, as `plugin@marketplace`.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DiscoveredSkill"
-            }
-          }
-        },
-        "required": [
-          "at",
-          "marketplaces",
-          "mcp",
-          "plugins",
-          "skills"
-        ]
-      },
-      "DiscoveredMcp": {
-        "description": "One MCP server a machine really has, wherever it came from. What\n{@link INSPECT_CONFIG} reports — the fleet's own rows included, so a reader\nsees one list rather than two halves of one.",
-        "type": "object",
-        "properties": {
-          "config": {
-            "$ref": "#/components/schemas/FleetMcpConfig"
-          },
-          "managed": {
-            "description": "Whether cawco wrote it — an unmanaged row is one worth adopting.",
-            "type": "boolean"
-          },
-          "name": {
-            "type": "string"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/FleetScope"
-          },
-          "shadowedBy": {
-            "$ref": "#/components/schemas/FleetScope",
-            "description": "Set when a nearer scope defines the same name and wins. Claude Code's own\nprecedence is local > project > user, and a fleet server quietly shadowed\nby a checkout is the kind of thing a reader should be told, not debug."
-          }
-        },
-        "required": [
-          "config",
-          "managed",
-          "name",
-          "scope"
-        ]
-      },
-      "FleetMcpConfig": {
-        "description": "A serializable MCP server definition — the SDK's own config shapes minus the\nin-process `sdk` kind, which cannot cross a wire. Stored verbatim in the\nhub and written verbatim into `~/.claude.json`; `${VAR}` expansion inside\nis the CLI's own affair.",
-        "anyOf": [
           {
-            "$ref": "#/components/schemas/McpStdioServerConfig"
-          },
-          {
-            "$ref": "#/components/schemas/McpSSEServerConfig"
-          },
-          {
-            "$ref": "#/components/schemas/McpHttpServerConfig"
-          }
-        ]
-      },
-      "McpStdioServerConfig": {
-        "description": "MCP server config shapes, re-declared so `fleet.ts` stops importing the SDK.",
-        "type": "object",
-        "properties": {
-          "alwaysLoad": {
-            "type": "boolean"
-          },
-          "args": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "command": {
-            "type": "string"
-          },
-          "env": {
-            "type": "object"
-          },
-          "timeout": {
-            "type": "number"
-          },
-          "type": {
-            "const": "stdio",
-            "type": "string"
-          }
-        },
-        "required": [
-          "command"
-        ]
-      },
-      "McpSSEServerConfig": {
-        "type": "object",
-        "properties": {
-          "alwaysLoad": {
-            "type": "boolean"
-          },
-          "headers": {
-            "type": "object"
-          },
-          "timeout": {
-            "type": "number"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "sse"
+            "type": "object",
+            "properties": {
+              "mcp": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DiscoveredMcpView"
+                }
+              }
+            },
+            "required": [
+              "mcp"
             ]
-          },
-          "url": {
-            "type": "string"
           }
-        },
-        "required": [
-          "type",
-          "url"
-        ]
-      },
-      "McpHttpServerConfig": {
-        "type": "object",
-        "properties": {
-          "alwaysLoad": {
-            "type": "boolean"
-          },
-          "headers": {
-            "type": "object"
-          },
-          "timeout": {
-            "type": "number"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "http"
-            ]
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "url"
-        ]
-      },
-      "FleetScope": {
-        "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}),\n  or every project in one area ({@link FleetPlacement.areaId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status.",
-        "type": "string",
-        "enum": [
-          "local",
-          "project",
-          "user"
         ]
       },
       "DiscoveredSkill": {
@@ -53498,6 +53395,194 @@
           "name",
           "path",
           "scope"
+        ]
+      },
+      "DiscoveredMcpView": {
+        "description": "A machine's own server as a read says it.",
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/components/schemas/FleetScope"
+              },
+              "managed": {
+                "description": "Whether cawco wrote it — an unmanaged row is one worth adopting.",
+                "type": "boolean"
+              },
+              "shadowedBy": {
+                "$ref": "#/components/schemas/FleetScope",
+                "description": "Set when a nearer scope defines the same name and wins. Claude Code's own\nprecedence is local > project > user, and a fleet server quietly shadowed\nby a checkout is the kind of thing a reader should be told, not debug."
+              }
+            },
+            "required": [
+              "managed",
+              "name",
+              "scope"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "config": {
+                "$ref": "#/components/schemas/FleetMcpConfigView"
+              }
+            },
+            "required": [
+              "config"
+            ]
+          }
+        ]
+      },
+      "FleetScope": {
+        "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}),\n  or every project in one area ({@link FleetPlacement.areaId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status.",
+        "type": "string",
+        "enum": [
+          "local",
+          "project",
+          "user"
+        ]
+      },
+      "FleetMcpConfigView": {
+        "description": "A server's config as every read but a machine's sync says it.",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "stdio",
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "timeout": {
+                    "type": "number"
+                  },
+                  "alwaysLoad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "env": {
+                    "type": "object"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "sse"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "number"
+                  },
+                  "alwaysLoad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "url"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "headers": {
+                    "type": "object"
+                  },
+                  "urlSecret": {
+                    "$ref": "#/components/schemas/SecretSet",
+                    "description": "A secret as a read says it: set. Never a string, so it is never a value that could be saved back as one."
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "http"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "timeout": {
+                    "type": "number"
+                  },
+                  "alwaysLoad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "url"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "headers": {
+                    "type": "object"
+                  },
+                  "urlSecret": {
+                    "$ref": "#/components/schemas/SecretSet",
+                    "description": "A secret as a read says it: set. Never a string, so it is never a value that could be saved back as one."
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "SecretSet": {
+        "description": "A secret as a read says it: set. Never a string, so it is never a value that could be saved back as one.",
+        "type": "object",
+        "properties": {
+          "secret": {
+            "type": "string",
+            "enum": [
+              "set"
+            ]
+          }
+        },
+        "required": [
+          "secret"
         ]
       },
       "SlashCommand": {
@@ -58554,99 +58639,110 @@
           "unsupported"
         ]
       },
-      "FleetMcpServer": {
-        "description": "One MCP server the fleet should have, keyed by the name sessions see.",
-        "type": "object",
-        "properties": {
-          "auth": {
-            "description": "Hub-owned sign-in; credentials stay in the hub database.",
+      "FleetMcpServerView": {
+        "description": "A server as every read but a machine's sync says it.",
+        "allOf": [
+          {
             "type": "object",
             "properties": {
-              "mode": {
-                "$ref": "#/components/schemas/FleetMcpServerMode"
-              },
-              "state": {
-                "$ref": "#/components/schemas/FleetMcpServerState"
-              },
-              "detail": {
+              "name": {
                 "type": "string"
               },
-              "ended": {
-                "description": "The hub's sign-in ended without the person (the token endpoint refused\na refresh, or the server moved its authorization): when, epoch ms, and\nwhy in the provider's words. Only while `needs-auth`; the dashboard's\nNeeds you item. Never sent to a machine (hub fleet-mcp.ts `syncConfig`).",
+              "areaId": {
+                "description": "The hub `areas` row this is bound to, in place of one project: every\nproject in that area as the hub reads it (core areas.ts). A machine is\nsent it under each such project it holds, as that project's own row\n(hub project-placements.ts); a project's own row of the same key wins.\nOne of `projectId` and `areaId` is required unless `user`, never both.",
+                "type": "string"
+              },
+              "projectId": {
+                "description": "The hub `projects` row this is bound to. One of it and `areaId` is required unless `user`.",
+                "type": "string"
+              },
+              "cwd": {
+                "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
+                "type": "string"
+              },
+              "auth": {
+                "description": "Hub-owned sign-in; credentials stay in the hub database.",
                 "type": "object",
                 "properties": {
-                  "at": {
-                    "type": "number"
+                  "mode": {
+                    "$ref": "#/components/schemas/FleetMcpServerViewMode"
                   },
-                  "why": {
+                  "state": {
+                    "$ref": "#/components/schemas/FleetMcpServerViewState"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "ended": {
+                    "description": "The hub's sign-in ended without the person (the token endpoint refused\na refresh, or the server moved its authorization): when, epoch ms, and\nwhy in the provider's words. Only while `needs-auth`; the dashboard's\nNeeds you item. Never sent to a machine (hub fleet-mcp.ts `syncConfig`).",
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number"
+                      },
+                      "why": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "why"
+                    ]
+                  },
+                  "as": {
+                    "description": "As whom the provider signed the hub in (its ID token's email or name),\nwhile signed in and when it said. Never sent to a machine.",
                     "type": "string"
                   }
                 },
                 "required": [
-                  "at",
-                  "why"
+                  "mode",
+                  "state"
                 ]
               },
-              "as": {
-                "description": "As whom the provider signed the hub in (its ID token's email or name),\nwhile signed in and when it said. Never sent to a machine.",
+              "enabled": {
+                "description": "Disabled rows stay in the hub but are removed from the machines.",
+                "type": "boolean"
+              },
+              "platforms": {
+                "description": "The machine platforms it can run on, by the name each machine reports in\nits capabilities (`MachineCapabilities.platform`, Node's\n`process.platform`: \"darwin\", \"linux\", \"win32\"). A machine of another\nplatform is never sent it, so it is neither installed nor probed there.\nAbsent: every machine.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolPlatform"
+                }
+              },
+              "shared": {
+                "description": "One instance on each machine serves every session there, started at its\nfirst call (the agent's MCP gateway, packages/agent mcp-host.ts), rather\nthan one per session started with it. A stdio fleet server only, and\nonly one whose tools keep nothing per session and resolve no path\nagainst its working directory. Absent: one per session, as the harness\nstarts it.",
+                "type": "boolean"
+              },
+              "scope": {
+                "$ref": "#/components/schemas/FleetScope",
+                "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}),\n  or every project in one area ({@link FleetPlacement.areaId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+              },
+              "proxied": {
+                "description": "The config points at the hub's authenticated forwarder.",
+                "type": "boolean"
+              },
+              "placeId": {
+                "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
                 "type": "string"
               }
             },
             "required": [
-              "mode",
-              "state"
+              "enabled",
+              "name"
             ]
           },
-          "config": {
-            "$ref": "#/components/schemas/FleetMcpConfig"
-          },
-          "enabled": {
-            "description": "Disabled rows stay in the hub but are removed from the machines.",
-            "type": "boolean"
-          },
-          "name": {
-            "type": "string"
-          },
-          "platforms": {
-            "description": "The machine platforms it can run on, by the name each machine reports in\nits capabilities (`MachineCapabilities.platform`, Node's\n`process.platform`: \"darwin\", \"linux\", \"win32\"). A machine of another\nplatform is never sent it, so it is neither installed nor probed there.\nAbsent: every machine.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ToolPlatform"
-            }
-          },
-          "proxied": {
-            "description": "The config points at the hub's authenticated forwarder.",
-            "type": "boolean"
-          },
-          "shared": {
-            "description": "One instance on each machine serves every session there, started at its\nfirst call (the agent's MCP gateway, packages/agent mcp-host.ts), rather\nthan one per session started with it. A stdio fleet server only, and\nonly one whose tools keep nothing per session and resolve no path\nagainst its working directory. Absent: one per session, as the harness\nstarts it.",
-            "type": "boolean"
-          },
-          "areaId": {
-            "description": "The hub `areas` row this is bound to, in place of one project: every\nproject in that area as the hub reads it (core areas.ts). A machine is\nsent it under each such project it holds, as that project's own row\n(hub project-placements.ts); a project's own row of the same key wins.\nOne of `projectId` and `areaId` is required unless `user`, never both.",
-            "type": "string"
-          },
-          "cwd": {
-            "description": "The folder this copy is written into: set by the machine as it places a\nproject's row at one of the project's places there (agent\nfleet-place.ts), never by the hub, which sends each row once.",
-            "type": "string"
-          },
-          "placeId": {
-            "description": "The place this copy is for ({@link placeKeyOf} of its folder), on a\ncopy the machine placed: its converge keys what the copy came to under\n`<key>@<placeId>`, and its report says it per place\n({@link FleetSyncReport.placed}).",
-            "type": "string"
-          },
-          "projectId": {
-            "description": "The hub `projects` row this is bound to. One of it and `areaId` is required unless `user`.",
-            "type": "string"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}),\n  or every project in one area ({@link FleetPlacement.areaId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+          {
+            "type": "object",
+            "properties": {
+              "config": {
+                "$ref": "#/components/schemas/FleetMcpConfigView"
+              }
+            },
+            "required": [
+              "config"
+            ]
           }
-        },
-        "required": [
-          "config",
-          "enabled",
-          "name"
         ]
       },
       "FleetMarketplace": {
@@ -65067,7 +65163,7 @@
           "servers": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/FleetMcpServer"
+              "$ref": "#/components/schemas/FleetMcpServerView"
             }
           }
         },
@@ -67967,14 +68063,14 @@
           "working"
         ]
       },
-      "FleetMcpServerMode": {
+      "FleetMcpServerViewMode": {
         "type": "string",
         "enum": [
           "direct",
           "oauth"
         ]
       },
-      "FleetMcpServerState": {
+      "FleetMcpServerViewState": {
         "type": "string",
         "enum": [
           "failed",

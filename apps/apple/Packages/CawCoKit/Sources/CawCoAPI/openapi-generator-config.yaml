@@ -89,8 +89,8 @@ typeOverrides:
     FleetConvergeState: OpenEnums.FleetConvergeState
     FleetDecidesCaw: OpenEnums.FleetDecidesCaw
     FleetFaultCause: OpenEnums.FleetFaultCause
-    FleetMcpServerMode: OpenEnums.FleetMcpServerMode
-    FleetMcpServerState: OpenEnums.FleetMcpServerState
+    FleetMcpServerViewMode: OpenEnums.FleetMcpServerViewMode
+    FleetMcpServerViewState: OpenEnums.FleetMcpServerViewState
     FleetRefreshOutcome: OpenEnums.FleetRefreshOutcome
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind

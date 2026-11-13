@@ -1,11 +1,10 @@
 <script lang="ts">
+  import type { DiscoveredSkill, FleetSkillMeta } from "@cawco/core/fleet";
   import type {
-    ConfigInspection,
-    DiscoveredMcp,
-    DiscoveredSkill,
-    FleetMcpServer,
-    FleetSkillMeta,
-  } from "@cawco/core/fleet";
+    ConfigInspectionView,
+    DiscoveredMcpView,
+    FleetMcpServerView,
+  } from "@cawco/core/fleet-secrets";
   import { machineLabel } from "@cawco/core/machine-names";
   import { skillsWords as words } from "@cawco/core/words/skills";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -17,7 +16,7 @@
   import { IconChevronDown, IconChevronRight, IconLaptop } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
-  import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
+  import { adoptMcpServer, adoptSkill, inspectMachine } from "./fleet";
   import MachineAway from "./MachineAway.svelte";
   import { MachineWait } from "./machine-wait.svelte";
   import OsMark from "./OsMark.svelte";
@@ -33,12 +32,12 @@
     machines: Machine[];
     kind: "mcp" | "skills";
     taken: readonly string[];
-    onserver?: (row: FleetMcpServer) => void;
+    onserver?: (row: FleetMcpServerView) => void;
     onskill?: (row: FleetSkillMeta) => void;
   } = $props();
 
   let open = $state<Record<string, boolean>>({});
-  let found = $state<Record<string, ConfigInspection>>({});
+  let found = $state<Record<string, ConfigInspectionView>>({});
   let reading = $state<Record<string, boolean>>({});
   let unread = $state<Record<string, string>>({});
   let busy = $state<Record<string, boolean>>({});
@@ -71,14 +70,14 @@
     }
   }
 
-  async function adoptServer(machine: Machine, row: DiscoveredMcp) {
+  async function adoptServer(machine: Machine, row: DiscoveredMcpView) {
     const key = keyOf(machine.machineId, row.scope, row.name);
     busy[key] = true;
     delete adoptFailed[key];
     try {
       // The row turns "In the fleet", and the fleet's list gains it with its
       // rollout chip: that is the result.
-      onserver?.(await saveMcpServer(row.name, row.config, true, null));
+      onserver?.(await adoptMcpServer(row.name, machine.machineId));
     } catch (error) {
       adoptFailed[key] = message(error);
     } finally {
@@ -227,7 +226,7 @@
                         label={words.adopt}
                         onclick={() =>
                           kind === "mcp"
-                            ? adoptServer(machine, row as DiscoveredMcp)
+                            ? adoptServer(machine, row as DiscoveredMcpView)
                             : adopt(machine, row as DiscoveredSkill)}
                         pending={busy[key] === true}
                         pendingLabel={words.adopting}

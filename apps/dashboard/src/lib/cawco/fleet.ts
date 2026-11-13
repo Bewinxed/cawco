@@ -11,13 +11,9 @@ import type { Bounded } from "@cawco/core/bounded";
 import { PACKAGE_MANAGERS } from "@cawco/core/deps";
 import {
   CAWCO_OAUTH_URL,
-  type ConfigInspection,
   type Deleted,
   type FleetAgent,
-  type FleetConfig,
   type FleetMarketplace,
-  type FleetMcpConfig,
-  type FleetMcpServer,
   type FleetPlugin,
   type FleetSkillMeta,
   type MachineHookScript,
@@ -29,11 +25,14 @@ import {
   type MemoryVersion,
   parseAgentFrontMatter,
 } from "@cawco/core/fleet";
-import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
 import type {
-  McpHttpServerConfig,
-  McpSSEServerConfig,
-} from "@cawco/core/harness";
+  ConfigInspectionView,
+  FleetConfigRead,
+  FleetMcpConfigView,
+  FleetMcpConfigWrite,
+  FleetMcpServerView,
+} from "@cawco/core/fleet-secrets";
+import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
 import type { FleetHook } from "@cawco/core/hooks";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { FsEntry } from "@cawco/core/protocol";
@@ -73,7 +72,7 @@ export interface FleetSnapshot {
    * editor is seeded from this read rather than fetching each one again.
    */
   agents: FleetAgent[];
-  config: FleetConfig;
+  config: FleetConfigRead;
   /**
    * Marketplace links with no row yet: under way, or refused and not let go.
    * Each stands in the marketplace list until it lands or is let go.
@@ -145,11 +144,11 @@ export function suggestMcpName(pkg: string): string {
 
 /** Remote servers are the ones with an endpoint; stdio's `type` is optional. */
 export const isRemoteMcp = (
-  config: FleetMcpConfig
-): config is McpHttpServerConfig | McpSSEServerConfig => "url" in config;
+  config: FleetMcpConfigView
+): config is Extract<FleetMcpConfigView, { url: string }> => "url" in config;
 
 /** The one line a row shows: the command it runs, or the endpoint it calls. */
-export const describeMcp = (config: FleetMcpConfig): string =>
+export const describeMcp = (config: FleetMcpConfigView): string =>
   isRemoteMcp(config)
     ? config.url
     : [config.command, ...(config.args ?? [])].join(" ");
@@ -162,25 +161,48 @@ export const describeMcp = (config: FleetMcpConfig): string =>
 export const splitArgs = (line: string): string[] =>
   line.trim().split(WHITESPACE_PATTERN).filter(Boolean);
 
-/** Drops the blank rows a key/value editor always ends up carrying. */
-export function pairsToRecord(
-  rows: readonly { key: string; value: string }[]
-): Record<string, string> {
-  const record: Record<string, string> = {};
+/** One line of the key/value editor; `held` is a secret the hub holds, in the place of a value it never says. */
+export interface Pair {
+  held?: boolean;
+  key: string;
+  value: string;
+}
+
+/**
+ * The lines a key/value editor sends: a typed value sets or replaces its key;
+ * a line that holds a secret and was left empty is not sent, so the hub keeps
+ * it; a held key whose line is gone is `null`, which clears it. Blank lines
+ * are dropped.
+ */
+export function pairsToWrite(
+  rows: readonly Pair[],
+  heldKeys: readonly string[]
+): Record<string, string | null> {
+  const record: Record<string, string | null> = {};
   for (const row of rows) {
     const key = row.key.trim();
-    if (key) {
+    if (key && !(row.held && row.value === "")) {
       record[key] = row.value;
+    }
+  }
+  const standing = new Set(rows.map((row) => row.key.trim()));
+  for (const key of heldKeys) {
+    if (!standing.has(key)) {
+      record[key] = null;
     }
   }
   return record;
 }
 
-/** A record back into editor rows, always with one empty row to type into. */
+/** A read's secrets back into editor rows (each one held, its value empty), always with one empty row to type into. */
 export const recordToPairs = (
-  record: Record<string, string> | undefined
-): { key: string; value: string }[] => [
-  ...Object.entries(record ?? {}).map(([key, value]) => ({ key, value })),
+  record: Record<string, unknown> | undefined
+): Pair[] => [
+  ...Object.keys(record ?? {}).map((key) => ({
+    key,
+    value: "",
+    held: true,
+  })),
   { key: "", value: "" },
 ];
 
@@ -322,16 +344,42 @@ const erase = (request: HubRequest, attempt: string): Promise<Deleted> =>
  */
 export const saveMcpServer = (
   name: string,
-  config: FleetMcpConfig,
+  config: FleetMcpConfigWrite,
   enabled: boolean,
   projectId: string | null
-): Promise<FleetMcpServer> =>
+): Promise<FleetMcpServerView> =>
   put(
     hubRequest("PUT /api/fleet/mcp/:name", {
       path: { name },
-      body: { config, enabled, projectId },
+      body: {
+        config: config as unknown as Record<string, unknown>,
+        enabled,
+        projectId,
+      },
     }),
     `save ${name}`
+  );
+
+/**
+ * A server somebody set up on one machine, taken into the fleet: the hub
+ * reads its config off that machine, keys and all, which no screen is sent.
+ */
+export const adoptMcpServer = (
+  name: string,
+  machineId: string,
+  cwd?: string
+): Promise<FleetMcpServerView> =>
+  put(
+    hubRequest("PUT /api/fleet/mcp/:name", {
+      path: { name },
+      body: {
+        fromMachine: machineId,
+        ...(cwd ? { cwd } : {}),
+        enabled: true,
+        projectId: null,
+      },
+    }),
+    `adopt ${name}`
   );
 
 export const removeMcpServer = (name: string): Promise<Deleted> =>
@@ -426,7 +474,7 @@ export type McpSignInIntent =
 
 export const mcpSignInIntent = (
   text: string,
-  servers: readonly FleetMcpServer[]
+  servers: readonly FleetMcpServerView[]
 ): McpSignInIntent => {
   const match = text.trim().match(MCP_AUTH_RE);
   if (!match) {
@@ -434,7 +482,7 @@ export const mcpSignInIntent = (
   }
   const oauth = servers.filter((server) => server.auth?.mode === "oauth");
   const waiting = oauth.filter((server) => server.auth?.state !== "signed-in");
-  const names = (list: readonly FleetMcpServer[]) =>
+  const names = (list: readonly FleetMcpServerView[]) =>
     list.map((server) => server.name).join(", ");
   const [, asked] = match;
   if (asked) {
@@ -676,7 +724,7 @@ export const saveSkill = (
 export const inspectMachine = (
   machineId: string,
   cwd?: string
-): Promise<ConfigInspection> =>
+): Promise<ConfigInspectionView> =>
   hubCall(
     hubRequest("POST /api/agents/:machineId/inspect", {
       path: { machineId },

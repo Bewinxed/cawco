@@ -48,6 +48,7 @@ import {
   startingSetProblem,
 } from "@cawco/core";
 import { type AskRecord, PROJECT_SETTINGS } from "@cawco/core/asks";
+import { maskMcpConfig } from "@cawco/core/fleet-secrets";
 import { routinesWords } from "@cawco/core/words/routines";
 import {
   CALLS_DEFAULT_DAYS,
@@ -542,7 +543,8 @@ export const createTrim = (deps: TrimDeps) => {
         {
           action: "put",
           name: item.name,
-          config: row.config,
+          // As a read says it: the put keeps the secrets the server holds.
+          config: maskMcpConfig(row.config),
           enabled: false,
           ...(row.platforms ? { platforms: row.platforms } : {}),
           reason,

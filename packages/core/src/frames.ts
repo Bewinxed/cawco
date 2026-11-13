@@ -2,13 +2,13 @@
 
 import type { BrowserKey, ListedBrowser } from "./browser";
 import type {
-  FleetMcpServer,
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
   MarketplaceLink,
   MarketplaceRead,
 } from "./fleet";
+import type { FleetMcpServerView } from "./fleet-secrets";
 import type {
   HarnessKind,
   ModeAsk,
@@ -41,7 +41,7 @@ import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage";
 
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
-  servers: FleetMcpServer[];
+  servers: FleetMcpServerView[];
 }
 
 /**

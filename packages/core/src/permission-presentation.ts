@@ -21,10 +21,12 @@ import {
   WEB_SEARCH_TOOLS,
 } from "./delegate-types";
 import { type MemoryScope, scopeWords } from "./fleet";
+import { cardOfMcpWrite } from "./fleet-secrets";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./frames";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
+import { looksSecret, SECRET_KEY } from "./secret-shapes";
 import { DAY_MS } from "./time";
 import { areaWords } from "./words/areas";
 import { projectAccountWords } from "./words/project-account";
@@ -454,26 +456,10 @@ const hunkOf = (
 
 // ── fields and secrets ───────────────────────────────────────────────────
 
-/** A field whose name says it carries a credential. */
-const SECRET_KEY =
-  /secret|token|passw|api[-_]?key|apikey|auth|credential|cookie|private[-_]?key|^key$|bearer|session[-_]?id/iu;
-/** A value that reads as a credential whatever its field is called. */
-const SECRET_VALUE = [
-  /^(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/u,
-  /^gh[pousr]_[A-Za-z0-9]{20,}/u,
-  /^github_pat_[A-Za-z0-9_]{20,}/u,
-  /^xox[abprs]-[A-Za-z0-9-]{10,}/u,
-  /^AKIA[0-9A-Z]{16}$/u,
-  /^eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}$/u,
-  /^bearer\s+\S{8,}/iu,
-];
 /** Maps whose every value is private by nature: a server's environment, a request's headers. */
 const KEYS_ONLY = new Set(["env", "headers", "environment"]);
 
 export const HIDDEN = "(hidden)";
-
-const looksSecret = (value: string): boolean =>
-  SECRET_VALUE.some((pattern) => pattern.test(value.trim()));
 
 /** A value with every credential in it replaced by {@link HIDDEN}, at any depth. */
 export function redact(key: string, value: unknown): unknown {
@@ -958,7 +944,12 @@ function mcpServersWrite(
       },
     ]);
   }
-  const config = record(input.config) ?? {};
+  // The write as the server would stand after it, its secrets said as the
+  // hub reads them (fleet-secrets.ts): none of a held or a typed one shown.
+  const config = cardOfMcpWrite(
+    record(input.config) ?? {},
+    record(before?.config)
+  );
   // As the hub stores a put: `enabled` left out is on, `projectId` left out
   // keeps the binding it has.
   const enabled = input.enabled ?? true;

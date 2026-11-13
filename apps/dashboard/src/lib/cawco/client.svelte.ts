@@ -1209,7 +1209,8 @@ const listedById = $derived(
 const staleInstances = $derived.by(keepsLast(() => instances.filter(isStale)));
 
 const state = $state({
-  fleetMcp: null as import("@cawco/core/fleet").FleetMcpServer[] | null,
+  fleetMcp: null as
+    import("@cawco/core/fleet-secrets").FleetMcpServerView[] | null,
   previews: {} as Record<
     string,
     Extract<FramePayload, { kind: "preview" }> & {

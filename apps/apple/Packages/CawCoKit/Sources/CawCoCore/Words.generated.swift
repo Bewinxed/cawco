@@ -4081,6 +4081,26 @@ public enum Words {
 
         public static let envValue = "${MY_API_KEY}"
 
+        /// A secret the hub holds, in its value's place: the hub never says it, so typing replaces it and removing the line clears it.
+        public static let secretSet = "Set · type to replace"
+
+        /// Under the URL of a server whose address carries a key (a query parameter or a password).
+        public static let urlKeyHeld = "Key held for this address. Type a new one in the address to replace it."
+
+        public static let urlKeyClear = "Clear key"
+
+        public static let urlKeyCleared = "Key cleared when you save."
+
+        public static let urlKeyKeep = "Keep key"
+
+        /// What the hub answers a write that names a secret it holds none of.
+        public static func secretNotHeld(field: String, key: String) -> String {
+            "\(key) in \(field) is marked as set, but this server holds no value for it. Send the value."
+        }
+
+        /// The admin tool's note on `config`: how a secret is read and written.
+        public static let secretToolNote = "A secret reads as {secret:\"set\"}. In a put a string replaces it, null clears it, left out keeps it."
+
         public static let addPair = "Add"
 
         public static func removePair(key: String) -> String {

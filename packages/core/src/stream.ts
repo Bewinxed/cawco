@@ -281,12 +281,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    `setTables` (what joins the set, what leaves it) in place of
  *    `unlisted`, which drew only what leaves. A page built for 57 reads an
  *    `unlisted` the hub no longer sends, so it reloads first.
+ * 59: a fleet MCP server's secrets are said as set and never read back: its
+ *    `config.env` and `config.headers` carry `{ secret: "set" }` for each
+ *    value, and a URL's key is cut from `config.url` and said as
+ *    `config.urlSecret` (`GET /api/fleet`, the `fleet_mcp` frame, a
+ *    machine's inspection). A page built for 58 reads a value that is no
+ *    longer a string, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 58;
+export const WIRE_PROTOCOL = 59;
 
 /**
  * What a session's stream carries: the changes each frame made to its

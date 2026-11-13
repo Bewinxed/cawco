@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { mcpWords } from "@cawco/core/words/mcp";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -6,9 +7,12 @@
    * The env-vars and headers editor: a key and a value per line, with a blank
    * line always waiting at the bottom so adding one is typing, not clicking.
    * A line that arrives or is removed goes through reflow: it opens and
-   * fades in, or closes and fades out, the lines after it sliding.
+   * fades in, or closes and fades out, the lines after it sliding. A value is
+   * a secret: typed hidden, and one the hub holds (`held`) says it is set in
+   * place of its value, which the hub never sends, until something is typed.
    */
   import { IconClose } from "#lib/icons.js";
+  import type { Pair } from "./fleet";
 
   let {
     rows = $bindable(),
@@ -16,7 +20,7 @@
     keyPlaceholder,
     valuePlaceholder,
   }: {
-    rows: { key: string; value: string }[];
+    rows: Pair[];
     legend: string;
     keyPlaceholder: string;
     valuePlaceholder: string;
@@ -44,6 +48,7 @@
         face="mono"
         oninput={settle}
         placeholder={keyPlaceholder}
+        readonly={row.held}
         spellcheck="false"
         bind:value={row.key}
       />
@@ -54,8 +59,9 @@
         face="mono"
         style="--value-basis: 0%; --value-grow: 2"
         oninput={settle}
-        placeholder={valuePlaceholder}
+        placeholder={row.held ? mcpWords.secretSet : valuePlaceholder}
         spellcheck="false"
+        type="password"
         bind:value={row.value}
       />
       <Button

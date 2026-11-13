@@ -91,6 +91,7 @@ import {
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
+  CONTROL_MCP_STATUS,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_LOGIN,
@@ -132,6 +133,8 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { detach } from "@cawco/core/detach";
+import type { FleetMcpConfig } from "@cawco/core/fleet";
+import { maskMcpConfig } from "@cawco/core/fleet-secrets";
 import {
   accountConfigDir,
   accountIds,
@@ -3943,6 +3946,18 @@ class ClaudeSession implements HarnessSession {
     // or down to the new model's ceiling.
     if (method === CONTROL_SET_MODEL) {
       await this.#readEffort();
+    }
+    // What a screen is told of a server's config says its secrets as set
+    // (core fleet-secrets.ts), as every other read of a connector does.
+    if (method === CONTROL_MCP_STATUS && Array.isArray(answer)) {
+      return answer.map((server: McpServerStatus) =>
+        server.config
+          ? {
+              ...server,
+              config: maskMcpConfig(server.config as unknown as FleetMcpConfig),
+            }
+          : server
+      );
     }
     return answer;
   }

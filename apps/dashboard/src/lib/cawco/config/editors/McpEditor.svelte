@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core/fleet";
+  import type {
+    FleetMcpConfigWrite,
+    FleetMcpServerView,
+  } from "@cawco/core/fleet-secrets";
   import { mcpWords as words } from "@cawco/core/words/mcp";
   import { untrack } from "svelte";
   import {
@@ -10,6 +13,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
   import { page } from "$app/state";
@@ -18,7 +22,7 @@
   import {
     isRemoteMcp,
     mcpNameProblem,
-    pairsToRecord,
+    pairsToWrite,
     recordToPairs,
     saveMcpServer,
     splitArgs,
@@ -42,8 +46,10 @@
    * One MCP server: how every machine starts it, and what sessions call it.
    * A new name makes a new server; the old one stays until it is removed.
    */
-  let { server, taken }: { server: FleetMcpServer | null; taken: string[] } =
-    $props();
+  let {
+    server,
+    taken,
+  }: { server: FleetMcpServerView | null; taken: string[] } = $props();
 
   const store = configStore();
   const HUE = "var(--color-mark-6)";
@@ -79,6 +85,15 @@
   let url = $state(remote?.url ?? "");
   let transport = $state<"http" | "sse">(remote?.type ?? "http");
   let headers = $state(recordToPairs(remote?.headers));
+  /**
+   * The secrets the hub holds, as the last read named them: a held line that
+   * is gone from the editor is cleared on save, one left empty is kept.
+   */
+  let heldEnv = $state(Object.keys(local?.env ?? {}));
+  let heldHeaders = $state(Object.keys(remote?.headers ?? {}));
+  /** The address carries a key the hub holds; `clearUrlKey` has it cleared on save. */
+  let urlKeyHeld = $state(remote?.urlSecret !== undefined);
+  let clearUrlKey = $state(false);
   /** One project's only (placed at its checkouts and workspaces); "" for every machine. */
   let projectId = $state(untrack(() => server?.projectId ?? ""));
 
@@ -93,19 +108,20 @@
     return url.trim() !== "";
   });
 
-  function build(): FleetMcpConfig {
+  function build(): FleetMcpConfigWrite {
     if (mode === "remote") {
-      const sent = pairsToRecord(headers);
+      const sent = pairsToWrite(headers, heldHeaders);
       return {
         type: transport,
         url: url.trim(),
         ...(Object.keys(sent).length > 0 ? { headers: sent } : {}),
+        ...(urlKeyHeld && clearUrlKey ? { urlSecret: null } : {}),
       };
     }
     if (mode === "bunx") {
       return { command: "bunx", args: [pkg.trim(), ...splitArgs(pkgArgs)] };
     }
-    const passed = pairsToRecord(env);
+    const passed = pairsToWrite(env, heldEnv);
     const args = splitArgs(argsLine);
     return {
       command: command.trim(),
@@ -134,10 +150,12 @@
             pkgArgs,
             command,
             argsLine,
-            env,
+            // A secret is never kept through a reload: what is typed goes.
+            env: env.map((row) => ({ ...row, value: "" })),
             url,
             transport,
-            headers,
+            headers: headers.map((row) => ({ ...row, value: "" })),
+            clearUrlKey,
             projectId,
           },
     (stored) => {
@@ -153,6 +171,7 @@
         url,
         transport,
         headers,
+        clearUrlKey,
         projectId,
       } = stored);
     }
@@ -179,6 +198,18 @@
       if (server?.name !== saved.name) {
         return saved.name;
       }
+      // What was typed is in the hub now, and is no more shown: its lines
+      // say set, as a read does.
+      const { config } = saved;
+      env = recordToPairs("env" in config ? config.env : undefined);
+      headers = recordToPairs("headers" in config ? config.headers : undefined);
+      heldEnv = Object.keys("env" in config ? (config.env ?? {}) : {});
+      heldHeaders = Object.keys(
+        "headers" in config ? (config.headers ?? {}) : {}
+      );
+      urlKeyHeld = "urlSecret" in config && config.urlSecret !== undefined;
+      clearUrlKey = false;
+      url = "url" in config ? config.url : url;
       baseline = { name: saved.name, config: build(), projectId };
       return null;
     });
@@ -360,6 +391,25 @@
               bind:value={url}
             />
           </Field>
+          {#if urlKeyHeld}
+            <p
+              data-slot="note"
+              class="type-meta max-w-c-measure text-ink-muted"
+            >
+              {clearUrlKey ? words.urlKeyCleared : words.urlKeyHeld}
+              <Button
+                label={clearUrlKey ? words.urlKeyKeep : words.urlKeyClear}
+                onclick={() => {
+                  clearUrlKey = !clearUrlKey;
+                }}
+                pad="none"
+                size="xs"
+                tone="quiet"
+                type="button"
+                variant="link"
+              />
+            </p>
+          {/if}
           <Choice
             label={words.transport}
             onchange={(next) => {

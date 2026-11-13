@@ -30,6 +30,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { mcpWords } from "@cawco/core/words/mcp";
 import { z } from "zod";
 import { landedFetch } from "./fleet-fetches";
 import { byHandle } from "./handles";
@@ -893,7 +894,7 @@ export function adminTools() {
           .optional()
           .describe(
             "Required for put. stdio: { command, args? }; remote: " +
-              '{ type: "http"|"sse", url }.'
+              `{ type: "http"|"sse", url }. ${mcpWords.secretToolNote}`
           ),
         enabled: z.boolean().optional().describe("Defaults to true for put."),
         projectId: z
