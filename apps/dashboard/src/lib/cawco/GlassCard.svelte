@@ -599,7 +599,15 @@
         {#if one.card === "caw"}
           <CawPanel feed={liveFeed} onchoose={close} quiet={cawQuiet()} />
         {:else if one.card === "machines"}
-          <MachinesList />
+          <!-- The list scrolls inside the card, held to the room under the bar as Caw's panel's is (CawPanel `--list-max`). -->
+          <div
+            data-slot="list"
+            class="flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain max-phone:max-h-(--list-max-phone)"
+            style:--list-max={"min(calc(var(--spacing) * 140), calc(100dvh - calc(var(--spacing) * 30)))"}
+            style:--list-max-phone={"calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-3) - var(--safe-bottom) - calc(var(--spacing) * 24))"}
+          >
+            <MachinesList />
+          </div>
         {:else if one.card === "files"}
           <FilesFace onclose={close} />
         {:else}

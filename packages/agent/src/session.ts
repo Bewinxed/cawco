@@ -159,6 +159,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import { detach } from "@cawco/core/detach";
+import { readingLines, shortDetail } from "@cawco/core/fleet-fault-reason";
 import type { FleetItemKind } from "@cawco/core/fleet-items";
 import { ARTIFACT_PICTURE } from "@cawco/core/frames";
 import { inFlight } from "@cawco/core/loop-watch";
@@ -6140,7 +6141,7 @@ export class SessionSupervisor {
         await keepOnlyPlaceSets(placed.places);
       }
       const failed = [...this.#harnessFailures].map(
-        ([harness, error]) => `${harness}: ${error}`
+        ([harness, error]) => `${harness}: ${shortDetail(error) ?? "failed"}`
       );
       return {
         places,
@@ -6496,14 +6497,15 @@ export class SessionSupervisor {
       if ("error" in outcome) {
         const { error } = outcome;
         warn(`${which} on ${adapter.kind} failed: ${error}`);
-        mcpFailures.set(adapter.kind, String(error));
+        const short = shortDetail(String(error)) ?? "failed";
+        mcpFailures.set(adapter.kind, short);
         mcpByHarness[adapter.kind] = Object.fromEntries(
           (config?.mcp ?? []).map((row) => [
             row.name,
             {
               state: "failed",
               cause: "unknown",
-              detail: `${adapter.kind}: ${String(error)}`,
+              detail: `${adapter.kind}: ${short}`,
             },
           ])
         );
@@ -6563,12 +6565,7 @@ export class SessionSupervisor {
           ? only.item
           : {
               ...worstFleetState(readings.map(({ item }) => item)),
-              detail: readings
-                .map(
-                  ({ kind, item }) =>
-                    `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
-                )
-                .join("\n"),
+              detail: readingLines(readings),
             };
     }
     const names = new Set([
@@ -6605,12 +6602,7 @@ export class SessionSupervisor {
       );
       mcp[name] = {
         ...worst,
-        detail: readings
-          .map(
-            ({ kind, item }) =>
-              `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
-          )
-          .join("\n"),
+        detail: readingLines(readings),
       };
     }
     // Each project row's state said per place, as the hub keeps it.

@@ -415,6 +415,25 @@ export class FleetSync {
     this.#ready.delete(machineId);
   }
 
+  /**
+   * The machine's kept status of an item the hub no longer names is let go:
+   * nothing will ever converge it again, so it can only sit under the
+   * machine as a failure with a Retry that sends nothing (a workspace's
+   * `placedSkill:` rows, from before workspaces left the fleet sync).
+   */
+  #forget(machineId: string, desired: FleetItems): void {
+    const statuses = this.#deps.keptItems(machineId);
+    const stale = Object.keys(statuses).filter((id) => !desired.has(id));
+    if (stale.length === 0) {
+      return;
+    }
+    const kept = { ...statuses };
+    for (const id of stale) {
+      delete kept[id];
+    }
+    this.#deps.keepItems(machineId, kept);
+  }
+
   /** What an acknowledged delta carried is what the machine holds now; its forces are spent. */
   #hold(machineId: string, sent: InFlight): void {
     const acked = sent.delta.full
@@ -518,6 +537,7 @@ export class FleetSync {
       });
       return;
     }
+    this.#forget(machineId, desired);
     const forced = this.#forced.get(machineId) ?? new Set<string>();
     const items = diffItems(
       desired,

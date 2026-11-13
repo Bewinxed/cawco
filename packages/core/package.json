@@ -154,6 +154,7 @@
     "./stored-types": "./src/stored-types.ts",
     "./workspace-policy": "./src/workspace-policy.ts",
     "./fleet-items": "./src/fleet-items.ts",
+    "./fleet-fault-reason": "./src/fleet-fault-reason.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
     "./hub-repo": "./src/hub-repo.ts",
     "./forge-post": "./src/forge-post.ts",

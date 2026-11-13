@@ -11,6 +11,7 @@ import {
   type FleetItemStatus,
   type FleetSyncReport,
 } from "@cawco/core/fleet";
+import { type ReadFault, readFault } from "@cawco/core/fleet-fault-reason";
 import { itemKind, projectItemOf } from "@cawco/core/fleet-items";
 import { isHarnessConfigKind } from "@cawco/core/harness-config";
 import type { AgentRow, BuildInfo } from "@cawco/core/protocol";
@@ -210,54 +211,53 @@ export function fleetFaults(
 }
 
 /**
- * A machine's failed items gathered by the cause it gave for each, the
- * group with most items first: 141 items that failed for one reason are one
- * failure, said once, with one Retry (the machines panel).
+ * A machine's failed items gathered by the cause each gave, the group with
+ * most items first: 141 items that failed for one reason are one failure,
+ * said once, with one Retry (the machines panel).
  */
 export interface FailureGroup {
-  /** What the machine said, word for word; `undefined` when it said nothing. */
-  cause: string | undefined;
+  /** The harnesses it failed on and why, read down from what the machine said; `undefined` when it said nothing. */
+  cause: ReadFault | undefined;
   /** The items, in their words' order. */
   items: FleetFault[];
 }
 
+/** What identifies a cause: items that read the same group together. */
+export const causeKey = (cause: ReadFault | undefined): string =>
+  cause ? JSON.stringify([cause.harnesses, cause.reason]) : "";
+
 export function failureGroups(faults: readonly FleetFault[]): FailureGroup[] {
-  const byCause = Map.groupBy(
-    faults,
-    (item) => item.error?.trim() || undefined
-  );
-  return [...byCause]
-    .map(([cause, group]) => ({
-      cause,
-      items: group.toSorted((a, b) =>
-        itemWords(a.id).localeCompare(itemWords(b.id))
-      ),
-    }))
+  const byCause = Map.groupBy(faults, (item) => {
+    const said = item.error?.trim();
+    return said ? causeKey(readFault(said)) : "";
+  });
+  return [...byCause.values()]
+    .map((group) => {
+      const said = group[0]?.error?.trim();
+      return {
+        cause: said ? readFault(said) : undefined,
+        items: group.toSorted((a, b) =>
+          itemWords(a.id).localeCompare(itemWords(b.id))
+        ),
+      };
+    })
     .sort((a, b) => b.items.length - a.items.length);
 }
 
 /**
- * A harness's thrown converge as the agent joins it, one per line
- * (session.ts `#harnessFailures`: "opencode: Error: …"): the harness's name
- * says whose it was, and the "Error: " a thrown Error's string carries after
- * it says nothing more.
- */
-const HARNESS_ERROR = /^([\w-]+): (?:Error: )+/gmu;
-
-/**
- * A group's reason, in the error formula: what happened (the one item by
- * name, or the count), then the machine's cause as a sentence of its own.
+ * A group's reason, in the error formula: one sentence naming the item (or
+ * the count), the harnesses it failed on and why, with the status or the
+ * word for it. The machine's raw reply is never printed.
  */
 export function failureReason(group: FailureGroup): string {
   const [first] = group.items;
   const what =
     group.items.length === 1 && first
-      ? `${itemWords(first.id)} didn't set up.`
-      : `${group.items.length} items didn't set up.`;
-  const cause = group.cause
-    ?.replace(HARNESS_ERROR, "$1: ")
-    .replace(/\s+/gu, " ");
-  return `${what} ${cause ?? "The machine gave no reason."}`;
+      ? itemWords(first.id)
+      : `${group.items.length} items`;
+  return group.cause
+    ? fleetFaultWords.sentence(what, group.cause.harnesses, group.cause.reason)
+    : `${what} didn't set up. The machine gave no reason.`;
 }
 
 /** A group's Show details: each item by name, one to a line; none for a group of one, which its reason names. */

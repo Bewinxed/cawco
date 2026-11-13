@@ -3,12 +3,13 @@
    * The fleet items that didn't set up on one machine, under its row in the
    * machines list: one fault line per cause the machine gave (convergence.ts
    * `failureGroups`), never one per item. A line says the count, or the one
-   * item by name, then the machine's words for the cause; Show details lists
+   * item by name, then the harnesses and the reason in a few words, never the machine's reply; Show details lists
    * its items, and one Retry sends them all again (DESIGN.md: a failure is
    * told and recoverable). 141 items that failed for one reason read as one
    * failure (niftybot.art, 2026-10-23).
    */
   import {
+    causeKey,
     type FleetFault,
     failureDetails,
     failureGroups,
@@ -29,7 +30,7 @@
   const groups = $derived(failureGroups(items));
 </script>
 
-{#each groups as group (group.cause ?? "")}
+{#each groups as group (causeKey(group.cause))}
   <RowFault
     again={() => retry(group.items.map((item) => item.id))}
     againLabel="Retry"
