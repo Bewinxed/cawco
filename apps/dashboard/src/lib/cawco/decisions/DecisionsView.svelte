@@ -14,7 +14,10 @@
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
-  import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import type {
+    CawLead,
+    SeatedLead,
+  } from "#lib/cawco/project/caw-lead.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
@@ -45,14 +48,14 @@
   }: {
     projectId: string;
     projectName: string;
-    decisions: ProjectDecisions;
+    decisions: Pick<ProjectDecisions, "list" | "problem" | "read">;
     /** The page open in the pane; null: the list. */
     page: string | null;
     /** The card the open page is scrolled to. */
     card: string | null;
     /** Caw can start: the empty tab offers him the ask. */
     canTalk: boolean;
-    lead: CawLead;
+    lead: SeatedLead & Pick<CawLead, "ask">;
     now: number;
     /** This tab's address for a page and card. */
     hrefOf: (to: { card?: string | null; page?: string | null }) => string;

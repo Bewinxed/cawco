@@ -54,8 +54,14 @@
           clip.currentSrc || clip.src,
           canvas.toDataURL("image/jpeg", 0.8)
         );
-      } catch {
-        // A frame the page may not read leaves the box of a clip's shape.
+      } catch (error) {
+        // A frame the page may not read (another origin's, so the canvas is
+        // tainted) leaves the box of a clip's shape; anything else is a fault.
+        if (!(
+          error instanceof DOMException && error.name === "SecurityError"
+        )) {
+          throw error;
+        }
       }
     };
     // A media element's events don't bubble: heard on their way down.

@@ -31,6 +31,16 @@ import { memoryWords } from "./words/memory";
 export type FleetMcpConfig =
   McpStdioServerConfig | McpSSEServerConfig | McpHttpServerConfig;
 
+/** A config that names what starts it, as a fleet server holds it: a stdio server's command, a remote one's url and its type, http or sse. */
+export const isFleetMcpConfig = (
+  config: Record<string, unknown>
+): config is Record<string, unknown> & FleetMcpConfig =>
+  "url" in config || config.type === "http" || config.type === "sse"
+    ? (config.type === "http" || config.type === "sse") &&
+      typeof config.url === "string"
+    : typeof config.command === "string" &&
+      (config.type === undefined || config.type === "stdio");
+
 /** One MCP server the fleet should have, keyed by the name sessions see. */
 export interface FleetMcpServer extends FleetPlacement {
   /** Hub-owned sign-in; credentials stay in the hub database. */

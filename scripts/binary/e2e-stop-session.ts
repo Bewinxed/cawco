@@ -18,8 +18,11 @@ socket.onmessage = (event) => {
     if (frame.instanceId === instanceId && frame.payload?.kind === "error") {
       refused.push(frame.payload.message ?? text.slice(0, 300));
     }
-  } catch {
-    // Not a frame: nothing to read here.
+  } catch (error) {
+    // Not a frame (no JSON): nothing to read here.
+    if (!(error instanceof SyntaxError)) {
+      throw error;
+    }
   }
 };
 await new Promise<void>((resolve, reject) => {

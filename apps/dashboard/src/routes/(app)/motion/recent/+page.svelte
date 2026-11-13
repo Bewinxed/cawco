@@ -1,6 +1,5 @@
 <script lang="ts">
   import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
-  import type { PermissionRequestFrame } from "@cawco/core/frames";
   import { CAPABILITIES_NONE } from "@cawco/core/harness";
   import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import {
@@ -11,7 +10,6 @@
     InstanceRow,
     NamedSpawn,
     SessionPulse,
-    StoredRecent,
     TabNamed,
   } from "@cawco/core/protocol";
   import { CONTROL_STORED_RUN } from "@cawco/core/session/controls";
@@ -27,6 +25,8 @@
   import { onMount } from "svelte";
   import { z } from "zod";
   import Home from "#lib/cawco/home/Home.svelte";
+  import type { ProjectRow } from "#lib/cawco/projects.js";
+  import type { Machine } from "#lib/cawco/stores/board.svelte.js";
   import { MINI, OBELISK, STORED, storedListing } from "./stored-listing";
 
   /**
@@ -74,34 +74,7 @@
    * to it), so a first send on a stored transcript's page resumes it here.
    */
 
-  /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
-  interface Bench {
-    accountsState: { accounts: unknown };
-    adoptInstances: (rows: InstanceRow[]) => void;
-    areas: {
-      areas: { id: string; name: string; position: number }[];
-      read: boolean;
-    };
-    boardState: { machines: unknown[] };
-    frame: (
-      frame:
-        Parameters<CawcoDebug["frame"]>[0] | PermissionRequestFrame | object
-    ) => void;
-    leaveHub: () => void;
-    projectsState: { projects: unknown[]; projectsRead: boolean };
-    standHub: (
-      answer: (
-        instanceId: string,
-        kind: string,
-        intent: unknown,
-        commandId: string
-      ) => void,
-      spawn: (machineId: string, spawn: NamedSpawn) => Promise<void>,
-      control: (machineId: string, method: string, args: unknown[]) => unknown
-    ) => void;
-    standStored: (stored: StoredRecent) => void;
-  }
-  const debug = (globalThis as unknown as { __cawcoDebug: Bench }).__cawcoDebug;
+  const debug = window.__cawcoDebug;
 
   const now = Date.now();
 
@@ -667,13 +640,7 @@
    * `/api/areas` from a hub opened on a copy of its database): the bench
    * draws them instead of its own.
    */
-  interface Real {
-    agents: unknown[];
-    areas: { areas: Bench["areas"]["areas"] };
-    instances: InstanceRow[];
-    projects: unknown[];
-  }
-  const real = (globalThis as unknown as { __rbReal?: Real }).__rbReal;
+  const real = window.__rbReal;
   /** `?fleet`: the page is Fleet on a desk, beside the rail. */
   const fleet = params.has("fleet");
   /** `?stay`: the bench's hub outlives its page. */
@@ -685,9 +652,9 @@
   const ACCOUNTS = [
     { id: STUDIO, email: "rand@acme.studio", hue: "amber" },
     { id: "acc-max", email: "billing@acme.studio", hue: "blue" },
-  ];
+  ] as const;
 
-  function standReal(from: Real): void {
+  function standReal(from: NonNullable<typeof real>): void {
     debug.boardState.machines = from.agents;
     debug.areas.areas = from.areas.areas;
     debug.areas.read = true;
@@ -702,7 +669,7 @@
     debug.boardState.machines = [
       { machineId: OBELISK, hostname: OBELISK, os: "linux-x64" },
       { machineId: MINI, hostname: MINI, os: "darwin-arm64" },
-    ].map((machine) => ({
+    ].map((machine): Machine => ({
       ...machine,
       auth: "unknown",
       lastSeenAt: now,
@@ -716,6 +683,8 @@
             harnesses: [
               {
                 harness: "claude",
+                auth: "authenticated",
+                installed: true,
                 capabilities: {
                   ...CAPABILITIES_NONE,
                   permissionModes: PERMISSION_MODES.filter(
@@ -761,13 +730,17 @@
             machineId,
             movedAt: null,
             movedFrom: null,
+            reason: null,
+            refusalReach: null,
             state: "signed-in",
           }))
         ),
       };
     }
     debug.projectsState.projects = PROJECTS.map(
-      ([id, name, area, machineId]) => ({
+      ([id, name, area, machineId]): ProjectRow => ({
+        account: null,
+        accountAtLimit: "wait",
         id,
         name,
         areaId: area,
@@ -782,11 +755,14 @@
         links: [],
         places: [
           {
+            createdAt: new Date(now - 30 * DAY_MS).toISOString(),
             id: `${id}-place`,
             isPrimary: true,
             kind: "checkout",
             machineId,
             path: `/srv/${name}`,
+            projectId: id,
+            within: [],
           },
         ],
         primaryPlaceId: `${id}-place`,

@@ -81,6 +81,19 @@ function breathMs(): number {
   return dur("--duration-breath");
 }
 
+/** What a seat of Caw's reads of him (CawSeat): where he stands and what he says. */
+export type SeatedLead = Pick<
+  CawLead,
+  | "anchor"
+  | "holds"
+  | "inPanel"
+  | "open"
+  | "seat"
+  | "sentence"
+  | "shown"
+  | "status"
+>;
+
 /**
  * What the page holds for its Caw: the project's id and row (its load's,
  * then the dashboard's live one), whether a machine was online as it loaded,
