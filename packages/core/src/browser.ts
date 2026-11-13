@@ -456,6 +456,45 @@ export interface BrowserHandedBackFrame extends BrowserHandback {
   why: "person" | "unwatched" | "stopped";
 }
 
+/**
+ * Daemon-originated: a FIDO hybrid (caBLE) QR code extracted from a page in
+ * the project's browser. The hub relays it to every dashboard socket (the
+ * app's included), so the person's phone can start the caBLE transport.
+ */
+export interface PasskeyQrFrame {
+  /** ms epoch of when the agent extracted the FIDO URI from the QR code. */
+  extractedAt: number;
+  /** The FIDO URI the QR code encodes (`FIDO:/…`). */
+  fidoUri: string;
+  instanceId?: undefined;
+  /** The browser the QR appeared in. */
+  key: BrowserKey;
+  kind: "passkey_qr";
+  machineId: string;
+}
+
+/**
+ * App-originated: the 20-byte caBLE advert the phone produced from a
+ * {@link PasskeyQrFrame}'s FIDO URI. The hub relays it to the machine
+ * whose browser showed the QR, so the agent can inject the BLE advert
+ * into the page's WebAuthn ceremony.
+ */
+export interface PasskeyAdvertFrame {
+  /** The 20-byte caBLE advert, base64-encoded. */
+  advert: string;
+  instanceId?: undefined;
+  key: BrowserKey;
+  kind: "passkey_advert";
+  machineId: string;
+}
+
+/** Hub → daemon: a caBLE advert the person's phone produced for a passkey QR this browser showed. */
+export const PASSKEY_ADVERT = "browser.passkeyAdvert";
+export interface PasskeyAdvertArgs {
+  advert: string;
+  key: BrowserKey;
+}
+
 /** Whether `value` is a {@link BrowserKey}. */
 export const isBrowserKey = (value: unknown): value is BrowserKey =>
   typeof value === "string" && BROWSER_KEY.test(value);

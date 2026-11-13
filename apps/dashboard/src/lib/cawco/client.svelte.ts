@@ -4056,6 +4056,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "fleet_report" || frame.kind === "fleet_converge") {
     return;
   }
+  // Passkey frames are handled by the app; the web dashboard ignores them.
+  if (frame.kind === "passkey_qr" || frame.kind === "passkey_advert") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 

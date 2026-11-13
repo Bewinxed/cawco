@@ -2411,6 +2411,8 @@ const attach = (
         frame.kind === "browsers" ||
         frame.kind === "browser_handback" ||
         frame.kind === "browser_list" ||
+        frame.kind === "passkey_qr" ||
+        frame.kind === "passkey_advert" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone" ||
         frame.kind === "catalog_moved"

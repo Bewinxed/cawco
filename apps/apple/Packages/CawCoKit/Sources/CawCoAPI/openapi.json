@@ -1439,6 +1439,66 @@
         }
       }
     },
+    "/api/browsers/{key}/passkey-advert": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "advert": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "advert"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyPasskeyAdvert",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/stream-relay": {
       "get": {
         "operationId": "getApiStreamRelay",
@@ -31958,6 +32018,20 @@
           "ok"
         ]
       },
+      "postApiBrowsersByKeyPasskeyAdvert200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiProjectsByIdGate200": {
         "type": "object",
         "properties": {
@@ -38166,6 +38240,12 @@
             "$ref": "#/components/schemas/BrowserListFrame"
           },
           {
+            "$ref": "#/components/schemas/PasskeyQrFrame"
+          },
+          {
+            "$ref": "#/components/schemas/PasskeyAdvertFrame"
+          },
+          {
             "$ref": "#/components/schemas/RelayFrame"
           },
           {
@@ -38234,6 +38314,8 @@
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
             "browser_list": "#/components/schemas/BrowserListFrame",
+            "passkey_qr": "#/components/schemas/PasskeyQrFrame",
+            "passkey_advert": "#/components/schemas/PasskeyAdvertFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
             "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
             "stored": "#/components/schemas/StoredFrame",
@@ -67501,6 +67583,68 @@
         "required": [
           "browsers",
           "kind"
+        ]
+      },
+      "PasskeyQrFrame": {
+        "description": "Daemon-originated: a FIDO hybrid (caBLE) QR code extracted from a page in\nthe project's browser. The hub relays it to every dashboard socket (the\napp's included), so the person's phone can start the caBLE transport.",
+        "type": "object",
+        "properties": {
+          "extractedAt": {
+            "description": "ms epoch of when the agent extracted the FIDO URI from the QR code.",
+            "type": "number"
+          },
+          "fidoUri": {
+            "description": "The FIDO URI the QR code encodes (`FIDO:/…`).",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser the QR appeared in."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_qr"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "extractedAt",
+          "fidoUri",
+          "key",
+          "kind",
+          "machineId"
+        ]
+      },
+      "PasskeyAdvertFrame": {
+        "description": "App-originated: the 20-byte caBLE advert the phone produced from a\n{@link PasskeyQrFrame}'s FIDO URI. The hub relays it to the machine\nwhose browser showed the QR, so the agent can inject the BLE advert\ninto the page's WebAuthn ceremony.",
+        "type": "object",
+        "properties": {
+          "advert": {
+            "description": "The 20-byte caBLE advert, base64-encoded.",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_advert"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "advert",
+          "key",
+          "kind",
+          "machineId"
         ]
       },
       "RelayFrame": {

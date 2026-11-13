@@ -60,6 +60,8 @@ import {
   type BrowserState,
   isBrowserKey,
   type ListedBrowser,
+  PASSKEY_ADVERT,
+  type PasskeyAdvertArgs,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
 import { DAY_MS } from "@cawco/core/time";
@@ -577,6 +579,28 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
     },
 
+    /**
+     * Relays a caBLE advert from the person's phone to the machine whose
+     * browser showed the QR code.
+     */
+    async relayAdvert(
+      key: BrowserKey,
+      named: string | undefined,
+      advert: string
+    ): Promise<void> {
+      const machineId = machineOf(key, named);
+      answered<unknown>(
+        await deps.call(
+          machineId,
+          PASSKEY_ADVERT,
+          [{ key, advert } satisfies PasskeyAdvertArgs],
+          BROWSER_CALL_MS
+        ),
+        deps.machineName(machineId),
+        "receive the passkey advert"
+      );
+    },
+
     /** Every browser of the fleet, for Settings, the project page and every browser view. */
     list(): ListedBrowser[] {
       return db.browsers.list().map((row) => ({
@@ -654,6 +678,24 @@ export const browserRoutes = (browsers: Browsers) =>
       ({ params, body }) =>
         run(async () => {
           await browsers.remove(keyOf(params.key), body.machineId);
+          return { ok: true as const };
+        })
+    )
+    .post(
+      "/api/browsers/:key/passkey-advert",
+      {
+        body: t.Object({
+          advert: t.String({ minLength: 1 }),
+          machineId: t.Optional(t.String({ minLength: 1 })),
+        }),
+      },
+      ({ params, body }) =>
+        run(async () => {
+          await browsers.relayAdvert(
+            keyOf(params.key),
+            body.machineId,
+            body.advert
+          );
           return { ok: true as const };
         })
     );

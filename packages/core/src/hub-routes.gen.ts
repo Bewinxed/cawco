@@ -1504,6 +1504,15 @@ export interface components {
         key: string | number;
       };
     };
+    "POST /api/browsers/:key/passkey-advert": {
+      body: {
+        advert: string;
+        machineId?: string;
+      };
+      path: {
+        key: string | number;
+      };
+    };
     "POST /api/browsers/:key/remove": {
       body: {
         machineId?: string;

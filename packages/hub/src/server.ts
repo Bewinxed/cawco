@@ -476,6 +476,7 @@ import {
   type BrowserKey,
   type BrowserPageArgs,
   isBrowserKey,
+  type PasskeyQrFrame,
 } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
@@ -39885,6 +39886,17 @@ export const createServer = (
                 browsers.heardHandback({
                   ...(message.payload as BrowserHandedBackFrame),
                   machineId: message.machineId,
+                });
+                break;
+              }
+              // A FIDO hybrid QR code extracted from a browser page:
+              // relayed to every dashboard (the app starts the caBLE transport).
+              if (kind === "passkey_qr") {
+                const qr = message.payload as PasskeyQrFrame;
+                registry.broadcast({
+                  verb: "frames",
+                  machineId: message.machineId,
+                  payload: { ...qr, machineId: message.machineId },
                 });
                 break;
               }
