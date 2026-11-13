@@ -26,7 +26,6 @@
     type ShownFailure,
   } from "@cawco/core/preview/protocol";
   import {
-    askHubReach,
     PAGE_SILENT_MS,
     probePreview,
     unreachedOf,
@@ -117,7 +116,7 @@
     IconUndockLinear,
   } from "#lib/icons.js";
   import { graceWhile } from "#lib/platform/grace-while.svelte.js";
-  import { hub, hubPath } from "#lib/platform/hub.js";
+  import { hub } from "#lib/platform/hub.js";
   import {
     failureClause,
     failureWords,
@@ -218,6 +217,7 @@
     type RailSort,
   } from "./comment-rows";
   import { FrameLinks } from "./frame-links.svelte";
+  import { hubReach } from "./hub-reach";
   import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
@@ -572,11 +572,7 @@
     // `unreachedOf`): its load gets the proxy's page naming the hop
     // (`heardDown`), so the pane draws that hop's down state and tells the
     // hub (`artifactShown`).
-    const failed = unreachedOf(
-      await probePreview(origin, (asked) =>
-        askHubReach(hubPath(hub.api["preview-reach"], { origin: asked }))
-      )
-    );
+    const failed = unreachedOf(await probePreview(origin, hubReach));
     if (failed) {
       return previewUnreachedWords(
         new URL(origin).host,
@@ -857,9 +853,7 @@
     const timer = setTimeout(
       () => {
         downTries += 1;
-        probePreview(origin, (asked) =>
-          askHubReach(hubPath(hub.api["preview-reach"], { origin: asked }))
-        ).then((failed) => {
+        probePreview(origin, hubReach).then((failed) => {
           if (!live) {
             return;
           }
