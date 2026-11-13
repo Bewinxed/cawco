@@ -17,6 +17,7 @@ import type { WorkItemRow } from "./db/project-work";
 import { byHandle } from "./handles";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
+import type { AnyProblem } from "./refusal";
 import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
 import { isHubParent } from "./work-item-state";
 import type { PersonWait, QueuedDelegate } from "./work-items";
@@ -196,10 +197,10 @@ export interface DelegationTreeDeps {
   ) => Promise<{ pages: TranscriptPage[] } | { fault: string }>;
   /** What the session itself waits on the person for now (server.ts `personWaitOf`); undefined when nothing. */
   personWait: (instanceId: string) => PersonWait | undefined;
-  /** The session's plan progress, when it has steps (plans.ts). */
+  /** The session's plan progress, when it has steps (plans.ts); or its refusal. */
   plan: (
     instanceId: string
-  ) => Promise<{ done: number; total: number } | undefined>;
+  ) => Promise<{ done: number; total: number } | undefined | AnyProblem>;
   /** The delegates `caller` may withdraw, still queued (work-items `queuedOf`). */
   queued: (caller: string) => QueuedDelegate[];
   /** The session stopped at its account's limit, in words (at-limit.ts `stall`); undefined while it runs. */
@@ -423,7 +424,10 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     const report =
       item.headline ?? firstLine(item.result) ?? firstLine(item.error);
     const landingWait = deps.landingWait(item.id);
-    const plan = await deps.plan(item.instanceId).catch(() => undefined);
+    const plan = await deps.plan(item.instanceId).then(
+      (progress) => (progress && "done" in progress ? progress : undefined),
+      () => undefined
+    );
     const activity = row
       ? deps.activity(row)
       : { lastActivityAt: item.endedAt ?? item.createdAt, cacheWarm: false };

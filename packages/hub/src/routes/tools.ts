@@ -8,9 +8,10 @@ import {
   type ToolSigninChallenge,
   toolSpec,
 } from "@cawco/core/tools";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { peekToolStatus } from "../machine-answers";
+
 import { unreachable } from "../unreachable";
 
 export const toolRoutes = ({
@@ -49,10 +50,13 @@ export const toolRoutes = ({
     // browser. A sign-in already waiting there answers its kept link.
     .post(
       "/api/machines/:machineId/tools/:toolId/signin",
-      async ({ params, status }) => {
+      async ({ params }) => {
         const spec = toolSpec(params.toolId);
         if (!spec?.signin) {
-          return status(404, `${params.toolId} has no sign-in of its own.`);
+          return problem(404, {
+            code: "has-no-sign-own",
+            detail: `${params.toolId} has no sign-in of its own.`,
+          });
         }
         const key = `${params.machineId}:${params.toolId}`;
         const kept = pendingToolSignins.get(key);
@@ -68,13 +72,16 @@ export const toolRoutes = ({
         );
         switch (answer.kind) {
           case "unanswered":
-            return status(503, awayWords(params.machineId, answer));
+            return problem(503, {
+              code: "machine-away",
+              detail: awayWords(params.machineId, answer),
+            });
           case "answered": {
             if (!answer.value.ok) {
-              return status(
-                422,
-                answer.value.error ?? "The sign-in did not start."
-              );
+              return problem(422, {
+                code: "tool-signin-not-started",
+                detail: answer.value.error ?? "The sign-in did not start.",
+              });
             }
             const challenge = answer.value.result as ToolSigninChallenge;
             pendingToolSignins.set(key, challenge);
@@ -91,10 +98,13 @@ export const toolRoutes = ({
     .post(
       "/api/machines/:machineId/tools/:toolId/signin/complete",
       { body: t.Object({ code: t.String() }) },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         const spec = toolSpec(params.toolId);
         if (!spec?.signin) {
-          return status(404, `${params.toolId} has no sign-in of its own.`);
+          return problem(404, {
+            code: "has-no-sign-own",
+            detail: `${params.toolId} has no sign-in of its own.`,
+          });
         }
         const answer = await callAgent(
           params.machineId,
@@ -104,16 +114,19 @@ export const toolRoutes = ({
         );
         switch (answer.kind) {
           case "unanswered":
-            return status(503, awayWords(params.machineId, answer));
+            return problem(503, {
+              code: "machine-away",
+              detail: awayWords(params.machineId, answer),
+            });
           case "answered": {
             // Used or refused, the machine's sign-in is spent.
             pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);
             const tool = peekToolStatus({ result: answer.value.result });
             if (!(answer.value.ok && tool)) {
-              return status(
-                422,
-                answer.value.error ?? "The sign-in did not finish."
-              );
+              return problem(422, {
+                code: "tool-signin-not-finished",
+                detail: answer.value.error ?? "The sign-in did not finish.",
+              });
             }
             db.setAgentToolCell(params.machineId, tool);
             publishInstances(params.machineId);
@@ -132,9 +145,12 @@ export const toolRoutes = ({
           pinnedVersion: t.Optional(t.Union([t.String(), t.Null()])),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         if (!toolSpec(params.id)) {
-          return status(404, `no tool ${params.id}`);
+          return problem(404, {
+            code: "no-tool",
+            detail: `no tool ${params.id}`,
+          });
         }
 
         const policy = db.putToolPolicy(params.id, body);

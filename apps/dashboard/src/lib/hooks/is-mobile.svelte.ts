@@ -35,6 +35,10 @@ export const DRAWER_QUERY = "(width < 900px)";
  */
 export const PHONE_QUERY = "(width < 640px)";
 
+/** A phone in either hold: a finger, and the screen under the phone line on one side or the other (core `FORMS` tablet). */
+export const PHONE_HELD_QUERY =
+  "(pointer: coarse) and ((width < 640px) or (height < 640px))";
+
 /**
  * The app's one narrow line: under 900px wide, or a touch device held
  * upright. The Shell, the session deck and `/config` all ask this, and the

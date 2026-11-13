@@ -35,14 +35,15 @@ import {
   notedLine,
   wroteLine,
 } from "@cawco/core/words/comment-lines";
+import { problem } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
 import type { HubTimer } from "../lifetime";
 import { storedFilePath } from "../media";
+
 import type { ArtifactServiceDeps } from "./deps";
 import { heldPictures } from "./held-pictures";
 import type { createPageStore } from "./page-store";
-import { ArtifactRefusal } from "./refusals";
 import type { MarksOutcome } from "./shapes";
 
 /**
@@ -346,18 +347,25 @@ export const createMarks = (ctx: MarksContext) => {
   const askAgain = async (row: ArtifactRow, again: ReadonlySet<string>) => {
     const instance = holder(row);
     if (!instance) {
-      throw new ArtifactRefusal(409, artifactToolWords.askAgainNoSession);
+      return problem(409, {
+        code: "artifact-ask-again-no-session",
+        detail: artifactToolWords.askAgainNoSession,
+      });
     }
     const doc = docs.doc(row.id);
     const pins = [...readPins(doc).values()].filter((pin) => again.has(pin.id));
     if (pins.length === 0) {
-      throw new ArtifactRefusal(404, artifactToolWords.askAgainGone);
+      return problem(404, {
+        code: "artifact-ask-again-gone",
+        detail: artifactToolWords.askAgainGone,
+      });
     }
     if (delivering.has(row.id)) {
-      throw new ArtifactRefusal(
-        409,
-        "Its comments are on their way to the session already, so this didn't go."
-      );
+      return problem(409, {
+        code: "artifact-comments-on-their-way",
+        detail:
+          "Its comments are on their way to the session already, so this didn't go.",
+      });
     }
     const changes = getMeta(doc, "changes");
     const url = ctx.addressOf(row.id, doc);
@@ -390,10 +398,10 @@ export const createMarks = (ctx: MarksContext) => {
         outcome,
       });
       if (!outcome.ok) {
-        throw new ArtifactRefusal(
-          503,
-          `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. Ask again.`
-        );
+        return problem(503, {
+          code: "artifact-comment-undelivered",
+          detail: `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. Ask again.`,
+        });
       }
     } finally {
       delivering.delete(row.id);
@@ -407,25 +415,27 @@ export const createMarks = (ctx: MarksContext) => {
    */
   const retry = async (row: ArtifactRow, only: ReadonlySet<string>) => {
     if (!marksOwed(docs.doc(row.id)).owed.some((pin) => only.has(pin.id))) {
-      throw new ArtifactRefusal(
-        409,
-        "Nothing new to send on this comment: the session has heard all of it."
-      );
+      return problem(409, {
+        code: "artifact-comment-heard",
+        detail:
+          "Nothing new to send on this comment: the session has heard all of it.",
+      });
     }
     if (delivering.has(row.id)) {
-      throw new ArtifactRefusal(
-        409,
-        "Its comments are on their way to the session already, so this didn't go."
-      );
+      return problem(409, {
+        code: "artifact-comments-on-their-way",
+        detail:
+          "Its comments are on their way to the session already, so this didn't go.",
+      });
     }
     delivering.add(row.id);
     try {
       const outcome = await deliverMarks(row.id, only);
       if (outcome !== "nothing" && !outcome.ok) {
-        throw new ArtifactRefusal(
-          503,
-          `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. It's kept; Try again.`
-        );
+        return problem(503, {
+          code: "artifact-comment-undelivered",
+          detail: `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. It's kept; Try again.`,
+        });
       }
     } finally {
       delivering.delete(row.id);

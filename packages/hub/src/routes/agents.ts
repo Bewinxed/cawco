@@ -2,9 +2,10 @@
  * The machines the hub knows: reading them, their media, and removing one.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { machineOut } from "../machine-out";
 
 /**
  * A file's bytes as an answer to a request that may ask for a range of them:
@@ -60,14 +61,16 @@ export const agentListRoutes = ({
     // The fleet's list is the person's. A machine reads its own row alone,
     // by its own id (hub-auth.ts): what its CLI's health, install and
     // service checks ask.
-    .get("/api/agents", () => withPresence(db.listAgents()))
-    .get(
-      "/api/agents/:machineId",
-      hidden,
-      ({ params, status }) =>
-        machineRow(params.machineId) ??
-        status(404, machineFault(params.machineId, "unknown"))
-    );
+    .get("/api/agents", () => withPresence(db.listAgents()).map(machineOut))
+    .get("/api/agents/:machineId", hidden, ({ params }) => {
+      const row = machineRow(params.machineId);
+      return row
+        ? machineOut(row)
+        : problem(404, {
+            code: "no-machine",
+            detail: machineFault(params.machineId, "unknown"),
+          });
+    });
 
 export const agentMediaRoutes = ({
   contact,
@@ -101,16 +104,25 @@ export const agentMediaRoutes = ({
     .get(
       "/api/agents/:machineId/media",
       { query: t.Object({ path: t.String() }) },
-      async ({ params, query, request, status }) => {
+      async ({ params, query, request }) => {
         const answer = await readMachineMedia(params.machineId, query.path);
         if (answer === "offline") {
-          return status(503, machineFault(params.machineId, "offline"));
+          return problem(503, {
+            code: "machine-offline",
+            detail: machineFault(params.machineId, "offline"),
+          });
         }
         if (answer === "timeout") {
-          return status(504, machineFault(params.machineId, "silent"));
+          return problem(504, {
+            code: "machine-silent",
+            detail: machineFault(params.machineId, "silent"),
+          });
         }
         if ("refused" in answer) {
-          return status(404, answer.refused);
+          return problem(404, {
+            code: "agent-refused",
+            detail: answer.refused,
+          });
         }
         return rangedResponse(
           answer.bytes,
@@ -126,7 +138,7 @@ export const agentMediaRoutes = ({
     // One never listed (admitted, or added over SSH, whose agent never
     // proved its key) has no row, and what the hub holds for it goes all
     // the same: its key, its held connection, its SSH connection.
-    .delete("/api/agents/:machineId", ({ params, status }) => {
+    .delete("/api/agents/:machineId", ({ params }) => {
       const row = db
         .listAgents()
         .find((agent) => agent.machineId === params.machineId);
@@ -135,17 +147,20 @@ export const agentMediaRoutes = ({
           hubAuth.holdsMachine(params.machineId) ||
           sshTunnels.holds(params.machineId)
         )) {
-          return status(404, "No machine with that id on this hub.");
+          return problem(404, {
+            code: "no-machine",
+            detail: "No machine with that id on this hub.",
+          });
         }
         hubAuth.forgetMachine(params.machineId);
         sshTunnels.forget(params.machineId);
         return { sessions: 0 };
       }
       if (registry.agent(params.machineId)) {
-        return status(
-          409,
-          `${row.hostname} is online. Stop its agent first, then remove it.`
-        );
+        return problem(409, {
+          code: "online-stop-agent-first",
+          detail: `${row.hostname} is online. Stop its agent first, then remove it.`,
+        });
       }
       const gone = db.deleteMachine(params.machineId);
       forgetInstances(gone.instanceIds);

@@ -7,6 +7,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   type WorkspaceCommit,
 } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
@@ -759,6 +760,15 @@ export const createGate = ({
       pick(capable)
     );
   };
+  /** The project's gate ({@link projectGate}), the folder's refusal thrown on in its words, as the landing's failures are: finish_item answers them. */
+  const gateOf = async (projectId: string) => {
+    const declared = await projectGate(projectId);
+    if (declared instanceof ElysiaStatus) {
+      throw new Error(declared.response.detail);
+    }
+    return declared;
+  };
+
   /**
    * THE landing gate of an item: what stands between its finished work and
    * where it lands, and what no session writes. The steps its project
@@ -779,7 +789,7 @@ export const createGate = ({
     if (item.lands === "none" || !projectId) {
       return { declared: false, steps: [] };
     }
-    const declared = await projectGate(projectId);
+    const declared = await gateOf(projectId);
     if (declared.kind === "none") {
       return { declared: false, steps: [] };
     }

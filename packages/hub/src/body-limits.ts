@@ -20,6 +20,7 @@
  * the cap before the route reads it: past the cap it is refused, and within
  * it the route reads the body as it came.
  */
+import { problem } from "elysia";
 import { MAX_REQUEST_BYTES } from "./config";
 import { FILE_LIMIT_BYTES } from "./media";
 
@@ -40,13 +41,14 @@ const bodyLimitOf = (path: string): number => {
 const megabytes = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MB`;
 
-const tooLarge = (path: string, limit: number): Response =>
-  new Response(
-    path === FILES_PATH
-      ? `Files up to ${megabytes(limit)}.`
-      : `This route takes bodies up to ${megabytes(limit)}.\n`,
-    { status: 413 }
-  );
+const tooLarge = (path: string, limit: number) =>
+  problem(413, {
+    code: "body-too-large",
+    detail:
+      path === FILES_PATH
+        ? `Files up to ${megabytes(limit)}.`
+        : `This route takes bodies up to ${megabytes(limit)}.`,
+  });
 
 /** Whether a body that declares no length ends within `limit` bytes; reading stops past it. */
 const endsWithin = async (
@@ -72,12 +74,10 @@ const endsWithin = async (
  * The refusal of a request whose body its route does not take, before the
  * route reads the body; undefined when it may go on.
  */
-export const bodyLimitRefusal = async (
-  request: Request
-): Promise<Response | undefined> => {
+export const bodyLimitRefusal = async (request: Request) => {
   const path = new URL(request.url).pathname;
   if (path.startsWith(GIT_PATH)) {
-    return undefined;
+    return;
   }
   const limit = bodyLimitOf(path);
   const declared = request.headers.get("content-length");
