@@ -13,6 +13,7 @@
  *   unread mark of the sidebar's Recent list (recent.svelte.ts), and Done,
  *   the archive that takes a session off it (`archive`).
  */
+
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { archiveRefusal } from "@cawco/core/archive";
 import type { ProjectCap } from "@cawco/core/areas";
@@ -47,19 +48,12 @@ import {
 } from "#lib/platform/hub-read.js";
 import { unlessSame } from "#lib/platform/unless-same.js";
 import { epochOf } from "../board.svelte";
-import {
-  type BlockedRequest,
-  type BoardRow,
-  cawco,
-  type HubState,
-  isFailed,
-  type ProjectRow,
-} from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence } from "../convergence";
+import { connectionStore, type HubState } from "../hub/socket.svelte";
 import { hubAuth } from "../hub-auth.svelte";
 import { askOpens, isDelegateOf, landingOf, movedAt } from "../landing";
-import { conversationHref, resolveSessionTitle } from "../links";
+import { type BoardRow, conversationHref, resolveSessionTitle } from "../links";
 import { machineVerdict } from "../machine-verdict";
 import { type MarkHue, markHue } from "../mark";
 import { asksHere, onPhone, person, rowAsks } from "../person.svelte";
@@ -68,10 +62,22 @@ import {
   stageLabel,
   type TaskSummary,
 } from "../project-tasks";
+import type { ProjectRow } from "../projects";
 import { folderOf } from "../projects";
 import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
+import { asksStore } from "../stores/asks.svelte";
+import { boardStore, isFailed } from "../stores/board.svelte";
+import { mcpServersStore } from "../stores/mcp-servers.svelte";
+import { movesStore } from "../stores/moves.svelte";
+import { needsStore } from "../stores/needs.svelte";
+import { projectsStore } from "../stores/projects.svelte";
+import { relayStore } from "../stores/relay.svelte";
+import type { BlockedRequest } from "../stores/sessions.svelte";
+import { storedStore } from "../stores/stored.svelte";
+import { tailnetStore } from "../stores/tailnet.svelte";
+import { tickersStore } from "../stores/tickers.svelte";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
    What "ended since you last looked" means is the owner's looking on
@@ -141,7 +147,7 @@ function settleSeen(): void {
     if (mark.at === undefined) {
       return false;
     }
-    const row = cawco.instanceIndex.byId.get(id);
+    const row = boardStore.instanceIndex.byId.get(id);
     return !row || epochOf(row, "seenAt") >= mark.at;
   });
   if (echoed.length > 0) {
@@ -188,7 +194,7 @@ async function postSeen(
 export function markOpened(id: string): void {
   seenMarks += 1;
   const mark = seenMarks;
-  const row = cawco.instanceIndex.byId.get(id);
+  const row = boardStore.instanceIndex.byId.get(id);
   const through = (row && endedAt(row)) ?? 0;
   moveMarks((seen, cleared) => {
     seen.set(id, { mark, through });
@@ -257,7 +263,7 @@ function sendUnsent(): void {
  */
 export function archive(ids: string[]): void {
   for (const id of ids) {
-    const row = cawco.instanceIndex.byId.get(id);
+    const row = boardStore.instanceIndex.byId.get(id);
     const through = (row && endedAt(row)) ?? 0;
     detach(
       onRow(
@@ -273,7 +279,7 @@ export function archive(ids: string[]): void {
           });
           settleSeen();
           // One the board no longer lists leaves on the hub's answer too.
-          await cawco.olderMoved(id);
+          await storedStore.olderMoved(id);
         },
         () => archive([id])
       ),
@@ -650,7 +656,7 @@ export function sessionName(id: string | undefined): string {
 }
 
 export const machineName = (machineId: string): string => {
-  const machine = cawco.machines.find((m) => m.machineId === machineId);
+  const machine = boardStore.machines.find((m) => m.machineId === machineId);
   return machine ? machineLabel(machine.hostname) : machineId;
 };
 
@@ -667,7 +673,10 @@ const WORKSPACE_ID = /-[0-9a-f]{8}$/u;
  */
 function projectOf(machineId: string, cwd: string | null | undefined): string {
   const folder = cwd ?? "";
-  const project = projectHolding(cawco.projects, { machineId, cwd: folder });
+  const project = projectHolding(projectsStore.projects, {
+    machineId,
+    cwd: folder,
+  });
   return (
     project?.name ??
     (folder.split("/").filter(Boolean).pop() ?? "").replace(WORKSPACE_ID, "")
@@ -680,9 +689,9 @@ function projectOf(machineId: string, cwd: string | null | undefined): string {
  * rail places it; undefined while that session has none.
  */
 function rowProject(row: BoardRow): ProjectRow | undefined {
-  const top = topsIn(cawco.instanceIndex.byId)(row);
+  const top = topsIn(boardStore.instanceIndex.byId)(row);
   return top.projectId
-    ? cawco.projects.find((project) => project.id === top.projectId)
+    ? projectsStore.projects.find((project) => project.id === top.projectId)
     : undefined;
 }
 
@@ -695,7 +704,7 @@ export function projectOfRow(row: BoardRow): string {
   if (project) {
     return project.name;
   }
-  const top = topsIn(cawco.instanceIndex.byId)(row);
+  const top = topsIn(boardStore.instanceIndex.byId)(row);
   return projectOf(top.machineId, top.cwd);
 }
 
@@ -714,7 +723,10 @@ function projectAt(
   cwd: string | null | undefined
 ): ProjectMarking | null {
   const folder = cwd ?? "";
-  const project = projectHolding(cawco.projects, { machineId, cwd: folder });
+  const project = projectHolding(projectsStore.projects, {
+    machineId,
+    cwd: folder,
+  });
   if (project) {
     return { name: project.name, hue: markHue(folderOf(project)) };
   }
@@ -728,7 +740,7 @@ function projectMarkOfRow(row: BoardRow): ProjectMarking | null {
   if (project) {
     return { name: project.name, hue: markHue(folderOf(project)) };
   }
-  const top = topsIn(cawco.instanceIndex.byId)(row);
+  const top = topsIn(boardStore.instanceIndex.byId)(row);
   return projectAt(top.machineId, top.cwd);
 }
 
@@ -749,7 +761,7 @@ function placeOfRow(row: BoardRow): string {
 
 /** When a session last moved: its pulse, else the hub's own update time. */
 export function lastAt(row: BoardRow): number {
-  return movedAt(row, cawco.pulseAt(row.id));
+  return movedAt(row, boardStore.pulseAt(row.id));
 }
 
 /**
@@ -775,7 +787,9 @@ function endedAt(row: BoardRow): number | undefined {
   if (end === undefined) {
     return;
   }
-  return isFailed(row) || cawco.activityOf(row.id) === "idle" ? end : undefined;
+  return isFailed(row) || asksStore.activityOf(row.id) === "idle"
+    ? end
+    : undefined;
 }
 
 /**
@@ -832,7 +846,7 @@ const enteredWorking = new Map<string, number>();
  * test the Delegates switch and the tabs' counts both read.
  */
 export const isDelegate = (row: BoardRow): boolean =>
-  isDelegateOf(row, (id) => cawco.instanceIndex.byId.has(id));
+  isDelegateOf(row, (id) => boardStore.instanceIndex.byId.has(id));
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
@@ -852,18 +866,20 @@ interface MachineException {
  * and build are its verdict ({@link machineVerdict}): the served board's until the
  * socket's first snapshot, made from its own row after.
  */
-function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
+function exceptionOf(
+  machine: (typeof boardStore.machines)[number]
+): string | null {
   if (machine.status !== "online") {
     return "unreachable";
   }
   const verdict =
-    cawco.servedVerdictOf(machine.machineId) ??
+    boardStore.servedVerdictOf(machine.machineId) ??
     machineVerdict(machine, clock.now);
   return (
     verdict.sync ??
     verdict.blocked ??
     verdict.signIn ??
-    (buildConvergence(machine.build, cawco.hubBuild) === "behind"
+    (buildConvergence(machine.build, boardStore.hubBuild) === "behind"
       ? "behind hub"
       : verdict.faults)
   );
@@ -873,7 +889,7 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
 
 class Home {
   /** The hub is live: only then can an empty group be believed. */
-  readonly live = $derived(cawco.hub === "connected");
+  readonly live = $derived(connectionStore.hub === "connected");
 
   /**
    * Where the fleet's machines stand, once the hub is live and has listed
@@ -882,13 +898,13 @@ class Home {
    * claimed over a list still being read.
    */
   readonly machines = $derived.by<"none" | "offline" | "online" | null>(() => {
-    if (!(this.live && cawco.fleetRead)) {
+    if (!(this.live && boardStore.fleetRead)) {
       return null;
     }
-    if (cawco.machines.length === 0) {
+    if (boardStore.machines.length === 0) {
       return "none";
     }
-    return cawco.onlineMachines.length === 0 ? "offline" : "online";
+    return boardStore.onlineMachines.length === 0 ? "offline" : "online";
   });
 
   /**
@@ -907,7 +923,7 @@ class Home {
    */
   readonly #children = $derived.by(() => {
     const children = new Map<string, string[]>();
-    for (const row of cawco.instanceIndex.byId.values()) {
+    for (const row of boardStore.instanceIndex.byId.values()) {
       if (row.parentInstanceId) {
         const held = children.get(row.parentInstanceId);
         if (held) {
@@ -930,9 +946,9 @@ class Home {
       archiveRefusal(row.id, {
         // A session still starting is working, as the hub counts it.
         doing: (id) =>
-          cawco.instanceIndex.byId.get(id)?.status === "starting"
+          boardStore.instanceIndex.byId.get(id)?.status === "starting"
             ? "working"
-            : cawco.activityOf(id),
+            : asksStore.activityOf(id),
         childrenOf: (id) => this.#children.get(id) ?? [],
       }) === null
     );
@@ -958,7 +974,7 @@ class Home {
   }
 
   /**
-   * The home's one readiness rule: the board is in hand (`cawco.boardRead`:
+   * The home's one readiness rule: the board is in hand (`boardStore.boardRead`:
    * the rows, machines and projects as the server read them for this page,
    * or the store's own first read). Recent and Projects draw from it, and
    * stand as skeletons only until it is; what the machines store and the
@@ -967,7 +983,7 @@ class Home {
    * skeleton.
    */
   get ready(): boolean {
-    return cawco.boardRead;
+    return boardStore.boardRead;
   }
 
   /**
@@ -976,7 +992,10 @@ class Home {
    * served board is as fresh as the server's read, and is not.
    */
   get stale(): boolean {
-    return cawco.hub === "unreachable" || (!this.live && cawco.liveRead);
+    return (
+      connectionStore.hub === "unreachable" ||
+      (!this.live && boardStore.liveRead)
+    );
   }
 
   /**
@@ -985,8 +1004,8 @@ class Home {
    * quiet one: live and read, there is no line at all.
    */
   get status(): HubState | "reading" {
-    if (cawco.hub !== "connected") {
-      return cawco.hub;
+    if (connectionStore.hub !== "connected") {
+      return connectionStore.hub;
     }
     return this.ready ? "connected" : "reading";
   }
@@ -1004,12 +1023,12 @@ class Home {
   constructor() {
     $effect.root(() => {
       $effect(() => {
-        if (cawco.hub !== "connected") {
+        if (connectionStore.hub !== "connected") {
           this.#waitingRead.clear();
           return;
         }
-        for (const project of cawco.projects) {
-          const changes = cawco.tasksChangedOf(project.id);
+        for (const project of projectsStore.projects) {
+          const changes = tickersStore.tasksChangedOf(project.id);
           if (this.#waitingRead.get(project.id) === changes) {
             continue;
           }
@@ -1037,7 +1056,7 @@ class Home {
       // The looks the hub did not take go again as it is connected again:
       // once a connection, never on a mark's own change.
       $effect(() => {
-        if (cawco.hub === "connected") {
+        if (connectionStore.hub === "connected") {
           untrack(sendUnsent);
         }
       });
@@ -1045,7 +1064,7 @@ class Home {
   }
 
   readonly exceptions = $derived<MachineException[]>(
-    cawco.machines.flatMap((machine) => {
+    boardStore.machines.flatMap((machine) => {
       const word = exceptionOf(machine);
       return word ? [{ machineId: machine.machineId, text: word }] : [];
     })
@@ -1058,16 +1077,18 @@ class Home {
    * said over it.
    */
   readonly waitingOn = $derived(
-    cawco.machines.filter(
+    boardStore.machines.filter(
       (machine) =>
         machine.status !== "online" ||
-        cawco.staleInstances.some((row) => row.machineId === machine.machineId)
+        boardStore.staleInstances.some(
+          (row) => row.machineId === machine.machineId
+        )
     )
   );
 
   readonly needs = $derived.by<NeedsItem[]>(() => {
-    const asks: NeedsItem[] = cawco.blocked.map((item) => {
-      const row = cawco.instanceIndex.byId.get(item.instanceId);
+    const asks: NeedsItem[] = asksStore.blocked.map((item) => {
+      const row = boardStore.instanceIndex.byId.get(item.instanceId);
       const questions = questionsOf(item.request.toolName, item.request.input);
       // An ask no session row stands behind (a memory proposal) is titled
       // by who asked, as the hub named them.
@@ -1089,7 +1110,7 @@ class Home {
         machine: {
           name: machineName(item.machineId),
           os:
-            cawco.machines.find((one) => one.machineId === item.machineId)
+            boardStore.machines.find((one) => one.machineId === item.machineId)
               ?.os ?? "",
         },
         isQuestion: Boolean(questions),
@@ -1099,7 +1120,7 @@ class Home {
         stale: item.stale,
       };
     });
-    const caps: NeedsItem[] = cawco.capped.flatMap((project) =>
+    const caps: NeedsItem[] = projectsStore.capped.flatMap((project) =>
       project.cap
         ? [
             {
@@ -1114,8 +1135,10 @@ class Home {
           ]
         : []
     );
-    const actions: NeedsItem[] = cawco.actions.map((action) => {
-      const project = cawco.projects.find((one) => one.id === action.projectId);
+    const actions: NeedsItem[] = needsStore.actions.map((action) => {
+      const project = projectsStore.projects.find(
+        (one) => one.id === action.projectId
+      );
       const at = `/project/${encodeURIComponent(action.projectId)}`;
       return {
         kind: "action",
@@ -1138,8 +1161,8 @@ class Home {
             : (action.endedAt ?? action.createdAt),
       };
     });
-    const watched: NeedsItem[] = cawco.watchNotices.map((notice) => {
-      const row = cawco.instanceIndex.byId.get(notice.instanceId);
+    const watched: NeedsItem[] = needsStore.watchNotices.map((notice) => {
+      const row = boardStore.instanceIndex.byId.get(notice.instanceId);
       return {
         kind: "watch",
         key: `watch:${notice.instanceId}`,
@@ -1149,16 +1172,16 @@ class Home {
         cwd: row?.cwd ?? "",
         title: row ? instanceTitle(row) : notice.title,
         place: row ? placeOfRow(row) : machineName(notice.machineId),
-        href: conversationHref(notice.instanceId, cawco.instanceIndex),
+        href: conversationHref(notice.instanceId, boardStore.instanceIndex),
         raisedAt: notice.at,
       };
     });
     // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
-    const tailnet = cawco.tailnetHttps;
+    const tailnet = tailnetStore.tailnetHttps;
     const secured: NeedsItem[] =
       tailnet &&
       (tailnet.state === "needs" ||
-        (tailnet.state === "serving" && cawco.tailnetTicked))
+        (tailnet.state === "serving" && tailnetStore.tailnetTicked))
         ? [
             {
               kind: "tailnet",
@@ -1199,9 +1222,9 @@ class Home {
           ]
         : [];
     // The stream relay's journey: its row while it asks, its tick a moment after.
-    const journey = cawco.relayJourney;
+    const journey = relayStore.relayJourney;
     const relaying: NeedsItem[] =
-      journey && (journey.asks || (journey.done && cawco.relayTicked))
+      journey && (journey.asks || (journey.done && relayStore.relayTicked))
         ? [
             {
               kind: "relay",
@@ -1235,7 +1258,7 @@ class Home {
       raisedAt: machine.since,
     }));
     // A machine the hub lost, while it stays lost.
-    const lostMachines: NeedsItem[] = cawco.machines.flatMap((machine) =>
+    const lostMachines: NeedsItem[] = boardStore.machines.flatMap((machine) =>
       typeof machine.lostAt === "number"
         ? [
             {
@@ -1266,25 +1289,27 @@ class Home {
         href: `?${INSTALL_PARAM}=${encodeURIComponent(one.id)}`,
         raisedAt: one.endedAt ?? one.startedAt,
       }));
-    const waitingTasks: NeedsItem[] = cawco.projects.flatMap((project) =>
-      (this.#waiting[project.id] ?? []).map((task) => ({
-        kind: "task" as const,
-        key: `task:${project.id}:${task.id}`,
-        taskId: task.id,
-        title: task.title,
-        reason: task.kind === "you" ? ("review" as const) : ("failed" as const),
-        stage: stageLabel(task.stage),
-        place: project.name,
-        project: { name: project.name, hue: markHue(folderOf(project)) },
-        href: `/project/${encodeURIComponent(project.id)}?task=${encodeURIComponent(task.id)}`,
-        raisedAt: task.updatedAt,
-      }))
+    const waitingTasks: NeedsItem[] = projectsStore.projects.flatMap(
+      (project) =>
+        (this.#waiting[project.id] ?? []).map((task) => ({
+          kind: "task" as const,
+          key: `task:${project.id}:${task.id}`,
+          taskId: task.id,
+          title: task.title,
+          reason:
+            task.kind === "you" ? ("review" as const) : ("failed" as const),
+          stage: stageLabel(task.stage),
+          place: project.name,
+          project: { name: project.name, hue: markHue(folderOf(project)) },
+          href: `/project/${encodeURIComponent(project.id)}?task=${encodeURIComponent(task.id)}`,
+          raisedAt: task.updatedAt,
+        }))
     );
     // The artifacts waiting on you, each under its session as an ask is;
     // one put away with Not now waits in Files until it is raised again.
-    const artifacts: NeedsItem[] = cawco.artifactNeedsOpen.map((need) => {
-      const row = cawco.instanceIndex.byId.get(need.instanceId);
-      const machine = cawco.machines.find(
+    const artifacts: NeedsItem[] = needsStore.artifactNeedsOpen.map((need) => {
+      const row = boardStore.instanceIndex.byId.get(need.instanceId);
+      const machine = boardStore.machines.find(
         (one) => one.machineId === need.machineId
       );
       return {
@@ -1314,23 +1339,25 @@ class Home {
       };
     });
     // A fleet MCP server's sign-in that ended without the person.
-    const signIns: NeedsItem[] = (cawco.fleetMcp ?? []).flatMap((server) => {
-      const ended = server.auth?.state === "needs-auth" && server.auth.ended;
-      return ended
-        ? [
-            {
-              kind: "mcp" as const,
-              key: `mcp:${server.name}`,
-              server: server.name,
-              title: mcpWords.signInAgain(server.name),
-              why: ended.why,
-              place: mcpWords.what,
-              href: "/config/mcp",
-              raisedAt: ended.at,
-            },
-          ]
-        : [];
-    });
+    const signIns: NeedsItem[] = (mcpServersStore.fleetMcp ?? []).flatMap(
+      (server) => {
+        const ended = server.auth?.state === "needs-auth" && server.auth.ended;
+        return ended
+          ? [
+              {
+                kind: "mcp" as const,
+                key: `mcp:${server.name}`,
+                server: server.name,
+                title: mcpWords.signInAgain(server.name),
+                why: ended.why,
+                place: mcpWords.what,
+                href: "/config/mcp",
+                raisedAt: ended.at,
+              },
+            ]
+          : [];
+      }
+    );
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
@@ -1372,9 +1399,9 @@ class Home {
    */
   get empty(): boolean {
     return (
-      cawco.listedInstances.length === 0 &&
-      cawco.olderInstances.length === 0 &&
-      cawco.storedTranscripts.length === 0
+      boardStore.listedInstances.length === 0 &&
+      boardStore.olderInstances.length === 0 &&
+      storedStore.storedTranscripts.length === 0
     );
   }
 
@@ -1395,11 +1422,11 @@ class Home {
         }
         return [];
       }),
-      rows: cawco.runningInstances,
-      pulseAt: cawco.pulseAt,
-      listed: (id) => cawco.instanceIndex.byId.has(id),
+      rows: boardStore.runningInstances,
+      pulseAt: boardStore.pulseAt,
+      listed: (id) => boardStore.instanceIndex.byId.has(id),
       cancelled: new Set(
-        cawco.moves
+        movesStore.moves
           .filter((job) => job.stage === "cancelled")
           .map((job) => job.targetInstanceId)
       ),
@@ -1413,8 +1440,8 @@ class Home {
  * turn moving on or a row outside it changing wakes nothing past it.
  */
 function workingNow(): BoardRow[] {
-  const rows = cawco.runningInstances.filter(
-    (row) => cawco.activityOf(row.id) === "working"
+  const rows = boardStore.runningInstances.filter(
+    (row) => asksStore.activityOf(row.id) === "working"
   );
   // Ordered by when each joined Working this stint, newest first: a key
   // that never moves while it works, so two agents trading turns never
@@ -1429,7 +1456,7 @@ function workingNow(): BoardRow[] {
   for (const row of rows) {
     if (!enteredWorking.has(row.id)) {
       // Its turn's start when known (a page opened mid-turn), read once.
-      enteredWorking.set(row.id, cawco.turnSince(row.id) ?? at);
+      enteredWorking.set(row.id, boardStore.turnSince(row.id) ?? at);
     }
   }
   return rows.sort(

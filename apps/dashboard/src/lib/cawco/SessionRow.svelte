@@ -112,11 +112,10 @@
   import { stopWords } from "./accounts/switch.svelte";
   import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
-  import type { BoardRow } from "./client.svelte";
   import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
-  import { isSessionRow } from "./links";
+  import { type BoardRow, isSessionRow } from "./links";
   import RowFault from "./RowFault.svelte";
   import SessionMark from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
