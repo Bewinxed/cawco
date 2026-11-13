@@ -58,7 +58,7 @@ export type ReleaseRead =
   { at: number; version: string } | { at: number; failed: string };
 
 /** Reads one release URL ({@link VERSION}), within {@link RELEASE_WAIT_MS}. */
-export const readRelease = async (
+const readRelease = async (
   url: string,
   options: { fetcher?: typeof fetch; signal?: AbortSignal } = {}
 ): Promise<ReleaseRead> => {

@@ -77,7 +77,7 @@ export const spotElementId = (spot: FileSpot): string => {
 };
 
 /** Where in the file `spot` stands, in words: "page 3, near the top left", "lines 12–14". */
-export function fileSpotWords(spot: FileSpot): string {
+function fileSpotWords(spot: FileSpot): string {
   switch (spot.kind) {
     case "image":
       return words.near(words.image, words.region(spot.x, spot.y));

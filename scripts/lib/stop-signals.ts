@@ -2,18 +2,9 @@
  * The stop signals a script run ends on, and which of their listeners end
  * the process themselves.
  *
- * scratch-fleet.ts ends the process on a stop signal once its fleets'
- * browsers and folders are gone, unless a listener of the probe's own ends
- * it its own way after work of its own (browser-relay's containers, a tied
- * child's run: lib/tied-child.ts). Counting the signal's listeners could not
- * tell those apart from a library's: Playwright listens for SIGTERM and
- * SIGHUP while a browser it launched runs (`sigtermHandler() {
- * gracefullyCloseAll(); }`, playwright-core 1.64.1 processLauncher), only
- * closing its browsers, so a run signalled mid-spec went on with closed
- * browsers instead of ending. A listener that ends the process says so here.
- *
- * Imports nothing, so lib/deps.ts loads it in a checkout with no
- * dependencies.
+ * A tied child's run (lib/tied-child.ts) marks its stop listeners as ending
+ * the process themselves, so a library's listener (Playwright's, say) is not
+ * taken for one that does.
  */
 
 /** Each stop signal, by name, with its number for a shell-style exit (128 + it). */
@@ -27,7 +18,3 @@ export const endsTheProcess = <T extends () => void>(listener: T): T => {
   ENDERS.add(listener);
   return listener;
 };
-
-/** Whether a listener for `signal` now ends the process itself ({@link endsTheProcess}). */
-export const anotherEnds = (signal: EndSignal): boolean =>
-  process.listeners(signal).some((listener) => ENDERS.has(listener));

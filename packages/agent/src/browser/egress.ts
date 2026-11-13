@@ -112,10 +112,6 @@ const defaultRouteInterface = (table: string): string | undefined => {
   return best?.iface;
 };
 
-/** Whether `/proc/net/route`'s text holds an up IPv4 default route. */
-export const hasDefaultRoute = (table: string): boolean =>
-  defaultRouteInterface(table) !== undefined;
-
 /** The first `nameserver` of resolv.conf's text: pasta's DNS target ("By default, the first nameserver from the host's /etc/resolv.conf", passt.1 `--dns-host`). */
 const resolverOf = (resolvConf: string): string | undefined =>
   resolvConf
@@ -143,7 +139,7 @@ export interface MachineNetwork {
 type Interfaces = ReturnType<typeof networkInterfaces>;
 
 /** The machine's network from `/proc/net/route`'s text, resolv.conf's and the interfaces' addresses. */
-export const machineNetworkOf = (
+const machineNetworkOf = (
   table: string,
   resolvConf: string,
   interfaces: Interfaces

@@ -46,7 +46,7 @@ export const launchdLog = (name: string, dir = launchdLogsDir()): string =>
  * live file and one `.1` copy, so a service holds at most twice this on disk
  * (our call).
  */
-export const LAUNCHD_LOG_CAP_BYTES = 10 * 1024 * 1024;
+const LAUNCHD_LOG_CAP_BYTES = 10 * 1024 * 1024;
 
 /**
  * Every `cawco-<name>.log` in `dir` past {@link LAUNCHD_LOG_CAP_BYTES}, copied
@@ -98,7 +98,7 @@ export const removeLaunchdLog = async (
  * (a retiring keeper's job runs on with its plist removed), as `loaded`
  * lists them. Throws launchctl's own words when it cannot list the jobs.
  */
-export async function cawcoLaunchdServices(
+async function cawcoLaunchdServices(
   agents = join(homedir(), "Library", "LaunchAgents"),
   loaded: () => Promise<ReadonlyMap<string, unknown>> = launchdJobs
 ): Promise<Set<string>> {
@@ -178,7 +178,7 @@ const LaunchdStartSchema = z.object({
 type LaunchdStart = z.infer<typeof LaunchdStartSchema>;
 
 /** Where the job `label`'s start record is. */
-export const launchdStartPath = (label: string): string =>
+const launchdStartPath = (label: string): string =>
   join(homedir(), ".cawco", "launchd", `${label}.start.json`);
 
 /**

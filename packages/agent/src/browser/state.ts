@@ -190,9 +190,7 @@ export const browserOwner = async (): Promise<string> => {
 };
 
 /** The owner the browsers dir `dir` names, or undefined while its agent has made none. */
-export const keptBrowserOwner = async (
-  dir: string
-): Promise<string | undefined> =>
+const keptBrowserOwner = async (dir: string): Promise<string | undefined> =>
   (await readFile(join(dir, OWNER_FILE), "utf8").catch(() => "")).trim() ||
   undefined;
 

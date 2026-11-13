@@ -1001,24 +1001,6 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
   );
 };
 
-/**
- * {@link hostGitEnv} for the clone's own origin `origin` outside the hub,
- * with git-lfs held to one endpoint whatever the repository's committed
- * `.lfsconfig` names (move.ts {@link lfsPins}): the project's `declared`
- * one with its connection's credential ({@link declaredPins}), else the
- * origin's own LFS, its access `basic` where the host signs in there (gh for
- * github.com, or the host's own helpers, host-lfs.ts `hostSigns`). An ssh
- * origin's endpoint is the URL itself, for which git-lfs asks that server
- * over ssh, as {@link lfsConfigFor} gives another repository's. So a push's
- * or a fetch's large files go nowhere else, and the host's credential goes
- * to no other server.
- */
-export const hostOriginGitEnv = async (
-  origin: string,
-  declared?: DeclaredLfs
-): Promise<Record<string, string>> =>
-  withGitConfig(await hostGitEnv(), await originLfsPins(origin, declared));
-
 /** The git-lfs pins of {@link hostOriginGitEnv}, for `origin` and its project's `declared` endpoint. */
 const originLfsPins = async (
   origin: string,

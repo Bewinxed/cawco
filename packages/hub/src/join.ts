@@ -109,7 +109,7 @@ const TRAILING_DOT = /\.$/u;
  * never listed (core reachable-links.ts). A machine without the `tailscale` binary simply has no Tailscale
  * rows, and a hub with mDNS off has no `.local` row.
  */
-export const joinAddresses = async (): Promise<JoinAddress[]> => {
+const joinAddresses = async (): Promise<JoinAddress[]> => {
   const url = (host: string): string => `http://${host}:${HUB_PORT}`;
   const [ip, status] = await Promise.all([
     Bun.which("tailscale") ? output(["tailscale", "ip", "-4"]) : undefined,
@@ -191,10 +191,7 @@ const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/u;
  * leaves the machine on the build the hub offers its fleet, joined to this
  * hub, whatever it ran before (core install-script.ts).
  */
-export const installScript = (
-  joining: InstallJoin,
-  releaseHost?: string
-): string =>
+const installScript = (joining: InstallJoin, releaseHost?: string): string =>
   generateInstallScript({
     origin: `https://github.com/${RELEASE_REPOSITORY}`,
     releaseHost,

@@ -1689,7 +1689,7 @@ const labelOf = (row: Pick<ArtifactRow, "id" | "kind" | "name">): string =>
  * a live show spent 8.9 s outside its wait for a view, which the journal
  * named nowhere.
  */
-export const SLOW_SHOW_STEP_MS = 300;
+const SLOW_SHOW_STEP_MS = 300;
 
 /** One step of a show: its open, its machine's listener reached, its frame published, or its wait for a view. */
 export type ShowStep = "open" | "reach" | "publish" | "shown wait";

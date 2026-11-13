@@ -768,7 +768,7 @@ const methodFor = async (
 const SETTINGS_READ_MS = 30_000;
 
 /** A read of a tool's settings that gave none to decide on: the last line it said, when it said one. */
-export interface SettingsUnread {
+interface SettingsUnread {
   unread: string | undefined;
 }
 
@@ -777,7 +777,7 @@ export interface SettingsUnread {
  * settings when it printed them; none read when it didn't finish, failed
  * (with the last line it said), or printed anything else.
  */
-export const settingsAnswer = (
+const settingsAnswer = (
   ran: Ran | undefined
 ): SettingsRead | SettingsUnread => {
   if (ran?.code !== 0) {
@@ -926,7 +926,7 @@ type SwitchedOff = SwitchPlace & { list: SwitchList; variable: string };
  * automatic one (CawCo's own) too, and the answer says which list it is in.
  * None set: undefined.
  */
-export const switchedOffIn = (
+const switchedOffIn = (
   switches: ToolUpdateSwitches,
   automatic: boolean,
   env: Readonly<Record<string, string | undefined>>,

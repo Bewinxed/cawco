@@ -46,7 +46,7 @@ const machineFloor = (): MachineFloor => {
 };
 
 /** What a machine refuses to remove for a project, in words; undefined when the path may go. */
-export const removalRefusal = (
+const removalRefusal = (
   asked: RemoveFolder,
   floor: MachineFloor = machineFloor()
 ): string | undefined => {

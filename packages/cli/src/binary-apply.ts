@@ -124,7 +124,7 @@ const SERVICE_TIMEOUT_MS = 120_000;
 /** How long a build has to become healthy, from the swap or from a resumed helper's start, before it is rolled back (core {@link UPDATE_TRIAL_MS}). */
 const TRIAL_WINDOW_S = timerMs(UPDATE_TRIAL_MS) / 1000;
 /** How long the build must stay healthy, unbroken by its own fault, to be confirmed: a minute (the hub's silence pauses it, `TrialWatch`). */
-export const CONFIRM_MS = timerMs(60_000);
+const CONFIRM_MS = timerMs(60_000);
 /**
  * How long the hub is given after this machine wakes before any answer
  * counts against the build: the trial's deadline stands at least this far
@@ -132,7 +132,7 @@ export const CONFIRM_MS = timerMs(60_000);
  * 2026-11-07 the Mac's first probe, 1 s after each wake, found no answer),
  * and a tailnet's path to its hub is set up again within a minute.
  */
-export const WAKE_GRACE_MS = timerMs(60_000);
+const WAKE_GRACE_MS = timerMs(60_000);
 
 const lockPath = lockFilePath;
 const note = (line: string) =>
@@ -684,7 +684,7 @@ async function handOverKeeperAlone(version: string): Promise<void> {
  * throws, before anything is swapped. A journal left from a copy before is
  * removed with it: opened beside this one, SQLite would play it in.
  */
-export function backUpDatabase(db: string, previous: string): string {
+function backUpDatabase(db: string, previous: string): string {
   const copy = `${db}.pre-${previous}.bak`;
   rmSync(copy, { force: true });
   rmSync(`${copy}-journal`, { force: true });
@@ -876,7 +876,7 @@ async function settle(
  * binary-updates.ts `rolledBack`): the hub's silence after this machine
  * slept during the trial is the sleep's, not the hub's or the build's.
  */
-export const rollbackCause = (trial: TrialMarker): RollbackCause => {
+const rollbackCause = (trial: TrialMarker): RollbackCause => {
   if (!trial.hubSilent) {
     return "own";
   }
@@ -916,7 +916,7 @@ const causeWords = (cause: RollbackCause, trial: TrialMarker): string => {
  * the network was not back for count against nothing; the hold counts awake
  * time only. The sleep is written on the trial (`sleptMs`) and said.
  */
-export async function verify(
+async function verify(
   start: TrialMarker,
   holdMs: number,
   awake: AwakeTime
@@ -1393,7 +1393,7 @@ const SIDECARS = ["-journal", "-wal", "-shm"] as const;
  * in rollback-journal mode, with no WAL of its own to lose, and the hub
  * converts it to WAL as it opens it.
  */
-export async function putBackup(
+async function putBackup(
   db: string,
   backup: string,
   version: string

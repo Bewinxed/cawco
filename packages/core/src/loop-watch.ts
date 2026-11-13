@@ -36,7 +36,7 @@ import { loopWords } from "./words/loop";
 /** How often the loop is looked at. */
 const TICK_MS = 250;
 /** A tick this late found the loop held. Ours: four ticks, past any GC pause or burst of frames the agent should have. */
-export const LATE_MS = 1000;
+const LATE_MS = 1000;
 
 /** Whose loop this is, as its lines say it: "agent", "hub". */
 let who = "agent";

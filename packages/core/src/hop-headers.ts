@@ -20,4 +20,3 @@ export const HOP_BY_HOP_HEADERS = [
   "proxy-authenticate",
   "proxy-authorization",
 ] as const;
-export type HopByHopHeader = (typeof HOP_BY_HOP_HEADERS)[number];

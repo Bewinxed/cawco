@@ -147,7 +147,7 @@ const absent = (error: unknown): void => {
  * owner label, and the key is matched here, so no runtime's way of combining
  * two label filters decides what is found.
  */
-export const ownedBy = async (
+const ownedBy = async (
   docker: Docker,
   owner: string,
   key?: BrowserKey
@@ -190,7 +190,7 @@ const removeContainers = async (
  * Removes everything {@link ownedBy} names, containers first (a volume in
  * use cannot go): an agent's own browsers on a runtime, by its label alone.
  */
-export const removeOwned = async (
+const removeOwned = async (
   docker: Docker,
   owner: string,
   key?: BrowserKey

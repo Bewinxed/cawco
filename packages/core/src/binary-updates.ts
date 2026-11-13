@@ -210,7 +210,7 @@ export const UPDATE_TRIAL_MS = 180_000;
  * does, until a person installs it. A rollback for the build's own fault
  * marks it failed at once, whatever came before.
  */
-export const HUB_SILENT_TRIALS = 3;
+const HUB_SILENT_TRIALS = 3;
 
 /**
  * Why a trial was rolled back, as the failed-version rule reads it: the

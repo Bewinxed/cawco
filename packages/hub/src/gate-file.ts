@@ -308,7 +308,7 @@ const blockLines = (content: string): string[] | undefined => {
 };
 
 /** gate.md's block as steps and its ship command, or every problem it has. */
-export const readGate = (content: string): GateReading => {
+const readGate = (content: string): GateReading => {
   const block = blockLines(content);
   if (!block) {
     return {

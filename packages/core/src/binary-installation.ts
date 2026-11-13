@@ -245,8 +245,7 @@ const KEPT_INSTALLS = 3;
  * confirms a build. Never read from version names: a nightly's and a
  * stable's do not sort by when they went on.
  */
-export const installOrderPath = (): string =>
-  join(binaryRoot(), "install-order.json");
+const installOrderPath = (): string => join(binaryRoot(), "install-order.json");
 const readInstallOrder = async (): Promise<string[]> =>
   (await readRecord(installOrderPath(), z.array(z.string()))) ?? [];
 

@@ -70,7 +70,7 @@ export interface HubPorts {
   previews: { first: number; last: number };
 }
 
-export interface HubLoopback {
+interface HubLoopback {
   /** The hub's tailnet HTTPS as its latest answer says it: the next request carries by it. Answers whether its route moved. */
   follow: (tailnet: TailnetServing | undefined) => boolean;
   /** What it serves now, as the agent records it ({@link recordAgentState}). */
@@ -323,7 +323,7 @@ async function startHubLoopback(
  * hub-loopback-relay calls it straight: on one computer every address the
  * hub can stand on is this computer's own.
  */
-export async function carryElsewhere(
+async function carryElsewhere(
   hubHost: string,
   addresses: string[],
   ports: HubPorts,

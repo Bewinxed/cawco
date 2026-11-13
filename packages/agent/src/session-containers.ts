@@ -111,7 +111,7 @@ import { delegationHubUrl } from "./delegation";
 import { socketPlace } from "./tool-door";
 
 /** The label naming the session whose work created a container: its instance id. */
-export const SESSION_LABEL = "dev.cawco.session";
+const SESSION_LABEL = "dev.cawco.session";
 /** The label naming the machine whose agent served that session: its machine id. */
 const MACHINE_LABEL = "dev.cawco.machine";
 /**
@@ -180,7 +180,7 @@ const doorOf = (instanceId: string, kind: RuntimeKind): string =>
   join(doorDir(), `${instanceId}.${kind.slice(0, 1)}.sock`);
 
 /** The folder of endings under way, in the agent's data dir: one file each, named by its session, crossed off once done. */
-export const ENDING_DIR_NAME = "containers-ending";
+const ENDING_DIR_NAME = "containers-ending";
 const ENDING_DIR = (): string => join(cawcoDataDir(), ENDING_DIR_NAME);
 
 /** An ending as it is written down: the ids of the pods and containers it ends, and nothing else. */
@@ -188,7 +188,7 @@ const EndingRecordSchema = z.object({
   containers: z.array(z.string()),
   pods: z.array(z.string()),
 });
-export type EndingRecord = z.infer<typeof EndingRecordSchema>;
+type EndingRecord = z.infer<typeof EndingRecordSchema>;
 
 const exists = (path: string): Promise<boolean> =>
   stat(path).then(

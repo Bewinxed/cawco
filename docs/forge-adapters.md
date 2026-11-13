@@ -284,9 +284,3 @@ request, on Gitea a pull request.
   workers, `roles.ts`) → `/api/instances/:id/forge-post` → `forge-posts.ts`
   → the session's machine (`CONTROL_FORGE_POST`) → `forges/forge.ts`
   `forgePost`.
-- Probe kit: `git-door` (s: a workspace holds no forge token in its
-  commands' environment or its files, and its gh's post is made by the
-  GitHub door, through the workspace's real executor and runner,
-  `workspace-gh.ts`). Stand-ins in
-  `scripts/probe-kit/forge-stubs.ts`. The forge-adapters specs were cut on
-  2026-10-26 with the owner's Tools group.

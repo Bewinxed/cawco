@@ -2414,26 +2414,6 @@ const specsOf = (
   return ids.map((id) => specFor(id, mode, layout));
 };
 
-/** The dashboard's sockets as `cawco service install` writes them on this computer: each systemd socket unit, its service unit, and its launchd plist. */
-export const dashboardSocketTexts = (): {
-  launchd: string;
-  service: string;
-  systemd: { text: string; unit: string }[];
-} => {
-  const [spec] = specsOf(["dashboard"], "prod", undefined);
-  if (!spec?.sockets) {
-    throw new Error("the dashboard's service has no socket");
-  }
-  return {
-    systemd: spec.sockets.map((socket) => ({
-      unit: socketName(socket.unit),
-      text: socketUnit(spec, socket),
-    })),
-    service: unit(spec),
-    launchd: plist(spec),
-  };
-};
-
 /**
  * Rewrites the units of `ids` this build writes differently from what is on
  * disk, and has systemd reload its unit files once; restarts, starts and

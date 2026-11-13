@@ -68,7 +68,7 @@
 
 {#if drawer}
   <div
-    class="relative h-c-graph-drawer-head w-(--frame-w) overflow-clip bg-surface-page"
+    class="relative h-37 w-(--frame-w) overflow-clip bg-surface-page"
     style:--frame-w={`${width}px`}
     bind:this={layer}
   >

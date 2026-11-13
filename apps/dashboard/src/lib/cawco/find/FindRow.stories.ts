@@ -42,16 +42,12 @@ export default {
     phone: true,
     peekable: true,
     onpick: () => undefined,
-    row: row(
-      "conversation:9f997798",
-      "bun scripts/probe-kit/run.ts web transcript-holds --leg reload-far-up --width 390x844 --engine webkit",
-      {
-        glyph: Working,
-        breathes: true,
-        meta: ["obelisk", "cockpit"],
-        state: { tone: "live", word: "Working" },
-      }
-    ),
+    row: row("conversation:9f997798", "bun run check", {
+      glyph: Working,
+      breathes: true,
+      meta: ["obelisk", "cockpit"],
+      state: { tone: "live", word: "Working" },
+    }),
   },
   parameters: { viewport: 390 },
 };

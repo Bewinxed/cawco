@@ -43,7 +43,7 @@
  *
  * A run holds one of the machine's heavy-work slots (core heavy-slots.ts)
  * from before it reads the tree until it ends, taken in line behind every
- * other heavy run on the machine (merge checks, other checks, probe runs);
+ * other heavy run on the machine (merge checks, other checks);
  * one run under a merge check's slot (its environment says so) takes none
  * of its own. Either way it and every check it starts run at nice 10, in
  * the idle I/O class on Linux and never in macOS's darwin background (core
@@ -636,25 +636,6 @@ const gated: Gated[] = [
     "design-previews/",
     "apps/dashboard/src/lib/cawco/address/flow/",
   ]),
-  bun("scripts/probe-words-check.ts", [
-    "apps/",
-    ...PKG,
-    "scripts/probe-kit/",
-    "scripts/probe-words.baseline.json",
-  ]),
-  bun("scripts/probe-waits-check.ts", [
-    ...PKG,
-    "scripts/probe-kit/",
-    "scripts/scratch-fleet.ts",
-  ]),
-  bun("scripts/probe-groups-check.ts", ["scripts/probe-kit/"]),
-  bun("scripts/probe-creates-check.ts", [
-    "scripts/probe-kit/",
-    "scripts/scratch-fleet.ts",
-    "scripts/binary/",
-  ]),
-  // A probe waiting for a responses notice reads his view, never the session's read.
-  bun("scripts/probe-reads-check.ts", ["scripts/probe-kit/"]),
   bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),
   bun("scripts/setup-draft-check.ts", ["apps/dashboard/src/lib/cawco/"]),
   run("packages/hub", "openapi:check", [

@@ -291,7 +291,7 @@ export const CAWCO_MCP_SERVER = "cawco";
  * the catalog changes in no event or route, so the debounce is waited out.
  * Ours: the debounce ten times over.
  */
-export const CATALOG_SETTLE_MS = 1000;
+const CATALOG_SETTLE_MS = 1000;
 
 /** The locations each server's catalog has had its settle in ({@link CATALOG_SETTLE_MS}). */
 const catalogSettled = new WeakMap<OpencodeClient, Set<string>>();

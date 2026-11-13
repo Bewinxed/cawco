@@ -66,7 +66,7 @@ const PRINT_TIMEOUT = "9m";
  * to go word for word to whichever of them calls the tool, and holds it to
  * one call.
  */
-export const promptOf = (job: ImageJob, paths: string[]): string => {
+const promptOf = (job: ImageJob, paths: string[]): string => {
   const ratio = ratioOf(job.size);
   const brief = [
     `The image: ${job.prompt}`,

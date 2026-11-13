@@ -15,7 +15,6 @@ export {
   listedPid,
   ownPid,
   type Pid,
-  type Spawned,
   signal,
   spawnedPid,
 } from "./signal-wall";

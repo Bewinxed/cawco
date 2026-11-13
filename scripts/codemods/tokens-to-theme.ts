@@ -425,24 +425,6 @@ const EDITS: Edit[] = [
       "/** Every token's value, by name, from theme.css (each scheme's block alike). */",
   },
   {
-    file: "scripts/probe-kit/rendered-checks.ts",
-    find: '/** tokens.css\'s own values, each `var()` written out, for a page whose stylesheet names none of them. */\nconst TOKEN_VALUES = (() => {\n  const css = readFileSync(\n    join(ROOT, "apps", "dashboard", "src", "lib", "tokens", "tokens.css"),\n    "utf8"\n  );',
-    replace:
-      '/** The kit\'s tokens.css values (the declarations of the dashboard\'s theme.css), each `var()` written out, for a page whose stylesheet names none of them. A name is a colour token\'s, read as `--color-<name>`. */\nconst TOKEN_VALUES = (() => {\n  const css = readFileSync(\n    join(ROOT, "packages", "hub", "skills", "decision-page", "kit", "tokens.css"),\n    "utf8"\n  );',
-  },
-  {
-    file: "scripts/probe-kit/rendered-checks.ts",
-    find: '    names.map((name) => ({ name, value: out(raw.get(name) ?? "transparent") }));',
-    replace:
-      '    names.map((name) => ({\n      name: `color-$\u007bname}`,\n      value: out(raw.get(`color-$\u007bname}`) ?? "transparent"),\n    }));',
-  },
-  {
-    file: "scripts/probe-kit/specs/canvas-cost.ts",
-    find: 'readFileSync(join(APP, "src/lib/tokens/tokens.css"), "utf8")',
-    replace:
-      'readFileSync(\n    join(ROOT, "packages/hub/skills/decision-page/kit/tokens.css"),\n    "utf8"\n  )',
-  },
-  {
     file: "scripts/token-contrast-check.ts",
     find: " * The values come from the token build itself: `buildTokens` over\n * design/tokens/cawco.resolver.json and the build's own evaluator\n * (packages/hub/src/design-css.ts, on colorjs.io), which resolves",
     replace:
@@ -592,23 +574,6 @@ const EDITS: Edit[] = [
     find: "const tokens = JSON.parse(readFileSync(at('../../design/tokens/cawco.tokens.json'), 'utf8'));\n// DTCG colours: both are sRGB, written with their hex.\nconst paper = tokens.color.paper.$value.hex;\nconst ink = tokens.color['crow-ink'].$value.hex;",
     replace:
       "const theme = readFileSync(at('../../apps/dashboard/src/lib/tokens/theme.css'), 'utf8');\n// The theme's colours: both are written with their hex.\nconst hex = (name) => theme.match(new RegExp(`--color-$\u007bname}:\\\\s*(#[0-9a-f]{6})`, 'iu'))?.[1];\nconst paper = hex('paper');\nconst ink = hex('crow-ink');\nif (!(paper && ink)) throw new Error('theme.css has no --color-paper or --color-crow-ink.');",
-  },
-  {
-    file: "scripts/probe-kit/specs/artifacts.ts",
-    find: '/** The design tokens\' one source (CLAUDE.md, Design Context). */\nconst TOKENS = join(\n  import.meta.dir,\n  "../../../design/tokens/cawco.tokens.json"\n);',
-    replace:
-      "/** The design tokens' one source (CLAUDE.md, Design Context). */\nconst THEME = join(\n  import.meta.dir,\n  \"../../../apps/dashboard/src/lib/tokens/theme.css\"\n);\n/** The sidebar's width, as theme.css declares it. */\nconst SIDEBAR_WIDTH = /^\\s*--spacing-c-sidebar-w:\\s*([^;]+);/mu;",
-  },
-  {
-    file: "scripts/probe-kit/specs/artifacts.ts",
-    find: '  const width = (\n    (await Bun.file(TOKENS).json()) as {\n      size: { "c-sidebar-w": { $value: { value: number; unit: string } } };\n    }\n  ).size["c-sidebar-w"].$value;\n  const token = `$\u007bwidth.value}$\u007bwidth.unit}`;',
-    replace:
-      '  const token =\n    SIDEBAR_WIDTH.exec(await Bun.file(THEME).text())?.[1]?.trim() ?? "";',
-  },
-  {
-    file: "scripts/probe-kit/specs/artifacts.ts",
-    find: " *    design/tokens/cawco.tokens.json, as tokens.css carries it.",
-    replace: " *    apps/dashboard/src/lib/tokens/theme.css.",
   },
   {
     file: "packages/hub/skills/decision-page/kit/page.css",

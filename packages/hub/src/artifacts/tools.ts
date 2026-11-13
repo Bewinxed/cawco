@@ -55,7 +55,6 @@ export const ARTIFACT_TOOLS = [
   "settle",
   "question_close",
 ] as const;
-export type ArtifactTool = (typeof ARTIFACT_TOOLS)[number];
 
 /** A story's export name in a CSF file: `Roomy`. */
 export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;

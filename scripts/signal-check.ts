@@ -29,9 +29,6 @@ const OWN = new Set([
   "scripts/signal-check.ts",
 ]);
 
-/** Files that may make a Pid of a value the wall must refuse: the probe that proves it does. */
-const FORGES = new Set(["scripts/probe-kit/signal-wall-child.ts"]);
-
 /**
  * Files that still signal on their own, each with why. A file here with no
  * raw call left fails the check too, so the list holds only what is still
@@ -71,7 +68,7 @@ for (const file of files) {
     } else if (raw) {
       hits.push(`${raw[0]}: ${at}`);
     }
-    if (FORGED.test(line) && !FORGES.has(file)) {
+    if (FORGED.test(line)) {
       hits.push(`a cast to Pid: ${at}`);
     }
   }

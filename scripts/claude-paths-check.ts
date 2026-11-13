@@ -24,8 +24,6 @@ const ALLOWED: Record<string, string> = {
     "this check, whose own examples name the paths it looks for",
   "packages/jsonl-parser/bench/bench.ts":
     "a benchmark of a package that depends on nothing in the workspace (importing core drags it into that package's stricter compile); its default corpus is the operator's own ~/.claude/projects, and any other is its first argument",
-  "scripts/probe-kit/specs/skill-escape.ts":
-    "the skill-escape probe, which on purpose builds a NESTED `sub/.claude/skills/probe/` inside a delegate's clone — the adversarial path the clone-side deny list does not cover; paths.ts builds only the managed root `.claude`, never this one",
 };
 
 const EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|mjs|cjs|svelte)$/u;

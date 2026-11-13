@@ -2865,7 +2865,7 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 const saidUnknown = new Map<string, number>();
 
 /** The file in a workspace's state dir that holds its {@link BoundaryDecision}s. */
-export const DECISIONS_FILE = "boundary-decisions.json";
+const DECISIONS_FILE = "boundary-decisions.json";
 
 /** How many of a workspace's latest decisions its {@link DECISIONS_FILE} keeps. Ours: an update, a narrowing and the closes after them, with room. */
 const DECISIONS_KEPT = 32;
@@ -2929,7 +2929,7 @@ export type NarrowCause =
  * - `left-down`: it ended unasked again within {@link UNASKED_RESTART_MS}
  *   of being started again, and is left down.
  */
-export type BoundaryDecision =
+type BoundaryDecision =
   | (DecidedBoundary & {
       readonly agent: number;
       readonly at: number;
@@ -7426,73 +7426,6 @@ ${guardAfter(id, held)}if [ -n "$cwd_file" ] && [ "$status" = 0 ] && [ -s "$req/
 rm -rf "$req"
 exit "$status"
 `;
-};
-
-/**
- * Workspace `ref`'s executor and runner as this build writes them, for a
- * proof that runs them on the host with no sandbox around them (the probe
- * kit's git-door spec): the files the executor's environment names written
- * as arming writes them (gh's door config, git's system config), then the
- * executor's text for a runner at `pid` and the runner's own. Every command
- * still goes in through the same executor, its environment built by
- * {@link commandEnv}, and runs through the same runner: `bash -c <runner>
- * cawco <fifo>`, its pid both of the boundary's in `place`, `guarded`
- * naming no bind. With them, what a claude session runs under (the
- * claude-prefix spec): the paths and text of its shell prefix
- * ({@link claudePrefixScript}, for the executor at `execAt`), its hook
- * ({@link hookScript}, for a judge listening on `socket`), and what its
- * judge is handed after its socket for a policy at `policy`
- * ({@link judgeHanded}), its build to follow.
- */
-export const executorUnsandboxed = async (
-  ref: WorkspaceRef,
-  gen: string,
-  pid: Pid
-): Promise<{
-  claudeTmp: string;
-  exec: string;
-  execAt: string;
-  fifo: string;
-  guarded: string;
-  hook: (socket: string) => Promise<string>;
-  hookAt: string;
-  judgeHanded: (policy: string) => string[];
-  place: string;
-  prefix: string;
-  prefixAt: string;
-  runner: string;
-  scratch: string;
-}> => {
-  await writeGuardedGhConfig(ref.id);
-  await writeWhole(gitSystemConfigOf(ref.id), gitSystemConfig(ref.id), 0o644);
-  await writeChromiumShim(ref.id);
-  const execAt = join(stateDir(ref.id), "exec");
-  const hookAt = join(stateDir(ref.id), "hook");
-  return {
-    claudeTmp: workspaceClaudeTmpDir(ref.id),
-    exec: execScript(ref.id, {
-      exec: execAt,
-      gen,
-      path: ref.path,
-      pid,
-      scratch: scratchOf(ref.id),
-    }),
-    execAt,
-    fifo: fifoOf(ref.id, gen),
-    guarded: guardedOf(ref.id, gen),
-    hook: async (socket) =>
-      hookScript(ref.id, hookAt, {
-        socket,
-        address: await socketAddress(ref.id, socket),
-      }),
-    hookAt,
-    judgeHanded: (policy) => judgeHanded(ref.id, execAt, hookAt, policy),
-    place: placeOf(ref.id, gen),
-    prefix: claudePrefixScript(ref.id, execAt),
-    prefixAt: claudePrefixOf(ref.id),
-    runner: runnerText(),
-    scratch: scratchOf(ref.id),
-  };
 };
 
 /**

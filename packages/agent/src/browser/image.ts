@@ -128,7 +128,7 @@ export const pullImage = async (
  * Docker builds on its default bridge, in the machine's namespace when
  * rootful and RootlessKit's fixed one when rootless.
  */
-export const browserBuildOptions = (
+const browserBuildOptions = (
   tag: string
 ): { labels: Record<string, string>; t: string } => ({
   t: tag,

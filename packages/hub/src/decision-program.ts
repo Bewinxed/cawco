@@ -1054,7 +1054,7 @@ export const PAGE_DIALS = `<script>window.cawcoDialsHeld=[];window.cawcoDials=fu
 <script type="module" src="${DECISION_ASSETS}dials.js"></script>`;
 
 /** The page the hub serves for a program: the house faces, its host bundle, the program and its files' addresses in script tags, nothing else. */
-export const programHost = (
+const programHost = (
   program: string,
   title: string,
   files: Record<string, string>

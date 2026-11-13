@@ -36,7 +36,7 @@ export const parentOf = (pid: number): number | undefined => {
  * `inner` on record, whose parent is `outer`. Undefined once it is gone, or
  * once the pid names another process, which is never signalled.
  */
-export const sandboxInit = (
+const sandboxInit = (
   sandbox: { readonly inner: number; readonly outer: number },
   parent: (pid: number) => number | undefined = parentOf
 ): number | undefined =>

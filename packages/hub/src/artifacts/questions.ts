@@ -112,7 +112,7 @@ const ID_ENDS = /^(?:$|[\s>:.[+~#])/u;
  * its outermost selector starts at (`#decision-<id>`, or an HTML page's
  * `[data-cawco-choice="<id>"]`); null on none.
  */
-export const pinCard = (
+const pinCard = (
   anchor: Anchor,
   cards: readonly string[],
   media: ReadonlyMap<string, string>

@@ -45,7 +45,7 @@ import type {
  * every asker. A search of obelisk's 1.47M-document index answers in under
  * 0.8 s (fts5.ts `MARKED_CHARS`). Our call.
  */
-export const READ_LIMIT_MS = 5000;
+const READ_LIMIT_MS = 5000;
 /**
  * How long the process may say nothing while work runs, ms: it beats every
  * second its thread is free (host.ts), and each step of a sync is tens of

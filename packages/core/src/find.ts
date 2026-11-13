@@ -95,8 +95,7 @@ export const TRANSCRIPT_ANSWER_MS = 1500;
  * {@link TRANSCRIPT_ANSWER_MS} is chosen from. Measured on a copy of
  * obelisk's index (1.47M documents, 2026-10-25): the 34-word query an
  * agent's `find` asked answered in 552 ms, the 16- to 20-word ones in
- * 111–318 ms, a word or two in tens of ms; probe-kit search-held (a) holds
- * the 34-word one inside the window. Our call: the worst of those, with room.
+ * 111–318 ms, a word or two in tens of ms. Our call: the worst of those, with room.
  */
 export const TRANSCRIPT_QUERY_MS = 800;
 

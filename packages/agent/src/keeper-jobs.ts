@@ -84,7 +84,7 @@ const CGROUP_ROOT = "/sys/fs/cgroup";
  * but the keeper and their process trees. `force`: the person asked for the
  * stop outright, and it reaches everything in the unit.
  */
-export type UnitStop =
+type UnitStop =
   { readonly force: true } | { readonly children: readonly number[] };
 
 /** A keeper's stop refused: its unit holds processes CawCo did not start. Its message names each one. */

@@ -456,8 +456,7 @@ export const PIN_MAPS = [
 ] as const;
 
 /** An entry's key in `entries`: its pin's id and its own. */
-export const entryKey = (pin: string, entry: string): string =>
-  `${pin}:${entry}`;
+const entryKey = (pin: string, entry: string): string => `${pin}:${entry}`;
 
 /** The pin an `entries` key belongs to. */
 const entryPin = (key: string): string => key.slice(0, key.indexOf(":"));
@@ -1370,10 +1369,6 @@ const pinHeard = (current: Pin, sent: Pin, at: string): Pin => {
     ),
   };
 };
-
-/** Pin `pin` as delivered at `at`, just as it stands ({@link pinHeard}). */
-export const pinDelivered = (pin: Pin, at: string): Pin =>
-  pinHeard(pin, pin, at);
 
 /**
  * A version 4 UUID from `crypto.getRandomValues`: a page or a dashboard

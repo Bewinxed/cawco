@@ -130,7 +130,7 @@ export interface PreviewWays {
  * main thread a booting page holds up, and asks its last once that thread
  * runs a task on time ({@link quiet}).
  */
-export const INSTANT_REFUSAL_MS = 10;
+const INSTANT_REFUSAL_MS = 10;
 
 /** Our call: a probe unanswered in 10 s is a failed one. */
 const PROBE_ANSWER_MS = 10_000;

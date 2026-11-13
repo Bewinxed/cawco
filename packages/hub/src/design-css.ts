@@ -98,8 +98,8 @@ export function call(s: string): { name: string; args: string } | undefined {
 }
 
 /**
- * The viewport a viewport-relative length is read at: the phone the probe
- * kit and the Apple app draw at (scripts/probe-kit/kit.ts `phone`, 390×844).
+ * The viewport a viewport-relative length is read at: the phone the Apple
+ * app draws at (390×844).
  * A sheet's `85vh` cap is a size on that phone, which is what the Apple
  * platform's constant means; the dashboard writes the CSS as it is.
  */

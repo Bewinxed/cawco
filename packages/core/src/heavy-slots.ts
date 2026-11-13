@@ -5,8 +5,7 @@
  * item's merge checks (the hub's gate steps, agent hub-command.ts), a stage
  * clone's install (agent stage-clone.ts), `bun run check` wherever it runs
  * (scripts/check.ts: `golar tsc -b`, Biome, Golar's lint and the house
- * checks), and a probe run (scripts/probe-kit/slot.ts: a dashboard build, a
- * dev or preview server, a browser, a scratch fleet). One pool for all of
+ * checks). One pool for all of
  * them: what the machine has room for is one number, whoever asks.
  *
  * WHY. On 2026-10-25 obelisk (48 cores, 188 GB) ran at load 150–190 for
@@ -99,7 +98,7 @@ export const HEAVY_SLOT_ENV = "CAWCO_HEAVY_SLOT";
  * at nice 10; under it a merge check's golar tsc, Golar's lint, Biome and
  * three rendered-checks runs each ran past the check runner's 240 s and failed.
  */
-export const HEAVY_NICE = 10;
+const HEAVY_NICE = 10;
 
 /**
  * Shell lines that put the shell running them, and everything it starts
@@ -170,7 +169,7 @@ const GIB_PER_SLOT = 16;
 const GIB = 1024 ** 3;
 
 /** The machine's slots: one per {@link CORES_PER_SLOT} cores and per {@link GIB_PER_SLOT} GiB, whichever is fewer, at least one. */
-export const machineSlots = (): number =>
+const machineSlots = (): number =>
   Math.max(
     1,
     Math.min(

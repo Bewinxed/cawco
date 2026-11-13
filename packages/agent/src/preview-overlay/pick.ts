@@ -7,8 +7,7 @@
  * (`data-cawco-multiple`) toggles it among its picks. A press that leaves
  * words selected in the choice (a drag over an option's line, a double or
  * triple click on its words) is the person reading them, never a pick. The
- * overlay runs it against the page's doc (page.ts); the probe kit runs this
- * same module against its stand-in bridge (probe-kit decision-embeds.ts).
+ * overlay runs it against the page's doc (page.ts).
  *
  * In Comment mode the overlay's layer takes the press, so the page never
  * hears it; the overlay hands a press that lands on an option to the pick

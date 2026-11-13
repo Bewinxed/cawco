@@ -344,7 +344,7 @@ const stderrSaid = (stderr: string | undefined): string | undefined => {
  * error with no exit behind it (a keeper's refusal, a lost ring, a spawn
  * that never ran) is not a process end, and is said as it is.
  */
-export const processEnded = async (
+const processEnded = async (
   ctx: Pick<HarnessContext, "died" | "failed">,
   error: unknown,
   exit: ProcessExit | undefined,
@@ -1381,7 +1381,7 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
  * x("tengu_cowork_chrome_automode_default",!1)`). In the non-bypass modes cawco
  * offers, the tool itself still asks for each call. A spec's own env still wins.
  */
-export const sessionEnv = (
+const sessionEnv = (
   specEnv: Record<string, string | undefined> | undefined,
   ctx: Pick<
     HarnessContext,

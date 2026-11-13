@@ -75,10 +75,6 @@ const AS_GIVEN: Record<string, string> = {
   "packages/core/src/hub-request.fixtures.ts": "the door's own proof",
   "apps/dashboard/src/lib/cawco/views-api.ts":
     "a view's own Query arguments, data no type holds, held by the hub's draft check and its 422",
-  "scripts/probe-kit/specs/setup-send.ts":
-    "leg 9 proves the show refuses `{ card }`, its shape before 5646cadda",
-  "scripts/probe-kit/specs/view-args.ts":
-    "proves the view-tool route refuses `{ limit: 5 }`",
 };
 
 /** The calls that only read a string they are given. */
@@ -165,7 +161,7 @@ export const hubPathDoor = defineRule({
       ) {
         report(
           node.expression,
-          "hubRequestAsGiven sends a body its route may not take: only for a probe that proves the hub refuses it, listed in scripts/lint/hub-path-door.ts AS_GIVEN with why. Build the request with hubRequest, which holds it to its route."
+          "hubRequestAsGiven sends a body its route may not take: only for a body the hub's own check holds, listed in scripts/lint/hub-path-door.ts AS_GIVEN with why. Build the request with hubRequest, which holds it to its route."
         );
       }
       const text =

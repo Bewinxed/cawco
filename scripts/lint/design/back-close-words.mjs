@@ -10,8 +10,7 @@
 // What the rule reads, in a `.svelte` file's markup: a bar control holding
 // a back or close glyph and words. A bar control is a BarItem anywhere, or
 // a Button or `<button>` standing in a bar: under a `<header>`, a BarGlass,
-// or an element whose `data-slot` names a bar (the rendered checks' bars,
-// scripts/probe-kit/rendered-checks.ts NAMED_BAR). The glyphs are
+// or an element whose `data-slot` names a bar. The glyphs are
 // packages/icons' back and close marks, by the name they are imported as
 // from #lib/icons.js or @cawco/icons (an alias followed): IconChevronLeft
 // (Solar's alt-arrow-left), IconArrowLeft, IconClose and IconCloseTab;

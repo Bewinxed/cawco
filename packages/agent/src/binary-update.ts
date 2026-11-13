@@ -417,7 +417,7 @@ const askHub = async <T>(
  * policy, or the status the hub refused with. Sent as this machine
  * ({@link askHub}): door-callers proves it arrives as one.
  */
-export const readUpdateSettings = (
+const readUpdateSettings = (
   hub: string
 ): Promise<{ policy: BinaryUpdatePolicy } | { status: number }> =>
   askHub(
@@ -474,7 +474,7 @@ async function recordFailure(version: string, error: string): Promise<void> {
  * wrote "This version is one that is already running" over the rollback's
  * cause (the Mac, 2026-11-07).
  */
-export async function runsFrom(
+async function runsFrom(
   version: string,
   machine: string = machineEndpoint()
 ): Promise<string | undefined> {

@@ -306,7 +306,7 @@ const sshSaid = (lines: readonly string[]): string =>
  * lines that are CawCo's own (curl's exit status on its line, the
  * installer's refusals, the join wait's words), never ssh's or curl's words.
  */
-export const problemOf = (
+const problemOf = (
   lines: readonly string[],
   exitCode: number
 ): InstallProblem => {

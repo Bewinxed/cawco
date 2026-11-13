@@ -62,7 +62,7 @@ export type KeeperReading =
   | { kind: "unanswered"; why: string };
 
 /** A reading as the handover reads it: the live children's ids, the end, or why not. */
-export const keeperWord = (reading: KeeperReading): KeeperWord =>
+const keeperWord = (reading: KeeperReading): KeeperWord =>
   reading.kind === "listed"
     ? {
         kind: "listed",

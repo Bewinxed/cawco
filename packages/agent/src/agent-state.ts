@@ -12,7 +12,7 @@ import { cawcoDataDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** The file in CawCo's data dir that holds {@link AgentState}. */
-export const AGENT_STATE_FILE = "agent-state.json";
+const AGENT_STATE_FILE = "agent-state.json";
 
 /** Why the hub is on this computer (hub-loopback.ts `onThisComputer`): its own word, an address that is this computer's loopback, or one of its own interfaces'. */
 export type HubHere = "hub-says" | "loopback" | "own-address";

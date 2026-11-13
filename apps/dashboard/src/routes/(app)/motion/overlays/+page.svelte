@@ -8,7 +8,7 @@
    * so what it opens stands over the page and nothing else. A script reads
    * the counts from `window.__overlays`: a control in an open overlay takes
    * a press on the first try, and once it has closed the next press, where
-   * it stood, lands on the page (probe-kit `overlay-taps`). `show(kind)`
+   * it stood, lands on the page. `show(kind)`
    * opens one from code, over another already open (layer-stack).
    * `?under=ledger` draws a ledger under the openers as the routines view
    * draws one (`layout="ledger" stickyBand`, its band's heads sticky at

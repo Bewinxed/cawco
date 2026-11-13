@@ -144,7 +144,7 @@ export interface FullSendCopy {
   /**
    * The confirmation's two sentences: what it approves, and what still
    * reaches the person. It stands inside the mode picker and fits there
-   * unscrolled at a phone's 390 px (probe-kit composer-layers).
+   * unscrolled at a phone's 390 px.
    */
   confirm: string[];
   /** Said under the confirmation when switching restarts a running session. */

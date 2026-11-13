@@ -77,19 +77,4 @@ export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
     pattern: "/api/v4/mcp",
     why: "GitLab's MCP server, on gitlab.com or a self-managed host",
   },
-  {
-    file: "scripts/probe-kit/specs/browser-keyboard.ts",
-    pattern: "/api",
-    why: "neko's REST, on the browser container's loopback port",
-  },
-  {
-    file: "scripts/probe-kit/forge-stubs.ts",
-    pattern: "/api/v3/**",
-    why: "a stand-in GitHub Enterprise host's API, which the stub serves",
-  },
-  {
-    file: "scripts/probe-kit/workspace-gh.ts",
-    pattern: "/api/v3",
-    why: "a stand-in GitHub Enterprise host's API base",
-  },
 ];

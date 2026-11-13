@@ -454,7 +454,7 @@ const parentProblem = (
 
 /**
  * A task check written to run outside every boundary: its command opens with
- * `host:`, as `host: bun scripts/probe-kit/run.ts x`. No attempt can run it
+ * `host:`, as `host: bun x`. No attempt can run it
  * inside its workspace.
  */
 const HOST_CHECK = /^host:\s*/u;

@@ -53,7 +53,7 @@ const memberDirs = (name: string): string[] =>
   );
 
 /** Every app's and package's own source: what the product is built from. */
-export const PRODUCT_SOURCES: readonly string[] = memberDirs("src");
+const PRODUCT_SOURCES: readonly string[] = memberDirs("src");
 
 /** Every source a check of the code reads: the product's, and each member's benches and scripts, and the repository's own scripts. */
 export const CODE_ROOTS: readonly string[] = [

@@ -35,7 +35,7 @@ import {
 } from "@cawco/core/stage-graph";
 
 /** The id every replay carries (Web Animations' `Animation.id`): a read of the page tells the replays from the component's own animations. */
-export const REPLAY_ID = "cawco-replay";
+const REPLAY_ID = "cawco-replay";
 
 /** One clip of the move the page last read: what the face names, its element and its frames as first seen. */
 export interface Held {

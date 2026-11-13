@@ -261,7 +261,7 @@ const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
  * landing-cutoff E, where a landed `.lfsconfig` naming another project's
  * repository left a workspace cut after it with pointers).
  */
-export const lfsCheckout = async ({
+const lfsCheckout = async ({
   deadline,
   declared,
   hub,

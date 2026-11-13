@@ -237,10 +237,7 @@ const questionsPart = (
  * heading, its rows as stored; a source with nothing open says nothing. With
  * nothing open anywhere it says so, so a reader knows the records were read.
  */
-export function openItemsSection(
-  rows: OpenItemRows,
-  page: QuestionsPage
-): string {
+function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
   const parts: string[] = [];
   const steps = (rows.plan?.steps ?? []).filter(
     (step) => step.status !== "completed"

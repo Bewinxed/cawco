@@ -43,13 +43,6 @@
         "value": "probe",
         "createdAt": "2026-10-25T23:50:41.348Z",
         "reason": "agent's call: canvas-cost memory leg's webfont probe names a house face file 'Probe' inside a test page string to read whether a loaded face keeps a frame; no UI uses it"
-      },
-      {
-        "rule": "design-system-font",
-        "value": "georgia",
-        "files": ["scripts/probe-kit/specs/web/decision-dials.ts"],
-        "createdAt": "2026-11-06T01:19:45.125Z",
-        "reason": "agent: the probe's fixture is a foreign page whose own serif must stay its own, proving the dials don't restyle it"
       }
     ]
   }

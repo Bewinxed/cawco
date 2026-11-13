@@ -1034,7 +1034,7 @@ const startAgainOnNetwork = (
   });
 
 /** What {@link followNetwork} reads and acts through: the daemon's own unless a probe gives others. */
-export interface NetworkFollowing {
+interface NetworkFollowing {
   /** How often the machine's network is read. */
   pollMs?: number;
   read?: () => Promise<MachineNetwork>;
@@ -1043,7 +1043,7 @@ export interface NetworkFollowing {
 }
 
 /** A running {@link followNetwork}: its sweep, run by each tick, and its stop. */
-export interface NetworkFollower {
+interface NetworkFollower {
   stop: () => void;
   /** Reads the machine's network and starts again every live browser {@link startAgainDue} names. */
   sweep: () => Promise<void>;
@@ -1057,7 +1057,7 @@ export interface NetworkFollower {
  * ({@link startAgainOnNetwork}). One sweep at a time; a reading that changes
  * during one is swept after it.
  */
-export const followNetwork = ({
+const followNetwork = ({
   pollMs = NETWORK_POLL_MS,
   read = machineNetwork,
   records = allBrowsers,

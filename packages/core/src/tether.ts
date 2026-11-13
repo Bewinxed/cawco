@@ -2,7 +2,7 @@ import { tetherWords } from "./words/tether";
 import { systemProgram } from "./workspace-needs";
 
 /** The tether's exit when its caller spawned it in a process group not its own: its command never ran. */
-export const TETHER_UNLED = 125;
+const TETHER_UNLED = 125;
 
 /**
  * A long-lived child that must end with the CawCo process that started it,

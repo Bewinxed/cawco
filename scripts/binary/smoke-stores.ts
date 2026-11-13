@@ -21,7 +21,7 @@ import { storeRead, storeWork } from "../../packages/agent/src/stores/client";
 import { claudeHome } from "../../packages/core/src/paths";
 
 /** Transcripts written: more than one, so the index parses them on threads of its own. */
-export const FILES = 4;
+const FILES = 4;
 /** A word only these transcripts say. */
 const WORD = "wombatquill";
 

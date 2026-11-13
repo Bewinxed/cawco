@@ -1536,7 +1536,7 @@ const commitMessage = (
  * their new ids: its `CawCo-Change: merge` trailer is what tells a fold
  * afterwards (project-trash.ts).
  */
-export const mergedInMessage = (
+const mergedInMessage = (
   actor: TaskActor,
   ids: readonly string[],
   from: string

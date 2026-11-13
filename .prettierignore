@@ -24,8 +24,6 @@ site/art/
 site/src/assets/
 site/wrangler.jsonc
 site/scripts/deploy.mjs
-# Pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
-scripts/probe-kit/fixtures/
 
 # Languages Biome never formatted here.
 *.md

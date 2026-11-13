@@ -318,7 +318,7 @@ const PORT_SESSION_PASS_PREFIX = "cawco-preview-session-pass-";
  * sharing a project's browser (one cookie jar) each keep their own pass;
  * `secure` false on a port reached over plain http.
  */
-export const sessionPassCookie = (instanceId: string, secure = true): string =>
+const sessionPassCookie = (instanceId: string, secure = true): string =>
   `${secure ? SESSION_PASS_PREFIX : PORT_SESSION_PASS_PREFIX}${instanceId}`;
 
 /** The person's pass cookie, `Secure` or over plain http. */

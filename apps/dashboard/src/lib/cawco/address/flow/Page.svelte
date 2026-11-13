@@ -11,8 +11,7 @@
    * as the hub would, and the switcher's address follows it. Where it
    * stands is kept across a reload.
    *
-   * `window.preview` is the probe's handle (scripts/probe-kit/specs/
-   * address-preview.ts): jump to a moment, hold the hub still and move it
+   * `window.preview` is the page's handle: jump to a moment, hold the hub still and move it
    * one sighting at a time.
    */
   import { onDestroy, onMount } from "svelte";

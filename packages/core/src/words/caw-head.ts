@@ -1,9 +1,7 @@
 /**
  * What Caw's head in the top bar says of what needs the operator
  * (NeedsCaw.svelte): its label, its tooltip and the line his panel shows
- * with nothing to count (CawPanel `quiet`). The probe kit's journeys find
- * the head by these same words (scripts/probe-kit/caw-head.ts), so a word
- * changed here is changed for both. `bun run words` writes them into the app
+ * with nothing to count (CawPanel `quiet`). `bun run words` writes them into the app
  * as `Words.CawHead`; the app's head (NeedsCaw.swift, CawPanel.swift) still
  * spells its own until it is wired to read them.
  */

@@ -294,7 +294,7 @@ const CONFIG_FLAG = "CAWCO_CONFIG";
  * index (fff), which its glob and grep tools search, keeps its own stream
  * over the session's dir.
  */
-export const SERVER_ENV: Readonly<Record<string, string>> = {
+const SERVER_ENV: Readonly<Record<string, string>> = {
   OPENCODE_DISABLE_AUTOUPDATE: "1",
   OPENCODE_DISABLE_FILEWATCHER: "1",
 };
@@ -481,7 +481,7 @@ const cawcoMcp = () => ({
  * child boots through the keeper, on a cold machine maybe, and a false
  * timeout here starts a second server.
  */
-export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
+const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 
 /**
  * How long a fleet report waits for the machine's server to run the config
@@ -654,7 +654,7 @@ const assertOpencodeKey = (key: string, what: string): void => {
  */
 const SERVER_ANNOUNCEMENT_URL_PATTERN = /on\s+(https?:\/\/[^\s]+)/u;
 
-export const parseServerAnnouncement = (line: string): string | undefined =>
+const parseServerAnnouncement = (line: string): string | undefined =>
   line.startsWith("server listening")
     ? line.match(SERVER_ANNOUNCEMENT_URL_PATTERN)?.[1]
     : undefined;
@@ -1153,7 +1153,7 @@ export const removeCawcoSessionConfigs = async (): Promise<void> => {
   );
 };
 
-export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
+const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   ...FULL_CAPABILITIES,
   tasks: false,
 };
@@ -1255,7 +1255,7 @@ const sessionsOnMachine = async (
   }
 };
 
-export const sessionToInfo = (
+const sessionToInfo = (
   session: StoredSession,
   tag?: string
 ): NeutralSessionInfo => ({
@@ -1852,7 +1852,7 @@ const oauthVerdict = (
 /** The id CawCo puts an account's credential on its server under: its own, named for its value. */
 const CREDENTIAL_PREFIX = "cred_cawco_";
 
-export class OpencodeHarness implements Harness {
+class OpencodeHarness implements Harness {
   readonly kind = "opencode" as const;
   /** Its catalog is its servers' databases, read on the stores thread ({@link listSessions}). */
   readonly catalogFromServer = true as const;

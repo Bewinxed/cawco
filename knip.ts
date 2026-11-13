@@ -104,7 +104,7 @@ export default {
   treatConfigHintsAsErrors: true,
   // The `.svelte` compiler above, in place of Knip's own.
   compilers: { svelte },
-  // includeEntryExports stays off for "." (probe specs under scripts/probe-kit/specs export what scripts/probe-kit/run.ts loads by path), apps/dashboard (*.stories.ts export what packages/agent/src/stage-host/host.ts loads by path) and packages/jsonl-parser (a published library); every other packages/* workspace turns it on.
+  // includeEntryExports stays off for ".", apps/dashboard (*.stories.ts export what packages/agent/src/stage-host/host.ts loads by path) and packages/jsonl-parser (a published library); every other packages/* workspace turns it on.
   workspaces: {
     ".": {
       entry: [
@@ -158,14 +158,6 @@ export default {
         "scripts/page-imports-check.ts",
         // scripts/check.ts:576
         "scripts/preview-switcher-check.ts",
-        // scripts/check.ts:580
-        "scripts/probe-words-check.ts",
-        // scripts/check.ts:586
-        "scripts/probe-waits-check.ts",
-        // scripts/check.ts:591
-        "scripts/probe-groups-check.ts",
-        "scripts/probe-creates-check.ts",
-        "scripts/probe-reads-check.ts",
         // scripts/check.ts:632
         "scripts/resolution-check.ts",
         // scripts/check.ts:655
@@ -198,49 +190,6 @@ export default {
         "scripts/binary/smoke-browser.ts",
         // A Claude Code hook a person installs: scripts/hooks/README.md:30.
         "scripts/hooks/delegate-nudge.ts",
-        // `--preload`ed into every scratch fleet service: scripts/scratch-fleet.ts:1647 and :1649.
-        "scripts/scratch-fleet-leash.ts",
-        "scripts/stand-ins/preload.ts",
-        // Loaded by path in place of product modules: scripts/stand-ins/preload.ts:14-15.
-        "scripts/stand-ins/{hub-upstreams,canvas-host-plugins}.ts",
-        // Loaded by path in place of agent canvas-host/bound.ts: scripts/stand-ins/canvas-host-plugins.ts:16.
-        "scripts/stand-ins/canvas-bound.ts",
-        // Spawned by the spec that proves the hub's one writer: scripts/probe-kit/specs/hub-one-writer.ts:34.
-        "scripts/repair-account-history.ts",
-        // The probe kit's runner: scripts/probe-kit/README.md:10.
-        "scripts/probe-kit/run.ts",
-        // Each spec imported by its name: scripts/probe-kit/run.ts:109 and :128.
-        "scripts/probe-kit/specs/*.ts",
-        // Each web spec imported by its name: scripts/probe-kit/run.ts:113 and :128.
-        "scripts/probe-kit/specs/web/*.ts",
-        // scripts/probe-kit/specs/browser-cap.ts:28
-        "scripts/probe-kit/browser-cap-child.ts",
-        // scripts/probe-kit/specs/fsevents-scope.ts:47-50
-        "scripts/probe-kit/fsevents-browsers-child.ts",
-        // scripts/probe-kit/specs/heavy-slots.ts:64 and specs/probe-slots.ts:41
-        "scripts/probe-kit/slot-child.ts",
-        // scripts/probe-kit/specs/signal-wall.ts:28
-        "scripts/probe-kit/signal-wall-child.ts",
-        // scripts/probe-kit/specs/sleep-listener.ts:33
-        "scripts/probe-kit/sleep-listener-child.ts",
-        // scripts/probe-kit/specs/store-reads-loop.ts:308
-        "scripts/probe-kit/store-reads-child.ts",
-        // scripts/probe-kit/specs/hub-loop-ends.ts:31
-        "scripts/probe-kit/hub-loop-child.ts",
-        // scripts/probe-kit/specs/slow-hub-trial.ts:35
-        "scripts/probe-kit/trial-verify-child.ts",
-        // scripts/probe-kit/specs/tether.ts:48
-        "scripts/probe-kit/tether-child.ts",
-        // scripts/probe-kit/specs/atomic-writes.ts:26
-        "scripts/probe-kit/atomic-writer.ts",
-        // scripts/probe-kit/specs/host-lfs.ts:223
-        "scripts/probe-kit/host-origin-git-env-child.ts",
-        // scripts/probe-kit/specs/fsevents-scope.ts:52
-        "scripts/probe-kit/fsevents-claude-args.ts",
-        // A Bun.build entrypoint: scripts/probe-kit/decision-embeds.ts:77.
-        "scripts/probe-kit/decision-pick-wiring.ts",
-        // Each journey found by its file name and imported: scripts/probe-kit/journeys/run.ts:13, :20 and :43.
-        "scripts/probe-kit/journeys/j*-*.ts",
         // Run on obelisk by artifacts/srt-eval/run-mac-checks.sh:192 and artifacts/srt-eval/mac-boundary-check.sh:23.
         "artifacts/srt-eval/home-toolchains.ts",
       ],
@@ -288,11 +237,6 @@ export default {
         // tsconfig.paths.json:48 and bunfig.toml:1-3 (vaul-svelte, huntabyte/vaul-svelte#130)
         "bits-ui",
       ],
-      // Operating-system programs the probes run through Bun's `$`
-      // (scripts/probe-kit/cloudflare-front.ts:221, specs/hub-loopback.ts,
-      // specs/preview-socket.ts): no npm package provides them, and Knip's
-      // default global list (ignoreGlobalBinaries) does not name these two.
-      ignoreBinaries: ["openssl", "ss"],
     },
     "apps/dashboard": {
       entry: [

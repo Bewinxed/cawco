@@ -13,7 +13,6 @@
  * below it, and removes nothing. A scratch fleet's folders hold all of
  * these, and go the same way (scripts/scratch-fleet.ts).
  */
-import { chmodSync, lstatSync, readdirSync, rmSync } from "node:fs";
 import { chmod, lstat, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -46,28 +45,6 @@ const ownerMayRemove = async (dir: string): Promise<void> => {
   }
 };
 
-/** {@link ownerMayRemove}, where nothing can wait: an exit or a signal. */
-const ownerMayRemoveSync = (dir: string): void => {
-  let info: ReturnType<typeof lstatSync> | undefined;
-  try {
-    info = lstatSync(dir);
-  } catch {
-    return;
-  }
-  if (!info.isDirectory()) {
-    return;
-  }
-  if (ownerBits(info.mode) !== 0o7) {
-    const mode = permissionBits(info.mode);
-    chmodSync(dir, mode - ownerBits(mode) * 0o100 + 0o700);
-  }
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      ownerMayRemoveSync(join(dir, entry.name));
-    }
-  }
-};
-
 /** Whether `error` is `rm`'s refusal by a folder on the way ({@link REFUSED}); any other is thrown. */
 const refused = (error: unknown): true => {
   if (!REFUSED.has((error as NodeJS.ErrnoException).code ?? "")) {
@@ -91,16 +68,4 @@ export const removeTree = async (path: string): Promise<void> => {
   }
   await ownerMayRemove(path);
   await rm(path, { recursive: true, force: true });
-};
-
-/** {@link removeTree}, where nothing can wait: an exit or a signal. */
-export const removeTreeSync = (path: string): void => {
-  try {
-    rmSync(path, { recursive: true, force: true });
-    return;
-  } catch (error) {
-    refused(error);
-  }
-  ownerMayRemoveSync(path);
-  rmSync(path, { recursive: true, force: true });
 };

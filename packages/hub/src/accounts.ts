@@ -513,10 +513,7 @@ export const signOutRefused = (
 export const REFUSAL_CHECK_EVERY_MS = HOUR_MS;
 
 /** The sign-ins of `accountId` an account-wide refusal signed out: the ones a check that is answered brings back. */
-export const refusedAccountWide = (
-  db: DbShape,
-  accountId: string
-): AccountSignin[] =>
+const refusedAccountWide = (db: DbShape, accountId: string): AccountSignin[] =>
   db.accounts
     .signins()
     .filter(
@@ -694,7 +691,7 @@ const extraUsageOf = (
  * `signedIn`: the account is signed in on some machine, so a reading can
  * still come; one signed in nowhere with none says so.
  */
-export const limitsOf = (
+const limitsOf = (
   reading: AccountReading | undefined,
   currentFor: number,
   signedIn: boolean,

@@ -476,25 +476,6 @@ export const sessiondEndpointPath = (): string =>
     : sessiondEndpoint();
 
 /**
- * macOS: removes the short name of sessiond's dir under `home`, a HOME that
- * is going (a scratch fleet's service HOME), when it names that HOME's
- * `.cawco` and nothing else. Nothing elsewhere.
- */
-export const forgetSessiondLink = (home: string): void => {
-  if (process.platform !== "darwin") {
-    return;
-  }
-  const link = join(darwinSocketRoot(), sessiondLinkName(home));
-  try {
-    if (readlinkSync(link) === sessiondHomeDir(home)) {
-      unlinkSync(link);
-    }
-  } catch {
-    // Not there, or not a link: nothing of this HOME's to remove.
-  }
-};
-
-/**
  * Whether `target`, a short name's, is where CawCo points one of that kind:
  * a `c-` name at a HOME's `.cawco` ({@link sessiondLinkDir}), a `t-<id8>`
  * name at a workspace's scratch dir `<HOME>/.cawco/tmp/<id8>` (paths.ts

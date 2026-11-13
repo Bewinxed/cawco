@@ -441,7 +441,7 @@ const lockedHint = async (session: string): Promise<boolean | undefined> => {
  * ends with the agent; when it ends first, the agent closes the tether's
  * stdin and the tether's reader ends too.
  */
-export const hearSleep = (
+const hearSleep = (
   onSleep: (going: boolean) => void,
   listening: () => void
 ): (() => void) => {

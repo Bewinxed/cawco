@@ -194,7 +194,7 @@ const decoded = (segment: string): string => {
 };
 
 /** The session a request for `method path` is that session's read of an artifact for, by its id; null when it is no such read. */
-export const sessionReadOf = (method: string, path: string): string | null => {
+const sessionReadOf = (method: string, path: string): string | null => {
   const verb = method === "HEAD" ? "GET" : method;
   const [, instance, artifact] = SESSION_READ.exec(path) ?? [];
   return verb === "GET" &&

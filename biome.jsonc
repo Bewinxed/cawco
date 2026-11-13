@@ -41,9 +41,6 @@
     // A Bun spawn names its env: with none it gets the environment its
     // process started with (oven-sh/bun#40846).
     "./scripts/lint/spawn-names-env.grit",
-    // A probe reads a tool's answer through scripts/tool-calls.ts, never off
-    // a request's `last`: a call moved to the background answers later.
-    "./scripts/lint/tool-answer-from-last.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
@@ -58,7 +55,7 @@
     "includes": [
       "!mocks",
       // Design previews served as plain folders for the owner to judge (design-previews/<page>/),
-      // mock-ups as mocks/ are; their proof is a probe-kit spec, which is linted.
+      // mock-ups as mocks/ are.
       "!design-previews",
       "!.design-foundations",
       "!.mcp.json",
@@ -85,8 +82,6 @@
       "!assets/mascot/loops/*/body-*.svg",
       // the same drawings for the transition clips, by trace_clip.py.
       "!assets/mascot/clips/*/body-*.svg",
-      // pages copied byte for byte from the owner's sessions: a spec reads them as he saw them.
-      "!scripts/probe-kit/fixtures",
       // each Biome plugin's planted mistakes, linted plugin by plugin by
       // scripts/lint/biome-plugins.ts and held to their list there.
       "!scripts/lint/fixtures/biome",
@@ -210,7 +205,7 @@
       // mean it: Math.max/min over strings, which they cannot tell from
       // numbers ("ignores operands that are obviously not numeric", which a
       // string is not; PreviewPane.svelte, comment-rows.ts), and innerText,
-      // which the probe specs read for the text a person sees ("`textContent`
+      // which dashboard and stage code read for the text a person sees ("`textContent`
       // and `innerText` are not equivalent",
       // biomejs.dev/linter/rules/use-dom-node-text-content). Off, so no fix
       // pass rewrites them.

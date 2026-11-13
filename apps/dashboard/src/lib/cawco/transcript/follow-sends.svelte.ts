@@ -1,8 +1,7 @@
 /**
  * A conversation pane's draft following the fleet store's sends. Its own
  * module, apart from `composer-draft.svelte.ts`: a comment's reply composer
- * holds a draft and no fleet, and loads `composer-draft` alone
- * (scripts/probe-kit/specs/composer-weight.ts).
+ * holds a draft and no fleet, and loads `composer-draft` alone.
  */
 
 import { untrack } from "svelte";

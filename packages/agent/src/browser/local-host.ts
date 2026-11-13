@@ -141,7 +141,7 @@ const merged = (base: Json, over: Json): Json =>
 const PROFILE_NAME = "profile";
 
 /** The local browser's profile dir. */
-export const profileDir = (record: BrowserRecord): string =>
+const profileDir = (record: BrowserRecord): string =>
   join(chromiumDir(record.key), PROFILE_NAME);
 
 /** Writes the profile's private preferences, into what Chromium kept there before. */

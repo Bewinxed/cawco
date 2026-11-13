@@ -1,31 +1,25 @@
 /**
  * An entry run again as this process's child, tied to it both ways, so a
- * script run never outlives the process that started it: the probe kit's
- * fresh process after an install (deps.ts `ensureDeps`) and its spec run
- * with a HOME of its own (probe-kit/run.ts `runOwnHome`).
+ * script run never outlives the process that started it (real-modules.ts).
  *
- * WHY. A delegate's session restarted while its `bun scripts/probe-kit/run.ts`
- * waited on the run it had started again after an install: nothing passed a
- * stop signal on, and nothing told the child its parent had gone, so the
- * run (and the scratch fleet it stood up) went on burning CPU until its pids
- * were killed by hand.
+ * WHY. A delegate's session restarted while the script it ran waited on the
+ * run it had started again: nothing passed a stop signal on, and nothing
+ * told the child its parent had gone, so the run went on burning CPU until
+ * its pids were killed by hand.
  *
  * PARENT SIDE ({@link runTied}). SIGINT, SIGTERM and SIGHUP are passed on to
  * the child while it runs; once it has ended, a parent that was signalled
  * exits with the child's exit, and one that was not gets it back. The
  * parent keeps no handler of its own beyond that, and none after the child;
- * its handlers are marked as ending the process (stop-signals.ts), so a
- * scratch fleet's own stop handler in the parent leaves the exit to them.
+ * its handlers are marked as ending the process (stop-signals.ts), so
+ * any other stop handler in the parent leaves the exit to them.
  *
  * CHILD SIDE (this module's load). The parent's pid comes in
  * {@link PARENT_ENV}; while the parent lives it is `process.ppid`, and the
  * moment it dies (a SIGKILL included) the child is re-parented (init, a
- * subreaper), which `process.ppid`, read live, shows (scratch-fleet-leash.ts
- * measured it). Read about once a second on a timer that keeps nothing
+ * subreaper), which `process.ppid`, read live, shows. Read about once a second on a timer that keeps nothing
  * alive; when it differs the child sends itself SIGTERM, once, so its own
- * teardown (scratch-fleet.ts's stop-signal handlers: its fleets' browsers
- * and folders, its services then ending under their leash) runs as for any
- * caught signal. The variable is taken out of `process.env` as it is read,
+ * teardown runs as for any caught signal. The variable is taken out of `process.env` as it is read,
  * so nothing this child starts mistakes its grandparent for its parent, as
  * long as it is started with `env` given: Bun hands a `Bun.spawn` or
  * `Bun.spawnSync` with none the environment this process started with
@@ -85,7 +79,7 @@ export const runTied = async (
   let signalled = false;
   const handlers = Object.keys(END_SIGNALS).map((name) => {
     const sig = name as EndSignal;
-    // It ends this process once the child has (scratch-fleet.ts waits for it).
+    // It ends this process once the child has (a handler of its own waits for it).
     const forward = endsTheProcess(() => {
       signalled = true;
       if (pid !== undefined) {

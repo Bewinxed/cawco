@@ -297,34 +297,6 @@ export const fleetSyncedPaths = (): string[] => [
   fleetHooksDir(),
 ];
 
-/** The names in `dir`; none when it is not there. */
-const namesIn = (dir: string): string[] => {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return [];
-  }
-};
-
-/**
- * The skill layers the fleet sync writes on this machine
- * ({@link fleetSyncedPaths}), each a dir of skills, in this order: the user
- * layer's ({@link claudeSkillsDir}, which every account dir links), pi's
- * ({@link piSkillsDir}), then each plugin's in the vendored marketplaces
- * ({@link VENDOR_MARKETPLACES_DIR}: `<marketplace>/plugins/<plugin>/skills`,
- * the folder Claude Code loads a vendored plugin's skills from in place).
- * Read from disk on each call: a fleet skill can be a plugin's on one machine
- * and the user layer's on the next.
- */
-export const userSkillLayers = (): string[] => {
-  const vendored = userLayerPath(VENDOR_MARKETPLACES_DIR);
-  const pluginSkills = namesIn(vendored).flatMap((marketplace) => {
-    const plugins = join(vendored, marketplace, "plugins");
-    return namesIn(plugins).map((plugin) => join(plugins, plugin, "skills"));
-  });
-  return [claudeSkillsDir(), piSkillsDir(), ...pluginSkills];
-};
-
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
 export const placedSkillsDir = (cwd: string): string =>
   join(cwd, PROJECT_SKILLS);
