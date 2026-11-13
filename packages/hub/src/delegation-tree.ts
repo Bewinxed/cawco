@@ -17,6 +17,7 @@ import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
 import {
   type HeldWork,
   isHubParent,
+  type PersonWait,
   type QueuedDelegate,
   type Unlanded,
 } from "./work-items";
@@ -62,6 +63,11 @@ export interface DelegateNode {
   machine: string;
   /** The session's directory name, as `list_sessions` shows it. */
   name: string;
+  /**
+   * While its live item rests on the person (work-items.ts `onPerson`): the
+   * cards and asks of its own that wait on them. Its state reads `waiting`.
+   */
+  onPerson?: PersonWait;
   /** While its machine is paused: "Omars-MacBook-Pro is paused until 00:57"; it runs no turn until then. */
   paused?: string;
   plan?: { done: number; total: number };
@@ -188,6 +194,8 @@ export interface DelegationTreeDeps {
     enough: (pages: readonly TranscriptPage[]) => boolean,
     most: number
   ) => Promise<{ pages: TranscriptPage[] } | { fault: string }>;
+  /** What the session itself waits on the person for now (server.ts `personWaitOf`); undefined when nothing. */
+  personWait: (instanceId: string) => PersonWait | undefined;
   /** The session's plan progress, when it has steps (plans.ts). */
   plan: (
     instanceId: string
@@ -374,13 +382,42 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     };
   };
 
+  /**
+   * A live item's waits: the one it declared (`wait_item`) and what its
+   * session waits on the person for (work-items.ts `onPerson`), either of
+   * which reads `waiting`; nothing when it waits on neither.
+   */
+  const waitsOf = (
+    item: WorkItemRow
+  ): Partial<Pick<DelegateNode, "state" | "waitingOn" | "onPerson">> => {
+    const declared = item.waitUntil && item.waitReason;
+    const onPerson =
+      item.state === "starting" || item.state === "running"
+        ? deps.personWait(item.instanceId)
+        : undefined;
+    if (!(declared || onPerson)) {
+      return {};
+    }
+    return {
+      state: "waiting",
+      ...(declared && item.waitUntil
+        ? {
+            waitingOn: {
+              reason: declared,
+              until: item.waitUntil.toISOString(),
+            },
+          }
+        : {}),
+      ...(onPerson ? { onPerson } : {}),
+    };
+  };
+
   const nodeOf = async (
     session: Session,
     row: KeepAliveRow | undefined,
     children: DelegateNode[]
   ): Promise<DelegateNode> => {
     const { item } = session;
-    const waiting = item.waitUntil && item.waitReason;
     // A finished item's headline is its report at a glance; else its
     // report's first line, or why it failed.
     const report =
@@ -394,21 +431,14 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       instanceId: item.instanceId,
       name: row ? sessionLabel(row).name : item.instanceId.slice(0, 8),
       title: item.title,
-      state: waiting ? "waiting" : item.state,
+      state: item.state,
       machine: row ? deps.machineName(row.machineId) : "",
       workspaceId: item.workspaceId,
       ...spanOf(session),
       lastActivityAt: activity.lastActivityAt.toISOString(),
       cacheWarm: activity.cacheWarm,
       queued: db.sendsIn(item.instanceId, ["pending"]).length,
-      ...(waiting
-        ? {
-            waitingOn: {
-              reason: item.waitReason as string,
-              until: (item.waitUntil as Date).toISOString(),
-            },
-          }
-        : {}),
+      ...waitsOf(item),
       ...(landingWait
         ? {
             landingWait: {

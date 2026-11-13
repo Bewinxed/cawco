@@ -39,7 +39,10 @@
  *    no new show of it. One asked at work on the plan stands until it is
  *    answered or deleted, whatever the plan's steps are rewritten to: its
  *    own ask record says so, and nothing else holds it. That retires its
- *    ask (not opened, questions open), never an answer he hasn't read.
+ *    ask (not opened, questions open), never an answer he hasn't read. A
+ *    writer whose work item is live never moves on so: its item rests on
+ *    its asks until they are answered or it ends (rule 4; hub
+ *    work-items.ts `onPerson`), whatever its parent wakes it to say.
  * 3. Superseded: a revision, or a same-name create, is the same artifact:
  *    its item changes in place.
  * 4. Its session ended: it leaves Needs you and is one notice, "<harness>

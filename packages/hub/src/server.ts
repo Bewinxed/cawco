@@ -443,8 +443,8 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
   waitArtifact,
-  waitingOnYou,
   waitsOnItself,
+  waitsOnYou,
   windowWords,
   withMovedLine,
   withReminder,
@@ -813,7 +813,11 @@ import {
   decisionRoutes,
 } from "./decisions";
 import { delegateTypesRoutes } from "./delegate-types";
-import { createDelegateWaits, type NoticeMark } from "./delegate-waits";
+import {
+  askWhat,
+  createDelegateWaits,
+  type NoticeMark,
+} from "./delegate-waits";
 import type {
   DelegateResult,
   SendDelivery,
@@ -1150,6 +1154,7 @@ import {
   isLive,
   mayStartRefusal,
   outputsFolder,
+  type PersonWait,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
   type Unlanded,
@@ -14890,14 +14895,36 @@ export const createServer = (
    * artifact of it in Needs you. Find's state, fleet watch's stall sweep and
    * an account's admission read it, as every screen's mark does.
    */
-  const waitingNow = (): Set<string> =>
-    waitingOnYou({
+  const waitsNow = () =>
+    waitsOnYou({
       asks: pending.list().map((envelope) => ({
+        envelope,
         instanceId: envelope.instanceId,
         routedTo: peek(envelope.payload, "routedTo"),
       })),
       artifacts: artifactLane.now().needs,
     });
+  const waitingNow = (): Set<string> => new Set(waitsNow().keys());
+  /**
+   * What session `instanceId` itself waits on the person for now, by the
+   * same rule ({@link waitingNow}): what each of its asks asks, and each
+   * artifact of it in Needs you at its first open card. A work item's
+   * session waiting so is held as it rests (work-items.ts `onPerson`), and
+   * `delegate_list` names what it waits on.
+   */
+  const personWaitOf = (instanceId: string): PersonWait | undefined => {
+    const waits = waitsNow().get(instanceId);
+    return (
+      waits && {
+        asks: waits.asks.map((one) => askWhat(one.envelope)),
+        cards: waits.artifacts.map((need) => ({
+          artifactId: need.artifactId,
+          card: "card" in need.stop ? need.stop.card : null,
+          title: need.title,
+        })),
+      }
+    );
+  };
   /**
    * A page's picks or pins moved: once the burst is over, each project whose
    * tasks wait on a card or pin of it looks again (tasks.ts `waitsMoved`:
@@ -15108,6 +15135,13 @@ export const createServer = (
       ? db.workItem(instance.workItemId)
       : undefined;
     return !!item && !isLive(item.state);
+  };
+  /** Whether the session's work item is live (artifacts service `itemLive`). */
+  const itemLive = (instance: InstanceRow): boolean => {
+    const item = instance.workItemId
+      ? db.workItem(instance.workItemId)
+      : undefined;
+    return !!item && isLive(item.state);
   };
   /**
    * Workspace `id` discarded for session `from` (work-items.ts
@@ -15451,6 +15485,7 @@ export const createServer = (
     askedAt: (instanceId, artifactId) => plans.askedAt(instanceId, artifactId),
     stranded,
     itemEnded,
+    itemLive,
     // Cold as handoff's check finds it: what it left, its project takes up.
     cold: (instance) => {
       const [row] = db.getInstancesByIds([instance.id]);
@@ -26565,6 +26600,9 @@ export const createServer = (
     lifetime,
     modelRefusal,
     online: (machineId) => Boolean(registry.agent(machineId)),
+    // What a session waits on the person for: an item's session resting on
+    // it is neither told to finish nor failed for idling.
+    personWait: personWaitOf,
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
       memoryWatch.spawned(instanceId, parentId),
@@ -28231,6 +28269,7 @@ export const createServer = (
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
     db,
+    personWait: personWaitOf,
     held: () => workItems.heldWorkspaces(),
     queued: (caller) => workItems.queuedOf(caller),
     landingWait: (itemId) => workItems.landingWaitOf(itemId),

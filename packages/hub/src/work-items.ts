@@ -396,6 +396,17 @@ export class WorkItemRefusal extends Error {
 }
 
 /**
+ * What a session waits on the person for (core `waitsOnYou`, read by the
+ * hub's server.ts `personWaitOf`): what each of its asks for the person
+ * asks, and each artifact of it in Needs you, at its first open card when
+ * it is a decision page.
+ */
+export interface PersonWait {
+  asks: string[];
+  cards: { artifactId: string; card: string | null; title: string }[];
+}
+
+/**
  * What a held workspace holds that is nowhere else, as its machine read it
  * once its boundary was closed (schema.ts `workspaces.holding`), and where
  * it is.
@@ -1098,6 +1109,13 @@ export interface WorkItemDeps {
    * cap holds (project-caps.ts `pauses`); nothing when it may.
    */
   readonly pauses: (projectId: string) => string | undefined;
+  /**
+   * What session `instanceId` itself waits on the person for now: an ask of
+   * its own for them, or an artifact of its own in Needs you (server.ts
+   * `personWaitOf`, core `waitsOnYou`); undefined when nothing. Its item
+   * rests on it ({@link onPerson}).
+   */
+  readonly personWait: (instanceId: string) => PersonWait | undefined;
   /**
    * A new workspace's first session placed before the workspace is cut
    * ({@link ItemPlacement}), on the project and task its item will name.
@@ -2563,6 +2581,7 @@ export const createWorkItems = ({
   machinePaused,
   modelRefusal,
   online,
+  personWait,
   stalled,
   send,
   sendWakes,
@@ -3330,6 +3349,23 @@ export const createWorkItems = ({
   };
 
   /**
+   * THE REST ON THE PERSON: a live item's session that waits on the person
+   * itself ({@link WorkItemDeps.personWait}: an ask of its own for them, a
+   * decision page or canvas of its own in Needs you) rests on them, one rule
+   * for both. Its turn's end is not quiet: it is not told its item is still
+   * open, and no count of quiet turns fails it ({@link openItemTurnEnded});
+   * asleep, the sweep neither wakes nor holds it ({@link leftAsleep}). Its
+   * workspace, uncommitted files and the previews it serves stay, as its
+   * live item holds them, and the answer, sent to it as the person's word
+   * (core `byPerson`), wakes it. Its parent's `delegate_list` names what it
+   * waits on. On 2026-11-13 a shaping run whose own card waited on the
+   * person was told to finish, refused by finish_item for the frame code its
+   * card's previews were served from, and failed twice for idling.
+   */
+  const onPerson = (instanceId: string): boolean =>
+    personWait(instanceId) !== undefined;
+
+  /**
    * Whether the sweep leaves a live item's session as it is: it has a
    * process, or something holds the item on purpose or will move it anyway.
    * An interrupt's hold (`heldAt`, until its parent or the reader writes); a
@@ -3337,7 +3373,8 @@ export const createWorkItems = ({
    * (here, or left by a hub before this one); a session that has moved on to
    * another item; a machine that is not connected (it settles its sessions
    * when it registers); a send on its way to the session, which is its next
-   * turn (a cut turn's hand-back included).
+   * turn (a cut turn's hand-back included); a session resting on the person
+   * ({@link onPerson}), whose answer is its next turn.
    */
   const leftAsleep = (item: WorkItemRow, row: InstanceRow): boolean =>
     !(row.status === "sleeping" || GONE.has(row.status)) ||
@@ -3351,7 +3388,8 @@ export const createWorkItems = ({
     finishing.has(item.id) ||
     row.workItemId !== item.id ||
     !online(row.machineId) ||
-    awaitsSend(row.id);
+    awaitsSend(row.id) ||
+    onPerson(row.id);
 
   /**
    * THE RULE FOR WORK ASLEEP: a live item whose session has no process while
@@ -7416,8 +7454,9 @@ export const createWorkItems = ({
 
   /**
    * A live item's turn, nothing holding it, ended at `endedAt`: failed, with
-   * something coming for its session, waiting on its own background work, or
-   * none of these. Answers what its parent is sent, or nothing.
+   * something coming for its session, resting on the person ({@link
+   * onPerson}), waiting on its own background work, or none of these.
+   * Answers what its parent is sent, or nothing.
    */
   const openItemTurnEnded = (
     row: InstanceRow,
@@ -7431,7 +7470,7 @@ export const createWorkItems = ({
     if (turn.error !== undefined) {
       return failedTurn(item, turn.error, busy || waits);
     }
-    if (busy) {
+    if (busy || onPerson(row.id)) {
       quiet.delete(item.id);
       return undefined;
     }
@@ -10254,9 +10293,10 @@ export const createWorkItems = ({
      * error when the turn failed. Answers what the parent is sent, or nothing.
      *
      * An item ends only through {@link finishItem}, or here when its turn
-     * failed. A turn with something coming (a send, its own delegated work)
-     * or with its own background work running, which its harness says on the
-     * result (`wakes`), is not quiet, and starts the count over. Any other
+     * failed. A turn with something coming (a send, its own delegated work),
+     * resting on the person ({@link onPerson}), or with its own background
+     * work running, which its harness says on the result (`wakes`), is not
+     * quiet, and starts the count over. Any other
      * gets the "still open" message ({@link quietTurn}), and the third in a
      * row that did nothing fails the item, whoever started those turns, and
      * reports that failure to the parent. A declared wait stays on the tray

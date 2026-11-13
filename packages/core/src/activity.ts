@@ -35,18 +35,42 @@ export const waitingOnYou = (sources: {
   asks: Iterable<{ instanceId?: string | null; routedTo?: unknown }>;
   /** The session that started a session, when one did: an ask's chain up its tree. */
   parentOf?: (instanceId: string) => string | null | undefined;
-}): Set<string> => {
-  const waiting = new Set<string>();
+}): Set<string> => new Set(waitsOnYou(sources).keys());
+
+/**
+ * {@link waitingOnYou}'s rule, with what each session waits on the person
+ * for: the asks and the Needs you artifacts that put it there, each as the
+ * caller gave it. What a work item's session waits on reads this (hub
+ * work-items.ts, delegation-tree.ts), so an ask and a card hold it alike.
+ */
+export const waitsOnYou = <
+  A extends { instanceId?: string | null; routedTo?: unknown },
+  N extends Pick<ArtifactNeed, "instanceId" | "parked">,
+>(sources: {
+  artifacts: Iterable<N>;
+  asks: Iterable<A>;
+  /** The session that started a session, when one did: an ask's chain up its tree. */
+  parentOf?: (instanceId: string) => string | null | undefined;
+}): Map<string, { artifacts: N[]; asks: A[] }> => {
+  const waiting = new Map<string, { artifacts: N[]; asks: A[] }>();
+  const of = (id: string) => {
+    let one = waiting.get(id);
+    if (!one) {
+      one = { artifacts: [], asks: [] };
+      waiting.set(id, one);
+    }
+    return one;
+  };
   for (const ask of sources.asks) {
     if (ask.instanceId && ask.routedTo !== "parent") {
       for (const id of sessionChain(ask.instanceId, sources.parentOf)) {
-        waiting.add(id);
+        of(id).asks.push(ask);
       }
     }
   }
   for (const need of sources.artifacts) {
     if (!need.parked) {
-      waiting.add(need.instanceId);
+      of(need.instanceId).artifacts.push(need);
     }
   }
   return waiting;

@@ -130,7 +130,7 @@ const payloadOf = (ask: Envelope): Partial<PermissionRequestFrame> =>
   (ask.payload ?? {}) as Partial<PermissionRequestFrame>;
 
 /** What the ask asks, in one line, as every surface says it. */
-const whatOf = (ask: Envelope): string => {
+export const askWhat = (ask: Envelope): string => {
   const payload = payloadOf(ask);
   return (
     payload.presentation?.summary?.trim() ||
@@ -273,7 +273,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       if (escalated) {
         tellUp(
           pair,
-          { mark: "persons-now", requestId, what: whatOf(ask) },
+          { mark: "persons-now", requestId, what: askWhat(ask) },
           true,
           delegateWaitWords.personsNowLine(deps.title(pair.asker)),
           delegateWaitWords.personsNow(name, requestId)
@@ -289,10 +289,10 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const browser = payloadOf(ask).browserAsk;
       const said = browser
         ? delegateWaitWords.browserHeld(name, browser.origin, browser.reason)
-        : delegateWaitWords.held(name, whatOf(ask));
+        : delegateWaitWords.held(name, askWhat(ask));
       tellUp(
         pair,
-        { mark: "waits", requestId, what: whatOf(ask) },
+        { mark: "waits", requestId, what: askWhat(ask) },
         true,
         delegateWaitWords.waitsLine(deps.title(pair.asker)),
         `${said} ${delegateWaitWords.personOnly}`
@@ -343,7 +343,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
         {
           mark: "ended",
           requestId: ask.requestId ?? "",
-          what: whatOf(ask),
+          what: askWhat(ask),
         },
         persons,
         taken
@@ -351,7 +351,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
           : delegateWaitWords.endedLine(title),
         delegateWaitWords.ended(
           deps.link(pair.asker),
-          whatOf(ask),
+          askWhat(ask),
           howOf(ask, end)
         )
       );

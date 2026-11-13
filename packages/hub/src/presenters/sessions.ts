@@ -7,7 +7,9 @@
 import {
   artifactLink,
   type DelegateType,
+  decisionLink,
   delegateTypesWords as delegateTypesUiWords,
+  delegateWaitWords,
   type GeneratedImage,
   machineLink,
   pauseClock,
@@ -31,6 +33,7 @@ import type { Step } from "../transcript-steps";
 import {
   excludedNamed,
   type HeldWork,
+  type PersonWait,
   type QueuedDelegate,
 } from "../work-items";
 import { ago, ahead, count, handle, lasted, lines, quote } from "./words";
@@ -44,6 +47,19 @@ const tagOf = (node: Pick<DelegateNode, "instanceId" | "name">): string =>
     ? node.name
     : `${node.name}#${handle(node.instanceId)}`;
 
+/** What a delegate resting on the person waits on: each card by its link, each ask by what it asks. */
+const personWords = (wait: PersonWait): string =>
+  delegateWaitWords.listed(
+    [
+      ...wait.cards.map((one) =>
+        one.card
+          ? decisionLink(one.artifactId, one.card, one.title)
+          : artifactLink(one.artifactId, one.title)
+      ),
+      ...wait.asks.map((what) => delegateWaitWords.listedAsk(quote(what, 120))),
+    ].join(", ")
+  );
+
 /** A delegate's state and its age, in words. */
 const stateWords = (node: DelegateNode, now: number): string => {
   const started = Date.parse(node.startedAt);
@@ -54,10 +70,17 @@ const stateWords = (node: DelegateNode, now: number): string => {
       const ended = node.endedAt ? Date.parse(node.endedAt) : now;
       return `${node.state} ${ago(ended, now)}, after ${lasted(ended - started)}`;
     }
-    case "waiting":
-      return node.waitingOn
-        ? `waiting on ${quote(node.waitingOn.reason, 120)}${node.waitingOn.until ? ` until ${ahead(node.waitingOn.until, now)}` : ""}`
-        : "waiting";
+    case "waiting": {
+      const said = [
+        ...(node.onPerson ? [personWords(node.onPerson)] : []),
+        ...(node.waitingOn
+          ? [
+              `waiting on ${quote(node.waitingOn.reason, 120)}${node.waitingOn.until ? ` until ${ahead(node.waitingOn.until, now)}` : ""}`,
+            ]
+          : []),
+      ];
+      return said.length > 0 ? said.join("; ") : "waiting";
+    }
     case "stalled":
       return node.stalled
         ? `stalled: ${node.stalled.words}${node.stalled.until ? ` (${ahead(node.stalled.until, now)})` : ""}`

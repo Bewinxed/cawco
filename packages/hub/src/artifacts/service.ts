@@ -1977,6 +1977,12 @@ export interface ArtifactServiceDeps {
    */
   itemEnded: (instance: InstanceRow) => boolean;
   /**
+   * Whether the session runs a work item that is live: its own asks rest
+   * on the person until answered or the item ends, so a turn's end never
+   * moves it on from them (needs.ts rule 2, work-items.ts `onPerson`).
+   */
+  itemLive: (instance: InstanceRow) => boolean;
+  /**
    * Page `name`'s source kept in `instance`'s project folder (a decision
    * page's at `decisions/<name>/`, a block's at `artifacts/<name>/`), as a
    * build with `keep` keeps it: a held next
@@ -8078,14 +8084,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * `before` (server.ts, at every result, on every harness). Each ask it
      * made before this turn began, still asked, with nothing of its plan
      * waiting on it, is one it moved on from (needs.ts rule 2): this turn
-     * was its next.
+     * was its next. A session whose work item is live moves on from none:
+     * its item rests on them ({@link ArtifactServiceDeps.itemLive}).
      */
     turnEnded: (
       instanceId: string,
       before: Date | null,
       endedAt: Date
     ): void => {
-      if (!before) {
+      const writer = deps.instance(instanceId);
+      if (!before || (writer && deps.itemLive(writer))) {
         return;
       }
       const from = before.toISOString();

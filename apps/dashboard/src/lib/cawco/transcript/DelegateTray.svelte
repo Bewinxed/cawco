@@ -137,12 +137,14 @@
     return Math.ceil(ruler.measureText(shown).width) + 1;
   }
 
-  /** A chip's tone: its work item's state, or the ask it waits on (`asked`: put to this session; `needs`: to you). */
+  /** A chip's tone: its work item's state, or what it waits on (`asked`: an ask put to this session; `needs`: an ask or a card of its own put to you). */
   type Tone = WorkItemState | "asked" | "needs";
   interface Chip {
+    /** Its own artifacts in Needs you (a decision page, a canvas to judge), by title. */
+    cards: string[];
     entry: Entry;
     item: TrayChild;
-    /** The pending question: the delegate's own (needs you), or the one it put to this session. */
+    /** What it waits on: its own question or card (needs you), or the question it put to this session. */
     question: string;
     questions: number;
     tone: Tone;
@@ -159,6 +161,11 @@
     const pending = cawco.session(item.instanceId)?.pending ?? [];
     const own = pending.filter((each) => !each.routedTo);
     const routed = pending.filter((each) => each.routedTo === "parent");
+    // Its own cards in Needs you wait on you as its own asks do (core
+    // `waitsOnYou`): the hub holds its item for them (work-items.ts `onPerson`).
+    const cards = cawco.artifactNeedsOpen.filter(
+      (need) => need.instanceId === item.instanceId
+    );
     let tone: Tone;
     if (item.state === "failed") {
       tone = "failed";
@@ -166,7 +173,7 @@
       tone = "cancelled";
     } else if (item.state === "done") {
       tone = "done";
-    } else if (own.length > 0) {
+    } else if (own.length > 0 || cards.length > 0) {
       tone = "needs";
     } else if (routed.length > 0) {
       tone = "asked";
@@ -175,18 +182,28 @@
     } else {
       tone = "running";
     }
-    const asking = own[0] ?? routed[0];
+    const [card] = cards;
+    let question = "";
+    if (own[0]) {
+      question = askDetailOf(
+        own[0].toolName,
+        own[0].input as Parameters<typeof askDetailOf>[1]
+      );
+    } else if (card) {
+      question = card.ask || card.title;
+    } else if (routed[0]) {
+      question = askShortOf(
+        routed[0].toolName,
+        routed[0].input as Parameters<typeof askShortOf>[1]
+      );
+    }
     return {
       item,
       tone,
       entry: entered.get(item.instanceId) ?? "none",
+      cards: cards.map((one) => one.title),
       questions: own.length,
-      question: asking
-        ? (own[0] ? askDetailOf : askShortOf)(
-            asking.toolName,
-            asking.input as Parameters<typeof askShortOf>[1]
-          )
-        : "",
+      question,
     };
   };
 
@@ -626,7 +643,10 @@
     }
     switch (chip.tone) {
       case "needs":
-        return `needs you, ${questionWords(chip.questions)}`;
+        return `needs you, ${[
+          ...(chip.questions > 0 ? [questionWords(chip.questions)] : []),
+          ...chip.cards,
+        ].join(", ")}`;
       case "asked":
         return "running, asked this session a question";
       case "cancelled":
@@ -656,14 +676,19 @@
     cancelled: "was cancelled",
   };
   function newsOf(
-    { item, tone, entry }: Chip,
+    { item, tone, entry, questions }: Chip,
     was: Tone | undefined
   ): { urgent?: string; polite?: string } {
     if (was === tone || (was === undefined && entry === "none")) {
       return {};
     }
     if (tone === "needs") {
-      return { urgent: `${item.title} has a question` };
+      return {
+        urgent:
+          questions > 0
+            ? `${item.title} has a question`
+            : `${item.title} needs you`,
+      };
     }
     const phrase = was === undefined ? "started" : PHRASE[tone];
     return phrase ? { polite: `${item.title} ${phrase}` } : {};

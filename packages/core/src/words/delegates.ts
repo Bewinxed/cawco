@@ -69,6 +69,14 @@ export const delegateWaitWords = {
   noteKind: "Delegate",
   /** The note's title, by what it tells. */
   waitsLine: (delegate: string) => `${delegate} waits on the person`,
+  /**
+   * A delegate's state in `delegate_list` while it waits on the person
+   * itself (hub work-items.ts `onPerson`): `what`, each card as its link and
+   * each ask as {@link listedAsk}.
+   */
+  listed: (what: string) => `waits on the person: ${what}`,
+  /** One ask in {@link listed}, `what` quoted. */
+  listedAsk: (what: string) => `the ask ${what}`,
   personsNowLine: (delegate: string) => `${delegate}'s ask is the person's now`,
   endedLine: (delegate: string) => `${delegate}'s ask to the person ended`,
   tookOverLine: (delegate: string) =>
