@@ -218,9 +218,9 @@ export const foldDb = (core: DbCore): FoldDb => {
         // Its identity too: the session it is now holds its own.
         session_identities: () => revokeIdentities(tx, gone),
       },
-      ({ table, column, fold }) => {
-        const name = sql.identifier(table);
-        const by = sql.identifier(column);
+      ({ column, fold }) => {
+        const name = column.table;
+        const by = sql.identifier(column.name);
         if (fold === "drop") {
           tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
           return;
@@ -228,7 +228,7 @@ export const foldDb = (core: DbCore): FoldDb => {
         // A session nested under one of the former rows is the session's;
         // the former rows themselves go below.
         const besides =
-          table === "instances" ? sql` AND id NOT IN (${idList(ids)})` : sql``;
+          name === instances ? sql` AND id NOT IN (${idList(ids)})` : sql``;
         tx.run(
           sql`UPDATE OR IGNORE ${name} SET ${by} = ${survivorId} WHERE ${by} IN (${idList(gone)})${besides}`
         );
