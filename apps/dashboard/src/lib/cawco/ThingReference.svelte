@@ -13,9 +13,9 @@
    * at the task or to-do, the session's plan at the step, the machines.
    */
   import { Portal } from "bits-ui";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { chipPeek } from "./chip-peek.svelte";
   import { numberOf } from "./motion/curves.svelte";
+  import ReferenceFace, { referenceChipClass } from "./ReferenceFace.svelte";
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";
   import { type ThingKind, thingNamed } from "./reference-things.svelte";
@@ -49,10 +49,7 @@
 
 <button
   aria-label={name}
-  class={chipVariants({
-    variant: "inline",
-    class: look.mark ? undefined : "ps-space-2",
-  })}
+  class={referenceChipClass(!!look.mark)}
   data-reference-chip={kind}
   data-reference-id={id}
   onblur={peek.leave}
@@ -67,23 +64,12 @@
   type="button"
   bind:this={chip}
 >
-  {#if look.mark}
-    {@const Mark = look.mark}
-    <span
-      data-slot="mark"
-      aria-hidden="true"
-      class="grid size-c-row-mark flex-none place-items-center text-ink-muted"
-      data-box
-    >
-      <Mark class="block size-icon-sm" />
-    </span>
-  {/if}
-  <span data-slot="label">{words}</span>
-  {#if thing?.state}
-    <span data-slot="state" class={["flex-none", look.state]}
-      >{thing.state}</span
-    >
-  {/if}
+  <ReferenceFace
+    glyph={look.mark ?? undefined}
+    state={thing?.state}
+    stateClass={look.state}
+    {words}
+  />
 </button><Portal>
   {#if peek.at && thing}
     <!-- The viewport is its room: a transcript's rows clip what stands inside them. -->

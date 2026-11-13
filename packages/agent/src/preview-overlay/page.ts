@@ -39,6 +39,13 @@ import {
 } from "@cawco/core/frames";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
+import {
+  drawnReferencesOf,
+  isReferenceHref,
+  OPEN_REFERENCE_ASK,
+  REFERENCE_FACES,
+  REFERENCES_DRAWN,
+} from "@cawco/core/reference-faces";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { interactionOf } from "@cawco/core/stage";
 import {
@@ -1297,6 +1304,8 @@ const pick = listenForPicks(window, {
  * of it opens (the dashboard's `openReference`).
  */
 let nextAsk = 1;
+/** The `cawco:` references the page's words draw now (core reference-faces.ts), said again on each hello. */
+let referencesDrawn: string[] = [];
 const asking = new Map<number, (result: unknown) => void>();
 
 function askHost(method: string, params: object): Promise<unknown> {
@@ -1361,6 +1370,12 @@ declare global {
        * it. Answers the refusal's words, or null once it opened.
        */
       open: (artifact: string) => Promise<string | null>;
+      /**
+       * Opens what a `cawco:` reference in the page's words names, where a
+       * chip of it opens in the dashboard (core reference-faces.ts).
+       * Answers the refusal's words, or null once it opened.
+       */
+      follow: (href: string) => Promise<string | null>;
     };
   }
 }
@@ -1435,6 +1450,13 @@ Object.defineProperty(window, "cawco", {
     },
     open: async (id: string) => {
       const refused = await askHost("cawco/open-artifact", { artifact: id });
+      return typeof refused === "string" ? refused : null;
+    },
+    follow: async (href: string) => {
+      if (!isReferenceHref(href)) {
+        return null;
+      }
+      const refused = await askHost(OPEN_REFERENCE_ASK, { href });
       return typeof refused === "string" ? refused : null;
     },
   }),
@@ -3580,6 +3602,16 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       for (const said of Object.values(onPage ?? {})) {
         post("cawco:sheet", { sheet: said });
       }
+      // The references the page draws, to a host that may not have heard them.
+      if (referencesDrawn.length > 0) {
+        post(REFERENCES_DRAWN, { hrefs: referencesDrawn });
+      }
+    },
+    // The host's faces of the page's references (core reference-faces.ts), for the page to draw.
+    [REFERENCE_FACES]: (message) => {
+      dispatchEvent(
+        new CustomEvent(REFERENCE_FACES, { detail: { faces: message.faces } })
+      );
     },
     "cawco:place": (message) => takeInset(message.inset),
     // The host's floating head over the page's top, px (the artifact
@@ -3874,6 +3906,18 @@ window.addEventListener("cawco:element-press", (event) => {
     artifact: artifact.id(),
     ...(event as CustomEvent<object>).detail,
   });
+});
+
+/*
+ * A page whose words name CawCo things (a decision page's, core
+ * reference-faces.ts) says which, each time they change; its host answers
+ * each one's face, and hears them again on its next hello.
+ */
+window.addEventListener(REFERENCES_DRAWN, (event) => {
+  referencesDrawn = drawnReferencesOf(
+    (event as CustomEvent<{ hrefs?: unknown } | null>).detail?.hrefs
+  );
+  post(REFERENCES_DRAWN, { hrefs: referencesDrawn });
 });
 
 /*

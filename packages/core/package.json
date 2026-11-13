@@ -274,6 +274,7 @@
     "./picture-scale": "./src/picture-scale.ts",
     "./words/preview": "./src/words/preview.ts",
     "./references": "./src/references.ts",
+    "./reference-faces": "./src/reference-faces.ts",
     "./accounts": "./src/accounts.ts",
     "./context-filing": "./src/context-filing.ts",
     "./ask-tools": "./src/ask-tools.ts",
