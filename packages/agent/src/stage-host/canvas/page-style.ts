@@ -54,7 +54,7 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 .cawco-section-failed-place > span:last-child { flex: none; }
 .cawco-frame-body { position: relative; min-inline-size: 24px; min-block-size: 16px; }
 .cawco-rig { position: fixed; inset-inline-start: -20000px; inset-block-start: 0; visibility: visible; pointer-events: none; }
-/* A probe held still while its values are read (runtime.ts probeInteraction): no keyframes run and no transition starts in it. */
+/* A probe held still while its values are read (runtime.ts probe): no keyframes run and no transition starts in it. */
 .cawco-rig .cawco-held, .cawco-rig .cawco-held *, .cawco-rig .cawco-held *::before, .cawco-rig .cawco-held *::after {
   animation-name: none !important; transition-property: none !important; }
 
