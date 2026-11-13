@@ -1619,6 +1619,8 @@ export type FramePayload =
   | import("./browser").BrowserFrame
   /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
   | import("./browser").BrowserHandedBackFrame
+  /** Daemon-originated: this machine's passkey relay capability changed. */
+  | import("./browser").PasskeyRelayFrame
   /** Hub-originated: every browser of the fleet, whole, on each change. */
   | import("./browser").BrowserListFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */

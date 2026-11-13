@@ -6079,6 +6079,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/PasskeyRelayRole`.
+    public enum PasskeyRelayRole: OpenEnum {
+        case both
+        case capture
+        case inject
+        case none
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "both": self = .both
+            case "capture": self = .capture
+            case "inject": self = .inject
+            case "none": self = .none
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .both: "both"
+            case .capture: "capture"
+            case .inject: "inject"
+            case .none: "none"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.both, .capture, .inject, .none]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PermissionMode`.
     public enum PermissionMode: OpenEnum {
         case acceptEdits
