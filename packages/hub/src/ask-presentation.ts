@@ -18,7 +18,7 @@ import {
   type SetStanding,
   type SourceFacts,
 } from "@cawco/core";
-import { maskMcpConfig } from "@cawco/core/fleet-secrets";
+import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
 import { boardTitle } from "./labels";
@@ -34,6 +34,24 @@ const permissionOf = (
     : undefined;
 };
 
+const MCP_SERVERS_WRITE = /^(?:mcp__cawco__|cawco_)?admin_mcp_servers_write$/u;
+
+/** A connector write's `config.url` with its secret parts cut, as every read says it. */
+const withOpenUrl = (input: Record<string, unknown>): Record<string, unknown> => {
+  const { config } = input;
+  if (
+    typeof config !== "object" ||
+    config === null ||
+    typeof (config as { url?: unknown }).url !== "string"
+  ) {
+    return input;
+  }
+  return {
+    ...input,
+    config: { ...config, url: openUrl((config as { url: string }).url) },
+  };
+};
+
 /**
  * The copy of a parked ask that leaves the hub for a client (a dashboard, the
  * apps, `/api/pending`): its tool input with every secret hidden, as the card
@@ -46,16 +64,19 @@ export const clientCopy = (envelope: Envelope): Envelope => {
   if (!payload) {
     return envelope;
   }
+  const input = Object.fromEntries(
+    Object.entries(payload.input).map(([key, value]) => [
+      key,
+      redact(key, value),
+    ])
+  );
   return {
     ...envelope,
     payload: {
       ...payload,
-      input: Object.fromEntries(
-        Object.entries(payload.input).map(([key, value]) => [
-          key,
-          redact(key, value),
-        ])
-      ),
+      input: MCP_SERVERS_WRITE.test(payload.toolName)
+        ? withOpenUrl(input)
+        : input,
     },
   };
 };

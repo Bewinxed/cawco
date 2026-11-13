@@ -152,6 +152,9 @@ const splitUrl = (url: string): UrlParts => {
   };
 };
 
+/** A URL as a read says it: its secret parts cut. */
+export const openUrl = (url: string): string => splitUrl(url).open;
+
 const hasSecretParts = (parts: UrlParts): boolean =>
   parts.query.length > 0 || parts.password !== undefined;
 
