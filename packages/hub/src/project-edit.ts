@@ -25,9 +25,10 @@ import {
 } from "@cawco/core/accounts";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { projectAccountWords } from "@cawco/core/words/project-account";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
-import { StatusRefusal } from "./refusal";
+import type { Dispatcher } from "./dispatch";
 
 /** As long as a name `POST /api/projects` takes. */
 const PROJECT_NAME_LIMIT = 200;
@@ -55,23 +56,26 @@ export interface ProjectEdit {
   review?: boolean;
 }
 
-/** A change the hub refuses, in a sentence the person reads under the field. */
-export class ProjectEditRefusal extends StatusRefusal<400 | 404> {}
-
 /** A name as the hub keeps it: trimmed, one line, not empty, at most 200 characters. */
-export const projectName = (raw: string): string => {
+export const projectName = (raw: string) => {
   const name = raw.trim();
   if (!name) {
-    throw new ProjectEditRefusal(400, "A project needs a name.");
+    return problem(400, {
+      code: "name-needed",
+      detail: "A project needs a name.",
+    });
   }
   if (CONTROL.test(name)) {
-    throw new ProjectEditRefusal(400, "A project's name is one line of text.");
+    return problem(400, {
+      code: "name-one-line",
+      detail: "A project's name is one line of text.",
+    });
   }
   if (name.length > PROJECT_NAME_LIMIT) {
-    throw new ProjectEditRefusal(
-      400,
-      `A project's name is at most ${PROJECT_NAME_LIMIT} characters; this one is ${name.length}.`
-    );
+    return problem(400, {
+      code: "name-too-long",
+      detail: `A project's name is at most ${PROJECT_NAME_LIMIT} characters; this one is ${name.length}.`,
+    });
   }
   return name;
 };
@@ -86,25 +90,28 @@ const TRAILING_SLASH = /\/+$/u;
  * (`<url>.git/info/lfs`, lfsapi/endpoint_finder.go
  * `NewEndpointFromCloneURL`).
  */
-const lfsEndpoint = (raw: string): string => {
+const lfsEndpoint = (raw: string) => {
   if (!URL.canParse(raw.trim())) {
-    throw new ProjectEditRefusal(
-      400,
-      "Large files live at a URL: the repository's, or its LFS endpoint (…/info/lfs)."
-    );
+    return problem(400, {
+      code: "large-files-live-url",
+      detail:
+        "Large files live at a URL: the repository's, or its LFS endpoint (…/info/lfs).",
+    });
   }
   const url = new URL(raw.trim());
   if (url.protocol !== "https:") {
-    throw new ProjectEditRefusal(
-      400,
-      "Large files live at an https URL: a connection's key never goes over plain http."
-    );
+    return problem(400, {
+      code: "large-files-live-https",
+      detail:
+        "Large files live at an https URL: a connection's key never goes over plain http.",
+    });
   }
   if (url.username || url.password || url.search || url.hash) {
-    throw new ProjectEditRefusal(
-      400,
-      "Give the URL alone: the connection signs in, so it carries no name, key or query."
-    );
+    return problem(400, {
+      code: "give-url-alone-connection",
+      detail:
+        "Give the URL alone: the connection signs in, so it carries no name, key or query.",
+    });
   }
   const plain = url.toString().replace(TRAILING_SLASH, "");
   if (LFS_PATH.test(url.pathname)) {
@@ -124,7 +131,10 @@ export interface ProjectEditsDeps {
   readonly conversationTo: (project: ProjectRow) => Promise<string | undefined>;
   readonly db: Pick<DbShape, "project" | "setProjectDetails">;
   /** Where its work lands, through the dispatch settings' own path (dispatch.ts `configure`). */
-  readonly lands: (projectId: string, lands: LandsMode) => Promise<unknown>;
+  readonly lands: (
+    projectId: string,
+    lands: LandsMode
+  ) => ReturnType<Dispatcher["configure"]>;
   /** Why a connection cannot sign in to a declared LFS endpoint; none when it can (connections.ts `lfsProblem`). */
   readonly lfsProblem: (connection: string) => string | undefined;
   /** Every dashboard and the app read the projects again. */
@@ -138,7 +148,7 @@ const lfsChange = (
   project: ProjectRow,
   asked: ProjectEdit["lfs"],
   lfsProblem: ProjectEditsDeps["lfsProblem"]
-): Pick<ProjectRow, "lfsConnection" | "lfsUrl"> | undefined => {
+) => {
   if (asked === undefined) {
     return;
   }
@@ -148,12 +158,15 @@ const lfsChange = (
       : { lfsUrl: null, lfsConnection: null };
   }
   const lfsUrl = lfsEndpoint(asked.url);
+  if (lfsUrl instanceof ElysiaStatus) {
+    return lfsUrl;
+  }
   const lfsConnection = asked.connection.trim();
   const why = lfsConnection
     ? lfsProblem(lfsConnection)
     : "Name the connection that signs in there.";
   if (why) {
-    throw new ProjectEditRefusal(400, why);
+    return problem(400, { code: "lfs-refused", detail: why });
   }
   return lfsUrl === project.lfsUrl && lfsConnection === project.lfsConnection
     ? undefined
@@ -183,7 +196,7 @@ export const accountChange = (
   project: ProjectRow,
   asked: ProjectEdit["account"],
   accounts: Account[]
-): Pick<ProjectRow, "account"> | undefined => {
+) => {
   if (asked === undefined) {
     return;
   }
@@ -194,22 +207,22 @@ export const accountChange = (
   const matches = accountsAsked(accounts, raw);
   const [account] = matches;
   if (!account) {
-    throw new ProjectEditRefusal(
-      400,
-      projectAccountWords.noAccount(
+    return problem(400, {
+      code: "no-account",
+      detail: projectAccountWords.noAccount(
         raw,
         accounts.map((one) => accountNameAmong(one, accounts))
-      )
-    );
+      ),
+    });
   }
   if (matches.length > 1) {
-    throw new ProjectEditRefusal(
-      400,
-      projectAccountWords.ambiguous(
+    return problem(400, {
+      code: "ambiguous",
+      detail: projectAccountWords.ambiguous(
         raw,
         matches.map((one) => one.id)
-      )
-    );
+      ),
+    });
   }
   // The project's list holds its providers' sessions alone (placement.ts `ofProvider`).
   const listed = project.accounts?.filter(
@@ -221,22 +234,25 @@ export const accountChange = (
       const one = accounts.find((each) => each.id === id);
       return one ? accountNameAmong(one, accounts) : id;
     };
-    throw new ProjectEditRefusal(
-      400,
-      projectAccountWords.notAllowed(
+    return problem(400, {
+      code: "not-allowed",
+      detail: projectAccountWords.notAllowed(
         accountNameAmong(account, accounts),
         listed.map(named)
-      )
-    );
+      ),
+    });
   }
   return account.id === project.account ? undefined : { account: account.id };
 };
 
 /** What `asked` changes of `project`: each field asked that differs, the name checked. */
-const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
+const changeOf = (project: ProjectRow, asked: ProjectEdit) => {
   const change: ProjectEdit = {};
   if (asked.name !== undefined) {
     const name = projectName(asked.name);
+    if (name instanceof ElysiaStatus) {
+      return name;
+    }
     if (name !== project.name) {
       change.name = name;
     }
@@ -246,7 +262,10 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   }
   if (asked.accountAtLimit !== undefined) {
     if (!PROJECT_AT_LIMIT.includes(asked.accountAtLimit)) {
-      throw new ProjectEditRefusal(400, projectAccountWords.atLimit.needs);
+      return problem(400, {
+        code: "at-limit-needs-account",
+        detail: projectAccountWords.atLimit.needs,
+      });
     }
     if (asked.accountAtLimit !== project.accountAtLimit) {
       change.accountAtLimit = asked.accountAtLimit;
@@ -254,16 +273,39 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   }
   if (asked.lands !== undefined) {
     if (!LANDS_MODES.includes(asked.lands)) {
-      throw new ProjectEditRefusal(
-        400,
-        `Work lands on ${LANDS_MODES.join(", ")}; ${String(asked.lands)} is none of them.`
-      );
+      return problem(400, {
+        code: "work-lands-none-them",
+        detail: `Work lands on ${LANDS_MODES.join(", ")}; ${String(asked.lands)} is none of them.`,
+      });
     }
     if (asked.lands !== project.lands) {
       change.lands = asked.lands;
     }
   }
   return change;
+};
+
+/** An edit's columns, each checked, and where its work lands; or the first refusal. */
+const checkedEdit = (
+  project: ProjectRow,
+  asked: ProjectEdit,
+  lfsProblem: ProjectEditsDeps["lfsProblem"],
+  accounts: Account[]
+) => {
+  const answered = changeOf(project, asked);
+  if (answered instanceof ElysiaStatus) {
+    return answered;
+  }
+  const { lands: landsTo, lfs: _lfs, account: _account, ...asks } = answered;
+  const lfs = lfsChange(project, asked.lfs, lfsProblem);
+  if (lfs instanceof ElysiaStatus) {
+    return lfs;
+  }
+  const account = accountChange(project, asked.account, accounts);
+  if (account instanceof ElysiaStatus) {
+    return account;
+  }
+  return { details: { ...asks, ...lfs, ...account }, landsTo, account };
 };
 
 /** A project as an edit left it, and what became of its running conversation when its account changed. */
@@ -288,46 +330,29 @@ export const createProjectEdits = ({
    * and, when its account changed, what became of its running
    * conversation. Nothing asked is refused.
    */
-  async edit(projectId: string, asked: ProjectEdit): Promise<Edited> {
+  async edit(projectId: string, asked: ProjectEdit) {
     const project = db.project(projectId);
     if (!project) {
-      throw new ProjectEditRefusal(
-        404,
-        "This project is no longer recorded. Refresh."
-      );
+      return problem(404, {
+        code: "no-project",
+        detail: "This project is no longer recorded. Refresh.",
+      });
     }
-    if (
-      asked.name === undefined &&
-      asked.review === undefined &&
-      asked.lands === undefined &&
-      asked.lfs === undefined &&
-      asked.account === undefined &&
-      asked.accountAtLimit === undefined
-    ) {
-      throw new ProjectEditRefusal(
-        400,
-        "Name what changes: the project's name, whether it reviews before done, where its work lands, where its large files live, the account its sessions start on, or what they do at its limit."
-      );
+    const checked = checkedEdit(project, asked, lfsProblem, accounts());
+    if (checked instanceof ElysiaStatus) {
+      return checked;
     }
-    const {
-      lands: landsTo,
-      lfs: _lfs,
-      account: _account,
-      ...asks
-    } = changeOf(project, asked);
-    const details = {
-      ...asks,
-      ...lfsChange(project, asked.lfs, lfsProblem),
-      ...accountChange(project, asked.account, accounts()),
-    };
+    const { details, landsTo, account } = checked;
     if (Object.keys(details).length === 0 && landsTo === undefined) {
-      return { project };
+      return { project } satisfies Edited;
     }
     if (Object.keys(details).length > 0) {
       db.setProjectDetails(projectId, details);
     }
-    if (landsTo !== undefined) {
-      await lands(projectId, landsTo);
+    const landed =
+      landsTo === undefined ? undefined : await lands(projectId, landsTo);
+    if (landed instanceof ElysiaStatus) {
+      return landed;
     }
     projectsChanged();
     if (details.review !== undefined) {
@@ -337,7 +362,10 @@ export const createProjectEdits = ({
     // Sessions started from now start on it; its conversation, the one
     // session that lives on, moves to it as a person's move would.
     const conversation =
-      details.account === undefined ? undefined : await conversationTo(now);
-    return { project: now, ...(conversation ? { conversation } : {}) };
+      account === undefined ? undefined : await conversationTo(now);
+    return {
+      project: now,
+      ...(conversation ? { conversation } : {}),
+    } satisfies Edited;
   },
 });

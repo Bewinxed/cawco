@@ -58,7 +58,7 @@ import {
   zoneOf,
 } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import {
   addRecord,
   isCloudflareAddress,
@@ -72,11 +72,12 @@ import type {
   StreamRelayDb,
 } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
+
 import {
   candidateOf,
   type RelayCall,
   type RelayFleetMachine,
-  RelayRefusal,
+  type RelayMachineRefusal,
   type StreamRelay,
 } from "./stream-relay";
 
@@ -115,17 +116,64 @@ export interface RelayJourneyDeps {
   relay: StreamRelay;
 }
 
+/** Why an act on the journey was refused, each under its own code. */
+type RelayActRefusal =
+  | ReturnType<
+      typeof problem<404, { code: "stream-relay-not-set-up"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "stream-relay-machine-unreached"; detail: string }
+      >
+    >
+  | ReturnType<
+      typeof problem<400, { code: "stream-relay-name-unfit"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<409, { code: "stream-relay-zone-none"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<409, { code: "stream-relay-name-none"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<404, { code: "stream-relay-none"; detail: string }>
+    >
+  | RelayMachineRefusal
+  | ReturnType<
+      typeof problem<409, { code: "stream-relay-not-removed"; detail: string }>
+    >;
+
+/** What an act answers: nothing, or its refusal. */
+type ActAnswer = undefined | RelayActRefusal;
+
 export interface RelayJourney {
-  act: (act: RelayAct, asker: RelayAsker) => Promise<void>;
+  act: (act: RelayAct, asker: RelayAsker) => Promise<ActAnswer>;
   /** Something the journey reads changed (the relay's record, a machine's report): looked at again now. */
   changed: () => void;
   /** The machine connected: looked at again now. */
   connected: (machineId: string) => void;
-  proof: (report: RelayProofReport, asker: RelayAsker) => void;
+  proof: (
+    report: RelayProofReport,
+    asker: RelayAsker
+  ) =>
+    | undefined
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "stream-relay-none-to-prove"; detail: string }
+        >
+      >;
   /** The person's Cloudflare token, for a renewal by DNS. */
   token: () => string | null;
   /** A credential for this screen's proof; a refusal while the relay is not live. */
-  try: (asker: RelayAsker) => RelayTry;
+  try: (
+    asker: RelayAsker
+  ) =>
+    | RelayTry
+    | ReturnType<
+        typeof problem<409, { code: "stream-relay-not-live"; detail: string }>
+      >;
   view: () => RelayJourneyView;
   /** The tick, on the hub's lifetime (lifetime.ts); the returned function ends it. */
   watch: () => () => void;
@@ -722,18 +770,20 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         hostname: name,
         cloudflareToken,
       });
-      db.journeyUpdate({
-        certificateName: name,
-        certificateEndsAt: endsAt,
-        certificateWhy: null,
-      });
-    } catch (error) {
-      if (error instanceof RelayRefusal && error.status === 503) {
+      if (!(endsAt instanceof ElysiaStatus)) {
+        db.journeyUpdate({
+          certificateName: name,
+          certificateEndsAt: endsAt,
+          certificateWhy: null,
+        });
+      } else if (endsAt.status === 503) {
         // Its machine is away or slow: tried again once it is back.
         certAwayAt = Date.now();
       } else {
-        db.journeyUpdate({ certificateWhy: said(error) });
+        db.journeyUpdate({ certificateWhy: endsAt.response.detail });
       }
+    } catch (error) {
+      db.journeyUpdate({ certificateWhy: said(error) });
     } finally {
       certifying = false;
       publish();
@@ -752,11 +802,16 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     db.proofsForget();
     publish();
     try {
-      await relay.setup({
+      const set = await relay.setup({
         machineId: journey.machineId,
         address: machine.address,
         hostname: named ? journey.name : null,
       });
+      if (set instanceof ElysiaStatus) {
+        console.warn(
+          `[relay-journey] the relay did not start: ${set.response.detail}`
+        );
+      }
     } catch (error) {
       console.warn(`[relay-journey] the relay did not start: ${said(error)}`);
     } finally {
@@ -943,17 +998,26 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
    * reaches it (the certificate's DNS challenge, and each renewal): the
    * zone's id, or Cloudflare's refusal in its words and none.
    */
-  const keepToken = async (
-    journey: StoredJourney,
-    token: string
-  ): Promise<{ zone: string } | { why: string }> => {
+  const keepToken = async (journey: StoredJourney, token: string) => {
     const zone = journey.name ? zoneOf(journey.name) : null;
     if (!zone) {
-      throw new RelayRefusal(
-        409,
-        "The stream relay has no name with a zone for a token yet."
-      );
+      return problem(409, {
+        code: "stream-relay-zone-none",
+        detail: "The stream relay has no name with a zone for a token yet.",
+      });
     }
+    const kept = await tokenKept(token, zone);
+    if ("zone" in kept) {
+      db.journeyUpdate({ cloudflareToken: token, certificateWhy: null });
+    }
+    return kept;
+  };
+
+  /** The token checked against `zone`: the zone's id, or Cloudflare's refusal in its words and none. */
+  const tokenKept = async (
+    token: string,
+    zone: string
+  ): Promise<{ zone: string } | { why: string }> => {
     const verified = await verifyToken(token);
     if (!verified.ok) {
       return { why: STREAM_RELAY_WORDS.tokenRefused(zone, verified.said) };
@@ -965,24 +1029,23 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     if (!found.value) {
       return { why: STREAM_RELAY_WORDS.zoneMissing(zone) };
     }
-    db.journeyUpdate({ cloudflareToken: token, certificateWhy: null });
     return { zone: found.value };
   };
 
   /** Let CawCo add it: the token kept, then the record made DNS only. */
-  const addTheRecord = async (
-    journey: StoredJourney,
-    token: string
-  ): Promise<void> => {
+  const addTheRecord = async (journey: StoredJourney, token: string) => {
     const { name, address } = journey;
     if (!(name && address)) {
-      throw new RelayRefusal(
-        409,
-        "The stream relay has no name with a zone to add yet."
-      );
+      return problem(409, {
+        code: "stream-relay-name-none",
+        detail: "The stream relay has no name with a zone to add yet.",
+      });
     }
     tokenWhy = undefined;
     const kept = await keepToken(journey, token);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
     if ("why" in kept) {
       tokenWhy = kept.why;
       return;
@@ -998,7 +1061,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   };
 
   /** Set up: the journey begun (or begun again) through the asker's domain, its name suggested from it. */
-  const setUp = (asker: RelayAsker): void => {
+  const setUp = (asker: RelayAsker) => {
     db.journeyOpen(asker.domain);
     db.asked();
     const opened = db.journey();
@@ -1011,16 +1074,15 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   };
 
   /** The relay started again on its machine; its failure stands on the start step (the relay's record keeps it), so the card says it once, there. */
-  const startAgain = async (journey: StoredJourney): Promise<void> => {
+  const startAgain = async (journey: StoredJourney) => {
     const stored = relay.read();
     if (stored?.machineId !== journey.machineId) {
       return;
     }
-    await relay.start().catch((error: unknown) => {
-      if (!(error instanceof RelayRefusal)) {
-        throw error;
-      }
-    });
+    const started = await relay.start();
+    if (started instanceof ElysiaStatus) {
+      // Its refusal stands on the start step, which the relay's record keeps.
+    }
   };
 
   /** Each act on a journey that stands, by its kind. */
@@ -1029,9 +1091,11 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       journey: StoredJourney,
       act: Extract<RelayAct, { act: K }>,
       asker: RelayAsker
-    ) => void | Promise<void>;
+    ) => ActAnswer | Promise<ActAnswer>;
   } = {
-    "set-up": (_journey, _act, asker) => setUp(asker),
+    "set-up": (_journey, _act, asker) => {
+      setUp(asker);
+    },
     later: () => {
       db.journeyUpdate({ closed: "later" });
       db.asked();
@@ -1044,20 +1108,20 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         (each) => each.machineId === one.machineId
       );
       if (!candidate) {
-        throw new RelayRefusal(
-          409,
-          `${machineName(one.machineId)} can't run the stream relay: the internet reaches it nowhere the hub knows.`
-        );
+        return problem(409, {
+          code: "stream-relay-machine-unreached",
+          detail: `${machineName(one.machineId)} can't run the stream relay: the internet reaches it nowhere the hub knows.`,
+        });
       }
       pick(candidate);
     },
     name: (_journey, one) => {
       const name = one.name.trim().toLowerCase();
       if (!RELAY_DNS_NAME.test(name)) {
-        throw new RelayRefusal(
-          400,
-          STREAM_RELAY_WORDS.notDnsName(name || one.name)
-        );
+        return problem(400, {
+          code: "stream-relay-name-unfit",
+          detail: STREAM_RELAY_WORDS.notDnsName(name || one.name),
+        });
       }
       db.journeyUpdate({ name, nameState: "open" });
       nameCheck = null;
@@ -1080,6 +1144,9 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     token: async (journey, one) => {
       certTokenWhy = undefined;
       const kept = await keepToken(journey, one.token.trim());
+      if (kept instanceof ElysiaStatus) {
+        return kept;
+      }
       if ("why" in kept) {
         certTokenWhy = kept.why;
       }
@@ -1087,15 +1154,22 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     retry: () => {
       db.journeyUpdate({ certificateWhy: null });
     },
-    "start-again": (journey) => startAgain(journey),
-    start: (journey) => startAgain(journey),
+    "start-again": async (journey) => {
+      await startAgain(journey);
+    },
+    start: async (journey) => {
+      await startAgain(journey);
+    },
     stop: () => relay.stop(),
     remove: async () => {
       // The relay's record goes first, and a look in between would find the
       // journey standing with no relay and start it again.
       removing = true;
       try {
-        await relay.remove();
+        const removed = await relay.remove();
+        if (removed instanceof ElysiaStatus) {
+          return removed;
+        }
         db.journeyForget();
         nameCheck = null;
         tokenWhy = undefined;
@@ -1109,7 +1183,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     "check-again": () => undefined,
   };
 
-  const actOn = async (one: RelayAct, asker: RelayAsker): Promise<void> => {
+  const actOn = async (
+    one: RelayAct,
+    asker: RelayAsker
+  ): Promise<ActAnswer> => {
     const journey = db.journey();
     if (one.act === "set-up") {
       setUp(asker);
@@ -1120,17 +1197,17 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         db.asked();
         return;
       }
-      throw new RelayRefusal(
-        404,
-        "The stream relay is not set up yet: press Set up first."
-      );
+      return problem(404, {
+        code: "stream-relay-not-set-up",
+        detail: "The stream relay is not set up yet: press Set up first.",
+      });
     }
     const run = ACTS[one.act] as (
       journey: StoredJourney,
       act: RelayAct,
       asker: RelayAsker
-    ) => void | Promise<void>;
-    await run(journey, one, asker);
+    ) => ActAnswer | Promise<ActAnswer>;
+    return await run(journey, one, asker);
   };
 
   /**
@@ -1158,7 +1235,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     connected: () => tick(),
     act: async (one, asker) => {
       try {
-        await actOn(one, asker);
+        return await actOn(one, asker);
       } finally {
         tick();
       }
@@ -1166,17 +1243,21 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     try: (asker) => {
       const minted = relay.mint(`proof:${asker.device.id}`, TRY_MS);
       if (!(minted && relay.read()?.state === "live")) {
-        throw new RelayRefusal(
-          409,
-          "The stream relay is not live yet, so there is nothing to prove."
-        );
+        return problem(409, {
+          code: "stream-relay-not-live",
+          detail:
+            "The stream relay is not live yet, so there is nothing to prove.",
+        });
       }
       return minted;
     },
     proof: (report, asker) => {
       const stored = relay.read();
       if (!stored) {
-        throw new RelayRefusal(409, "The fleet has no stream relay to prove.");
+        return problem(409, {
+          code: "stream-relay-none-to-prove",
+          detail: "The fleet has no stream relay to prove.",
+        });
       }
       const urls = streamRelayUrls(stored.address, stored.hostname);
       db.proved({
@@ -1255,14 +1336,6 @@ export const browserKey = (userAgent: string | null): string =>
     .digest("hex")
     .slice(0, 16)}`;
 
-/** Answers a refusal with its status and sentence; anything else goes on as an error. */
-const refused = (error: unknown): Response => {
-  if (error instanceof RelayRefusal) {
-    return new Response(error.message, { status: error.status });
-  }
-  throw error;
-};
-
 const ACT_BODY = t.Union([
   t.Object({
     act: t.UnionEnum([
@@ -1316,21 +1389,13 @@ export const relayJourneyRoutes = (
       { body: ACT_BODY },
       async ({ body, request, server }) => {
         const asker = askerOf(request, socketOf(request, server));
-        try {
-          await journey.act(body as RelayAct, asker);
-          return answer(asker);
-        } catch (error) {
-          return refused(error);
-        }
+        const acted = await journey.act(body as RelayAct, asker);
+        return acted instanceof ElysiaStatus ? acted : answer(asker);
       }
     )
-    .get("/api/stream-relay/try", ({ request, server }) => {
-      try {
-        return journey.try(askerOf(request, socketOf(request, server)));
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/stream-relay/try", ({ request, server }) =>
+      journey.try(askerOf(request, socketOf(request, server)))
+    )
     .post(
       "/api/stream-relay/proof",
       {
@@ -1342,12 +1407,8 @@ export const relayJourneyRoutes = (
       },
       ({ body, request, server }) => {
         const asker = askerOf(request, socketOf(request, server));
-        try {
-          journey.proof(body, asker);
-          return answer(asker);
-        } catch (error) {
-          return refused(error);
-        }
+        const proved = journey.proof(body, asker);
+        return proved instanceof ElysiaStatus ? proved : answer(asker);
       }
     );
 };

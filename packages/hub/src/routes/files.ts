@@ -2,7 +2,7 @@
  * The hub's media and file stores.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import {
   mediaContentType,
   mediaFilePath,
@@ -15,13 +15,13 @@ export const fileRoutes = () =>
   new Elysia()
     // An image a transcript referenced, by the hash of its bytes: the same
     // name can only ever mean the same picture, so the browser keeps it.
-    .get("/api/media/:name", async ({ params, status }) => {
+    .get("/api/media/:name", async ({ params }) => {
       const path = mediaFilePath(params.name);
       // Its write may still be under way (media.ts `writing`).
       const writing = path ? mediaWriting(params.name) : undefined;
       const file = path && !writing ? Bun.file(path) : undefined;
       if (!(writing || (file && (await file.exists())))) {
-        return status(404, "no such media");
+        return problem(404, { code: "no-such-media", detail: "no such media" });
       }
       return new Response(writing ? new Uint8Array(writing) : file, {
         headers: {
@@ -64,11 +64,11 @@ export const fileRoutes = () =>
       }
     )
     // An attached file's bytes, by the hash a send's reference names.
-    .get("/api/files/:hash", async ({ params, status }) => {
+    .get("/api/files/:hash", async ({ params }) => {
       const path = storedFilePath(params.hash);
       const file = path ? Bun.file(path) : undefined;
       if (!(file && (await file.exists()))) {
-        return status(404, "no such file");
+        return problem(404, { code: "no-such-file", detail: "no such file" });
       }
       return new Response(file, {
         headers: {
