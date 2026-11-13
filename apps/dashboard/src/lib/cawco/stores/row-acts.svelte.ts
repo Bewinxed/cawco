@@ -25,17 +25,6 @@ import {
 } from "./sessions.svelte";
 
 /**
- * The other half of durability: a message to a dead session revives it first.
- * The daemon respawns the same instance with `resume`, then the text goes
- * through as usual — the reader never has to know the process died.
- */
-/**
- * Brings a dead-but-resumable session back before anything is asked of it.
- * A process can die between one action and the next — a daemon restart, a
- * crash — and the reader should not have to know which of their actions
- * happens to revive it. Returns once the session can take work again.
- */
-/**
  * The harness key a spawn resumes an instance under. The hub row is the one
  * authority: it holds what the daemon recorded when the session named itself,
  * and a view id — a CawCo instance id — is never a key, whatever shape it
