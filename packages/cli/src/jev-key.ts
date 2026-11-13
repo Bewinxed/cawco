@@ -8,52 +8,48 @@
  * last four characters as the hub shows them, and the route Jev takes now;
  * never the key.
  */
+
+import {
+  type HubAnswer,
+  type HubClient,
+  type HubData,
+  refusalText,
+  unwrap,
+} from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
-import { ownerAsk } from "./owner";
+import { ownerCall } from "./owner";
 
-/** What `GET /api/jev` answers with. */
-const JevViewSchema = z.object({
-  route: z.enum(["typesafe", "openrouter"]).nullable(),
-  suggestWhileTyping: z.boolean(),
-  typesafe: z
-    .object({ ends: z.string(), setAt: z.number().nullable() })
-    .nullable(),
-});
-type JevView = z.infer<typeof JevViewSchema>;
-
-const ROUTE_LINE: Record<NonNullable<JevView["route"]> | "off", string> = {
+const ROUTE_LINE = {
   typesafe: "Jev goes to TypeSafe directly with this key.",
   openrouter: "Jev goes through the OpenRouter connection.",
   off: "Jev is off: no TypeSafe key, and OpenRouter is not connected.",
-};
+} as const;
 
-const routeLine = (view: JevView): string => ROUTE_LINE[view.route ?? "off"];
+const routeLine = (route: keyof typeof ROUTE_LINE | null): string =>
+  ROUTE_LINE[route ?? "off"];
 
 /** Sends `request` (the TypeSafe key's route) to the hub; answers the view it returns. */
-const callHub = async (
+const callHub = async <A extends HubAnswer>(
   hub: string,
-  request: HubRequest,
+  request: (client: HubClient) => Promise<A>,
   refused: string
-): Promise<JevView> => {
-  const { ok, said, status } = await ownerAsk(
-    hub,
-    request,
-    "cawco jev",
-    30_000,
-    ConnectionKeyError,
-    (seconds) =>
-      `${hub} did not answer within ${seconds}s, so what it did with the TypeSafe key is not known`
+): Promise<HubData<A>> =>
+  unwrap(
+    await ownerCall(
+      hub,
+      "cawco jev",
+      30_000,
+      ConnectionKeyError,
+      (seconds) =>
+        `${hub} did not answer within ${seconds}s, so what it did with the TypeSafe key is not known`,
+      request
+    ),
+    (refusal) =>
+      new ConnectionKeyError(
+        `${hub} ${refused} (${refusal.status}): ${refusalText(refusal).slice(0, 300)}`
+      )
   );
-  if (!ok) {
-    throw new ConnectionKeyError(
-      `${hub} ${refused} (${status}): ${said.slice(0, 300)}`
-    );
-  }
-  return JevViewSchema.parse(JSON.parse(said));
-};
 
 /** Reads the key and has the hub at `hub` (its http base) hold it. Answers the lines to print. */
 export const setJevKey = async (hub: string): Promise<string[]> => {
@@ -74,12 +70,12 @@ export const setJevKey = async (hub: string): Promise<string[]> => {
   }
   const view = await callHub(
     hub,
-    hubRequest("PUT /api/jev/typesafe-key", { body: { key } }),
+    (client) => client.api.jev["typesafe-key"].put({ key }),
     "refused the TypeSafe key"
   );
   return [
     `TypeSafe key held (${key.length} characters, ends …${view.typesafe?.ends ?? "?"})`,
-    routeLine(view),
+    routeLine(view.route),
   ];
 };
 
@@ -87,8 +83,8 @@ export const setJevKey = async (hub: string): Promise<string[]> => {
 export const removeJevKey = async (hub: string): Promise<string[]> => {
   const view = await callHub(
     hub,
-    hubRequest("DELETE /api/jev/typesafe-key"),
+    (client) => client.api.jev["typesafe-key"].delete(),
     "did not remove the TypeSafe key"
   );
-  return ["TypeSafe key removed", routeLine(view)];
+  return ["TypeSafe key removed", routeLine(view.route)];
 };
