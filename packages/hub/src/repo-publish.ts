@@ -34,6 +34,7 @@ import {
   type PlacePush,
 } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
+import { ElysiaStatus, problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { PlaceRow, ProjectRow } from "./db/projects";
@@ -70,10 +71,6 @@ export interface Published {
 
 const TRAILING_SLASHES = /\/+$/u;
 
-const refuse = (message: string): never => {
-  throw new Error(message);
-};
-
 export const createRepoPublish = ({
   bare,
   call,
@@ -82,10 +79,7 @@ export const createRepoPublish = ({
   places,
 }: RepoPublishDeps) => {
   /** The checkout a publish reads and pushes: the one named, else the project's only one. */
-  const placeOf = (
-    project: ProjectRow,
-    folder: string | undefined
-  ): PlaceRow => {
+  const placeOf = (project: ProjectRow, folder: string | undefined) => {
     const checkouts = project.places.filter(
       (place) => place.kind === "checkout"
     );
@@ -96,19 +90,23 @@ export const createRepoPublish = ({
       ? checkouts.find((place) => place.path === named)
       : sole;
     if (found) {
-      return found;
+      const place: PlaceRow = found;
+      return place;
     }
     if (checkouts.length === 0) {
-      return refuse(
-        "This project has no checkout on a machine to publish: its only place is its folder on the hub."
-      );
+      return problem(409, {
+        code: "repo-publish-no-checkout",
+        detail:
+          "This project has no checkout on a machine to publish: its only place is its folder on the hub.",
+      });
     }
     const listed = checkouts.map((place) => place.path).join(", ");
-    return refuse(
-      named
+    return problem(400, {
+      code: "repo-publish-folder-unnamed",
+      detail: named
         ? `${named} isn't one of this project's folders. Pass one as folder: ${listed}.`
-        : `Name the folder to publish (folder): ${listed}.`
-    );
+        : `Name the folder to publish (folder): ${listed}.`,
+    });
   };
 
   /** Refused when the hub repository `key` is published already: its link names where. */
@@ -116,9 +114,12 @@ export const createRepoPublish = ({
     const linked = key
       ? db.projectLinkPublishedFrom(project.id, hubRepoSegment(key))
       : undefined;
-    if (linked) {
-      refuse(`This folder's repository is already published, as ${linked}.`);
-    }
+    return linked
+      ? problem(409, {
+          code: "repo-publish-published",
+          detail: `This folder's repository is already published, as ${linked}.`,
+        })
+      : undefined;
   };
 
   /** The GitHub connection to create it with: the one named, else the project's one, else the fleet's one. */
@@ -126,27 +127,29 @@ export const createRepoPublish = ({
     const github = connections
       .list()
       .filter((one) => one.service.trim().toLowerCase() === "github");
-    const pick =
-      (named?.trim() && github.find((one) => one.name === named.trim())) ||
-      (named?.trim()
-        ? refuse(`There is no GitHub connection ${named.trim()}.`)
-        : undefined) ||
-      (() => {
-        const mine = github.filter(
-          (one) =>
-            one.projects.includes(project.id) ||
-            (!!project.areaId && one.areas.includes(project.areaId))
-        );
-        const from = mine.length > 0 ? mine : github;
-        if (from.length === 1) {
-          return from[0];
-        }
-        return refuse(
-          from.length === 0
-            ? "The fleet has no GitHub connection to create the repository with; add one in Settings › Connections."
-            : `Name the GitHub connection to create it with (connection): ${from.map((one) => one.name).join(", ")}.`
-        );
-      })();
+    const wanted = named?.trim();
+    const mine = github.filter(
+      (one) =>
+        one.projects.includes(project.id) ||
+        (!!project.areaId && one.areas.includes(project.areaId))
+    );
+    const from = mine.length > 0 ? mine : github;
+    const sole = from.length === 1 ? from[0] : undefined;
+    const pick = wanted ? github.find((one) => one.name === wanted) : sole;
+    if (!pick) {
+      return wanted
+        ? problem(404, {
+            code: "repo-publish-connection-unknown",
+            detail: `There is no GitHub connection ${wanted}.`,
+          })
+        : problem(400, {
+            code: "repo-publish-connection-unnamed",
+            detail:
+              from.length === 0
+                ? "The fleet has no GitHub connection to create the repository with; add one in Settings › Connections."
+                : `Name the GitHub connection to create it with (connection): ${from.map((one) => one.name).join(", ")}.`,
+          });
+    }
     // A connection the hub cannot sign in as is refused before anyone is
     // asked; so is a GitHub App's, which makes no repository under a person
     // (`POST /user/repos` takes a user's token).
@@ -155,9 +158,10 @@ export const createRepoPublish = ({
       pick.auth === "gh" ||
       pick.auth === "device"
     )) {
-      refuse(
-        `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection that acts as you: gh on a machine, a code sign-in, or a token.`
-      );
+      return problem(400, {
+        code: "repo-publish-connection-unfit",
+        detail: `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection that acts as you: gh on a machine, a code sign-in, or a token.`,
+      });
     }
     connections.githubClient(pick.name);
     return pick;
@@ -172,15 +176,23 @@ export const createRepoPublish = ({
       name?: string;
       private?: boolean;
     }
-  ): Promise<CreateRepo> => {
+  ) => {
     const name = asked.name?.trim() ?? "";
     if (!REPO_NAME.test(name)) {
-      refuse(
-        "create_repo takes the repository's name: letters, digits, '.', '-' and '_'."
-      );
+      return problem(400, {
+        code: "repo-publish-name-unfit",
+        detail:
+          "create_repo takes the repository's name: letters, digits, '.', '-' and '_'.",
+      });
     }
     const connection = connectionOf(project, asked.connection);
+    if (connection instanceof ElysiaStatus) {
+      return connection;
+    }
     const place = placeOf(project, asked.folder);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
     const made = await places.ensure({
       projectId: project.id,
       machineId: place.machineId,
@@ -191,8 +203,11 @@ export const createRepoPublish = ({
       project.id,
       true,
     ])) as PlacePush;
-    unpublished(project, tree.hub);
-    return {
+    const published = unpublished(project, tree.hub);
+    if (published) {
+      return published;
+    }
+    const change: CreateRepo = {
       kind: "create_repo",
       folder: place.path,
       name,
@@ -211,6 +226,7 @@ export const createRepoPublish = ({
         ).values(),
       ].sort((a, b) => a.path.localeCompare(b.path)),
     };
+    return change;
   };
 
   /** The hub's push from its bare repository to GitHub, the token in git's environment. */
@@ -273,22 +289,27 @@ export const createRepoPublish = ({
   };
 
   /** Approved: pushed to the hub, created on GitHub, pushed there; answers what it made, from where. */
-  const publish = async (
-    project: ProjectRow,
-    change: CreateRepo
-  ): Promise<Published> => {
+  const publish = async (project: ProjectRow, change: CreateRepo) => {
     const place = placeOf(project, change.folder);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
     const pushed = (await call(place.machineId, CONTROL_PLACE_PUSH, [
       place.path,
       project.id,
       false,
     ])) as PlacePush;
-    const hub =
-      pushed.hub ??
-      refuse(
-        `${place.path} answered its push without naming the hub repository it went to.`
-      );
-    unpublished(project, hub);
+    const { hub } = pushed;
+    if (!hub) {
+      return problem(502, {
+        code: "repo-publish-hub-unnamed",
+        detail: `${place.path} answered its push without naming the hub repository it went to.`,
+      });
+    }
+    const published = unpublished(project, hub);
+    if (published) {
+      return published;
+    }
     const octokit = connections.githubClient(change.connection);
     const asked = await readWithin(API_MS, async (signal) => {
       try {
@@ -333,7 +354,8 @@ export const createRepoPublish = ({
     console.log(
       `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`
     );
-    return { full: made.full_name, from: hub };
+    const done: Published = { full: made.full_name, from: hub };
+    return done;
   };
 
   return { read, publish };

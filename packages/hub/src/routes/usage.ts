@@ -2,7 +2,7 @@
  * What the fleet has spent and what limits it stands at.
  */
 import type { UsageLimitsResponse, UsageSpend } from "@cawco/core/usage/types";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { usageLimits } from "../accounts";
 import { CapabilityCallsRefusal, capabilityCalls } from "../capability-calls";
 import { hidden } from "../hidden";
@@ -30,12 +30,15 @@ export const usageRoutes = ({
           days: t.Optional(t.Numeric()),
         }),
       },
-      ({ query, status }) => {
+      ({ query }) => {
         try {
           return capabilityCalls(db, query);
         } catch (error) {
           if (error instanceof CapabilityCallsRefusal) {
-            return status(400, error.message);
+            return problem(400, {
+              code: "capability-calls-refused",
+              detail: error.message,
+            });
           }
           throw error;
         }
@@ -52,12 +55,14 @@ export const usageRoutes = ({
         }),
       },
       ({ query }) =>
-        db.accounts.history({
-          accountId: query.accountId,
-          kind: query.kind,
-          since: query.since,
-          until: query.until,
-        })
+        db.accounts
+          .history({
+            accountId: query.accountId,
+            kind: query.kind,
+            since: query.since,
+            until: query.until,
+          })
+          .map((row) => ({ ...row, fetchedAt: row.fetchedAt.toISOString() }))
     )
     .get(
       "/api/usage/summary",

@@ -81,7 +81,7 @@ import {
   type TrackerView,
 } from "@cawco/core/trackers";
 import { connectionsWords } from "@cawco/core/words/connections";
-import { Elysia, status, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
@@ -94,6 +94,7 @@ import type {
 import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
+
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
   externalStateOf,
@@ -164,7 +165,6 @@ export interface TrackersDeps {
 }
 
 /** A refusal for a route: a 400 in words. */
-class TrackerProblem extends Error {}
 
 /** What a project binds to, as a person gives it. */
 export interface BindInput {
@@ -182,25 +182,36 @@ export interface BindInput {
 }
 
 /** A binding to GitHub Issues or Linear as asked, its connection and target named; refused in words when one is missing. */
-const askedOf = (
-  input: BindInput & { tracker: IssueTracker }
-): { connection: string; target: string; tracker: IssueTracker } => {
+const askedOf = (input: BindInput & { tracker: IssueTracker }) => {
   const name = TRACKER_NAMES[input.tracker];
   const where = input.tracker === "github" ? "repository" : "team";
   const connection = input.connection?.trim();
   if (!connection) {
-    throw new TrackerProblem(
-      `${name} needs a connection: pick the one that reaches its ${where}.`
-    );
+    return problem(400, {
+      code: "tracker-connection-missing",
+      detail: `${name} needs a connection: pick the one that reaches its ${where}.`,
+    });
   }
   const target = input.target?.trim();
   if (!target) {
-    throw new TrackerProblem(
-      `${name} needs its ${where}: pick one ${connection} reaches.`
-    );
+    return problem(400, {
+      code: "tracker-target-missing",
+      detail: `${name} needs its ${where}: pick one ${connection} reaches.`,
+    });
   }
   return { connection, target, tracker: input.tracker };
 };
+
+/** A project the hub does not keep, refused as the tracker's routes refuse (tracker-project-unknown). */
+const projectUnknown = (projectId: string) =>
+  problem(400, {
+    code: "tracker-project-unknown",
+    detail: `The hub keeps no project ${projectId}.`,
+  });
+
+/** What the tracker or the connection threw, in its words (tracker-refused). */
+const trackerRefused = (error: unknown) =>
+  problem(400, { code: "tracker-refused", detail: wordsOf(error) });
 
 /** The fields the sync compares, as a task file holds them. */
 type Fields = Pick<TrackerSynced, "description" | "labels" | "title">;
@@ -315,8 +326,8 @@ const itemOf = (binding: TrackerBindingRow, key: string): ItemKey =>
 const wordsOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-const problemWords = (problem: Problem): string =>
-  typeof problem === "string" ? problem : problem.message;
+const problemWords = (misfit: Problem): string =>
+  typeof misfit === "string" ? misfit : misfit.message;
 
 /** A failure as a task's problem: the tracker's refusal, or the error's words. */
 const problemOf = (error: unknown): Problem =>
@@ -328,11 +339,11 @@ const stopsSync = (error: unknown): error is TrackerRefusal =>
   (error.kind === "rate" || error.kind === "sign-in");
 
 /** Keeps a task's problem for the binding's word; answers its words. */
-const fail = (sync: Sync, taskId: string, problem: Problem): string => {
+const fail = (sync: Sync, taskId: string, misfit: Problem): string => {
   if (!sync.problems.has(taskId)) {
-    sync.problems.set(taskId, problem);
+    sync.problems.set(taskId, misfit);
   }
-  return problemWords(problem);
+  return problemWords(misfit);
 };
 
 const stageOf = (sync: Sync, name: string): Stage | undefined =>
@@ -618,9 +629,9 @@ const applyPush = async (round: Round): Promise<void> => {
 const outcomeOf = (sync: Sync): Pick<TrackerBindingRow, "reason" | "state"> => {
   const problems = [...sync.problems.values()];
   const refused = problems.find(
-    (problem): problem is TrackerRefusal =>
-      problem instanceof TrackerRefusal &&
-      (problem.kind === "scope" || problem.kind === "sign-in")
+    (misfit): misfit is TrackerRefusal =>
+      misfit instanceof TrackerRefusal &&
+      (misfit.kind === "scope" || misfit.kind === "sign-in")
   );
   if (refused) {
     return { state: "refused", reason: refused.message };
@@ -645,10 +656,10 @@ const projectAfter = (
 
 /** Where a binding stands after a sync that stopped: refused for a sign-in or scope, else as it stood. */
 const stateAfter = (
-  refusal: TrackerRefusal,
+  trackerRefusal: TrackerRefusal,
   binding: TrackerBindingRow
 ): TrackerSyncState =>
-  refusal.kind === "scope" || refusal.kind === "sign-in"
+  trackerRefusal.kind === "scope" || trackerRefusal.kind === "sign-in"
     ? "refused"
     : binding.state;
 
@@ -751,8 +762,16 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const { provider } = sync.binding;
+    const unwritten = (why: string) =>
+      round.said.push(
+        fail(
+          sync,
+          link.taskId,
+          `${link.ref}'s change on ${TRACKER_NAMES[provider]} could not be written into ${link.taskId}: ${why}`
+        )
+      );
     try {
-      await own(sync.projectId, link.taskId, () =>
+      const updated = await own(sync.projectId, link.taskId, () =>
         tasks.update(
           sync.projectId,
           link.taskId,
@@ -760,15 +779,13 @@ export const createTrackers = (deps: TrackersDeps) => {
           actorOf(provider, `${link.ref} changed on ${TRACKER_NAMES[provider]}`)
         )
       );
+      if (updated instanceof ElysiaStatus) {
+        unwritten(updated.response.detail);
+        return;
+      }
       Object.assign(round.next, pull);
     } catch (error) {
-      round.said.push(
-        fail(
-          sync,
-          link.taskId,
-          `${link.ref}'s change on ${TRACKER_NAMES[provider]} could not be written into ${link.taskId}: ${wordsOf(error)}`
-        )
-      );
+      unwritten(wordsOf(error));
     }
   };
 
@@ -783,8 +800,16 @@ export const createTrackers = (deps: TrackersDeps) => {
       round.held ??
       round.statusWhy ??
       `${link.ref} is “${issue.state.name}” on ${TRACKER_NAMES[provider]}`;
+    const unmoved = (why: string) =>
+      round.said.push(
+        fail(
+          sync,
+          link.taskId,
+          `${where}, and ${link.taskId} could not move to ${moveTo}: ${why}`
+        )
+      );
     try {
-      await own(sync.projectId, link.taskId, () =>
+      const moved = await own(sync.projectId, link.taskId, () =>
         tasks.move(
           sync.projectId,
           link.taskId,
@@ -792,16 +817,14 @@ export const createTrackers = (deps: TrackersDeps) => {
           actorOf(provider, where)
         )
       );
+      if (moved instanceof ElysiaStatus) {
+        unmoved(moved.response.detail);
+        return;
+      }
       round.next.state = issue.state.token;
       round.next.stage = moveTo;
     } catch (error) {
-      round.said.push(
-        fail(
-          sync,
-          link.taskId,
-          `${where}, and ${link.taskId} could not move to ${moveTo}: ${wordsOf(error)}`
-        )
-      );
+      unmoved(wordsOf(error));
     }
   };
 
@@ -810,15 +833,15 @@ export const createTrackers = (deps: TrackersDeps) => {
    * on the binding, and issues keep syncing. Answers the words.
    */
   const statusStopped = (sync: Sync, error: unknown): string => {
-    const refusal = problemOf(error);
+    const trackerRefusal = problemOf(error);
     if (
-      refusal instanceof TrackerRefusal &&
-      (refusal.kind === "scope" || refusal.kind === "sign-in")
+      trackerRefusal instanceof TrackerRefusal &&
+      (trackerRefusal.kind === "scope" || trackerRefusal.kind === "sign-in")
     ) {
-      sync.statusRefused = refusal.message;
+      sync.statusRefused = trackerRefusal.message;
       sync.onProject = undefined;
     }
-    return problemWords(refusal);
+    return problemWords(trackerRefusal);
   };
 
   /** The task's move put on its item: added to the Project when it is not on it, its Status set. */
@@ -950,6 +973,9 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const task = await tasks.get(sync.projectId, link.taskId);
+    if (task instanceof ElysiaStatus) {
+      throw new TrackerRefusal("input", task.response.detail);
+    }
     const round: Round = {
       sync,
       link,
@@ -997,6 +1023,14 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const { provider } = sync.binding;
+    const unheld = (why: string) =>
+      db.trackers.updateLink(sync.projectId, link.taskId, {
+        problem: fail(
+          sync,
+          link.taskId,
+          `A comment on ${link.ref} could not be added to ${link.taskId}, or its task held for you: ${why}`
+        ),
+      });
     try {
       const filed = await own(sync.projectId, link.taskId, () =>
         deps.externalItems.fileComment(
@@ -1015,13 +1049,17 @@ export const createTrackers = (deps: TrackersDeps) => {
           comment.body
         )
       );
+      if (filed instanceof ElysiaStatus) {
+        unheld(filed.response.detail);
+        return;
+      }
       if (filed.kind === "none") {
         return;
       }
       const { task } = filed;
       // Their words are in its file now: an agent reads them only once you say so.
       if (comment.unvouched && unattended(sync, task.stage)) {
-        await own(sync.projectId, link.taskId, () =>
+        const held = await own(sync.projectId, link.taskId, () =>
           tasks.move(
             sync.projectId,
             link.taskId,
@@ -1032,15 +1070,12 @@ export const createTrackers = (deps: TrackersDeps) => {
             )
           )
         );
+        if (held instanceof ElysiaStatus) {
+          unheld(held.response.detail);
+        }
       }
     } catch (error) {
-      db.trackers.updateLink(sync.projectId, link.taskId, {
-        problem: fail(
-          sync,
-          link.taskId,
-          `A comment on ${link.ref} could not be added to ${link.taskId}, or its task held for you: ${wordsOf(error)}`
-        ),
-      });
+      unheld(wordsOf(error));
     }
   };
 
@@ -1175,7 +1210,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   };
 
   /** A task with no issue: one made for it, linked, and what the tracker made of its words taken back. */
-  const fileIssue = async (sync: Sync, task: TaskView): Promise<void> => {
+  const fileIssue = async (sync: Sync, task: TaskView) => {
     const { provider, targetName } = sync.binding;
     const current = stageOf(sync, task.stage);
     const state = current ? stateFor(current, sync.states) : undefined;
@@ -1208,25 +1243,26 @@ export const createTrackers = (deps: TrackersDeps) => {
         (field) => [field, remote[field]]
       )
     ) as TaskPatch;
-    await own(sync.projectId, task.id, async () => {
-      await tasks.setIssue(
+    const written = await own(sync.projectId, task.id, async () => {
+      const named = await tasks.setIssue(
         sync.projectId,
         task.id,
         issue.url,
         actorOf(provider, `${issue.ref} made on ${TRACKER_NAMES[provider]}`)
       );
-      if (Object.keys(back).length > 0) {
-        await tasks.update(
-          sync.projectId,
-          task.id,
-          back,
-          actorOf(
-            provider,
-            `${issue.ref} as ${TRACKER_NAMES[provider]} keeps it`
-          )
-        );
+      if (named instanceof ElysiaStatus || Object.keys(back).length === 0) {
+        return named;
       }
+      return await tasks.update(
+        sync.projectId,
+        task.id,
+        back,
+        actorOf(provider, `${issue.ref} as ${TRACKER_NAMES[provider]} keeps it`)
+      );
     });
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     console.info(
       `[tracker] ${sync.projectId} ${task.id} → ${issue.ref} on ${targetName}`
     );
@@ -1235,15 +1271,39 @@ export const createTrackers = (deps: TrackersDeps) => {
   /** A task with no issue yet: the issue its file names, linked, or one made; a refusal is the binding's to say, and the next sync tries again. */
   const fileOrRelink = async (sync: Sync, taskId: string): Promise<void> => {
     const task = await tasks.get(sync.projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      throw new TrackerRefusal("input", task.response.detail);
+    }
     try {
       const named = task.links.find((link) => link.mode === "record")?.url;
-      await (named ? relink(sync, task, named) : fileIssue(sync, task));
+      const refused = await (named
+        ? relink(sync, task, named)
+        : fileIssue(sync, task));
+      if (refused) {
+        fail(sync, taskId, refused.response.detail);
+      }
     } catch (error) {
       if (stopsSync(error)) {
         throw error;
       }
       fail(sync, taskId, problemOf(error));
     }
+  };
+
+  /** The stage an issue is filed in: its Project status's, while that agrees with its state; else its state's. */
+  const issueStage = (
+    sync: Sync,
+    issue: Issue,
+    optionId: string | null | undefined
+  ) => {
+    const byStatus =
+      sync.onProject && optionId
+        ? stageForStatus(sync, sync.onProject.project, optionId, "")
+        : undefined;
+    return byStatus &&
+      stateFor(byStatus, sync.states)?.token === issue.state.token
+      ? byStatus
+      : stageFor(issue.state, undefined, sync.stages, sync.states);
   };
 
   /**
@@ -1256,14 +1316,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     const { provider, targetName } = sync.binding;
     const { unvouched } = issue.opener;
     const item = sync.onProject?.read.items.get(issue.key);
-    const byStatus =
-      sync.onProject && item?.optionId
-        ? stageForStatus(sync, sync.onProject.project, item.optionId, "")
-        : undefined;
-    const placed =
-      byStatus && stateFor(byStatus, sync.states)?.token === issue.state.token
-        ? byStatus
-        : stageFor(issue.state, undefined, sync.stages, sync.states);
+    const placed = issueStage(sync, issue, item?.optionId);
     if (!placed) {
       sync.problems.set(
         `issue:${issue.key}`,
@@ -1280,12 +1333,21 @@ export const createTrackers = (deps: TrackersDeps) => {
         ? heldWords(issue.ref, unvouched, stage.name)
         : `${issue.ref} opened on ${TRACKER_NAMES[provider]} by ${issue.opener.name}`
     );
+    const unfiled = (why: string) =>
+      sync.problems.set(
+        `issue:${issue.key}`,
+        `${issue.ref} on ${targetName} could not be filed as a task: ${why}`
+      );
     try {
       const task = await tasks.create(
         sync.projectId,
         { ...fields, stage: stage.name },
         actor
       );
+      if (task instanceof ElysiaStatus) {
+        unfiled(task.response.detail);
+        return;
+      }
       putLink(
         sync,
         task,
@@ -1298,27 +1360,36 @@ export const createTrackers = (deps: TrackersDeps) => {
         new Date(issue.createdAt),
         unvouched
       );
-      await own(sync.projectId, task.id, () =>
+      const named = await own(sync.projectId, task.id, () =>
         tasks.setIssue(sync.projectId, task.id, issue.url, actor)
       );
+      if (named instanceof ElysiaStatus) {
+        unfiled(named.response.detail);
+        return;
+      }
       console.info(
         `[tracker] ${sync.projectId} ${issue.ref} on ${targetName} → ${task.id}`
       );
     } catch (error) {
-      sync.problems.set(
-        `issue:${issue.key}`,
-        `${issue.ref} on ${targetName} could not be filed as a task: ${wordsOf(error)}`
-      );
+      unfiled(wordsOf(error));
     }
   };
 
-  /** A sync's adapter, states and stages; stages that do not read refuse it. */
+  /**
+   * A sync's adapter, states and stages; stages that do not read refuse it.
+   * A refused read of the project's folder here and in the sync's other
+   * steps is thrown on as the sync's own input refusal, as its other
+   * failures are: the binding says it in its words.
+   */
   const openSync = async (binding: TrackerBindingRow): Promise<Sync> => {
     const adapter = await adapterOf(binding);
     const [states, stagesView] = await Promise.all([
       adapter.states(),
       tasks.stages(binding.projectId),
     ]);
+    if (stagesView instanceof ElysiaStatus) {
+      throw new TrackerRefusal("input", stagesView.response.detail);
+    }
     if (stagesView.problems.length > 0) {
       throw new TrackerRefusal(
         "input",
@@ -1359,11 +1430,17 @@ export const createTrackers = (deps: TrackersDeps) => {
     checkedAt.set(binding.projectId, Date.now());
     const bound = binding.githubProject;
     try {
-      sync.projectProbe = await projectOf(
+      const probe = await projectOf(
         binding.connection,
         binding.target,
         bound ? { id: bound.id, map: bound.map } : undefined
       );
+      if (probe instanceof ElysiaStatus) {
+        // The bound Project gone: its words stand.
+        sync.statusRefused = probe.response.detail;
+        return null;
+      }
+      sync.projectProbe = probe;
     } catch (error) {
       if (stopsSync(error)) {
         throw error;
@@ -1491,22 +1568,24 @@ export const createTrackers = (deps: TrackersDeps) => {
     marked: Set<string>,
     error: unknown
   ): void => {
-    const refusal =
+    const trackerRefusal =
       error instanceof TrackerRefusal
         ? error
         : new TrackerRefusal("input", wordsOf(error));
-    if (refusal.kind === "sign-in") {
-      deps.connections.refusedBy(binding.connection, refusal.message);
+    if (trackerRefusal.kind === "sign-in") {
+      deps.connections.refusedBy(binding.connection, trackerRefusal.message);
     }
     for (const id of marked) {
       dirtyOf(binding.projectId).add(id);
     }
-    console.warn(`[tracker] ${binding.projectId}: ${refusal.message}`);
+    console.warn(`[tracker] ${binding.projectId}: ${trackerRefusal.message}`);
     db.trackers.updateBinding(binding.projectId, {
-      state: stateAfter(refusal, binding),
-      reason: refusal.message,
+      state: stateAfter(trackerRefusal, binding),
+      reason: trackerRefusal.message,
       polledAt: new Date(),
-      resumeAt: refusal.resumeAt ? new Date(refusal.resumeAt) : null,
+      resumeAt: trackerRefusal.resumeAt
+        ? new Date(trackerRefusal.resumeAt)
+        : null,
     });
   };
 
@@ -1541,7 +1620,11 @@ export const createTrackers = (deps: TrackersDeps) => {
             : []
         );
         const comments = await carryIn(sync, cursor);
-        const { tasks: board } = await tasks.list(projectId);
+        const list = await tasks.list(projectId);
+        if (list instanceof ElysiaStatus) {
+          throw new TrackerRefusal("input", list.response.detail);
+        }
+        const board = list.tasks;
         await reconcileLinks(sync, board, moved, marked);
         await fileNewTasks(sync, moved);
         await fileNewIssues(sync, board);
@@ -1601,12 +1684,15 @@ export const createTrackers = (deps: TrackersDeps) => {
     syncSoon(event.projectId);
   });
 
-  /** A connection by its name, or the route's refusal in its words. */
+  /** A connection by its name, or the route's refusal in its words (tracker-connection-unknown). */
   const connectionNamed = (name: string) => {
     try {
       return deps.connections.get(name);
     } catch (error) {
-      throw new TrackerProblem(wordsOf(error), { cause: error });
+      return problem(400, {
+        code: "tracker-connection-unknown",
+        detail: wordsOf(error),
+      });
     }
   };
 
@@ -1616,12 +1702,9 @@ export const createTrackers = (deps: TrackersDeps) => {
    * bound again keeps its links. `cawco` lets the binding go: the files stay,
    * each naming its issue, and nothing syncs.
    */
-  const bind = async (
-    projectId: string,
-    input: BindInput
-  ): Promise<TrackerView> => {
+  const bind = async (projectId: string, input: BindInput) => {
     if (!db.project(projectId)) {
-      throw new TrackerProblem(`The hub keeps no project ${projectId}.`);
+      return projectUnknown(projectId);
     }
     if (input.tracker === "cawco") {
       await inTurn(projectId, () => {
@@ -1632,15 +1715,29 @@ export const createTrackers = (deps: TrackersDeps) => {
       return view(projectId);
     }
     const asked = askedOf({ ...input, tracker: input.tracker });
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
     // Nothing is bound where the tracker's unvouched issues could not wait for you.
-    if (!holdOf((await tasks.stages(projectId)).stages)) {
-      throw new TrackerProblem(noHoldWords(asked.tracker));
+    const staged = await tasks.stages(projectId);
+    if (staged instanceof ElysiaStatus) {
+      return staged;
+    }
+    if (!holdOf(staged.stages)) {
+      return problem(400, {
+        code: "tracker-no-hold",
+        detail: noHoldWords(asked.tracker),
+      });
     }
     const connection = connectionNamed(asked.connection);
+    if (connection instanceof ElysiaStatus) {
+      return connection;
+    }
     if (appServiceOf(connection.service) !== asked.tracker) {
-      throw new TrackerProblem(
-        `${asked.connection} is a ${connection.service} connection; ${TRACKER_NAMES[asked.tracker]} needs a ${asked.tracker} one.`
-      );
+      return problem(400, {
+        code: "tracker-connection-kind",
+        detail: `${asked.connection} is a ${connection.service} connection; ${TRACKER_NAMES[asked.tracker]} needs a ${asked.tracker} one.`,
+      });
     }
     const now = new Date();
     const draft: TrackerBindingRow = {
@@ -1664,7 +1761,11 @@ export const createTrackers = (deps: TrackersDeps) => {
       githubProject: null,
       githubProjectReason: null,
     };
-    const { target, onProject } = await targetOf(draft, input.githubProject);
+    const read = await targetOf(draft, input.githubProject);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { target, onProject } = read;
     checkedAt.set(projectId, Date.now());
     const was = db.trackers.binding(projectId);
     // The same target bound again (another connection) keeps where it stood: nothing is missed or copied twice.
@@ -1698,10 +1799,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   const targetOf = async (
     draft: TrackerBindingRow,
     asked: BindInput["githubProject"]
-  ): Promise<{
-    onProject: Pick<TrackerBindingRow, "githubProject" | "githubProjectReason">;
-    target: TrackerTarget;
-  }> => {
+  ) => {
     try {
       // A GitHub App that may only read issues would be refused on every
       // sync: it is refused here, with what to grant on GitHub.
@@ -1712,21 +1810,22 @@ export const createTrackers = (deps: TrackersDeps) => {
         const { permissions, slug } =
           await deps.connections.githubAppPermissions(draft.connection);
         if (permissions.issues !== "write") {
-          throw new TrackerProblem(connectionsWords.appReadsIssuesOnly(slug));
+          return problem(400, {
+            code: "tracker-app-reads-only",
+            detail: connectionsWords.appReadsIssuesOnly(slug),
+          });
         }
       }
-      const target = await (await adapterOf(draft)).describe();
-      return {
-        target,
-        onProject:
-          draft.provider === "github"
-            ? await projectOf(draft.connection, target.id, asked)
-            : { githubProject: null, githubProjectReason: null },
-      };
+      const target: TrackerTarget = await (await adapterOf(draft)).describe();
+      const onProject =
+        draft.provider === "github"
+          ? await projectOf(draft.connection, target.id, asked)
+          : { githubProject: null, githubProjectReason: null };
+      return onProject instanceof ElysiaStatus
+        ? onProject
+        : { target, onProject };
     } catch (error) {
-      throw error instanceof TrackerProblem
-        ? error
-        : new TrackerProblem(wordsOf(error), { cause: error });
+      return trackerRefused(error);
     }
   };
 
@@ -1740,28 +1839,31 @@ export const createTrackers = (deps: TrackersDeps) => {
     connection: string,
     repo: string,
     asked: BindInput["githubProject"]
-  ): Promise<
-    Pick<TrackerBindingRow, "githubProject" | "githubProjectReason">
-  > => {
+  ) => {
     const listed = await githubProjects(
       deps.connections.githubClient(connection),
       repo
     );
-    if (listed.refused) {
-      return { githubProject: null, githubProjectReason: listed.refused };
-    }
-    if (asked === null) {
-      return { githubProject: null, githubProjectReason: null };
+    const none: Pick<
+      TrackerBindingRow,
+      "githubProject" | "githubProjectReason"
+    > = { githubProject: null, githubProjectReason: listed.refused ?? null };
+    if (listed.refused || asked === null) {
+      return none;
     }
     const chosen = asked
       ? listed.projects.find((each) => each.id === asked.id)
       : listed.projects.find((each) => each.linked);
     if (asked && !chosen) {
-      throw new TrackerProblem(
-        `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`
-      );
+      return problem(400, {
+        code: "tracker-github-project-unknown",
+        detail: `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`,
+      });
     }
-    return {
+    const onProject: Pick<
+      TrackerBindingRow,
+      "githubProject" | "githubProjectReason"
+    > = {
       githubProject: chosen
         ? {
             id: chosen.id,
@@ -1775,44 +1877,56 @@ export const createTrackers = (deps: TrackersDeps) => {
         : null,
       githubProjectReason: null,
     };
+    return onProject;
   };
 
   /** The Projects a GitHub connection reaches for a repository, for the binding's choice; GitHub's words when it may not read them. */
-  const githubProjectsOf = async (
-    name: string,
-    repo: string
-  ): Promise<GithubProjectsView> => {
+  const githubProjectsOf = async (name: string, repo: string) => {
     const connection = connectionNamed(name);
+    if (connection instanceof ElysiaStatus) {
+      return connection;
+    }
     if (appServiceOf(connection.service) !== "github") {
-      throw new TrackerProblem(
-        `${name} is a ${connection.service} connection: GitHub Projects need a GitHub one.`
-      );
+      return problem(400, {
+        code: "tracker-connection-kind",
+        detail: `${name} is a ${connection.service} connection: GitHub Projects need a GitHub one.`,
+      });
     }
     try {
-      return await githubProjects(deps.connections.githubClient(name), repo);
+      const reachable: GithubProjectsView = await githubProjects(
+        deps.connections.githubClient(name),
+        repo
+      );
+      return reachable;
     } catch (error) {
-      throw new TrackerProblem(wordsOf(error), { cause: error });
+      return trackerRefused(error);
     }
   };
 
   /** The repositories or teams a connection reaches, for the binding's choice. */
-  const targets = async (name: string): Promise<TrackerTarget[]> => {
+  const targets = async (name: string) => {
     const connection = connectionNamed(name);
+    if (connection instanceof ElysiaStatus) {
+      return connection;
+    }
     const service = appServiceOf(connection.service);
     if (!service) {
-      throw new TrackerProblem(
-        `${name} is a ${connection.service} connection: a tracker is GitHub Issues or Linear.`
-      );
+      return problem(400, {
+        code: "tracker-connection-kind",
+        detail: `${name} is a ${connection.service} connection: a tracker is GitHub Issues or Linear.`,
+      });
     }
     try {
-      return service === "github"
-        ? await githubTargets(
-            deps.connections.githubClient(name),
-            connection.auth === "app"
-          )
-        : await linearTargets(await deps.connections.linearClient(name));
+      const reached: TrackerTarget[] =
+        service === "github"
+          ? await githubTargets(
+              deps.connections.githubClient(name),
+              connection.auth === "app"
+            )
+          : await linearTargets(await deps.connections.linearClient(name));
+      return reached;
     } catch (error) {
-      throw new TrackerProblem(wordsOf(error), { cause: error });
+      return trackerRefused(error);
     }
   };
 
@@ -1837,9 +1951,9 @@ export const createTrackers = (deps: TrackersDeps) => {
     targets,
     view,
     /** Syncs a project now, in its turn; answers where it stands after. */
-    sync: async (projectId: string): Promise<TrackerView> => {
+    sync: async (projectId: string) => {
       if (!db.project(projectId)) {
-        throw new TrackerProblem(`The hub keeps no project ${projectId}.`);
+        return projectUnknown(projectId);
       }
       await syncProject(projectId, true);
       return view(projectId);
@@ -1848,13 +1962,6 @@ export const createTrackers = (deps: TrackersDeps) => {
 };
 
 export type Trackers = ReturnType<typeof createTrackers>;
-
-const refused = (error: unknown) => {
-  if (error instanceof TrackerProblem) {
-    return status(400, error.message);
-  }
-  throw error;
-};
 
 /**
  * `/api/projects/:id/tracker`: where a project's tasks live, its binding
@@ -1891,36 +1998,17 @@ export const trackerRoutes = (trackers: Trackers) =>
           ),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await trackers.bind(params.id, body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => trackers.bind(params.id, body)
     )
-    .post("/api/projects/:id/tracker/sync", async ({ params }) => {
-      try {
-        return await trackers.sync(params.id);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .post("/api/projects/:id/tracker/sync", ({ params }) =>
+      trackers.sync(params.id)
+    )
     .get("/api/connections/:name/targets", async ({ params }) => {
-      try {
-        return { targets: await trackers.targets(params.name) };
-      } catch (error) {
-        return refused(error);
-      }
+      const reached = await trackers.targets(params.name);
+      return reached instanceof ElysiaStatus ? reached : { targets: reached };
     })
     .get(
       "/api/connections/:name/github-projects",
       { query: t.Object({ repo: t.String() }) },
-      async ({ params, query }) => {
-        try {
-          return await trackers.githubProjects(params.name, query.repo);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, query }) => trackers.githubProjects(params.name, query.repo)
     );

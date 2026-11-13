@@ -1,4 +1,4 @@
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { CONTINUATION_CANCELLED } from "../continuations";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
@@ -20,47 +20,39 @@ export const instancePreviewRoutes = ({
     .get(
       "/api/continuations/:id/outcome",
       hidden,
-      async ({ params, request, server, status }) => {
+      async ({ params, request, server }) => {
         // A summariser can take minutes; the wait must outlast Bun's idle cut.
         server?.timeout(request, 0);
         const row = await settledContinuation(params.id);
         if (!row) {
-          return status(404, "That continuation is not running.");
+          return problem(404, {
+            code: "continuation-not-running",
+            detail: "That continuation is not running.",
+          });
         }
         if (row.stage === "started") {
           return outcomeOf(row);
         }
-        return status(
-          422,
-          row.stage === "cancelled"
-            ? CONTINUATION_CANCELLED
-            : (row.error ?? "the continuation failed")
-        );
+        return problem(422, {
+          code: "continuation-cancelled",
+          detail:
+            row.stage === "cancelled"
+              ? CONTINUATION_CANCELLED
+              : (row.error ?? "the continuation failed"),
+        });
       }
     )
     // A session's Open items section, built now from its records
     // (open-items.ts): what the `open_items` tool answers, which every
     // harness's listing after a compaction reads.
-    .get(
-      "/api/instances/:id/open-items",
-      hidden,
-      async ({ params, query, status }) => {
-        try {
-          const cursor = Number(query.cursor ?? 0);
-          return {
-            text: await openItems.read(db.instanceIdOf(params.id), {
-              cursor: Number.isInteger(cursor) && cursor > 0 ? cursor : 0,
-              detailed: query.format === "detailed",
-            }),
-          };
-        } catch (error) {
-          return status(
-            404,
-            error instanceof Error ? error.message : String(error)
-          );
-        }
-      }
-    )
+    .get("/api/instances/:id/open-items", hidden, async ({ params, query }) => {
+      const cursor = Number(query.cursor ?? 0);
+      const text = await openItems.read(db.instanceIdOf(params.id), {
+        cursor: Number.isInteger(cursor) && cursor > 0 ? cursor : 0,
+        detailed: query.format === "detailed",
+      });
+      return text instanceof ElysiaStatus ? text : { text };
+    })
     // The iOS app's Close (CawCoCore Previews.swift `closePreview`): the
     // show goes for every view. The dashboard's Close is its tab's own
     // (dashboard preview/closed-here.ts) and sends nothing.

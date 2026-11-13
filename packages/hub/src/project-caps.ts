@@ -20,7 +20,7 @@
 import type { CapPeriod, OnCap, ProjectCap } from "@cawco/core/areas";
 import type { ProjectCapFrame } from "@cawco/core/frames";
 import { capHolds } from "@cawco/core/project-conversation";
-import { Elysia, status, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 
@@ -183,19 +183,26 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
           ({ params, body }) => {
             const project = db.project(params.id);
             if (!project) {
-              return status(404, `No project ${params.id}.`);
+              return problem(404, {
+                code: "no-project",
+                detail: `No project ${params.id}.`,
+              });
             }
             if (
               body.usd !== null &&
               !(Number.isFinite(body.usd) && body.usd > 0)
             ) {
-              return status(400, "The budget is a number of dollars above 0.");
+              return problem(400, {
+                code: "budget-number-dollars-above",
+                detail: "The budget is a number of dollars above 0.",
+              });
             }
             if ((body.usd === null) !== (body.period === null)) {
-              return status(
-                400,
-                "A budget has both an amount and a period (day or month), or neither."
-              );
+              return problem(400, {
+                code: "budget-has-both-amount",
+                detail:
+                  "A budget has both an amount and a period (day or month), or neither.",
+              });
             }
             db.setProjectCap(project.id, {
               capUsd: body.usd,

@@ -113,6 +113,7 @@ import {
   IGNORED_STATUS,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
+import { ElysiaStatus } from "elysia";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
 import type {
@@ -135,7 +136,7 @@ import {
   capableWaitReason,
 } from "./gate-file";
 import { type HeldInput, handedInputs } from "./handed-input";
-import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
+import type { HandedFile, HandedInputs } from "./handed-inputs";
 import { byId } from "./handles";
 import { holdsBut, type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -153,7 +154,8 @@ import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
-import { FolderRefusal, folderPath } from "./project-folder";
+import { folderPath } from "./project-folder";
+import type { AnyProblem } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo } from "./task-file";
@@ -810,9 +812,9 @@ interface WorkItemDeps extends Pick<
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
-   * these.
+   * these; or its refusal.
    */
-  readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
+  readonly planSteps: (instanceId: string) => Promise<PlanStep[] | AnyProblem>;
   /**
    * A project's first work item on `machineId`, which holds no checkout of
    * it: the machine is sent the project's rows from now on (server.ts
@@ -859,11 +861,8 @@ interface WorkItemDeps extends Pick<
     headline?: string,
     outputs?: string[]
   ) => void;
-  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; throws a refusal in its words. */
-  readonly resolveHanded: (
-    caller: InstanceRow,
-    input: HeldInput
-  ) => AsyncGenerator<HandedFile> | Promise<HandedFile[]> | HandedFile[];
+  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; or its refusal in its words. */
+  readonly resolveHanded: HandedInputs["resolve"];
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -1343,14 +1342,8 @@ const requestProblem = (request: WorkItemRequest): string | undefined =>
 
 /** A path as the project's folder reads it, or undefined when the folder refuses it. */
 const folderPathOf = (raw: string): string | undefined => {
-  try {
-    return folderPath(raw);
-  } catch (error) {
-    if (error instanceof FolderRefusal) {
-      return undefined;
-    }
-    throw error;
-  }
+  const rel = folderPath(raw);
+  return rel instanceof ElysiaStatus ? undefined : rel;
 };
 
 const OUTPUTS_LIMIT = 50;
@@ -2433,7 +2426,10 @@ export const createWorkItems = ({
 
   /** The item's session's plan as its panel reads it; undefined when it cannot be read now. */
   const planFor = (item: WorkItemRow): Promise<PlanStep[] | undefined> =>
-    planSteps(item.instanceId).catch(() => undefined);
+    planSteps(item.instanceId).then(
+      (steps) => (Array.isArray(steps) ? steps : undefined),
+      () => undefined
+    );
 
   /** The task an item is an attempt at, when the plan link can reach it. */
   const taskOf = (
@@ -3250,23 +3246,25 @@ export const createWorkItems = ({
     const resolved: HandedFile[] = [];
     let bytes = 0;
     for (const input of held) {
-      try {
-        for await (const file of await resolveHanded(reader, input)) {
-          // What is made for its reader as it is written (a preview's pass)
-          // is a few hundred bytes: what is in hand now is what counts.
-          bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
-          if (bytes > INPUTS_LIMIT_BYTES) {
-            throw new WorkItemRefusal(
-              400,
-              workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
-            );
-          }
-          resolved.push(file);
+      // A handed input's refusal is the delegate's, thrown as its refusals are.
+      const files = await resolveHanded(reader, input);
+      if (files instanceof ElysiaStatus) {
+        throw inputsRefused(files.response.detail);
+      }
+      for await (const file of files) {
+        if (file instanceof ElysiaStatus) {
+          throw inputsRefused(file.response.detail);
         }
-      } catch (error) {
-        throw error instanceof HandedInputRefusal
-          ? inputsRefused(error.message, { cause: error })
-          : error;
+        // What is made for its reader as it is written (a preview's pass)
+        // is a few hundred bytes: what is in hand now is what counts.
+        bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
+        if (bytes > INPUTS_LIMIT_BYTES) {
+          throw new WorkItemRefusal(
+            400,
+            workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
+          );
+        }
+        resolved.push(file);
       }
     }
     return resolved;

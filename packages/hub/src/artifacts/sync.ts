@@ -61,6 +61,7 @@ import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
 import type { ServerWebSocket } from "bun";
+import { problemResponse } from "elysia/error";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
   createEncoder,
@@ -85,6 +86,7 @@ import {
   type Array as YArray,
   Map as YMap,
 } from "yjs";
+import type { AnyProblem } from "../refusal";
 import {
   type ArtifactClient,
   type ArtifactDocs,
@@ -92,7 +94,6 @@ import {
   MAPS,
 } from "./docs";
 import { picturePath } from "./page-store";
-import { ArtifactRefusal, NothingNewToSend } from "./refusals";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
@@ -435,27 +436,36 @@ export const artifactPicture =
   (root: string, docs: ArtifactDocs) =>
   async (request: Request, artifactId: string): Promise<Response> => {
     if (request.method !== "POST") {
-      return new Response("A picture is a POST.", {
-        status: 405,
-        headers: { allow: "POST" },
-      });
+      return problemResponse(
+        { status: 405, code: "picture-post", detail: "A picture is a POST." },
+        { allow: "POST" }
+      );
     }
     if (getMeta(docs.doc(artifactId), "kind") !== "canvas") {
-      return new Response("Only a canvas keeps a picture.", { status: 409 });
+      return problemResponse({
+        status: 409,
+        code: "only-canvas-keeps-picture",
+        detail: "Only a canvas keeps a picture.",
+      });
     }
     const body = new Uint8Array(await request.arrayBuffer());
     if (body.length > CANVAS_LIMITS.pictureBytes) {
-      return new Response(
-        `A picture is at most ${CANVAS_LIMITS.pictureBytes / 1024 / 1024} MB.`,
-        { status: 413 }
-      );
+      return problemResponse({
+        status: 413,
+        code: "picture-most-mb",
+        detail: `A picture is at most ${CANVAS_LIMITS.pictureBytes / 1024 / 1024} MB.`,
+      });
     }
     const path = picturePath(root, artifactId);
     if (body.length === 0) {
       await rm(path, { force: true });
     } else {
       if (!PNG_SIGNATURE.every((byte, i) => body[i] === byte)) {
-        return new Response("A picture is a PNG.", { status: 415 });
+        return problemResponse({
+          status: 415,
+          code: "picture-png",
+          detail: "A picture is a PNG.",
+        });
       }
       await writeStateFile(path, body);
     }
@@ -680,7 +690,7 @@ export const artifactPictures =
       instanceId: string,
       artifactId: string,
       body: MarkPictures
-    ) => { held: number }
+    ) => { held: number } | AnyProblem
   ) =>
   async (
     request: Request,
@@ -688,36 +698,35 @@ export const artifactPictures =
     artifactId: string
   ): Promise<Response> => {
     if (request.method !== "POST") {
-      return new Response("Pictures are a POST.", {
-        status: 405,
-        headers: { allow: "POST" },
-      });
+      return problemResponse(
+        { status: 405, code: "pictures-post", detail: "Pictures are a POST." },
+        { allow: "POST" }
+      );
     }
     const raw = await request.text();
     if (raw.length > PICTURES_BODY_MAX) {
-      return new Response(
-        `A post carries at most ${COMMENT_LIMITS.pictures} pictures.`,
-        { status: 413 }
-      );
+      return problemResponse({
+        status: 413,
+        code: "post-carries-most-pictures",
+        detail: `A post carries at most ${COMMENT_LIMITS.pictures} pictures.`,
+      });
     }
     let body: unknown;
     try {
       body = JSON.parse(raw);
     } catch {
-      return new Response(PICTURES_SHAPE, { status: 400 });
+      return problemResponse({
+        status: 400,
+        code: "refused",
+        detail: PICTURES_SHAPE,
+      });
     }
     const problem = picturesBodyProblem(body);
     if (problem) {
-      return new Response(problem, { status: 400 });
+      return problemResponse({ status: 400, code: "refused", detail: problem });
     }
-    try {
-      return Response.json(keep(instanceId, artifactId, body as MarkPictures));
-    } catch (error) {
-      if (error instanceof ArtifactRefusal) {
-        return new Response(error.message, { status: error.status });
-      }
-      throw error;
-    }
+    const kept = keep(instanceId, artifactId, body as MarkPictures);
+    return "response" in kept ? problemOf(kept) : Response.json(kept);
   };
 
 /** A checked send's body as the service takes it: its text trimmed, and only the fields it holds. */
@@ -801,7 +810,7 @@ export const artifactSend =
       artifactId: string,
       body: SendBody,
       route: string
-    ) => Promise<ArtifactChoices>,
+    ) => Promise<ArtifactChoices | AnyProblem>,
     docs: ArtifactDocs
   ) =>
   async (
@@ -810,64 +819,67 @@ export const artifactSend =
     artifactId: string
   ): Promise<Response> => {
     if (request.method !== "POST") {
-      return new Response("Send is a POST.", {
-        status: 405,
-        headers: { allow: "POST" },
-      });
+      return problemResponse(
+        { status: 405, code: "send-post", detail: "Send is a POST." },
+        { allow: "POST" }
+      );
     }
     const raw = await request.text();
     if (raw.length > SEND_BODY_MAX) {
-      return new Response(
-        `A send carries at most ${COMMENT_LIMITS.pictures} pictures and ${CHOICE_LIMITS.note} characters of text.`,
-        { status: 413 }
-      );
+      return problemResponse({
+        status: 413,
+        code: "send-carries-most-pictures",
+        detail: `A send carries at most ${COMMENT_LIMITS.pictures} pictures and ${CHOICE_LIMITS.note} characters of text.`,
+      });
     }
     let body: unknown;
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch {
-      return new Response(SEND_SHAPE, { status: 400 });
+      return problemResponse({
+        status: 400,
+        code: "refused",
+        detail: SEND_SHAPE,
+      });
     }
     const problem = sendBodyProblem(body);
     if (problem) {
-      return new Response(problem, { status: 400 });
+      return problemResponse({ status: 400, code: "refused", detail: problem });
     }
     const { writes } = body as SendBody;
     if (writes) {
       const refused = takeSentWrites(docs, artifactId, writes);
       if (refused) {
-        return new Response(refused, { status: 422 });
+        return problemResponse({
+          status: 422,
+          code: "refused",
+          detail: refused,
+        });
       }
     }
-    try {
-      return Response.json(
-        await send(
-          instanceId,
-          artifactId,
-          sentBody(body as SendBody),
-          `POST ${new URL(request.url).pathname}`
-        )
-      );
-    } catch (error) {
-      return refusedSend(error);
-    }
+    const sent = await send(
+      instanceId,
+      artifactId,
+      sentBody(body as SendBody),
+      `POST ${new URL(request.url).pathname}`
+    );
+    return "response" in sent ? refusedSend(sent) : Response.json(sent);
   };
 
 /**
  * The page's answer for a Send the service refused, in its words and
  * status; a Send with nothing new reads as sent (his press after every pick
  * had gone, by the hub's own send or an earlier press: what he asked for
- * holds). Anything else is thrown on.
+ * holds).
  */
-const refusedSend = (error: unknown): Response => {
-  if (error instanceof NothingNewToSend) {
-    return Response.json({ sent: "already" });
-  }
-  if (error instanceof ArtifactRefusal) {
-    return new Response(error.message, { status: error.status });
-  }
-  throw error;
-};
+const refusedSend = (refused: AnyProblem): Response =>
+  refused.response.code === "artifact-nothing-new"
+    ? Response.json({ sent: "already" })
+    : problemOf(refused);
+
+/** A refusal the service answered, as the page reads it: Elysia's problem, its status, code and words. */
+const problemOf = ({ status, response }: AnyProblem): Response =>
+  problemResponse({ status, code: response.code, detail: response.detail });
 
 /** The listener's handlers for artifact sockets. */
 export const artifactSocket = (docs: ArtifactDocs) => ({

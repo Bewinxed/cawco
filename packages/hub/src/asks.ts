@@ -90,6 +90,7 @@ import { tool as mcpTool, sentence } from "./mcp-tool";
 import { uuidOf } from "./named-uuid";
 import type { AnswerFrom } from "./pending";
 import { askEnvelope } from "./pending";
+import type { AnyProblem } from "./refusal";
 
 /** The session tools asks give, by name: what a call is routed by (delegation-mcp.ts). */
 export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
@@ -193,7 +194,7 @@ export interface AsksDeps {
     name: string,
     input: Record<string, unknown>,
     asker: InstanceRow
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   /**
    * Takes an ask off every screen (pending.ts `resolve`): answered, with who
    * answered, or withdrawn, with why.
@@ -259,6 +260,24 @@ export const createAsks = (deps: AsksDeps) => {
     );
 
   /** An approve ask's answer, carried out: run once when approved, and the caller told either way. */
+  /** What an approved call came to, run for `asker`: what it said, or why it failed. */
+  const ranFor = async (
+    tool: string,
+    input: Record<string, unknown>,
+    asker: InstanceRow
+  ): Promise<{ said: string } | { failed: string }> => {
+    try {
+      const said = await deps.run(tool, input, asker);
+      return typeof said === "string"
+        ? { said }
+        : { failed: said.response.detail };
+    } catch (error) {
+      return {
+        failed: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
   const carryOut = async (ask: AskRecord, asked: Approve): Promise<void> => {
     const { tool, input } = asked;
     const asker = deps.instance(ask.instanceId);
@@ -282,15 +301,9 @@ export const createAsks = (deps: AsksDeps) => {
       await askAgain(ask, asked, asker);
       return;
     }
-    let end: { said: string } | { failed: string };
-    try {
-      if (!asker) {
-        throw new Error("The session that asked is gone; nothing changed.");
-      }
-      end = { said: await deps.run(tool, input, asker) };
-    } catch (error) {
-      end = { failed: error instanceof Error ? error.message : String(error) };
-    }
+    const end = asker
+      ? await ranFor(tool, input, asker)
+      : { failed: "The session that asked is gone; nothing changed." };
     const ended = deps.asks.carried(ask.id, { at: Date.now(), ...end });
     tellAnswered(ended ?? ask);
   };
@@ -419,10 +432,15 @@ export const createAsks = (deps: AsksDeps) => {
     try {
       const bound = await deps.bind(asker, tool, input);
       const recorded = await put(asker, tool, bound);
-      said =
-        recorded === undefined
-          ? `Full Send approved it again for what it holds now and the hub ran it, so don't call ${tool} again for it. It said:\n\n${await deps.run(tool, bound, asker)}`
-          : `CawCo has asked the person again for what it holds now, so don't call ${tool} again for it. ${recorded}`;
+      if (recorded === undefined) {
+        const ran = await deps.run(tool, bound, asker);
+        said =
+          typeof ran === "string"
+            ? `Full Send approved it again for what it holds now and the hub ran it, so don't call ${tool} again for it. It said:\n\n${ran}`
+            : `It can't be asked again: ${ran.response.detail}`;
+      } else {
+        said = `CawCo has asked the person again for what it holds now, so don't call ${tool} again for it. ${recorded}`;
+      }
     } catch (error) {
       said = `It can't be asked again: ${error instanceof Error ? error.message : String(error)}`;
     }
