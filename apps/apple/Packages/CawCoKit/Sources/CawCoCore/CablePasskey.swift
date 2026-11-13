@@ -4,24 +4,22 @@ import Foundation
 import OSLog
 import UIKit
 
-/// The `CablePasskeyProvider` backed by `ASAuthorizationController`: asks the
-/// device's passkey store for an assertion via Face ID / Touch ID, for any RP
-/// the device holds a credential for.
+/// The `CablePasskeyProvider` backed by CawCo's credential store with a
+/// fallback to `ASAuthorizationController`.
 ///
-/// **Limitation:** `ASAuthorizationController` creates its own
-/// `clientDataJSON` and signs with `SHA256(its clientDataJSON)`, not with
-/// the `clientDataHash` the browser passed in the CTAP2 request. This means
-/// the resulting signature won't verify against the browser's clientDataJSON.
-/// For production caBLE use, an `ASCredentialProviderViewController` extension
-/// with its own credential storage and signing is needed: the extension
-/// receives `clientDataHash` directly and can construct the correct signature.
-/// This implementation serves as the integration point and will work when
-/// the credential provider extension is in place.
+/// When CawCo's `PasskeyStore` holds a credential for the RP, the assertion
+/// is signed directly with the Secure Enclave key and the browser's
+/// `clientDataHash` — the signature the browser will verify. When no
+/// CawCo-managed credential exists, the provider falls through to
+/// `ASAuthorizationController`, which creates its own `clientDataJSON` and
+/// signs with its hash (a known limitation for system-managed passkeys).
 ///
 /// `@unchecked Sendable` because `UIWindow` is not `Sendable`, but the window
 /// is only accessed on the main actor.
 public final class PlatformPasskeyProvider: NSObject, CablePasskeyProvider, @unchecked Sendable {
     private let anchor: UIWindow
+    private let store = PasskeyStore()
+    private let log = Logger(subsystem: "dev.cawco.app", category: "caBLE.passkey")
 
     @MainActor
     public init(anchor: UIWindow) {
@@ -29,6 +27,59 @@ public final class PlatformPasskeyProvider: NSObject, CablePasskeyProvider, @unc
     }
 
     public func assertPasskey(
+        rpId: String,
+        challenge: Data,
+        allowedCredentials: [Data]
+    ) async throws -> CablePasskeyAssertion {
+        // Try CawCo's credential store first: it signs with the browser's
+        // clientDataHash directly, which ASAuthorizationController cannot.
+        do {
+            let assertion = try assertFromStore(
+                rpId: rpId,
+                clientDataHash: challenge,
+                allowedCredentials: allowedCredentials)
+            log.info("asserted from credential store for \(rpId, privacy: .public)")
+            return assertion
+        } catch {
+            log.debug("no stored credential for \(rpId, privacy: .public); falling through to ASAuthorizationController")
+        }
+
+        // Fall back to ASAuthorizationController for system-managed passkeys.
+        return try await assertWithController(
+            rpId: rpId, challenge: challenge, allowedCredentials: allowedCredentials)
+    }
+
+    /// Asserts from CawCo's own credential store, signing with the correct
+    /// `clientDataHash`. Works for any RP without associated domains.
+    private func assertFromStore(
+        rpId: String,
+        clientDataHash: Data,
+        allowedCredentials: [Data]
+    ) throws -> CablePasskeyAssertion {
+        let candidates: [PasskeyStore.Credential]
+        if allowedCredentials.isEmpty {
+            candidates = store.credentials(for: rpId)
+        } else {
+            candidates = allowedCredentials.compactMap { store.credential(for: $0) }
+        }
+        guard let credential = candidates.first else {
+            throw CablePasskeyError.noCredential(rpId: rpId)
+        }
+        let (authData, signature) = try store.assert(
+            credential: credential,
+            clientDataHash: clientDataHash)
+        return CablePasskeyAssertion(
+            credentialId: credential.credentialId,
+            authenticatorData: authData,
+            signature: signature,
+            userHandle: credential.userHandle)
+    }
+
+    /// Asserts via `ASAuthorizationController`. Creates its own
+    /// `clientDataJSON` whose hash won't match the browser's — a known
+    /// limitation for system-managed passkeys until they're migrated to
+    /// the credential provider store.
+    private func assertWithController(
         rpId: String,
         challenge: Data,
         allowedCredentials: [Data]

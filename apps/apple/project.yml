@@ -41,6 +41,8 @@ targets:
         products: [CawCoAPI, CawCoCable, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]
       # Embedded in PlugIns: opens each push's sealed alert on the device.
       - target: NotificationService
+      # Embedded in PlugIns: provides passkeys for any RP without associated domains.
+      - target: CawCoCredentialProvider
     settings:
       base:
         DEVELOPMENT_TEAM: FN5LJSPX2R
@@ -106,9 +108,13 @@ targets:
       path: CawCo/CawCo.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
-        # The pairing and its push key, shared with NotificationService (CawCoPush).
-        # Every profile of the team allows `FN5LJSPX2R.*`.
+        # The pairing and its push key, shared with NotificationService and the
+        # credential provider (CawCoPush, PasskeyStore). Every team profile allows
+        # `FN5LJSPX2R.*`.
         keychain-access-groups: [$(AppIdentifierPrefix)dev.cawco.app.shared]
+        # Shared data between the app and its extensions (caBLE session state,
+        # credential provider coordination).
+        com.apple.security.application-groups: [group.dev.cawco.app]
     info:
       path: CawCo/Info.plist
       properties:
@@ -240,3 +246,52 @@ targets:
               NSExceptionAllowsInsecureHTTPLoads: true
             "100.64.0.0/10":
               NSExceptionAllowsInsecureHTTPLoads: true
+
+  # The Credential Provider Extension: provides passkeys for any relying party
+  # without associated domain restrictions. The system invokes it when a site
+  # or app requests a passkey that CawCo has registered; it receives the
+  # clientDataHash directly and signs with the Secure Enclave key from the
+  # shared Keychain — the correct signature that the browser will verify.
+  # Signing follows the app target, per SDK and configuration.
+  CawCoCredentialProvider:
+    type: app-extension
+    supportedDestinations: [iOS, macCatalyst]
+    sources:
+      - path: CawCoCredentialProvider
+    dependencies:
+      - package: CawCoKit
+        products: [CawCoCable]
+    settings:
+      base:
+        DEVELOPMENT_TEAM: FN5LJSPX2R
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.app.credential-provider
+        PRODUCT_NAME: CawCoCredentialProvider
+        TARGETED_DEVICE_FAMILY: "1,2,6"
+        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        "IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]": "18.0"
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Automatic
+          "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
+    entitlements:
+      path: CawCoCredentialProvider/CawCoCredentialProvider.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)dev.cawco.app.shared]
+        com.apple.security.application-groups: [group.dev.cawco.app]
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    info:
+      path: CawCoCredentialProvider/Info.plist
+      properties:
+        CFBundleDisplayName: CawCo
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          ASCredentialProviderExtensionCapabilities:
+            ProvidesPasskeys: true
