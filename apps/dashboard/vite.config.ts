@@ -30,6 +30,7 @@ import { groupsAsCombinators } from "./group-selectors.ts";
 import { precompressAll } from "./precompress-adapter.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
+import { leaveOutShiki } from "./vite/leave-out-shiki.ts";
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -523,6 +524,7 @@ export default defineConfig(({ command }) => {
   }
   return {
     plugins: [
+      leaveOutShiki(),
       workspacePackagesWatched(),
       linkedRebundle(),
       houseFaces(),
