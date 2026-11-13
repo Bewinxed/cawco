@@ -43,7 +43,8 @@
   import { failureWords } from "#lib/platform/hub-read.js";
   import { CURVE, dur, staggered } from "#lib/platform/motion/curves.svelte.js";
   import { folds } from "#lib/platform/motion/fold.svelte.js";
-  import { didntAnswer, machineFs } from "../client.svelte";
+  import { didntAnswer } from "../hub/control";
+  import { machineFs } from "../stores/machines";
   import { TRY_AGAIN } from "../unanswered";
 
   let {

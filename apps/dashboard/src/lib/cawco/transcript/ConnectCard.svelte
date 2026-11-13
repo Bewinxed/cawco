@@ -52,15 +52,16 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
-  import {
-    cawco,
-    commandRecord,
-    isStale,
-    type PendingPermission,
-    submitCommand,
-  } from "../client.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-live";
+  import { boardStore, isStale } from "../stores/board.svelte";
+  import { submitCommand } from "../stores/commands.svelte";
+  import { commandRecord } from "../stores/ledger.svelte";
+  import { mcpServersStore } from "../stores/mcp-servers.svelte";
+  import {
+    type PendingPermission,
+    sessionsStore,
+  } from "../stores/sessions.svelte";
   import type { Message } from "../types";
   import ConnectAddress from "./ConnectAddress.svelte";
   import ConnectRow from "./ConnectRow.svelte";
@@ -91,7 +92,7 @@
   const ask = $derived(
     answer
       ? null
-      : ((cawco.session(instanceId)?.pending ?? []).find(
+      : ((sessionsStore.session(instanceId)?.pending ?? []).find(
           (request) =>
             request.connectAsk &&
             (!(request.toolUseId && message?.toolCallId) ||
@@ -152,8 +153,9 @@
   /** The server as the fleet reads it now: signed in, and as whom. */
   const server = $derived(
     connect
-      ? ((cawco.fleetMcp ?? []).find((one) => one.name === connect.server) ??
-          null)
+      ? ((mcpServersStore.fleetMcp ?? []).find(
+          (one) => one.name === connect.server
+        ) ?? null)
       : null
   );
   // The hub's word that it signed in, while this card waited on it.
@@ -169,7 +171,7 @@
   });
 
   const hub = hubSeam();
-  const row = $derived(cawco.instanceIndex.byId.get(instanceId));
+  const row = $derived(boardStore.instanceIndex.byId.get(instanceId));
   /** The session's machine is offline (a stand-in's word, else its row's). */
   const offline = $derived(hub.machineOffline ?? (row ? isStale(row) : false));
   /** An answer can reach the daemon that asked: the hub is live, and its machine. */
@@ -218,7 +220,7 @@
     connectSignIns.forget(card.requestId);
     declined = submitCommand(
       instanceId,
-      cawco.session(instanceId)?.machineId ?? "",
+      sessionsStore.session(instanceId)?.machineId ?? "",
       "permission.answer",
       {
         requestId: card.requestId,

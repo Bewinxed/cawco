@@ -10,10 +10,12 @@ import type {
   SessionPulse,
   StoredRecent,
 } from "@cawco/core/protocol";
-import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { servedBoardOf } from "#lib/cawco/first-paint.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
+import type { ProjectRow } from "#lib/cawco/projects.js";
 import type { Area, ServedBoard } from "#lib/cawco/served-board.js";
+import type { Machine } from "#lib/cawco/stores/board.svelte.js";
+
 import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
   isSessionTab,

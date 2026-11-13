@@ -13,8 +13,10 @@
  * worth listed whole is the four thousand pixels of rail the fold is for.
  */
 
-import { type BoardRow, cawco } from "./client.svelte";
+import type { BoardRow } from "./links";
 import { sessionStatus } from "./session-status";
+import { asksStore } from "./stores/asks.svelte";
+import { boardStore } from "./stores/board.svelte";
 
 /** A session lists its newest delegates, however lately the rest moved. */
 export const DELEGATE_WINDOW = 0;
@@ -32,7 +34,7 @@ export interface Reading {
 
 /** Every row running now: the sessions. */
 export const runningIds = (): Set<string> =>
-  new Set(cawco.runningInstances.map((row) => row.id));
+  new Set(boardStore.runningInstances.map((row) => row.id));
 
 /**
  * Which of a parent's rows it lists, by id; the rest fold under its "N
@@ -47,7 +49,7 @@ export function listedOf(
   window: number
 ): Set<string> {
   const pressing = (row: BoardRow): boolean =>
-    running.has(row.id) || cawco.activityOf(row.id) === "blocked";
+    running.has(row.id) || asksStore.activityOf(row.id) === "blocked";
   const listed = new Set<string>();
   const rest: BoardRow[] = [];
   for (const row of rows) {
