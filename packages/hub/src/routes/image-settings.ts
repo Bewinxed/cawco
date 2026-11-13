@@ -8,7 +8,7 @@ import {
   offersModelChoice,
 } from "@cawco/core/image-generation";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 
 export const imageSettingRoutes = ({ db }: Pick<HubContext, "db">) =>
@@ -26,29 +26,32 @@ export const imageSettingRoutes = ({ db }: Pick<HubContext, "db">) =>
           model: t.Optional(t.Union([t.String(), t.Null()])),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         const provider = imageProviderOf(body.provider);
         if (!provider) {
-          return status(
-            400,
-            imageGenerationWords.noSuchProvider(body.provider)
-          );
+          return problem(400, {
+            code: "no-such-provider",
+            detail: imageGenerationWords.noSuchProvider(body.provider),
+          });
         }
         const model = body.model?.trim() || null;
         const models = IMAGE_PROVIDER_MODELS[provider];
         if (model && !offersModelChoice(provider)) {
-          return status(
-            400,
-            imageGenerationWords.settingsNoModelChoice(provider, models[0])
-          );
+          return problem(400, {
+            code: "settings-no-model-choice",
+            detail: imageGenerationWords.settingsNoModelChoice(
+              provider,
+              models[0]
+            ),
+          });
         }
         if (model && !models.includes(model)) {
-          return status(
-            400,
-            imageGenerationWords.settingsUnknownModel(provider, model, [
+          return problem(400, {
+            code: "settings-unknown-model",
+            detail: imageGenerationWords.settingsUnknownModel(provider, model, [
               ...models,
-            ])
-          );
+            ]),
+          });
         }
         const chosen: ImageSettings = { provider, model };
         db.setImageSettings(chosen);

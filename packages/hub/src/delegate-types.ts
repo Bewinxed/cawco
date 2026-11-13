@@ -5,7 +5,7 @@ import type { DelegateType } from "@cawco/core/delegate-types";
 import { delegateTypeProblem } from "@cawco/core/delegate-types";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { undoable } from "./db/trash";
 
@@ -44,22 +44,31 @@ export const delegateTypesRoutes = (
           ),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         const draft = { ...(body as Partial<DelegateType>), name: params.name };
-        const problem = delegateTypeProblem(draft);
-        if (problem) {
-          return status(400, problem);
+        const misfit = delegateTypeProblem(draft);
+        if (misfit) {
+          return problem(400, {
+            code: "delegate-type-invalid",
+            detail: misfit,
+          });
         }
         if (draft.account !== undefined && !accountKnown(draft.account)) {
-          return status(400, delegateTypesWords.noAccount(draft.account));
+          return problem(400, {
+            code: "no-account",
+            detail: delegateTypesWords.noAccount(draft.account),
+          });
         }
         return store.put(draft as DelegateType);
       }
     )
-    .delete("/api/delegate-types/:name", ({ params, status }) => {
+    .delete("/api/delegate-types/:name", ({ params }) => {
       const restore = trash(params.name);
       if (restore === undefined) {
-        return status(404, `the fleet keeps no delegate type ${params.name}`);
+        return problem(404, {
+          code: "no-delegate",
+          detail: `the fleet keeps no delegate type ${params.name}`,
+        });
       }
       return undoable(restore);
     });

@@ -64,7 +64,7 @@ import {
 } from "@cawco/core/relays";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -82,7 +82,6 @@ import {
   relayListWords,
   relayRemovedWords,
 } from "./presenters/project";
-import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 
 /** The most a delivery's body holds: 1 MiB. */
 const RELAY_BODY_MAX = 1024 * 1024;
@@ -117,11 +116,6 @@ const SHA256_PREFIX = "sha256=";
  * always points at the port it actually bound.
  */
 const wantedPort = (): number => Number(readEnv(CAWCO_ENV.relayPort)) || 0;
-
-/** What a route answers and a tool says when the relay refuses. */
-class RelayRefusal extends StatusRefusal {}
-
-const refuse = refuser(RelayRefusal);
 
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -493,9 +487,9 @@ export const createRelay = ({
       console.warn(`[relay] ${row.id}: a delivery over 1 MiB (413)`);
       return empty(413);
     }
-    const problem = signatureProblem(row, request.headers, body);
-    if (problem) {
-      console.warn(`[relay] ${row.id}: refused a delivery (401): ${problem}`);
+    const misfit = signatureProblem(row, request.headers, body);
+    if (misfit) {
+      console.warn(`[relay] ${row.id}: refused a delivery (401): ${misfit}`);
       return empty(401);
     }
     return empty(deliver(row, request.headers, body));
@@ -791,9 +785,9 @@ export const createRelay = ({
     if (!store.anyEver()) {
       return;
     }
-    const problem = await tailscale().remove();
-    if (problem) {
-      console.warn(`[relay] Funnel's /hooks/ mount wasn't removed: ${problem}`);
+    const misfit = await tailscale().remove();
+    if (misfit) {
+      console.warn(`[relay] Funnel's /hooks/ mount wasn't removed: ${misfit}`);
     }
   };
 
@@ -903,14 +897,22 @@ export const createRelay = ({
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
-    refuse(404, `The hub keeps no project ${projectId}.`);
+    problem(404, {
+      code: "relay-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
 
   const relayOf = (id: string) =>
-    store.get(id) ?? refuse(404, `There is no relay ${id}.`);
+    store.get(id) ??
+    problem(404, { code: "relay-unknown", detail: `There is no relay ${id}.` });
 
-  const list = (projectId: string): RelayView[] => {
-    projectOf(projectId);
-    return store.ofProject(projectId).map(viewOf);
+  const list = (projectId: string) => {
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const views: RelayView[] = store.ofProject(projectId).map(viewOf);
+    return views;
   };
 
   // --- create, remove, secret ------------------------------------------------------------
@@ -919,29 +921,31 @@ export const createRelay = ({
   const githubRepoFor = (
     project: ProjectRow,
     named: string | null | undefined
-  ): string => {
+  ) => {
     const repos = githubReposOf(project.links);
     const asked = named?.trim();
     if (asked) {
       return (
         repos.find((one) => one.toLowerCase() === asked.toLowerCase()) ??
-        refuse(
-          400,
-          repos.length > 0
-            ? `${asked} isn't one of the project's GitHub repositories. Pass one as repo: ${repos.join(", ")}.`
-            : `${asked} isn't one of the project's GitHub repositories: it links none.`
-        )
+        problem(400, {
+          code: "relay-repo-unknown",
+          detail:
+            repos.length > 0
+              ? `${asked} isn't one of the project's GitHub repositories. Pass one as repo: ${repos.join(", ")}.`
+              : `${asked} isn't one of the project's GitHub repositories: it links none.`,
+        })
       );
     }
     if (repos.length === 1 && repos[0]) {
       return repos[0];
     }
-    return refuse(
-      400,
-      repos.length === 0
-        ? "The project links no repository on github.com, so there is none to register a webhook on."
-        : `Name the repository to register the webhook on (repo): ${repos.join(", ")}.`
-    );
+    return problem(400, {
+      code: "relay-repo-unnamed",
+      detail:
+        repos.length === 0
+          ? "The project links no repository on github.com, so there is none to register a webhook on."
+          : `Name the repository to register the webhook on (repo): ${repos.join(", ")}.`,
+    });
   };
 
   /** A GitHub relay's connection: one that holds a token, for a repository with no relay yet. */
@@ -949,18 +953,23 @@ export const createRelay = ({
     projectId: string,
     repo: string,
     named: string | null | undefined
-  ): string => {
+  ) => {
     const connection =
-      named?.trim() ||
-      db.ingress.githubPoller(projectId)?.connection ||
-      refuse(
-        400,
-        "Name the GitHub connection to register the webhook through (connection), or name the project's GitHub poller's connection first."
-      );
+      named?.trim() || db.ingress.githubPoller(projectId)?.connection;
+    if (!connection) {
+      return problem(400, {
+        code: "relay-connection-unnamed",
+        detail:
+          "Name the GitHub connection to register the webhook through (connection), or name the project's GitHub poller's connection first.",
+      });
+    }
     try {
       connections.githubClient(connection);
     } catch (error) {
-      refuse(409, wordsOf(error));
+      return problem(409, {
+        code: "relay-connection-unusable",
+        detail: wordsOf(error),
+      });
     }
     const live = store
       .ofProject(projectId)
@@ -971,10 +980,10 @@ export const createRelay = ({
           row.repo?.toLowerCase() === repo.toLowerCase()
       );
     if (live) {
-      refuse(
-        409,
-        `${repo} already has relay ${live.id} (${live.state}); remove it first.`
-      );
+      return problem(409, {
+        code: "relay-repo-has-relay",
+        detail: `${repo} already has relay ${live.id} (${live.state}); remove it first.`,
+      });
     }
     return connection;
   };
@@ -984,10 +993,11 @@ export const createRelay = ({
     const header = input.signatureHeader?.trim() ?? "";
     const stamp = input.timestampHeader?.trim() || null;
     if (!HEADER.test(header) || (stamp && !HEADER.test(stamp))) {
-      refuse(
-        400,
-        "A generic relay names the header its HMAC-SHA256 comes in (signature_header, like X-Signature), and optionally a timestamp header: letters, digits and dashes."
-      );
+      return problem(400, {
+        code: "relay-headers-unfit",
+        detail:
+          "A generic relay names the header its HMAC-SHA256 comes in (signature_header, like X-Signature), and optionally a timestamp header: letters, digits and dashes.",
+      });
     }
     return {
       signatureHeader: header.toLowerCase(),
@@ -996,30 +1006,52 @@ export const createRelay = ({
   };
 
   /** The input as it will be made, or the refusal: everything checked before anyone is asked. */
-  const checked = (input: RelayInput): Required<RelayInput> => {
+  const checked = (input: RelayInput) => {
     const project = projectOf(input.projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     if (!RELAY_PROVIDERS.includes(input.provider)) {
-      refuse(400, `provider is one of ${RELAY_PROVIDERS.join(", ")}.`);
+      return problem(400, {
+        code: "relay-provider-unknown",
+        detail: `provider is one of ${RELAY_PROVIDERS.join(", ")}.`,
+      });
     }
     const repo =
       input.provider === "github" ? githubRepoFor(project, input.repo) : null;
-    return {
+    if (repo instanceof ElysiaStatus) {
+      return repo;
+    }
+    const connection = repo
+      ? githubConnection(project.id, repo, input.connection)
+      : null;
+    if (connection instanceof ElysiaStatus) {
+      return connection;
+    }
+    const headers =
+      input.provider === "generic"
+        ? genericHeaders(input)
+        : { signatureHeader: null, timestampHeader: null };
+    if (headers instanceof ElysiaStatus) {
+      return headers;
+    }
+    const made: Required<RelayInput> = {
       projectId: project.id,
       provider: input.provider,
       repo,
-      connection: repo
-        ? githubConnection(project.id, repo, input.connection)
-        : null,
-      ...(input.provider === "generic"
-        ? genericHeaders(input)
-        : { signatureHeader: null, timestampHeader: null }),
+      connection,
+      ...headers,
       idPath: input.idPath?.trim() || null,
     };
+    return made;
   };
 
   /** The sentence the owner approves: what goes public. */
-  const publicText = (input: Required<RelayInput>): string => {
+  const publicText = (input: Required<RelayInput>) => {
     const project = projectOf(input.projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const registers =
       input.provider === "github"
         ? ` The hub then registers a webhook on ${input.repo} through ${input.connection}, with a secret it makes, for pull requests, issues and issue comments.`
@@ -1060,11 +1092,11 @@ export const createRelay = ({
   };
 
   /** Makes a relay: the id and secret minted, Funnel applied, GitHub's webhook registered and its ping awaited. */
-  const create = async (
-    input: RelayInput,
-    by: string
-  ): Promise<RelayCreated> => {
+  const create = async (input: RelayInput, by: string) => {
     const made = checked(input);
+    if (made instanceof ElysiaStatus) {
+      return made;
+    }
     const minted = made.provider === "github";
     const row = store.create({
       id: randomBytes(16).toString("base64url"),
@@ -1092,6 +1124,9 @@ export const createRelay = ({
     );
     await apply(true);
     const now = relayOf(row.id);
+    if (now instanceof ElysiaStatus) {
+      return now;
+    }
     if (now.provider === "github" && now.hookId) {
       const arrived = await pinged(now.id);
       if (!arrived) {
@@ -1099,25 +1134,43 @@ export const createRelay = ({
       }
     }
     const final = relayOf(row.id);
-    return { relay: viewOf(final), suggestedRoutes: suggested(final) };
+    if (final instanceof ElysiaStatus) {
+      return final;
+    }
+    const created: RelayCreated = {
+      relay: viewOf(final),
+      suggestedRoutes: suggested(final),
+    };
+    return created;
   };
 
-  /** Who may touch a relay: the owner, or a session of its project. */
-  const mayTouch = (by: "owner" | InstanceRow, row: RelayRow) => {
-    if (by !== "owner" && by.projectId !== row.projectId) {
-      refuse(403, "That relay is not one of this session's project's.");
+  /** The relay `id` as `by` may touch it: the owner, or a session of its project. */
+  const touchable = (id: string, by: "owner" | InstanceRow) => {
+    const row = relayOf(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
     }
+    if (by !== "owner" && by.projectId !== row.projectId) {
+      return problem(403, {
+        code: "relay-not-yours",
+        detail: "That relay is not one of this session's project's.",
+      });
+    }
+    return row;
   };
 
   /** Turns a relay off: its path answers 404, the webhook the hub made is deleted, Funnel's mount goes with the last one. */
-  const remove = async (
-    id: string,
-    by: "owner" | InstanceRow
-  ): Promise<{ github: string; relay: RelayView }> => {
-    const row = relayOf(id);
-    mayTouch(by, row);
+  const remove = async (id: string, by: "owner" | InstanceRow) => {
+    const row = touchable(id, by);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     if (row.state === "off") {
-      return { relay: viewOf(row), github: "already off" };
+      const removed: { github: string; relay: RelayView } = {
+        relay: viewOf(row),
+        github: "already off",
+      };
+      return removed;
     }
     store.update(id, { state: "off", reason: null, publicUrl: null });
     buckets.delete(id);
@@ -1129,23 +1182,38 @@ export const createRelay = ({
       store.update(id, { hookId: null });
     }
     await apply();
-    return { relay: viewOf(relayOf(id)), github: githubSaid };
+    const after = relayOf(id);
+    if (after instanceof ElysiaStatus) {
+      return after;
+    }
+    const removed: { github: string; relay: RelayView } = {
+      relay: viewOf(after),
+      github: githubSaid,
+    };
+    return removed;
   };
 
   /** The owner's secret for a relay (from their terminal): sealed, never answered back. */
-  const setSecret = async (id: string, secret: string): Promise<RelayView> => {
+  const setSecret = async (id: string, secret: string) => {
     const row = relayOf(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     if (row.state === "off") {
-      refuse(409, `Relay ${id} is off.`);
+      return problem(409, { code: "relay-off", detail: `Relay ${id} is off.` });
     }
     const trimmed = secret.trim();
     if (trimmed.length < 16 || trimmed.length > 512) {
-      refuse(400, "A relay's secret is 16 to 512 characters.");
+      return problem(400, {
+        code: "relay-secret-unfit",
+        detail: "A relay's secret is 16 to 512 characters.",
+      });
     }
     store.update(id, { secret: trimmed, secretFrom: "owner" });
     console.log(`[relay] ${id}: the owner set its secret`);
     await apply();
-    return viewOf(relayOf(id));
+    const after = relayOf(id);
+    return after instanceof ElysiaStatus ? after : viewOf(after);
   };
 
   // --- tools ---------------------------------------------------------------------------
@@ -1183,28 +1251,36 @@ export const createRelay = ({
   });
 
   /** A `relay_create` the owner approved, run by the hub with the arguments shown (asks.ts `carryOut`). */
-  const runApproved = async (
-    input: Record<string, unknown>
-  ): Promise<string> => {
+  const runApproved = async (input: Record<string, unknown>) => {
     const asked = approvedAsk.parse(input);
-    return JSON.stringify(
-      await create(inputOf(asked.project, asked), asked.requested_by)
+    const created = await create(
+      inputOf(asked.project, asked),
+      asked.requested_by
     );
+    return created instanceof ElysiaStatus ? created : JSON.stringify(created);
   };
 
   /**
    * Asks the person to approve opening a relay (asks.ts): the words
    * the session reads while it waits; made now in Full Send.
    */
-  const askThenCreate = async (
-    asker: InstanceRow,
-    input: RelayInput
-  ): Promise<RelayCreated | string> => {
+  const askThenCreate = async (asker: InstanceRow, input: RelayInput) => {
     const made = checked(input);
+    if (made instanceof ElysiaStatus) {
+      return made;
+    }
+    const said = publicText(made);
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
+    const project = projectOf(made.projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const recorded = await askPerson(asker, "relay_create", {
-      public: publicText(made),
+      public: said,
       project: made.projectId,
-      project_name: projectOf(made.projectId).name,
+      project_name: project.name,
       provider: made.provider,
       repo: made.repo,
       connection: made.connection,
@@ -1226,17 +1302,10 @@ export const createRelay = ({
     };
     const projectOfMe = () =>
       me().projectId ??
-      refuse(403, "This session is in no project, so it has no relays.");
-    const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
-      try {
-        return await work();
-      } catch (error) {
-        if (error instanceof RelayRefusal) {
-          throw new Error(error.message, { cause: error });
-        }
-        throw error;
-      }
-    };
+      problem(403, {
+        code: "relay-no-project",
+        detail: "This session is in no project, so it has no relays.",
+      });
     return [
       tool(
         "relay_create",
@@ -1252,8 +1321,12 @@ export const createRelay = ({
           timestamp_header: z.string().optional().describe("generic"),
           id_path: z.string().optional().describe("generic: event id path"),
         },
-        (input) =>
-          run(() => askThenCreate(me(), inputOf(projectOfMe(), input))),
+        async (input) => {
+          const projectId = projectOfMe();
+          return projectId instanceof ElysiaStatus
+            ? projectId
+            : await askThenCreate(me(), inputOf(projectId, input));
+        },
         (answer) =>
           typeof answer === "string" ? answer : relayCreatedWords(answer)
       ),
@@ -1261,28 +1334,38 @@ export const createRelay = ({
         "relay_list",
         "Your project's relays: URL, state, the owner's step.",
         {},
-        () => run(() => list(projectOfMe())),
+        () => {
+          const projectId = projectOfMe();
+          return Promise.resolve(
+            projectId instanceof ElysiaStatus ? projectId : list(projectId)
+          );
+        },
         relayListWords
       ),
       tool(
         "relay_remove",
         "Turn a relay off; the GitHub webhook the hub made goes with it.",
         { id: z.string().trim().min(1) },
-        ({ id }) =>
-          run(() =>
-            remove(
-              byHandle(
-                id,
-                list(projectOfMe()),
-                {
-                  id: (relay) => relay.id,
-                  said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
-                },
-                "relay"
-              ).id,
-              me()
-            )
-          ),
+        async ({ id }) => {
+          const projectId = projectOfMe();
+          if (projectId instanceof ElysiaStatus) {
+            return projectId;
+          }
+          const relays = list(projectId);
+          if (relays instanceof ElysiaStatus) {
+            return relays;
+          }
+          const named = byHandle(
+            id,
+            relays,
+            {
+              id: (relay) => relay.id,
+              said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
+            },
+            "relay"
+          );
+          return await remove(named.id, me());
+        },
         relayRemovedWords
       ),
     ];
@@ -1318,8 +1401,6 @@ export const RELAY_TOOLS: ReadonlySet<string> = new Set([
   "relay_remove",
 ]);
 
-const attempt = refusalAttempt(RelayRefusal);
-
 /** What a relay is made of, as the owner sends it to preview or make one. */
 const RELAY_FIELDS = t.Object({
   provider: t.UnionEnum(RELAY_PROVIDERS),
@@ -1337,20 +1418,20 @@ const RELAY_FIELDS = t.Object({
  */
 export const relayRoutes = (relay: Relay) =>
   new Elysia()
-    .get("/api/projects/:id/relays", ({ params }) =>
-      attempt(() => relay.list(params.id))
-    )
+    .get("/api/projects/:id/relays", ({ params }) => relay.list(params.id))
     .post(
       "/api/projects/:id/relays/preview",
       {
         body: RELAY_FIELDS,
       },
-      ({ params, body }) =>
-        attempt(() => ({
-          public: relay.publicText(
-            relay.checked({ ...body, projectId: params.id })
-          ),
-        }))
+      ({ params, body }) => {
+        const made = relay.checked({ ...body, projectId: params.id });
+        if (made instanceof ElysiaStatus) {
+          return made;
+        }
+        const said = relay.publicText(made);
+        return said instanceof ElysiaStatus ? said : { public: said };
+      }
     )
     .post(
       "/api/projects/:id/relays",
@@ -1358,14 +1439,11 @@ export const relayRoutes = (relay: Relay) =>
         body: RELAY_FIELDS,
       },
       ({ params, body }) =>
-        attempt(() => relay.create({ ...body, projectId: params.id }, "owner"))
+        relay.create({ ...body, projectId: params.id }, "owner")
     )
-    .delete("/api/relays/:id", ({ params }) =>
-      attempt(() => relay.remove(params.id, "owner"))
-    )
+    .delete("/api/relays/:id", ({ params }) => relay.remove(params.id, "owner"))
     .put(
       "/api/relays/:id/secret",
       { body: t.Object({ secret: t.String() }) },
-      ({ params, body }) =>
-        attempt(() => relay.setSecret(params.id, body.secret))
+      ({ params, body }) => relay.setSecret(params.id, body.secret)
     );

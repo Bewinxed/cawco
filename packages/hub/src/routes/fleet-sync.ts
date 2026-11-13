@@ -1,7 +1,7 @@
 /**
  * Pushing the fleet to its machines and retrying what a machine refused.
  */
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 
 export const fleetSyncRoutes = ({
@@ -15,9 +15,12 @@ export const fleetSyncRoutes = ({
     .post(
       "/api/fleet/sync",
       { body: t.Object({ machineId: t.Optional(t.String()) }) },
-      ({ body, status }) => {
+      ({ body }) => {
         if (body.machineId && !registry.agent(body.machineId)) {
-          return status(404, machineFault(body.machineId, "offline"));
+          return problem(404, {
+            code: "machine-offline",
+            detail: machineFault(body.machineId, "offline"),
+          });
         }
         fleetSyncs.changed("asked for", {
           reconverge: true,
@@ -37,9 +40,12 @@ export const fleetSyncRoutes = ({
           ids: t.Array(t.String(), { minItems: 1 }),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         if (!registry.agent(body.machineId)) {
-          return status(404, machineFault(body.machineId, "offline"));
+          return problem(404, {
+            code: "machine-offline",
+            detail: machineFault(body.machineId, "offline"),
+          });
         }
         fleetSyncs.retry(body.machineId, body.ids);
         return { ok: true };

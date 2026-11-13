@@ -1,6 +1,8 @@
+import { ElysiaStatus, type problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DelegateResult } from "./delegate-result";
 import type { AttemptAsk } from "./dispatch";
+
 import type { createTreeStops } from "./tree-stops";
 import { WorkItemRefusal } from "./work-item-state";
 import type { WorkItemRequest, WorkItemStart, WorkItems } from "./work-items";
@@ -37,12 +39,28 @@ export interface WorkItemCallsDeps {
     type?: string;
     workspace?: string;
   }) => Promise<{ type?: string }>;
-  /** Asks the person whether workspace `id` goes (asks.ts). */
+  /**
+   * Asks the person whether workspace `id` goes (asks.ts); refused without
+   * a reason, or for a session the hub does not have (artifact-events.ts
+   * `discardAsked`).
+   */
   readonly discardAsked: (
     from: string,
     id: string,
     reason: string | undefined
-  ) => Promise<{ recorded: string } | { approved: boolean }>;
+  ) => Promise<
+    | { recorded: string }
+    | { approved: boolean }
+    | ReturnType<
+        typeof problem<400, { code: "discard-ask-reason"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          404,
+          { code: "discard-ask-session-unknown"; detail: string }
+        >
+      >
+  >;
   /** Workspace `id` discarded for `from`. */
   readonly discarded: (
     from: string,
@@ -103,6 +121,10 @@ export const discardCall =
     const decided = asked.ask
       ? await ctx.discardAsked(from, id, asked.reason)
       : { approved: false };
+    // The work items' calls throw their refusals (`workItemCalls`).
+    if (decided instanceof ElysiaStatus) {
+      throw new WorkItemRefusal(decided.status, decided.response.detail);
+    }
     if ("recorded" in decided) {
       return decided.recorded;
     }
