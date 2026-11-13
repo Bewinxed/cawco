@@ -6,6 +6,7 @@
   "exports": {
     "./browser": "./src/browser/browsers.ts",
     "./passkey-inject": "./src/browser/passkey-inject.ts",
+    "./passkey-capture": "./src/browser/passkey-capture.ts",
     "./capabilities": "./src/capabilities.ts",
     "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
