@@ -22,6 +22,7 @@
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { z } from "zod";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -134,8 +135,7 @@
     boardStore.machines.find((item) => item.machineId === machineId)
   );
   const harness = $derived(
-    (kept?.harness || session?.harness || row?.harness || context?.harness) as
-      HarnessKind | undefined
+    kept?.harness || session?.harness || row?.harness || context?.harness
   );
   const report = $derived(
     machine?.harnesses?.find((item) => item.harness === harness)
@@ -341,9 +341,10 @@
    * under the head where it was pressed, with Try again and the text under
    * Show details; never a toast.
    */
+  const CopyAskedSchema = z.object({ what: z.string(), text: z.string() });
   const copyKey = $derived(`copy:details:${sessionId}`);
   const copyFault = $derived(
-    refusals.get(copyKey)?.asked as { what: string; text: string } | undefined
+    CopyAskedSchema.safeParse(refusals.get(copyKey)?.asked).data
   );
   async function copy(what: string, text: string): Promise<void> {
     const key = copyKey;
@@ -616,7 +617,10 @@
     if (!(editable && machineId) || pending("model") || next === model) {
       return;
     }
-    submitCommand(sessionId, machineId, "set-model", { model: next });
+    submitCommand(sessionId, machineId, {
+      kind: "set-model",
+      intent: { model: next },
+    });
   }
   function changeEffort(next: EffortLevel) {
     if (resume) {
@@ -630,7 +634,10 @@
     ) {
       return;
     }
-    submitCommand(sessionId, machineId, "set-effort", { effort: next });
+    submitCommand(sessionId, machineId, {
+      kind: "set-effort",
+      intent: { effort: next },
+    });
   }
   async function changePermission(next: PermissionMode) {
     if (resume) {
@@ -649,8 +656,11 @@
     // harness: entering them from another mode starts the session again in
     // place. Between the two the CLI stays in bypass, and a switch is enough.
     if (!bypasses(next) || bypasses(session?.permissionMode)) {
-      submitCommand(sessionId, machineId, "set-permission-mode", {
-        mode: next,
+      submitCommand(sessionId, machineId, {
+        kind: "set-permission-mode",
+        intent: {
+          mode: next,
+        },
       });
       return;
     }
