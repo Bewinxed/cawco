@@ -9,8 +9,8 @@
  * that say so.
  */
 import type { HubRequest } from "@cawco/core/hub-request";
-import type { HubState } from "./client.svelte";
 import HubStandIn from "./HubStandIn.svelte";
+import type { HubState } from "./hub/socket.svelte";
 import type { HubSeam } from "./hub-seam";
 
 export const hubAs =

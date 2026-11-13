@@ -15,7 +15,10 @@
    * was sent, in order.
    */
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import {
+    blankSession,
+    type SessionState,
+  } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -38,7 +41,9 @@
 
   const debug = (
     globalThis as unknown as {
-      __cawcoDebug: { state: { sessions: Record<string, SessionState> } };
+      __cawcoDebug: {
+        sessionsState: { sessions: Record<string, SessionState> };
+      };
     }
   ).__cawcoDebug;
   const now = Date.now();
@@ -53,7 +58,7 @@
         timestamp: new Date(now - (SENT - i) * 7 * 60_000).toISOString(),
       }) as Message
   );
-  debug.state.sessions[ID] = { ...blankSession(ID), messages };
+  debug.sessionsState.sessions[ID] = { ...blankSession(ID), messages };
 
   /** The session's `/` menu: skills (a plugin's among them) and a built-in. */
   const COMMANDS: AvailableCommand[] = [

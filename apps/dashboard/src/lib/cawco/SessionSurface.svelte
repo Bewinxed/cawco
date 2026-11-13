@@ -29,12 +29,6 @@
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
-  import {
-    cawco,
-    readTranscript,
-    type ServerTail,
-    syncSubscriptions,
-  } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import FirstRunHere from "#lib/cawco/home/FirstRunHere.svelte";
   import { firstRunSteps } from "#lib/cawco/home/first-run.svelte.js";
@@ -45,9 +39,19 @@
     markOpened,
   } from "#lib/cawco/home/home-state.svelte.js";
   import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { instanceForSession } from "#lib/cawco/links.js";
   import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
   import { presenceWorkspace } from "#lib/cawco/presence.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { continuationsStore } from "#lib/cawco/stores/continuations.svelte.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
+  import { sessionsStore } from "#lib/cawco/stores/sessions.svelte.js";
+  import { syncSubscriptions } from "#lib/cawco/stores/subscriptions.svelte.js";
+  import {
+    readTranscript,
+    type ServerTail,
+  } from "#lib/cawco/stores/transcript-reads.svelte.js";
   import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
@@ -128,7 +132,7 @@
 
   /** What a wide screen's detail area says while nothing is open. */
   const detailState = $derived.by(() => {
-    if (cawco.hub === "unreachable") {
+    if (connectionStore.hub === "unreachable") {
       return "reconnecting";
     }
     if (!fleetHome.ready) {
@@ -330,7 +334,7 @@
       return;
     }
     for (const id of drawnChats) {
-      const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
+      const row = id ? boardStore.instanceIndex.byId.get(id) : undefined;
       if (row && endedUnseen(row) && !picked.has(row.id)) {
         untrack(() => markOpened(row.id));
       }
@@ -435,8 +439,8 @@
      (a session whose continuations the hub folded into one) is that
      session's tab, under its id now. */
   $effect(() => {
-    const index = cawco.instanceIndex;
-    const former = cawco.formerIds;
+    const index = boardStore.instanceIndex;
+    const former = continuationsStore.formerIds;
     if (!workspace.restored) {
       return;
     }
@@ -464,12 +468,12 @@
      the projects are read, its tab is taken away as a tab that names
      nothing is (workspace `drop`), never walked back to. */
   $effect(() => {
-    if (!(workspace.restored && cawco.projectsRead)) {
+    if (!(workspace.restored && projectsStore.projectsRead)) {
       return;
     }
     const gone = workspace.openTabs.filter((tab) => {
       const projectId = projectOfTab(tab);
-      return projectId !== null && !cawco.project(projectId);
+      return projectId !== null && !projectsStore.project(projectId);
     });
     untrack(() => {
       for (const tab of gone) {
@@ -507,7 +511,7 @@
   // skeleton is one that beats the active tab's own read.
   $effect(() => {
     const active = workspace.activeSessionId;
-    const held = active ? cawco.session(active) : null;
+    const held = active ? sessionsStore.session(active) : null;
     const ready =
       active === null ||
       (held !== null && (held.initialized || held.messages.length > 0));

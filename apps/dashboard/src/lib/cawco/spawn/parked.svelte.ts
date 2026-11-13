@@ -25,7 +25,6 @@ import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { track } from "#lib/platform/track.js";
-import { cawco, followContinuations, sendFirstPrompt } from "../client.svelte";
 import {
   type ContinueSource,
   continuationRunning,
@@ -33,6 +32,12 @@ import {
   type SessionDraft,
 } from "../continue.svelte";
 import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
+import { boardStore } from "../stores/board.svelte";
+import {
+  continuationsStore,
+  followContinuations,
+} from "../stores/continuations.svelte";
+import { sendFirstPrompt } from "../stores/session-start.svelte";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { type SpawnPrefill, spawning } from "./new-session.svelte";
 
@@ -223,7 +228,7 @@ export function followJob(id: string, job: string): void {
   if (start) {
     start.job = job;
     start.askedAt ||= Date.now();
-    settleJobs(cawco.continuations);
+    settleJobs(continuationsStore.continuations);
   }
 }
 
@@ -359,11 +364,11 @@ function recover(start: ParkedStart): void {
     failStart(start.id, start.askedAt ? NOT_KNOWN : NOTHING_ASKED);
     return;
   }
-  if (!cawco.fleetRead) {
+  if (!boardStore.fleetRead) {
     return;
   }
   const listed = asked.filter((ask) =>
-    cawco.instanceIndex.byId.has(ask.instanceId)
+    boardStore.instanceIndex.byId.has(ask.instanceId)
   );
   for (const ask of listed) {
     if (!ask.sent) {

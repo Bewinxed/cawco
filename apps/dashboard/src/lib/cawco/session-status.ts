@@ -8,7 +8,10 @@
 import type { CawStatus } from "@cawco/core/project-conversation";
 import { commonWords } from "@cawco/core/words/common";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
-import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
+import type { BoardRow } from "./links";
+import { asksStore } from "./stores/asks.svelte";
+import { boardStore, isFailed, isStale } from "./stores/board.svelte";
+import { projectsStore } from "./stores/projects.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
@@ -71,7 +74,7 @@ export function sessionStatus(
   ) {
     return done ? "done" : "idle";
   }
-  const activity = cawco.activityOf(instance.id);
+  const activity = asksStore.activityOf(instance.id);
   if (activity === "blocked") {
     return "attn";
   }
@@ -87,11 +90,14 @@ export function sessionStatus(
  * events reach. Null for any other session, which is never named Caw.
  */
 export const cawOf = (id: string): CawStatus | null => {
-  const projectId = cawco.rowOf(id)?.projectId;
-  if (!projectId || cawco.project(projectId)?.conversationInstanceId !== id) {
+  const projectId = boardStore.rowOf(id)?.projectId;
+  if (
+    !projectId ||
+    projectsStore.project(projectId)?.conversationInstanceId !== id
+  ) {
     return null;
   }
-  const activity = cawco.activityOf(id);
+  const activity = asksStore.activityOf(id);
   if (activity === "blocked") {
     return "needs-you";
   }

@@ -2,6 +2,7 @@
   import { bucketStart } from "@cawco/core/usage/tokens";
   import type { LimitWindow, UsageHarness } from "@cawco/core/usage/types";
   import { openedAt } from "@cawco/core/usage/windows";
+  import { cawOf, projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   /**
    * Usage: will it last, first. The Limits block
    * leads with the window that stops you first and every window under it;
@@ -12,7 +13,8 @@
    * spend today and this month, its conversations' share, the budget an
    * attempt runs under, and the ledger of its attempts and sessions.
    */
-  import { cawco, cawOf, readSpend } from "#lib/cawco/client.svelte.js";
+
+  import { readSpend, usageStore } from "#lib/cawco/stores/usage.svelte.js";
   import History from "#lib/cawco/usage/History.svelte";
   import LimitsBlock from "#lib/cawco/usage/LimitsBlock.svelte";
   import ProjectSpend from "#lib/cawco/usage/ProjectSpend.svelte";
@@ -31,7 +33,7 @@
 
   /** The project the page is filtered to, by `?project=`; null: the fleet. */
   const filtered = $derived(
-    cawco.projects.find(
+    projectsStore.projects.find(
       (project) => project.id === page.url.searchParams.get("project")
     ) ?? null
   );
@@ -100,12 +102,12 @@
   const since = $derived.by(
     (): Record<UsageHarness, number | null | undefined> => {
       if (range === "window") {
-        if (!cawco.usageLimitsRead) {
+        if (!usageStore.usageLimitsRead) {
           return { claude: undefined, opencode: undefined };
         }
         // Each Claude account has its own 5-hour window: the range opens
         // with the earliest of those still running, so it holds them all.
-        const opened = Object.values(cawco.claudeLimits)
+        const opened = Object.values(usageStore.claudeLimits)
           .filter((reading) =>
             reading.windows.some(
               (w) =>
@@ -119,17 +121,17 @@
         return {
           claude: opened.length > 0 ? Math.min(...opened) : null,
           opencode: fiveHourStart(
-            speakingReading(cawco.openCodeGoLimits)?.reading
+            speakingReading(usageStore.openCodeGoLimits)?.reading
           ),
         };
       }
       // Days are the hub's (its spend's own midnight and zone), so "Today"
       // here is the same today as the spend line and the home's status.
-      if (!cawco.spend) {
+      if (!usageStore.spend) {
         return { claude: undefined, opencode: undefined };
       }
       const back = { today: 0, "7d": 6, "30d": 29 }[range];
-      const start = hubMidnight(cawco.spend, back);
+      const start = hubMidnight(usageStore.spend, back);
       return { claude: start, opencode: start };
     }
   );
@@ -199,7 +201,7 @@
         </Select.Trigger>
         <Select.Content>
           <Select.Item label="All projects" value="all" />
-          {#each cawco.projects as project (project.id)}
+          {#each projectsStore.projects as project (project.id)}
             <Select.Item label={project.name} value={project.id} />
           {/each}
         </Select.Content>
@@ -233,7 +235,7 @@
       {/if}
     </header>
 
-    {#if cawco.spendFailed}
+    {#if usageStore.spendFailed}
       <div class="flex flex-wrap items-center gap-space-3" role="alert">
         <p data-slot="note" class="type-meta text-ink-muted">
           Could not reach the hub for usage data. Check that it is running, then

@@ -270,13 +270,13 @@
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { canvasPath } from "@cawco/core/stage";
   import { untrack } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import {
     type PanePreview,
     setPaneFleet,
   } from "#lib/cawco/preview/pane-fleet.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
@@ -358,12 +358,11 @@
     globalThis as unknown as {
       __cawcoDebug: {
         frame: (frame: PulseFrame) => void;
-        state: {
-          status: string;
+        sessionsState: {
           sessions: Record<string, ReturnType<typeof blankSession>>;
-          workItems: Record<string, WorkItemSummary>;
-          previews: Record<string, PanePreview>;
         };
+        workItemsState: { workItems: Record<string, WorkItemSummary> };
+        previewsState: { previews: Record<string, PanePreview> };
         adoptInstances: (rows: InstanceRow[]) => void;
       };
     }
@@ -393,7 +392,7 @@
   session.cwd = "/home/you/cockpit";
   session.messages = history();
   session.initialized = true;
-  debug.state.sessions[ID] = session;
+  debug.sessionsState.sessions[ID] = session;
   debug.frame({
     kind: "pulse",
     instanceId: ID,
@@ -432,7 +431,7 @@
       waitReason: null,
       waitUntil: null,
     } as WorkItemSummary;
-    debug.state.workItems[item.id] = item;
+    debug.workItemsState.workItems[item.id] = item;
     entered.set(item.instanceId, "none");
   });
 
@@ -441,7 +440,7 @@
   // instance and hands it each story's args in turn (component-canvas: a
   // story's args are inputs the live instance takes at any time).
   $effect.pre(() => {
-    debug.state.previews[ID] = {
+    debug.previewsState.previews[ID] = {
       kind: "preview",
       instanceId: ID,
       artifact: {

@@ -12,8 +12,8 @@
 import type { AvailableCommand } from "@cawco/core/fleet";
 import type { Snippet } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
-import type { SendExtras } from "../client.svelte";
 import type { ConversationFind } from "../find/conversation-find.svelte";
+import type { SendExtras } from "../send-store";
 import type { SuggestCandidate } from "../suggest.svelte";
 import type { ComposerAsk, ComposerFoot } from "../transcript/Composer.svelte";
 import type { ComposerDraft } from "../transcript/composer-draft.svelte";

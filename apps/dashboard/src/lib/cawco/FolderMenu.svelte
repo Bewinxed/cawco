@@ -20,10 +20,10 @@
     IconSessionAdd,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import type { ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { HUES } from "./identity";
   import { askEnd, endAtRail, endHost } from "./project-end.svelte";
+  import type { ProjectRow } from "./projects";
   import { rail } from "./rail.svelte";
 
   interface Props {

@@ -3,15 +3,18 @@
  * takes it: IndexedDB (idb.ts `sends`), one record per send, under the
  * send's own id, holding what the send carries. A tab reloaded while a send
  * waits for the hub (its socket dropped, or its ack never came) sends it
- * again under that id as it starts (client.svelte.ts `resumeKeptSends`),
+ * again under that id as it starts (stores/commands.svelte.ts `resumeKeptSends`),
  * and the hub, which takes a repeat of an id as the same send, posts it
  * once. A record goes once the hub takes its send; one the hub refused is
  * kept with its words for Try again or Edit, for as long as those stand.
  */
 
+import type { SendPayload } from "@cawco/core/protocol";
 import { KeptSendSchema } from "#lib/cawco/stored-shapes.js";
-import type { SendExtras } from "./client.svelte";
 import { database, done, result, SENDS } from "./idb";
+
+/** What a turn carries besides its typed text — pastes turned into chips, images. */
+export type SendExtras = Pick<SendPayload, "attachments" | "images">;
 
 /** One send as it is kept: enough to send it again exactly as it went. */
 export interface KeptSend {

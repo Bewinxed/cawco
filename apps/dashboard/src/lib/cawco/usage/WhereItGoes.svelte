@@ -40,12 +40,13 @@
   import { failureWords } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import { GroupRelay } from "../home/group-relay.svelte";
   import type { RelayLine } from "../home/relay-plan";
   import { conversationHref } from "../links";
   import OsMark from "../OsMark.svelte";
   import { type SessionSpend, sessionsCsv } from "../session-export";
+  import { boardStore } from "../stores/board.svelte";
   import { compactNumber, money, summaryReader, totalTokensOf } from "../usage";
   import ReadFailed from "./ReadFailed.svelte";
 
@@ -166,7 +167,7 @@
         v.grouping === "session"
           ? conversationHref(
               row.instanceId ?? String(row.key),
-              cawco.instanceIndex
+              boardStore.instanceIndex
             )
           : undefined,
       os: v.grouping === "machine" ? row.machine?.os : undefined,
@@ -181,7 +182,7 @@
     if (id === FLAT) {
       return -1;
     }
-    const at = cawco.machines.findIndex((m) => m.machineId === id);
+    const at = boardStore.machines.findIndex((m) => m.machineId === id);
     return at === -1 ? Number.MAX_SAFE_INTEGER : at;
   };
 
