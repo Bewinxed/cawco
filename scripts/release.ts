@@ -47,10 +47,10 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
+import { hubClient, unwrap } from "../packages/agent/src/hub-client";
+import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
-import { hubInit, hubRequest } from "../packages/core/src/hub-request";
-import { machineFetch } from "../packages/core/src/machine-key";
 import {
   listedPid,
   signalGroup,
@@ -148,25 +148,18 @@ const gatePassed = async (commit: string): Promise<boolean> => {
     return false;
   }
   const { hubUrl } = installation;
-  const gate = hubRequest("GET /api/landing-gate", { query: { tree } });
-  const asked = await readWithin(ANNOUNCE_MS, async (signal) => {
-    const response = await machineFetch(
-      `${hubUrl}${gate.path}`,
-      hubInit(gate, { signal })
-    );
-    return {
-      ok: response.ok,
-      status: response.status,
-      text: await response.text(),
-    };
-  });
-  if (asked.kind === "unanswered" || !asked.value.ok) {
+  const asked = await readWithin(ANNOUNCE_MS, (signal) =>
+    hubClient(hubUrl, (url, init) =>
+      machineFetch(url, { ...init, signal })
+    ).api["landing-gate"].get({ query: { tree } })
+  );
+  if (asked.kind === "unanswered" || asked.value.error) {
     console.log(
       `The hub at ${hubUrl} ${asked.kind === "unanswered" ? `did not answer within ${ANNOUNCE_MS / 1000} s` : `answered ${asked.value.status}`} on the merge checks of tree ${tree.slice(0, 12)}: the release runs its own check`
     );
     return false;
   }
-  const { passed } = JSON.parse(asked.value.text) as { passed: string[] };
+  const { passed } = unwrap(asked.value, () => new Error("unreachable"));
   const ok = passed.includes(LANDING_CHECK);
   console.log(
     ok
