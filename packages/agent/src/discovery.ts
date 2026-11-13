@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { fetchHub, hubRequest } from "@cawco/core/hub-request";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
 import { Bonjour, type Service } from "bonjour-service";
 import { readConfig, writeConfig } from "./config";
+import { hubClient } from "./hub-client";
 
 /**
  * The network rungs of hub discovery, shared between `cawco up`
@@ -63,24 +63,13 @@ export const hubIdAt = (
   httpUrl: string
 ): Promise<Bounded<string | undefined>> =>
   readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-    const body: { hubId?: unknown } = await fetchHub(
-      fetch,
-      httpUrl,
-      hubRequest("GET /health"),
-      { signal }
-    )
-      .then((response) =>
-        response.ok ? (response.json() as Promise<{ hubId?: unknown }>) : {}
-      )
-      .catch((error: unknown) => {
-        if (signal.aborted) {
-          throw error;
-        }
-        return {};
-      });
-    return typeof body.hubId === "string" && body.hubId
-      ? body.hubId
-      : undefined;
+    const answer = await hubClient(httpUrl, (url, init) =>
+      fetch(url, { ...init, signal })
+    ).health.get();
+    if (answer.response === undefined && signal.aborted) {
+      throw answer.error?.value;
+    }
+    return answer.data?.hubId || undefined;
   });
 
 /** A probe that answers true for the hub `joined` alone, and says when another hub answered or one did not answer in time. */

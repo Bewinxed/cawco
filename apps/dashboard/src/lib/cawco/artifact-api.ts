@@ -138,14 +138,7 @@ export async function showArtifact(
     (refused) =>
       new ArtifactRefused(refused.response.status, hubRefusal(refused).message)
   );
-  // The show route's problems from across the hub's import cycle are typed
-  // at any status (artifacts/deps.ts `Resaid`), so Eden types them, and an
-  // empty body, as a possible answer too; hubData has thrown every one.
-  if (
-    typeof shown === "object" &&
-    "href" in shown &&
-    typeof shown.href === "string"
-  ) {
+  if ("href" in shown && typeof shown.href === "string") {
     await goto(shown.href);
     return "page";
   }

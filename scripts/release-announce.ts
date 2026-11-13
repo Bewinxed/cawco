@@ -2,10 +2,15 @@
  * The last step of a published release, shared by release.ts and
  * republish.ts: the hub on this host told the release is up.
  */
+
+import {
+  hubClient,
+  refusalText,
+  unwrap,
+} from "../packages/agent/src/hub-client";
+import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
-import { hubInit, hubRequest } from "../packages/core/src/hub-request";
-import { machineFetch } from "../packages/core/src/machine-key";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 
 /** How long the hub has to look at its release host and answer, each ask. */
@@ -35,30 +40,23 @@ export async function announce(published: ReleaseManifest): Promise<void> {
   }
   const { hubUrl } = installation;
   const check = async (): Promise<{ channel: string; version: string }> => {
-    const request = hubRequest("POST /api/binary-updates/check");
-    const asked = await readWithin(ANNOUNCE_MS, async (signal) => {
-      const response = await machineFetch(
-        `${hubUrl}${request.path}`,
-        hubInit(request, { signal })
-      );
-      return {
-        ok: response.ok,
-        status: response.status,
-        text: await response.text(),
-      };
-    });
+    const asked = await readWithin(ANNOUNCE_MS, (signal) =>
+      hubClient(hubUrl, (url, init) =>
+        machineFetch(url, { ...init, signal })
+      ).api["binary-updates"].check.post()
+    );
     if (asked.kind === "unanswered") {
       throw new Error(
         `The hub at ${hubUrl} did not answer the release check within ${ANNOUNCE_MS / 1000} s`
       );
     }
-    const { ok, status, text } = asked.value;
-    if (!ok) {
-      throw new Error(
-        `The hub at ${hubUrl} answered the release check ${status}: ${text}`
-      );
-    }
-    return JSON.parse(text) as { channel: string; version: string };
+    return unwrap(
+      asked.value,
+      (refusal) =>
+        new Error(
+          `The hub at ${hubUrl} answered the release check ${refusal.status}: ${refusalText(refusal)}`
+        )
+    );
   };
   const started = Date.now();
   let wait = ANNOUNCE_WAIT_MS;
