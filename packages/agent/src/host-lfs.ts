@@ -20,8 +20,6 @@
 import { spawn } from "node:child_process";
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { refusalWords } from "@cawco/core/hub-refusal";
-import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -32,6 +30,14 @@ import { z } from "zod";
 import { toHttpBase } from "./discovery";
 import { holdDeclaredSecret } from "./git/hub-credential";
 import { type DeclaredLfs, sameEndpoint } from "./git/lfs";
+import {
+  type HubAnswer,
+  type HubClient,
+  type HubData,
+  hubClient,
+  refusalText,
+  unwrap,
+} from "./hub-client";
 import { provenFetch } from "./hub-proof";
 
 /** How long the hub may take to say where a project's large files live. Our choice. */
@@ -58,17 +64,15 @@ export const declaredLfs = async (
   if (!(hub && typeof projectId === "string" && projectId)) {
     return;
   }
-  const { declared } = (await askHub(
-    ...hubAt(
-      hub,
-      hubRequest("GET /api/lfs/projects/:id", { path: { id: projectId } })
-    ),
+  const { declared } = await askHub(
+    hub,
+    (client) => client.api.lfs.projects({ id: projectId }).get(),
     `where project ${projectId}'s large files live`
   ).catch((error: Error) => {
     throw new Error(`${error.message}, so git-lfs did not run`, {
       cause: error,
     });
-  })) as { declared: DeclaredLfs | null };
+  });
   if (declared) {
     holdDeclaredSecret(declared.basic);
   }
@@ -79,25 +83,26 @@ export const declaredLfs = async (
  * The hub's JSON answer to `url`, within {@link HUB_MS}; throws, saying
  * `what` it did not say, when it answers otherwise or not at all.
  */
-const askHub = async (
-  url: string,
-  init: RequestInit,
+const askHub = async <A extends HubAnswer>(
+  hub: string,
+  request: (client: HubClient) => Promise<A>,
   what: string
-): Promise<unknown> => {
-  const read = await readWithin(HUB_MS, async (signal) => {
-    const answer = await provenFetch(url, { ...init, signal });
-    return { status: answer.status, ok: answer.ok, text: await answer.text() };
-  });
+): Promise<HubData<A>> => {
+  const read = await readWithin(HUB_MS, (signal) =>
+    request(
+      hubClient(hub, (url, init) => provenFetch(url, { ...init, signal }))
+    )
+  );
   if (read.kind === "unanswered") {
     throw new Error(`the hub did not say ${what} within ${HUB_MS / 1000}s`);
   }
-  const { ok, status, text } = read.value;
-  if (!ok) {
-    throw new Error(
-      `the hub did not say ${what} (${status}: ${refusalWords(text, status)})`
-    );
-  }
-  return JSON.parse(text) as unknown;
+  return unwrap(
+    read.value,
+    (refusal) =>
+      new Error(
+        `the hub did not say ${what} (${refusal.status}: ${refusalText(refusal).trim()})`
+      )
+  );
 };
 
 /** The project workspace `id` belongs to, as the hub named it at its cut (boundary/looks.ts `setProject`); none for none. */
@@ -245,14 +250,15 @@ export const noteRefused = async (
   if (!(hub && projectId)) {
     return;
   }
+  const machine = await machineId();
   await askHub(
-    ...hubAt(
-      hub,
-      hubRequest("POST /api/lfs/projects/:id/refused", {
-        path: { id: projectId },
-        body: { root, endpoint, machineId: await machineId() },
-      })
-    ),
+    hub,
+    (client) =>
+      client.api.lfs.projects({ id: projectId }).refused.post({
+        root,
+        endpoint,
+        machineId: machine,
+      }),
     "it told the project's conversation"
   ).catch((error: unknown) =>
     console.warn(

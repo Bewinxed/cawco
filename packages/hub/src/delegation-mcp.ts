@@ -64,7 +64,7 @@ import {
   projectFromSessionTool,
 } from "./project-offers";
 import type { ProjectSettings } from "./project-settings";
-
+import type { ProblemStatus } from "./refusal";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -522,7 +522,7 @@ export function createDelegationMcp(options: {
     }
     return [
       ...all.filter(
-        (tool) =>
+        (tool: { name: string }) =>
           allows(actor, tool.name) &&
           (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
           (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
@@ -743,7 +743,7 @@ export function createDelegationMcp(options: {
           ? (asked) => {
               const named = options.artifactNamed?.(actor.id, asked) ?? asked;
               return named instanceof ElysiaStatus
-                ? problem<number, { code: string; detail: string }>(
+                ? problem<ProblemStatus, { code: string; detail: string }>(
                     named.status,
                     { code: named.response.code, detail: named.response.detail }
                   )

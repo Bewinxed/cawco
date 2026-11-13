@@ -247,7 +247,7 @@ export const CONTROL_BEGIN_TOOL_SIGNIN = "beginToolSignin";
 export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 
 /** What a probe or an install attempt found. The unit every surface renders. */
-export type ToolState =
+type ToolState =
   "installed" | "missing" | "installing" | "failed" | "unsupported";
 
 /** @socketFrame fromHub */

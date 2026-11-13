@@ -108,7 +108,7 @@ import {
   dispatchProblem,
 } from "./dispatch";
 import { boardTitle } from "./labels";
-import { type McpTool, sentence, tool } from "./mcp-tool";
+import { sentence, tool } from "./mcp-tool";
 import type { createProjectEdits } from "./project-edit";
 import { accountChange, projectName } from "./project-edit";
 
@@ -1177,10 +1177,7 @@ export const createProjectSettings = ({
   };
 
   /** `project_settings`, bound to the calling session and its call; with none, its listing. */
-  const definitionFor = (
-    actor: InstanceRow | undefined,
-    toolUseId?: string
-  ): McpTool =>
+  const definitionFor = (actor: InstanceRow | undefined, toolUseId?: string) =>
     tool(
       PROJECT_SETTINGS,
       DESCRIPTION,
