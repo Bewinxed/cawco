@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import type { SessionPlan } from "@cawco/core/plan";
   import { planWords } from "@cawco/core/words/plan";
-  import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+  import { refusedOrUnreached } from "#lib/platform/hub-read.js";
   import { stepsTree, todosTree } from "../plan";
   import { boardStore } from "../stores/board.svelte";
 
@@ -19,7 +19,6 @@
 
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's plan (PRD §5.2, "Every session's plan, in a panel"): its
@@ -49,10 +48,11 @@
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
+  import { hub } from "#lib/platform/hub.js";
+  import { hubData } from "#lib/platform/hub-read.js";
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
-
   import MessageBody from "../MessageBody.svelte";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import { plansStore } from "../stores/plans.svelte";
@@ -95,9 +95,10 @@
     if (!untrack(() => plan?.awayUnseen)) {
       return;
     }
-    hubJson(hubRequest("POST /api/instances/:id/plan/seen", { path: { id } }), {
-      failure: refusedOrUnreached,
-    }).catch((error: unknown) => {
+    hubData(
+      hub.api.instances({ id }).plan.seen.post(),
+      refusedOrUnreached
+    ).catch((error: unknown) => {
       console.warn("[cawco] marking the away notes seen failed:", error);
     });
   });

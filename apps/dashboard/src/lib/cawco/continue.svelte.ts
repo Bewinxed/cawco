@@ -15,10 +15,10 @@ import type {
   HarnessKind,
   PermissionMode,
 } from "@cawco/core/harness/kinds";
-import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ContinuationJob } from "@cawco/core/protocol";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
-import { hubJson, hubSend } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData, hubDone } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import type { SendExtras } from "./send-store";
 import { spawning } from "./spawn/new-session.svelte";
@@ -95,16 +95,11 @@ export function continueInNewSession(source: ContinueSource | null): void {
  */
 export async function startContinuation(
   source: ContinueSource,
-  body: HubSent<"POST /api/instances/:id/continue">["body"]
+  body: Parameters<ReturnType<typeof hub.api.instances>["continue"]["post"]>[0]
 ): Promise<string> {
-  const { continuationId } = (await hubJson(
-    hubRequest("POST /api/instances/:id/continue", {
-      path: { id: source.instanceId },
-      body,
-    })
-  )) as {
-    continuationId: string;
-  };
+  const { continuationId } = await hubData(
+    hub.api.instances({ id: source.instanceId }).continue.post(body)
+  );
   return continuationId;
 }
 
@@ -127,7 +122,7 @@ export const continuationRunning = (
 
 /** Cancel, in any stage before the new session has started: nothing starts. Throws the hub's refusal. */
 export async function cancelContinuation(id: string): Promise<void> {
-  await hubSend(hubRequest("DELETE /api/continuations/:id", { path: { id } }));
+  await hubDone(hub.api.continuations({ id }).delete());
 }
 
 /**

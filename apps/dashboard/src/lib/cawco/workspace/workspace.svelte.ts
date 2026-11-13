@@ -21,11 +21,11 @@
 import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import { TAB_NAMES_PER_ASK, type TabNamed } from "@cawco/core/protocol";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
-import { hubFetch } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import {
   asPref,
   keepPrefs,
@@ -182,20 +182,15 @@ function sendNames(): void {
 }
 
 function sendNamesOf(asked: string[]): void {
-  hubFetch(
-    hubRequest("POST /api/instances/named", {
-      body: {
-        ids: asked.map((id) => ({
-          id,
-          machine: held.ctx?.[id]?.machine ?? null,
-        })),
-      },
+  hubData(
+    hub.api.instances.named.post({
+      ids: asked.map((id) => ({
+        id,
+        machine: held.ctx?.[id]?.machine ?? null,
+      })),
     })
   )
-    .then(async (response) =>
-      response.ok ? ((await response.json()) as TabNamed[]) : []
-    )
-    // Not reached: each tab is read as it stands, and its read says why.
+    // Refused or not reached: each tab is read as it stands, and its read says why.
     .catch((): TabNamed[] => [])
     .then((answers) => {
       for (const answer of answers) {

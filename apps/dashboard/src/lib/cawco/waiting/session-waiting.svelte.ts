@@ -22,7 +22,12 @@ import type {
   SessionQuestion,
   SessionQuestionsRead,
 } from "@cawco/core/session-questions";
-import { failureClause, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  failureClause,
+  hubFetch,
+  hubRefusal,
+  refusedOf,
+} from "#lib/platform/hub-read.js";
 import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
 import { refusals } from "../refusals.svelte";
 import { needsStore } from "../stores/needs.svelte";
@@ -102,7 +107,7 @@ export class SessionWaiting {
     })
       .then(async (response) => {
         if (!response.ok) {
-          throw await hubRefusal(response);
+          throw hubRefusal(await refusedOf(response));
         }
         const read = (await response.json()) as SessionQuestionsRead;
         this.questions = read.questions;
