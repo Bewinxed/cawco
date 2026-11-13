@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { PulseFrame } from "@cawco/core/frames";
   import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
@@ -48,14 +47,7 @@
   // The client's own state, as the hub's frames would have set it: the
   // sessions' rows and pulses (dev's `__cawcoDebug`, set when
   // client.svelte.ts loads, which PaneTabs imports ahead of this script).
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        adoptInstances: (rows: InstanceRow[]) => void;
-      };
-    }
-  ).__cawcoDebug;
+  const debug = window.__cawcoDebug;
   const now = Date.now();
   const pulse = (
     instanceId: string,

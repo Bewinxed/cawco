@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { PulseFrame } from "@cawco/core/frames";
   /**
    * DELEGATE TRAY BENCH: the delegate tray's row (transcript/DelegateTray),
    * no hub. The real SessionPane and the group's composer lent to it as
@@ -20,10 +19,9 @@
    */
   import { CAPABILITIES_NONE } from "@cawco/core/harness";
   import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
-  import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
+  import type { WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
-  import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
@@ -103,32 +101,19 @@
         type: "user",
         content: ask,
         timestamp: at,
-      } as Message);
+      });
       rows.push({
         id: `${ID}-asst-${n}`,
         instanceId: ID,
         type: "assistant",
         content: answer,
         timestamp: at,
-      } as Message);
+      });
     }
     return rows;
   }
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        connectionState: { status: string };
-        sessionsState: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-        workItemsState: { workItems: Record<string, WorkItemSummary> };
-        plansState: { plans: Record<string, HeldPlan> };
-        adoptInstances: (rows: InstanceRow[]) => void;
-      };
-    }
-  ).__cawcoDebug;
+  const debug = window.__cawcoDebug;
 
   // Running, as the hub would list it: an ask parked on it is the
   // conversation's own (its composer grows into it over its transcript),

@@ -245,7 +245,8 @@
   );
   const heldCount = $derived(pins.filter(pinHeld).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
-  let mode = $state<"interact" | "comment" | "draw">("interact");
+  const MODES = ["interact", "comment", "draw"] as const;
+  let mode = $state<(typeof MODES)[number]>("interact");
   /** Changed since you looked: five stops, the tour not started. */
   let tourAt = $state<number | null>(null);
   /** A comment on the whole page being written. */
@@ -475,7 +476,7 @@
 {#snippet modeMenu()}
   <DropdownMenu.RadioGroup
     onValueChange={(next) => {
-      mode = next as typeof mode;
+      mode = MODES.find((one) => one === next) ?? mode;
     }}
     value={mode}
   >

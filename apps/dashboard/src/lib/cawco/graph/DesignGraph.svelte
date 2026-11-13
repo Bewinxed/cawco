@@ -1009,9 +1009,12 @@
 
   onMount(() => {
     const key = (event: KeyboardEvent) => {
-      const field = (event.target as HTMLElement | null)?.closest(
-        "input, textarea, select, [contenteditable='true']"
-      );
+      const field =
+        event.target instanceof Element
+          ? event.target.closest(
+              "input, textarea, select, [contenteditable='true']"
+            )
+          : null;
       if (
         event.key === "Escape" &&
         event.isTrusted &&

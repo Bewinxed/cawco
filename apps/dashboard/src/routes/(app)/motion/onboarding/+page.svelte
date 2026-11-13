@@ -1,19 +1,14 @@
 <script lang="ts">
   import {
+    ASK_STORED,
     type AskRecord,
     askAnsweredText,
     askOutcome,
   } from "@cawco/core/asks";
   import { detach } from "@cawco/core/detach";
-  import type { PulseFrame } from "@cawco/core/frames";
   import { CAWCO_NOTICE } from "@cawco/core/harness";
   import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
-  import type { InstanceRow } from "@cawco/core/protocol";
-  import type {
-    PermissionResult,
-    UserAnswers,
-    UserQuestion,
-  } from "@cawco/core/session-messages";
+  import type { PermissionResult } from "@cawco/core/session-messages";
   import type { Stage as BoardStage } from "@cawco/core/task-views";
   import { askAnsweredTitle } from "@cawco/core/transcript-rules";
   import { projectWords } from "@cawco/core/words/project";
@@ -59,7 +54,10 @@
   } from "#lib/cawco/project/setup.fixtures.js";
   import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
-  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
+  import {
+    type ProjectRow,
+    projectsStore,
+  } from "#lib/cawco/stores/projects.svelte.js";
   import {
     blankSession,
     sessionsStore,
@@ -109,14 +107,17 @@
 
   const WORDS =
     "set up a new project to be my personal PR team, you will handle my personal tasks, job hunts, social media and others, visa applications and travel. the aim is to propel me into wealth";
-  const said = (id: string, type: Message["type"], content: string) =>
-    ({
-      id,
-      instanceId: ID,
-      type,
-      content,
-      timestamp: new Date(now - 60_000).toISOString(),
-    }) as Message;
+  const said = (
+    id: string,
+    type: Message["type"],
+    content: string
+  ): Message => ({
+    id,
+    instanceId: ID,
+    type,
+    content,
+    timestamp: new Date(now - 60_000).toISOString(),
+  });
   const sent = said("sent", "user", WORDS);
   const first = said(
     "caw-first",
@@ -164,24 +165,11 @@
     "first-run": [],
   };
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        projectsState: { projects: unknown[] };
-        sessionsState: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-        adoptInstances: (rows: InstanceRow[]) => void;
-        standHub: (
-          answer: (instanceId: string, kind: string, intent: unknown) => void
-        ) => void;
-        leaveHub: () => void;
-      };
-    }
-  ).__cawcoDebug;
+  const debug = window.__cawcoDebug;
 
-  const row = {
+  const row: ProjectRow = {
+    account: null,
+    accountAtLimit: "wait",
     id: PROJECT,
     name,
     cawHarness: "claude",
@@ -214,7 +202,7 @@
         parentInstanceId: null,
         createdAt: new Date(now - 60_000).toISOString(),
         title: name,
-      } as InstanceRow,
+      },
     ]);
     const session = blankSession(ID);
     session.machineId = "hub";
@@ -248,7 +236,7 @@
         instanceId: ID,
         runningSubagents: 0,
       },
-    } as PulseFrame);
+    });
   }
 
   // The bench's hub: the page stands on it (no socket, so no band says the
@@ -269,23 +257,14 @@
     session.pending = session.pending.filter(
       (one) => one.requestId !== requestId
     );
-    const input = parked.input as {
-      blocks?: boolean;
-      meanwhile?: string;
-      questions?: UserQuestion[];
-      waiting?: string;
-    };
-    const record = {
-      id: requestId,
-      instanceId: ID,
-      raisedAt: now,
-      state: "answered",
+    const { questions, blocks: blocking, waiting, meanwhile } = parked.input;
+    const stored = ASK_STORED.safeParse({
       asked: {
         kind: "question",
-        questions: input.questions ?? [],
-        blocks: input.blocks === true,
-        ...(input.waiting ? { waiting: input.waiting } : {}),
-        ...(input.meanwhile ? { meanwhile: input.meanwhile } : {}),
+        questions: questions ?? [],
+        blocks: blocking === true,
+        ...(waiting ? { waiting } : {}),
+        ...(meanwhile ? { meanwhile } : {}),
       },
       answer: {
         at: Date.now(),
@@ -295,12 +274,25 @@
             ? {
                 behavior: "allow",
                 answers:
-                  (result.updatedInput as { answers?: UserAnswers })?.answers ??
-                  {},
+                  typeof result.updatedInput === "object" &&
+                  result.updatedInput !== null &&
+                  "answers" in result.updatedInput
+                    ? result.updatedInput.answers
+                    : {},
               }
             : { behavior: "deny", message: result.message ?? "" },
       },
-    } as unknown as AskRecord;
+    });
+    if (!stored.success) {
+      return;
+    }
+    const record: AskRecord = {
+      ...stored.data,
+      id: requestId,
+      instanceId: ID,
+      raisedAt: now,
+      state: "answered",
+    };
     const outcome = askOutcome(record);
     session.messages = [
       ...session.messages,
@@ -319,11 +311,9 @@
           ),
           notice: ASK_ORIGIN,
         },
-      } as Message,
+      },
     ];
-    const holding = session.pending.some(
-      (one) => (one.input as { blocks?: unknown }).blocks === true
-    );
+    const holding = session.pending.some((one) => one.input.blocks === true);
     if (holding || writing || at === "drafted") {
       return;
     }
@@ -401,7 +391,7 @@
     lead.asks.filter((one) => one.request.toolName === "AskUserQuestion")
   );
   const blocks = (one: (typeof asks)[number]): boolean =>
-    (one.request.input as { blocks?: unknown }).blocks === true;
+    one.request.input.blocks === true;
   const notSetUp = $derived(at !== "set");
   const progress = $derived(
     notSetUp
