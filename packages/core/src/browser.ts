@@ -133,11 +133,21 @@ export interface BrowserRow {
   why?: string;
 }
 
+/** What a machine can do for passkey relay. */
+export interface PasskeyRelayCapability {
+  /** Has a BLE adapter for capturing FIDO adverts. */
+  hasBle: boolean;
+  /** Has /dev/vhci for injecting adverts into containers. */
+  hasVhci: boolean;
+}
+
 /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
 export interface BrowserFrame {
   browsers: BrowserRow[];
   kind: "browsers";
   machineId: string;
+  /** What this machine can do for passkey relay; absent when neither is available. */
+  passkeyRelay?: PasskeyRelayCapability;
   runtime: BrowserRuntime;
 }
 
@@ -405,6 +415,8 @@ export interface ListedBrowser {
   name: string;
   /** The origin of the page the person's view shows; absent while it shows none. */
   origin?: string;
+  /** What this browser's machine can do for passkey relay; absent when neither is available. */
+  passkeyRelay?: PasskeyRelayCapability;
   /** How far an image build is, while `state` is `pulling` or `building`. */
   progress?: { done: number; total: number; what: "image" };
   /** The project of a `project:` key; null for a machine's own browser. */

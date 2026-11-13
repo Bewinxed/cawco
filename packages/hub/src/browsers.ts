@@ -65,6 +65,7 @@ import {
   type ListedBrowser,
   PASSKEY_ADVERT_MAX_AGE_MS,
   type PasskeyQrFrame,
+  type PasskeyRelayCapability,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
@@ -177,6 +178,8 @@ const rowFrom = (row: BrowserRow): Omit<StoredBrowser, "machineId"> => ({
 
 export const createBrowsers = (deps: BrowsersDeps) => {
   const passkeyQrs = new Map<BrowserKey, PasskeyQrFrame>();
+  /** Each machine's passkey relay capability, from its latest browser frame. */
+  const passkeyRelayOf = new Map<string, PasskeyRelayCapability>();
   const { db } = deps;
   /** Each browser's live facts, by machine and key, from its machine's latest frame or answer. */
   const live = new Map<string, LiveBrowserFacts>();
@@ -411,6 +414,11 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       for (const row of frame.browsers) {
         noteLive(machineId, row);
+      }
+      if (frame.passkeyRelay) {
+        passkeyRelayOf.set(machineId, frame.passkeyRelay);
+      } else {
+        passkeyRelayOf.delete(machineId);
       }
       told();
     },
@@ -694,11 +702,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
 
     /** Every browser of the fleet, for Settings, the project page and every browser view. */
     list(): ListedBrowser[] {
-      return db.browsers.list().map((row) => ({
-        ...row,
-        machineName: deps.machineName(row.machineId),
-        ...live.get(liveKey(row.machineId, row.key)),
-      }));
+      return db.browsers.list().map((row) => {
+        const relay = passkeyRelayOf.get(row.machineId);
+        return {
+          ...row,
+          machineName: deps.machineName(row.machineId),
+          ...live.get(liveKey(row.machineId, row.key)),
+          ...(relay ? { passkeyRelay: relay } : {}),
+        };
+      });
     },
 
     /**

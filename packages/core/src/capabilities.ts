@@ -11,6 +11,7 @@ export interface MachineCapability {
     | "node"
     | "browser"
     | "container-runtime"
+    | "passkey-relay"
     | "public-address"
     | "service-manager"
     | "workspace";
