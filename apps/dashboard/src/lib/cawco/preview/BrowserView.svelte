@@ -194,8 +194,8 @@
   let tapFrom: { x: number; y: number } | null = null;
   /** The one finger on the page at its own size: where it came down, where it last was in the stream's pixels, and what it is doing. */
   interface Finger {
-    id: number;
     from: { x: number; y: number };
+    id: number;
     last: { x: number; y: number };
     mode: "wait" | "scroll" | "select";
   }
