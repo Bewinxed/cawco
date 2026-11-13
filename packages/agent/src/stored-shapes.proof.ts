@@ -9,13 +9,13 @@ import type {
   BrowserRecord as BrowserRecordType,
   MachineNetwork as MachineNetworkType,
 } from "./browser/state";
-import type {
-  FleetHarnessSet as FleetHarnessSetType,
-  SetHarnessConfig as SetHarnessConfigType,
-  SetHook as SetHookType,
-} from "./fleet-harness-set";
+import type { FleetHarnessSet as FleetHarnessSetType } from "./fleet-harness-set";
 import type { FleetMcpSet as FleetMcpSetType } from "./fleet-mcp-set";
 import type { FleetPlaceSet as FleetPlaceSetType } from "./fleet-place-set";
+import type {
+  SetHarnessConfig as SetHarnessConfigType,
+  SetHook as SetHookType,
+} from "./fleet-set-rows";
 import type {
   BrowserRecordOutput,
   FleetHarnessSetOutput,
