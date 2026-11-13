@@ -59,9 +59,7 @@ export function fieldText(task: ViewTaskRow, path: string): string {
   let value: unknown = task;
   for (const part of path.split(".")) {
     value =
-      value && typeof value === "object"
-        ? (value as Record<string, unknown>)[part]
-        : undefined;
+      value && typeof value === "object" ? Reflect.get(value, part) : undefined;
   }
   if (value === undefined || value === null) {
     return "";

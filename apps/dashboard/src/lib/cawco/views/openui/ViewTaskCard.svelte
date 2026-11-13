@@ -14,9 +14,7 @@
   );
   const extra = $derived(
     task && Array.isArray(props.fields)
-      ? (props.fields as string[])
-          .map((path) => fieldText(task, path))
-          .filter(Boolean)
+      ? props.fields.map((path) => fieldText(task, path)).filter(Boolean)
       : []
   );
 </script>

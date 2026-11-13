@@ -89,7 +89,7 @@ export const parkKey = (id: string): string => `new-session:park:${id}`;
 
 /** What a kept start holds in the tab's storage: its prompt's extras live in the draft store. */
 const kept = (start: ParkedStart): ParkedStart => {
-  const { prefill, ...rest } = $state.snapshot(start) as ParkedStart;
+  const { prefill, ...rest } = $state.snapshot(start);
   const plain: ParkedStart = {
     ...rest,
     draft: { ...rest.draft, extras: {} },
@@ -153,7 +153,7 @@ export function beginStart(options: {
   prefill?: SpawnPrefill;
   replacing: string | null;
   stage: string;
-}): ParkedStart {
+}): void {
   const { caw, content, continueFrom, draft, id, prefill, replacing, stage } =
     options;
   if (replacing) {
@@ -177,7 +177,6 @@ export function beginStart(options: {
     asks: [],
     askedAt: 0,
   });
-  return parked.list.at(-1) as ParkedStart;
 }
 
 /** What `id` is doing now, while it runs. */
