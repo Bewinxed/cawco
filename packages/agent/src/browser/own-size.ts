@@ -15,21 +15,20 @@
  * bounds, which sizes every view in it from the window again and keeps the
  * page as it stands.
  *
- * So each window a page stands in is moved off its bounds and back: one px
- * wider and back for a window in its normal state, out of its state and
- * back for a maximized or full-screen one (the container host's Chromium
- * starts maximized). One window is settled whole before the next is
+ * So each window a page stands in is moved off its bounds and back
+ * through the other window state: a maximized or full-screen one (the
+ * container host's Chromium starts maximized) to normal and back, a normal
+ * one (a sign-in's popup window) to maximized and back to its own bounds.
+ * A width step is not enough for a normal window: on the container host a
+ * popup's page took one px of width and then followed no other, its window
+ * at 500, 499, 501 and its page at 501 throughout (the container run's
+ * run21 trace), and 10 of 20 such popups were loaded again; through the
+ * maximized state, 0 of 20. One window is settled whole before the next is
  * touched: each step waits for the window's page to take it, and after the
- * move every page in the window is read. A step can be lost on the way to
- * the screen: on the container host a sign-in's popup window, moved after
- * its opener's window was un-maximized and maximized again, took the one
- * px and kept it, its bounds saying 500 and its page 501, 8 times in 10
- * (the container run's run15 trace). Sending the same bounds again changes
- * nothing Chromium can see, so a window with a page still off its width is
- * moved again the other way (one px narrower and back), up to
- * {@link MOVES_MOST} moves. Only a page no move brought to its window's
- * width is loaded again by GET (never a reload, which would post a form
- * again), the one way left that sets it right.
+ * move every page in the window is read. A window with a page still off its
+ * width is moved again, up to {@link MOVES_MOST} moves. Only a page no move
+ * brought to its window's width is loaded again by GET (never a reload,
+ * which would post a form again), the one way left that sets it right.
  */
 import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
@@ -42,7 +41,10 @@ const TargetsSchema = z.object({
 const WindowSchema = z.object({
   windowId: z.number(),
   bounds: z.object({
+    left: z.number().optional(),
+    top: z.number().optional(),
     width: z.number().optional(),
+    height: z.number().optional(),
     windowState: z
       .enum(["normal", "minimized", "maximized", "fullscreen"])
       .optional(),
@@ -130,22 +132,30 @@ const settled = async (link: CdpLink, targetId: string): Promise<boolean> => {
 };
 
 /**
- * Window `window` moved off its bounds and back, its `move`th time (one px
- * wider first, narrower the next, so each move is a change Chromium sees),
- * each step taken by page `lead` before the next: two steps sent at once
- * can land as no change at all.
+ * Window `window` moved off its bounds and back, through the other window
+ * state (normal through maximized, maximized or full-screen through
+ * normal), each step taken by page `lead` before the next: two steps sent
+ * at once can land as no change at all.
  */
 const moveOnce = async (
   link: CdpLink,
   lead: string,
-  { windowId, bounds }: Window,
-  move: number
+  { windowId, bounds }: Window
 ) => {
   const state = bounds.windowState ?? "normal";
-  const by = move % 2 === 1 ? 1 : -1;
+  const { left, top, width, height } = bounds;
+  // A normal window goes through the maximized state and back to its own
+  // bounds, as a maximized window goes through the normal state. A width
+  // step is not enough: a view a cut link left at its sharp picture's size
+  // can take one width and then follow no other (the container's headful
+  // Chromium: 1170, then 501, then 501 whatever the window's width after).
   const steps =
-    state === "normal" && bounds.width !== undefined
-      ? [{ width: bounds.width + by }, { width: bounds.width }]
+    state === "normal"
+      ? [
+          { windowState: "maximized" },
+          { windowState: "normal" },
+          { left, top, width, height },
+        ]
       : [{ windowState: "normal" }, { windowState: state }];
   for (const step of steps) {
     await link.call("Browser.setWindowBounds", { windowId, bounds: step });
@@ -168,7 +178,7 @@ const settleWindow = async (
   let moves = 0;
   while (lead && off.length > 0 && moves < MOVES_MOST) {
     moves += 1;
-    await moveOnce(link, lead.targetId, window, moves);
+    await moveOnce(link, lead.targetId, window);
     const still: Page[] = [];
     for (const page of pages) {
       if (!(await atWidth(link, page.targetId))) {
