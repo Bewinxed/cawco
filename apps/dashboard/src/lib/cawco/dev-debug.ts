@@ -7,25 +7,17 @@
  * folds it away with what it would have exposed: a shipped dashboard has no
  * such global, and no way for a page to stage anything.
  */
-declare global {
-  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoDebug: Record<string, unknown> | undefined;
-}
-
-export function devDebug(parts: Record<string, unknown>): void {
+export function devDebug(parts: Partial<CawcoDebug>): void {
   if (typeof window !== "undefined") {
-    globalThis.__cawcoDebug = Object.assign(
-      globalThis.__cawcoDebug ?? {},
-      parts
-    );
+    window.__cawcoDebug = Object.assign(window.__cawcoDebug ?? {}, parts);
   }
 }
 
 /** One more `entry` on the `name` list, for a probe to count. */
 export function devNote(name: string, entry: unknown): void {
   if (typeof window !== "undefined") {
-    const debug = globalThis.__cawcoDebug ?? {};
-    globalThis.__cawcoDebug = debug;
+    const debug = window.__cawcoDebug ?? {};
+    window.__cawcoDebug = debug;
     const list = debug[name];
     if (Array.isArray(list)) {
       list.push(entry);

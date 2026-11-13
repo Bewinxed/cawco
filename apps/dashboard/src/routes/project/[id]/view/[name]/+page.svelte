@@ -18,6 +18,7 @@
   import { IconAlert } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
 
@@ -87,12 +88,7 @@
    * opens the app's own sheet over the project, as a card in its board does.
    * A browser has no such host and opens the project's page on the task.
    */
-  interface AppHost {
-    postMessage: (message: { task: string; type: "cawco:open-task" }) => void;
-  }
-  const appHost = (
-    globalThis as { webkit?: { messageHandlers?: { cawco?: AppHost } } }
-  ).webkit?.messageHandlers?.cawco;
+  const appHost = browser ? window.webkit?.messageHandlers?.cawco : undefined;
   const open = (task: string) => {
     if (appHost) {
       appHost.postMessage({ type: "cawco:open-task", task });
