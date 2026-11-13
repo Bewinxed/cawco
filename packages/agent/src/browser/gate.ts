@@ -80,6 +80,8 @@ const GATE_WORDS = {
     "The project's browser is shared by its sessions: close your own pages, never the browser.",
   wide: "That reaches every page of the project's browser: send it to one of your own pages.",
   flat: "This browser attaches agents in flat sessions only: pass flatten: true.",
+  proxy:
+    "A proxy is not for agents to set: this browser's network is the project's, so open the page with no proxy of your own.",
   token: "This browser opens to a workspace's own token.",
   none: "No browser is kept for this workspace's project on this machine.",
   ended: "This workspace's boundary ended, and its pages with it.",
@@ -1467,6 +1469,12 @@ class Link {
 
   /** Why the gate refuses a call naming a target, session, context or window not the agent's. */
   #named(method: string, params: Json): string | undefined {
+    if (
+      method === "Target.createBrowserContext" &&
+      (params.proxyServer !== undefined || params.proxyBypassList !== undefined)
+    ) {
+      return GATE_WORDS.proxy;
+    }
     const target = text(params.targetId);
     if (TARGET_METHODS.has(method) && target) {
       if (this.#gate.isBrowser(target)) {

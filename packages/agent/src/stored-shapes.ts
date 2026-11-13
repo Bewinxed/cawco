@@ -64,6 +64,7 @@ const BrowserRecordShape = declared(
         media: MediaPathShape,
         network: MachineNetworkShape.optional(),
         hostRules: z.string().optional(),
+        pac: z.string().optional(),
         ports: BrowserPortsShape.optional(),
         runtime: z
           .object({ endpoint: z.string(), kind: z.enum(["docker", "podman"]) })

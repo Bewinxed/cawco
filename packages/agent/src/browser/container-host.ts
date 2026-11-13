@@ -54,6 +54,7 @@ import {
   type Placement,
   placementOf,
 } from "./egress";
+import { hubPacUrl } from "./hub-pac";
 import { ensureImage } from "./image";
 import {
   carriesLess,
@@ -286,6 +287,7 @@ const keptAsAsked = (
     /** Its slot's address on the media network; none in a namespace of its own. */
     address: string | undefined;
     hostRules: string | undefined;
+    pac: string;
   },
   relay: BrowserRelay | undefined
 ): boolean => {
@@ -305,6 +307,7 @@ const keptAsAsked = (
     kept.ports?.media === published.media &&
     kept.stun === stunServer() &&
     kept.hostRules === now.hostRules &&
+    kept.pac === now.pac &&
     relayHolds
   );
 };
@@ -460,7 +463,11 @@ export class ContainerHost implements BrowserHost {
     const hostRules = wanted ? wanted.rules : kept?.hostRules;
     let reuse =
       kept &&
-      keptAsAsked(record, { image, media, address, hostRules }, options.relay)
+      keptAsAsked(
+        record,
+        { image, media, address, hostRules, pac: hubPacUrl() },
+        options.relay
+      )
         ? await this.#exists(kept.id)
         : false;
     let container = kept && reuse ? kept : undefined;
@@ -679,6 +686,14 @@ export class ContainerHost implements BrowserHost {
           await machineAddresses(),
           stun
         ),
+        // chromium.conf passes it to Chromium's --proxy-pac-url. The PAC is
+        // enough on this host and not on the local host: Chromium never
+        // sends loopback through a PAC's proxy (net/docs/proxy.md, "Implicit
+        // bypass rules", no way to turn them off under a PAC), and here
+        // loopback is the container's own, which holds neither port. The
+        // hub's address on any other name (host.containers.internal, the
+        // LAN, the tailnet) is not loopback, so the PAC decides it.
+        `CAWCO_PAC_URL=${hubPacUrl()}`,
         // chromium.conf passes it to Chromium's --host-resolver-rules.
         ...(hostRules ? [`CAWCO_HOST_RULES=${hostRules}`] : []),
       ],
@@ -731,6 +746,7 @@ export class ContainerHost implements BrowserHost {
       runtime: { kind: this.#runtime.kind, endpoint: this.#runtime.endpoint },
       stun,
       ...(hostRules ? { hostRules } : {}),
+      pac: hubPacUrl(),
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,

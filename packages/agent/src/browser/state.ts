@@ -68,6 +68,11 @@ export interface BrowserRecord {
      * (preview-names.ts). One made for other rules is made again.
      */
     hostRules?: string;
+    /**
+     * The `--proxy-pac-url` it was made with (hub-pac.ts): the script that
+     * keeps its Chromium off the hub's ports. One made for another is made again.
+     */
+    pac?: string;
     /** The ports it was published on: one made for other ports is made again. */
     ports?: BrowserPorts;
     /** The runtime it was made on, as the record names it while that runtime is away. */
