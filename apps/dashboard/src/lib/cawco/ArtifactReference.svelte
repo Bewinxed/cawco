@@ -7,9 +7,9 @@
    * conversation it stands in, else of its own session's
    * (reference-open.svelte.ts).
    */
+  import { ARTIFACT_GLYPH } from "./artifact-glyph";
   import { artifactNamed } from "./artifact-names.svelte";
   import ReferenceChip from "./ReferenceChip.svelte";
-  import { markLook } from "./reference-looks";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
 
@@ -21,7 +21,7 @@
   artifact={id}
   at={{ top: true }}
   data-artifact-chip={id}
-  glyph={markLook({ of: "artifact", kind: named?.kind ?? "page" }).glyph}
+  glyph={ARTIFACT_GLYPH[named?.kind ?? "page"]}
   refKey="ref:{id}:top"
   title={words}
   {words}

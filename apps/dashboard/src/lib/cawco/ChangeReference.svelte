@@ -13,10 +13,8 @@
    */
   import { changeReference } from "@cawco/core/references";
   import { commentWords } from "@cawco/core/words/comments";
+  import { IconRefresh } from "#lib/icons.js";
   import ReferenceChip from "./ReferenceChip.svelte";
-  import { markLook } from "./reference-looks";
-
-  const look = markLook({ of: "change" });
 
   let { id, label = "" }: { id: string; label?: string } = $props();
 
@@ -29,8 +27,8 @@
   artifact={named?.artifact}
   at={{ change: named?.anchor ?? "" }}
   data-change-chip={id}
-  glyph={look.glyph}
+  glyph={IconRefresh}
   refKey="ref:{id}:change"
-  tone={look.tone}
+  tone="text-c-change-ring"
   {words}
 />

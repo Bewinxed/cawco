@@ -197,7 +197,6 @@
     type RailList,
     type RailSort,
   } from "./comment-rows";
-  import { FrameReferences } from "./frame-references.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
@@ -957,8 +956,6 @@
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
-  /** The `cawco:` references the page's words draw (a decision page's), answered with their faces. */
-  const references = new FrameReferences(post, () => instanceId);
   /*
    * This view's word to the hub that the artifact is on screen at the open
    * frame's revision, or why it could not be: the agent's artifact_create and
@@ -3330,9 +3327,6 @@
     }
     if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {
       turnedAway();
-      return;
-    }
-    if (references.heard(event.data)) {
       return;
     }
     // A decision page's Open to draw or Open full: the artifact opens where

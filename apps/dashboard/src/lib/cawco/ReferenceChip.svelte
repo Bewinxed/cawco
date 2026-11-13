@@ -12,8 +12,8 @@
    */
   import type { Component, Snippet } from "svelte";
   import type { HTMLAttributes, HTMLButtonAttributes } from "svelte/elements";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import type { OpenAt } from "./artifact-names.svelte";
-  import ReferenceFace, { referenceChipClass } from "./ReferenceFace.svelte";
   import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
   import { refusals } from "./refusals.svelte";
@@ -69,19 +69,31 @@
 </script>
 
 {#snippet face()}
-  <ReferenceFace glyph={Glyph} {mark} {tone} {words} />
+  {#if mark}
+    {@render mark()}
+  {:else if Glyph}
+    <span
+      data-slot="mark"
+      aria-hidden="true"
+      class="grid size-c-row-mark flex-none place-items-center {tone}"
+      data-box
+    >
+      <Glyph class="block size-icon-sm" />
+    </span>
+  {/if}
+  <span data-slot="label">{words}</span>
 {/snippet}
 
 {#if href}
   <a
     {...rest as HTMLAttributes<HTMLAnchorElement>}
-    class={referenceChipClass(true)}
+    class={chipVariants({ variant: "inline" })}
     {href}
     onclick={() => onpress?.()}>{@render face()}</a
   >
 {:else}
   <button
-    class={referenceChipClass(true)}
+    class={chipVariants({ variant: "inline" })}
     onclick={() => {
       onpress?.();
       return press();

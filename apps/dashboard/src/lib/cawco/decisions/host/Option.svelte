@@ -34,8 +34,6 @@
     PIECE_NAME,
     type PieceNames,
   } from "./page.svelte.js";
-  import Words from "./Words.svelte";
-  import { plainOf, runsOf } from "./words";
 
   let {
     props,
@@ -71,12 +69,7 @@
   >("decision-rows");
   const id = $derived(String(props.id ?? ""));
   /** Its media name themselves by its label (page.svelte.ts `pieceName`). */
-  /** Its line's type; its cost's and builds'. */
-  const LINE_LOOK =
-    "type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere";
-  const META_LOOK =
-    "type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere";
-  setContext<PieceNames>(PIECE_NAME, () => plainOf(String(props.label ?? id)));
+  setContext<PieceNames>(PIECE_NAME, () => String(props.label ?? id));
   const keycap = $derived((order?.().indexOf(id) ?? -1) + 1);
   const media = $derived(Array.isArray(props.media) ? props.media : []);
   const decision = getContext<(() => string) | undefined>("decision-id");
@@ -97,35 +90,6 @@
     rows?.() ?? { line: 2, cost: 3, builds: 4, media: 5, span: 5 }
   );
 </script>
-
-<!-- Its line, cost or builds: a label of its chip, so a press on its words picks. Words that name a `cawco:` reference draw it as its chip (Words.svelte), which opens what it names; a label holds no control but its own, so they stand as a line beside the chip instead, the chip still described by them. -->
-{#snippet optionPart(
-  part: "line" | "cost" | "builds",
-  text: unknown,
-  look: string
-)}
-  {#if text}
-    {@const said = String(text)}
-    {#if runsOf(said).some((run) => "href" in run)}
-      <p
-        class={[look, "row-start-(--row)"]}
-        data-option-for={id}
-        id="{uid}-{part}"
-        style:--row={at[part]}
-      >
-        <Words text={said} />
-      </p>
-    {:else}
-      <label
-        class={[look, "row-start-(--row)"]}
-        data-option-for={id}
-        for="{uid}-chip"
-        id="{uid}-{part}"
-        style:--row={at[part]}>{said}</label
-      >
-    {/if}
-  {/if}
-{/snippet}
 
 <div
   class="grid min-w-0 row-span-(--span) grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full"
@@ -150,7 +114,7 @@
         >{/if}<span
         class="min-w-0 wrap-anywhere text-pretty"
         data-slot="option-label"
-        id="{uid}-label"><Words still text={String(props.label ?? id)} /></span
+        id="{uid}-label">{String(props.label ?? id)}</span
       >
     </OptionGroupItem>
     {#if props.recommended === true}
@@ -160,9 +124,33 @@
       <Badge id="{uid}-now"><span>{words.current}</span></Badge>
     {/if}
   </div>
-  {@render optionPart("line", props.line, LINE_LOOK)}
-  {@render optionPart("cost", props.cost, META_LOOK)}
-  {@render optionPart("builds", props.builds, META_LOOK)}
+  {#if props.line}
+    <label
+      class="type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere row-start-(--row)"
+      data-option-for={id}
+      for="{uid}-chip"
+      id="{uid}-line"
+      style:--row={at.line}>{String(props.line)}</label
+    >
+  {/if}
+  {#if props.cost}
+    <label
+      class="type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere row-start-(--row)"
+      data-option-for={id}
+      for="{uid}-chip"
+      id="{uid}-cost"
+      style:--row={at.cost}>{String(props.cost)}</label
+    >
+  {/if}
+  {#if props.builds}
+    <label
+      class="type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere row-start-(--row)"
+      data-option-for={id}
+      for="{uid}-chip"
+      id="{uid}-builds"
+      style:--row={at.builds}>{String(props.builds)}</label
+    >
+  {/if}
   {#each media as piece, place (place)}
     <!-- Each piece on its own row, shared with every option's piece at the same place (Decision.svelte `rows`): a state beside the same state. -->
     <div

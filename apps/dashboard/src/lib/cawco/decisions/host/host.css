@@ -36,9 +36,6 @@
 @source "../../project/DraftStages.svelte";
 @source "../../project/StageKindItems.svelte";
 @source "../../project/StageLookItems.svelte";
-@source "../../ReferenceFace.svelte";
-@source "../../reference-looks.ts";
-@source "../../RowFault.svelte";
 @source "../../fault/FaultActions.svelte";
 @source "../../fault/FaultBoundary.svelte";
 @source "../../fault/FaultDetails.svelte";

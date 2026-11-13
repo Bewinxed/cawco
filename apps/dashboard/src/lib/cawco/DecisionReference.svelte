@@ -12,9 +12,9 @@
    * (tasks/sheet-cards.ts).
    */
   import { decisionReference } from "@cawco/core/references";
+  import { IconDecisions } from "#lib/icons.js";
   import { artifactMarks } from "./artifact-names.svelte";
   import ReferenceChip from "./ReferenceChip.svelte";
-  import { markLook } from "./reference-looks";
   import { sheetCardsHere } from "./tasks/sheet-cards";
 
   let { id, label = "" }: { id: string; label?: string } = $props();
@@ -51,7 +51,7 @@
   artifact={named?.artifact}
   at={{ card: named?.card ?? "" }}
   data-decision-chip={id}
-  glyph={markLook({ of: "decision" }).glyph}
+  glyph={IconDecisions}
   href={onSheet?.href}
   refKey="ref:{id}:card:{uid}"
   {title}

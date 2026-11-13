@@ -25,7 +25,6 @@
   import { artifactReached } from "#lib/cawco/files/reached.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
-  import { FrameReferences } from "#lib/cawco/preview/frame-references.svelte.js";
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
@@ -174,9 +173,6 @@
     }
   }
 
-  /** The `cawco:` references the page's words draw, answered with their faces. */
-  const references = new FrameReferences(post, () => here?.());
-
   function hello() {
     connected = false;
     post({
@@ -251,26 +247,6 @@
     }
   });
 
-  /**
-   * Whether `data` asked to open something, taken and answered: a
-   * reference in the page's words (`references`), or a Canvas's Open to
-   * draw or a Preview's Open full, whose artifact opens where a chip of it
-   * pressed here opens.
-   */
-  function opened(data: unknown): boolean {
-    if (references.heard(data)) {
-      return true;
-    }
-    const opening = previewOpenArtifact(data);
-    if (!opening) {
-      return false;
-    }
-    openReference(opening.artifact, { top: true }, here?.()).then((refused) =>
-      post({ jsonrpc: "2.0", id: opening.id, result: refused })
-    );
-    return true;
-  }
-
   // Only its own frame, from its own origin, is heard.
   $effect(() => {
     const heard = (event: MessageEvent) => {
@@ -286,7 +262,13 @@
         of?: unknown;
         type?: unknown;
       } | null;
-      if (opened(event.data)) {
+      // A Canvas's Open to draw or a Preview's Open full: the artifact opens
+      // where a chip of it pressed here opens.
+      const opening = previewOpenArtifact(event.data);
+      if (opening) {
+        openReference(opening.artifact, { top: true }, here?.()).then(
+          (refused) => post({ jsonrpc: "2.0", id: opening.id, result: refused })
+        );
         return;
       }
       const type = told?.type;

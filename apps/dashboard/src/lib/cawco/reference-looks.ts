@@ -10,11 +10,7 @@
  * after the label in the muted ink. The owner asked for a design that tells
  * the kinds apart; it replaces these entries.
  */
-import type { ReferenceMark } from "@cawco/core/reference-faces";
 import type { Component } from "svelte";
-import { IconDecisions, IconRefresh } from "#lib/icons.js";
-import { ARTIFACT_GLYPH } from "./artifact-glyph";
-import { type MarkHue, markHue, sessionSprite } from "./mark";
 import type { ThingKind } from "./reference-things.svelte";
 
 /** A kind's look on the shared inline chip. */
@@ -37,31 +33,3 @@ export const REFERENCE_LOOKS: Record<ThingKind, ReferenceLook> = {
   project: SHARED,
   machine: SHARED,
 };
-
-/** A mark as ReferenceFace draws it: its glyph, tinted by `tone`, or on a session's `hue`. */
-export interface MarkLook {
-  glyph: Component<{ class?: string }>;
-  hue?: MarkHue;
-  tone?: string;
-}
-
-/**
- * Each mark a reference's chip wears before its words (core
- * reference-faces.ts `ReferenceMark`): a session's sprite on its hue, an
- * artifact's kind's glyph (an artifact's chip, a pin's), a decision page's
- * glyph (a card's), and the change glyph in the change ring's ink.
- */
-export function markLook(mark: ReferenceMark): MarkLook {
-  switch (mark.of) {
-    case "session":
-      return { glyph: sessionSprite(mark.seed), hue: markHue(mark.place) };
-    case "artifact":
-      return { glyph: ARTIFACT_GLYPH[mark.kind] };
-    case "decision":
-      return { glyph: IconDecisions };
-    case "change":
-      return { glyph: IconRefresh, tone: "text-c-change-ring" };
-    default:
-      return mark satisfies never;
-  }
-}
