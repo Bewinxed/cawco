@@ -42,7 +42,10 @@
   import { paneDrafts } from "./composer-draft.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
-  import { ConversationBlocks, provideInlineBlocks } from "./inline-blocks.svelte";
+  import {
+    ConversationBlocks,
+    provideInlineBlocks,
+  } from "./inline-blocks.svelte";
   import { JumpToLatest } from "./jump-to-latest.svelte";
   import { KeptPlace } from "./kept-place.svelte";
   import Latest from "./Latest.svelte";
@@ -315,7 +318,8 @@
    * composer has its own place and the clearance is a thin edge. With no
    * pane naming one, the fixed reserve.
    */
-  const FOOT_ROOM = "var(--composer-clearance, calc(var(--space-8) * 3))";
+  const FOOT_ROOM =
+    "var(--composer-clearance, calc(var(--spacing-space-8) * 3))";
   const rowDraw = new RowPresentation(host);
 
   const rails = new RowRails(host);
@@ -493,7 +497,7 @@
 </p>
 
 <!-- Asymmetric content padding is the DESIGN.md ledger signature: inline
-     start --space-7 (25), inline end --space-6 (21). The foot's height
+     start --spacing-space-7 (25), inline end --spacing-space-6 (21). The foot's height
      (`.foot`), which what floats over it stands on, is --foot-room. What
      scrolls here is its own stacking context, so nothing in it (a row's
      raised mark, a card's z-index) rises over the pane's fades (FootFade,
@@ -521,7 +525,7 @@
       data-slot="transcript-empty"
       class="mark-line isolate flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
       style:padding-top={headRoom
-        ? `calc(var(--space-5) + ${headRoom})`
+        ? `calc(var(--spacing-space-5) + ${headRoom})`
         : undefined}
     >
       <LiveDot /><span>Loading transcript…</span>
@@ -726,7 +730,7 @@
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight}px"
-    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--space-2) + var(--parked-room, 0px)))"}
+    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--spacing-space-4) + var(--spacing-space-2) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if region.behind}
@@ -744,8 +748,8 @@
       <p
         class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
         data-open-at={seek.unfound}
-        in:rise={"--dur-panel"}
-        out:rise={"--dur-exit"}
+        in:rise={"--duration-panel"}
+        out:rise={"--duration-exit"}
       >
         {seek.unfoundWords}
       </p>
