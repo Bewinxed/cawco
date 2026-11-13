@@ -31,7 +31,10 @@
     text: string | undefined;
     /** Where the shape's top corners stand, px: how far in from the stage's sides, and their radius. */
     corner: { inset: number; radius: number };
-    ondown: (handle: Handle, event: PointerEvent) => void;
+    ondown: (
+      handle: Handle,
+      event: PointerEvent & { currentTarget: HTMLElement }
+    ) => void;
     onkey: (handle: Handle, event: KeyboardEvent) => void;
   } = $props();
 </script>

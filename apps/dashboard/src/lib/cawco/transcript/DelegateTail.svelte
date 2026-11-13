@@ -18,10 +18,7 @@
    */
   import { type Component, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import {
-    describeTool,
-    type ToolCallStatus,
-  } from "#lib/components/features/tool-cards/descriptors.js";
+  import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconCpu,
@@ -90,10 +87,10 @@
     switch (m.type) {
       case "tool.use":
       case "tool.handoff": {
-        const status = (meta.toolStatus ?? "pending") as ToolCallStatus;
+        const status = meta.toolStatus ?? "pending";
         const d = describeTool(
           meta.toolName,
-          (meta.toolInput ?? undefined) as Record<string, unknown> | undefined,
+          meta.toolInput,
           typeof meta.toolResult === "string" ? meta.toolResult : undefined,
           status
         );
@@ -297,7 +294,8 @@
       arrivals.length &&
       dataOf(arrivals[0])?.kind === settlesAs(end)
     ) {
-      shown = [...shown.slice(0, -1), arrivals.shift() as string];
+      shown = [...shown.slice(0, -1), arrivals[0]];
+      arrivals.shift();
     }
     if (arrivals.length) {
       queue.push(...arrivals);

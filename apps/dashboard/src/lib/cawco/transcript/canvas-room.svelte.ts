@@ -140,6 +140,8 @@ interface Sizes {
   min: number;
   /** How far each side may reach past the pill, centred on it: to the column's nearer edge less `--spacing-space-3`. */
   reach: number;
+  /** The pill's shell the sizes were measured on, which the shape stands in. */
+  shell: HTMLElement;
   size: ReturnType<typeof measureShape>["size"];
   /** How far each side stands past the pill now. */
   spread: number;
@@ -223,8 +225,7 @@ export class CanvasRoom {
     return this.#stage;
   }
 
-  #hold(canvas: DraftCanvas): Stage {
-    const session = this.#parts.session() as string;
+  #hold(canvas: DraftCanvas, session: string): Stage {
     if (this.#stage && this.#stage.id !== canvas.id) {
       this.#letGoStage();
     }
@@ -291,7 +292,10 @@ export class CanvasRoom {
         Math.min(at.left - room.left - gap, room.right - gap - at.right)
       );
       const spread = Math.min(reach, this.#chosenSpread);
-      return this.#boxes({ size, lift, min, max, reach, spread }, height);
+      return this.#boxes(
+        { shell, size, lift, min, max, reach, spread },
+        height
+      );
     });
   }
 
@@ -377,11 +381,15 @@ export class CanvasRoom {
 
   #newShape(sizes: Sizes): GrownShape {
     this.#shape?.remove();
-    const shell = this.#parts.shell() as HTMLElement;
-    const shape = new GrownShape(shell, { ...sizes.size }, this.#ext(sizes), {
-      taperRows: 1,
-      fade: false,
-    });
+    const shape = new GrownShape(
+      sizes.shell,
+      { ...sizes.size },
+      this.#ext(sizes),
+      {
+        taperRows: 1,
+        fade: false,
+      }
+    );
     shape.wide = { left: sizes.spread, right: sizes.spread };
     this.#shape = shape;
     return shape;
@@ -484,11 +492,12 @@ export class CanvasRoom {
    */
   async #grow(from: Box | null): Promise<void> {
     const { canvas } = this.draft;
-    if (!canvas) {
+    const session = this.#parts.session();
+    if (!(canvas && session)) {
       return;
     }
     this.#stop();
-    const stage = this.#hold(canvas);
+    const stage = this.#hold(canvas, session);
     this.up = true;
     await tick();
     const sizes = this.#measure();
@@ -870,7 +879,7 @@ export class CanvasRoom {
     if (!canvas) {
       return;
     }
-    this.#hold(canvas);
+    this.#hold(canvas, session);
     // The panel goes in this tab alone (closed-here.ts): another tab or
     // device showing the session keeps the canvas docked in its panel.
     closePreview(session);
@@ -926,14 +935,17 @@ export class CanvasRoom {
 
   // --- resize -----------------------------------------------------------------
 
-  #grabDown(handle: Handle, event: PointerEvent): void {
+  #grabDown(
+    handle: Handle,
+    event: PointerEvent & { currentTarget: HTMLElement }
+  ): void {
     const sizes = this.#sizes;
     const slot = this.#parts.slot();
     if (!(sizes && slot && this.up) || this.#runs.length > 0) {
       return;
     }
     event.preventDefault();
-    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture(event.pointerId);
     // A settle caught mid-way is taken from where it stands.
     this.#stopSettle(true);
     this.#shape?.unsettle();
@@ -942,13 +954,13 @@ export class CanvasRoom {
       id: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      from: this.#size(),
+      from: this.#size(sizes),
       lastX: event.clientX,
       lastY: event.clientY,
       lastAt: event.timeStamp,
       v: { h: 0, s: 0 },
     };
-    const target = event.currentTarget as HTMLElement;
+    const target = event.currentTarget;
     const move = (e: PointerEvent) => this.#grabMove(e);
     const up = (e: PointerEvent) => {
       target.removeEventListener("pointermove", move);
@@ -962,17 +974,19 @@ export class CanvasRoom {
   }
 
   /** The canvas's size now: its height, and how far it stands past the pill each side. */
-  #size(): Size {
-    return { h: this.height, s: (this.#sizes as Sizes).spread };
+  #size(sizes: Sizes): Size {
+    return { h: this.height, s: sizes.spread };
   }
 
   /** A dimension's bounds, and the size the rubber band's furthest reach is a share of. */
-  #bounds(dim: keyof Size): {
+  #bounds(
+    dim: keyof Size,
+    sizes: Sizes
+  ): {
     min: number;
     max: number;
     scale: (bound: number) => number;
   } {
-    const sizes = this.#sizes as Sizes;
     if (dim === "h") {
       return { min: sizes.min, max: sizes.max, scale: (bound) => bound };
     }
@@ -985,8 +999,8 @@ export class CanvasRoom {
   }
 
   /** The value under the pointer: 1:1 inside its bounds, rubber-banded past them. */
-  #follow(dim: keyof Size, value: number): number {
-    const { min, max, scale } = this.#bounds(dim);
+  #follow(dim: keyof Size, value: number, sizes: Sizes): number {
+    const { min, max, scale } = this.#bounds(dim, sizes);
     const past = value > max ? value - max : Math.min(0, value - min);
     if (past === 0) {
       return value;
@@ -1003,7 +1017,8 @@ export class CanvasRoom {
    */
   #grabMove(event: PointerEvent): void {
     const drag = this.#drag;
-    if (!drag || event.pointerId !== drag.id) {
+    const sizes = this.#sizes;
+    if (!(drag && sizes) || event.pointerId !== drag.id) {
       return;
     }
     const out = SPREADS[drag.handle];
@@ -1019,11 +1034,15 @@ export class CanvasRoom {
     drag.lastY = event.clientY;
     drag.lastAt = event.timeStamp;
     this.#write({
-      h: this.#follow("h", drag.from.h - (event.clientY - drag.y)),
+      h: this.#follow("h", drag.from.h - (event.clientY - drag.y), sizes),
       s:
         out === 0
           ? drag.from.s
-          : this.#follow("s", drag.from.s + out * (event.clientX - drag.x)),
+          : this.#follow(
+              "s",
+              drag.from.s + out * (event.clientX - drag.x),
+              sizes
+            ),
     });
   }
 
@@ -1040,9 +1059,9 @@ export class CanvasRoom {
   }
 
   /** Where the slot stands now, the settle's motion included. */
-  #readSlot(slot: HTMLElement): Size {
+  #readSlot(slot: HTMLElement, shell: HTMLElement): Size {
     const at = slot.getBoundingClientRect();
-    const pill = (this.#parts.shell() as HTMLElement).getBoundingClientRect();
+    const pill = shell.getBoundingClientRect();
     return { h: at.height + 1, s: pill.left - at.left + 1 };
   }
 
@@ -1053,7 +1072,7 @@ export class CanvasRoom {
     if (!(drag && sizes) || event.pointerId !== drag.id) {
       return;
     }
-    const now = this.#size();
+    const now = this.#size(sizes);
     const corner = SPREADS[drag.handle] !== 0;
     // A pointer held still before it lets go carries nothing.
     const still = event.timeStamp - drag.lastAt > STILL_MS;
@@ -1061,7 +1080,7 @@ export class CanvasRoom {
       ? { h: 0, s: 0 }
       : { h: drag.v.h, s: corner ? drag.v.s : 0 };
     const land = (dim: keyof Size) => {
-      const { min, max } = this.#bounds(dim);
+      const { min, max } = this.#bounds(dim, sizes);
       return Math.min(max, Math.max(min, now[dim] + v[dim] * PROJECT * 1000));
     };
     const target = { h: land("h"), s: corner ? land("s") : now.s };
@@ -1080,7 +1099,8 @@ export class CanvasRoom {
    */
   #settleTo(now: Size, target: Size, v: Size): void {
     const slot = this.#parts.slot();
-    if (!slot) {
+    const shell = this.#sizes?.shell;
+    if (!(slot && shell)) {
       return;
     }
     if (!motionOk.current) {
@@ -1116,7 +1136,7 @@ export class CanvasRoom {
     ]);
     run.id = "canvas-settle";
     const follow = () => {
-      const size = this.#readSlot(slot);
+      const size = this.#readSlot(slot, shell);
       this.#standAt(size.h, size.s);
       if (this.#settle?.run === run) {
         this.#settle.frame = requestAnimationFrame(follow);
@@ -1144,7 +1164,8 @@ export class CanvasRoom {
     this.#settle = null;
     cancelAnimationFrame(settle.frame);
     const slot = this.#parts.slot();
-    const at = slot ? this.#readSlot(slot) : null;
+    const shell = this.#sizes?.shell;
+    const at = slot && shell ? this.#readSlot(slot, shell) : null;
     settle.run.cancel();
     if (keep && at !== null) {
       this.#write(at);
@@ -1162,8 +1183,8 @@ export class CanvasRoom {
     if (!(sizes && this.up)) {
       return;
     }
-    const tall = this.#bounds("h");
-    const wide = this.#bounds("s");
+    const tall = this.#bounds("h", sizes);
+    const wide = this.#bounds("s", sizes);
     const out = SPREADS[handle];
     const steps: Record<string, Partial<Size>> = {
       ArrowUp: { h: KEY_STEP },
@@ -1185,7 +1206,7 @@ export class CanvasRoom {
     }
     event.preventDefault();
     this.#stopSettle(false);
-    const now = this.#size();
+    const now = this.#size(sizes);
     const next = {
       h: Math.min(tall.max, Math.max(tall.min, now.h + (by.h ?? 0))),
       s: Math.min(wide.max, Math.max(wide.min, now.s + (by.s ?? 0))),
@@ -1208,14 +1229,17 @@ export class CanvasRoom {
     Pick<SendExtras, "attachments" | "images">
   > | null> {
     const { canvas } = this.draft;
-    if (!canvas) {
+    const session = this.#parts.session();
+    if (!(canvas && session)) {
       return null;
     }
     this.error = "";
     this.working = true;
     try {
       const stage =
-        this.#stage?.id === canvas.id ? this.#stage : this.#hold(canvas);
+        this.#stage?.id === canvas.id
+          ? this.#stage
+          : this.#hold(canvas, session);
       await stage.ready();
       const { out, count } = await reached(stage, canvas);
       // The hub holds what the page shows: the page's own count says whether anything is drawn.

@@ -65,7 +65,6 @@ as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
 as-unknown-as	number	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PinPeekFrame.stories.ts	4
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	ProjectDecisions	apps/dashboard/src/lib/cawco/decisions/DecisionsView.stories.ts	1
@@ -77,7 +76,6 @@ as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1

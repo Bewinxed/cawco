@@ -173,7 +173,10 @@ function copyAt(words: Node, box: WordsBox): HTMLElement {
 
 /** The bubble's words as the bubble sets them, without its controls. */
 export function asBubble(words: HTMLElement): Node {
-  const clone = words.cloneNode(true) as HTMLElement;
+  const clone = words.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) {
+    return clone;
+  }
   // The bubble hides its own words while they fly; the copy is them.
   clone.style.visibility = "visible";
   for (const control of clone.querySelectorAll(

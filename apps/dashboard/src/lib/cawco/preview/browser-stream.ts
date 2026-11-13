@@ -146,6 +146,14 @@ const NekoMessageSchema = z.object({
   payload: z.record(z.string(), z.unknown()).optional(),
 });
 type NekoMessage = z.infer<typeof NekoMessageSchema>;
+const ScreenSizeSchema = z.object({ width: z.number(), height: z.number() });
+/** A candidate as neko relays it: the browser's `RTCIceCandidateInit`. */
+const IceCandidateSchema = z.object({
+  candidate: z.string().optional(),
+  sdpMid: z.string().nullish(),
+  sdpMLineIndex: z.number().nullish(),
+  usernameFragment: z.string().nullish(),
+});
 
 /** neko's stream into `video`: the container host's screen, watched. */
 export const nekoStream = (
@@ -202,7 +210,7 @@ export const nekoStream = (
   const provided = async (payload: Record<string, unknown>) => {
     closePeer();
     const at = new RTCPeerConnection({
-      iceServers: (payload.iceservers as RTCIceServer[] | undefined) ?? [],
+      iceServers: Array.isArray(payload.iceservers) ? payload.iceservers : [],
     });
     peer = at;
     at.onicecandidate = (found) => {
@@ -243,9 +251,10 @@ export const nekoStream = (
     switch (message.event) {
       case "system/init": {
         again.opened();
-        const size = payload.screen_size as
-          { width: number; height: number } | undefined;
-        screen = size ? { width: size.width, height: size.height } : null;
+        const size = ScreenSizeSchema.safeParse(payload.screen_size);
+        screen = size.success
+          ? { width: size.data.width, height: size.data.height }
+          : null;
         requestPeer();
         return;
       }
@@ -269,15 +278,18 @@ export const nekoStream = (
       case "signal/restart":
         answer(String(payload.sdp ?? "")).catch(() => undefined);
         return;
-      case "signal/candidate":
+      case "signal/candidate": {
+        const found = IceCandidateSchema.safeParse(payload);
+        if (!found.success) {
+          return;
+        }
         if (peer?.remoteDescription) {
-          peer
-            .addIceCandidate(payload as RTCIceCandidateInit)
-            .catch(() => undefined);
+          peer.addIceCandidate(found.data).catch(() => undefined);
         } else {
-          held.push(payload as RTCIceCandidateInit);
+          held.push(found.data);
         }
         return;
+      }
       case "signal/close":
         closePeer();
         requestPeer();
@@ -639,9 +651,9 @@ export const cdpStream = (
         events.state({ kind: "live" });
       }
       if (decoding) {
-        next = event.data as ArrayBuffer;
+        next = event.data;
       } else {
-        draw(event.data as ArrayBuffer).catch(() => undefined);
+        draw(event.data).catch(() => undefined);
       }
     };
     at.onclose = (event) => {
