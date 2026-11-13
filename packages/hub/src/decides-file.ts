@@ -32,36 +32,30 @@ import {
   type FleetDecides,
   readDecides,
 } from "@cawco/core/decides";
-import { areaFolder, FolderRefusal, readFolderFile } from "./project-folder";
-import { StatusRefusal } from "./refusal";
-
-/** A refusal of `settle`, in one sentence. */
-export class SettleRefusal extends StatusRefusal<403 | 409> {}
+import { ElysiaStatus } from "elysia";
+import { areaFolder, readFolderFile } from "./project-folder";
 
 /** The file in the project's folder that declares its Who decides. */
 export const DECIDES_FILE = "decides.md";
 
 /** decides.md as the project's folder holds it now, its text; undefined with none. */
-export const decidesText = async (
-  projectId: string
-): Promise<string | undefined> => {
-  try {
-    return (await readFolderFile(projectId, DECIDES_FILE)).content;
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
-      return;
-    }
-    throw error;
+export const decidesText = async (projectId: string) => {
+  const file = await readFolderFile(projectId, DECIDES_FILE);
+  if (file instanceof ElysiaStatus) {
+    return file.status === 404 ? undefined : file;
   }
+  return file.content;
 };
 
 /** decides.md as the project's folder holds it now, read; undefined with none. */
-const decidesReading = async (
-  projectId: string,
-  fleet: FleetDecides
-): Promise<DecidesReading | undefined> => {
+const decidesReading = async (projectId: string, fleet: FleetDecides) => {
   const content = await decidesText(projectId);
-  return content === undefined ? undefined : readDecides(content, fleet);
+  if (content instanceof ElysiaStatus) {
+    return content;
+  }
+  const reading: DecidesReading | undefined =
+    content === undefined ? undefined : readDecides(content, fleet);
+  return reading;
 };
 
 /** Where a table is read for: a project (null: outside any), and the area it sits in (null: none). */
@@ -79,14 +73,20 @@ export interface DecidesAt {
 export const decidesTable = async (
   { projectId, areaId }: DecidesAt,
   fleet: FleetDecides
-): Promise<DecidesTable> => {
+) => {
   const project = projectId
     ? await decidesReading(projectId, fleet)
     : undefined;
+  if (project instanceof ElysiaStatus) {
+    return project;
+  }
   const area =
     projectId && areaId
       ? await decidesReading(areaFolder(areaId), fleet)
       : undefined;
+  if (area instanceof ElysiaStatus) {
+    return area;
+  }
   const problems = [
     ...(project?.ok === false ? project.problems : []),
     ...(area?.ok === false
@@ -106,7 +106,7 @@ export const decidesTable = async (
         : (mine ?? its ?? fleet.routes[kind.id] ?? "you");
     from[kind.id] = (mine && "project") || (its && "area") || "fleet";
   }
-  return {
+  const table: DecidesTable = {
     routes,
     from,
     yours: [
@@ -117,4 +117,5 @@ export const decidesTable = async (
     ],
     problems,
   };
+  return table;
 };

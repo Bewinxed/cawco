@@ -34,7 +34,7 @@ import {
   type ParseResult,
   tokenize,
 } from "@openuidev/lang-core";
-import { FolderRefusal } from "./project-folder";
+import { problem } from "elysia";
 
 // lang-core's runtime telemetry is opt-in and only `generateSystemPrompt`
 // sends it, which the hub never calls (the prompt is generated at build
@@ -63,15 +63,15 @@ const ACTIONS = new Set(["OpenUrl", "ToAssistant", "Run", "Set", "Reset"]);
 /** lang-core's token kinds this reads (tokens.ts `T`, a const enum). */
 const TOKEN = { Str: 14, Type: 17, BuiltinCall: 35 } as const;
 
-/** Refuses a view with every reason, as the folder refusal its route answers (422) and its tool call reads. */
-const refuse = (problems: string[]): never => {
-  throw new FolderRefusal(
-    422,
-    problems.length === 1
-      ? (problems[0] ?? "")
-      : `The view has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`
-  );
-};
+/** Refuses a view with every reason, as the refusal its route answers (422) and its tool call reads. */
+const unfit = (problems: string[]) =>
+  problem(422, {
+    code: "view-unfit",
+    detail:
+      problems.length === 1
+        ? (problems[0] ?? "")
+        : `The view has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`,
+  });
 
 /** Its strings, action steps and functions that would run code or reach out. */
 const unsafe = (source: string): string[] => {
@@ -229,33 +229,31 @@ export const readView = (source: string): { dropped: string[] } => ({
 });
 
 /**
- * `source` as a view, or a 422 {@link FolderRefusal} with every reason: its
+ * `source` as a view, or a 422 refusal ({@link unfit}) with every reason: its
  * size and code first, then its tools, then the parser's other errors. A
  * component the library does not have is not a reason: it is dropped and
  * named in `dropped`.
  */
-export const checkView = (
-  raw: string
-): { dropped: string[]; source: string } => {
+export const checkView = (raw: string) => {
   const source = `${raw.trim()}\n`;
   if (source.length > VIEW_SOURCE_MAX) {
-    refuse([
+    return unfit([
       `The view is ${source.length} characters; one is ${VIEW_SOURCE_MAX} at most.`,
     ]);
   }
   if (source.includes(CLOUD_MARKER)) {
-    refuse([
+    return unfit([
       `The view carries OpenUI Cloud markers (${CLOUD_MARKER}…): a view is a program alone, and runs no scripts.`,
     ]);
   }
   const found = unsafe(source);
   if (found.length) {
-    refuse(found);
+    return unfit(found);
   }
   const result = parser.parse(source);
   const tools = toolProblems(result);
   if (tools.length) {
-    refuse(tools);
+    return unfit(tools);
   }
   const mistakes = result.meta.errors
     .filter((error) => error.code !== "unknown-component")
@@ -270,9 +268,13 @@ export const checkView = (
     );
   }
   if (mistakes.length) {
-    refuse([...new Set(mistakes)]);
+    return unfit([...new Set(mistakes)]);
   }
-  return { source, dropped: droppedOf(result) };
+  const view: { dropped: string[]; source: string } = {
+    source,
+    dropped: droppedOf(result),
+  };
+  return view;
 };
 
 /** What Caw reads to write a view: the system prompt generated from the library and the tools. */

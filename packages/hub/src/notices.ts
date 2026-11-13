@@ -23,7 +23,7 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 
 /**
@@ -79,12 +79,12 @@ export function createNoticesSeen(options: {
             ids: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
           }),
         },
-        ({ body, status }) => {
+        ({ body }) => {
           if ("damaged" in record) {
-            return status(
-              409,
-              damagedHubRecordWords("notices", record.damaged)
-            );
+            return problem(409, {
+              code: "damaged-hub-record-words",
+              detail: damagedHubRecordWords("notices", record.damaged),
+            });
           }
           const { seen } = record;
           const fresh = body.ids.filter((id) => !seen.includes(id));
@@ -99,12 +99,13 @@ export function createNoticesSeen(options: {
       // Reset: the one way out of a damaged record. A fresh, empty record
       // written whole, and notices on again. Refused while the record reads
       // whole: it would only forget what the person acknowledged.
-      .post("/api/notices/reset", ({ status }) => {
+      .post("/api/notices/reset", () => {
         if (!("damaged" in record)) {
-          return status(
-            409,
-            "The notices record reads whole, so there is nothing to reset."
-          );
+          return problem(409, {
+            code: "notices-record-reads-whole",
+            detail:
+              "The notices record reads whole, so there is nothing to reset.",
+          });
         }
         console.info(`[notices] ${record.damaged.file} reset: notices are on`);
         const seen: string[] = [];
