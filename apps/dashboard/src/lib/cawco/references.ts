@@ -37,7 +37,6 @@ import {
 } from "./artifact-names.svelte";
 import ChangeReference from "./ChangeReference.svelte";
 import CommentChip from "./CommentChip.svelte";
-import { cawco } from "./client.svelte";
 import DecisionReference from "./DecisionReference.svelte";
 import { sessionName } from "./home/home-state.svelte";
 import { conversationHref } from "./links";
@@ -50,6 +49,7 @@ import { openReference, openThing } from "./reference-open.svelte";
 import { type ThingKind, thingNamed } from "./reference-things.svelte";
 import SessionReference from "./SessionReference.svelte";
 import { sessionNamed, sessionPlace } from "./session-names.svelte";
+import { boardStore } from "./stores/board.svelte";
 import ThingReference from "./ThingReference.svelte";
 
 interface ReferenceElement {
@@ -124,7 +124,7 @@ const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
     }),
     // Its chip's panel stands in the dashboard: from a page, its conversation opens.
     follow: async (id) => {
-      await goto(conversationHref(id, cawco.instanceIndex));
+      await goto(conversationHref(id, boardStore.instanceIndex));
       return null;
     },
     // Read when drawn, not when this module loads: the element's own

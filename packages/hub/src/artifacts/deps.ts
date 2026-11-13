@@ -3,7 +3,6 @@ import type { Member } from "@cawco/core/decides";
 import type { AfterLinks, DecisionCard } from "@cawco/core/decisions";
 import type { PlanStep } from "@cawco/core/plan";
 import type { PreviewDown } from "@cawco/core/preview/protocol";
-import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasSpec,
@@ -18,14 +17,16 @@ import type {
   StageWarm,
 } from "@cawco/core/stage";
 import type { FolderWeight } from "@cawco/preview/proxy";
+import type { problem } from "elysia";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import type { ArtifactNamed, BuiltProgram } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
 import type { HubLifetimeShape } from "../lifetime";
+import type { PreviewListeners } from "../preview";
+
 import type { SentPage } from "../setup";
 import type { StateAsk } from "./component";
 import type { ArtifactDocs } from "./docs";
-import type { ArtifactRefusal } from "./refusals";
 import type {
   Browsed,
   CanvasScreen,
@@ -36,19 +37,52 @@ import type {
   StageAt,
 } from "./shapes";
 
+/**
+ * A problem from across the hub's import cycle (decisions, settling and the
+ * artifact pages reach this file again): the wiring makes it again with
+ * Elysia's `problem`, its status and code typed as a number and a string.
+ */
+type Resaid = ReturnType<
+  typeof problem<number, { code: string; detail: string }>
+>;
+
+/** A machine call of the hub's own wiring that no machine answered: away (503), or not in time (504). */
+type Unanswered<Away extends string, Late extends string> =
+  | ReturnType<typeof problem<503, { code: Away; detail: string }>>
+  | ReturnType<typeof problem<504, { code: Late; detail: string }>>;
+
+/** A stage's refusal (artifact-events.ts `onStage`): its workspace gone or on no machine, its machine away or late, or the stage's own no. */
+type StageRefused =
+  | ReturnType<
+      typeof problem<409, { code: "stage-workspace-gone"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<409, { code: "stage-workspace-unplaced"; detail: string }>
+    >
+  | Unanswered<"stage-machine-away", "stage-machine-late">
+  | ReturnType<typeof problem<422, { code: "stage-said-no"; detail: string }>>;
+
+/** Why an artifact has no origin a browser of the session's own opens (preview-browse.ts `browsedOrigin`): no session holds it, no machine serves it, or its listener does not open. */
+type OriginRefused =
+  | ReturnType<typeof problem<404, { code: "browse-unheld"; detail: string }>>
+  | ReturnType<typeof problem<409, { code: "browse-unserved"; detail: string }>>
+  | Exclude<ReturnType<PreviewListeners["address"]>, { port: number }>
+  | Exclude<ReturnType<PreviewListeners["embed"]>, { port: number }>;
+
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
   acknowledged: () => readonly string[];
   /**
    * What decision page `name` drawn with `cards` does to its project's
    * links (decisions.ts `linksOf`): its `after`s naming no decision, and
-   * its decisions other pages come after. Said to its writer.
+   * its decisions other pages come after. Said to its writer. A project
+   * the hub does not keep is refused.
    */
   afterLinks: (
     projectId: string,
     name: string,
     cards: DecisionCard[]
-  ) => Promise<AfterLinks>;
+  ) => Promise<AfterLinks | Resaid>;
   /**
    * Who hears the person on `artifact`, which `writer` made: the one his
    * marks and the hub's own send of his answers go to (artifacts/taker.ts),
@@ -66,7 +100,15 @@ export interface ArtifactServiceDeps {
    * may read (`artifact_browse`, preview-browse.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
-  browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
+  browse: (
+    instance: InstanceRow,
+    row: ArtifactRow
+  ) =>
+    | Browsed
+    | OriginRefused
+    | ReturnType<
+        typeof problem<503, { code: "browse-unnamed"; detail: string }>
+      >;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
   /**
@@ -90,7 +132,7 @@ export interface ArtifactServiceDeps {
       cards: DecisionCard[],
       all: DecisionCard[],
       state: Record<string, ChoiceEntry>
-    ) => Promise<Record<string, string>>;
+    ) => Promise<Record<string, string> | Resaid>;
     settled: (
       row: ArtifactRow,
       card: DecisionCard,
@@ -101,7 +143,9 @@ export interface ArtifactServiceDeps {
       settler: InstanceRow,
       row: ArtifactRow,
       card: DecisionCard
-    ) => Promise<Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }>;
+    ) => Promise<
+      (Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }) | Resaid
+    >;
   };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
@@ -130,9 +174,7 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     projectId: string,
     name: string
-  ) => Promise<
-    { refused: string; status: ArtifactRefusal["status"] } | undefined
-  >;
+  ) => Promise<Resaid | undefined>;
   /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /**
@@ -141,12 +183,18 @@ export interface ArtifactServiceDeps {
    * gone, or nothing can give it a turn again. A machine away is not.
    */
   finished: (instance: InstanceRow) => boolean;
-  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
+  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`); refused saying why it can't. */
   folderWeight: (
     machineId: string,
     dir: string,
     path: string | undefined
-  ) => Promise<FolderWeight>;
+  ) => Promise<
+    | FolderWeight
+    | Unanswered<"artifact-folder-machine-away", "artifact-folder-machine-late">
+    | ReturnType<
+        typeof problem<422, { code: "artifact-folder-unread"; detail: string }>
+      >
+  >;
   /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
   followed: (instanceId: string) => boolean;
   /**
@@ -189,20 +237,35 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     name: string,
     page: { html: string; program?: string }
-  ) => Promise<
-    { refused: string; status: ArtifactRefusal["status"] } | undefined
-  >;
+  ) => Promise<Resaid | undefined>;
   /**
    * Picture `png` (base64) kept at `path` in session `instance`'s workspace
    * (`artifact_read`'s `save`), written by its machine (core
-   * `CONTROL_WORKSPACE_SAVE`). The path written; throws an
-   * {@link ArtifactRefusal} saying why when it wasn't.
+   * `CONTROL_WORKSPACE_SAVE`). The path written, or the refusal saying why
+   * it wasn't.
    */
   keepPicture: (
     instance: InstanceRow,
     path: string,
     png: string
-  ) => Promise<string>;
+  ) => Promise<
+    | string
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "picture-save-no-workspace"; detail: string }
+        >
+      >
+    | ReturnType<
+        typeof problem<503, { code: "picture-save-unanswered"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<503, { code: "picture-save-failed"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "picture-save-refused"; detail: string }>
+      >
+  >;
   /**
    * The projects session `instance` is the conversation of (their Caw): an ended writer's
    * marks are routed to him, and he answers them in their pins' threads.
@@ -255,23 +318,30 @@ export interface ArtifactServiceDeps {
     keep: boolean,
     /** The artifact a program's Canvas or Preview names, whole (`whole`). */
     artifact: ArtifactNamed
-  ) => Promise<
-    | { html: string; program?: BuiltProgram }
-    | { refused: string; status: ArtifactRefusal["status"] }
-  >;
+  ) => Promise<{ html: string; program?: BuiltProgram } | Resaid>;
   /**
    * Preview or page `artifact` drawn as the person's panel draws it, for
    * session `instance`'s `artifact_read` with `png` (server.ts, agent
    * artifact-picture.ts): on its own preview origin in the Chromium of the
    * hub's machine, `width` CSS px wide, at its state's `link` when one is
-   * named, a sleeping server woken first. Its picture, base64 PNG; throws an
-   * {@link ArtifactRefusal} saying why when it can't be drawn.
+   * named, a sleeping server woken first. Its picture, base64 PNG, or the
+   * refusal saying why it can't be drawn.
    */
   picture: (
     instance: InstanceRow,
     artifact: ArtifactRow,
     drawn: { link?: string; width: number }
-  ) => Promise<string>;
+  ) => Promise<
+    | string
+    | OriginRefused
+    | ReturnType<
+        typeof problem<503, { code: "picture-no-daemon"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<503, { code: "picture-undrawn"; detail: string }>
+      >
+    | ReturnType<typeof problem<503, { code: "picture-none"; detail: string }>>
+  >;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
    * person something (`comment_reply`'s `asks`): its push, grouped per
@@ -280,9 +350,9 @@ export interface ArtifactServiceDeps {
   pinAsked: (artifactId: string, text: string) => void;
   /**
    * Session `instanceId`'s preview origin (preview.ts), its listener started
-   * when it has none; throws a refusal when every port is taken.
+   * when it has none; refused when every port is taken.
    */
-  previewAddress: (instanceId: string) => PreviewAddress;
+  previewAddress: PreviewListeners["address"];
   /**
    * A session closed one of artifact `artifactId`'s questions to the person
    * (taken or withdrawn): every screen listing a session's questions reads
@@ -320,24 +390,49 @@ export interface ArtifactServiceDeps {
    * Canvas `artifact`'s host page opened in the Chromium of the hub's own
    * machine (agent canvas-screen.ts), told it is that canvas, its doc at
    * `sync`, where it joins the doc as a screen: what holds it on through a
-   * write, and what lets it go. Throws an {@link ArtifactRefusal} saying why
-   * when none can open.
+   * write, and what lets it go; refused saying why when none can open.
    */
-  screen: (artifact: ArtifactRow, sync: string) => Promise<CanvasScreen>;
+  screen: (
+    artifact: ArtifactRow,
+    sync: string
+  ) => Promise<
+    | CanvasScreen
+    | ReturnType<
+        typeof problem<
+          503,
+          { code: "artifact-screen-no-daemon"; detail: string }
+        >
+      >
+    | ReturnType<
+        typeof problem<
+          503,
+          { code: "artifact-screen-unopened"; detail: string }
+        >
+      >
+    | Exclude<ReturnType<PreviewListeners["local"]>, string>
+  >;
   /**
    * What a send applies before the session hears it (setup.ts
-   * `applySetupPicks`): the page as it stands ({@link SentPage}); a
-   * refusal throws and nothing is sent.
+   * `applySetupPicks`): the page as it stands ({@link SentPage}); a place's
+   * refusal (place-refusal.ts) is answered and nothing is sent.
    */
   sending: (
     to: PageHearer,
     artifact: ArtifactRow,
     page: SentPage
-  ) => Promise<void>;
+  ) => Promise<
+    | ReturnType<
+        typeof problem<
+          400 | 404 | 409 | 413 | 503 | 504,
+          { code: "setup-place-refused"; detail: string }
+        >
+      >
+    | undefined
+  >;
   /**
    * A workspace preview's server (agent stage.ts `ensureServed`), started or
    * woken on the workspace's machine and waited on until its port answers:
-   * its state. Throws an {@link ArtifactRefusal} saying why it didn't start.
+   * its state, or the refusal saying why it didn't start.
    * A decision page's Previews of it wake it as the page goes out, unwaited
    * (`warmPreviews`).
    */
@@ -345,7 +440,16 @@ export interface ArtifactServiceDeps {
     machineId: string,
     workspace: string,
     serve: ServeSpec
-  ) => Promise<StageState>;
+  ) => Promise<
+    | StageState
+    | Unanswered<"artifact-serve-machine-away", "artifact-serve-machine-late">
+    | ReturnType<
+        typeof problem<
+          422,
+          { code: "artifact-serve-unstarted"; detail: string }
+        >
+      >
+  >;
   /** Whether project `projectId` is set up (tasks.ts `isSetUp`): where its setup page lands (core `setupLanding`). */
   setUp: (projectId: string) => boolean;
   /** The artifact a session's panel shows now, if any. */
@@ -366,8 +470,8 @@ export interface ArtifactServiceDeps {
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
    * `ensureStage`), started or woken there and waited on: its port, root and
-   * state, the sheet's stories, with the workspace and its machine. Throws
-   * an {@link ArtifactRefusal} saying why it can't run, and, `opening` a
+   * state, the sheet's stories, with the workspace and its machine; refused
+   * saying why it can't run, and, `opening` a
    * canvas, naming a states file that isn't written. A decision page's
    * Previews of sheets start or wake theirs as the page goes out, unwaited
    * ({@link ArtifactServiceDeps.warmStage}).
@@ -377,20 +481,28 @@ export interface ArtifactServiceDeps {
     file: string,
     files?: string[],
     opening?: boolean
-  ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
+  ) => Promise<
+    { machineId: string; opened: StageOpened; workspace: string } | StageRefused
+  >;
   /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
-  stageComponents: (at: StageAt, ask: DesignQuery) => Promise<DesignMap>;
+  stageComponents: (
+    at: StageAt,
+    ask: DesignQuery
+  ) => Promise<DesignMap | StageRefused>;
   /** A canvas drawn by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what it drew and what it did not. */
   stageRender: (
     at: StageAt,
     ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
-  ) => Promise<StageRendered>;
+  ) => Promise<StageRendered | StageRefused>;
   /**
    * A write to a sheet's story file in its workspace, made by its stage
    * (agent stage.ts `writeSheet`): the lines it changed and the sheet after.
-   * Throws an {@link ArtifactRefusal} saying why it can't.
+   * Refused saying why it can't.
    */
-  stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
+  stageWrite: (
+    at: StageAt,
+    write: SheetWrite
+  ) => Promise<SheetWritten | StageRefused>;
   /** The session's plan's steps: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
   steps: (instanceId: string) => readonly PlanStep[];
   /**
@@ -427,10 +539,12 @@ export interface ArtifactServiceDeps {
    * One stage warmed for a decision page as it goes out (agent stage.ts
    * `warmStage`): started or woken there and every canvas of `warm` compiled
    * as its Preview's page loads it. Settles once the machine took it, before
-   * the warm-up runs; throws an {@link ArtifactRefusal} when it can't be
-   * reached.
+   * the warm-up runs; refused when it can't be reached.
    */
-  warmStage: (at: StageAt, warm: StageWarm) => Promise<void>;
+  warmStage: (
+    at: StageAt,
+    warm: StageWarm
+  ) => Promise<StageRefused | undefined>;
   /**
    * Why a browser in a workspace on machine `machineId` cannot open `url`,
    * or null when it can (server.ts, core boundary-reach.ts

@@ -67,7 +67,6 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
   import { stopWords } from "../accounts/switch.svelte";
-
   import { age } from "../find/find-rows";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
@@ -77,6 +76,7 @@
   import { sessionPlace } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
   import { delegatesStore, type TrayChild } from "../stores/delegates.svelte";
+  import { needsStore } from "../stores/needs.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
   import { dismissWorkItem, retryWorkItem } from "../stores/work-items.svelte";
   import { composerLayerOf } from "./composer-layer.svelte";
@@ -168,7 +168,7 @@
     const routed = pending.filter((each) => each.routedTo === "parent");
     // Its own cards in Needs you wait on you as its own asks do (core
     // `waitsOnYou`): the hub holds its item for them (work-items.ts `onPerson`).
-    const cards = cawco.artifactNeedsOpen.filter(
+    const cards = needsStore.artifactNeedsOpen.filter(
       (need) => need.instanceId === item.instanceId
     );
     let tone: Tone;

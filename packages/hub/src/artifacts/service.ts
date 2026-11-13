@@ -63,7 +63,6 @@ import {
   writeEntry,
   writeResolve,
 } from "@cawco/core/comments/model";
-import type { Member } from "@cawco/core/decides";
 import {
   type DecisionCard,
   pickMade,
@@ -105,7 +104,6 @@ import type {
   ArtifactThumbnail,
   InstanceRow,
 } from "@cawco/core/protocol";
-import type { PageLinks } from "@cawco/core/reference-faces";
 import {
   artifactLink,
   decisionLink,
@@ -121,7 +119,6 @@ import {
   type CanvasSpec,
   canvasOf,
   canvasPath,
-  type DesignMap,
   type DesignQuery,
   type EmbedShape,
   STAGE_IDLE_MS,
@@ -133,26 +130,25 @@ import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
+import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
-import { SettleRefusal } from "../decides-file";
 import {
   type BuiltProgram,
   keptLinks,
   mergeProgram,
   PROGRAM_FILE,
-  ProgramRefusal,
   readKept,
 } from "../decision-program";
 import { HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
 import {
   changeFolderFiles,
-  FolderRefusal,
   folderFileNames,
   folderPath,
 } from "../project-folder";
-import { artifactByHandle, boardOf, createAccess, named } from "./access";
+import type { AnyProblem } from "../refusal";
+import { artifactNamed, boardOf, createAccess, named } from "./access";
 import { canvasEntries } from "./canvas";
 import {
   type CanvasInput,
@@ -164,7 +160,7 @@ import type { ArtifactServiceDeps } from "./deps";
 import { createFacts, metaOf, stateOf } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind, sheetOf } from "./kinds/component";
-import { createPageKind, newestHash, refusedProgram } from "./kinds/page";
+import { createPageKind, newestHash } from "./kinds/page";
 import { createPreviewKind, servedOf } from "./kinds/preview";
 import { createMarks, labelOf, linkOfPin } from "./marks";
 import {
@@ -184,7 +180,6 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
-import { ArtifactRefusal, NothingNewToSend } from "./refusals";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -195,7 +190,6 @@ import {
   type CanvasChange,
   type CanvasExport,
   type CommentRead,
-  type ComponentWritten,
   type Created,
   type HandedArtifactFile,
   type Making,
@@ -212,7 +206,6 @@ import {
   type PromotedFile,
   type QuestionClosed,
   type Removed,
-  type Revised,
   type ServedMedia,
   type Settled,
   type SheetChange,
@@ -224,13 +217,17 @@ import { routeOf } from "./sync";
 import { LIST_PAGE } from "./tools";
 import { createVersions } from "./versions";
 
-/** Statements lang-core could not merge into the program: nothing was changed. */
-const unmerged = (error: unknown): ArtifactRefusal =>
-  new ArtifactRefusal(
-    422,
-    `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`,
-    { cause: error }
-  );
+/** `statements` merged into `existing` (decision-program.ts `mergeProgram`), or its refusal; what lang-core could not merge (it throws) is refused, nothing changed. */
+const merging = (existing: string, statements: string) => {
+  try {
+    return mergeProgram(existing, statements);
+  } catch (error) {
+    return problem(422, {
+      code: "artifact-statements-unmerged",
+      detail: `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`,
+    });
+  }
+};
 /** The fields each kind takes, and what its refusal says it takes. */
 const KIND_FIELDS = {
   page: { fields: ["program", "html", "dir"], takes: "program, html or dir" },
@@ -376,15 +373,15 @@ const CURSOR = /^([0-9a-z]{1,12})\.([0-9a-f-]{36})$/u;
  * `cursor`, and the cursor after them. Keyed on the last row shown, not a
  * count, so a page made or deleted meanwhile neither repeats nor skips one.
  */
-const pageOf = (
-  rows: ArtifactRow[],
-  cursor: string | undefined
-): { next: string | null; rows: ArtifactRow[] } => {
+const pageOf = (rows: ArtifactRow[], cursor: string | undefined) => {
   let from = 0;
   if (cursor !== undefined) {
     const parts = CURSOR.exec(cursor);
     if (!parts) {
-      throw new ArtifactRefusal(400, artifactToolWords.notListCursor(cursor));
+      return problem(400, {
+        code: "artifact-list-cursor",
+        detail: artifactToolWords.notListCursor(cursor),
+      });
     }
     const at = Number.parseInt(parts[1] as string, 36);
     const id = parts[2] as string;
@@ -397,10 +394,11 @@ const pageOf = (
   }
   const page = rows.slice(from, from + LIST_PAGE);
   const last = page.at(-1);
-  return {
+  const listed: { next: string | null; rows: ArtifactRow[] } = {
     next: last && from + LIST_PAGE < rows.length ? cursorOf(last) : null,
     rows: page,
   };
+  return listed;
 };
 /** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
 export const SHOWN_WAIT_MS = 10_000;
@@ -455,14 +453,15 @@ const TRAILING_STOPS = /[\s.]+$/u;
 /** A promote from a session outside a project. DESIGN.md's error formula. */
 const NO_PROJECT =
   "This session belongs to no project, so there is nowhere to promote to.";
-/** `artifacts/<name>`, inside the project folder; refused for a name that would leave it. */
-const promotedFolder = (name: string): string => {
+/** `artifacts/<name>`, inside the project folder; refused for a name that would leave it, or that the folder refuses as a path. */
+const promotedFolder = (name: string) => {
   const folder = `artifacts/${name}`;
-  if (!ARTIFACT_NAME.test(name) || folderPath(folder) !== folder) {
-    throw new ArtifactRefusal(
-      400,
-      `${JSON.stringify(name)} would not stay inside artifacts/: a name is lowercase letters, digits and dashes.`
-    );
+  const path = ARTIFACT_NAME.test(name) ? folderPath(folder) : undefined;
+  if (path instanceof ElysiaStatus || path !== folder) {
+    return problem(400, {
+      code: "artifact-promote-name",
+      detail: `${JSON.stringify(name)} would not stay inside artifacts/: a name is lowercase letters, digits and dashes.`,
+    });
   }
   return folder;
 };
@@ -470,11 +469,13 @@ const promotedFolder = (name: string): string => {
 const TRAILING_DOT = /\.$/u;
 
 /** A promote git refused, in DESIGN.md's error formula: what failed, and git's reason. */
-const notCommitted = (name: string, error: FolderRefusal): ArtifactRefusal =>
-  new ArtifactRefusal(
-    error.status === 413 || error.status === 409 ? error.status : 503,
-    `${name} could not be committed: ${error.message.replace(TRAILING_DOT, "")}.`,
-    { cause: error }
+const notCommitted = (name: string, refused: AnyProblem) =>
+  problem(
+    refused.status === 413 || refused.status === 409 ? refused.status : 503,
+    {
+      code: "artifact-promote-uncommitted",
+      detail: `${name} could not be committed: ${refused.response.detail.replace(TRAILING_DOT, "")}.`,
+    }
   );
 
 /** A promoted file's text: JSON, two-space indented, ending on a newline, as a repository keeps it. */
@@ -511,33 +512,30 @@ const sentTextOf = (doc: Doc): string | null =>
  * preview or a page, a frame is a component's, and the project's browser
  * has no page the hub can draw (`drawn`: a picture is asked).
  */
-const pictureRefusal = (
-  row: ArtifactRow,
-  ask: PictureAsk,
-  drawn: boolean
-): ArtifactRefusal | undefined => {
+const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
   if (
     ask.link !== undefined &&
     !(row.kind === "preview" || row.kind === "page")
   ) {
-    return new ArtifactRefusal(
-      400,
-      row.kind === "component"
-        ? `${row.name} is a component canvas: its state is a frame, { story, interaction?, scheme?, width? }.`
-        : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`
-    );
+    return problem(400, {
+      code: "artifact-read-link-unfit",
+      detail:
+        row.kind === "component"
+          ? `${row.name} is a component canvas: its state is a frame, { story, interaction?, scheme?, width? }.`
+          : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`,
+    });
   }
   if (ask.state && row.kind !== "component") {
-    return new ArtifactRefusal(
-      400,
-      `${row.name} is a ${row.kind}: its state is the query or hash of the state's own link, like "?__state=pairing:asking".`
-    );
+    return problem(400, {
+      code: "artifact-read-state-unfit",
+      detail: `${row.name} is a ${row.kind}: its state is the query or hash of the state's own link, like "?__state=pairing:asking".`,
+    });
   }
   if (row.kind === "browser" && drawn) {
-    return new ArtifactRefusal(
-      409,
-      `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`
-    );
+    return problem(409, {
+      code: "artifact-browser-undrawn",
+      detail: `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`,
+    });
   }
 };
 /**
@@ -600,6 +598,28 @@ const saySend = (
       outcome
     )
   );
+/** What a create answers beside its row: its stage, its folder's weight and what it left broken, each when it has one. */
+const createdExtras = ({
+  broken,
+  stage,
+  weight,
+}: {
+  broken: PageBroken | undefined;
+  stage: StageState | undefined;
+  weight: FolderWeight | undefined;
+}) => ({
+  ...(stage ? { stage } : {}),
+  ...(weight ? { weight } : {}),
+  ...(broken ? { broken } : {}),
+});
+
+/** No artifact `id` on this hub at all. */
+const notOnHub = (id: string) =>
+  problem(404, {
+    code: "artifact-not-on-hub",
+    detail: `No artifact ${id} on this hub.`,
+  });
+
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
   const store = createPageStore(deps.root);
@@ -614,6 +634,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     leftInProject,
     nameable,
     namedFor,
+    namedIn,
     ofTree,
     own,
     panelHeld,
@@ -851,24 +872,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * newest; one it made, else one it may read ({@link readable}). Its maker
    * reads what it changed: the next version held for its parent.
    */
-  const readTarget = (
-    instance: InstanceRow,
-    asked: string | undefined
-  ): ArtifactRow => {
+  const readTarget = (instance: InstanceRow, asked: string | undefined) => {
     const id = asked === undefined ? undefined : whole(instance, asked);
-    const handed = id === undefined ? undefined : db.get(id);
-    let row: ArtifactRow | undefined = handed;
-    if (id === undefined) {
-      [row] = db.ofInstance(instance.id);
-    } else if (handed?.madeBy !== instance.id) {
-      row = readable(instance, id);
+    if (id instanceof ElysiaStatus) {
+      return id;
+    }
+    const row =
+      id === undefined
+        ? db.ofInstance(instance.id)[0]
+        : madeOrRead(instance, id);
+    if (row instanceof ElysiaStatus) {
+      return row;
     }
     if (!row) {
-      throw new ArtifactRefusal(404, "This session has made no artifact yet.");
+      return problem(404, {
+        code: "artifact-none-made",
+        detail: "This session has made no artifact yet.",
+      });
     }
     return row.instanceId !== instance.id && row.madeBy === instance.id
       ? newestVersion(row)
       : row;
+  };
+  /** Artifact `id` (whole) as session `instance` reads it: one it made as it stands, else one it may read ({@link readable}). */
+  const madeOrRead = (instance: InstanceRow, id: string) => {
+    const handed = db.get(id);
+    return handed?.madeBy === instance.id ? handed : readable(instance, id);
   };
   const {
     changedBy,
@@ -923,31 +952,31 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * `to: "parent"` the session that started it; refused for a session with
    * no parent, or one whose parent is gone.
    */
-  const ownerFor = (maker: InstanceRow, input: ArtifactInput): InstanceRow => {
+  const ownerFor = (maker: InstanceRow, input: ArtifactInput) => {
     if (input.to !== "parent") {
       return maker;
     }
     if (input.draft) {
-      throw new ArtifactRefusal(
-        400,
-        "A draft canvas is the person's own: it goes to no parent."
-      );
+      return problem(400, {
+        code: "artifact-draft-to-parent",
+        detail: "A draft canvas is the person's own: it goes to no parent.",
+      });
     }
     const parentId = maker.parentInstanceId;
     if (!parentId) {
-      throw new ArtifactRefusal(
-        409,
-        'This session has no parent to put an artifact in front of: leave out to: "parent".'
-      );
+      return problem(409, {
+        code: "artifact-no-parent",
+        detail:
+          'This session has no parent to put an artifact in front of: leave out to: "parent".',
+      });
     }
-    const parent = deps.instance(parentId);
-    if (!parent) {
-      throw new ArtifactRefusal(
-        404,
-        `Your parent session ${parentId.slice(0, 8)} is gone, so nothing was put in its panel.`
-      );
-    }
-    return parent;
+    return (
+      deps.instance(parentId) ??
+      problem(404, {
+        code: "artifact-parent-gone",
+        detail: `Your parent session ${parentId.slice(0, 8)} is gone, so nothing was put in its panel.`,
+      })
+    );
   };
 
   /**
@@ -983,14 +1012,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * ({@link readable}), so a pin the session reads is one it answers.
    * Refused when none holds it.
    */
-  const pinOf = (
-    instance: InstanceRow,
-    pinId: string
-  ): { pin: Pin; row: ArtifactRow } => {
+  const pinOf = (instance: InstanceRow, pinId: string) => {
     const handle = pinId.length >= HANDLE_MIN && pinId.length < 36;
-    const among = (
-      rows: ArtifactRow[]
-    ): { pin: Pin; row: ArtifactRow } | undefined => {
+    const among = (rows: ArtifactRow[]) => {
       for (const row of rows) {
         const doc = docs.doc(row.id);
         const pin =
@@ -1001,16 +1025,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
               )
             : undefined);
         if (pin) {
-          return { pin, row: readable(instance, row.id) };
+          const read = readable(instance, row.id);
+          return read instanceof ElysiaStatus ? read : { pin, row: read };
         }
       }
     };
     // What its project's cold writers left is searched only when nothing nearer holds the pin.
-    const found = among(nameable(instance)) ?? among(leftInProject(instance));
-    if (!found) {
-      throw new ArtifactRefusal(404, artifactToolWords.noPin(pinId));
-    }
-    return found;
+    return (
+      among(nameable(instance)) ??
+      among(leftInProject(instance)) ??
+      problem(404, {
+        code: "artifact-pin-unknown",
+        detail: artifactToolWords.noPin(pinId),
+      })
+    );
   };
 
   /**
@@ -1213,12 +1241,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ];
     });
     if (problems.length > 0) {
-      throw new ArtifactRefusal(
-        422,
-        problems.length === 1
-          ? (problems[0] ?? "")
-          : `The program has ${problems.length} problems:\n- ${problems.join("\n- ")}`
-      );
+      return problem(422, {
+        code: "artifact-media-unfit",
+        detail:
+          problems.length === 1
+            ? (problems[0] ?? "")
+            : `The program has ${problems.length} problems:\n- ${problems.join("\n- ")}`,
+      });
     }
   };
 
@@ -1411,16 +1440,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** Each of `cards` (of all `all` on artifact `id`), routed by Who decides and said as a line ({@link ArtifactServiceDeps.decides}). */
-  const routedOn = (
+  const routedOn = async (
     asker: InstanceRow,
     id: string,
     cards: DecisionCard[],
     all: DecisionCard[]
-  ): Promise<Record<string, string>> => {
+  ) => {
     const row = db.get(id);
+    const none: Record<string, string> = {};
     return row
-      ? deps.decides.routed(asker, row, cards, all, stateOf(docs.doc(id)))
-      : Promise.resolve({});
+      ? await deps.decides.routed(asker, row, cards, all, stateOf(docs.doc(id)))
+      : none;
   };
 
   /** What a create answers of a decision page's cards' routes ({@link routedOn}); nothing when none is said. */
@@ -1428,13 +1458,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     asker: InstanceRow,
     id: string,
     program: BuiltProgram | undefined
-  ): Promise<Pick<Created, "routes">> => {
+  ) => {
+    const none: Pick<Created, "routes"> = {};
     if (!program) {
-      return {};
+      return none;
     }
     const { cards } = program.read;
     const routes = await routedOn(asker, id, cards, cards);
-    return Object.keys(routes).length > 0 ? { routes } : {};
+    if (routes instanceof ElysiaStatus) {
+      return routes;
+    }
+    return Object.keys(routes).length > 0 ? { routes } : none;
   };
 
   /**
@@ -1447,51 +1481,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     instance: InstanceRow,
     page: string,
     asked: { card: string; option: string }
-  ): {
-    card: DecisionCard;
-    option: DecisionCard["options"][number];
-    row: ArtifactRow;
-  } => {
+  ) => {
     const found = readable(instance, page);
+    if (found instanceof ElysiaStatus) {
+      return found;
+    }
     const row = found.heldFor ? (db.get(found.heldFor) ?? found) : found;
     const program = programOf(row);
     if (program === undefined) {
-      throw new ArtifactRefusal(
-        409,
-        `${named(row)} asks no decision cards: settle takes a decision page's card.`
-      );
+      return problem(409, {
+        code: "artifact-settle-no-cards",
+        detail: `${named(row)} asks no decision cards: settle takes a decision page's card.`,
+      });
     }
     const { cards } = readKept(program);
     const card = cards.find((one) => one.id === asked.card);
     if (!card) {
-      throw new ArtifactRefusal(
-        404,
-        `${row.name} asks no card “${asked.card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`
-      );
+      return problem(404, {
+        code: "artifact-settle-card-unknown",
+        detail: `${row.name} asks no card “${asked.card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`,
+      });
     }
     const option = card.options.find((one) => one.id === asked.option);
     if (!option) {
-      throw new ArtifactRefusal(
-        422,
-        `“${asked.option}” is not an option of ${card.id}. Its options: ${card.options.map((one) => one.id).join(", ")}.`
-      );
+      return problem(422, {
+        code: "artifact-settle-option-unknown",
+        detail: `“${asked.option}” is not an option of ${card.id}. Its options: ${card.options.map((one) => one.id).join(", ")}.`,
+      });
     }
     return { row, card, option };
-  };
-
-  /** The member `instance` settles `card` for (settling.ts `settler`), its refusal an artifact refusal. */
-  const settlerOf = async (
-    instance: InstanceRow,
-    row: ArtifactRow,
-    card: DecisionCard
-  ): Promise<Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }> => {
-    try {
-      return await deps.decides.settler(instance, row, card);
-    } catch (error) {
-      throw error instanceof SettleRefusal
-        ? new ArtifactRefusal(error.status, error.message)
-        : error;
-    }
   };
 
   /** What a create answers of a decision page: its decisions, and the components it dropped. */
@@ -1519,7 +1537,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const brokenBy = async (
     page: { id: string | undefined; name: string; projectId: string | null },
     cards: DecisionCard[]
-  ): Promise<PageBroken | undefined> => {
+  ) => {
     const state = page.id ? stateOf(docs.doc(page.id)) : {};
     const has = (id: string) => cards.some((card) => card.id === id);
     const picked = Object.entries(state)
@@ -1534,6 +1552,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const links = page.projectId
       ? await deps.afterLinks(page.projectId, page.name, cards)
       : { unlinked: [], dependents: {} };
+    if (links instanceof ElysiaStatus) {
+      return links;
+    }
     const after = Object.fromEntries(
       Object.entries(links.dependents).filter(([id]) => !has(id))
     );
@@ -1803,7 +1824,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       Object.values(state).some((entry) => !sentAt || entry.at > sentAt);
     const note = body.text?.trim() || null;
     if (!(picked || note)) {
-      throw new NothingNewToSend();
+      // Agents and the API hear it as the 409 it is; the page's own Send
+      // reads it as sent (sync.ts `artifactSend`), since what he asked for
+      // already holds.
+      return problem(409, {
+        code: "artifact-nothing-new",
+        detail: "Nothing new to send: every pick here has gone to the session.",
+      });
     }
     return { picked, note };
   };
@@ -1826,24 +1853,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     to: PageHearer,
     by: SentBy = "person",
     tell = true
-  ): Promise<string | null> => {
+  ) => {
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
     const program = programOf(row);
     const setup = program === undefined ? null : readKept(program).setup;
-    let owes: ReturnType<typeof sendOwes>;
-    try {
-      owes = sendOwes(doc, state, setup, body);
-    } catch (error) {
+    const owes = sendOwes(doc, state, setup, body);
+    if (owes instanceof ElysiaStatus) {
       saySend(
         row,
         body,
         route,
-        artifactToolWords.sendRefused(
-          error instanceof Error ? error.message : String(error)
-        )
+        artifactToolWords.sendRefused(owes.response.detail)
       );
-      throw error;
+      return owes;
     }
     const { picked, note } = owes;
     const { sentAt } = metaOf(doc);
@@ -1858,13 +1881,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
         : artifactToolWords.sendSettled
     );
-    if (picked) {
-      await deps.sending(to, row, {
-        state,
-        sentAt,
-        revisedAt: getMeta(doc, "revisedAt") ?? null,
-        setup,
-      });
+    const unsent = picked
+      ? await deps.sending(to, row, {
+          state,
+          sentAt,
+          revisedAt: getMeta(doc, "revisedAt") ?? null,
+          setup,
+        })
+      : undefined;
+    if (unsent) {
+      return unsent;
     }
     const hearer = tell
       ? await deps.signal(to, row, { since: row.deliveredSeq })
@@ -1986,7 +2012,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       program: BuiltProgram | undefined;
       weight: FolderWeight | undefined;
     }
-  ): Promise<void> => {
+  ) => {
     const { html, program, weight } = made;
     if (input.does === "pick") {
       // A project's setup page holds its Setup alone, Caw's questions going
@@ -1995,18 +2021,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? program.read.cards.length > 0 || program.read.setup !== null
         : HTML_CHOICE.test(html ?? "");
       if (!holds) {
-        throw new ArtifactRefusal(400, NO_CHOICE);
+        return problem(400, {
+          code: "artifact-pick-no-choice",
+          detail: NO_CHOICE,
+        });
       }
     }
     if (!(input.does === "judge" || input.does === "pick")) {
       return;
     }
-    let captures = weight?.captures ?? 0;
-    if (html !== null && !program) {
-      captures = await deskCaptures(html, dataUrlBytes);
-    }
+    const captures =
+      html !== null && !program
+        ? await deskCaptures(html, dataUrlBytes)
+        : (weight?.captures ?? 0);
     if (captures > DESK_CAPTURES_PER_PAGE) {
-      throw new ArtifactRefusal(400, capturesRefused(captures));
+      return problem(400, {
+        code: "artifact-desk-captures",
+        detail: capturesRefused(captures),
+      });
     }
   };
 
@@ -2015,39 +2047,46 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * the person does there, in their words, on a kind that can deliver it.
    * The person's own composer canvas (`draft`) asks them nothing.
    */
-  const asksFirst = (input: ArtifactInput): void => {
+  const asksFirst = (input: ArtifactInput) => {
     if (input.draft) {
       return;
     }
-    const { does, ask, title } = askedOf(input);
-    const problem =
+    const asked = askedOf(input);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const { does, ask, title } = asked;
+    const misfit =
       titleProblem(title, input.name) ??
       askProblem(ask) ??
       doesProblem(input, does);
-    if (problem) {
-      throw new ArtifactRefusal(400, problem);
+    if (misfit) {
+      return problem(400, { code: "artifact-ask-unfit", detail: misfit });
     }
   };
 
   /** What a create names the person does there, its ask and its title, as its row keeps them; refused with the tool's shape when it names any not. */
-  const askedOf = (
-    input: Pick<ArtifactInput, "does" | "ask" | "title">
-  ): { ask: string; does: ArtifactDoes; title: string } => {
+  const askedOf = (input: Pick<ArtifactInput, "does" | "ask" | "title">) => {
     if (
       input.does === undefined ||
       input.ask === undefined ||
       input.title === undefined
     ) {
-      throw new ArtifactRefusal(422, CREATE_SHAPE);
+      return problem(422, {
+        code: "artifact-create-shape",
+        detail: CREATE_SHAPE,
+      });
     }
-    return { does: input.does, ask: input.ask, title: input.title.trim() };
+    const asked: { ask: string; does: ArtifactDoes; title: string } = {
+      does: input.does,
+      ask: input.ask,
+      title: input.title.trim(),
+    };
+    return asked;
   };
 
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
-  const madeOwnWay = (
-    making: Making,
-    input: ArtifactInput
-  ): Promise<Created> | null => {
+  const madeOwnWay = (making: Making, input: ArtifactInput) => {
     if (input.kind === "canvas") {
       return input.draft
         ? Promise.resolve(createDraft(making.owner, input))
@@ -2092,7 +2131,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     { lands, owner, maker }: Making,
     input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask" | "title">,
     at: { machineId: string | null; source: PreviewSource }
-  ): Placement => {
+  ) => {
+    const asked = askedOf(input);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
     const now = new Date();
     // Read again: opening its held version first (openNextFirst) moved it.
     const found = lands
@@ -2106,7 +2149,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? (db.update(found.id, { instanceId: owner.id }) as ArtifactRow)
       : found;
     const movedFrom = moved ? (found.instanceId ?? undefined) : undefined;
-    const asked = askedOf(input);
     if (before) {
       const holding = holdNext(maker, before);
       const target = holding?.next ?? before;
@@ -2121,13 +2163,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!holding) {
         versionMoved(row);
       }
-      return {
+      const remade: Placement = {
         before,
         holding,
         movedFrom,
         row,
         was: holding?.fresh ? undefined : target,
       };
+      return remade;
     }
     const row = db.create({
       id: crypto.randomUUID(),
@@ -2148,7 +2191,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       updatedAt: now,
       shownAt: null,
     });
-    return { before, holding: null, row, was: undefined };
+    const made: Placement = { before, holding: null, row, was: undefined };
+    return made;
   };
 
   /**
@@ -2162,12 +2206,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     making: Making,
     input: ArtifactInput,
     at: { machineId: string | null; source: PreviewSource }
-  ): Promise<{ placement: Placement; stage: StageState | undefined }> => {
+  ) => {
     const madeFrom = makingFrom(at.source);
     try {
       const stage = await serveFirst(at.source, at.machineId);
-      await openNextFirst(making, input.kind, input.name);
-      return { stage, placement: placed(making, input, at) };
+      if (stage instanceof ElysiaStatus) {
+        return stage;
+      }
+      const unopened = await openNextFirst(making, input.kind, input.name);
+      if (unopened) {
+        return unopened;
+      }
+      const placement = placed(making, input, at);
+      if (placement instanceof ElysiaStatus) {
+        return placement;
+      }
+      const served: { placement: Placement; stage: StageState | undefined } = {
+        stage,
+        placement,
+      };
+      return served;
     } finally {
       madeFrom();
     }
@@ -2218,7 +2276,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * is still making goes up as it does to a panel. Nothing for a page
    * artifact.
    */
-  const answersFirst = async (placement: Placement): Promise<void> => {
+  const answersFirst = async (placement: Placement) => {
     const { row } = placement;
     if (!(row.kind === "preview" && row.machineId) || "page" in row.source) {
       return;
@@ -2235,7 +2293,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const said = down.why
       ? `${failed.replace(TRAILING_STOPS, "")} (${down.why.replace(TRAILING_STOPS, "")}).`
       : failed;
-    throw new ArtifactRefusal(503, `${said} ${artifactToolWords.notHanded}`);
+    return problem(503, {
+      code: "artifact-unanswered-unhanded",
+      detail: `${said} ${artifactToolWords.notHanded}`,
+    });
   };
 
   /** A session by its link, labelled by its title, as `artifact_list` names it. */
@@ -2269,33 +2330,67 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     since: number | undefined,
     drawn: boolean,
     { link, ...ask }: PictureAsk
-  ): Promise<ArtifactRead> => {
+  ) => {
     const ownersRead = readsForOwner(instance, row);
     const now = newestVersion(row);
     if (row.kind === "canvas") {
       return heldAnswer(await canvasNow(row, now, since, drawn, ownersRead));
     }
     if (row.kind !== "component") {
-      // Drawn before the read, which then says what the picture shows.
-      const picture = drawn
-        ? await deps.picture(instance, now, {
-            width: ask.width ?? PICTURE_VIEW.width,
-            ...(link === undefined ? {} : { link }),
-          })
-        : undefined;
-      return heldAnswer({
-        ...pageNow(row, now, since, ownersRead),
-        ...(since === undefined ? programRead(now) : {}),
-        ...(picture === undefined ? {} : { png: picture }),
+      return await pageReadOf(instance, row, now, since, ownersRead, {
+        drawn,
+        link,
+        width: ask.width,
       });
     }
-    const answer = await readSheet(row, since, ownersRead, {
+    return await sheetReadOf(instance, row, since, ownersRead, {
       ...ask,
       png: drawn,
     });
-    return ask.verify
-      ? { ...answer, verify: await askVerify(instance, row) }
-      : answer;
+  };
+
+  /** A page's or a preview's read ({@link pageNow}), its picture drawn first when `drawn`, which the read then says it shows. */
+  const pageReadOf = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    now: ArtifactRow,
+    since: number | undefined,
+    ownersRead: boolean,
+    {
+      drawn,
+      link,
+      width,
+    }: { drawn: boolean; link: string | undefined; width: number | undefined }
+  ) => {
+    const picture = drawn
+      ? await deps.picture(instance, now, {
+          width: width ?? PICTURE_VIEW.width,
+          ...(link === undefined ? {} : { link }),
+        })
+      : undefined;
+    return picture instanceof ElysiaStatus
+      ? picture
+      : heldAnswer({
+          ...pageNow(row, now, since, ownersRead),
+          ...(since === undefined ? programRead(now) : {}),
+          ...(picture === undefined ? {} : { png: picture }),
+        });
+  };
+
+  /** A component canvas's read ({@link readSheet}), with the verdict a round asks when `ask.verify`. */
+  const sheetReadOf = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    since: number | undefined,
+    ownersRead: boolean,
+    ask: Omit<PictureAsk, "link"> & { png: boolean }
+  ) => {
+    const answer = await readSheet(row, since, ownersRead, ask);
+    if (answer instanceof ElysiaStatus || !ask.verify) {
+      return answer;
+    }
+    const verify = await askVerify(instance, row);
+    return verify instanceof ElysiaStatus ? verify : { ...answer, verify };
   };
 
   /** The picture read `told` answered for `row`, kept at `save` in `instance`'s workspace: the path written. */
@@ -2304,12 +2399,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     save: string,
     told: ArtifactRead
-  ): Promise<string> => {
+  ) => {
     if (typeof told.png !== "string") {
-      throw new ArtifactRefusal(
-        409,
-        `${row.name} has no picture yet, so nothing was saved.`
-      );
+      return problem(409, {
+        code: "artifact-no-picture-saved",
+        detail: `${row.name} has no picture yet, so nothing was saved.`,
+      });
     }
     return deps.keepPicture(instance, save, told.png);
   };
@@ -2330,7 +2425,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       before: Record<string, unknown>;
       tested: ReadonlySet<string>;
     }
-  ): void => {
+  ) => {
     const live = (row.heldFor === null ? row : db.get(row.heldFor)) ?? row;
     const owners = readsForOwner(instance, live);
     const had = owners ? heardSeq(live) : 0;
@@ -2357,7 +2452,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (live !== row) {
       how = "held";
     }
-    throw new ArtifactRefusal(409, artifactToolWords.answersStand(said, how));
+    return problem(409, {
+      code: "artifact-answers-stand",
+      detail: artifactToolWords.answersStand(said, how),
+    });
   };
   const {
     askOf,
@@ -2501,7 +2599,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (to === null) {
       return;
     }
-    await sendPage(
+    const sent = await sendPage(
       row,
       { control: "answered" },
       "hub",
@@ -2509,6 +2607,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       "hub",
       unheardAnswers(row)
     );
+    // Said as a failed one is, where it is let go (marks.ts, `sendIfWhole`).
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[artifacts] ${id}: the person's answers did not go by themselves: ${sent.response.detail}`
+      );
+    }
   };
 
   /** Whether `row` holds a pick, note or value of the person's its session has not had (needs.ts `answersUnheard`). */
@@ -2743,12 +2847,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * handle (its judgement), on an artifact it reads ({@link readable}).
    * Refused in words when it names none of its questions.
    */
-  const questionNamed = (
-    instance: InstanceRow,
-    asked: string
-  ): { question: Question; row: ArtifactRow } => {
+  const questionNamed = (instance: InstanceRow, asked: string) => {
     const [artifact, key] = questionKeyOf(asked);
     const row = readable(instance, artifact);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     const doc = docs.doc(row.id);
     const pins = [...readPins(doc).values()];
     // A pin's link names it by number; its key is its id.
@@ -2761,12 +2865,389 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
     const question = questions.find((one) => one.key === pinKey);
     if (!question) {
-      throw new ArtifactRefusal(
-        404,
-        `${named(row)} asks no such question. Its questions: ${questions.map((one) => one.link).join(", ") || "none"}.`
-      );
+      return problem(404, {
+        code: "artifact-question-unknown",
+        detail: `${named(row)} asks no such question. Its questions: ${questions.map((one) => one.link).join(", ") || "none"}.`,
+      });
     }
     return { question, row };
+  };
+
+  /**
+   * What a page's or a preview's create is made from: its page built
+   * ({@link createdPage}) or its source named ({@link previewSource}), a
+   * folder weighed, and checked against what it asks
+   * ({@link deliversItsAsk}).
+   */
+  const createdFrom = async (
+    instance: InstanceRow,
+    making: Making,
+    input: ArtifactInput
+  ) => {
+    const from =
+      input.kind === "page"
+        ? await createdPage(making, input)
+        : previewSource(instance, input);
+    if (from instanceof ElysiaStatus) {
+      return from;
+    }
+    const page = "html" in from ? from : undefined;
+    const machineId = "machineId" in from ? from.machineId : null;
+    const source: PreviewSource =
+      "source" in from ? from.source : { page: input.name };
+    const html = page?.html ?? null;
+    const program = page?.program;
+    const weight =
+      "dir" in source && machineId
+        ? await deps.folderWeight(machineId, source.dir, source.path)
+        : undefined;
+    if (weight instanceof ElysiaStatus) {
+      return weight;
+    }
+    const undelivered = await deliversItsAsk(input, { html, program, weight });
+    if (undelivered) {
+      return undelivered;
+    }
+    const made: {
+      broken: PageBroken | undefined;
+      html: string | null;
+      machineId: string | null;
+      program: BuiltProgram | undefined;
+      source: PreviewSource;
+      weight: FolderWeight | undefined;
+    } = { broken: page?.broken, html, machineId, program, source, weight };
+    return made;
+  };
+
+  /**
+   * A page's or a preview's create (`create`): built or sourced, weighed,
+   * checked against its ask, served and placed, handed or shown, and what
+   * it answers.
+   */
+  const createShown = async (
+    instance: InstanceRow,
+    making: Making,
+    input: ArtifactInput
+  ) => {
+    const from = await createdFrom(instance, making, input);
+    if (from instanceof ElysiaStatus) {
+      return from;
+    }
+    const { broken, html, machineId, program, source, weight } = from;
+    const served = await servedAndPlaced(making, input, {
+      source,
+      machineId,
+    });
+    if (served instanceof ElysiaStatus) {
+      return served;
+    }
+    const { stage, placement } = served;
+    const { before, holding, movedFrom, row } = placement;
+    const unanswered = handing(making)
+      ? await answersFirst(placement)
+      : undefined;
+    if (unanswered) {
+      return unanswered;
+    }
+    letGo(movedFrom, row);
+    const made = writtenPlaced(row, making, input.dir, {
+      html,
+      program,
+      stage,
+    });
+    const shown = await handOver(making, before, row, undefined, holding);
+    if (!(shown.started || before) && input.kind === "preview") {
+      // A preview nothing could start shows nothing: it is not kept. One
+      // whose server did not answer stays in the panel, its failure on it.
+      discard(row);
+      return problem(503, {
+        code: "artifact-preview-unstarted",
+        detail: shown.why,
+      });
+    }
+    const said = heldId(row);
+    askedNow(instance, said.id);
+    const routes = await routesOf(instance, said.id, program);
+    if (routes instanceof ElysiaStatus) {
+      return routes;
+    }
+    const created: Created = {
+      ...said,
+      kind: row.kind,
+      name: row.name,
+      title: row.title,
+      route: routeOf(said.id),
+      ...routes,
+      link: artifactLink(said.id, row.title),
+      ...openedOf(shown),
+      ...programAnswer(said.id, program),
+      ...markedLinks(said.id, made),
+      ...createdExtras({ broken, stage, weight }),
+    };
+    return created;
+  };
+
+  /**
+   * A placed page's or preview's files and marks written: a page's HTML
+   * and program, what it changed marked; its hash stamped; its published
+   * sources kept; a served preview's stage. The server it moved off is let
+   * go by the preview that serves it (server.ts `onSourceMoved`); a held
+   * next version's moves off none, its artifact still showing it until it
+   * is opened (promote).
+   */
+  const writtenPlaced = (
+    row: ArtifactRow,
+    making: Making,
+    dir: string | undefined,
+    {
+      html,
+      program,
+      stage,
+    }: {
+      html: string | null;
+      program: BuiltProgram | undefined;
+      stage: StageState | undefined;
+    }
+  ) => {
+    const made = html === null ? [] : writeMade(row, html, program);
+    stampMeta(row, pageHashOf(html, program));
+    keepPublishedSources(row, program, dir, making.maker);
+    if (stage) {
+      writeStage(row, stage);
+    }
+    return made;
+  };
+
+  /** The questions session `instance`'s delegation tree put to the person, as its own screen lists them (core session-questions.ts). */
+  const sessionQuestionsOf = (instance: InstanceRow): SessionQuestionsRead => ({
+    questions: askedBy(instance).flatMap((of) =>
+      of.questions.flatMap((question): SessionQuestion[] =>
+        question.state === "open" || question.state === "answered"
+          ? [
+              {
+                key: question.key,
+                kind: question.kind,
+                words: question.words,
+                state: question.state,
+                answer:
+                  question.state === "answered"
+                    ? answerShown(question.answer)
+                    : null,
+                stop: question.stop,
+                artifact: {
+                  id: of.artifact.id,
+                  kind: of.artifact.kind,
+                  title: of.artifact.title,
+                },
+                session: of.session
+                  ? {
+                      id: of.session.id,
+                      title: of.session.title,
+                      ended: of.session.ended,
+                    }
+                  : null,
+              },
+            ]
+          : []
+      )
+    ),
+  });
+
+  /** What a hand of `row` carries of itself, by its kind ({@link Artifacts.handed}): its files, a sheet's drawn picture and its states files; refused as its read or its address refuses. */
+  const handedOwn = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    base: string
+  ) => {
+    const files: HandedArtifactFile[] = [];
+    const kept: {
+      drawn: Buffer | null;
+      files: HandedArtifactFile[];
+      states: { files: string[]; workspace: string } | null;
+    } = { drawn: null, files, states: null };
+    if (row.kind === "canvas") {
+      const { file, outline } = canvasFile(row.id);
+      files.push(
+        { name: `${base}.excalidraw`, bytes: jsonFile(file) },
+        { name: `${base}.md`, bytes: Buffer.from(`${outline}\n`) }
+      );
+      return kept;
+    }
+    if (row.kind === "page") {
+      const program = programOf(row);
+      files.push(
+        {
+          name: `${base}.html`,
+          bytes: store.htmlBytes(row.id),
+        },
+        ...(program === undefined
+          ? []
+          : [{ name: `${base}.oui`, bytes: Buffer.from(program) }]),
+        { name: `${base}.json`, bytes: jsonFile(read(row, undefined, false)) }
+      );
+      return kept;
+    }
+    if (row.kind === "preview") {
+      const file = previewHanded(instance, row, base);
+      if (file instanceof ElysiaStatus) {
+        return file;
+      }
+      files.push(file);
+      return kept;
+    }
+    const sheet = sheetOf(row);
+    const sheetRead = await readSheet(row, undefined, false, {
+      render: true,
+      png: true,
+    });
+    if (sheetRead instanceof ElysiaStatus) {
+      return sheetRead;
+    }
+    const { png, ...answer } = sheetRead;
+    files.push({
+      name: `${base}.json`,
+      bytes: jsonFile({
+        ...answer,
+        files: sheet?.files ?? [],
+        sheet: getMeta(docs.doc(row.id), "sheet") ?? null,
+      }),
+    });
+    kept.drawn = png ? Buffer.from(png, "base64") : null;
+    kept.states = sheet && { files: sheet.files, workspace: sheet.workspace };
+    return kept;
+  };
+
+  /**
+   * A preview's handed file: what it stands as, and the pass the receiver
+   * gets, minted once its session stands. Refused now, in its words, when
+   * it has no address to open.
+   */
+  const previewHanded = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    base: string
+  ) => {
+    const opens = deps.browse(instance, row);
+    if (opens instanceof ElysiaStatus) {
+      return opens;
+    }
+    const stands = {
+      ...read(row, undefined, false),
+      source: row.source,
+      machine: machineOf(row),
+    };
+    const file: HandedArtifactFile = {
+      name: `${base}.json`,
+      bytes: async ({ session, machineId }) => {
+        const pass = deps.browse(session, row);
+        // The receiver's inputs throw what they cannot write (work-items.ts).
+        if (pass instanceof ElysiaStatus) {
+          throw new Error(pass.response.detail);
+        }
+        const unreached = await deps.workspaceReach(pass.url, machineId);
+        return jsonFile(
+          unreached
+            ? {
+                ...stands,
+                pass: null,
+                reach: `${unreached}. What you have of it is this file and its latest picture, ${base}.png, when it has one; for more, ask your parent with handoff.`,
+              }
+            : {
+                ...stands,
+                pass: {
+                  ...pass,
+                  how: `Load url once in your own browser tool: it lets that browser into ${row.name} until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one.`,
+                },
+              }
+        );
+      },
+    };
+    return file;
+  };
+
+  /**
+   * The artifact a show of `id` from session `instance` finds (`found`:
+   * any of the fleet's for the person's, {@link showable}; its own, one it
+   * made or its tree's for the agent's, {@link viewable}) and the row it
+   * opens: the artifact a held next version is held for.
+   */
+  const shownTarget = (instance: InstanceRow, id: string, by: PanelHand) => {
+    const found =
+      by === "person" ? showable(instance, id) : viewable(instance, id);
+    if (found instanceof ElysiaStatus) {
+      return found;
+    }
+    const opens = found.heldFor === null ? found : db.get(found.heldFor);
+    return opens
+      ? { found, opens }
+      : problem(404, {
+          code: "artifact-unknown",
+          detail: artifactToolWords.noArtifact(id),
+        });
+  };
+
+  /**
+   * What session `instance`'s panel shows once an artifact is removed:
+   * what it showed, when that was another (`wasShown` false), its list
+   * heard again; else the person's Remove shows its next newest artifact,
+   * as closing a tab does, and the agent's delete closes the panel.
+   */
+  const shownAfterRemove = async (
+    instance: InstanceRow,
+    by: PanelHand,
+    wasShown: boolean
+  ): Promise<Removed["showing"]> => {
+    if (!wasShown) {
+      deps.relist(instance.id);
+      const shown = deps.showing(instance.id);
+      const now = shown === undefined ? undefined : db.get(shown);
+      return now
+        ? { id: now.id, kind: now.kind, name: now.name, title: now.title }
+        : null;
+    }
+    const next = by === "person" ? nextNewest(instance) : undefined;
+    if (next && (await deps.open(next)).ok) {
+      return {
+        id: next.id,
+        kind: next.kind,
+        name: next.name,
+        title: next.title,
+      };
+    }
+    deps.close(instance.id);
+    return null;
+  };
+
+  /** Session `instanceId`'s own artifact `id` ({@link own}), or the refusal of either. */
+  const ownIn = (instanceId: string, id: string) => {
+    const instance = sessionOf(instanceId);
+    return instance instanceof ElysiaStatus ? instance : own(instance, id);
+  };
+
+  /** Pin `pinId` on an artifact session `instanceId` reads ({@link pinOf}), or the refusal of either. */
+  const pinIn = (instanceId: string, pinId: string) => {
+    const instance = sessionOf(instanceId);
+    return instance instanceof ElysiaStatus ? instance : pinOf(instance, pinId);
+  };
+
+  /**
+   * What a Send of `row` by its session does: a comment's Try again
+   * (`body.pins`), its Ask again (`body.again`), else the page's Send
+   * ({@link sendPage}); the refusal of any.
+   */
+  const sentAs = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    body: SendBody,
+    route: string
+  ) => {
+    if (body.pins) {
+      return retry(row, new Set(body.pins));
+    }
+    if (body.again) {
+      return askAgain(row, new Set(body.again));
+    }
+    return sendPage(row, body, route, { session: instance });
   };
 
   return {
@@ -3046,8 +3527,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** The whole id of the artifact a session names by its name, handle or id ({@link whole}). */
-    named: (instanceId: string, asked: string): string =>
-      whole(sessionOf(instanceId), asked),
+    named: (instanceId: string, asked: string) => namedIn(instanceId, asked),
 
     /**
      * Card `card` of page `artifactId` as a wait reads it (task-waits.ts
@@ -3131,8 +3611,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): { id: string; name: string } | string => {
       try {
         const id = instanceId
-          ? whole(sessionOf(instanceId), asked)
-          : artifactByHandle(asked, db.ofProject(projectId));
+          ? namedIn(instanceId, asked)
+          : artifactNamed(asked, () => db.ofProject(projectId));
+        if (id instanceof ElysiaStatus) {
+          return id.response.detail;
+        }
         const page = db.get(id);
         return page
           ? { id: page.id, name: page.name }
@@ -3167,8 +3650,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** Every artifact the session holds, newest first: its panel's menu, where each stays reachable. */
-    list: (instanceId: string): ArtifactSummary[] => {
+    list: (instanceId: string) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       deps.listing(instance);
       return db.ofInstance(instance.id).map(summaryOf);
     },
@@ -3192,11 +3678,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * weight. Best match first, then newest; a page that matched by its
      * words brings the words round the first hit (`excerptOf`).
      */
-    search: (instanceId: string, q: string): ArtifactHit[] => {
+    search: (instanceId: string, q: string) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const query = parse(q);
-      const rows = filesOf(sessionOf(instanceId));
+      const rows = filesOf(instance);
       if (query.tokens.length === 0) {
-        return rows.map((row) => ({ id: row.id, excerpt: null }));
+        return rows.map((row): ArtifactHit => ({ id: row.id, excerpt: null }));
       }
       return rows
         .flatMap((row) => {
@@ -3225,7 +3715,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             b.score - a.score ||
             b.row.createdAt.getTime() - a.row.createdAt.getTime()
         )
-        .map(({ row, excerpt }) => ({ id: row.id, excerpt }));
+        .map(({ row, excerpt }): ArtifactHit => ({ id: row.id, excerpt }));
     },
 
     /**
@@ -3241,18 +3731,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         dark: Uint8Array | null;
         single: boolean;
       }
-    ): ArtifactThumbnail => {
-      const { row } = panelHeld(instanceId, id);
+    ) => {
+      const reached = panelHeld(instanceId, id);
+      if (reached instanceof ElysiaStatus) {
+        return reached;
+      }
+      const { row } = reached;
       if (row.kind === "canvas") {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a canvas: it keeps its own picture.`
-        );
+        return problem(409, {
+          code: "artifact-thumbnail-canvas",
+          detail: `${row.name} is a canvas: it keeps its own picture.`,
+        });
       }
       const light = shot.light ?? (shot.single ? null : shot.dark);
       const size = light ? pngSize(light) : null;
       if (!(light && size)) {
-        throw new ArtifactRefusal(422, "A thumbnail needs a picture.");
+        return problem(422, {
+          code: "artifact-thumbnail-empty",
+          detail: "A thumbnail needs a picture.",
+        });
       }
       store.keepThumbnail(id, "light", light);
       if (shot.single || !shot.dark) {
@@ -3271,10 +3768,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** An artifact's latest picture in `scheme` (a single page's one picture in both), or null. */
-    thumbnailFile: (id: string, scheme: "light" | "dark"): Buffer | null => {
+    thumbnailFile: (id: string, scheme: "light" | "dark") => {
       const row = db.get(id);
       if (!row) {
-        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+        return notOnHub(id);
       }
       if (row.kind === "canvas") {
         return pictureBytes(id);
@@ -3306,8 +3803,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         cursor,
         waitingOnly = false,
       }: { cursor?: string; waitingOnly?: boolean } = {}
-    ): ArtifactList => {
+    ) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const rows = [
         ...new Map(
           [
@@ -3322,35 +3822,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? rows.filter((row) => statusOf(instance, row).waitingOn.length > 0)
         : rows;
       const page = pageOf(kept, cursor);
-      return {
+      if (page instanceof ElysiaStatus) {
+        return page;
+      }
+      const list: ArtifactList = {
         artifacts: page.rows.map((row) => statusOf(instance, row)),
         next_cursor: page.next,
         total: kept.length,
       };
+      return list;
     },
 
     /**
      * An artifact by id with the session that made it, and whether that
      * session's panel shows it now: what its own tab opens on.
      */
-    find: (
-      id: string
-    ): ArtifactSummary & { instanceId: string; shown: boolean } => {
+    find: (id: string) => {
       const row = db.get(id);
       if (!row) {
-        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+        return notOnHub(id);
       }
       if (row.instanceId === null) {
-        throw new ArtifactRefusal(
-          404,
-          `No session holds ${row.name} now: it is its project's page, in the project's Decisions tab.`
-        );
+        return problem(404, {
+          code: "artifact-project-page",
+          detail: `No session holds ${row.name} now: it is its project's page, in the project's Decisions tab.`,
+        });
       }
-      return {
+      const found: ArtifactSummary & { instanceId: string; shown: boolean } = {
         ...summaryOf(row),
         instanceId: row.instanceId,
         shown: inPanel(row),
       };
+      return found;
     },
 
     /**
@@ -3362,10 +3865,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * program (a preview, a canvas, an HTML page). 404 for an artifact the
      * hub holds none of.
      */
-    links: (id: string): PageLinks => {
+    links: (id: string) => {
       const row = db.get(id);
       if (!row) {
-        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+        return problem(404, {
+          code: "artifact-unknown",
+          detail: `No artifact ${id} on this hub.`,
+        });
       }
       const program = join(deps.root, row.id, PROGRAM_FILE);
       return row.kind === "page" && existsSync(program)
@@ -3385,87 +3891,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * ({@link makingFor}). What it is made from (a
      * page's folder, a preview's workspace, a sheet's stage) is the caller's.
      */
-    create: async (
-      instanceId: string,
-      input: ArtifactInput
-    ): Promise<Created> => {
+    create: async (instanceId: string, input: ArtifactInput) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       if (!ARTIFACT_NAME.test(input.name)) {
-        throw new ArtifactRefusal(
-          400,
-          "A name is lowercase letters, digits and dashes, like onboarding, at most 63 characters."
-        );
+        return problem(400, {
+          code: "artifact-name-unfit",
+          detail:
+            "A name is lowercase letters, digits and dashes, like onboarding, at most 63 characters.",
+        });
       }
       const stray = strayFields(input);
       if (stray) {
-        throw new ArtifactRefusal(400, stray);
+        return problem(400, { code: "artifact-fields-stray", detail: stray });
       }
-      asksFirst(input);
+      const unasked = asksFirst(input);
+      if (unasked) {
+        return unasked;
+      }
       const making = makingFor(instance, input);
+      if (making instanceof ElysiaStatus) {
+        return making;
+      }
       const ownWay = madeOwnWay(making, input);
-      if (ownWay !== null) {
-        const made = linked(await ownWay);
-        askedNow(instance, made.id);
+      if (ownWay === null) {
+        return await createShown(instance, making, input);
+      }
+      const made = await ownWay;
+      if (made instanceof ElysiaStatus) {
         return made;
       }
-      let source: PreviewSource = { page: input.name };
-      let machineId: string | null = null;
-      let html: string | null = null;
-      let program: BuiltProgram | undefined;
-      let broken: PageBroken | undefined;
-      if (input.kind === "page") {
-        ({ html, program, broken } = await createdPage(making, input));
-      } else {
-        ({ machineId, source } = previewSource(instance, input));
-      }
-      const weight =
-        "dir" in source && machineId
-          ? await deps.folderWeight(machineId, source.dir, source.path)
-          : undefined;
-      await deliversItsAsk(input, { html, program, weight });
-      const { stage, placement } = await servedAndPlaced(making, input, {
-        source,
-        machineId,
-      });
-      const { before, holding, movedFrom, row } = placement;
-      if (handing(making)) {
-        await answersFirst(placement);
-      }
-      letGo(movedFrom, row);
-      const made = html === null ? [] : writeMade(row, html, program);
-      stampMeta(row, pageHashOf(html, program));
-      keepPublishedSources(row, program, input.dir, making.maker);
-      // The server it moved off is let go by the preview that serves it
-      // (server.ts `onSourceMoved`); a held next version's moves off none,
-      // its artifact still showing it until it is opened (promote).
-      if (stage) {
-        writeStage(row, stage);
-      }
-      const shown = await handOver(making, before, row, undefined, holding);
-      if (!(shown.started || before) && input.kind === "preview") {
-        // A preview nothing could start shows nothing: it is not kept. One
-        // whose server did not answer stays in the panel, its failure on it.
-        discard(row);
-        throw new ArtifactRefusal(503, shown.why);
-      }
-      const said = heldId(row);
-      askedNow(instance, said.id);
-      const routes = await routesOf(instance, said.id, program);
-      return {
-        ...said,
-        kind: row.kind,
-        name: row.name,
-        title: row.title,
-        route: routeOf(said.id),
-        ...routes,
-        link: artifactLink(said.id, row.title),
-        ...openedOf(shown),
-        ...(stage ? { stage } : {}),
-        ...(weight ? { weight } : {}),
-        ...programAnswer(said.id, program),
-        ...markedLinks(said.id, made),
-        ...(broken ? { broken } : {}),
-      };
+      const shown = linked(made);
+      askedNow(instance, shown.id);
+      return shown;
     },
 
     /**
@@ -3480,24 +3940,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id: string,
       change: Exclude<PageChange, { statements: string }> | CanvasChange
-    ): Promise<ArtifactRead> => {
+    ) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const found = revisable(instance, id);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
       const ownersRead = found.instanceId === instance.id;
       const forCanvas = !("html" in change || "patch" in change);
       if (forCanvas !== (found.kind === "canvas")) {
-        throw new ArtifactRefusal(
-          409,
-          found.kind === "canvas"
-            ? `${found.name} is a canvas: it takes elements, delete or mermaid.`
-            : `${found.name} is a ${found.kind}: elements, delete and mermaid are for a canvas.`
-        );
+        return found.kind === "canvas"
+          ? problem(409, {
+              code: "artifact-update-canvas",
+              detail: `${found.name} is a canvas: it takes elements, delete or mermaid.`,
+            })
+          : problem(409, {
+              code: "artifact-update-not-canvas",
+              detail: `${found.name} is a ${found.kind}: elements, delete and mermaid are for a canvas.`,
+            });
       }
-      const answer = await changedBy(instance, found, (row) =>
+      const answer = await changedBy(instance, found, async (row) =>
         "html" in change || "patch" in change
-          ? pageChanged(instance, row, change, ownersRead)
-          : updateCanvas(row, change, ownersRead)
+          ? await pageChanged(instance, row, change, ownersRead)
+          : await updateCanvas(row, change, ownersRead)
       );
+      if (answer instanceof ElysiaStatus) {
+        return answer;
+      }
       askedNow(instance, found.id);
       return heldAnswer(answer);
     },
@@ -3559,23 +4031,37 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       page: string,
       asked: { card: string; option: string; sources: string[]; why: string }
-    ): Promise<Settled> => {
+    ) => {
       const instance = sessionOf(instanceId);
-      const { row, card, option } = cardToSettle(instance, page, asked);
-      const { member, ...signed } = await settlerOf(instance, row, card);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const toSettle = cardToSettle(instance, page, asked);
+      if (toSettle instanceof ElysiaStatus) {
+        return toSettle;
+      }
+      const { row, card, option } = toSettle;
+      const signs = await deps.decides.settler(instance, row, card);
+      if (signs instanceof ElysiaStatus) {
+        return signs;
+      }
+      const { member, ...signed } = signs;
       const doc = docs.doc(row.id);
       const before = stateOf(doc)[card.id];
       if (pickMade(card, before)) {
-        throw new ArtifactRefusal(
-          409,
-          `${card.question} is decided already; only the person picks again.`
-        );
+        return problem(409, {
+          code: "artifact-settle-decided",
+          detail: `${card.question} is decided already; only the person picks again.`,
+        });
       }
       if (
         signed.by === "practice" &&
         !asked.sources.some((one) => WEB_SOURCE.test(one))
       ) {
-        throw new ArtifactRefusal(422, decidesWords.practiceCites);
+        return problem(422, {
+          code: "artifact-settle-uncited",
+          detail: decidesWords.practiceCites,
+        });
       }
       const settled: SettledBy = {
         ...signed,
@@ -3591,9 +4077,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         at: new Date().toISOString(),
         settled,
       };
-      const problem = choiceEntryProblem(card.id, entry);
-      if (problem) {
-        throw new ArtifactRefusal(422, `${problem} Nothing was changed.`);
+      const misfit = choiceEntryProblem(card.id, entry);
+      if (misfit) {
+        return problem(422, {
+          code: "artifact-settle-entry-unfit",
+          detail: `${misfit} Nothing was changed.`,
+        });
       }
       docs.transact(row.id, "agent", (live) =>
         live.getMap("state").set(card.id, entry)
@@ -3605,11 +4094,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         label: option.label,
         why: settled.why,
       });
-      return {
+      const done: Settled = {
         card: decisionLink(row.id, card.id, card.question),
         option: { id: option.id, label: option.label },
         settled,
       };
+      return done;
     },
 
     /**
@@ -3627,13 +4117,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * waiting for the parent, so opening that keeps it. Each merges into the
      * program of the row it lands on.
      */
-    revise: async (
-      instanceId: string,
-      id: string,
-      statements: string
-    ): Promise<Revised> => {
+    revise: async (instanceId: string, id: string, statements: string) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const wholeId = whole(instance, id);
+      if (wholeId instanceof ElysiaStatus) {
+        return wholeId;
+      }
       const asked = db.get(wholeId);
       const peer =
         asked &&
@@ -3642,30 +4134,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? projectPage(instance, wholeId)
           : undefined;
       const found = peer ?? revisable(instance, wholeId);
-      if (programOf(found) === undefined) {
-        throw new ArtifactRefusal(
-          409,
-          found.kind === "page"
-            ? `${found.name} is an HTML page: revise it with html.`
-            : `${named(found)} takes no statements: they revise a decision page's program.`
-        );
+      if (found instanceof ElysiaStatus) {
+        return found;
       }
-      const revisedOn = (row: ArtifactRow): Promise<Revised> => {
+      if (programOf(found) === undefined) {
+        return found.kind === "page"
+          ? problem(409, {
+              code: "artifact-revise-html",
+              detail: `${found.name} is an HTML page: revise it with html.`,
+            })
+          : problem(409, {
+              code: "artifact-revise-no-program",
+              detail: `${named(found)} takes no statements: they revise a decision page's program.`,
+            });
+      }
+      const revisedOn = async (row: ArtifactRow) => {
         // A next version is made from its artifact whole (holdNext), so it holds a program.
         const existing = programOf(row) as string;
-        let merged: ReturnType<typeof mergeProgram>;
-        try {
-          merged = mergeProgram(existing, statements);
-        } catch (error) {
-          throw error instanceof ProgramRefusal
-            ? refusedProgram(error)
-            : unmerged(error);
+        const merged = merging(existing, statements);
+        // A program's refusal passes up as the revision's.
+        if (merged instanceof ElysiaStatus) {
+          return merged;
         }
-        return programRevised(instance, row, existing, merged);
+        return await programRevised(instance, row, existing, merged);
       };
       const revised = peer
         ? await revisedOn(db.heldOf(peer.id) ?? peer)
         : await changedBy(instance, found, revisedOn);
+      if (revised instanceof ElysiaStatus) {
+        return revised;
+      }
       askedNow(instance, found.id);
       return heldAnswer(revised);
     },
@@ -3794,23 +4292,39 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       since?: number,
       png = false,
       ask: PictureAsk = {}
-    ): Promise<ArtifactRead> => {
+    ) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = readTarget(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       // A state's link draws it, and a picture kept is drawn first.
       const drawn =
         png ||
         ask.png === true ||
         ask.link !== undefined ||
         ask.save !== undefined;
-      const refusal = pictureRefusal(row, ask, drawn);
-      if (refusal) {
-        throw refusal;
+      const unfit = pictureRefusal(row, ask, drawn);
+      if (unfit) {
+        return unfit;
       }
       const told = await readOf(instance, row, since, drawn, ask);
-      return ask.save === undefined
-        ? told
-        : { ...told, saved: await keptIn(instance, row, ask.save, told) };
+      if (told instanceof ElysiaStatus) {
+        return told;
+      }
+      if (ask.save === undefined) {
+        const answer: ArtifactRead = told;
+        return answer;
+      }
+      const saved = await keptIn(instance, row, ask.save, told);
+      if (saved instanceof ElysiaStatus) {
+        return saved;
+      }
+      const answer: ArtifactRead = { ...told, saved };
+      return answer;
     },
 
     /** `artifact_update` of a sheet by whoever may change it ({@link revisable}): one story's args, or one story op, written by its stage. */
@@ -3818,17 +4332,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id: string,
       change: SheetChange
-    ): Promise<ComponentWritten> => {
+    ) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = revisable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const written = await writeSheet(
         row,
         change,
         "agent",
         row.instanceId === instance.id
       );
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
       askedNow(instance, row.id);
-      return componentWritten(row, change, written);
+      return await componentWritten(row, change, written);
     },
 
     /**
@@ -3840,19 +4363,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id: string,
       input: CanvasInput
-    ): Promise<{ id: string; revision: number; spec: CanvasSpec }> => {
+    ) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = revisable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const sheet = sheetOf(row);
       if (!(sheet && "port" in row.source)) {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`
-        );
+        return problem(409, {
+          code: "artifact-canvas-spec-not-sheet",
+          detail: `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`,
+        });
       }
-      const problem = canvasProblem(input);
-      if (problem) {
-        throw new ArtifactRefusal(400, problem);
+      const misfit = canvasProblem(input);
+      if (misfit) {
+        return problem(400, {
+          code: "artifact-canvas-spec-unfit",
+          detail: misfit,
+        });
       }
       const spec = specOf(row.name, {
         edges: input.edges ?? sheet.spec.edges,
@@ -3875,7 +4407,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         await show(next, next.instanceId, null, true);
       }
       askedNow(instance, next.id);
-      return { id: next.id, revision: next.revision, spec };
+      const changed: { id: string; revision: number; spec: CanvasSpec } = {
+        id: next.id,
+        revision: next.revision,
+        spec,
+      };
+      return changed;
     },
 
     /**
@@ -3883,22 +4420,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * every open view (it reads the doc's `meta.ask`), and the person's
      * last Send is answered, so the head asks again.
      */
-    askUpdate: (
-      instanceId: string,
-      id: string,
-      ask: string
-    ): { ask: string; id: string } => {
-      const row = revisable(sessionOf(instanceId), id);
-      const problem = askProblem(ask);
-      if (problem) {
-        throw new ArtifactRefusal(400, problem);
+    askUpdate: (instanceId: string, id: string, ask: string) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const row = revisable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
+      const misfit = askProblem(ask);
+      if (misfit) {
+        return problem(400, { code: "artifact-ask-unfit", detail: misfit });
       }
       db.update(row.id, { ask, updatedAt: new Date() });
       askNow(row.id, ask);
       // Every view of the panel hears the frame again with the new ask; nothing reloads.
       relistOf(row);
-      askedNow(sessionOf(instanceId), row.id);
-      return { id: row.id, ask };
+      askedNow(instance, row.id);
+      const asked: { ask: string; id: string } = { id: row.id, ask };
+      return asked;
     },
 
     /**
@@ -3907,21 +4448,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * frame again, the list and Needs you on their next read). A new title
      * asks nothing, so the person's last Send stands.
      */
-    titleUpdate: (
-      instanceId: string,
-      id: string,
-      title: string
-    ): { id: string; title: string } => {
-      const row = revisable(sessionOf(instanceId), id);
-      const problem = titleProblem(title, row.name);
-      if (problem) {
-        throw new ArtifactRefusal(400, problem);
+    titleUpdate: (instanceId: string, id: string, title: string) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const row = revisable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
+      const misfit = titleProblem(title, row.name);
+      if (misfit) {
+        return problem(400, { code: "artifact-title-unfit", detail: misfit });
       }
       const kept = title.trim();
       db.update(row.id, { title: kept, updatedAt: new Date() });
       docs.transact(row.id, "hub", (doc) => setMeta(doc, "title", kept));
       relistOf(row);
-      return { id: row.id, title: kept };
+      const titled: { id: string; title: string } = { id: row.id, title: kept };
+      return titled;
     },
 
     /**
@@ -3929,22 +4474,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * any panel that sees it ({@link panelHeld}): the same write as its
      * session's `artifact_update`, owed to that session.
      */
-    sheetWrite: (
-      instanceId: string,
-      id: string,
-      change: SheetChange
-    ): Promise<ArtifactRead> =>
-      writeSheet(panelHeld(instanceId, id).row, change, "person"),
+    sheetWrite: async (instanceId: string, id: string, change: SheetChange) => {
+      const reached = panelHeld(instanceId, id);
+      return reached instanceof ElysiaStatus
+        ? reached
+        : await writeSheet(reached.row, change, "person");
+    },
 
     /** The panel's Verify on a component canvas, from any panel that sees it ({@link panelHeld}): a round asked for the canvas's session, whose verdict reaches that session. */
-    verifyFor: (instanceId: string, id: string): Promise<string> => {
-      const { owner, row } = panelHeld(instanceId, id);
-      return askVerify(owner, row);
+    verifyFor: async (instanceId: string, id: string) => {
+      const reached = panelHeld(instanceId, id);
+      return reached instanceof ElysiaStatus
+        ? reached
+        : await askVerify(reached.owner, reached.row);
     },
 
     /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */
-    designMap: (instanceId: string, ask: DesignQuery): Promise<DesignMap> =>
-      deps.stageComponents({ session: sessionOf(instanceId) }, ask),
+    designMap: async (instanceId: string, ask: DesignQuery) => {
+      const session = sessionOf(instanceId);
+      return session instanceof ElysiaStatus
+        ? session
+        : await deps.stageComponents({ session }, ask);
+    },
 
     /**
      * The artifact's doc as a person's view reads it (the dashboard pane's
@@ -3953,19 +4504,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * reaches it on the preview frame). It is no read of the session's: its
      * read cursor stays, and a sheet's stage is neither woken nor waited on.
      */
-    viewOf: (
-      instanceId: string,
-      id: string
-    ): {
-      choices: Record<string, ChoiceEntry>;
-      sentAt: string | null;
-    } => {
-      const row = readable(sessionOf(instanceId), id);
+    viewOf: (instanceId: string, id: string) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const row = readable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const doc = docs.doc(row.id);
-      return {
+      const view: {
+        choices: Record<string, ChoiceEntry>;
+        sentAt: string | null;
+      } = {
         choices: stateOf(doc),
         sentAt: getMeta(doc, "sentAt") ?? null,
       };
+      return view;
     },
 
     /**
@@ -4105,117 +4661,62 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      *   caller to read from its workspace;
      * and the latest picture of any that has one.
      */
-    handed: async (
-      instanceId: string,
-      id: string
-    ): Promise<{
-      files: HandedArtifactFile[];
-      row: ArtifactRow;
-      states: { files: string[]; workspace: string } | null;
-    }> => {
+    handed: async (instanceId: string, id: string) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = readTarget(instance, id);
-      const base = `artifact-${row.name}`;
-      const files: HandedArtifactFile[] = [];
-      let drawn: Buffer | null = null;
-      let states: { files: string[]; workspace: string } | null = null;
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       if (row.kind === "browser") {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a browser: nothing of it is a file. Hand what it shows as a preview, or its URL as text.`
-        );
-      }
-      if (row.kind === "canvas") {
-        const { file, outline } = canvasFile(row.id);
-        files.push(
-          { name: `${base}.excalidraw`, bytes: jsonFile(file) },
-          { name: `${base}.md`, bytes: Buffer.from(`${outline}\n`) }
-        );
-      } else if (row.kind === "page") {
-        const program = programOf(row);
-        files.push(
-          {
-            name: `${base}.html`,
-            bytes: store.htmlBytes(row.id),
-          },
-          ...(program === undefined
-            ? []
-            : [{ name: `${base}.oui`, bytes: Buffer.from(program) }]),
-          { name: `${base}.json`, bytes: jsonFile(read(row, undefined, false)) }
-        );
-      } else if (row.kind === "preview") {
-        // Refused now, in its words, when it has no address to open: the
-        // pass the receiver gets is minted once its session stands.
-        deps.browse(instance, row);
-        const stands = {
-          ...read(row, undefined, false),
-          source: row.source,
-          machine: machineOf(row),
-        };
-        files.push({
-          name: `${base}.json`,
-          bytes: async ({ session, machineId }) => {
-            const pass = deps.browse(session, row);
-            const unreached = await deps.workspaceReach(pass.url, machineId);
-            return jsonFile(
-              unreached
-                ? {
-                    ...stands,
-                    pass: null,
-                    reach: `${unreached}. What you have of it is this file and its latest picture, ${base}.png, when it has one; for more, ask your parent with handoff.`,
-                  }
-                : {
-                    ...stands,
-                    pass: {
-                      ...pass,
-                      how: `Load url once in your own browser tool: it lets that browser into ${row.name} until expiresAt or your session ends; artifact_browse { id: "${row.id}" } gives you a fresh one.`,
-                    },
-                  }
-            );
-          },
-        });
-      } else {
-        const sheet = sheetOf(row);
-        const { png, ...answer } = await readSheet(row, undefined, false, {
-          render: true,
-          png: true,
-        });
-        drawn = png ? Buffer.from(png, "base64") : null;
-        states = sheet && { files: sheet.files, workspace: sheet.workspace };
-        files.push({
-          name: `${base}.json`,
-          bytes: jsonFile({
-            ...answer,
-            files: sheet?.files ?? [],
-            sheet: getMeta(docs.doc(row.id), "sheet") ?? null,
-          }),
+        return problem(409, {
+          code: "artifact-handed-browser",
+          detail: `${row.name} is a browser: nothing of it is a file. Hand what it shows as a preview, or its URL as text.`,
         });
       }
-      const picture = drawn ?? latestPicture(row);
+      const base = `artifact-${row.name}`;
+      const kept = await handedOwn(instance, row, base);
+      if (kept instanceof ElysiaStatus) {
+        return kept;
+      }
+      const files = [...kept.files];
+      const picture = kept.drawn ?? latestPicture(row);
       if (picture) {
         files.push({ name: `${base}.png`, bytes: picture });
       }
-      return { files, row, states };
+      const handed: {
+        files: HandedArtifactFile[];
+        row: ArtifactRow;
+        states: { files: string[]; workspace: string } | null;
+      } = { files, row, states: kept.states };
+      return handed;
     },
 
     /** A canvas's `.excalidraw` file, its outline and its latest picture: what a send carries. */
-    export: (id: string): CanvasExport => {
+    export: (id: string) => {
       const row = db.get(id);
       if (!row) {
-        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+        return notOnHub(id);
       }
       if (row.kind !== "canvas") {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a ${row.kind}: only a canvas exports.`
-        );
+        return problem(409, {
+          code: "artifact-export-not-canvas",
+          detail: `${row.name} is a ${row.kind}: only a canvas exports.`,
+        });
       }
-      return {
+      // A canvas is always its session's: only a project's page outlives one.
+      const address = deps.previewAddress(row.instanceId as string);
+      if (address instanceof ElysiaStatus) {
+        return address;
+      }
+      const exported: CanvasExport = {
         ...canvasFile(id),
         png: pictureOf(id),
-        // A canvas is always its session's: only a project's page outlives one.
-        ...deps.previewAddress(row.instanceId as string),
+        ...address,
       };
+      return exported;
     },
 
     /**
@@ -4225,57 +4726,74 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * commits it as it stands then over the same folder. Stamps the doc's
      * `meta.promoted`. Refused outside a project, and when git refuses.
      */
-    promote: async (instanceId: string, id: string): Promise<Promoted> => {
+    promote: async (instanceId: string, id: string) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = own(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const { projectId } = instance;
       if (!projectId) {
-        throw new ArtifactRefusal(409, NO_PROJECT);
+        return problem(409, {
+          code: "artifact-promote-no-project",
+          detail: NO_PROJECT,
+        });
       }
       const folder = promotedFolder(row.name);
+      if (folder instanceof ElysiaStatus) {
+        return folder;
+      }
       const at = new Date().toISOString();
       const files = promotedFiles(instance, row, at);
-      let commit: string;
-      try {
-        const there = new Set(await folderFileNames(projectId, folder));
-        ({ sha: commit } = await changeFolderFiles(
-          projectId,
-          {
-            writes: Object.entries(files).map(([name, content]) => ({
-              path: `${folder}/${name}`,
-              content,
-            })),
-            deletes: PROMOTED_FILES.filter(
-              (name) => !(name in files) && there.has(name)
-            ).map((name) => `${folder}/${name}`),
-          },
-          {
-            author: { name: sessionLabel(instance).name },
-            message: `Promote ${row.kind} ${row.name} from session ${instance.id.slice(0, 8)}`,
-          }
-        ));
-      } catch (error) {
-        if (!(error instanceof FolderRefusal)) {
-          throw error;
-        }
-        throw notCommitted(row.name, error);
+      const names = await folderFileNames(projectId, folder);
+      if (names instanceof ElysiaStatus) {
+        return notCommitted(row.name, names);
       }
+      const there = new Set(names);
+      const changed = await changeFolderFiles(
+        projectId,
+        {
+          writes: Object.entries(files).map(([name, content]) => ({
+            path: `${folder}/${name}`,
+            content,
+          })),
+          deletes: PROMOTED_FILES.filter(
+            (name) => !(name in files) && there.has(name)
+          ).map((name) => `${folder}/${name}`),
+        },
+        {
+          author: { name: sessionLabel(instance).name },
+          message: `Promote ${row.kind} ${row.name} from session ${instance.id.slice(0, 8)}`,
+        }
+      );
+      if (changed instanceof ElysiaStatus) {
+        return notCommitted(row.name, changed);
+      }
+      const commit = changed.sha;
       const promoted: ArtifactPromotion = { commit, at };
       docs.transact(row.id, "hub", (doc) => setMeta(doc, "promoted", promoted));
-      return { commit, path: `${folder}/` };
+      const kept: Promoted = { commit, path: `${folder}/` };
+      return kept;
     },
 
     /** A draft canvas went out with a send: it is the session's to hold now. */
-    sent: (instanceId: string, id: string): { draft: false } => {
-      const row = own(sessionOf(instanceId), id);
+    sent: (instanceId: string, id: string) => {
+      const row = ownIn(instanceId, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       if (row.kind !== "canvas") {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a ${row.kind}: only a canvas is sent from the composer.`
-        );
+        return problem(409, {
+          code: "artifact-sent-not-canvas",
+          detail: `${row.name} is a ${row.kind}: only a canvas is sent from the composer.`,
+        });
       }
       docs.transact(row.id, "hub", (doc) => setMeta(doc, "draft", false));
-      return { draft: false };
+      const sent: { draft: false } = { draft: false };
+      return sent;
     },
 
     /**
@@ -4299,36 +4817,44 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: string,
       by: PanelHand,
       at: ArtifactPlace = { top: true }
-    ): Promise<Shown> => {
+    ) => {
       const instance = sessionOf(instanceId);
-      const found =
-        by === "person" ? showable(instance, id) : viewable(instance, id);
-      let row = found.heldFor === null ? found : db.get(found.heldFor);
-      if (!row) {
-        throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+      if (instance instanceof ElysiaStatus) {
+        return instance;
       }
-      const link = artifactLink(row.id, row.title);
-      const there = inItsSession(instance, found, row, at);
+      const target = shownTarget(instance, id, by);
+      if (target instanceof ElysiaStatus) {
+        return target;
+      }
+      const { found, opens } = target;
+      const link = artifactLink(opens.id, opens.title);
+      const there = inItsSession(instance, found, opens, at);
       if (there) {
-        return { ...there, link };
+        const elsewhere: Shown = { ...there, link };
+        return elsewhere;
       }
       const next =
-        by === "agent" && row.instanceId === instance.id
-          ? db.heldOf(row.id)
+        by === "agent" && opens.instanceId === instance.id
+          ? db.heldOf(opens.id)
           : undefined;
-      if (next) {
-        row = await promote(row, next);
+      const row = next ? await promote(opens, next) : opens;
+      if (row instanceof ElysiaStatus) {
+        return row;
       }
       const shown = await show(row, instance.id, "card" in at ? at.card : null);
       if (!shown.started) {
-        throw new ArtifactRefusal(503, shown.why);
+        return problem(503, {
+          code: "artifact-show-unstarted",
+          detail: shown.why,
+        });
       }
       // The agent's show of its own asks again (needs.ts rule 2: a new show of it).
       if (by === "agent" && row.instanceId === instance.id) {
         askedNow(instance, row.id);
       }
       // Its link: what the agent names it by, and its tool row draws.
-      return { ...openedOf(shown), link };
+      const opened: Shown = { ...openedOf(shown), link };
+      return opened;
     },
 
     /**
@@ -4340,31 +4866,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * address ({@link ArtifactServiceDeps.workspaceReach}) is refused, in
      * words saying why, rather than handed an address it cannot open.
      */
-    browse: async (
-      instanceId: string,
-      id: string
-    ): Promise<Browsed & { link: string }> => {
+    browse: async (instanceId: string, id: string) => {
       const instance = sessionOf(instanceId);
-      const row = newestVersion(readTarget(instance, id));
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const target = readTarget(instance, id);
+      if (target instanceof ElysiaStatus) {
+        return target;
+      }
+      const row = newestVersion(target);
       if (row.kind === "browser") {
-        throw new ArtifactRefusal(
-          409,
-          `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`
-        );
+        return problem(409, {
+          code: "artifact-browse-browser",
+          detail: `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`,
+        });
       }
       const pass = deps.browse(instance, row);
+      if (pass instanceof ElysiaStatus) {
+        return pass;
+      }
       const bound = deps.ownWorkspace(instance);
       const [workspace] = bound ? deps.workspaces(bound) : [];
       const unreached = workspace
         ? await deps.workspaceReach(pass.url, workspace.machineId)
         : null;
       if (unreached) {
-        throw new ArtifactRefusal(
-          409,
-          `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
-        );
+        return problem(409, {
+          code: "artifact-browse-unreached",
+          detail: `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`,
+        });
       }
-      return { ...pass, link: artifactLink(row.heldFor ?? row.id, row.title) };
+      const browsed: Browsed & { link: string } = {
+        ...pass,
+        link: artifactLink(row.heldFor ?? row.id, row.title),
+      };
+      return browsed;
     },
 
     /**
@@ -4385,13 +4922,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * showed it closes, else it hears its artifacts again.
      * Answers what the panel shows after.
      */
-    remove: async (
-      instanceId: string,
-      id: string,
-      by: PanelHand
-    ): Promise<Removed> => {
+    remove: async (instanceId: string, id: string, by: PanelHand) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = deletable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const removed = {
         id: row.id,
         kind: row.kind,
@@ -4409,7 +4948,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           row.name
         );
         if (refused) {
-          throw new ArtifactRefusal(refused.status, refused.refused);
+          return refused;
         }
       }
       discard(row);
@@ -4420,31 +4959,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           relistOf(row);
         }
       }
-      if (!wasShown) {
-        deps.relist(instance.id);
-        const shown = deps.showing(instance.id);
-        const now = shown === undefined ? undefined : db.get(shown);
-        return {
-          removed,
-          showing: now
-            ? { id: now.id, kind: now.kind, name: now.name, title: now.title }
-            : null,
-        };
-      }
-      const next = by === "person" ? nextNewest(instance) : undefined;
-      if (next && (await deps.open(next)).ok) {
-        return {
-          removed,
-          showing: {
-            id: next.id,
-            kind: next.kind,
-            name: next.name,
-            title: next.title,
-          },
-        };
-      }
-      deps.close(instance.id);
-      return { removed, showing: null };
+      const after: Removed = {
+        removed,
+        showing: await shownAfterRemove(instance, by, wasShown),
+      };
+      return after;
     },
 
     /**
@@ -4494,8 +5013,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * from it. A word on a revision no show waits for is kept for one that
      * starts waiting (a fast page answers before the publish returns).
      */
-    shown: (instanceId: string, id: string, ack: ShownAck): { heard: true } => {
-      const row = viewable(sessionOf(instanceId), id);
+    shown: (instanceId: string, id: string, ack: ShownAck) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const row = viewable(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       if (ack.ok && row.instanceId === instanceId) {
         db.update(row.id, { openedRevision: row.revision });
         // The person's look (needs.ts rule 6): their own mark in the doc, on every device.
@@ -4514,7 +5040,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         // Kept as long as a show could still come to wait for it.
         deps.lifetime.after(SHOWN_WAIT_MS, () => heard.delete(key));
       }
-      return { heard: true };
+      const said: { heard: true } = { heard: true };
+      return said;
     },
 
     /**
@@ -4533,12 +5060,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         filter: "open" | "resolved" | "all";
         since?: string | undefined;
       }
-    ): CommentRead => {
+    ) => {
       const instance = sessionOf(instanceId);
-      const rows =
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const asked =
         query.artifact === undefined
-          ? db.ofInstance(instance.id)
-          : [readable(instance, query.artifact)];
+          ? undefined
+          : readable(instance, query.artifact);
+      if (asked instanceof ElysiaStatus) {
+        return asked;
+      }
+      const rows = asked ? [asked] : db.ofInstance(instance.id);
       const readAt = new Date().toISOString();
       const newest = (pin: Pin) =>
         [pin.resolvedAt, pin.movedAt, ...pin.thread.map((entry) => entry.at)]
@@ -4580,7 +5114,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             ]
           : [];
       });
-      return { artifacts, at: readAt };
+      const comments: CommentRead = { artifacts, at: readAt };
+      return comments;
     },
 
     /** The agent answers a pin: an entry in its thread, by the agent, shown at once wherever the artifact is open. */
@@ -4593,14 +5128,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       pinId: string,
       reply: { asks?: boolean; files?: string[]; text: string }
-    ): { entry: ThreadEntry; link: string; number: number; pin: string } => {
+    ) => {
       const { asks, files, text } = reply;
-      const { row, pin } = pinOf(sessionOf(instanceId), pinId);
+      const found = pinIn(instanceId, pinId);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      const { row, pin } = found;
       if (pin.thread.length >= COMMENT_LIMITS.entries) {
-        throw new ArtifactRefusal(
-          409,
-          `Pin ${pin.number}'s thread holds ${COMMENT_LIMITS.entries} entries, so this reply wasn't kept. Resolve the pin, or answer in the conversation.`
-        );
+        return problem(409, {
+          code: "artifact-thread-full",
+          detail: `Pin ${pin.number}'s thread holds ${COMMENT_LIMITS.entries} entries, so this reply wasn't kept. Resolve the pin, or answer in the conversation.`,
+        });
       }
       const entry: ThreadEntry = {
         id: crypto.randomUUID(),
@@ -4619,21 +5158,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (asks) {
         deps.pinAsked(row.id, text);
       }
-      return {
+      const replied: {
+        entry: ThreadEntry;
+        link: string;
+        number: number;
+        pin: string;
+      } = {
         pin: pin.id,
         number: pin.number,
         link: linkOfPin(row.id, pin),
         entry,
       };
+      return replied;
     },
 
     /** The agent resolves a pin, with a last reply when given; the person can reopen it. */
-    commentResolve: (
-      instanceId: string,
-      pinId: string,
-      text?: string
-    ): { link: string; number: number; pin: string; resolvedAt: string } => {
-      const { row, pin } = pinOf(sessionOf(instanceId), pinId);
+    commentResolve: (instanceId: string, pinId: string, text?: string) => {
+      const found = pinIn(instanceId, pinId);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      const { row, pin } = found;
       const at = new Date().toISOString();
       const said =
         text && pin.thread.length < COMMENT_LIMITS.entries
@@ -4666,55 +5211,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           });
         }
       });
-      return {
+      const done: {
+        link: string;
+        number: number;
+        pin: string;
+        resolvedAt: string;
+      } = {
         pin: pin.id,
         number: pin.number,
         link: linkOfPin(row.id, pin),
         resolvedAt: at,
       };
+      return done;
     },
 
     /** The person changed artifact `id`'s doc: what of it the session hasn't heard goes once quiet ({@link personMarked}). */
     personMarked,
 
     /** Every question session `instanceId`'s delegation tree put to the person, open or answered ({@link askedBy}). */
-    questions: (instanceId: string): AskedOf[] =>
-      askedBy(sessionOf(instanceId)),
+    questions: (instanceId: string) => {
+      const instance = sessionOf(instanceId);
+      return instance instanceof ElysiaStatus ? instance : askedBy(instance);
+    },
 
     /** The same questions as session `instanceId`'s own screen lists them (core session-questions.ts). */
-    sessionQuestions: (instanceId: string): SessionQuestionsRead => ({
-      questions: askedBy(sessionOf(instanceId)).flatMap((of) =>
-        of.questions.flatMap((question): SessionQuestion[] =>
-          question.state === "open" || question.state === "answered"
-            ? [
-                {
-                  key: question.key,
-                  kind: question.kind,
-                  words: question.words,
-                  state: question.state,
-                  answer:
-                    question.state === "answered"
-                      ? answerShown(question.answer)
-                      : null,
-                  stop: question.stop,
-                  artifact: {
-                    id: of.artifact.id,
-                    kind: of.artifact.kind,
-                    title: of.artifact.title,
-                  },
-                  session: of.session
-                    ? {
-                        id: of.session.id,
-                        title: of.session.title,
-                        ended: of.session.ended,
-                      }
-                    : null,
-                },
-              ]
-            : []
-        )
-      ),
-    }),
+    sessionQuestions: (instanceId: string) => {
+      const instance = sessionOf(instanceId);
+      return instance instanceof ElysiaStatus
+        ? instance
+        : sessionQuestionsOf(instance);
+    },
 
     /**
      * `question_close`: the session takes question `question` (it acted on
@@ -4727,9 +5253,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     closeQuestion: (
       instanceId: string,
       asked: { as: QuestionClose["as"]; question: string; why: string }
-    ): QuestionClosed => {
+    ) => {
       const instance = sessionOf(instanceId);
-      const { row, question } = questionNamed(instance, asked.question);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const asking = questionNamed(instance, asked.question);
+      if (asking instanceof ElysiaStatus) {
+        return asking;
+      }
+      const { row, question } = asking;
       const close: QuestionClose = {
         as: asked.as,
         at: new Date().toISOString(),
@@ -4748,7 +5281,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
       deps.needsMoved();
       deps.questionsMoved(row.id);
-      return { as: close.as, link: question.link, words: question.words };
+      const closed: QuestionClosed = {
+        as: close.as,
+        link: question.link,
+        words: question.words,
+      };
+      return closed;
     },
 
     /** Anyone changed artifact `id`'s doc, `by` whom: what waits on its answers moves ({@link answersMoved}). */
@@ -4766,15 +5304,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * delivery carries the ones it delivers. A later post replaces a mark's
      * picture.
      */
-    pictures: (
-      instanceId: string,
-      id: string,
-      body: MarkPictures
-    ): { held: number } => {
-      const row = own(sessionOf(instanceId), id);
+    pictures: (instanceId: string, id: string, body: MarkPictures) => {
+      const row = ownIn(instanceId, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       // On disk before the page hears it was held: a restart keeps it for the delivery.
       held.hold(row.id, body);
-      return { held: held.marks(row.id).length };
+      const kept: { held: number } = { held: held.marks(row.id).length };
+      return kept;
     },
 
     /**
@@ -4814,21 +5352,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: string,
       body: SendBody,
       route: string
-    ): Promise<ArtifactChoices> => {
+    ) => {
       const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
       const row = own(instance, id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const doc = docs.doc(row.id);
       const state = stateOf(doc);
-      if (body.pins) {
-        await retry(row, new Set(body.pins));
-        return { choices: state, ...metaOf(doc) };
+      const sent = await sentAs(instance, row, body, route);
+      if (sent instanceof ElysiaStatus) {
+        return sent;
       }
-      if (body.again) {
-        await askAgain(row, new Set(body.again));
-        return { choices: state, ...metaOf(doc) };
-      }
-      await sendPage(row, body, route, { session: instance });
-      return { choices: state, ...metaOf(doc) };
+      const choices: ArtifactChoices = { choices: state, ...metaOf(doc) };
+      return choices;
     },
 
     /**
@@ -4838,14 +5378,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * Caw. The same Send as {@link send}'s, whoever hears it. Answers the
      * session that heard it.
      */
-    sendPage: async (
-      id: string,
-      route: string,
-      to: PageHearer
-    ): Promise<string> => {
+    sendPage: async (id: string, route: string, to: PageHearer) => {
       const row = db.get(id);
       if (!row) {
-        throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+        return problem(404, {
+          code: "artifact-unknown",
+          detail: artifactToolWords.noArtifact(id),
+        });
       }
       const hearer = await sendPage(
         row,
@@ -4853,6 +5392,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         route,
         to
       );
+      if (hearer instanceof ElysiaStatus) {
+        return hearer;
+      }
       // A Send that tells (sendPage's default) always names who heard it.
       if (hearer === null) {
         throw new Error(`${labelOf(row)}: its Send told no one.`);

@@ -2,7 +2,7 @@
  * A session's follow-up reading, as keep-alive and the dashboard ask it.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 
@@ -22,12 +22,15 @@ export const followupStateRoutes = ({
         message: t.Optional(t.String()),
       }),
     },
-    async ({ body, status }) => {
+    async ({ body }) => {
       let { instanceId } = body;
       if (body.workspace) {
         const workspaces = db.workspacesNamed(body.workspace.trim());
         if (workspaces.length !== 1) {
-          return status(404, `No unique workspace "${body.workspace}".`);
+          return problem(404, {
+            code: "no-unique-workspace",
+            detail: `No unique workspace "${body.workspace}".`,
+          });
         }
         instanceId = db.workItemsIn(workspaces[0].id)[0]?.instanceId;
       }

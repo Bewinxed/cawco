@@ -6,7 +6,7 @@ import {
   DELEGATE_SUMMARIES_LIMIT,
   type DelegateSummary,
 } from "@cawco/core/protocol";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 
 export const delegateEventRoutes = ({ db }: Pick<HubContext, "db">) =>
@@ -25,9 +25,12 @@ export const delegateEventRoutes = ({ db }: Pick<HubContext, "db">) =>
           before: t.Optional(t.Numeric({ minimum: 1 })),
         }),
       },
-      ({ query, status }) => {
+      ({ query }) => {
         if (!(query.parent || query.instance)) {
-          return status(400, "name a parent or an instance");
+          return problem(400, {
+            code: "name-parent-instance",
+            detail: "name a parent or an instance",
+          });
         }
         return db.delegateEventsPage(query);
       }

@@ -45,6 +45,7 @@ import {
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import type { Octokit } from "@octokit/rest";
+import { ElysiaStatus } from "elysia";
 import type { TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type { TrackersDb } from "./db/trackers";
 import type { InboundEvent } from "./ingress";
@@ -365,7 +366,8 @@ export const createExternalItems = ({
   /**
    * THE door for a comment from a source: filed once on `taskId`, under the
    * source's own id; an edit since (its `editedAt` past the one kept)
-   * rewrites its entry. `ref` names its item in the commit's words.
+   * rewrites its entry. `ref` names its item in the commit's words. The
+   * task's refusal of the comment.
    */
   const fileComment = async (
     projectId: string,
@@ -373,10 +375,11 @@ export const createExternalItems = ({
     ref: string,
     comment: ExternalComment,
     body: string
-  ): Promise<Filed> => {
+  ) => {
     const text = intoFile(body, COMMENT_DEPTH);
+    const none: Filed = { kind: "none" };
     if (!text) {
-      return { kind: "none" };
+      return none;
     }
     const kept = db.taskLinks.comment(
       projectId,
@@ -390,7 +393,7 @@ export const createExternalItems = ({
         comment.editedAt !== null &&
         comment.editedAt > (kept.editedAt ?? kept.at);
       if (!edited) {
-        return { kind: "none" };
+        return none;
       }
       const task = await tasks.editComment(
         projectId,
@@ -399,13 +402,17 @@ export const createExternalItems = ({
         text,
         actor
       );
+      if (task instanceof ElysiaStatus) {
+        return task;
+      }
       db.taskLinks.updateComment(
         projectId,
         comment.source,
         comment.externalId,
         { editedAt: comment.editedAt, author: comment.author }
       );
-      return { kind: "edited", task };
+      const rewritten: Filed = { kind: "edited", task };
+      return rewritten;
     }
     const task = await tasks.comment(
       projectId,
@@ -415,6 +422,9 @@ export const createExternalItems = ({
       undefined,
       comment
     );
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
     db.taskLinks.putComment({
       projectId,
       taskId,
@@ -427,7 +437,8 @@ export const createExternalItems = ({
       editedAt: comment.editedAt,
       entryAt: comment.at,
     });
-    return { kind: "added", task };
+    const added: Filed = { kind: "added", task };
+    return added;
   };
 
   /** The task a comment on an item goes to: its record task, else the lowest-numbered one linking it. */
@@ -477,13 +488,13 @@ export const createExternalItems = ({
     return moved;
   };
 
-  /** A comment on a linked item of `kind`, filed on its record task, else the lowest-numbered task linking it. */
+  /** A comment on a linked item of `kind`, filed on its record task, else the lowest-numbered task linking it; the task's refusal of it. */
   const fileEventComment = async (
     projectId: string,
     event: InboundEvent & { number: number; url: string },
     kind: ExternalKind,
     repo: string
-  ): Promise<void> => {
+  ) => {
     const item = refOfUrl(event.url);
     const externalId =
       commentIdOfUrl(event.url) ?? COMMENT_KEY.exec(event.key)?.[1];
@@ -501,7 +512,7 @@ export const createExternalItems = ({
     if (!row) {
       return;
     }
-    await fileComment(
+    const filed = await fileComment(
       projectId,
       row.taskId,
       row.ref,
@@ -516,18 +527,17 @@ export const createExternalItems = ({
       },
       event.body ?? ""
     );
+    return filed instanceof ElysiaStatus ? filed : undefined;
   };
 
   /**
    * One stored GitHub event applied to the links it names: an issue's, pull
    * request's or discussion's state, title and labels; a comment on a
    * linked discussion filed on its task, and one on a linked issue in a
-   * project no tracker is bound to. Answers once it is done.
+   * project no tracker is bound to. Answers once it is done, with a task's
+   * refusal of the comment.
    */
-  const applyEvent = async (
-    projectId: string,
-    event: InboundEvent
-  ): Promise<void> => {
+  const applyEvent = async (projectId: string, event: InboundEvent) => {
     const repo = GITHUB_SOURCE.exec(event.source)?.[1];
     const { number, url } = event;
     if (!repo || number === undefined) {
@@ -543,7 +553,7 @@ export const createExternalItems = ({
       url &&
       (commented !== "issue" || !db.trackers.binding(projectId))
     ) {
-      await fileEventComment(
+      return await fileEventComment(
         projectId,
         { ...event, number, url },
         commented,

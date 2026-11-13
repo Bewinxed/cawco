@@ -4,12 +4,10 @@ import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
 import { parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import type { AcceptResult } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
-import type { AttemptStart } from "@cawco/core/task-views";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -18,8 +16,11 @@ import {
   CancelledNotificationSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ElysiaStatus, problem } from "elysia";
+import { problemResponse } from "elysia/error";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
+import type { Artifacts } from "./artifacts/service";
 import { ASK_TOOLS, type Asks } from "./asks";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
 import { createCallCuts, type Started, whenCut } from "./call-cuts";
@@ -49,6 +50,7 @@ import type {
   DelegateListQuery,
   DelegatePeek,
 } from "./delegation-tree";
+import type { Dispatcher } from "./dispatch";
 import type { FleetWatch } from "./fleet-watch";
 import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
@@ -58,9 +60,11 @@ import { MEMORY_TOOLS, type Memory } from "./memory";
 import {
   mayMakeProject,
   PROJECT_FROM_SESSION,
+  type ProjectOffers,
   projectFromSessionTool,
 } from "./project-offers";
 import type { ProjectSettings } from "./project-settings";
+
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -285,7 +289,10 @@ export function createDelegationMcp(options: {
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
   foundIn?: (actor: InstanceRow) => string | null;
   /** A plan step's wait as a session writes it, read as a task's wait is and kept as a file keeps it (task-waits.ts `readWait`). */
-  stepWait?: (actor: InstanceRow, written: string) => Promise<string>;
+  stepWait?: (
+    actor: InstanceRow,
+    written: string
+  ) => ReturnType<Tasks["keptWait"]>;
   /** Where a work item lands: what its session's finish_item says happens. */
   workItemLands?: (workItemId: string) => ItemEnd | undefined;
   /** "Build the design system" filed in the hub's words (design-offers.ts `fileBuild`). */
@@ -304,17 +311,15 @@ export function createDelegationMcp(options: {
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart>;
+  ) => ReturnType<Dispatcher["startAttempt"]>;
   /** Retries a task whose last attempt failed, for `task_retry` (dispatch.ts). */
-  retryAttempt?: (
-    projectId: string,
-    ref: string,
-    parent: InstanceRow
-  ) => Promise<AttemptStart>;
+  retryAttempt?: Dispatcher["retryAttempt"];
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
-  projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
-  /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
-  artifactNamed?: (instanceId: string, asked: string) => string;
+  projectFromSession?: (
+    actor: InstanceRow
+  ) => ReturnType<ProjectOffers["accept"]>;
+  /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`), or its refusal. */
+  artifactNamed?: Artifacts["named"];
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
@@ -699,12 +704,15 @@ export function createDelegationMcp(options: {
 
   /** An attempt's start, its session or its queued start stopped if the call is cut ({@link startedBy}). */
   const attemptCut = (
-    start: TaskToolContext["startAttempt"],
+    start: typeof options.startAttempt,
     started: (thing: Started) => void
   ): TaskToolContext["startAttempt"] =>
     start &&
     (async (projectId, ref, parent) => {
       const attempt = await start(projectId, ref, parent);
+      if (attempt instanceof ElysiaStatus) {
+        return attempt;
+      }
       if (attempt.instanceId) {
         started({ kind: "session", instanceId: attempt.instanceId });
       } else if (attempt.queued) {
@@ -730,8 +738,17 @@ export function createDelegationMcp(options: {
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
         startAttempt: attemptCut(options.startAttempt, started),
+        // Said again across the import cycle task-tools.ts is in.
         artifactNamed: options.artifactNamed
-          ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
+          ? (asked) => {
+              const named = options.artifactNamed?.(actor.id, asked) ?? asked;
+              return named instanceof ElysiaStatus
+                ? problem<number, { code: string; detail: string }>(
+                    named.status,
+                    { code: named.response.code, detail: named.response.detail }
+                  )
+                : named;
+            }
           : undefined,
         retryAttempt: attemptCut(options.retryAttempt, started),
         tasks: options.tasks,
@@ -1288,12 +1305,18 @@ export function createDelegationMcp(options: {
   const bindingProblem = (bindings: string[]): Response | undefined => {
     const [binding] = bindings;
     if (bindings.length > 1 || (binding !== undefined && !binding.trim())) {
-      return new Response("CawCo instanceId must be one non-empty string", {
+      return problemResponse({
         status: 400,
+        code: "cawco-instanceid-must-one",
+        detail: "CawCo instanceId must be one non-empty string",
       });
     }
     if (binding !== undefined && !options.instanceById(binding)) {
-      return new Response("Unknown CawCo instanceId", { status: 400 });
+      return problemResponse({
+        status: 400,
+        code: "unknown-cawco-instanceid",
+        detail: "Unknown CawCo instanceId",
+      });
     }
     return undefined;
   };
@@ -1308,7 +1331,11 @@ export function createDelegationMcp(options: {
     const authorization = request.headers.get("authorization");
     const actor = options.credentialActor(authorization);
     if (authorization !== null && !actor) {
-      return new Response("Invalid session credential", { status: 401 });
+      return problemResponse({
+        status: 401,
+        code: "invalid-session-credential",
+        detail: "Invalid session credential",
+      });
     }
     const bindings = new URL(request.url).searchParams.getAll("instanceId");
     const invalid = bindingProblem(bindings);
@@ -1316,16 +1343,18 @@ export function createDelegationMcp(options: {
       return invalid;
     }
     if (bindings[0] !== undefined && !actor) {
-      return new Response(
-        "A session's CawCo connection needs its session credential",
-        { status: 401 }
-      );
+      return problemResponse({
+        status: 401,
+        code: "sessions-cawco-connection-needs",
+        detail: "A session's CawCo connection needs its session credential",
+      });
     }
     if (actor && bindings[0] !== undefined && bindings[0] !== actor.id) {
-      return new Response(
-        "Session credential does not belong to the named instanceId",
-        { status: 403 }
-      );
+      return problemResponse({
+        status: 403,
+        code: "session-credential-does-not",
+        detail: "Session credential does not belong to the named instanceId",
+      });
     }
     return actor?.id ?? null;
   };
@@ -1371,10 +1400,14 @@ export function createDelegationMcp(options: {
       return await openStream(binding, request);
     }
     if (request.method !== "POST") {
-      return new Response("CawCo MCP accepts POST and GET requests only", {
-        status: 405,
-        headers: { Allow: "POST, GET" },
-      });
+      return problemResponse(
+        {
+          status: 405,
+          code: "cawco-mcp-accepts-post",
+          detail: "CawCo MCP accepts POST and GET requests only",
+        },
+        { Allow: "POST, GET" }
+      );
     }
     // A body not parsed here is read by the transport: it may be one.
     const { transport, server } = await open(

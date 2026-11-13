@@ -2,9 +2,10 @@
  * The delegation tools a session lists and calls through the hub's door.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+
 import { toolResultRefused } from "../tool-call-keys";
 
 export const delegationRoutes = ({
@@ -24,31 +25,36 @@ export const delegationRoutes = ({
           lister: t.Optional(t.Literal("pi")),
         }),
       },
-      ({ query, status }) =>
+      ({ query }) =>
         delegationMcp.list(query.instanceId, query.lister !== undefined) ??
-        status(404, `No session ${query.instanceId} on this hub.`)
+        problem(404, {
+          code: "no-session",
+          detail: `No session ${query.instanceId} on this hub.`,
+        })
     )
     .post(
       "/api/delegation/call/:instanceId",
       { ...hidden, body: t.Any() },
-      ({ params, body, request, server, status }) => {
+      ({ params, body, request, server }) => {
         // The caller is its credential's session; the path only says which
         // one it claims to be, and must agree.
         const authorization = request.headers.get("authorization");
         const identity = identities.resolve(authorization);
         if (!identity) {
-          return status(
-            401,
-            authorization === null
-              ? "A CawCo tool call needs its session credential"
-              : "Invalid session credential"
-          );
+          return problem(401, {
+            code: "cawco-tool-call-needs",
+            detail:
+              authorization === null
+                ? "A CawCo tool call needs its session credential"
+                : "Invalid session credential",
+          });
         }
         if (identity.instanceId !== params.instanceId) {
-          return status(
-            403,
-            "Session credential does not belong to the named instanceId"
-          );
+          return problem(403, {
+            code: "session-credential-does-not",
+            detail:
+              "Session credential does not belong to the named instanceId",
+          });
         }
         if (
           typeof body !== "object" ||
@@ -61,10 +67,11 @@ export const delegationRoutes = ({
               body.arguments === null ||
               Array.isArray(body.arguments)))
         ) {
-          return status(
-            400,
-            "delegation call needs a non-empty tool name and object arguments"
-          );
+          return problem(400, {
+            code: "delegation-call-needs-non",
+            detail:
+              "delegation call needs a non-empty tool name and object arguments",
+          });
         }
         const input = body as {
           name: string;
