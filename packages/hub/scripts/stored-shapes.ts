@@ -29,6 +29,14 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "packages/",
+  "apps/dashboard/src/",
+  "tsconfig.base.json",
+  "tsconfig.paths.json",
+];
+
 const HUB = resolve(import.meta.dir, "..");
 const ROOT = resolve(HUB, "../..");
 const SCHEMA = join(HUB, "src/db/schema.ts");

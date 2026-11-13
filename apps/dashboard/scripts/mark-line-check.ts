@@ -52,8 +52,12 @@
  *
  *   bun apps/dashboard/scripts/mark-line-check.ts [file…]   (no files: every .svelte under src/)
  */
+
 import { parse } from "svelte/compiler";
 import { runSvelteCheck } from "./svelte-sources";
+
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
 
 const ALLOW = /^\s*mark-line:\s*\S/u;
 const SPLIT = /[^\w-]+/u;

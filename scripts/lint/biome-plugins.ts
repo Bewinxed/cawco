@@ -30,6 +30,9 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { biomeLint } from "../lib/biome-run";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["scripts/lint/", "biome.jsonc"];
+
 const ROOT = join(import.meta.dir, "../..");
 const FIXTURES = "scripts/lint/fixtures/biome";
 const SPACES = /\s+/u;
