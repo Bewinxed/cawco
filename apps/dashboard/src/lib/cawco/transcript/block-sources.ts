@@ -13,9 +13,9 @@
  *   still the thumbnail a pane last took of it.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import { blockFile } from "@cawco/core/inline-blocks";
 import { projectPagePlace } from "@cawco/core/preview/routes";
+import { hub, hubPath } from "#lib/platform/hub.js";
 import { theme } from "#lib/theme.svelte.js";
 import { thumbnailUrl } from "../artifact-api";
 import { artifactsOf, readArtifacts } from "../files/files.svelte";
@@ -45,10 +45,9 @@ export const transcriptSources = (
       if (named.on === "folder") {
         return projectId ? folderRawHref(projectId, named.path) : null;
       }
-      return hubRequest("GET /api/agents/:machineId/media", {
-        path: { machineId },
-        query: { path: named.path },
-      }).path;
+      return hubPath(hub.api.agents({ machineId }).media, {
+        path: named.path,
+      });
     },
     open: (shots, index) => {
       lightbox.open({ kind: "image", shots, index });
