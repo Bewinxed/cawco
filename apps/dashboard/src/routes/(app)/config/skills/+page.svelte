@@ -11,7 +11,6 @@
   } from "@cawco/core/fleet";
   import { routinesWords } from "@cawco/core/words/routines";
   import { skillsWords as words } from "@cawco/core/words/skills";
-  import { cawco } from "#lib/cawco/client.svelte.js";
   import {
     deleteMarketplace,
     deletePlugin,
@@ -64,6 +63,7 @@
     readFleetTrim,
     setFleetTrim,
   } from "#lib/cawco/routines/routines-api.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -81,6 +81,7 @@
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  import { connectionStore } from "../../../../lib/cawco/hub/socket.svelte";
 
   /**
    * Two ways to the same thing: fetch a skill and the hub downloads its files
@@ -98,12 +99,12 @@
   /** Links with no row yet: under way, or refused and not let go. */
   const links = $derived(fleet?.links ?? []);
   const plugins = $derived(fleet?.config.plugins ?? []);
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   const hubBroken = $derived(
     hubFaults(
       skills,
       plugins,
-      cawco.machines.map((machine) => machine.fleet)
+      boardStore.machines.map((machine) => machine.fleet)
     )
   );
 
@@ -115,7 +116,7 @@
   /** A refused flip draws the switch again at the hub's word. */
   let trimKey = $state(0);
   $effect(() => {
-    if (cawco.status !== "connected") {
+    if (connectionStore.status !== "connected") {
       return;
     }
     readFleetTrim().then(

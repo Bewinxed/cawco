@@ -1,7 +1,7 @@
 /**
  * The shapes the board the first paint draws is made of, below both the
  * server's load that builds it (first-paint.ts) and the store that draws from
- * it (client.svelte.ts), so neither imports the other.
+ * it (stores/board.svelte.ts), so neither imports the other.
  */
 import type {
   AgentRow,

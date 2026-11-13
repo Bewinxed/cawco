@@ -7,8 +7,8 @@
 
 import { RailLayoutShape } from "#lib/cawco/stored-shapes.js";
 import { parseJson, stored, writeJson } from "../platform/storage";
-import type { Machine } from "./client.svelte";
 import { drawnFrom } from "./kept.svelte";
+import type { Machine } from "./stores/board.svelte";
 
 const RAIL_LAYOUT_KEY = "cawco-rail-layout";
 

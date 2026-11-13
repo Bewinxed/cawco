@@ -1,7 +1,9 @@
 import { hubRequest } from "@cawco/core/hub-request";
-import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
+import type { ProjectRow } from "#lib/cawco/projects.js";
 import { checkoutOf } from "#lib/cawco/projects.js";
+import type { Machine } from "#lib/cawco/stores/board.svelte.js";
+
 import { type FindSeed, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
 import {
   failureSentence,

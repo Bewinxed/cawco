@@ -35,9 +35,11 @@ import {
 import { store, stored as storedIn } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
-import { cawco } from "../client.svelte";
 import { conversationHref, isSessionRow } from "../links";
 import { openArtifactIn } from "../reference-open.svelte";
+import { boardStore } from "../stores/board.svelte";
+import { followTabs } from "../stores/follows.svelte";
+import { storedStore } from "../stores/stored.svelte";
 import { askOpenAt, carryOpenAt, MATCH } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -159,7 +161,7 @@ function askName(id: string): void {
     unnamed.has(id) ||
     resolved.has(id) ||
     // The hub's own row under this id: read off the event, never a reader's.
-    untrack(() => cawco.instanceIndex.byId.has(id))
+    untrack(() => boardStore.instanceIndex.byId.has(id))
   ) {
     return;
   }
@@ -469,13 +471,13 @@ function remember(sessionId: string, ctx?: AskedContext): void {
  * asked.
  *
  * Asked in order of authority: the hub's own instances, then the stored
- * transcripts this page knows (`cawco.storedOf`), then what we were told
+ * transcripts this page knows (`storedStore.storedOf`), then what we were told
  * when the tab was opened. The first two
  * are live, so a tab whose remembered address was lost heals itself as soon
  * as the fleet answers.
  */
 export function contextOf(sessionId: string): SessionContext | null {
-  const instance = cawco.instanceIndex.byId.get(sessionId);
+  const instance = boardStore.instanceIndex.byId.get(sessionId);
   if (instance?.machineId && isSessionRow(instance)) {
     return {
       machine: instance.machineId,
@@ -483,7 +485,7 @@ export function contextOf(sessionId: string): SessionContext | null {
       harness: instance.harness,
     };
   }
-  const stored = cawco.storedOf(sessionId);
+  const stored = storedStore.storedOf(sessionId);
   if (stored) {
     return {
       machine: stored.machineId,
@@ -542,7 +544,7 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
   const ctx = sessionId && !projectId ? contextOf(sessionId) : null;
   const url = projectId
     ? projectHref(projectId, projectSearch.get(projectId))
-    : conversationHref(sessionId, cawco.instanceIndex, {
+    : conversationHref(sessionId, boardStore.instanceIndex, {
         machineId: ctx?.machine,
         cwd: ctx?.cwd,
       });
@@ -715,9 +717,9 @@ export const workspace = {
     if (!isSessionTab(sessionId)) {
       // A project's tab: no conversation to visit.
     } else if (ctx) {
-      workingSet.visit(sessionId, ctx);
+      workingSet.visit(sessionId, workspace.openIds, ctx);
     } else {
-      workingSet.visit(sessionId);
+      workingSet.visit(sessionId, workspace.openIds);
     }
     this.activate(sessionId, leafHolding(sessionId)?.id ?? into);
   },
@@ -733,9 +735,9 @@ export const workspace = {
     if (sessionId && isSessionTab(sessionId)) {
       remember(sessionId, ctx);
       if (ctx) {
-        workingSet.visit(sessionId, ctx);
+        workingSet.visit(sessionId, workspace.openIds, ctx);
       } else {
-        workingSet.visit(sessionId);
+        workingSet.visit(sessionId, workspace.openIds);
       }
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
@@ -850,7 +852,7 @@ export const workspace = {
       leaf.opened.from = to;
     }
     workingSet.forget(from);
-    workingSet.visit(to);
+    workingSet.visit(to, workspace.openIds);
     if (held.ctx) {
       delete held.ctx[from];
     }
@@ -902,7 +904,7 @@ export const workspace = {
    */
   land(sessionId: string): void {
     restore();
-    workingSet.visit(sessionId);
+    workingSet.visit(sessionId, workspace.openIds);
     enter(sessionId);
     landIn(held, sessionId);
     save();
@@ -1124,3 +1126,11 @@ export const workspace = {
   /** Once the first paint is up: the tree localStorage keeps, in front of the server's (Persistence above). */
   restore,
 };
+
+followTabs({
+  get openIds() {
+    return workspace.openIds;
+  },
+  named: (id) => workspace.named(id),
+  machineOf: (id) => contextOf(id)?.machine,
+});

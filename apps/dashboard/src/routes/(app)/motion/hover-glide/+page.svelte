@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ProjectRow } from "#lib/cawco/projects.js";
   /**
    * The kit highlight's hover ghost in each place it glides, for its glide's
    * proof in one Chromium session over the DevTools protocol: the Animation
@@ -13,7 +14,7 @@
    * (labels of every length), a command list, a select and a menu.
    * `?open=select` or `?open=menu` opens that one.
    */
-  import type { ProjectRow } from "#lib/cawco/client.svelte.js";
+
   import * as Command from "#lib/components/ui/command/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -49,15 +50,12 @@
   const debug = (
     globalThis as unknown as {
       __cawcoDebug: {
-        state: {
-          fleetRead: boolean;
-          projects: ProjectRow[];
-          projectsRead: boolean;
-        };
+        boardState: { fleetRead: boolean };
+        projectsState: { projects: ProjectRow[]; projectsRead: boolean };
       };
     }
   ).__cawcoDebug;
-  debug.state.projects = NAMES.map(
+  debug.projectsState.projects = NAMES.map(
     (name, n) =>
       ({
         account: null,
@@ -78,8 +76,8 @@
         review: false,
       }) as unknown as ProjectRow
   );
-  debug.state.projectsRead = true;
-  debug.state.fleetRead = true;
+  debug.projectsState.projectsRead = true;
+  debug.boardState.fleetRead = true;
 
   const open = $derived(page.url.searchParams.get("open"));
   const TABS = [

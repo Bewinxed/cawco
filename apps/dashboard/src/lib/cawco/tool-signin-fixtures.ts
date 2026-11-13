@@ -12,7 +12,7 @@ import {
   type ToolStatus,
 } from "@cawco/core/tools";
 import { toolWords } from "@cawco/core/words/tools";
-import type { Machine } from "./client.svelte";
+import type { Machine } from "./stores/board.svelte";
 
 export const AGY = "antigravity";
 
