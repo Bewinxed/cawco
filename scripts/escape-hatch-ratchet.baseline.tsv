@@ -25,7 +25,6 @@ as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEv
 as-unknown-as	{ cawco?: Bridge }	apps/dashboard/src/lib/cawco/decisions/host/page.svelte.ts	1
 as-unknown-as	{ cawco?: Bridge }	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	{ cawcoArtifact: ArtifactGlobal }	packages/agent/src/canvas-host/replica.ts	1
-as-unknown-as	{ config: object }	packages/hub/src/db/owner-columns.ts	1
 as-unknown-as	{ credentials?: { store?: { constructor?: unknown } }; }	packages/agent/src/harnesses/pi-accounts.ts	1
 as-unknown-as	{ details?: unknown; firstKeptEntryId?: string; id?: string; message?: {	packages/agent/src/harnesses/pi-services.ts	1
 as-unknown-as	{ dialect: { migrate: ( migrations: MigrationMeta[], session: unknown, c	packages/hub/src/db/migrate.ts	1

@@ -42,11 +42,15 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { choiceEntryProblem } from "@cawco/core/choices";
-import { is } from "drizzle-orm";
-import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { getTableName, is } from "drizzle-orm";
+import {
+  getTableConfig,
+  type SQLiteColumn,
+  SQLiteTable,
+} from "drizzle-orm/sqlite-core";
 import { applyUpdate, Doc } from "yjs";
 import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
-import { KNOWN_UNOWNED, OWNED_ROWS, type OwnedOp } from "../src/db/owned-rows";
+import type { OwnedOp, OwnedRow } from "../src/db/owned-rows";
 import { type OwnerKind, ownerOf } from "../src/db/owner-columns";
 import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
@@ -388,12 +392,12 @@ const qualifiedChecks = async (tag: string): Promise<string[]> => {
   );
 };
 
-/**
- * A text column named as an owner column is: `…instance_id`, `…_machine`.
- * A net for one declared as plain `text()`, which the marks alone cannot see.
- */
-const OWNER_NAMED =
-  /(^|_)(instance|machine|project)_id$|_(instance|machine|project)$/u;
+/** What a foreign key to this column says its own column names: the key is the schema's statement of an owner. */
+const KEYED_OWNER: Readonly<Record<string, OwnerKind>> = {
+  "agents.machine_id": "machine",
+  "instances.id": "session",
+  "projects.id": "project",
+};
 
 /** What each registry operation moves, by the owner it names. */
 const OPERATION_OWNER: Readonly<
@@ -412,10 +416,17 @@ interface OwnerColumn {
   withKey: boolean;
 }
 
+/** A column as the check names it: `table.column`. */
+const columnKey = (column: SQLiteColumn): string =>
+  `${getTableName(column.table)}.${column.name}`;
+
 /** The registry's problems: a row of a column not declared as an owner's, or an operation that moves another owner's rows. */
-const registryProblems = (owners: Map<string, OwnerColumn>): string[] =>
-  OWNED_ROWS.flatMap((row) => {
-    const key = `${row.table}.${row.column}`;
+const registryProblems = (
+  rows: readonly OwnedRow[],
+  owners: Map<string, OwnerColumn>
+): string[] =>
+  rows.flatMap((row) => {
+    const key = columnKey(row.column);
     const owner = owners.get(key);
     if (!owner) {
       return [
@@ -433,10 +444,12 @@ const registryProblems = (owners: Map<string, OwnerColumn>): string[] =>
 
 /** KNOWN_UNOWNED's problems: an entry the schema does not declare, one something now answers for, or one with no reason. */
 const exceptionProblems = (
+  exceptions: readonly { column: SQLiteColumn; reason: string }[],
   owners: Map<string, OwnerColumn>,
   registered: Set<string>
 ): string[] =>
-  Object.entries(KNOWN_UNOWNED).flatMap(([key, reason]) => {
+  exceptions.flatMap(({ column, reason }) => {
+    const key = columnKey(column);
     const owner = owners.get(key);
     if (!owner) {
       return [
@@ -452,15 +465,17 @@ const exceptionProblems = (
   });
 
 /**
- * Every column that names a session, machine or project is declared as one
- * (db/owner-columns.ts), whatever it is called, and is an owner's to answer
- * for: a foreign key, a row in the owned-rows registry whose operations fit
- * the owner it names, or a named exception with its reason
- * ({@link KNOWN_UNOWNED}). A new column with none of these is a decision the
- * check surfaces; one named like an owner column but declared plain is one
- * whose mark was forgotten.
+ * Every column the schema declares as naming a session, machine or project
+ * (db/owner-columns.ts) is an owner's to answer for: a foreign key, a row in
+ * the owned-rows registry whose operations fit the owner it names, or a
+ * named exception with its reason ({@link KNOWN_UNOWNED}). A new column with
+ * none of these is a decision the check surfaces. A column the schema keys
+ * to a session's, machine's or project's id and declares plain has its mark
+ * forgotten; one with no key declares what it names by its mark alone.
  */
 const unownedColumns = async (): Promise<string[]> => {
+  // Imported here, as the schema is: they load the hub's config, which a hub in this process reads first.
+  const { KNOWN_UNOWNED, OWNED_ROWS } = await import("../src/db/owned-rows");
   const schema = await import("../src/db/schema");
   const declared = Object.values(schema).flatMap((value) =>
     is(value, SQLiteTable) ? [getTableConfig(value)] : []
@@ -468,22 +483,27 @@ const unownedColumns = async (): Promise<string[]> => {
   const owners = new Map<string, OwnerColumn>();
   const unmarked: string[] = [];
   for (const table of declared) {
+    const keyed = new Map<string, OwnerKind | undefined>(
+      table.foreignKeys.flatMap((fk) => {
+        const { columns, foreignColumns } = fk.reference();
+        return columns.map((from, i): [string, OwnerKind | undefined] => {
+          const to = foreignColumns[i];
+          return [
+            from.name,
+            to && KEYED_OWNER[`${getTableName(to.table)}.${to.name}`],
+          ];
+        });
+      })
+    );
     for (const column of table.columns) {
       const key = `${table.name}.${column.name}`;
       const kind = ownerOf(column);
+      const named = keyed.get(column.name);
       if (kind) {
-        owners.set(key, {
-          kind,
-          withKey: table.foreignKeys.some((fk) =>
-            fk.reference().columns.some((from) => from.name === column.name)
-          ),
-        });
-      } else if (
-        column.columnType === "SQLiteText" &&
-        OWNER_NAMED.test(column.name)
-      ) {
+        owners.set(key, { kind, withKey: keyed.has(column.name) });
+      } else if (named) {
         unmarked.push(
-          `${key} is named as a column that names a session, machine or project but is declared plain: declare it with sessionColumn, machineColumn or projectColumn (db/owner-columns.ts)`
+          `${key} has a foreign key to a ${named}'s id but is declared plain: declare it with sessionColumn, machineColumn or projectColumn (db/owner-columns.ts)`
         );
       }
     }
@@ -493,13 +513,14 @@ const unownedColumns = async (): Promise<string[]> => {
       "No schema column carries an owner mark: drizzle no longer hands a builder's config to its column (db/owner-columns.ts `configOf`), so the marks are lost",
     ];
   }
-  const registered = new Set(
-    OWNED_ROWS.map((row) => `${row.table}.${row.column}`)
+  const registered = new Set(OWNED_ROWS.map((row) => columnKey(row.column)));
+  const excepted = new Set(
+    KNOWN_UNOWNED.map(({ column }) => columnKey(column))
   );
   const unanswered = [...owners]
     .filter(
       ([key, { withKey }]) =>
-        !(withKey || registered.has(key) || key in KNOWN_UNOWNED)
+        !(withKey || registered.has(key) || excepted.has(key))
     )
     .map(
       ([key]) =>
@@ -507,8 +528,8 @@ const unownedColumns = async (): Promise<string[]> => {
     );
   return [
     ...unmarked,
-    ...registryProblems(owners),
-    ...exceptionProblems(owners, registered),
+    ...registryProblems(OWNED_ROWS, owners),
+    ...exceptionProblems(KNOWN_UNOWNED, owners, registered),
     ...unanswered,
   ];
 };

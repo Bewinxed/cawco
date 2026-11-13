@@ -10,9 +10,86 @@
  * migrations:check holds to the schema.
  */
 
+import { getTableName } from "drizzle-orm";
+import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import {
+  accountLeaves,
+  accountSignins,
+  actions,
+  agents,
+  artifacts,
+  asks,
+  browsers,
+  capabilityCalls,
+  cardSettlings,
+  chosenModes,
+  completedTurns,
+  connectionProjects,
+  connectorPolls,
+  continuations,
+  delegateEvents,
+  designChecks,
+  designOffers,
+  designProposals,
+  eventRoutes,
+  fleetHookHistory,
+  fleetHooks,
+  fleetMemoryDocProjects,
+  fleetWatchNotices,
+  githubPollers,
+  inboundEvents,
+  instanceAliases,
+  instances,
+  lfsOffers,
+  lfsRefusals,
+  limitCompactions,
+  limitEvents,
+  limitHolds,
+  limitStops,
+  lineAnchors,
+  loginMoves,
+  machineKeys,
+  mcpServers,
+  movedFromSessions,
+  moves,
+  parkedAsks,
+  planChanges,
+  presenceClients,
+  presenceDevices,
+  projectLinks,
+  projectNotes,
+  projectOffers,
+  projectPlaces,
+  projectRepositories,
+  projects,
+  purgedSessions,
+  queuedTaskStarts,
+  queuedWorkItems,
+  relays,
+  removedMachines,
+  routineRuns,
+  routines,
+  ruleState,
+  rules,
+  sentMessages,
+  sessionIdentities,
+  sessionLines,
+  sessionPlans,
+  skills,
+  sshMachines,
+  treeStops,
+  trimOffers,
+  turnUsage,
+  usageBuckets,
+  usageLimits,
+  workItems,
+  workspaceCreates,
+  workspaces,
+} from "./schema";
+
 /** One column that names an owner, and what each row-moving operation does with its rows. */
 export interface OwnedRow {
-  readonly column: string;
+  readonly column: SQLiteColumn;
   /**
    * dropInstances: `delete` the rows of the sessions that go, `null` the
    * column on what only pointed at one, or `custom`.
@@ -26,7 +103,6 @@ export interface OwnedRow {
   readonly goesWithMachine?: true;
   /** rekeyMachine: `move` onto the new id; `keyed`: the machine is in the row's key, so a row the new id holds keeps its place and the old one goes; or `custom`. */
   readonly rekey?: "move" | "keyed" | "custom";
-  readonly table: string;
 }
 
 /**
@@ -34,161 +110,144 @@ export interface OwnedRow {
  * by hand, by table, in the order each operation walks its own. Across
  * tables the order is free: no trigger or key ties one table's statement
  * to another's here, and each function runs what one table's rows need of
- * another (the owner's own row last) outside the walk.
+ * another (the owner's own row last) outside the walk: deleteMachine's
+ * `agents` row goes after the rows that go with it.
  */
 export const OWNED_ROWS = [
   // A former session's rows, and what a session's going takes (fold order).
   // Moved row by row by foldInto itself: its owed and envelope carry the id.
   {
-    table: "sent_messages",
-    column: "instance_id",
+    column: sentMessages.instanceId,
     fold: "custom",
     drop: "delete",
   },
   {
-    table: "instances",
-    column: "parent_instance_id",
+    column: instances.parentInstanceId,
     fold: "move",
     drop: "null",
   },
-  { table: "instances", column: "continued_into", fold: "move" },
-  { table: "work_items", column: "instance_id", fold: "move" },
-  { table: "work_items", column: "parent_instance_id", fold: "move" },
-  { table: "queued_work_items", column: "parent_instance_id", fold: "move" },
-  { table: "queued_task_starts", column: "parent_instance_id", fold: "move" },
+  { column: instances.continuedInto, fold: "move" },
+  { column: workItems.instanceId, fold: "move" },
+  { column: workItems.parentInstanceId, fold: "move" },
+  { column: queuedWorkItems.parentInstanceId, fold: "move" },
+  { column: queuedTaskStarts.parentInstanceId, fold: "move" },
   {
-    table: "delegate_events",
-    column: "instance_id",
+    column: delegateEvents.instanceId,
     fold: "move",
     drop: "delete",
   },
   {
-    table: "delegate_events",
-    column: "parent_instance_id",
+    column: delegateEvents.parentInstanceId,
     fold: "move",
     drop: "delete",
   },
-  { table: "workspaces", column: "created_by_instance_id", fold: "move" },
-  { table: "projects", column: "conversation_instance_id", fold: "move" },
-  { table: "project_notes", column: "instance_id", fold: "move" },
+  { column: workspaces.createdByInstanceId, fold: "move" },
+  { column: projects.conversationInstanceId, fold: "move" },
+  { column: projectNotes.instanceId, fold: "move" },
   {
-    table: "limit_events",
-    column: "instance_id",
+    column: limitEvents.instanceId,
     fold: "move",
     drop: "delete",
   },
-  { table: "turn_usage", column: "instance_id", fold: "move" },
-  { table: "artifacts", column: "instance_id", fold: "move" },
-  { table: "artifacts", column: "made_by", fold: "move" },
-  { table: "design_proposals", column: "instance_id", fold: "move" },
-  { table: "asks", column: "instance_id", fold: "move" },
-  { table: "session_lines", column: "instance_id", fold: "move" },
-  { table: "line_anchors", column: "instance_id", fold: "move" },
-  { table: "completed_turns", column: "instance_id", fold: "once" },
-  { table: "session_plans", column: "instance_id", fold: "once" },
-  { table: "project_offers", column: "instance_id", fold: "once" },
+  { column: turnUsage.instanceId, fold: "move" },
+  { column: artifacts.instanceId, fold: "move" },
+  { column: artifacts.madeBy, fold: "move" },
+  { column: designProposals.instanceId, fold: "move" },
+  { column: asks.instanceId, fold: "move" },
+  { column: sessionLines.instanceId, fold: "move" },
+  { column: lineAnchors.instanceId, fold: "move" },
+  { column: completedTurns.instanceId, fold: "once" },
+  { column: sessionPlans.instanceId, fold: "once" },
+  { column: projectOffers.instanceId, fold: "once" },
   {
-    table: "fleet_watch_notices",
-    column: "instance_id",
+    column: fleetWatchNotices.instanceId,
     fold: "once",
     drop: "delete",
   },
   // Revoked, so what its credentials grant ends with it.
   {
-    table: "session_identities",
-    column: "instance_id",
+    column: sessionIdentities.instanceId,
     fold: "custom",
     drop: "custom",
   },
-  { table: "limit_holds", column: "instance_id", fold: "drop", drop: "delete" },
+  { column: limitHolds.instanceId, fold: "drop", drop: "delete" },
   {
-    table: "limit_compactions",
-    column: "instance_id",
+    column: limitCompactions.instanceId,
     fold: "drop",
     drop: "delete",
   },
-  { table: "parked_asks", column: "instance_id", fold: "drop" },
-  { table: "rule_state", column: "instance_id", fold: "drop", drop: "delete" },
-  { table: "moved_from_sessions", column: "instance_id", fold: "drop" },
-  { table: "limit_stops", column: "instance_id", drop: "delete" },
+  { column: parkedAsks.instanceId, fold: "drop" },
+  { column: ruleState.instanceId, fold: "drop", drop: "delete" },
+  { column: movedFromSessions.instanceId, fold: "drop" },
+  { column: limitStops.instanceId, drop: "delete" },
   // What a machine re-joining under a new id moves (rekeyMachine order);
   // `goesWithMachine` is what deleteMachine takes with it.
+  { column: agents.machineId, rekey: "custom" },
+  { column: instances.machineId, rekey: "move" },
+  { column: workspaces.machineId, rekey: "move" },
+  { column: workspaceCreates.machineId, rekey: "move" },
+  { column: artifacts.machineId, rekey: "move" },
+  { column: parkedAsks.machineId, rekey: "move" },
+  { column: movedFromSessions.machineId, rekey: "move" },
+  { column: fleetWatchNotices.machineId, rekey: "move" },
+  { column: moves.sourceMachineId, rekey: "move" },
+  { column: moves.targetMachineId, rekey: "move" },
+  { column: rules.scopeMachineId, rekey: "move" },
+  { column: projectPlaces.machineId, rekey: "keyed" },
   {
-    table: "agents",
-    column: "machine_id",
-    rekey: "custom",
-    goesWithMachine: true,
-  },
-  { table: "instances", column: "machine_id", rekey: "move" },
-  { table: "workspaces", column: "machine_id", rekey: "move" },
-  { table: "workspace_creates", column: "machine_id", rekey: "move" },
-  { table: "artifacts", column: "machine_id", rekey: "move" },
-  { table: "parked_asks", column: "machine_id", rekey: "move" },
-  { table: "moved_from_sessions", column: "machine_id", rekey: "move" },
-  { table: "fleet_watch_notices", column: "machine_id", rekey: "move" },
-  { table: "moves", column: "source_machine_id", rekey: "move" },
-  { table: "moves", column: "target_machine_id", rekey: "move" },
-  { table: "rules", column: "scope_machine_id", rekey: "move" },
-  { table: "project_places", column: "machine_id", rekey: "keyed" },
-  {
-    table: "project_repositories",
-    column: "machine_id",
+    column: projectRepositories.machineId,
     rekey: "keyed",
     goesWithMachine: true,
   },
   {
-    table: "account_signins",
-    column: "machine_id",
+    column: accountSignins.machineId,
     rekey: "keyed",
     goesWithMachine: true,
   },
-  { table: "login_moves", column: "machine_id", rekey: "keyed" },
+  { column: loginMoves.machineId, rekey: "keyed" },
   {
-    table: "usage_limits",
-    column: "machine_id",
+    column: usageLimits.machineId,
     rekey: "keyed",
     goesWithMachine: true,
   },
-  { table: "machine_keys", column: "machine_id", rekey: "keyed" },
-  { table: "ssh_machines", column: "machine_id", rekey: "move" },
-  { table: "chosen_modes", column: "machine_id", rekey: "keyed" },
-  { table: "usage_buckets", column: "machine_id", rekey: "custom" },
+  { column: machineKeys.machineId, rekey: "keyed" },
+  { column: sshMachines.machineId, rekey: "move" },
+  { column: chosenModes.machineId, rekey: "keyed" },
+  { column: usageBuckets.machineId, rekey: "custom" },
   // A project folded into another (foldProject order).
-  { table: "project_places", column: "project_id", foldProject: "custom" },
-  { table: "project_links", column: "project_id", foldProject: "custom" },
+  { column: projectPlaces.projectId, foldProject: "custom" },
+  { column: projectLinks.projectId, foldProject: "custom" },
   {
-    table: "project_repositories",
-    column: "project_id",
+    column: projectRepositories.projectId,
     foldProject: "custom",
   },
-  { table: "instances", column: "project_id", foldProject: "custom" },
-  { table: "work_items", column: "project_id", foldProject: "custom" },
-  { table: "project_notes", column: "project_id", foldProject: "move" },
-  { table: "rules", column: "scope_project_id", foldProject: "move" },
-  { table: "routines", column: "project_id", foldProject: "move" },
-  { table: "event_routes", column: "project_id", foldProject: "move" },
-  { table: "connector_polls", column: "project_id", foldProject: "move" },
-  { table: "inbound_events", column: "project_id", foldProject: "move" },
-  { table: "actions", column: "project_id", foldProject: "custom" },
-  { table: "relays", column: "project_id", foldProject: "move" },
-  { table: "moves", column: "project_id", foldProject: "move" },
-  { table: "artifacts", column: "project_id", foldProject: "custom" },
-  { table: "fleet_watch_notices", column: "project_id", foldProject: "move" },
-  { table: "instances", column: "delegate_type_project", foldProject: "move" },
-  { table: "fleet_hooks", column: "project_id", foldProject: "move" },
-  { table: "fleet_hook_history", column: "project_id", foldProject: "move" },
-  { table: "mcp_servers", column: "project_id", foldProject: "move" },
-  { table: "skills", column: "project_id", foldProject: "move" },
-  { table: "project_offers", column: "project_id", foldProject: "move" },
-  { table: "connection_projects", column: "project_id", foldProject: "custom" },
-  { table: "github_pollers", column: "project_id", foldProject: "custom" },
+  { column: instances.projectId, foldProject: "custom" },
+  { column: workItems.projectId, foldProject: "custom" },
+  { column: projectNotes.projectId, foldProject: "move" },
+  { column: rules.scopeProjectId, foldProject: "move" },
+  { column: routines.projectId, foldProject: "move" },
+  { column: eventRoutes.projectId, foldProject: "move" },
+  { column: connectorPolls.projectId, foldProject: "move" },
+  { column: inboundEvents.projectId, foldProject: "move" },
+  { column: actions.projectId, foldProject: "custom" },
+  { column: relays.projectId, foldProject: "move" },
+  { column: moves.projectId, foldProject: "move" },
+  { column: artifacts.projectId, foldProject: "custom" },
+  { column: fleetWatchNotices.projectId, foldProject: "move" },
+  { column: instances.delegateTypeProject, foldProject: "move" },
+  { column: fleetHooks.projectId, foldProject: "move" },
+  { column: fleetHookHistory.projectId, foldProject: "move" },
+  { column: mcpServers.projectId, foldProject: "move" },
+  { column: skills.projectId, foldProject: "move" },
+  { column: projectOffers.projectId, foldProject: "move" },
+  { column: connectionProjects.projectId, foldProject: "custom" },
+  { column: githubPollers.projectId, foldProject: "custom" },
   {
-    table: "fleet_memory_doc_projects",
-    column: "project_id",
+    column: fleetMemoryDocProjects.projectId,
     foldProject: "custom",
   },
-  { table: "queued_task_starts", column: "project_id", foldProject: "custom" },
-  { table: "queued_work_items", column: "project_id", foldProject: "custom" },
+  { column: queuedTaskStarts.projectId, foldProject: "custom" },
+  { column: queuedWorkItems.projectId, foldProject: "custom" },
 ] as const satisfies readonly OwnedRow[];
 
 type Owned = (typeof OWNED_ROWS)[number];
@@ -203,10 +262,16 @@ type RowsOf<O extends OwnedOp> = Extract<Owned, { readonly [K in O]: unknown }>;
 export type HandledBy<O extends OwnedOp> = Extract<
   Owned,
   { readonly [K in O]: "custom" }
->["table"];
+>["column"]["_"]["tableName"];
 
-/** A row `op` runs one statement for: its table, its column and what the statement does. */
+/** A row `op` runs one statement for: its column and what the statement does. */
 export type PlainRow<O extends OwnedOp> = Exclude<
+  RowsOf<O>,
+  { readonly [K in O]: "custom" }
+>;
+
+/** The rows `op` leaves to its function's own code. */
+type CustomRow<O extends OwnedOp> = Extract<
   RowsOf<O>,
   { readonly [K in O]: "custom" }
 >;
@@ -221,12 +286,30 @@ export const walkOwned = <O extends OwnedOp>(
   handlers: { readonly [T in HandledBy<O>]: () => void },
   plain: (row: PlainRow<O>) => void
 ): void => {
+  const handler = (row: CustomRow<O>): void => {
+    const handle: unknown = Reflect.get(
+      handlers,
+      getTableName(row.column.table)
+    );
+    if (typeof handle !== "function") {
+      throw new Error(
+        `owned-rows: ${op} has no handler for ${row.column.name}`
+      );
+    }
+    handle();
+  };
+  const walked = (row: Owned): row is RowsOf<O> => op in row;
+  const custom = (row: RowsOf<O>): row is CustomRow<O> =>
+    Reflect.get(row, op) === "custom";
+  const plainly = (row: RowsOf<O>): row is PlainRow<O> => !custom(row);
   for (const row of OWNED_ROWS) {
-    const how: unknown = (row as OwnedRow)[op];
-    if (how === "custom") {
-      handlers[row.table as HandledBy<O>]();
-    } else if (how !== undefined) {
-      plain(row as PlainRow<O>);
+    if (!walked(row)) {
+      continue;
+    }
+    if (custom(row)) {
+      handler(row);
+    } else if (plainly(row)) {
+      plain(row);
     }
   }
 };
@@ -238,16 +321,17 @@ export const GO_WITH_MACHINE = OWNED_ROWS.filter(
 );
 
 /**
- * The columns of `table` a fold moves onto the survivor: what else hands a
- * session's rows to another reads them here.
+ * The columns of `table` a fold moves or keeps onto the survivor, as a union
+ * of the schema's own column types: what else hands a session's rows to
+ * another holds its columns to this type.
  */
-export const foldMovedColumns = (table: string): readonly string[] =>
-  OWNED_ROWS.filter(
-    (row) =>
-      row.table === table &&
-      "fold" in row &&
-      (row.fold === "move" || row.fold === "once")
-  ).map((row) => row.column);
+export type FoldMoved<Table extends SQLiteTable> = Extract<
+  Owned,
+  {
+    readonly fold: "move" | "once";
+    readonly column: { readonly _: { readonly tableName: Table["_"]["name"] } };
+  }
+>["column"];
 
 /**
  * Columns that name a session, machine or project, have no foreign key and
@@ -256,77 +340,188 @@ export const foldMovedColumns = (table: string): readonly string[] =>
  * until then the check holds this list to the schema, so a new one is a
  * decision with its reason written here.
  */
-export const KNOWN_UNOWNED: Readonly<Record<string, string>> = {
-  "account_leaves.machine_id":
-    "A removed account's store the machine still holds, until that machine signs it out (server.ts `leaveAccounts`); a machine removed first leaves its row standing.",
-  "actions.proposed_by":
-    "The session that proposed the action: the action's record of who asked, read after that session goes.",
-  "browsers.project_id":
-    "A `project:` browser's project, as its machine's last `browsers` frame said: the row is that frame's, rewritten by the next one, not the project's.",
-  "capability_calls.instance_id":
-    "The session whose skill, tool and MCP server calls a day's row counts: the counts stand after that session goes, read for the starting sets, and old days are pruned (capability-calls.ts).",
-  "card_settlings.asked_by":
-    "The session that wrote the card: the settling ledger's record of who asked, kept after it goes.",
-  "card_settlings.instance_id":
-    "The member's session that settles the card: the settling ledger's record of where it went, kept after it goes.",
-  "connector_polls.created_by":
-    "`owner`, or the id of the session that made the poll: who made it, as its log lines say, kept after that session goes.",
-  "continuations.source_instance_id":
-    "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
-  "continuations.summariser_instance_id":
-    "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
-  "continuations.target_instance_id":
-    "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
-  "design_checks.project_id":
-    "A design check round's project: its rounds outlive a deleted project.",
-  "design_checks.requester_id":
-    "The session that asked a chat round, told its verdict: the round's record stays after that session goes.",
-  "design_offers.project_id":
-    "Caw's one design-system offer per project: it outlives a deleted project.",
-  "design_proposals.machine_id":
-    "Where an agent's proposed design change is written: the proposal is deleted once answered, and stands until then whatever its machine does.",
-  "design_proposals.project_id":
-    "The project an agent's proposed design change is for: the proposal is deleted once answered, and stands until then.",
-  "event_routes.created_by":
-    "`owner`, or the id of the session that made the route: who made it, as its log lines say, kept after that session goes.",
-  "instance_aliases.id":
-    "A former id of a session a fold took in: the alias is the record that the id now names `instance_id`, so it outlives the former row by design.",
-  "instance_aliases.instance_id":
-    "The session a former id now names: an alias of a session that went resolves to an id no row holds.",
-  "instances.forked_from":
-    "The session this one was forked from: its lineage, kept after that session goes.",
-  "lfs_offers.machine_id":
-    "The machine of the place an LFS offer was made for: the offer's record outlives a removed machine.",
-  "lfs_offers.project_id":
-    "The project an LFS offer was made for: the offer's record outlives a deleted project.",
-  "lfs_refusals.project_id":
-    "The project told an LFS endpoint refused, so it is told once: the record outlives a deleted project.",
-  "plan_changes.instance_id":
-    "The session whose plan the person changed: the changes outlive the session.",
-  "presence_clients.machine_id":
-    "The machine a presence client is or runs on: the row is the device's last word, dropped once the device is silent a day.",
-  "presence_devices.machine_id":
-    "A machine the person opted in to presence: the opt-in outlives a removed machine.",
-  "purged_sessions.machine_id":
-    "A purge's machine: by design no key, so a machine removed later leaves its purges standing for find to leave out.",
-  "queued_work_items.queued_instance_id":
-    "The id a queued delegate's session will take, minted before any row holds it: there is no session to own it yet.",
-  "relays.created_by":
-    "`owner`, or the id of the session whose ask the owner approved: who made the relay, kept after that session goes.",
-  "removed_machines.machine_id":
-    "A machine the person removed: the row is the record that it went, read by rows that still name it.",
-  "routine_runs.instance_id":
-    "A conversation run's session: the run's record outlives the session.",
-  "routines.created_by":
-    "`owner`, or the id of the session that made the routine: who made it, kept after that session goes.",
-  "routines.made_in_instance":
-    "The session whose `routine_create` made the routine: kept after that session goes, and a fold does not move it, so a folded former's id stays here.",
-  "trim_offers.project_id":
-    "Caw's offer to trim a project's starting set, kept so it is offered once: it outlives a deleted project (unused-trim.ts).",
-  "tree_stops.instance_id":
-    "The session a delegation tree's stop ends: the row stands until that session's end is confirmed, then goes (tree-stops.ts).",
-  "tree_stops.parent_id":
-    "The session above one in a stop's walk: the row stands until the stop is done, then goes (tree-stops.ts).",
-  "tree_stops.root_id":
-    "The session a tree's stop was asked of: the row stands until the stop is done, then goes (tree-stops.ts).",
-};
+export const KNOWN_UNOWNED: readonly {
+  readonly column: SQLiteColumn;
+  readonly reason: string;
+}[] = [
+  {
+    column: accountLeaves.machineId,
+    reason:
+      "A removed account's store the machine still holds, until that machine signs it out (server.ts `leaveAccounts`); a machine removed first leaves its row standing.",
+  },
+  {
+    column: actions.proposedBy,
+    reason:
+      "The session that proposed the action: the action's record of who asked, read after that session goes.",
+  },
+  {
+    column: browsers.projectId,
+    reason:
+      "A `project:` browser's project, as its machine's last `browsers` frame said: the row is that frame's, rewritten by the next one, not the project's.",
+  },
+  {
+    column: capabilityCalls.instanceId,
+    reason:
+      "The session whose skill, tool and MCP server calls a day's row counts: the counts stand after that session goes, read for the starting sets, and old days are pruned (capability-calls.ts).",
+  },
+  {
+    column: cardSettlings.askedBy,
+    reason:
+      "The session that wrote the card: the settling ledger's record of who asked, kept after it goes.",
+  },
+  {
+    column: cardSettlings.instanceId,
+    reason:
+      "The member's session that settles the card: the settling ledger's record of where it went, kept after it goes.",
+  },
+  {
+    column: connectorPolls.createdBy,
+    reason:
+      "`owner`, or the id of the session that made the poll: who made it, as its log lines say, kept after that session goes.",
+  },
+  {
+    column: continuations.sourceInstanceId,
+    reason:
+      "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
+  },
+  {
+    column: continuations.summariserInstanceId,
+    reason:
+      "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
+  },
+  {
+    column: continuations.targetInstanceId,
+    reason:
+      "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
+  },
+  {
+    column: designChecks.projectId,
+    reason:
+      "A design check round's project: its rounds outlive a deleted project.",
+  },
+  {
+    column: designChecks.requesterId,
+    reason:
+      "The session that asked a chat round, told its verdict: the round's record stays after that session goes.",
+  },
+  {
+    column: designOffers.projectId,
+    reason:
+      "Caw's one design-system offer per project: it outlives a deleted project.",
+  },
+  {
+    column: designProposals.machineId,
+    reason:
+      "Where an agent's proposed design change is written: the proposal is deleted once answered, and stands until then whatever its machine does.",
+  },
+  {
+    column: designProposals.projectId,
+    reason:
+      "The project an agent's proposed design change is for: the proposal is deleted once answered, and stands until then.",
+  },
+  {
+    column: eventRoutes.createdBy,
+    reason:
+      "`owner`, or the id of the session that made the route: who made it, as its log lines say, kept after that session goes.",
+  },
+  {
+    column: instanceAliases.id,
+    reason:
+      "A former id of a session a fold took in: the alias is the record that the id now names `instance_id`, so it outlives the former row by design.",
+  },
+  {
+    column: instanceAliases.instanceId,
+    reason:
+      "The session a former id now names: an alias of a session that went resolves to an id no row holds.",
+  },
+  {
+    column: instances.forkedFrom,
+    reason:
+      "The session this one was forked from: its lineage, kept after that session goes.",
+  },
+  {
+    column: lfsOffers.machineId,
+    reason:
+      "The machine of the place an LFS offer was made for: the offer's record outlives a removed machine.",
+  },
+  {
+    column: lfsOffers.projectId,
+    reason:
+      "The project an LFS offer was made for: the offer's record outlives a deleted project.",
+  },
+  {
+    column: lfsRefusals.projectId,
+    reason:
+      "The project told an LFS endpoint refused, so it is told once: the record outlives a deleted project.",
+  },
+  {
+    column: planChanges.instanceId,
+    reason:
+      "The session whose plan the person changed: the changes outlive the session.",
+  },
+  {
+    column: presenceClients.machineId,
+    reason:
+      "The machine a presence client is or runs on: the row is the device's last word, dropped once the device is silent a day.",
+  },
+  {
+    column: presenceDevices.machineId,
+    reason:
+      "A machine the person opted in to presence: the opt-in outlives a removed machine.",
+  },
+  {
+    column: purgedSessions.machineId,
+    reason:
+      "A purge's machine: by design no key, so a machine removed later leaves its purges standing for find to leave out.",
+  },
+  {
+    column: queuedWorkItems.queuedInstanceId,
+    reason:
+      "The id a queued delegate's session will take, minted before any row holds it: there is no session to own it yet.",
+  },
+  {
+    column: relays.createdBy,
+    reason:
+      "`owner`, or the id of the session whose ask the owner approved: who made the relay, kept after that session goes.",
+  },
+  {
+    column: removedMachines.machineId,
+    reason:
+      "A machine the person removed: the row is the record that it went, read by rows that still name it.",
+  },
+  {
+    column: routineRuns.instanceId,
+    reason:
+      "A conversation run's session: the run's record outlives the session.",
+  },
+  {
+    column: routines.createdBy,
+    reason:
+      "`owner`, or the id of the session that made the routine: who made it, kept after that session goes.",
+  },
+  {
+    column: routines.madeInInstance,
+    reason:
+      "The session whose `routine_create` made the routine: kept after that session goes, and a fold does not move it, so a folded former's id stays here.",
+  },
+  {
+    column: trimOffers.projectId,
+    reason:
+      "Caw's offer to trim a project's starting set, kept so it is offered once: it outlives a deleted project (unused-trim.ts).",
+  },
+  {
+    column: treeStops.instanceId,
+    reason:
+      "The session a delegation tree's stop ends: the row stands until that session's end is confirmed, then goes (tree-stops.ts).",
+  },
+  {
+    column: treeStops.parentId,
+    reason:
+      "The session above one in a stop's walk: the row stands until the stop is done, then goes (tree-stops.ts).",
+  },
+  {
+    column: treeStops.rootId,
+    reason:
+      "The session a tree's stop was asked of: the row stands until the stop is done, then goes (tree-stops.ts).",
+  },
+];
