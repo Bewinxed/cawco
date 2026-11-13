@@ -17,6 +17,7 @@ import {
   hubFailure,
   machineAway,
   refusalClause,
+  refusedOf,
 } from "#lib/platform/hub-read.js";
 import { connectionState, hubRun } from "../hub/socket.svelte";
 import { transcriptUrl } from "../links";
@@ -251,7 +252,7 @@ function thrownReason(error: unknown): string {
 
 /** Why a page read ended with nothing, said the way the pane says it. */
 async function pageFault(response: Response): Promise<TranscriptOutcome> {
-  const failure = await hubFailure(response);
+  const failure = hubFailure(await refusedOf(response));
   const { away, reconnectingMs } = machineAway(response);
   return {
     ok: false,
@@ -727,7 +728,7 @@ async function olderPage(
         }
         const { away, reconnectingMs } = machineAway(response);
         return readFaultOf(
-          await hubFailure(response),
+          hubFailure(await refusedOf(response)),
           away,
           deadlineIn(reconnectingMs)
         );

@@ -1,20 +1,11 @@
-import type { ArtifactNeedsRead } from "@cawco/core/artifact-needs";
 import type { FramePayload } from "@cawco/core/frames";
 import { harnessNamed } from "@cawco/core/harness/kinds";
-import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
-import type { MoveJob } from "@cawco/core/move";
-import type {
-  Envelope,
-  InstanceRow,
-  SessionPulse,
-  StoredRecent,
-} from "@cawco/core/protocol";
+import type { Envelope, InstanceRow, SessionPulse } from "@cawco/core/protocol";
 import { servedBoardOf } from "#lib/cawco/first-paint.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
 import type { ProjectRow } from "#lib/cawco/projects.js";
-import type { Area, ServedBoard } from "#lib/cawco/served-board.js";
-import type { Machine } from "#lib/cawco/stores/board.svelte.js";
+import type { ServedBoard } from "#lib/cawco/served-board.js";
 
 import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
@@ -35,7 +26,8 @@ import {
   type WorkspaceV1,
 } from "#lib/cawco/workspace/tree.js";
 import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
-import { type HubRead, readHub } from "#lib/platform/hub-read.js";
+import { hubThrough } from "#lib/platform/hub.js";
+import { type HubRead, hubRead, readHub } from "#lib/platform/hub-read.js";
 import {
   clampRail,
   FOLD_BOXES_PREF,
@@ -87,10 +79,12 @@ function narrowOf(cookie: string | undefined, headers: Headers): boolean {
 async function readWaits(
   fetch: typeof globalThis.fetch
 ): Promise<{ waits: Wait[]; cancelled: Set<string> } | null> {
+  const hub = hubThrough(fetch);
   const [pending, artifacts, moves] = await Promise.all([
+    // The hub types a pending envelope's payload as unknown; read as client.svelte.ts reads it.
     readHub<Envelope<FramePayload>[]>(fetch, hubRequest("GET /api/pending")),
-    readHub<ArtifactNeedsRead>(fetch, hubRequest("GET /api/artifact-needs")),
-    readHub<MoveJob[]>(fetch, hubRequest("GET /api/moves")),
+    hubRead(hub.api["artifact-needs"].get()),
+    hubRead(hub.api.moves.get()),
   ]);
   if (!(pending.ok && artifacts.ok && moves.ok)) {
     return null;
@@ -184,6 +178,7 @@ export const load: LayoutServerLoad = async ({
   // are in the server's HTML and on the first paint, and none of them waits
   // on the socket. All of it or none: a part the hub would not give leaves
   // the store to read it all itself.
+  const hub = hubThrough(fetch);
   const [
     authRead,
     rowsRead,
@@ -194,13 +189,13 @@ export const load: LayoutServerLoad = async ({
     storedRead,
     waitsRead,
   ] = await Promise.all([
-    readHub<HubAuthState>(fetch, hubRequest("GET /api/auth")),
-    readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
-    readHub<Record<string, SessionPulse>>(fetch, hubRequest("GET /api/pulses")),
-    readHub<Machine[]>(fetch, hubRequest("GET /api/agents")),
-    readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
-    readHub<{ areas: Area[] }>(fetch, hubRequest("GET /api/areas")),
-    readHub<StoredRecent>(fetch, hubRequest("GET /api/stored")),
+    hubRead(hub.api.auth.get()),
+    hubRead(hub.api.instances.get()),
+    hubRead(hub.api.pulses.get()),
+    hubRead(hub.api.agents.get()),
+    hubRead(hub.api.projects.get()),
+    hubRead(hub.api.areas.get()),
+    hubRead(hub.api.stored.get()),
     lands ? readWaits(fetch) : null,
   ]);
   const auth = authRead.ok ? authRead.value : null;
@@ -368,17 +363,14 @@ export const load: LayoutServerLoad = async ({
   const unnamed = open.filter((id) => !names[id]);
   if (unnamed.length > 0) {
     const ctx = workspace.ctx ?? {};
-    const titles = await readHub<{ id: string; title: string | null }[]>(
-      fetch,
-      hubRequest("POST /api/instances/titles", {
-        body: {
-          ids: unnamed.map((id) => ({
-            id,
-            machine: ctx[id]?.machine ?? undefined,
-            cwd: ctx[id]?.cwd,
-            harness: ctx[id]?.harness,
-          })),
-        },
+    const titles = await hubRead(
+      hub.api.instances.titles.post({
+        ids: unnamed.map((id) => ({
+          id,
+          machine: ctx[id]?.machine ?? undefined,
+          cwd: ctx[id]?.cwd,
+          harness: ctx[id]?.harness,
+        })),
       })
     );
     if (titles.ok) {

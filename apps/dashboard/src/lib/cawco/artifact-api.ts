@@ -16,11 +16,12 @@ import type {
   SessionAttachments,
 } from "@cawco/core/protocol";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
+import { hub, hubPath } from "#lib/platform/hub.js";
 import {
-  hubFetch,
+  hubData,
+  hubDone,
   hubJson,
   hubRefusal,
-  hubSend,
 } from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
@@ -79,10 +80,12 @@ export const thumbnailUrl = (
   thumbnail: ArtifactThumbnail,
   scheme: "light" | "dark"
 ): string =>
-  hubRequest("GET /api/artifacts/:artifact/thumbnail/:scheme", {
-    path: { artifact: id, scheme: thumbnail.single ? "light" : scheme },
-    query: { at: thumbnail.at },
-  }).path;
+  hubPath(
+    hub.api
+      .artifacts({ artifact: id })
+      .thumbnail({ scheme: thumbnail.single ? "light" : scheme }),
+    { at: String(thumbnail.at) }
+  );
 
 /**
  * The pane's thumbnail of the artifact it shows, kept by the hub as the
@@ -93,11 +96,11 @@ export async function keepThumbnail(
   id: string,
   shot: { light: string | null; dark: string | null; single: boolean }
 ): Promise<void> {
-  await hubSend(
-    hubRequest("PUT /api/instances/:id/artifacts/:artifact/thumbnail", {
-      path: { id: instanceId, artifact: id },
-      body: shot,
-    })
+  await hubDone(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts({ artifact: id })
+      .thumbnail.put(shot)
   );
 }
 
@@ -126,22 +129,22 @@ export async function showArtifact(
   id: string,
   at: ArtifactPlace = { top: true }
 ): Promise<"panel" | "page"> {
-  const response = await hubFetch(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-      path: { id: instanceId, artifact: id },
-      body: "top" in at ? {} : { at },
-    })
+  const shown = await hubData(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts({ artifact: id })
+      .show.post("top" in at ? {} : { at }),
+    (refused) =>
+      new ArtifactRefused(refused.response.status, hubRefusal(refused).message)
   );
-  if (!response.ok) {
-    throw new ArtifactRefused(
-      response.status,
-      (await hubRefusal(response)).message
-    );
-  }
-  const shown = (await response.json().catch(() => null)) as {
-    href?: unknown;
-  } | null;
-  if (typeof shown?.href === "string") {
+  // The show route's problems from across the hub's import cycle are typed
+  // at any status (artifacts/deps.ts `Resaid`), so Eden types them, and an
+  // empty body, as a possible answer too; hubData has thrown every one.
+  if (
+    typeof shown === "object" &&
+    "href" in shown &&
+    typeof shown.href === "string"
+  ) {
     await goto(shown.href);
     return "page";
   }
@@ -156,10 +159,8 @@ export async function removeArtifact(
   instanceId: string,
   id: string
 ): Promise<void> {
-  await hubSend(
-    hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-      path: { id: instanceId, artifact: id },
-    })
+  await hubDone(
+    hub.api.instances({ id: instanceId }).artifacts({ artifact: id }).delete()
   );
 }
 
@@ -175,11 +176,11 @@ export async function artifactShown(
     { ok: true } | { ok: false; error: ShownFailure }
   )
 ): Promise<void> {
-  await hubSend(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/shown", {
-      path: { id: instanceId, artifact: id },
-      body: { client: currentClientId(), ...word },
-    })
+  await hubDone(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts({ artifact: id })
+      .shown.post({ client: currentClientId(), ...word })
   );
 }
 
@@ -289,10 +290,11 @@ export async function canvasSent(
   instanceId: string,
   id: string
 ): Promise<void> {
-  await hubSend(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/sent", {
-      path: { id: instanceId, artifact: id },
-    })
+  await hubDone(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts({ artifact: id })
+      .sent.post()
   );
 }
 
@@ -303,10 +305,10 @@ export async function findArtifact(
   return await hubJson(
     hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } }),
     {
-      failure: async (response) =>
+      failure: (refused) =>
         new ArtifactRefused(
-          response.status,
-          (await hubRefusal(response)).message
+          refused.response.status,
+          hubRefusal(refused).message
         ),
     }
   );
