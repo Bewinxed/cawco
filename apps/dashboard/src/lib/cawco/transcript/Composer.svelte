@@ -335,13 +335,13 @@
 
   /**
    * The composer arriving where a read-only note stood (and back): the two
-   * cross-fade over --dur-control and the composer rises --pop-rise into place.
+   * cross-fade over --duration-control and the composer rises --pop-rise into place.
    * Reduced motion keeps the fade.
    */
   function rise(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -358,34 +358,34 @@
   function glyphOut(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--space-1) * ${u}))`,
+          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--spacing-space-1) * ${u}))`,
     };
   }
   function fade(_node: Element): TransitionConfig {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--dur-grow-exit) has landed, so the two never stand in one place
+   * fold (--duration-grow-exit) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
    * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
-   * out of a --part-blur blur over --dur-control, as the card's own parts come up
+   * out of a --part-blur blur over --duration-control, as the card's own parts come up
    * (Prompt `.part`). Reduced motion keeps the fade, with no wait.
    */
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--dur-grow-exit"),
-      duration: dur("--dur-control"),
+      delay: still ? 0 : dur("--duration-grow-exit"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -393,10 +393,10 @@
           : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u}); filter: blur(calc(var(--part-blur) * ${u}))`,
     };
   }
-  /** The bar gives way to the card growing over it: a fade over --dur-exit. */
+  /** The bar gives way to the card growing over it: a fade over --duration-exit. */
   function askedOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -736,9 +736,9 @@
   const GROUND_BOTTOM = "calc(-1 * var(--dock-foot, 0px))";
   /** As tall as the foot, the composer and the step to the layer, and its dissolve. */
   const GROUND_H =
-    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--space-8))";
+    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--spacing-space-8))";
   const LAYER_GROUND =
-    "linear-gradient(to top, var(--surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
+    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--color-surface-recess-clear))";
   /** The offers standing on the tray row: each conversation's, built, the one written to seen. */
   const offerStack = new OfferStack({
     showing: () => showing,
@@ -793,10 +793,10 @@
   bind:this={dockEl}
   style:--dock-foot={flush
     ? undefined
-    : "calc(var(--space-4) + var(--safe-bottom))"}
-  style:--c-composer-w={flush ? "100%" : undefined}
-  style:--layer-foot="calc({dockFoot.panel}px + var(--c-tray-row) +
-  var(--space-2))"
+    : "calc(var(--spacing-space-4) + var(--safe-bottom))"}
+  style:--spacing-c-composer-w={flush ? "100%" : undefined}
+  style:--layer-foot="calc({dockFoot.panel}px + var(--spacing-c-tray-row) +
+  var(--spacing-space-2))"
 >
   <!-- The ground under an open layer (the plan, the tray's shelf, the list
        of what waits on the person). Each
@@ -830,7 +830,7 @@
       inert={grown.askRaised}
       bind:this={offerStack.offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
-      style:--prompts-step="calc(var(--space-4) - var(--space-2))"
+      style:--prompts-step={"calc(var(--spacing-space-4) - var(--spacing-space-2))"}
     >
       <!-- Each conversation's offer, built, standing on the stack's foot;
            the one written to is seen, and the stack is as tall as it. What
@@ -863,7 +863,7 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
-       tray's fixed row (app.css `--c-tray-row`), which a transcript keeps
+       tray's fixed row (app.css `--spacing-c-tray-row`), which a transcript keeps
        clear at its foot while something stands in it (SessionPane
        `trayStands`), and the suggestion chips standing on it (out of flow),
        over the transcript's foot. An offer stands on top of both. -->
@@ -897,7 +897,7 @@
       <div
         class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none transition-fade-show group-has-slot-waiting/dock:opacity-0 group-has-slot-waiting/dock:invisible group-has-slot-waiting/dock:transition-fade-hide"
         style:--ring-room={planRing
-          ? `calc(${dockFoot.ringWidth}px + var(--space-2))`
+          ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
           : undefined}
         in:askedIn
         out:askedOut
@@ -972,7 +972,7 @@
       <!-- One conversation's tray over the next while they cross-fade, in a
            column the composer's width: an auto column grew to the chips' own
            width. The slot is the tray's one row from the composer's first
-           render, chips or none (app.css `--c-tray-row`; a transcript keeps
+           render, chips or none (app.css `--spacing-c-tray-row`; a transcript keeps
            it clear while a chip stands, SessionPane `trayStands`), with the
            tray standing on its foot: a chip arriving late fills room already
            laid out, and the suggestion row standing on the slot never moves. The tray's shelf and panel
@@ -981,7 +981,7 @@
         data-slot="tray-slot"
         class="relative grid grid-cols-1 items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
         style:--ring-room={planRing
-          ? `calc(${dockFoot.ringWidth}px + var(--space-2))`
+          ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
           : undefined}
       >
         <!-- Each conversation's tray, built, in the slot's one cell: handed
@@ -1177,7 +1177,7 @@
         <div
           data-composer-shown={queued.edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-stagger)"
           bind:this={queued.editRow}
           style:--edit-inset="{queued.edit.inset}px"
           style:bottom="{queued.edit.base}px"
@@ -1192,7 +1192,7 @@
              was, and the keys are not shown. -->
           <span
             data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--dur-stagger)"
+            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-stagger)"
           >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -1239,7 +1239,7 @@
       <!-- With the keyboard down a touch screen's pill is a control to hold
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
-      <!-- One shape, always. --radius-lg outside, --space-2 of inset, and the
+      <!-- One shape, always. --radius-lg outside, --spacing-space-2 of inset, and the
            controls inside carry (panel − inset − edge) so the curves are concentric
            rather than two unrelated roundings stacked. The pill is the
            whole surface of its text field: its caret is its focus, and
@@ -1282,8 +1282,8 @@
         onsubmit={(e) => e.preventDefault()}
         ontouchend={press.onholdnative}
         bind:this={pill}
-        style:--cin-pad="var(--c-composer-inset)"
-        style:--cin-ctl="var(--c-composer-field)"
+        style:--cin-pad="var(--spacing-c-composer-inset)"
+        style:--cin-ctl="var(--spacing-c-composer-field)"
       >
         {#if menu.open}
           <!-- Above the input, not over it: the sentence being written stays legible
@@ -1314,7 +1314,7 @@
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
             out:popOut={{ side: "top" }}
-            style:--menu-foot="calc(100% + var(--space-2))"
+            style:--menu-foot="calc(100% + var(--spacing-space-2))"
           >
             <Command.Root loop shouldFilter={false} bind:value={menu.highlight}>
               <Command.List>
@@ -1423,10 +1423,10 @@
           style:--roll-move="0 var(--roll-y)"
           style:--roll-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) var(--roll-y))"}
           style:--fold-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
-          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run))"}
-          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--mask-opaque) var(--cue-run))"}
-          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run), var(--mask-opaque) calc(100% - var(--cue-run)), transparent)"}
-          style:--fold-fade={"linear-gradient(to right, var(--mask-opaque) calc(100% - var(--c-composer-more-w) - var(--space-8)), transparent calc(100% - var(--c-composer-more-w)))"}
+          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run))"}
+          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-mask-opaque) var(--cue-run))"}
+          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run), var(--color-mask-opaque) calc(100% - var(--cue-run)), transparent)"}
+          style:--fold-fade={"linear-gradient(to right, var(--color-mask-opaque) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {
@@ -1446,7 +1446,7 @@
                in it (motion/autosize.svelte.ts), a line at a time over 120ms,
                from one line's worth of the control height to a ceiling, and
                scrolls past that; folding and opening a long draft run over
-               --dur-morph. No scrollbar is drawn, so the text wraps at the
+               --duration-morph. No scrollbar is drawn, so the text wraps at the
                field's full width in every state. While another draft's words
                fly in over it, or an ask's card stands over it, it draws none
                of its own text or caret; while the wheel is up, no caret. -->
@@ -1462,7 +1462,7 @@
               : undefined}
             aria-expanded={menu.open || !!recalling.recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:data-folding:duration-(--dur-morph) motion-safe:group-data-settling/cin:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--dur-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(swap.cueBottom && !fieldFold.folded) || undefined}
             data-cue-top={(swap.cueTop && !fieldFold.folded) || undefined}
             data-flying={swap.flight !== null ||
@@ -1524,8 +1524,8 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-body text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
-              style:--flight-clip={"inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)))"}
+              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span
                 data-slot="flight-text"
@@ -1554,7 +1554,7 @@
             <span
               data-slot="more"
               aria-hidden="true"
-              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-c-composer-more-w h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
+              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
               >+{fieldFold.lines - 1}
               {fieldFold.lines === 2 ? "line" : "lines"}</span
             >
