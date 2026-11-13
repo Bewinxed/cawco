@@ -288,8 +288,10 @@
     const kept: number[] = [];
     let pads = 0;
     const parts = [...el.children, ...(glass?.children ?? [])];
-    for (const child of parts) {
-      const one = child as HTMLElement;
+    for (const one of parts) {
+      if (!(one instanceof HTMLElement)) {
+        continue;
+      }
       if (glass && one.contains(glass)) {
         pads += insetOf(glass);
       } else if (one.dataset.slot !== "join") {
@@ -364,9 +366,10 @@
    * {@link nameWidth}. Read with its words held to one line for the read.
    */
   function nameWants(name: HTMLElement, keeps: number): number {
+    const first = name.firstElementChild;
     const lead =
       name.querySelector<HTMLElement>('[data-slot="name-lead"]') ??
-      (name.firstElementChild as HTMLElement | null);
+      (first instanceof HTMLElement ? first : null);
     if (!lead) {
       return 0;
     }

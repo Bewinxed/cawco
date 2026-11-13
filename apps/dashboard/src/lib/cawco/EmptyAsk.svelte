@@ -39,7 +39,8 @@
     data-empty-ask
     {label}
     {size}
-    onclick={(event: MouseEvent) => onask(event.currentTarget as HTMLElement)}
+    onclick={(event: MouseEvent & { currentTarget: HTMLElement }) =>
+      onask(event.currentTarget)}
     variant="outline"
   />
 {:else}

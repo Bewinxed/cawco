@@ -79,10 +79,7 @@
         (each) => !each.routedTo
       );
       if (asking) {
-        const text = askDetailOf(
-          asking.toolName,
-          asking.input as Parameters<typeof askDetailOf>[1]
-        );
+        const text = askDetailOf(asking.toolName, asking.input);
         return { key: `ask:${text}`, kind: "ask", text };
       }
     }

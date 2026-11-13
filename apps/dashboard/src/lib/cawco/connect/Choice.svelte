@@ -53,7 +53,12 @@
   <DropdownMenu.Content align="start" width="wide">
     <DropdownMenu.RadioGroup
       {value}
-      onValueChange={(next) => onchoose(next as T)}
+      onValueChange={(next) => {
+        const picked = options.find((one) => one.value === next);
+        if (picked) {
+          onchoose(picked.value);
+        }
+      }}
     >
       {#each options as option (option.value)}
         <DropdownMenu.RadioItem value={option.value}>

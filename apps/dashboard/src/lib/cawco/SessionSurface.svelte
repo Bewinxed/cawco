@@ -58,10 +58,7 @@
   import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
   import PaneHost from "#lib/cawco/workspace/PaneHost.svelte";
   import PaneLeaf from "#lib/cawco/workspace/PaneLeaf.svelte";
-  import {
-    holdProjectSeed,
-    type ProjectSeed,
-  } from "#lib/cawco/workspace/project-seed.js";
+  import { holdProjectSeed } from "#lib/cawco/workspace/project-seed.js";
   import {
     isSessionTab,
     projectOfTab,
@@ -258,7 +255,7 @@
    */
   const picked = new SvelteSet<string>(
     // The server's landing ((app)/+layout.server.ts `landOnDesk`) is the app's pick too.
-    untrack(() => (page.data as { landed?: string[] }).landed ?? [])
+    untrack(() => page.data.landed ?? [])
   );
 
   /* ── Wide screens never show an empty detail if anything can be opened ──
@@ -377,7 +374,7 @@
 
   /** Keyed by the tail's own conversation: the board's address on a desk carries the landed one's (+page.server.ts). */
   const captureEntry = (): EntryData => {
-    const tail = (page.data as { tail?: ServerTail | null }).tail ?? null;
+    const tail = page.data.tail ?? null;
     return { id: tail?.viewId ?? page.params.id ?? "", tail };
   };
 
@@ -385,7 +382,7 @@
   // A project's page carries its project's server read instead: held for its
   // tab to claim once (project-seed.ts).
   if (browser) {
-    holdProjectSeed((page.data as { seed?: ProjectSeed | null }).seed);
+    holdProjectSeed(page.data.seed);
   }
   // Only a `/session` page carries a conversation's server answer; a trip to
   // another spoke leaves the one this surface holds alone.
@@ -397,7 +394,7 @@
     if (to?.url.pathname.startsWith("/session")) {
       entry = captureEntry();
     } else if (to?.url.pathname.startsWith("/project/")) {
-      holdProjectSeed((page.data as { seed?: ProjectSeed | null }).seed);
+      holdProjectSeed(page.data.seed);
     }
     // A real navigation is the owner's: the app moves the URL shallowly.
     // One to a conversation the app had put in front opens it.

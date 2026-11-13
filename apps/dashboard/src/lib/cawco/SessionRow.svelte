@@ -548,7 +548,7 @@
         aria-current={active ? "page" : undefined}
         class={cn(
           "press-tint focus-inset flex coarse:min-h-c-btn-h-lg min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) coarse:group-data-compact/session-row:min-h-c-btn-h-lg group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
-          trigger.class as string | undefined
+          typeof trigger.class === "string" ? trigger.class : undefined
         )}
         data-hover-session={instance?.id}
         data-rail-row

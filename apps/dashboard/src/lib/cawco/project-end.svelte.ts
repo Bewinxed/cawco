@@ -91,8 +91,15 @@ export function bringBackRefusal(
   if (!said) {
     return null;
   }
-  const kept = said.asked as { standing?: boolean } | undefined;
-  return { reason: said.reason, standing: kept?.standing === true };
+  const kept = said.asked;
+  return {
+    reason: said.reason,
+    standing:
+      typeof kept === "object" &&
+      kept !== null &&
+      "standing" in kept &&
+      kept.standing === true,
+  };
 }
 
 /**
