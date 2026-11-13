@@ -17,11 +17,11 @@ import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
 import DecisionsView from "./DecisionsView.svelte";
 import type { ProjectDecisions } from "./decisions.svelte";
 
-const decisions = {
-  list: { pages: [] },
+const decisions: Pick<ProjectDecisions, "list" | "problem" | "read"> = {
+  list: { graph: false, pages: [], problems: [] },
   problem: null,
   read: async () => undefined,
-} as unknown as ProjectDecisions;
+};
 
 const STARTERS: ProjectStarter[] = [
   {

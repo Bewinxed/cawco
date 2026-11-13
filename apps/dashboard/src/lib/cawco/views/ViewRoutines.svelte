@@ -19,7 +19,7 @@
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { rowHref } from "#lib/cawco/links.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
-  import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import type { SeatedLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { startConversation } from "#lib/cawco/project/conversation.js";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -154,7 +154,7 @@
     standing = $bindable(false),
   }: {
     /** The project's Caw: he stands as the empty page's mark (CawSeat at 80). */
-    lead: CawLead;
+    lead: SeatedLead;
     /** His seat's outro as he leaves the empty page for the head's (ProjectPage). */
     sitDown: (node: HTMLElement) => TransitionConfig;
     /**

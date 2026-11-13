@@ -31,6 +31,7 @@ import {
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import type { LocatedRecord, TranscriptRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
+import { z } from "zod";
 import { timeOf } from "./last-prompt.ts";
 import {
   idSpans,
@@ -110,6 +111,9 @@ interface RawRecord {
   uuid: string;
   [key: string]: unknown;
 }
+
+/** A record read as one the chain walk reads ({@link RawRecord}): its type and its uuid, as strings. */
+const RawRecordSchema = z.looseObject({ type: z.string(), uuid: z.string() });
 
 /**
  * One line of a transcript as the line index keeps it: the fields the chain
@@ -1201,8 +1205,8 @@ function opensTurn(msg: SDKSessionMessage): boolean {
  * (last-prompt.ts).
  */
 export function claudePromptAt(record: TranscriptRecord): number | undefined {
-  const r = record as unknown as RawRecord;
-  if (r.type !== "user" || chainFields(r).toolResult) {
+  const r = RawRecordSchema.safeParse(record).data;
+  if (r?.type !== "user" || chainFields(r).toolResult) {
     return;
   }
   const msg = toSDKMessage(r);

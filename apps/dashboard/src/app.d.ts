@@ -21,19 +21,30 @@ declare global {
    * (usage/forecast.svelte.ts), and the lists `devNote` grows.
    */
   interface CawcoDebug {
+    accountsState: typeof import("#lib/cawco/stores/accounts.svelte.js").accountsState;
     adoptInstances: (
       rows: import("@cawco/core/protocol").InstanceRow[]
     ) => void;
+    /** The areas as home/areas.svelte.ts holds them. */
+    areas: {
+      areas: import("#lib/cawco/served-board.js").Area[];
+      read: boolean;
+    };
+    boardState: typeof import("#lib/cawco/stores/board.svelte.js").boardState;
     connectionState: typeof import("#lib/cawco/hub/socket.svelte.js").connectionState;
     frame: typeof import("#lib/cawco/hub/frames.js").takeFrame;
     inflight: typeof import("#lib/cawco/hub/socket.svelte.js").inflight;
     leaveHub: typeof import("#lib/cawco/hub/socket.svelte.js").leaveHub;
     plansState: typeof import("#lib/cawco/stores/plans.svelte.js").plansState;
+    previewsState: typeof import("#lib/cawco/stores/previews.svelte.js").previewsState;
     projectsState: typeof import("#lib/cawco/stores/projects.svelte.js").projectsState;
     sessionsState: typeof import("#lib/cawco/stores/sessions.svelte.js").sessionsState;
     standHub: (
-      answer: import("#lib/cawco/hub/socket.svelte.js").BenchHub
+      answer: import("#lib/cawco/hub/socket.svelte.js").BenchHub,
+      spawn?: import("#lib/cawco/hub/socket.svelte.js").BenchSpawn | null,
+      control?: import("#lib/cawco/hub/socket.svelte.js").BenchControl | null
     ) => void;
+    standStored: (stored: import("@cawco/core/protocol").StoredRecent) => void;
     usage: {
       staged: {
         claude: import("#lib/cawco/usage/rings.js").ClaudeRings | null;
@@ -71,6 +82,17 @@ declare global {
     >;
     /** Set once the touch long-press menus are installed (utils/longpress.ts); the probe reads it. */
     __longPressInstalled?: boolean;
+    /**
+     * A live hub's board for the /motion/recent bench to stand in, read
+     * from its database by whoever opens the bench: its machines, areas,
+     * sessions and projects.
+     */
+    __rbReal?: {
+      agents: import("@cawco/core/protocol").AgentRow[];
+      areas: { areas: import("#lib/cawco/served-board.js").Area[] };
+      instances: import("@cawco/core/protocol").InstanceRow[];
+      projects: import("#lib/cawco/projects.js").ProjectRow[];
+    };
     /** The /motion/skeleton bench's two states, for the spec to drive. */
     __skeletonBench: { load: () => void; wait: () => void };
     /** Dev only: how many times each transcript, by session id, has built its rows (row-build.svelte.ts `countBuild`); a probe counts them. */

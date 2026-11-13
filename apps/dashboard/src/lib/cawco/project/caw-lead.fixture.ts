@@ -5,9 +5,11 @@
  * where the frame has no head to sit down in.
  */
 import { conversationWords } from "@cawco/core/words/project-conversation";
-import type { CawLead } from "./caw-lead.svelte";
+import type { CawLead, SeatedLead } from "./caw-lead.svelte";
 
-export const RESTING_LEAD = {
+export const RESTING_LEAD: SeatedLead & Pick<CawLead, "ask"> = {
+  anchor: null,
+  ask: () => undefined,
   holds: true,
   inPanel: false,
   open: false,
@@ -15,6 +17,6 @@ export const RESTING_LEAD = {
   sentence: conversationWords.status.ready,
   shown: true,
   status: "idle",
-} as unknown as CawLead;
+};
 
 export const sitDownNowhere = () => ({ duration: 0 });
