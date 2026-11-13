@@ -146,6 +146,8 @@
   const ZOOM = 2;
   /** How far a finger may move, px, and still tap rather than pan. */
   const TAP_SLOP = 8;
+  /** A finger held this long without moving presses the button, so a drag then selects. Our call: the phone's long-press. */
+  const HOLD_MS = 400;
 
   /** The well's frames, counted on its element for whoever reads the engine (the probe kit). */
   function counted(width: number, height: number) {
@@ -190,6 +192,17 @@
   let zoomed = $state(false);
   /** Where a finger came down on a zoomed page: a tap there is a click, a drag pans. */
   let tapFrom: { x: number; y: number } | null = null;
+  /** The one finger on the page at its own size: where it came down, where it last was in the stream's pixels, and what it is doing. */
+  interface Finger {
+    id: number;
+    from: { x: number; y: number };
+    last: { x: number; y: number };
+    mode: "wait" | "scroll" | "select";
+  }
+  let drag = null as Finger | null;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A second finger came down: nothing is sent until every finger is up. */
+  let pinching = false;
 
   // The stream, while the browser is live: neko's on the container host,
   // the local browser's frames on the local host.
@@ -345,6 +358,10 @@
       tap(event, phase);
       return;
     }
+    if (event.pointerType !== "mouse") {
+      finger(event, phase);
+      return;
+    }
     const point = at(event);
     if (!point) {
       return;
@@ -366,6 +383,117 @@
     }
     event.preventDefault();
     stream.button(point.x, point.y, event.button, phase === "down");
+  }
+
+  /**
+   * A finger (or stylus) on the page at its own size, which the surface
+   * takes whole (`touch-none`, so the phone neither scrolls the panel nor
+   * pulls to refresh). The remote Chromium is spoken to in mouse and wheel
+   * (the agent's wire has no touch message), so the finger is translated
+   * the way every remote-desktop client does: a drag is wheel steps
+   * following it, a tap is a click as it lifts, and a press held still
+   * then dragged is a button held down, which selects text.
+   */
+  function finger(event: PointerEvent, phase: "down" | "move" | "up") {
+    if (phase === "down") {
+      fingerDown(event);
+      return;
+    }
+    if (!drag || drag.id !== event.pointerId) {
+      if (phase === "up" && !drag && event.isPrimary) {
+        pinching = false;
+      }
+      return;
+    }
+    const point = at(event);
+    if (phase === "up") {
+      endDrag(true, point);
+    } else if (point) {
+      fingerMove(event, point, drag);
+    }
+  }
+
+  function fingerDown(event: PointerEvent) {
+    if (drag) {
+      // A second finger: a pinch, which the page can't take. What the
+      // first began ends, its button released.
+      endDrag(false);
+      pinching = true;
+      return;
+    }
+    const point = at(event);
+    if (pinching || !point) {
+      return;
+    }
+    if (keyboardUp) {
+      resetSink();
+    } else {
+      layer?.focus();
+    }
+    layer?.setPointerCapture(event.pointerId);
+    const current: Finger = {
+      id: event.pointerId,
+      from: { x: event.clientX, y: event.clientY },
+      last: point,
+      mode: "wait",
+    };
+    drag = current;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      if (drag === current && current.mode === "wait") {
+        current.mode = "select";
+        stream?.button(current.last.x, current.last.y, 0, true);
+      }
+    }, HOLD_MS);
+    event.preventDefault();
+  }
+
+  function fingerMove(
+    event: PointerEvent,
+    point: { x: number; y: number },
+    current: Finger
+  ) {
+    if (current.mode === "select") {
+      stream?.move(point.x, point.y);
+      current.last = point;
+      return;
+    }
+    const still =
+      Math.hypot(
+        event.clientX - current.from.x,
+        event.clientY - current.from.y
+      ) <= TAP_SLOP;
+    if (current.mode === "wait" && still) {
+      return;
+    }
+    clearTimeout(holdTimer);
+    current.mode = "scroll";
+    // The page follows the finger: a finger up reads the page further down.
+    stream?.wheel(point.x, point.y, {
+      ctrlKey: false,
+      deltaMode: 0,
+      deltaX: current.last.x - point.x,
+      deltaY: current.last.y - point.y,
+      timeStamp: event.timeStamp,
+    });
+    current.last = point;
+  }
+
+  /** The finger's gesture ends: a tap clicks, a held press releases; `lifted` is false when it is cut short (a second finger, cancel). */
+  function endDrag(lifted: boolean, point?: { x: number; y: number } | null) {
+    clearTimeout(holdTimer);
+    const current = drag;
+    drag = null;
+    if (!(current && stream)) {
+      return;
+    }
+    const end = point ?? current.last;
+    if (current.mode === "select") {
+      stream.button(end.x, end.y, 0, false);
+    } else if (current.mode === "wait" && lifted) {
+      stream.button(end.x, end.y, 0, true);
+      stream.button(end.x, end.y, 0, false);
+    }
   }
 
   /**
@@ -718,6 +846,8 @@
           onpaste={paste}
           onpointercancel={() => {
             tapFrom = null;
+            endDrag(false);
+            pinching = false;
           }}
           onpointerdown={(event) => pointer(event, "down")}
           onpointermove={(event) => pointer(event, "move")}

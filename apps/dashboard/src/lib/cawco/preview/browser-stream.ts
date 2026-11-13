@@ -49,8 +49,14 @@ interface StreamInput {
   paste: (text: string) => void;
   /** What the phone's keyboard typed (keyboard-sink.ts): deletions, then text, a newline as Enter. */
   type: (typed: Typed) => void;
-  wheel: (x: number, y: number, event: WheelEvent) => void;
+  wheel: (x: number, y: number, event: WheelInput) => void;
 }
+
+/** What a wheel step needs of an event: a real WheelEvent, or a finger's drag said as one. */
+type WheelInput = Pick<
+  WheelEvent,
+  "ctrlKey" | "deltaMode" | "deltaX" | "deltaY" | "timeStamp"
+>;
 
 export interface BrowserStream extends StreamInput {
   close: () => void;
