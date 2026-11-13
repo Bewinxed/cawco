@@ -1818,6 +1818,11 @@ const hubOwnedControl = (method: string): string | undefined => {
   if (method === CONTROL_RELOAD_SKILLS) {
     return "Skills reload when synced fleet content changes.";
   }
+  if (method === INSPECT_CONFIG) {
+    // The raw inspection carries a connector's keys; a dashboard reads it
+    // masked, through POST /api/agents/:machineId/inspect.
+    return `${method} is the hub's to send. Read a machine's config with POST /api/agents/:machineId/inspect.`;
+  }
   if (HUB_WORKSPACE_CONTROLS.has(method)) {
     return `${method} is the hub's to send. A workspace retires on its own once its work lands; a held one is discarded with POST /api/workspaces/:id/archive and discard: true.`;
   }
