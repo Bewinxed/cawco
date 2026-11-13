@@ -1,5 +1,12 @@
 <script lang="ts">
-  import type { ListedBrowser } from "@cawco/core/browser";
+  import {
+    BROWSER_SCREEN,
+    type ListedBrowser,
+    TAKEOVER_SCALE_MOST,
+    type TakeoverFocus,
+    type TakeoverLayout,
+    type TakeoverTouchPoint,
+  } from "@cawco/core/browser";
   /**
    * A browser artifact in the panel (Projects spec §5.11, "The view"): the
    * browser's stream, drawn here from the hub's socket (browser-stream.ts),
@@ -7,31 +14,49 @@
    * any page not CawCo's own does (its layout is not ours to push down).
    * No band claims a row over it: while the browser is live, where it is
    * and who drives stand in the head after its title (BrowserAddress) on a
-   * desk. The stream draws in its screen, one box at the stream's own
-   * shape that its wait draws in too: contained and centred in the well on
-   * a desk; on a phone's sheet (`addressAtFoot`) at the well's top at its
-   * width, framed, where it is and its controls (Zoom, Show keyboard) right
-   * under it, as a phone browser frames a page. Zoomed, the page is drawn
-   * twice its fitted size in a taller screen a finger pans, and a tap
-   * there is a click. Take over stands in the head only while the stream
-   * is drawn here (`viewing`). The local browser's line, on a machine with
-   * no container runtime, stands under the stream.
+   * desk. The stream draws in its screen, one box its wait draws in too.
+   * Take over stands in the head only while the stream is drawn here
+   * (`viewing`). The local browser's line, on a machine with no container
+   * runtime, stands under the stream in every layout.
    * No comments and no ink: nothing the person sees here reaches an agent
    * (§5.11, "Private").
+   *
+   * Watched (the agent driving), the screen is the stream's own shape:
+   * contained and centred in the well on a desk; on a phone's sheet
+   * (`addressAtFoot`) at the well's top at its width, framed, where it is
+   * right under it, as a phone browser frames a page.
+   *
+   * Taken over, the page takes the layout of the device the person holds
+   * (`form`, the head's switch; a phone's sheet starts on the phone's, a
+   * desk on the desktop's, on every take-over), and the hands that drive it
+   * follow the layout (the takeover pitch, shape A):
+   *
+   * - **Phone layout on a phone**: the page laid out at the sheet's room
+   *   under the head, real touch (a drag scrolls and flings, a pinch zooms,
+   *   a tap clicks, a finger held still selects the word under it).
+   * - **Phone layout at a desk**: the phone's width (core `FORMS.phone`) at
+   *   the well's height up to a phone's (`screenHeight`), at 1:1, centred in
+   *   a plain card; mouse and wheel.
+   * - **Desktop layout on a phone**: the desktop page drawn at a reading
+   *   size, opened where its focus stands; one finger pans the picture, two
+   *   scroll the page, a pinch zooms the picture, a tap clicks. An overview
+   *   in the corner marks the part in view while zoomed past the whole, and
+   *   Fit the page shows it whole.
+   * - **Desktop layout at a desk**: contained in the well; mouse and wheel.
    *
    * The well's states: waiting (the browser waking, its image building,
    * its stream connecting), drawn as the preview's cover draws a wait, a
    * skeleton of the page to come over its live line; live (the agent
    * driving, the person watching); you have control (the person's pointer,
-   * keys and paste go to the browser; on a touch screen Show keyboard,
-   * floating at the stream's foot, raises the phone's keyboard, its typing
-   * read from a field of the view's own, keyboard-sink.ts); and each
-   * failure as the house's region fault draws one, Caw over its headline
-   * and line, its way out leading: the machine away, the browser that
-   * didn't start, the view's link lost or refused, the stream that found
-   * no way here (the stream relay's settings), a codec this browser can't
-   * play.
+   * fingers, keys and paste go to the browser; on a touch screen Show
+   * keyboard raises the phone's keyboard, its typing read from a field of
+   * the view's own, keyboard-sink.ts); and each failure as the house's
+   * region fault draws one, Caw over its headline and line, its way out
+   * leading: the machine away, the browser that didn't start, the view's
+   * link lost or refused, the stream that found no way here (the stream
+   * relay's settings), a codec this browser can't play.
    */
+  import { FORMS, screenHeight } from "@cawco/core/stage";
   import { browserWords } from "@cawco/core/words/browser";
   import { commonWords } from "@cawco/core/words/common";
   import { untrack } from "svelte";
@@ -43,9 +68,9 @@
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconKeyboardLinear,
+    IconMinimizeLinear,
     IconRefresh,
-    IconZoomInLinear,
-    IconZoomOutLinear,
+    IconRefreshLinear,
   } from "#lib/icons.js";
   import FaultDetails from "../fault/FaultDetails.svelte";
   import ShowDetails from "../fault/ShowDetails.svelte";
@@ -54,13 +79,14 @@
   import { appear } from "../motion/curves.svelte";
   import { store, stored } from "../storage";
   import BrowserAddress from "./BrowserAddress.svelte";
-  import { startFromPanel, takeOverFromPanel } from "./browser-acts";
+  import { startFromPanel } from "./browser-acts";
   import {
     type BrowserStream,
     cdpStream,
     nekoStream,
     type StreamState,
     streamUrl,
+    type TakeoverStream,
   } from "./browser-stream";
   import CoverState from "./CoverState.svelte";
   import {
@@ -71,6 +97,9 @@
     typedBetween,
   } from "./keyboard-sink";
 
+  /** The layout a take-over's page is in: a phone's or the desktop's. */
+  type Form = TakeoverLayout["form"];
+
   let {
     instanceId,
     artifactId,
@@ -78,6 +107,7 @@
     machine,
     addressAtFoot = false,
     viewing = $bindable(false),
+    form = $bindable<Form>("desk"),
   }: {
     instanceId: string;
     artifactId: string;
@@ -85,6 +115,8 @@
     addressAtFoot?: boolean;
     /** The stream is drawn here: there is a page to take over (PreviewPane's Take over). */
     viewing?: boolean;
+    /** The layout the page is in while the person holds it (the head's switch); each take-over starts on the device's own. */
+    form?: Form;
     /** The browser as the hub lists it; null until its machine reported it. */
     browser: ListedBrowser | null;
     /** The session's machine: its name, and whether the hub reaches it. */
@@ -110,22 +142,31 @@
     });
   });
 
-  /** What each host streams: neko's video, or the local browser's frames. */
-  const STREAM_OF = { container: "video", local: "frames" } as const;
-
   const mine = $derived(!!browser?.takeover);
   const host = $derived(browser?.host ?? null);
   const live = $derived(browser?.state === "live" && machine.online);
+  /**
+   * What the well draws: the page's frames (a take-over on either host, the
+   * local browser watched) or neko's video (the container host watched).
+   */
+  const source = $derived.by(() => {
+    if (mine || host === "local") {
+      return "frames" as const;
+    }
+    return host === "container" ? ("video" as const) : null;
+  });
 
   let stream: BrowserStream | null = null;
+  /** The frames' stream, which takes input: a take-over's, or the local browser's watched. */
+  let frames: TakeoverStream | null = null;
   let streamState = $state<StreamState>({ kind: "connecting" });
-  /** neko's session for this view, once introduced: the shield gives it control. */
-  let session = $state<string | null>(null);
   /** Each press of a failure's Try again opens the stream again. */
   let again = $state(0);
   let video = $state<HTMLVideoElement>();
   let canvas = $state<HTMLCanvasElement>();
+  let overviewCanvas = $state<HTMLCanvasElement>();
   let well = $state<HTMLDivElement>();
+  let screenBox = $state<HTMLDivElement>();
   let layer = $state<HTMLDivElement>();
   /** The field the phone's keyboard types into (keyboard-sink.ts), while the person drives. */
   let sink = $state<HTMLTextAreaElement>();
@@ -136,18 +177,24 @@
   /** A finger, not a cursor: Show keyboard floats at the stream's foot. */
   const coarse = new IsCoarsePointer();
   let details = $state(false);
-  /** A start or a control hand-off the hub refused, in its words. */
+  /** A start the hub refused, in its words. */
   let refusal = $state<string | null>(null);
   let starting = $state(false);
 
   /** A frame's shape before the stream says its own: a desktop screen's 16:10. */
-  const SCREEN_RATIO = 16 / 10;
-  /** How much a zoomed page is drawn up on a phone. */
-  const ZOOM = 2;
-  /** How far a finger may move, px, and still tap rather than pan. */
+  const SCREEN_RATIO = BROWSER_SCREEN.width / BROWSER_SCREEN.height;
+  /** How far a finger may move, px, and still tap or hold rather than pan. */
   const TAP_SLOP = 8;
-  /** A finger held this long without moving presses the button, so a drag then selects. Our call: the phone's long-press. */
-  const HOLD_MS = 400;
+  /** How far two fingers move apart or together, px, before they pinch; or together, before they scroll. */
+  const TWO_SLOP = 12;
+  /** A finger held this long without moving is a long press, as a phone's (Android's 500 ms). */
+  const HOLD_MS = 500;
+  /** The desktop layout on a phone opens at this share of its size: the takeover pitch's measure, where a form's column fits the sheet and its text reads. */
+  const READ_SCALE = 0.6;
+  /** The desktop layout's picture zooms to this share of its size at most: twice its own. */
+  const ZOOM_MOST = 2;
+  /** A sheet's room changes for a while as it moves between its stops: the page is laid out again once it has stood this long, ms. Our call. */
+  const LAYOUT_SETTLE_MS = 200;
 
   /** The well's frames, counted on its element for whoever reads the engine (the probe kit). */
   function counted(width: number, height: number) {
@@ -160,6 +207,7 @@
     if (width > 0 && height > 0 && Math.abs(width / height - ratio) > 0.001) {
       ratio = width / height;
     }
+    drawOverview();
   }
 
   /** The stream's own shape, from its frames; a screen's 16:10 until the first. */
@@ -168,48 +216,212 @@
   let room = $state({ w: 0, h: 0, gap: 0 });
   /** The phone's foot under the screen, px: where it is and its controls. */
   let footH = $state(0);
+
+  // Each take-over starts on the layout of the device taking over: a
+  // phone's sheet on the phone's, a desk on the desktop's.
+  let formFor = 0;
+  $effect(() => {
+    const since = browser?.takeover?.since;
+    if (since && since !== formFor) {
+      formFor = since;
+      form = untrack(() => (addressAtFoot ? "phone" : "desk"));
+    }
+  });
+
+  /** The page's room under the head on a phone's sheet: the well less its foot. */
+  const below = $derived(
+    Math.max(0, room.h - (addressAtFoot && live ? room.gap + footH : 0))
+  );
+
+  /** The phone layout's page as the well has room for it, CSS px: the sheet's room on a phone, a phone's shape at a desk. */
+  const phoneRoom = $derived(
+    addressAtFoot
+      ? { w: Math.floor(room.w), h: Math.floor(below) }
+      : {
+          w: Math.min(FORMS.phone, Math.floor(room.w)),
+          h: Math.min(screenHeight(FORMS.phone), Math.floor(room.h)),
+        }
+  );
+
+  /** The phone's keyboard is up for the sink while the person drives. */
+  const keyboardUp = $derived(
+    mine && streamState.kind === "live" && sinkFocused
+  );
+
   /**
-   * The screen: the box the stream draws in, at the stream's own shape, and
-   * the one its wait draws in too, so nothing jumps or changes shape as the
-   * stream arrives. On a desk it is contained in the well, centred; on a
-   * phone's sheet it stands at the well's top at its width, with where it
-   * is and its controls right under it, as a phone browser frames a page.
+   * The layout sent: the device's room once it has stood still, and kept
+   * while the phone's keyboard is up (the page keeps its size, and the
+   * view moves to the field instead).
+   */
+  let laid = $state<TakeoverLayout | null>(null);
+  $effect(() => {
+    if (!mine) {
+      laid = null;
+      return;
+    }
+    if (form === "desk") {
+      if (untrack(() => laid?.form) !== "desk") {
+        laid = { form: "desk" };
+      }
+      return;
+    }
+    const { w, h } = phoneRoom;
+    if (keyboardUp || w <= 0 || h <= 0) {
+      return;
+    }
+    const next: TakeoverLayout = {
+      form: "phone",
+      width: w,
+      height: h,
+      scale: Math.min(
+        TAKEOVER_SCALE_MOST,
+        Math.max(1, Math.round(window.devicePixelRatio))
+      ),
+      landscape: w > h,
+    };
+    const now = untrack(() => laid);
+    // The first phone layout of a take-over goes at once; a change waits
+    // for the room to stand.
+    const wait = now?.form === "phone" ? LAYOUT_SETTLE_MS : 0;
+    const timer = setTimeout(() => {
+      if (!(
+        now?.form === "phone" &&
+        now.width === next.width &&
+        now.height === next.height &&
+        now.scale === next.scale
+      )) {
+        laid = next;
+      }
+    }, wait);
+    return () => clearTimeout(timer);
+  });
+
+  // The layout to the daemon: first on every connection (the stream keeps it), and on each change.
+  $effect(() => {
+    const layout = laid;
+    untrack(() => frames?.layout(layout));
+  });
+
+  /**
+   * The screen: the box the stream draws in, and the one its wait draws in
+   * too. Taken over in the phone layout, the page's own size; in the
+   * desktop layout on a phone, the sheet's room, the page's picture moved
+   * and zoomed in it; else the stream's own shape, contained in the well on
+   * a desk and at its width at the well's top on a phone.
    */
   const screen = $derived.by(() => {
+    if (mine && form === "phone") {
+      return laid?.form === "phone"
+        ? { w: laid.width, h: laid.height }
+        : phoneRoom;
+    }
+    if (mine && addressAtFoot) {
+      return { w: room.w, h: below };
+    }
     const w = addressAtFoot
       ? room.w
       : Math.max(0, Math.min(room.w, room.h * ratio));
-    const fitted = w / ratio;
-    // Zoomed on a phone, the screen takes the well's height down to its
-    // foot, so more of the page drawn up stands in view to pan.
-    const h =
-      addressAtFoot && zoomed
-        ? Math.max(fitted, Math.min(fitted * ZOOM, room.h - room.gap - footH))
-        : fitted;
-    return { w, h, fitted };
+    return { w, h: w / ratio };
   });
-  /** On a phone the page is drawn twice its fitted size, panned under a finger, so its links take a tap. */
-  let zoomed = $state(false);
-  /** Where a finger came down on a zoomed page: a tap there is a click, a drag pans. */
-  let tapFrom: { x: number; y: number } | null = null;
-  /** The one finger on the page at its own size: where it came down, where it last was in the stream's pixels, and what it is doing. */
-  interface Finger {
-    from: { x: number; y: number };
-    id: number;
-    last: { x: number; y: number };
-    mode: "wait" | "scroll" | "select";
-  }
-  let drag = null as Finger | null;
-  let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  /** A second finger came down: nothing is sent until every finger is up. */
-  let pinching = false;
 
-  // The stream, while the browser is live: neko's on the container host,
-  // the local browser's frames on the local host.
+  /** The desktop layout's picture, while the person holds it: its zoom (0, the whole page in the screen) and where it stands, px. */
+  let view = $state({ scale: 0, x: 0, y: 0 });
+  /** The person moved the picture since the layout opened: where the page's focus stands no longer moves it. */
+  let placed = false;
+  /** The picture's zoom that shows the whole page across the screen. */
+  const fit = $derived(
+    screen.w > 0 ? screen.w / BROWSER_SCREEN.width : READ_SCALE
+  );
+  /** The picture moves and zooms: the desktop layout, held. */
+  const picturing = $derived(mine && form === "desk");
+  const zoom = $derived(
+    view.scale > 0 ? Math.max(fit, Math.min(ZOOM_MOST, view.scale)) : fit
+  );
+  /** The page's box: the picture's size and where it stands while it moves, else the screen. */
+  const pageBox = $derived(
+    picturing
+      ? {
+          w: BROWSER_SCREEN.width * zoom,
+          h: BROWSER_SCREEN.height * zoom,
+          x: view.x,
+          y: view.y,
+        }
+      : { w: screen.w, h: screen.h, x: 0, y: 0 }
+  );
+  /** Zoomed past the whole page: the overview stands, and Fit the page is offered. */
+  const zoomedIn = $derived(picturing && zoom > fit + 0.001);
+
+  /** The picture at zoom `scale`, standing at `x`, `y`, kept on the page. */
+  function setView(scale: number, x: number, y: number) {
+    const s = Math.max(fit, Math.min(ZOOM_MOST, scale));
+    const most = {
+      x: Math.max(0, BROWSER_SCREEN.width * s - screen.w),
+      y: Math.max(0, BROWSER_SCREEN.height * s - screen.h),
+    };
+    const next = {
+      scale: s,
+      x: Math.max(0, Math.min(most.x, x)),
+      y: Math.max(0, Math.min(most.y, y)),
+    };
+    if (next.scale !== view.scale || next.x !== view.x || next.y !== view.y) {
+      view = next;
+    }
+  }
+
+  // The desktop layout opens at reading size on a phone, at the page's
+  // start until the daemon says where its focus stands; whole at a desk.
+  $effect(() => {
+    if (!picturing) {
+      return;
+    }
+    untrack(() => {
+      placed = false;
+      view = { scale: addressAtFoot ? READ_SCALE : 0, x: 0, y: 0 };
+    });
+  });
+
+  // The picture stays on the page as the screen changes (the sheet moved).
+  $effect(() => {
+    track(screen.w, screen.h);
+    if (!picturing) {
+      return;
+    }
+    untrack(() => {
+      if (view.scale > 0) {
+        setView(view.scale, view.x, view.y);
+      }
+    });
+  });
+
+  /** Where the page's focus stands: a desktop layout opened on a phone moves to it, until the person moves it. */
+  function focused(focus: TakeoverFocus) {
+    if (!(picturing && addressAtFoot) || placed) {
+      return;
+    }
+    setView(
+      zoom,
+      (focus.x + focus.width / 2) * zoom - screen.w / 2,
+      (focus.y + focus.height / 2) * zoom - screen.h / 3
+    );
+  }
+
+  /** Fit the page: the whole page across the screen, and back to reading size. */
+  function fitPage() {
+    placed = true;
+    if (zoomedIn) {
+      setView(fit, 0, 0);
+    } else {
+      setView(READ_SCALE, view.x, view.y);
+    }
+  }
+
+  // The stream, while the browser is live: the page's frames (a take-over
+  // on either host, the local browser watched) or neko's video (the
+  // container host watched).
   $effect(() => {
     track(again);
-    const kind = host;
-    const media = kind === "container" ? video : canvas;
+    const kind = source;
+    const media = kind === "video" ? video : canvas;
     if (!(live && kind && media)) {
       return;
     }
@@ -217,31 +429,35 @@
       state: (next: StreamState) => {
         streamState = next;
       },
-      session: (id: string | null) => {
-        session = id;
-      },
     };
-    const opened = untrack(() =>
-      kind === "container"
-        ? nekoStream(
-            streamUrl(instanceId, artifactId, "api", viewer),
-            media as HTMLVideoElement,
-            events
-          )
-        : cdpStream(
-            streamUrl(instanceId, artifactId, "cdp", viewer),
-            media as HTMLCanvasElement,
-            events,
-            counted
-          )
-    );
+    const opened = untrack(() => {
+      if (kind === "video") {
+        return nekoStream(
+          streamUrl(instanceId, artifactId, "api", viewer),
+          media as HTMLVideoElement,
+          events
+        );
+      }
+      const made = cdpStream(
+        streamUrl(instanceId, artifactId, "cdp", viewer),
+        media as HTMLCanvasElement,
+        events,
+        counted,
+        focused
+      );
+      made.layout(laid);
+      frames = made;
+      return made;
+    });
     stream = opened;
     return () => {
       opened.close();
       if (stream === opened) {
         stream = null;
       }
-      session = null;
+      if (frames === opened) {
+        frames = null;
+      }
       streamState = { kind: "connecting" };
     };
   });
@@ -249,7 +465,7 @@
   // The video's frames, counted as they are presented.
   $effect(() => {
     const playing = video;
-    if (!(playing && host === "container")) {
+    if (!(playing && source === "video")) {
       return;
     }
     let handle = 0;
@@ -261,33 +477,6 @@
     };
     presented();
     return () => playing.cancelVideoFrameCallback(handle);
-  });
-
-  // While the person holds the browser, control goes to this view's neko
-  // session, once per take-over and session (the hub's /takeover sent
-  // again with `viewer`, agent shield.ts `control/give`).
-  let gaveTo = "";
-  $effect(() => {
-    const held = browser?.takeover;
-    const own = session;
-    if (!(held && own && host === "container" && browser)) {
-      return;
-    }
-    const mark = `${held.since}:${own}`;
-    if (gaveTo === mark) {
-      return;
-    }
-    gaveTo = mark;
-    const { key: browserKey } = browser;
-    untrack(() =>
-      takeOverFromPanel(browserKey, {
-        instanceId,
-        machineId: machine.machineId,
-        viewer: own,
-      }).then((why) => {
-        refusal = why ? browserWords.cantTakeOver(why) : null;
-      })
-    );
   });
 
   // The person opened it asleep, or failed at a start before this view: it
@@ -324,7 +513,14 @@
     again += 1;
   }
 
-  /** A point on the well in the stream's own pixels, the picture letterboxed in the well. */
+  /** Reload page (the head's glass on a desk, the foot's on a phone): the page loaded again in the layout the person holds. */
+  export function reloadPage() {
+    if (driving) {
+      frames?.reload();
+    }
+  }
+
+  /** A point on the page in the stream's own pixels, the picture letterboxed in its box. */
   function at(event: { clientX: number; clientY: number }) {
     const size = stream?.size();
     const box = layer?.getBoundingClientRect();
@@ -350,199 +546,408 @@
   /** Input goes to the browser only while the person holds it and the stream stands. */
   const driving = $derived(mine && streamState.kind === "live");
 
-  function pointer(event: PointerEvent, phase: "down" | "move" | "up") {
-    if (!(driving && stream)) {
+  /** The fingers on the page, by pointer id: where each is, client px. */
+  const fingers = new Map<number, { x: number; y: number }>();
+  /**
+   * What the fingers are doing: forwarded as touch (the phone layout); a
+   * finger held still, its word selected and a mouse button down after it;
+   * on the desktop layout's picture, one finger not yet moved (a tap or a
+   * hold to come), panning it, two fingers (pinching it or scrolling the
+   * page, once they have moved), or two fingers done and one still down.
+   */
+  type Gesture =
+    | { kind: "touch" }
+    | { kind: "select" }
+    | { kind: "wait" }
+    | { kind: "pan" }
+    | {
+        kind: "two";
+        mode: "wait" | "pinch" | "scroll";
+        dist: number;
+        mid: { x: number; y: number };
+        last: { x: number; y: number };
+        from: { scale: number; x: number; y: number };
+      }
+    | { kind: "spent" };
+  let gesture: Gesture | null = null;
+  /** Where the one finger came down, client px: a hold or a tap is one that stayed near it. */
+  let downAt = { x: 0, y: 0 };
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Where the last finger came down on the screen, px from its top: the field the phone's keyboard is raised for. */
+  let tappedAt = $state(0);
+
+  /** The fingers, in the stream's pixels. */
+  function points(): TakeoverTouchPoint[] {
+    const out: TakeoverTouchPoint[] = [];
+    for (const [id, client] of fingers) {
+      const point = at({ clientX: client.x, clientY: client.y });
+      if (point) {
+        out.push({ id, ...point });
+      }
+    }
+    return out;
+  }
+
+  /** An event's time on the epoch's clock, ms: the phone's own, which the page's fling reads. */
+  const timeOf = (event: Event): number =>
+    performance.timeOrigin + event.timeStamp;
+
+  /** A finger held still for {@link HOLD_MS}: the word under it selected, and a drag from there selects on. */
+  function armHold(point: { x: number; y: number }) {
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      if (
+        !frames ||
+        fingers.size !== 1 ||
+        !(gesture?.kind === "touch" || gesture?.kind === "wait")
+      ) {
+        return;
+      }
+      gesture = { kind: "select" };
+      frames.hold(point.x, point.y);
+    }, HOLD_MS);
+  }
+
+  /** The person's input takes the view's focus, or keeps the sink's while the phone's keyboard is up. */
+  function takeFocus() {
+    // With the keyboard up the sink keeps the focus, so it stays up while
+    // the person taps from field to field; what it held was typed where
+    // the caret stood before.
+    if (keyboardUp) {
+      resetSink();
+    } else {
+      layer?.focus();
+    }
+  }
+
+  function pointer(
+    event: PointerEvent,
+    phase: "down" | "move" | "up" | "cancel"
+  ) {
+    if (!(driving && frames)) {
       return;
     }
-    if (zoomed && event.pointerType === "touch") {
-      tap(event, phase);
-      return;
-    }
-    if (event.pointerType !== "mouse") {
-      finger(event, phase);
-      return;
-    }
-    const point = at(event);
-    if (!point) {
-      return;
-    }
-    if (phase === "move") {
-      stream.move(point.x, point.y);
+    if (event.pointerType === "mouse") {
+      mouse(event, phase, frames);
       return;
     }
     if (phase === "down") {
-      // With the keyboard up the sink keeps the focus, so it stays up while
-      // the person taps from field to field; what it held was typed where
-      // the caret stood before.
-      if (keyboardUp) {
-        resetSink();
-      } else {
-        layer?.focus();
-      }
+      takeFocus();
+      layer?.setPointerCapture(event.pointerId);
+      const box = screenBox?.getBoundingClientRect();
+      tappedAt = box ? event.clientY - box.top : 0;
+    }
+    event.preventDefault();
+    if (form === "phone") {
+      touch(event, phase, frames);
+    } else {
+      picture(event, phase, frames);
+    }
+  }
+
+  /** A mouse on the page, in either layout: its moves, presses and releases. */
+  function mouse(
+    event: PointerEvent,
+    phase: "down" | "move" | "up" | "cancel",
+    to: TakeoverStream
+  ) {
+    const point = at(event);
+    if (!point || phase === "cancel") {
+      return;
+    }
+    if (phase === "move") {
+      to.move(point.x, point.y);
+      return;
+    }
+    if (phase === "down") {
+      takeFocus();
       layer?.setPointerCapture(event.pointerId);
     }
     event.preventDefault();
-    stream.button(point.x, point.y, event.button, phase === "down");
+    to.button(point.x, point.y, event.button, phase === "down");
   }
 
-  /**
-   * A finger (or stylus) on the page at its own size, which the surface
-   * takes whole (`touch-none`, so the phone neither scrolls the panel nor
-   * pulls to refresh). The remote Chromium is spoken to in mouse and wheel
-   * (the agent's wire has no touch message), so the finger is translated
-   * the way every remote-desktop client does: a drag is wheel steps
-   * following it, a tap is a click as it lifts, and a press held still
-   * then dragged is a button held down, which selects text.
-   */
-  function finger(event: PointerEvent, phase: "down" | "move" | "up") {
-    if (phase === "down") {
-      fingerDown(event);
-      return;
+  /** The two fingers down: their middle and how far apart they are, client px. */
+  function pair(): { mid: { x: number; y: number }; dist: number } {
+    const [a, b] = [...fingers.values()];
+    if (!(a && b)) {
+      return { mid: { x: 0, y: 0 }, dist: 0 };
     }
-    if (!drag || drag.id !== event.pointerId) {
-      if (phase === "up" && !drag && event.isPrimary) {
-        pinching = false;
-      }
-      return;
-    }
-    const point = at(event);
-    if (phase === "up") {
-      endDrag(true, point);
-    } else if (point) {
-      fingerMove(event, point, drag);
-    }
-  }
-
-  function fingerDown(event: PointerEvent) {
-    if (drag) {
-      // A second finger: a pinch, which the page can't take. What the
-      // first began ends, its button released.
-      endDrag(false);
-      pinching = true;
-      return;
-    }
-    const point = at(event);
-    if (pinching || !point) {
-      return;
-    }
-    if (keyboardUp) {
-      resetSink();
-    } else {
-      layer?.focus();
-    }
-    layer?.setPointerCapture(event.pointerId);
-    const current: Finger = {
-      id: event.pointerId,
-      from: { x: event.clientX, y: event.clientY },
-      last: point,
-      mode: "wait",
+    return {
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      dist: Math.hypot(a.x - b.x, a.y - b.y),
     };
-    drag = current;
-    clearTimeout(holdTimer);
-    holdTimer = setTimeout(() => {
-      if (drag === current && current.mode === "wait") {
-        current.mode = "select";
-        stream?.button(current.last.x, current.last.y, 0, true);
-      }
-    }, HOLD_MS);
-    event.preventDefault();
-  }
-
-  function fingerMove(
-    event: PointerEvent,
-    point: { x: number; y: number },
-    current: Finger
-  ) {
-    if (current.mode === "select") {
-      stream?.move(point.x, point.y);
-      current.last = point;
-      return;
-    }
-    const still =
-      Math.hypot(
-        event.clientX - current.from.x,
-        event.clientY - current.from.y
-      ) <= TAP_SLOP;
-    if (current.mode === "wait" && still) {
-      return;
-    }
-    clearTimeout(holdTimer);
-    current.mode = "scroll";
-    if (point.x === current.last.x && point.y === current.last.y) {
-      return;
-    }
-    // The page follows the finger: a finger up reads the page further down.
-    stream?.wheel(point.x, point.y, {
-      ctrlKey: false,
-      deltaMode: 0,
-      deltaX: current.last.x - point.x,
-      deltaY: current.last.y - point.y,
-      timeStamp: event.timeStamp,
-    });
-    current.last = point;
-  }
-
-  /** The finger's gesture ends: a tap clicks, a held press releases; `lifted` is false when it is cut short (a second finger, cancel). */
-  function endDrag(lifted: boolean, point?: { x: number; y: number } | null) {
-    clearTimeout(holdTimer);
-    const current = drag;
-    drag = null;
-    if (!(current && stream)) {
-      return;
-    }
-    const end = point ?? current.last;
-    if (current.mode === "select") {
-      stream.button(end.x, end.y, 0, false);
-    } else if (current.mode === "wait" && lifted) {
-      stream.button(end.x, end.y, 0, true);
-      stream.button(end.x, end.y, 0, false);
-    }
   }
 
   /**
-   * A finger on a zoomed page: a drag pans the page (the screen scrolls
-   * natively), and a tap, one that barely moved, is a click where it
-   * landed, its press and release sent together as it lifts.
+   * Fingers on the phone layout's page, which the surface takes whole
+   * (`touch-none`, so the phone neither scrolls the panel nor pulls to
+   * refresh): each sent as the page's own touch as it comes, every sample
+   * of a coalesced move with its own time, so the page scrolls, flings and
+   * pinches as a phone's page does. A finger held still is a long press:
+   * its touch cancelled, the word under it selected, and a drag from there
+   * selects on with the mouse's button held.
    */
-  function tap(event: PointerEvent, phase: "down" | "move" | "up") {
+  function touch(
+    event: PointerEvent,
+    phase: "down" | "move" | "up" | "cancel",
+    to: TakeoverStream
+  ) {
     if (phase === "down") {
-      tapFrom = { x: event.clientX, y: event.clientY };
+      touchDown(event, to);
+    } else if (fingers.has(event.pointerId)) {
+      if (phase === "move") {
+        touchMove(event, to);
+      } else {
+        touchLift(event, phase, to);
+      }
+    }
+  }
+
+  function touchDown(event: PointerEvent, to: TakeoverStream) {
+    fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (gesture?.kind === "select") {
       return;
     }
-    if (phase === "move") {
-      return;
-    }
-    const from = tapFrom;
-    tapFrom = null;
+    gesture = { kind: "touch" };
+    to.touch("start", points(), timeOf(event));
+    clearTimeout(holdTimer);
     const point = at(event);
-    if (
-      !(from && point && stream) ||
-      Math.hypot(event.clientX - from.x, event.clientY - from.y) > TAP_SLOP
-    ) {
+    if (fingers.size === 1 && point) {
+      downAt = { x: event.clientX, y: event.clientY };
+      armHold(point);
+    }
+  }
+
+  function touchMove(event: PointerEvent, to: TakeoverStream) {
+    const samples = event.getCoalescedEvents?.() ?? [];
+    for (const one of samples.length > 0 ? samples : [event]) {
+      fingers.set(event.pointerId, { x: one.clientX, y: one.clientY });
+      if (
+        Math.hypot(one.clientX - downAt.x, one.clientY - downAt.y) > TAP_SLOP
+      ) {
+        clearTimeout(holdTimer);
+      }
+      const point = gesture?.kind === "select" ? at(one) : null;
+      if (point) {
+        to.move(point.x, point.y);
+      } else if (gesture?.kind !== "select") {
+        to.touch("move", points(), timeOf(one));
+      }
+    }
+  }
+
+  function touchLift(
+    event: PointerEvent,
+    phase: "up" | "cancel",
+    to: TakeoverStream
+  ) {
+    const lifted = at(event);
+    fingers.delete(event.pointerId);
+    clearTimeout(holdTimer);
+    if (gesture?.kind === "select") {
+      if (fingers.size === 0 && lifted) {
+        to.button(lifted.x, lifted.y, 0, false);
+      }
+      gesture = fingers.size === 0 ? null : gesture;
       return;
     }
-    if (keyboardUp) {
-      resetSink();
-    } else {
-      layer?.focus();
+    if (fingers.size > 0) {
+      // One finger lifted of several: the page's touch goes on with the rest.
+      to.touch("move", points(), timeOf(event));
+      return;
     }
-    stream.button(point.x, point.y, 0, true);
-    stream.button(point.x, point.y, 0, false);
+    to.touch(phase === "up" ? "end" : "cancel", [], timeOf(event));
+    gesture = null;
+  }
+
+  /**
+   * Fingers on the desktop layout's picture, a desktop page driven by a
+   * mouse: as a remote desktop's client takes them (Jump Desktop, Screens,
+   * Chrome Remote Desktop), one finger pans the picture and a tap clicks
+   * where it lands; two fingers scroll the page, or pinch the picture's
+   * zoom, whichever they do first; a finger held still selects the word
+   * under it, as on the phone layout.
+   */
+  function picture(
+    event: PointerEvent,
+    phase: "down" | "move" | "up" | "cancel",
+    to: TakeoverStream
+  ) {
+    const before = fingers.get(event.pointerId);
+    if (phase === "down") {
+      pictureDown(event, to);
+    } else if (before) {
+      if (phase === "move") {
+        pictureMove(event, before, to);
+      } else {
+        pictureLift(event, phase, to);
+      }
+    }
+  }
+
+  function pictureDown(event: PointerEvent, to: TakeoverStream) {
+    fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const point = at(event);
+    if (fingers.size === 1) {
+      gesture = { kind: "wait" };
+      downAt = { x: event.clientX, y: event.clientY };
+      if (point) {
+        armHold(point);
+      }
+      return;
+    }
+    if (fingers.size !== 2) {
+      return;
+    }
+    clearTimeout(holdTimer);
+    if (gesture?.kind === "select" && point) {
+      to.button(point.x, point.y, 0, false);
+    }
+    const { mid, dist } = pair();
+    gesture = {
+      kind: "two",
+      mode: "wait",
+      dist,
+      mid,
+      last: mid,
+      from: { scale: zoom, x: view.x, y: view.y },
+    };
+  }
+
+  function pictureMove(
+    event: PointerEvent,
+    before: { x: number; y: number },
+    to: TakeoverStream
+  ) {
+    const client = { x: event.clientX, y: event.clientY };
+    fingers.set(event.pointerId, client);
+    switch (gesture?.kind) {
+      case "wait":
+        if (Math.hypot(client.x - downAt.x, client.y - downAt.y) > TAP_SLOP) {
+          clearTimeout(holdTimer);
+          gesture = { kind: "pan" };
+          placed = true;
+          setView(
+            zoom,
+            view.x - (client.x - downAt.x),
+            view.y - (client.y - downAt.y)
+          );
+        }
+        return;
+      case "pan":
+        setView(
+          zoom,
+          view.x - (client.x - before.x),
+          view.y - (client.y - before.y)
+        );
+        return;
+      case "select": {
+        const point = at(event);
+        if (point) {
+          to.move(point.x, point.y);
+        }
+        return;
+      }
+      case "two":
+        twoFingers(gesture, to);
+        return;
+      // A finger forwarded as touch is the phone layout's; a pair's last
+      // finger, or none, moves nothing.
+      case "touch":
+      case "spent":
+      case undefined:
+        return;
+      default:
+        return;
+    }
+  }
+
+  function pictureLift(
+    event: PointerEvent,
+    phase: "up" | "cancel",
+    to: TakeoverStream
+  ) {
+    fingers.delete(event.pointerId);
+    clearTimeout(holdTimer);
+    const point = at(event);
+    if (gesture?.kind === "wait" && phase === "up" && point) {
+      to.button(point.x, point.y, 0, true);
+      to.button(point.x, point.y, 0, false);
+    } else if (gesture?.kind === "select" && point) {
+      to.button(point.x, point.y, 0, false);
+    }
+    gesture = fingers.size > 0 ? { kind: "spent" } : null;
+  }
+
+  /** Two fingers on the desktop layout's picture: they pinch its zoom about their middle, or scroll the page under it. */
+  function twoFingers(
+    two: Extract<Gesture, { kind: "two" }>,
+    to: TakeoverStream
+  ) {
+    const { mid, dist } = pair();
+    if (two.mode === "wait") {
+      if (Math.abs(dist - two.dist) > TWO_SLOP) {
+        two.mode = "pinch";
+      } else if (Math.hypot(mid.x - two.mid.x, mid.y - two.mid.y) > TWO_SLOP) {
+        two.mode = "scroll";
+      } else {
+        return;
+      }
+    }
+    placed = true;
+    if (two.mode === "pinch") {
+      pinch(two, mid, dist);
+      return;
+    }
+    const point = at({ clientX: mid.x, clientY: mid.y });
+    if (point) {
+      // The page follows the fingers: fingers up read the page further down.
+      to.wheel(point.x, point.y, {
+        deltaMode: 0,
+        deltaX: (two.last.x - mid.x) / zoom,
+        deltaY: (two.last.y - mid.y) / zoom,
+      });
+    }
+    two.last = mid;
+  }
+
+  /** The picture zoomed by the fingers' spread, the page's point under their first middle kept under their middle. */
+  function pinch(
+    two: Extract<Gesture, { kind: "two" }>,
+    mid: { x: number; y: number },
+    dist: number
+  ) {
+    const box = screenBox?.getBoundingClientRect();
+    if (!(box && two.dist > 0)) {
+      return;
+    }
+    const scale = Math.max(
+      fit,
+      Math.min(ZOOM_MOST, (two.from.scale * dist) / two.dist)
+    );
+    const pageX = (two.from.x + two.mid.x - box.left) / two.from.scale;
+    const pageY = (two.from.y + two.mid.y - box.top) / two.from.scale;
+    setView(
+      scale,
+      pageX * scale - (mid.x - box.left),
+      pageY * scale - (mid.y - box.top)
+    );
   }
 
   function wheel(event: WheelEvent) {
-    if (!(driving && stream)) {
+    if (!(driving && frames)) {
       return;
     }
     const point = at(event);
     if (point) {
       event.preventDefault();
-      stream.wheel(point.x, point.y, event);
+      frames.wheel(point.x, point.y, event);
     }
   }
 
   function key(event: KeyboardEvent, down: boolean) {
-    if (!(driving && stream)) {
+    if (!(driving && frames)) {
       return;
     }
     // Every key is the browser's while the person drives it: none reaches
@@ -554,22 +959,19 @@
     if (!pasting) {
       event.preventDefault();
     }
-    stream.key(event, down);
+    frames.key(event, down);
   }
 
   function paste(event: ClipboardEvent) {
-    if (!(driving && stream)) {
+    if (!(driving && frames)) {
       return;
     }
     const text = event.clipboardData?.getData("text/plain") ?? "";
     event.preventDefault();
     if (text) {
-      stream.paste(text);
+      frames.paste(text);
     }
   }
-
-  /** The phone's keyboard is up for the sink while the person drives. */
-  const keyboardUp = $derived(driving && sinkFocused);
 
   /** The sink as it stands with nothing typed, its caret at its end. */
   function resetSink() {
@@ -595,16 +997,30 @@
     sink?.focus({ preventScroll: true });
   }
 
+  /**
+   * While the phone's keyboard covers the sheet's foot, the phone layout's
+   * page keeps its size and moves up under the head so where the person
+   * last tapped (the field the keyboard is for) stands in view, px.
+   */
+  const keyboardShift = $derived(
+    keyboardUp && form === "phone" && addressAtFoot
+      ? Math.max(
+          0,
+          Math.min(screen.h - below, tappedAt - Math.max(0, below) / 2)
+        )
+      : 0
+  );
+
   /** The keyboard changed the sink: the change typed into the browser. */
   function sinkInput(event: Event) {
-    if (!(driving && stream && sink)) {
+    if (!(driving && frames && sink)) {
       return;
     }
     const now = sink.value;
     const typed = typedBetween(sent, now);
     sent = now;
     if (typed.back > 0 || typed.text) {
-      stream.type(typed);
+      frames.type(typed);
     }
     // A composition's field is the IME's until it ends.
     if ((event as InputEvent).isComposing) {
@@ -623,7 +1039,7 @@
 
   /** Enter that would break the sink's line, when no key press said so first: typed as Enter. */
   function sinkBeforeInput(event: InputEvent) {
-    if (!(driving && stream)) {
+    if (!(driving && frames)) {
       return;
     }
     const breaks =
@@ -632,13 +1048,13 @@
     // One that can't be cancelled reaches the sink, and its input types it.
     if (breaks && event.cancelable) {
       event.preventDefault();
-      stream.type({ back: 0, text: "\n" });
+      frames.type({ back: 0, text: "\n" });
     }
   }
 
   /** A key in the sink: the sink takes what edits it, the browser the rest (keyboard-sink.ts `sinkKeyRole`). */
   function sinkKey(event: KeyboardEvent, down: boolean) {
-    if (!(driving && stream)) {
+    if (!(driving && frames)) {
       return;
     }
     event.stopPropagation();
@@ -649,11 +1065,59 @@
     if (role === "enter") {
       event.preventDefault();
       if (down) {
-        stream.type({ back: 0, text: "\n" });
+        frames.type({ back: 0, text: "\n" });
       }
       return;
     }
     key(event, down);
+  }
+
+  /**
+   * The overview of the desktop layout's picture: the whole page in small,
+   * drawn from each frame as it lands, the part in view marked over it.
+   */
+  function drawOverview() {
+    const small = overviewCanvas;
+    if (!(small && canvas && canvas.width > 0 && zoomedIn)) {
+      return;
+    }
+    const width = small.clientWidth * window.devicePixelRatio;
+    const height = small.clientHeight * window.devicePixelRatio;
+    if (small.width !== width || small.height !== height) {
+      small.width = width;
+      small.height = height;
+    }
+    small.getContext("2d")?.drawImage(canvas, 0, 0, width, height);
+  }
+
+  // The overview drawn as it stands up, from the frame already drawn.
+  $effect(() => {
+    if (overviewCanvas && zoomedIn) {
+      untrack(drawOverview);
+    }
+  });
+
+  /** A press on the overview: the view moved to centre there. */
+  function overviewAt(event: PointerEvent) {
+    const box = overviewCanvas?.getBoundingClientRect();
+    if (!(box && box.width > 0 && box.height > 0)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.type === "pointerdown") {
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    } else if (event.buttons === 0) {
+      return;
+    }
+    placed = true;
+    const pageW = BROWSER_SCREEN.width * zoom;
+    const pageH = BROWSER_SCREEN.height * zoom;
+    setView(
+      zoom,
+      ((event.clientX - box.left) / box.width) * pageW - screen.w / 2,
+      ((event.clientY - box.top) / box.height) * pageH - screen.h / 2
+    );
   }
 
   /** What the well says when it shows no stream: a wait, or a failure with its way out. */
@@ -764,13 +1228,16 @@
 >
   <!-- The well: the screen contained in it on a desk, centred; on a
        phone's sheet the screen at its top, at its width, with where it is
-       and its controls right under it. -->
+       and its controls right under it. Taken over, `data-form` is the
+       layout the page is in: at a desk the phone's page stands in a card
+       with room round it. -->
   <div
     bind:this={well}
-    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3"
+    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:data-[form=phone]:p-space-5"
+    data-form={mine ? form : undefined}
     data-framed={addressAtFoot || undefined}
     data-slot="browser-well"
-    data-stream={host ? STREAM_OF[host] : undefined}
+    data-stream={source ?? undefined}
     data-stream-state={live ? streamState.kind : (browser?.state ?? "unknown")}
     {@attach frameSize(
       (node: HTMLElement) => {
@@ -793,22 +1260,30 @@
       }
     )}
   >
-    <!-- The screen: the stream's own box, at its own shape. Zoomed on a
-         phone it scrolls: the page drawn twice its size, a drag panning it. -->
+    <!-- The screen: the box the page draws in. The phone layout's page at a
+         desk is a plain card (the takeover pitch's frame); on a phone's
+         sheet every screen is framed by a hairline. While the phone's
+         keyboard is up the phone layout's page moves up under the head, so
+         the field the person tapped stands over the keyboard. -->
     <div
-      class="relative h-(--screen-h) w-(--screen-w) overflow-hidden data-zoomed:overflow-auto data-zoomed:overscroll-contain in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline"
+      bind:this={screenBox}
+      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:in-data-[form=phone]:rounded-modal not-in-data-framed:in-data-[form=phone]:border not-in-data-framed:in-data-[form=phone]:border-border-hairline not-in-data-framed:in-data-[form=phone]:shadow-overlay"
       data-slot="browser-screen"
-      data-zoomed={zoomed || undefined}
-      style:--screen-w="{screen.w}px"
+      style:--keyboard-shift="{-keyboardShift}px"
       style:--screen-h="{screen.h}px"
+      style:--screen-w="{screen.w}px"
     >
+      <!-- The page's picture: the screen's own box, or the desktop layout's
+           picture at its zoom, moved under the person's fingers. -->
       <div
-        class="relative h-(--page-h) w-(--page-w)"
+        class="absolute start-0 top-0 h-(--page-h) w-(--page-w) translate-x-(--page-x) translate-y-(--page-y)"
         data-slot="browser-page"
-        style:--page-w="{screen.w * (zoomed ? ZOOM : 1)}px"
-        style:--page-h="{screen.fitted * (zoomed ? ZOOM : 1)}px"
+        style:--page-h="{pageBox.h}px"
+        style:--page-w="{pageBox.w}px"
+        style:--page-x="{-pageBox.x}px"
+        style:--page-y="{-pageBox.y}px"
       >
-        {#if host === "container"}
+        {#if source === "video"}
           <video
             bind:this={video}
             class="absolute inset-0 size-full object-contain pointer-events-none"
@@ -817,7 +1292,7 @@
             muted
             playsinline
           ></video>
-        {:else if host === "local"}
+        {:else if source === "frames"}
           <canvas
             bind:this={canvas}
             class="absolute inset-0 size-full object-contain pointer-events-none"
@@ -830,10 +1305,9 @@
         <div
           bind:this={layer}
           aria-label={browserWords.view}
-          class="absolute inset-0 outline-none data-driving:cursor-default data-driving:not-data-zoomed:touch-none"
+          class="absolute inset-0 outline-none data-driving:cursor-default data-driving:touch-none"
           data-driving={driving || undefined}
           data-slot="browser-input"
-          data-zoomed={zoomed || undefined}
           oncontextmenu={(event) => {
             if (driving) {
               event.preventDefault();
@@ -847,11 +1321,7 @@
             }
           }}
           onpaste={paste}
-          onpointercancel={() => {
-            tapFrom = null;
-            endDrag(false);
-            pinching = false;
-          }}
+          onpointercancel={(event) => pointer(event, "cancel")}
           onpointerdown={(event) => pointer(event, "down")}
           onpointermove={(event) => pointer(event, "move")}
           onpointerup={(event) => pointer(event, "up")}
@@ -880,6 +1350,29 @@
           </div>
         </div>
       {/if}
+      {#if zoomedIn}
+        <!-- The whole page in small over the picture's corner, the part in
+             view marked; a press there moves the view to it. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -- a pointer's shortcut over the picture, which fingers pan as well. -->
+        <div
+          aria-label={browserWords.overview}
+          class="absolute end-space-3 top-space-3 z-1 aspect-16/10 w-22 touch-none overflow-hidden rounded-xs border border-border-contrast bg-surface-raised shadow-raised"
+          data-slot="browser-overview"
+          onpointerdown={overviewAt}
+          onpointermove={overviewAt}
+          role="img"
+        >
+          <canvas bind:this={overviewCanvas} class="absolute inset-0 size-full"
+          ></canvas>
+          <div
+            class="absolute start-(--view-x) top-(--view-y) h-(--view-h) w-(--view-w) rounded-hair border-2 border-coral-9"
+            style:--view-h="{Math.min(100, (screen.h / pageBox.h) * 100)}%"
+            style:--view-w="{Math.min(100, (screen.w / pageBox.w) * 100)}%"
+            style:--view-x="{(pageBox.x / pageBox.w) * 100}%"
+            style:--view-y="{(pageBox.y / pageBox.h) * 100}%"
+          ></div>
+        </div>
+      {/if}
       {#if driving && coarse.current && !addressAtFoot}
         <!-- On a desk's screen under a finger, Show keyboard floats at the
              screen's trailing foot. -->
@@ -892,7 +1385,8 @@
     </div>
     {#if addressAtFoot && live}
       <!-- Under the page, where a phone browser keeps it: where it is, and
-           its controls: Zoom, and while the person drives Show keyboard. -->
+           while the person drives its controls: Fit the page on the
+           desktop layout, Reload page, and Show keyboard. -->
       <div
         class="flex w-(--screen-w) min-w-0 items-center gap-space-2"
         data-slot="browser-foot"
@@ -907,19 +1401,28 @@
         <div class="flex min-w-0 flex-1">
           <BrowserAddress {mine} origin={browser?.origin ?? null} />
         </div>
-        <BarGlass form="group">
-          <BarItem
-            icon={zoomed ? IconZoomOutLinear : IconZoomInLinear}
-            label={zoomed ? browserWords.zoomOut : browserWords.zoomIn}
-            onclick={() => {
-              zoomed = !zoomed;
-            }}
-            props={{ "data-slot": "browser-zoom" }}
-          />
-          {#if driving && coarse.current}
-            {@render keyboardKey()}
-          {/if}
-        </BarGlass>
+        {#if driving}
+          <BarGlass form="group">
+            {#if picturing}
+              <BarItem
+                icon={IconMinimizeLinear}
+                label={browserWords.fitPage}
+                onclick={fitPage}
+                pressed={!zoomedIn}
+                props={{ "data-slot": "browser-fit" }}
+              />
+            {/if}
+            <BarItem
+              icon={IconRefreshLinear}
+              label={browserWords.reloadPage}
+              onclick={reloadPage}
+              props={{ "data-slot": "browser-reload" }}
+            />
+            {#if coarse.current}
+              {@render keyboardKey()}
+            {/if}
+          </BarGlass>
+        {/if}
       </div>
     {/if}
     {#if driving}

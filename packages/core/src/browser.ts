@@ -315,6 +315,63 @@ export const BROWSER_VIEW_MOVED = 4205;
 /** How long a take-over stands with no view open before the daemon hands it back itself. */
 export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;
 
+/**
+ * The layout the person takes the browser over in (agent cdp-takeover.ts):
+ * the desktop's, {@link BROWSER_SCREEN} with a mouse, as the agent drives
+ * it; or a phone's, the page laid out at `width` × `height` CSS px (the
+ * room the view has for it), drawn at `scale` device px to each, and
+ * driven by touch. Only the page's shape and its input change, never the
+ * browser's identity (its user agent and client hints stay the desktop's).
+ */
+export type TakeoverLayout =
+  | { form: "desk" }
+  | {
+      form: "phone";
+      width: number;
+      height: number;
+      scale: number;
+      landscape: boolean;
+    };
+
+/** One finger on a phone layout's page, in its CSS px; `id` stays the finger's while it is down. */
+export interface TakeoverTouchPoint {
+  id: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * What a take-over's view sends beside its pointer and keys: the layout
+ * (first on every connection, and on each change), the fingers on a
+ * phone layout's page at `time` (the phone's own clock, ms since the
+ * epoch: the page's fling takes its speed from the fingers' spacing), a
+ * finger held still on it (`hold`), which selects the word under it, and
+ * the page loaded again (`reload`: a site that chose its markup by touch
+ * as it loaded takes the layout's).
+ */
+export type TakeoverMessage =
+  | { t: "layout"; layout: TakeoverLayout }
+  | {
+      t: "touch";
+      phase: "start" | "move" | "end" | "cancel";
+      points: TakeoverTouchPoint[];
+      time: number;
+    }
+  | { t: "hold"; x: number; y: number }
+  | { t: "reload" };
+
+/** What a take-over's daemon tells its view beside the frames: where the page's focus stands, in its CSS px, once a desktop layout is laid out. */
+export interface TakeoverFocus {
+  height: number;
+  t: "focus";
+  width: number;
+  x: number;
+  y: number;
+}
+
+/** The most device px a phone layout draws each CSS px at: a phone's 3x. */
+export const TAKEOVER_SCALE_MOST = 3;
+
 /** What a hand-back answers: the front page's origin, and nothing else of it. */
 export interface BrowserHandback {
   key: BrowserKey;

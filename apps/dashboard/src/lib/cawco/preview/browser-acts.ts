@@ -1,8 +1,7 @@
 /**
  * The person's acts on a browser from its view in the panel (hub
- * browsers.ts routes): Take over unasked, the view's neko session named so
- * the shield gives it control, Hand back, and a start for a browser that is
- * asleep or failed. Each answers null once the hub has it, else the hub's
+ * browsers.ts routes): Take over unasked, Hand back, and a start for a
+ * browser that is asleep or failed. Each answers null once the hub has it, else the hub's
  * sentence.
  */
 import type { BrowserKey } from "@cawco/core/browser";
@@ -22,19 +21,15 @@ const post = async (request: HubRequest): Promise<string | null> => {
   }
 };
 
-/** Take over from session `instanceId`'s panel; with `viewer`, control goes to that neko session. */
+/** Take over from session `instanceId`'s panel. */
 export const takeOverFromPanel = (
   key: BrowserKey,
-  at: { instanceId: string; machineId: string; viewer?: string | null }
+  at: { instanceId: string; machineId: string }
 ): Promise<string | null> =>
   post(
     hubRequest("POST /api/browsers/:key/takeover", {
       path: { key },
-      body: {
-        instanceId: at.instanceId,
-        machineId: at.machineId,
-        ...(at.viewer ? { viewer: at.viewer } : {}),
-      },
+      body: { instanceId: at.instanceId, machineId: at.machineId },
     })
   );
 
