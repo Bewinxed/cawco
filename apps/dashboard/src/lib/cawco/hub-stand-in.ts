@@ -5,8 +5,8 @@
  * `hubAs("connecting")` as they see it while it reconnects;
  * `hubAs("connected", {}, { offline: true })` with the session's machine
  * offline. Its reads are
- * answered from `answers` by path, and refused for any other path in words
- * that say so.
+ * answered from `answers` by path (a query string after it is no part of
+ * the key), and refused for any other path in words that say so.
  */
 
 import { hubThrough } from "#lib/platform/hub.js";
@@ -29,7 +29,7 @@ export const hubAs =
       client: hubThrough(
         new Proxy(fetch, {
           apply: (_fetch, _this, [input]: Parameters<typeof fetch>) => {
-            const path = String(input);
+            const [path] = String(input).split("?", 1);
             return path in answers
               ? Promise.resolve(Response.json(answers[path]))
               : Promise.reject(

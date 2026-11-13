@@ -4,7 +4,7 @@
  * is asked once more, to read the hub's refusal (TaskOutput, MediaPlayer).
  */
 import { madeWords } from "@cawco/core/words/made";
-import { failureWords, hubRefusal } from "../../platform/hub-read";
+import { failureWords, hubRefusal, refusedOf } from "#lib/platform/hub-read.js";
 
 export const mediaProblem = (src: string, name: string): Promise<string> =>
   fetch(src).then(
@@ -12,7 +12,7 @@ export const mediaProblem = (src: string, name: string): Promise<string> =>
       response.ok
         ? madeWords.notShown(name)
         : failureWords(
-            await hubRefusal(response, madeWords.notShownThen(name))
+            hubRefusal(await refusedOf(response), madeWords.notShownThen(name))
           ),
     (error: unknown) => failureWords(error)
   );

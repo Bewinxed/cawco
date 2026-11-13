@@ -52,11 +52,19 @@ const run = (
 };
 
 const base = {
+  budget: null,
+  createdAt: now - 30 * DAY_MS,
   createdBy: "owner",
+  dailyCapUsd: null,
+  delegateType: null,
   disabledReason: null,
   expiresAt: null,
   keep: true,
+  lands: "main",
   lastSlot: null,
+  madeIn: null,
+  madeWhy: null,
+  mode: null,
   projectId: PROJECT.id,
   timeZone: "Europe/London",
 } as const;
@@ -74,6 +82,12 @@ const OWN: Routine[] = [
     prompt: "Fold, reshape and archive the project's knowledge files.",
     nextRuns: weekOf(6, [0, 1, 2, 3, 4, 5, 6]),
     nextSlot: weekOf(6, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
+    schedule: {
+      cron: "0 6 * * *",
+      nextAt: weekOf(6, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
+      timeZone: base.timeZone,
+      words: "At 06:00, every day (Europe/London)",
+    },
     runs: [
       run(
         "c1",
@@ -94,6 +108,12 @@ const OWN: Routine[] = [
     prompt: "Run `bun run check --all` on main and file what fails as tasks.",
     nextRuns: weekOf(2, [1, 2, 3, 4, 5]),
     nextSlot: weekOf(2, [1, 2, 3, 4, 5])[0] ?? now,
+    schedule: {
+      cron: "0 2 * * 1-5",
+      nextAt: weekOf(2, [1, 2, 3, 4, 5])[0] ?? now,
+      timeZone: base.timeZone,
+      words: "At 02:00, Monday through Friday (Europe/London)",
+    },
     runs: [run("n1", 9 * HOUR_MS, 14, "silent", null)],
   },
   {
@@ -106,6 +126,12 @@ const OWN: Routine[] = [
     prompt: "File each new GitHub issue on Bewinxed/cawco as a task.",
     nextRuns: [],
     nextSlot: now + HOUR_MS,
+    schedule: {
+      cron: "*/30 * * * *",
+      nextAt: null,
+      timeZone: base.timeZone,
+      words: "Every 30 minutes (Europe/London)",
+    },
     runs: [run("g1", 16 * DAY_MS, 3, "delivered", "Filed #412.")],
   },
 ];
@@ -122,6 +148,12 @@ const TRIM = {
     "You run the unused skills and servers routine. The hub has compared what sessions called over the last 30 days with each starting set; its findings follow.",
   nextRuns: weekOf(9, [1]),
   nextSlot: weekOf(9, [1])[0] ?? now,
+  schedule: {
+    cron: "0 9 * * 1",
+    nextAt: weekOf(9, [1])[0] ?? now,
+    timeZone: base.timeZone,
+    words: "At 09:00, only on Monday (Europe/London)",
+  },
 } as const;
 
 /** The routine turned on: no run yet. */
