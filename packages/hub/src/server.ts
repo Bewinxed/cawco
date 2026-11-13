@@ -2730,6 +2730,9 @@ export const createServer = (
       console.warn(`[hub] a note was not sent: ${sent.response.detail}`);
     }
   };
+  /** The latest passkey QR per browser key: newly connected dashboards get it. */
+  const latestPasskeyQr = new Map<BrowserKey, PasskeyQrFrame>();
+
   // The fleet's browsers and the browser asks that wait on the person
   // (browsers.ts, browser-tools.ts). Made before the settlement listener
   // below, which withdraws the asks of sessions that ended.

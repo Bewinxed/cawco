@@ -66,6 +66,7 @@ import { nekoLogin } from "./container-host";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import { restoreWindows } from "./own-size";
+import { extractFidoUri } from "./passkey-qr";
 import {
   allBrowsers,
   type BrowserRecord,
@@ -112,7 +113,13 @@ interface Held extends Kept {
 const held = new Map<BrowserKey, Held>();
 
 /** What the shield tells the hub through: the registry's frames, and a take-over it ended itself, each of this machine. */
-export type ShieldPorts = Pick<AgentPorts, "browsers" | "machineId" | "shield">;
+export type ShieldPorts = Pick<
+  AgentPorts,
+  "browsers" | "machineId" | "passkeyQr" | "shield"
+>;
+
+/** The last FIDO URI emitted per browser key: emit only once per unique URI. */
+const lastQr = new Map<BrowserKey, string>();
 
 const shieldFile = (key: BrowserKey): string =>
   join(browserDir(key), "shield.json");
@@ -705,6 +712,7 @@ const release = async (
     await endView(take);
   }
   await restorePages(key);
+  lastQr.delete(key);
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(ports, key, undefined).catch((error: unknown) =>
@@ -813,6 +821,8 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
       );
       continue;
     }
+    // While the take-over stands, check for a passkey QR on the page.
+    pollPasskeyQr(ports, key, take).catch(() => undefined);
     const views = Math.max(take.hubViewers, (await take.cdp)?.viewers ?? 0);
     if (views > 0) {
       take.unwatchedSince = undefined;
@@ -827,6 +837,46 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
       // which); the next count tries the hand-back again.
       await handBackBrowser(ports, key, "unwatched").catch(() => undefined);
     }
+  }
+};
+
+/**
+ * Attempts to extract a FIDO URI from the page the person is looking at
+ * during a take-over. When a new URI is found (one not already emitted for
+ * this browser), it is sent to the hub as a `passkey_qr` frame.
+ */
+const pollPasskeyQr = async (
+  { machineId, passkeyQr }: ShieldPorts,
+  key: BrowserKey,
+  take: Held
+): Promise<void> => {
+  if (!take.targetId) {
+    return;
+  }
+  const record = await readBrowser(key);
+  if (!record) {
+    return;
+  }
+  let link: CdpLink | undefined;
+  try {
+    link = await CdpLink.open(`http://127.0.0.1:${portsOf(record).devtools}`);
+    const session = await link.attach(take.targetId);
+    const uri = await extractFidoUri(link, session);
+    if (uri && uri !== lastQr.get(key)) {
+      lastQr.set(key, uri);
+      passkeyQr({
+        kind: "passkey_qr",
+        machineId,
+        key,
+        fidoUri: uri,
+        extractedAt: Date.now(),
+      });
+      console.info(`[browser] ${key}: passkey QR extracted`);
+    }
+  } catch {
+    // The browser may not be reachable; silently skip this tick.
+  } finally {
+    link?.close();
   }
 };
 
