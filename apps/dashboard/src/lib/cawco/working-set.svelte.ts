@@ -74,7 +74,22 @@ const save = () => {
   store("local", KEY, JSON.stringify(visits));
 };
 
+/** The sessions the workspace's tabs hold open, as the workspace says it ({@link workingSet.holdOpen}). */
+let openIds = (): readonly string[] => {
+  throw new Error(
+    "workingSet.visit was called before the workspace registered its open tabs (workingSet.holdOpen)"
+  );
+};
+
 export const workingSet = {
+  /**
+   * The workspace's tabs, registered once: none of the sessions they hold
+   * open is forgotten to make room for another visit.
+   */
+  holdOpen(source: () => readonly string[]): void {
+    openIds = source;
+  },
+
   /** Where a stored session's tab last knew it to live, or null for a live
       session, whose row on the hub answers instead, and for one remembered
       without its harness. */
@@ -92,12 +107,9 @@ export const workingSet = {
   },
 
   /** Notes that a conversation is on screen, keeping where a stored session
-      was last known to live so its tab can be named before the fleet answers.
-      `open`: the sessions the workspace's tabs hold open, none of which is
-      forgotten to make room. */
+      was last known to live so its tab can be named before the fleet answers. */
   visit(
     id: string,
-    open: readonly string[],
     ctx?: { machine?: string | null; cwd?: string; harness?: HarnessKind }
   ): void {
     if (!id) {
@@ -115,7 +127,7 @@ export const workingSet = {
     // is never forgotten — its name and address are what draw it — so with
     // more tabs open than the limit, the set simply holds them all.
     if (visits.length > LIMIT) {
-      const held = new Set(open);
+      const held = new Set(openIds());
       let coldest = -1;
       for (let i = 0; i < visits.length; i += 1) {
         if (visits[i].id === id || held.has(visits[i].id)) {

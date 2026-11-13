@@ -275,7 +275,7 @@ export function dragSession(
         // conversation that happens to share an id.
         const ctx = current.ctx?.();
         if (ctx) {
-          workingSet.visit(current.sessionId, workspace.openIds, ctx);
+          workingSet.visit(current.sessionId, ctx);
         }
       },
       onDrop: clearHints,
