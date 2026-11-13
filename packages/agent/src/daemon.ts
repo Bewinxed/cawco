@@ -197,6 +197,7 @@ import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { claudeAuthNote, onSigninsChanged } from "./accounts";
 import { type Activity, desktopReadable, watchActivity } from "./activity";
+import type { AgentPorts } from "./agent-ports";
 import { recordAgentState } from "./agent-state";
 import { unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
@@ -213,7 +214,6 @@ import { accountsChangedHere, watchQuietBoundaries } from "./boundary/looks";
 import {
   browserFrame,
   removeBrowser,
-  setBrowserSink,
   startBrowser,
   stopBrowser,
   stopBrowsers,
@@ -227,7 +227,6 @@ import {
   relayRuntimeRead,
   removeRelay,
   renewRelay,
-  setRelaySink,
   startRelay,
   stopRelay,
   watchRelay,
@@ -238,7 +237,6 @@ import {
   browserViewers,
   handBackBrowser,
   restoreShields,
-  setShieldSink,
   shieldBrowser,
 } from "./browser/shield";
 import { buildInfo } from "./build";
@@ -262,12 +260,13 @@ import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
 import {
   OPENCODE_REPORTED_FILES,
+  opencodeAccounts,
   removeCawcoSessionConfigs,
 } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
-import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
+import { cancelCommand, runFollowedCommand } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
@@ -283,7 +282,7 @@ import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
-import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
+import { startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
   moveCancel,
@@ -293,7 +292,6 @@ import {
   movePrepare,
   moveRemoteCredential,
   moveSnapshot,
-  setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
 import { placeLfs, placeRepo } from "./place-repo";
@@ -317,14 +315,9 @@ import {
   piProviders,
   providerAccountReports,
   readHomeCredentials,
-  setBorrowAsk,
   setProviderKey,
 } from "./provider-accounts";
-import {
-  machineGoKey,
-  readDueProviderAccounts,
-  setProviderReadingSink,
-} from "./provider-usage";
+import { machineGoKey, readDueProviderAccounts } from "./provider-usage";
 import {
   forgetRevoked,
   outbound,
@@ -333,7 +326,7 @@ import {
 } from "./redaction";
 import { removeFolder } from "./remove-folder";
 import { repoRoot } from "./repo-top";
-import { fenced, setRestartSource } from "./restart";
+import { fenced } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
@@ -344,14 +337,12 @@ import {
   renderStage,
   resumeStages,
   StageRefusal,
-  setStageSink,
   stageComponents,
   stopServed,
   tellStages,
   warmStage,
   writeSheet,
 } from "./stage";
-import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
 import { endToolSignins } from "./tool-signin";
 import { onNeedsAnswered, onToolsMoved, probeTools } from "./tools";
@@ -838,7 +829,10 @@ const watchOpencodeReport = (
 };
 
 /** The provider-account controls, each telling the machine's harnesses when the accounts moved. */
-const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
+const registerProviderAccounts = (
+  supervisor: SessionSupervisor,
+  ports: AgentPorts
+): void => {
   const changing =
     <T>(work: () => Promise<T>) =>
     async (): Promise<T> => {
@@ -877,12 +871,12 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
   );
   supervisor.declareControl(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
     changing(async () => {
-      await forgetProviderAccount(id as string);
+      await forgetProviderAccount(id as string, ports);
       return { forgotten: true };
     })()
   );
   supervisor.declareControl(CONTROL_READ_HOME_CREDENTIALS, () =>
-    readHomeCredentials()
+    readHomeCredentials(ports)
   );
   supervisor.declareControl(
     CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -891,7 +885,8 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
         joinProviderAccount(
           from as string,
           into as string,
-          expected as AccountIdentity
+          expected as AccountIdentity,
+          ports
         )
       )()
   );
@@ -901,6 +896,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       changing(() =>
         moveHomeCredential(
           id as string,
+          ports,
           store as HomeCredential["store"],
           storeProvider as string,
           expected as AccountIdentity
@@ -908,7 +904,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       )()
   );
   supervisor.declareControl(CONTROL_LEND_ACCOUNT, (id) =>
-    lendAccount(id as string)
+    lendAccount(id as string, ports)
   );
   supervisor.declareControl(
     CONTROL_BORROW_ACCOUNT,
@@ -916,6 +912,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       changing(() =>
         borrowAccount(
           id as string,
+          ports,
           lender as string,
           lent as LentAccess,
           store as HomeCredential["store"],
@@ -1353,6 +1350,30 @@ const send = (socket: WebSocket, envelope: Envelope): void => {
 };
 
 /**
+ * The hub connection the agent's own frames leave on ({@link AgentPorts}):
+ * the latest `attach` opened. With none open (before the first, or one that
+ * closed) a frame is dropped.
+ */
+class HubLine {
+  #open: { machine: string; socket: WebSocket } | undefined;
+
+  /** A connection opened, of `machine`: frames leave on it from here. */
+  use(socket: WebSocket, machine: string): void {
+    this.#open = { socket, machine };
+  }
+
+  send(envelope: Envelope): void {
+    if (this.#open?.socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    send(this.#open.socket, {
+      ...envelope,
+      machineId: envelope.machineId || this.#open.machine,
+    });
+  }
+}
+
+/**
  * How long a dial waits for the hub to answer its upgrade. A socket the far
  * end accepted but never answers (a hub whose loop is wedged, a middlebox
  * holding the connection, another process on the hub's port) fires neither
@@ -1747,6 +1768,9 @@ const attach = (
   sessions: () => ReturnType<typeof readSessions>,
   /** What launches ask the hub as they start; this connection carries them once registered. */
   launchAsks: LaunchAsks,
+  /** What the agent sends through, and the line its frames leave on: this connection from here. */
+  ports: AgentPorts,
+  hubLine: HubLine,
   /**
    * Called once the socket is open and the register has gone out — the moment
    * this connection counts as up. {@link reconnecting} reads it to tell a
@@ -2051,7 +2075,7 @@ const attach = (
       network = now;
       needs = lacking;
       if (moved) {
-        relayReachChanged().catch((error: unknown) =>
+        relayReachChanged(ports).catch((error: unknown) =>
           console.warn(
             `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
           )
@@ -2403,17 +2427,10 @@ const attach = (
       return reportedHarnesses;
     };
 
-    // An envelope a harness builds itself (opencode's custody inspection
-    // frame); hand-offs and spawns go through the hub's MCP, never this socket.
-    supervisor.emit = (envelope) => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      send(socket, {
-        ...envelope,
-        machineId: envelope.machineId || identity.machineId,
-      });
-    };
+    // From here the agent's own frames and the envelopes a harness builds
+    // itself (opencode's custody inspection frame) leave on this socket;
+    // hand-offs and spawns go through the hub's MCP, never this socket.
+    hubLine.use(socket, identity.machineId);
 
     supervisor.sink = (frame) => {
       if (socket.readyState !== WebSocket.OPEN) {
@@ -2844,7 +2861,7 @@ const attach = (
       const named = ack.sessions ?? [];
       (async () => {
         if (unknown.length > 0) {
-          await forgetUnknownAccounts(unknown);
+          await forgetUnknownAccounts(unknown, ports);
           providerAccountsChanged();
         }
         if (named.length > 0) {
@@ -3202,18 +3219,6 @@ const attach = (
       once: true,
     });
 
-    // A turn on an account reads its windows shortly after; they go to the
-    // hub on this connection as they come.
-    setProviderReadingSink((accounts) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "usage",
-          machineId: identity.machineId,
-          payload: { accounts },
-        });
-      }
-    });
-
     // Usage, cost & limits (USAGE-SPEC.md §5): scan the machine's transcripts
     // and opencode DB, then report absolute bucket totals with OpenCode Go's
     // windows. A scan failure must never kill the daemon — it hosts the user's
@@ -3231,7 +3236,7 @@ const attach = (
             fetchOpenCodeGoLimits(machineGoKey())
           );
           const accounts = yield* Effect.promise(() =>
-            readDueProviderAccounts()
+            readDueProviderAccounts(ports)
           );
           send(socket, {
             verb: "usage",
@@ -3365,8 +3370,36 @@ const startDaemon = (rediscover = false) =>
     // is enough: each attempt calls `session` anew, in the same tick that
     // reads this.
     let hubUrl = url;
+    // The supervisor, from when it is made until it detaches: what the
+    // gateway and the updater ask what a restart would cut read it (restart.ts).
+    let supervising: SessionSupervisor | undefined;
+    const machineIdValue = yield* Effect.promise(() => machineId());
+    // What the modules send through, built before any of them starts; every
+    // frame leaves on the hub connection that is up (`HubLine`).
+    const hubLine = new HubLine();
+    const framed = (frame: unknown): void =>
+      hubLine.send({ verb: "frames", machineId: "", payload: frame });
+    const ports: AgentPorts = {
+      borrowAsk: framed,
+      browsers: framed,
+      commandQueue: framed,
+      emit: (envelope) => hubLine.send(envelope),
+      machineId: machineIdValue,
+      moveProgress: framed,
+      opencodeAccounts,
+      relay: framed,
+      shield: framed,
+      stage: framed,
+      stageClone: framed,
+    };
     yield* Effect.acquireRelease(
-      Effect.promise(() => startMcpGateway(() => hubUrl)),
+      Effect.promise(() =>
+        startMcpGateway(() => hubUrl, {
+          freshen: (accountId) => freshen(accountId, ports),
+          supervisorHolds: () => supervising?.restartHolds(),
+          browsers: ports,
+        })
+      ),
       (listener) => Effect.sync(() => listener.stop(true))
     );
     // Only now: its echo's kernel-picked port could otherwise be the
@@ -3374,7 +3407,6 @@ const startDaemon = (rediscover = false) =>
     watchFromItsOwnThread();
     // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
     yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
-    const machineIdValue = yield* Effect.promise(() => machineId());
     // Set for this process's own readers (core machine-id.ts `machineId` takes
     // the id from here; git-credential.ts `hubOrigin`, move.ts and host-lfs.ts
     // read the hub) and for what it starts with an env built from this one.
@@ -3413,10 +3445,10 @@ const startDaemon = (rediscover = false) =>
     // Outlives any one connection: a hub restart must not kill running sessions.
     const supervisor = yield* Effect.acquireRelease(
       Effect.sync(() => {
-        const created = new SessionSupervisor();
+        const created = new SessionSupervisor(ports);
         // What a restart would cut is the supervisor's to say from here on
         // (`restart.ts`); the updater and `cawco service restart` read it.
-        setRestartSource(() => created.restartHolds());
+        supervising = created;
         return created;
       }),
       (running) =>
@@ -3428,7 +3460,7 @@ const startDaemon = (rediscover = false) =>
           Effect.andThen(
             Effect.sync(() => {
               running.detach();
-              setRestartSource(undefined);
+              supervising = undefined;
             })
           )
         )
@@ -3458,7 +3490,9 @@ const startDaemon = (rediscover = false) =>
 
     // Updates arrive only as signed builds from the hub: this one object owns
     // the update tick, the "Install now" command and the policy the hub pushes.
-    const updater = new BinaryUpdater(reportBinaryUpdate);
+    const updater = new BinaryUpdater(reportBinaryUpdate, () =>
+      supervising?.restartHolds()
+    );
     supervisor.declareControl(UPDATE_CAWCO, (command) =>
       updater.installNow(
         (command ?? {}) as { commandId?: string; version?: string }
@@ -3475,11 +3509,7 @@ const startDaemon = (rediscover = false) =>
     // OAuth sign-in (the store's only writer, which also writes each
     // account's OpenCode store), the refresh pi sessions ask for, and
     // OpenCode's own store cleared of the markers CawCo kept there before.
-    registerProviderAccounts(supervisor);
-    setAccountFreshener((accountId) => freshen(accountId));
-    setBorrowAsk((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
+    registerProviderAccounts(supervisor, ports);
     yield* Effect.promise(() =>
       dropOpencodeMarkers().catch((error: unknown) =>
         console.warn(
@@ -3489,7 +3519,7 @@ const startDaemon = (rediscover = false) =>
     );
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.promise(() => freshenAll()),
+        Effect.promise(() => freshenAll(ports)),
         Schedule.spaced(ACCOUNT_REFRESH_INTERVAL)
       )
     );
@@ -3544,15 +3574,12 @@ const startDaemon = (rediscover = false) =>
       )
     );
     // A command runs as this process's child, so a restart kills it: none starts behind a raised fence.
-    setCommandQueue((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(
       CONTROL_RUN_COMMAND,
       (cwd, cmd, timeoutMs, workspace, run) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : runHubCommand(cwd, cmd, timeoutMs, workspace, run),
+          : runFollowedCommand(cwd, cmd, timeoutMs, workspace, run, ports),
       commandLane
     );
     // A cancel ends a command already running, so it is taken behind a raised fence too.
@@ -3689,36 +3716,30 @@ const startDaemon = (rediscover = false) =>
     });
     // A project's browser (browser/browsers.ts): started or woken on its
     // machine's host, stopped, removed; the whole list told on each change.
-    setBrowserSink(machineIdValue, (frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(BROWSER_START, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : startBrowser(args as BrowserStartArgs)
+        : startBrowser(ports, args as BrowserStartArgs)
     );
     supervisor.declareControl(BROWSER_STOP, async (args) =>
-      stopBrowser(browserKeyOf(args))
+      stopBrowser(ports, browserKeyOf(args))
     );
     supervisor.declareControl(BROWSER_REMOVE, async (args) =>
-      removeBrowser(browserKeyOf(args))
+      removeBrowser(ports, browserKeyOf(args))
     );
     // The person takes a browser over privately and hands it back
     // (browser/shield.ts); a take-over with no view for two minutes is
     // handed back here, and the hub told.
-    setShieldSink(machineIdValue, (frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(BROWSER_SHIELD, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : shieldBrowser({
+        : shieldBrowser(ports, {
             ...(args as BrowserShieldArgs),
             key: browserKeyOf(args),
           })
     );
     supervisor.declareControl(BROWSER_HANDBACK, async (args) =>
-      handBackBrowser(browserKeyOf(args))
+      handBackBrowser(ports, browserKeyOf(args))
     );
     // A browser ask as it parks: the asking door's page on the asked origin,
     // which a take-over brings to the front (browser/shield.ts).
@@ -3735,14 +3756,14 @@ const startDaemon = (rediscover = false) =>
     // browser-routes.ts): the machine's one browser listener, and a neko
     // session of its own for each viewer.
     supervisor.declareControl(BROWSER_LISTEN, async (args) =>
-      listenBrowsers(args)
+      listenBrowsers(args, ports)
     );
     supervisor.declareControl(BROWSER_VIEWER_TOKEN, async (args) =>
-      viewerSession(browserKeyOf(args))
+      viewerSession(ports, browserKeyOf(args))
     );
     // The machine's browsers whole, as its records hold them: what the hub
     // reads as the machine registers (its take-overs are the machine's own).
-    supervisor.declareControl(BROWSER_ROWS, () => browserFrame());
+    supervisor.declareControl(BROWSER_ROWS, () => browserFrame(ports));
     supervisor.declareControl(BROWSER_VIEWERS, (args) => {
       const { count } = args as BrowserViewersArgs;
       const key = browserKeyOf(args);
@@ -3769,11 +3790,11 @@ const startDaemon = (rediscover = false) =>
         // gates start closed as the registry makes them, browsers.ts
         // `gateFor`), so a browser the registry then reads back as stopped
         // has its take-over released and its gate opened.
-        restoreShields()
+        restoreShields(ports)
           .catch((error: unknown) =>
             console.warn(`[browser] take-overs not restored: ${String(error)}`)
           )
-          .then(() => watchBrowsers())
+          .then(() => watchBrowsers(ports))
           .then(
             (stop) => {
               unwatchBrowsers = stop;
@@ -3794,23 +3815,20 @@ const startDaemon = (rediscover = false) =>
     yield* Effect.addFinalizer(() => Effect.promise(() => stopBrowsers()));
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):
     // started, stopped, its certificate renewed; read back from its container.
-    setRelaySink(machineIdValue, (frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(RELAY_START, async (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : startRelay(relayStartOf(args))
+        : startRelay(ports, relayStartOf(args))
     );
-    supervisor.declareControl(RELAY_STOP, () => stopRelay());
-    supervisor.declareControl(RELAY_REMOVE, () => removeRelay());
+    supervisor.declareControl(RELAY_STOP, () => stopRelay(ports));
+    supervisor.declareControl(RELAY_REMOVE, () => removeRelay(ports));
     supervisor.declareControl(RELAY_RENEW, (args) => {
       const token = (args as { cloudflareToken?: unknown } | null)
         ?.cloudflareToken;
       if (typeof token !== "string") {
         throw new Error("relay.renew takes the Cloudflare token.");
       }
-      return renewRelay({ cloudflareToken: token });
+      return renewRelay(ports, { cloudflareToken: token });
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, and a binding from here through it.
@@ -3826,23 +3844,17 @@ const startDaemon = (rediscover = false) =>
     });
     yield* Effect.forkScoped(
       Effect.promise(() =>
-        watchRelay().catch((error: unknown) =>
+        watchRelay(ports).catch((error: unknown) =>
           console.warn(`[relay] not read back: ${String(error)}`)
         )
       )
     );
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
-    setStageSink((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     // Each stage that answered as the last agent ended, started again at its port (stage.ts `carryStages`).
-    resumeStages().catch((error: unknown) =>
+    resumeStages(ports).catch((error: unknown) =>
       console.warn(
         `[stage] the stages the last agent carried were not started again: ${error instanceof Error ? error.message : String(error)}`
       )
-    );
-    setStageCloneSink((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
     // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
     supervisor.declareControl(STAGE_ENSURE, (ref, file) => {
@@ -3852,8 +3864,9 @@ const startDaemon = (rediscover = false) =>
       const named = file as
         { file?: string; files?: string[]; opening?: boolean } | string;
       return typeof named === "string"
-        ? ensureStage(ref as WorkspaceRef, named)
+        ? ensureStage(ports, ref as WorkspaceRef, named)
         : ensureStage(
+            ports,
             ref as WorkspaceRef,
             String(named.file),
             named.files,
@@ -3865,26 +3878,27 @@ const startDaemon = (rediscover = false) =>
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      warmStage(ref as WorkspaceRef, warm as StageWarm);
+      warmStage(ports, ref as WorkspaceRef, warm as StageWarm);
       return Promise.resolve();
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
     supervisor.declareControl(STAGE_WRITE, (ref, write) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : writeSheet(ref as WorkspaceRef, write as SheetWrite)
+        : writeSheet(ports, ref as WorkspaceRef, write as SheetWrite)
     );
     // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
     supervisor.declareControl(STAGE_RENDER, (ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : renderStage(ref as WorkspaceRef, ask as RenderAsk)
+        : renderStage(ports, ref as WorkspaceRef, ask as RenderAsk)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
     supervisor.declareControl(STAGE_COMPONENTS, (ref, dir) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(
+            ports,
             ref as WorkspaceRef,
             dir && typeof dir === "object" ? (dir as DesignQuery) : {}
           )
@@ -3898,7 +3912,7 @@ const startDaemon = (rediscover = false) =>
       if (!ref) {
         throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
       }
-      return ensureServed(ref, serve as ServeSpec);
+      return ensureServed(ports, ref, serve as ServeSpec);
     });
     supervisor.declareControl(STAGE_UNSERVE, (workspace, port) =>
       stopServed(String(workspace), Number(port))
@@ -3954,9 +3968,6 @@ const startDaemon = (rediscover = false) =>
       <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
       (...args: A): Promise<R> =>
         fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : step(...args);
-    setMoveProgress((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(CONTROL_MOVE_INSPECT, (path) =>
       moveInspect(path as string)
     );
@@ -3980,13 +3991,15 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(
       CONTROL_MOVE_CLONE,
       unfenced((request) =>
-        moveClone(request as Parameters<typeof moveClone>[0])
+        moveClone(request as Parameters<typeof moveClone>[0], ports)
       ),
       moveLane
     );
     supervisor.declareControl(
       CONTROL_MOVE_LFS,
-      unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0])),
+      unfenced((request) =>
+        moveLfs(request as Parameters<typeof moveLfs>[0], ports)
+      ),
       moveLane
     );
     supervisor.declareControl(CONTROL_MOVE_CANCEL, (jobId) =>
@@ -4032,6 +4045,8 @@ const startDaemon = (rediscover = false) =>
             hubUrl,
             sessions,
             launchAsks,
+            ports,
+            hubLine,
             markLive
           )
         ),

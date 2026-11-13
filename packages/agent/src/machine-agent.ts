@@ -18,12 +18,9 @@
  * waits until this process holds the link.
  */
 
-let markHeld: () => void = () => undefined;
-const held = new Promise<boolean>((resolve) => {
-  markHeld = () => resolve(true);
-});
+const { promise: held, resolve: markHeld } = Promise.withResolvers<boolean>();
 
 /** This process's connection to the hub is proven: it is the machine's agent. */
-export const holdHubLink = (): void => markHeld();
+export const holdHubLink = (): void => markHeld(true);
 
 export const isMachineAgent = (): Promise<boolean> => held;

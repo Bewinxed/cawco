@@ -396,8 +396,12 @@ export const interactionOf = (value: unknown): Interaction | undefined =>
 export type Scheme = "light" | "dark";
 
 /** The width presets a frame takes when its story names no viewport of its own. Ours, DESIGN.md's breakpoints. */
-export const FORMS = { phone: 390, tablet: 768, desk: 1280 } as const;
-export type FormName = keyof typeof FORMS;
+export type FormName = "phone" | "tablet" | "desk";
+export const FORMS = {
+  phone: 390,
+  tablet: 768,
+  desk: 1280,
+} as const satisfies Record<FormName, number>;
 const FORM_NAMES = [
   "phone",
   "tablet",
@@ -529,7 +533,7 @@ export interface SectionRender {
    * stage's problem): no browser drew this content since the stage started,
    * or the files changed since one did.
    */
-  drawn?: { at: string; by: RenderReport["by"] };
+  drawn?: { at: string; by: RenderedBy };
   file: string;
   frames: FrameRender[];
   /** The content hash of the states file and every file of the project's its frames are drawn from, as they stood when the stage kept the report: an edit since the draw loads the section again, which draws and reports again. */
@@ -540,6 +544,9 @@ export interface SectionRender {
   title: string;
 }
 
+/** Which browser drew a canvas: the person's panel, or the stage's own. */
+export type RenderedBy = "panel" | "stage";
+
 /**
  * What a browser drew of a canvas: the page's own errors, each section
  * drawn, and the stories with no doc comment. Posted by the canvas page
@@ -549,7 +556,7 @@ export interface SectionRender {
  */
 export interface RenderReport {
   at: string;
-  by: "panel" | "stage";
+  by: RenderedBy;
   /** Each story whose label holds a word of code (`isOpen`, `open_record`, a backticked span, an export's name), with that word. Optional on the wire, as `widthOnly`. */
   codeNamed?: { story: string; word: string }[];
   /**

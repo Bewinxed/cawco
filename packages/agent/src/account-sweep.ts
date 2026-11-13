@@ -16,6 +16,7 @@ import {
   accountsRoot,
 } from "@cawco/core/paths/claude";
 import { changingSignins, removeAccountDir } from "./accounts";
+import type { AgentPorts } from "./agent-ports";
 import { forgetAccount } from "./login";
 import { forgetProviderAccount } from "./provider-accounts";
 
@@ -35,7 +36,10 @@ export const accountStoreIds = (): string[] => {
  * machine itself listed are acted on; a store whose sign-out fails is left
  * for the next connect, and the others go on.
  */
-export const forgetUnknownAccounts = async (ids: string[]): Promise<void> => {
+export const forgetUnknownAccounts = async (
+  ids: string[],
+  ports: Pick<AgentPorts, "opencodeAccounts">
+): Promise<void> => {
   const ours = new Set(accountStoreIds());
   for (const id of ids.filter((one) => ours.has(one))) {
     try {
@@ -43,7 +47,7 @@ export const forgetUnknownAccounts = async (ids: string[]): Promise<void> => {
         await changingSignins(forgetAccount(id));
       }
       if (existsSync(accountCredentialPath(id))) {
-        await forgetProviderAccount(id);
+        await forgetProviderAccount(id, ports);
       }
       await removeAccountDir(id);
       console.log(

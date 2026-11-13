@@ -53,6 +53,7 @@ import {
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";
+import type { AgentPorts } from "../agent-ports";
 import { browserRows, browsersChanged, startBrowser } from "./browsers";
 import {
   CdpLink,
@@ -110,17 +111,8 @@ interface Held extends Kept {
 
 const held = new Map<BrowserKey, Held>();
 
-let sink: (frame: BrowserHandedBackFrame) => void = () => undefined;
-let machineId = "";
-
-/** Where the daemon tells the hub of a take-over it ended itself, and the machine it is. */
-export const setShieldSink = (
-  id: string,
-  send: (frame: BrowserHandedBackFrame) => void
-): void => {
-  machineId = id;
-  sink = send;
-};
+/** What the shield tells the hub through: the registry's frames, and a take-over it ended itself, each of this machine. */
+export type ShieldPorts = Pick<AgentPorts, "browsers" | "machineId" | "shield">;
 
 const shieldFile = (key: BrowserKey): string =>
   join(browserDir(key), "shield.json");
@@ -180,19 +172,26 @@ interface Page {
   url: string;
 }
 
+/** A target of Chromium's list that is a page. */
+const PAGE_TARGET = z.object({
+  targetId: z.string(),
+  type: z.literal("page"),
+  url: z.string().optional(),
+});
+
 /** The browser's pages, as Chromium lists them. */
 const pagesOf = async (link: CdpLink): Promise<Page[]> => {
   const { targetInfos } = await link.call("Target.getTargets");
-  return (Array.isArray(targetInfos) ? targetInfos : [])
-    .filter(
-      (info): info is { targetId: string; type: string; url?: string } =>
-        !!info &&
-        typeof info === "object" &&
-        typeof (info as { targetId?: unknown }).targetId === "string" &&
-        (info as { type?: unknown }).type === "page"
-    )
-    .map((info) => ({ targetId: info.targetId, url: info.url ?? "" }));
+  return (Array.isArray(targetInfos) ? targetInfos : []).flatMap((info) => {
+    const page = PAGE_TARGET.safeParse(info);
+    return page.success
+      ? [{ targetId: page.data.targetId, url: page.data.url ?? "" }]
+      : [];
+  });
 };
+
+/** A navigation-history entry, as Chromium lists it. */
+const HISTORY_ENTRY = z.object({ url: z.string().optional() });
 
 /**
  * The page a take-over brings to the front. A browser ask's is the page it
@@ -360,7 +359,11 @@ const rowOf = async (key: BrowserKey): Promise<BrowserRow> => {
 };
 
 /** Writes the record's `takeover` as the shield holds it now, and tells the hub. */
-const recordTakeover = async (key: BrowserKey, take: Held | undefined) => {
+const recordTakeover = async (
+  ports: ShieldPorts,
+  key: BrowserKey,
+  take: Held | undefined
+) => {
   await withBrowser(key, async () => {
     const record = await readBrowser(key);
     if (record) {
@@ -377,7 +380,7 @@ const recordTakeover = async (key: BrowserKey, take: Held | undefined) => {
       });
     }
   });
-  browsersChanged();
+  browsersChanged(ports);
 };
 
 /**
@@ -416,6 +419,7 @@ const viewFor = (
  * take-over as it stands.
  */
 export const shieldBrowser = async (
+  ports: ShieldPorts,
   args: BrowserShieldArgs
 ): Promise<BrowserRow> => {
   const { key } = args;
@@ -428,7 +432,7 @@ export const shieldBrowser = async (
   // A take-over this daemon holds already (sent again) keeps its browser
   // as it runs: it is never started again under the person.
   if (!before) {
-    await startBrowser({ key });
+    await startBrowser(ports, { key });
   }
   const gate = gateOf(key);
   if (!gate) {
@@ -474,7 +478,7 @@ export const shieldBrowser = async (
   };
   held.set(key, take);
   await keep(key, take);
-  await recordTakeover(key, take);
+  await recordTakeover(ports, key, take);
   // The band names the page in front, the one the person sees.
   if (take.targetId) {
     setFront(key, take.targetId);
@@ -484,8 +488,8 @@ export const shieldBrowser = async (
   endWatch(key, "The person took the browser over.");
   await viewFor(key, record, take);
   await keep(key, take);
-  await recordTakeover(key, take);
-  watch();
+  await recordTakeover(ports, key, take);
+  watch(ports);
   console.info(
     `[browser] ${key} taken over${take.workspaceId ? ` for workspace ${take.workspaceId}` : ""}`
   );
@@ -521,12 +525,12 @@ const reloadFront = async (
     }
     const session = await link.attach(page.targetId);
     const history = await link.call("Page.getNavigationHistory", {}, session);
-    const entries = Array.isArray(history.entries)
-      ? (history.entries as { url?: string }[])
-      : [];
     const index =
       typeof history.currentIndex === "number" ? history.currentIndex : -1;
-    const url = entries[index]?.url ?? page.url;
+    const current = Array.isArray(history.entries)
+      ? HISTORY_ENTRY.safeParse(history.entries[index]).data
+      : undefined;
+    const url = current?.url ?? page.url;
     if (!url || url === "about:blank") {
       return null;
     }
@@ -559,6 +563,7 @@ const reloadFront = async (
  * and the gate stays closed: the private period ends only whole.
  */
 export const handBackBrowser = async (
+  ports: ShieldPorts,
   key: BrowserKey,
   /** How it came to be handed back: the person's Hand back, or the daemon's own. */
   said: BrowserHandedBackFrame["why"] = "person"
@@ -606,7 +611,7 @@ export const handBackBrowser = async (
     origin,
     ...(take?.requestId ? { requestId: take.requestId } : {}),
   };
-  await release(key, answer, said);
+  await release(ports, key, answer, said);
   console.info(
     `[browser] ${key} handed back${origin ? ` on ${origin}` : ""}, its gate open`
   );
@@ -688,12 +693,13 @@ const restorePages = async (key: BrowserKey): Promise<void> => {
  * and no agent meets the person's.
  */
 const release = async (
+  ports: ShieldPorts,
   key: BrowserKey,
   answer: BrowserHandback,
   said: BrowserHandedBackFrame["why"]
 ): Promise<void> => {
   const take = held.get(key);
-  tellHub(answer, said);
+  tellHub(ports, answer, said);
   held.delete(key);
   if (take) {
     await endView(take);
@@ -701,7 +707,7 @@ const release = async (
   await restorePages(key);
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
-  await recordTakeover(key, undefined).catch((error: unknown) =>
+  await recordTakeover(ports, key, undefined).catch((error: unknown) =>
     console.warn(`[browser] ${key}'s take-over was not cleared: ${why(error)}`)
   );
   gateOf(key)?.open();
@@ -774,16 +780,16 @@ export const cdpView = async (
 let watching: ReturnType<typeof setInterval> | undefined;
 
 /** Counts every take-over's views; one unwatched for two minutes, or whose browser stopped, is handed back. */
-const watch = (): void => {
+const watch = (ports: ShieldPorts): void => {
   watching ??= setInterval(() => {
-    watchOnce().catch((error: unknown) =>
+    watchOnce(ports).catch((error: unknown) =>
       console.warn(`[browser] take-overs not counted: ${why(error)}`)
     );
   }, WATCH_MS);
   watching.unref?.();
 };
 
-const watchOnce = async (): Promise<void> => {
+const watchOnce = async (ports: ShieldPorts): Promise<void> => {
   if (held.size === 0 && watching) {
     clearInterval(watching);
     watching = undefined;
@@ -796,6 +802,7 @@ const watchOnce = async (): Promise<void> => {
     // registry cleared its take-over: answered as a hand-back with no page.
     if (!record?.takeover) {
       await release(
+        ports,
         key,
         {
           key,
@@ -818,16 +825,17 @@ const watchOnce = async (): Promise<void> => {
       );
       // A step that fails leaves the gate closed (handBackBrowser says
       // which); the next count tries the hand-back again.
-      await handBackBrowser(key, "unwatched").catch(() => undefined);
+      await handBackBrowser(ports, key, "unwatched").catch(() => undefined);
     }
   }
 };
 
 const tellHub = (
+  { machineId, shield }: ShieldPorts,
   answer: BrowserHandback,
   said: BrowserHandedBackFrame["why"]
 ): void => {
-  sink({
+  shield({
     kind: "browser_handback",
     machineId,
     key: answer.key,
@@ -845,7 +853,7 @@ const tellHub = (
  * that holds a take-over (browsers.ts `gateFor`). A browser that stopped
  * meanwhile has its take-over released by the watch.
  */
-export const restoreShields = async (): Promise<void> => {
+export const restoreShields = async (ports: ShieldPorts): Promise<void> => {
   const keys: BrowserKey[] = [];
   for (const record of await allBrowsers()) {
     const kept = await keptOf(record.key);
@@ -874,5 +882,5 @@ export const restoreShields = async (): Promise<void> => {
   console.info(
     `[browser] held privately across the restart: ${keys.join(", ")}`
   );
-  watch();
+  watch(ports);
 };

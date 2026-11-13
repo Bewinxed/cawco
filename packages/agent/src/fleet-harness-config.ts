@@ -6,7 +6,7 @@
  * {@link fleetPlacedDir}, outside every checkout. What each row came to goes
  * into the harness set (fleet-harness-set.ts), a project's copy into its
  * place's file (fleet-place-set.ts), that sessions load as they start: Claude Code's flag settings (claude.ts), CawCo's OpenCode plugin
- * (opencode-plugin.ts), pi's `additionalExtensionPaths` (pi-runtime.ts).
+ * (opencode-plugin-module.ts), pi's `additionalExtensionPaths` (pi-runtime.ts).
  * Whatever no row names any more is taken away.
  */
 import { createHash } from "node:crypto";
