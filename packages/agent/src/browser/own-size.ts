@@ -23,7 +23,10 @@
  * popup's page took one px of width and then followed no other, its window
  * at 500, 499, 501 and its page at 501 throughout (the container run's
  * run21 trace), and 10 of 20 such popups were loaded again; through the
- * maximized state, 0 of 20. One window is settled whole before the next is
+ * maximized state, 0 of 20. A window already the screen's size keeps its
+ * size through the state change and its view with it (the local host's
+ * headless Chromium), so a normal window still off after that move is
+ * moved one px wider and back. One window is settled whole before the next is
  * touched: each step waits for the window's page to take it, and after the
  * move every page in the window is read. A window with a page still off its
  * width is moved again, up to {@link MOVES_MOST} moves. Only a page no move
@@ -132,15 +135,18 @@ const settled = async (link: CdpLink, targetId: string): Promise<boolean> => {
 };
 
 /**
- * Window `window` moved off its bounds and back, through the other window
- * state (normal through maximized, maximized or full-screen through
- * normal), each step taken by page `lead` before the next: two steps sent
- * at once can land as no change at all.
+ * Window `window` moved off its bounds and back, its `move`th time, each
+ * step taken by page `lead` before the next: two steps sent at once can
+ * land as no change at all. The first move takes it through the other
+ * window state (normal through maximized, maximized or full-screen through
+ * normal); a normal window still with a page off its width after that is
+ * then moved one px wider and back (narrower and back the time after).
  */
 const moveOnce = async (
   link: CdpLink,
   lead: string,
-  { windowId, bounds }: Window
+  { windowId, bounds }: Window,
+  move: number
 ) => {
   const state = bounds.windowState ?? "normal";
   const { left, top, width, height } = bounds;
@@ -149,7 +155,11 @@ const moveOnce = async (
   // step is not enough: a view a cut link left at its sharp picture's size
   // can take one width and then follow no other (the container's headful
   // Chromium: 1170, then 501, then 501 whatever the window's width after).
-  const steps =
+  // A window already the screen's size is not resized by the state change
+  // (the local host's headless Chromium: a 1280x800 window in a 1280x800
+  // screen moves to 0,0 and keeps its size, its view at 1170 x 2532), and
+  // the width step is what sizes its view again.
+  const throughState =
     state === "normal"
       ? [
           { windowState: "maximized" },
@@ -157,6 +167,11 @@ const moveOnce = async (
           { left, top, width, height },
         ]
       : [{ windowState: "normal" }, { windowState: state }];
+  const by = move % 2 === 0 ? 1 : -1;
+  const steps =
+    move > 1 && state === "normal" && width !== undefined
+      ? [{ width: width + by }, { width }]
+      : throughState;
   for (const step of steps) {
     await link.call("Browser.setWindowBounds", { windowId, bounds: step });
     await settled(link, lead);
@@ -178,7 +193,7 @@ const settleWindow = async (
   let moves = 0;
   while (lead && off.length > 0 && moves < MOVES_MOST) {
     moves += 1;
-    await moveOnce(link, lead.targetId, window);
+    await moveOnce(link, lead.targetId, window, moves);
     const still: Page[] = [];
     for (const page of pages) {
       if (!(await atWidth(link, page.targetId))) {
