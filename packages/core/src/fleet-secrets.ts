@@ -160,7 +160,7 @@ const hasSecretParts = (parts: UrlParts): boolean =>
 
 /** Every secret value a server's config holds: each `env` and `headers` value whose name or shape reads as a credential, and the password and secret query values of any URL (the config's, or an env or header value that is one). */
 export const secretValuesOf = (config: FleetMcpConfig): string[] => {
-  const record = config as unknown as Record<string, unknown>;
+  const record: Record<string, unknown> = { ...config };
   const values: string[] = [];
   /** A URL's password and secret query values, raw and decoded. */
   const urlParts = (url: string): void => {
@@ -285,8 +285,10 @@ const restoredUrl = (sent: string, held: string): string => {
   return url;
 };
 
+/** A write's config with its secrets settled, as written (the route checks it names what starts it), or why not. */
 export type KeptMcpSecrets =
-  { config: FleetMcpConfig; ok: true } | { ok: false; problem: string };
+  | { config: Record<string, unknown>; ok: true }
+  | { ok: false; problem: string };
 
 const mapOf = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -442,7 +444,7 @@ export const mergeMcpSecrets = (
   ) {
     rest.url = restoredUrl(sentUrl, heldUrl);
   }
-  return { ok: true, config: rest as unknown as FleetMcpConfig };
+  return { ok: true, config: rest };
 };
 
 /** What an approval card says a secret's write did: a value in its place. */
