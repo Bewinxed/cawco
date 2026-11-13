@@ -475,7 +475,9 @@ import {
   type BrowserHandedBackFrame,
   type BrowserKey,
   type BrowserPageArgs,
+  type BrowserPasskeyAdvertArgs,
   isBrowserKey,
+  type PasskeyRelayFrame,
 } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
@@ -39893,6 +39895,30 @@ export const createServer = (
                 streamRelay.heard({
                   ...(message.payload as RelayFrame),
                   machineId: message.machineId,
+                });
+                break;
+              }
+              // Passkey proximity relay: a machine's BLE capability changed.
+              // Broadcast to every dashboard so the UI can show which
+              // machines have BLE capture active.
+              if (kind === "passkey_relay") {
+                registry.broadcast({
+                  verb: "frames",
+                  machineId: message.machineId,
+                  payload: message.payload as PasskeyRelayFrame,
+                });
+                break;
+              }
+              // Passkey proximity relay: a FIDO caBLE BLE advert captured
+              // on this machine, forwarded to every other machine with a
+              // live browser whose take-over is active (browsers.ts).
+              if (kind === "passkey_advert") {
+                const { serviceData, rssi, capturedAt } =
+                  message.payload as BrowserPasskeyAdvertArgs;
+                browsers.relayPasskeyAdvert(message.machineId, {
+                  serviceData,
+                  rssi,
+                  capturedAt,
                 });
                 break;
               }
