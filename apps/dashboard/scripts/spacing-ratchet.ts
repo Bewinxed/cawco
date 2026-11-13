@@ -25,6 +25,12 @@ import {
 /** The utilities that are rhythm: padding, margin, gap, space. */
 const RHYTHM = /^(?:[pm][xystblrse]?|gap(?:-[xy])?|space-[xy])$/u;
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/src/",
+  "apps/dashboard/scripts/spacing-ratchet.baseline.json",
+];
+
 const BASELINE = join(DASHBOARD, "scripts/spacing-ratchet.baseline.json");
 
 interface Baseline {

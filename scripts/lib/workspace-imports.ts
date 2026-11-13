@@ -9,6 +9,14 @@ import { readFileSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 import { ROOT } from "./repo-files";
 
+// The manifests `packages` reads: the root's and each workspace's.
+export const checkReads = [
+  "package.json",
+  "apps/*/package.json",
+  "packages/*/package.json",
+  "site/package.json",
+];
+
 type Entry = string | { types?: string; default?: string };
 /** A workspace package: its name, folder, `exports`, `imports` and `main`. */
 export interface Manifest {
