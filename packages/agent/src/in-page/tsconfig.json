@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.browser.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../../../.tsbuild/packages/agent/src/in-page"
+  },
+  "include": ["."],
+  "references": [
+    {
+      "path": "../../../core"
+    }
+  ]
+}
