@@ -275,7 +275,7 @@ function rememberControlAsk(
   controlAsks.set(commandId, { arg, machineId });
 }
 
-export function sayCommandFault(
+function sayCommandFault(
   record: CommandRecord,
   /** The session whose composer says it: the command's own, unless its card stood in another's. */
   sessionId = record.sessionId
@@ -294,6 +294,57 @@ export function sayCommandFault(
   });
 }
 
+/**
+ * The failure port of the ledger: every command that ever reaches `failed`,
+ * on either dialect, is heard exactly once here.
+ *
+ * The rule is "nothing goes unsaid, and nothing is said TWICE", and never
+ * in a toast (DESIGN.md, The Work Outlives Its Surface Rule). A kind whose
+ * own surface renders the failure inline claims it; everything else, and
+ * every claim whose surface has since vanished, is said over the session's
+ * composer ({@link sayCommandFault}), in the error formula, with Try again
+ * where a try can go. That way a command kind added next year is loud by
+ * default rather than silent by default, which is the failure mode this
+ * whole port exists to close.
+ */
+export function noteCommandFailure(record: CommandRecord): void {
+  if (record.kind === "send") {
+    // A send's failure is said over the composer it left (the session's
+    // notice) and on its row — stamped rather than kept only on the command
+    // record, which is swept after five minutes, where a message that never
+    // sent must not fade back to looking sent. It is never a toast.
+    announceSendFailure(record);
+    markUnreached(record);
+    return;
+  }
+  // A withdraw is a queued message's edit, and the composer it was edited
+  // in says what became of it, over the field that holds the words again
+  // (transcript/lift.svelte.ts).
+  if (record.kind === "send.withdraw") {
+    return;
+  }
+  // A parked permission card renders its own refusal (`Couldn't send that
+  // answer.`) against the very command id it holds. It only does so while it
+  // is still on screen: answering removes the request from `pending`, so an
+  // answer that fails after the card has gone has no inline surface at all
+  // and is said over the composer of the session the card was drawn in:
+  // its own, or, for an ask parked under a proposal of its (a memory or
+  // design proposal, `originInstanceId`), the session that proposed it.
+  if (record.kind === "permission.answer") {
+    const surface = answerSurfaces.get(record.commandId);
+    if (answerCardStillParked(record)) {
+      return;
+    }
+    sayCommandFault(record, surface?.origin ?? record.sessionId);
+    return;
+  }
+  // Kept for its session (refusals.svelte.ts): a model, effort or mode
+  // change is said on the details card's own line for it while that card
+  // stands, and over the composer otherwise; anything else over the
+  // composer. A reload says it again in the same place.
+  sayCommandFault(record);
+}
+
 /** A new command of the session answers what was said of its last ones. */
 function clearCommandFaults(instanceId: string): void {
   for (const [key] of refusals.under(commandKey(instanceId, ""))) {
@@ -308,7 +359,7 @@ function clearCommandFaults(instanceId: string): void {
  * say anything about (its row is the record's), and neither is a retry of a
  * failed send, which draws no row of its own until the hub takes it.
  */
-export function markUnreached(record: CommandRecord): void {
+function markUnreached(record: CommandRecord): void {
   const target = sessionsState.sessions[record.sessionId];
   const row = target?.local.find((message) => message.id === record.commandId);
   if (!(target && row)) {
@@ -328,7 +379,7 @@ export function markUnreached(record: CommandRecord): void {
  * request id while the ledger correlates on the COMMAND's — nothing else joins
  * the two.
  */
-export const answerSurfaces = new Map<
+const answerSurfaces = new Map<
   string,
   {
     instanceId: string;
@@ -391,7 +442,7 @@ function rememberAnswerSurface(
  *   returns true. It returns false only when the ask has gone some other way
  *   meanwhile, and then the composer's line is the report.
  */
-export function answerCardStillParked(record: CommandRecord): boolean {
+function answerCardStillParked(record: CommandRecord): boolean {
   const surface = answerSurfaces.get(record.commandId);
   answerSurfaces.delete(record.commandId);
   if (!surface) {
@@ -1162,7 +1213,7 @@ export function clearRestore(instanceId: string): void {
   restoreSlots[instanceId] = null;
 }
 
-export function announceSendFailure(record: CommandRecord): void {
+function announceSendFailure(record: CommandRecord): void {
   // A notice is a sentence about a session, so it dies with the session. These
   // are small, but "small and unbounded" is still unbounded on a board a
   // reader leaves open for a week.

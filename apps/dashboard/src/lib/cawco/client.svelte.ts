@@ -68,18 +68,13 @@ import {
 } from "./stores/board.svelte";
 import { takeBrowsers } from "./stores/browsers.svelte";
 import {
-  announceSendFailure,
-  answerCardStillParked,
-  answerSurfaces,
-  markUnreached,
+  noteCommandFailure,
   resumeKeptSends,
-  sayCommandFault,
   sweepOnTraffic,
   takePermissionSettled,
 } from "./stores/commands.svelte";
 import { takeBoardContinuations } from "./stores/continuations.svelte";
 import { hearDelegateEvent, rereadDelegates } from "./stores/delegates.svelte";
-import { watchedIds } from "./stores/follows.svelte";
 import { plugLedger, streamHost, streamState } from "./stores/ledger.svelte";
 import { dropFleetFetches, takeFleetFetch } from "./stores/machines";
 import { takeFleetMcp } from "./stores/mcp-servers.svelte";
@@ -565,61 +560,11 @@ plugLedger({
     trackWorking(target);
     target.lastActivityAt = new Date();
   },
-  follows: (sessionId) => watchedIds().includes(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
     detach(readTranscript(sessionId, cause), "readTranscript");
   },
-  /**
-   * The client half of the ledger's failure port: every command that ever
-   * reaches `failed`, on either dialect, is heard exactly once here.
-   *
-   * The rule is "nothing goes unsaid, and nothing is said TWICE", and never
-   * in a toast (DESIGN.md, The Work Outlives Its Surface Rule). A kind whose
-   * own surface renders the failure inline claims it; everything else, and
-   * every claim whose surface has since vanished, is said over the session's
-   * composer ({@link commandFault}), in the error formula, with Try again
-   * where a try can go. That way a command kind added next year is loud by
-   * default rather than silent by default, which is the failure mode this
-   * whole port exists to close.
-   */
-  noteFailure: (record) => {
-    if (record.kind === "send") {
-      // A send's failure is said over the composer it left (the session's
-      // notice) and on its row — stamped rather than kept only on the command
-      // record, which is swept after five minutes, where a message that never
-      // sent must not fade back to looking sent. It is never a toast.
-      announceSendFailure(record);
-      markUnreached(record);
-      return;
-    }
-    // A withdraw is a queued message's edit, and the composer it was edited
-    // in says what became of it, over the field that holds the words again
-    // (transcript/lift.svelte.ts).
-    if (record.kind === "send.withdraw") {
-      return;
-    }
-    // A parked permission card renders its own refusal (`Couldn't send that
-    // answer.`) against the very command id it holds. It only does so while it
-    // is still on screen: answering removes the request from `pending`, so an
-    // answer that fails after the card has gone has no inline surface at all
-    // and is said over the composer of the session the card was drawn in:
-    // its own, or, for an ask parked under a proposal of its (a memory or
-    // design proposal, `originInstanceId`), the session that proposed it.
-    if (record.kind === "permission.answer") {
-      const surface = answerSurfaces.get(record.commandId);
-      if (answerCardStillParked(record)) {
-        return;
-      }
-      sayCommandFault(record, surface?.origin ?? record.sessionId);
-      return;
-    }
-    // Kept for its session (refusals.svelte.ts): a model, effort or mode
-    // change is said on the details card's own line for it while that card
-    // stands, and over the composer otherwise; anything else over the
-    // composer. A reload says it again in the same place.
-    sayCommandFault(record);
-  },
+  noteFailure: noteCommandFailure,
 });
 
 /** One message off the hub's socket, taken into the stores. */
