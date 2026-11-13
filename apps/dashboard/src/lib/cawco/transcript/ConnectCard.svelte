@@ -221,10 +221,12 @@
     declined = submitCommand(
       instanceId,
       sessionsStore.session(instanceId)?.machineId ?? "",
-      "permission.answer",
       {
-        requestId: card.requestId,
-        result: { behavior: "deny", message: "" },
+        kind: "permission.answer",
+        intent: {
+          requestId: card.requestId,
+          result: { behavior: "deny", message: "" },
+        },
       }
     );
   }

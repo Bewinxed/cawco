@@ -103,7 +103,12 @@ declare global {
       region?: boolean;
     }
     // interface Locals {}
+    /** What a route's load hands the shell, read from `page.data` by the components that draw it. */
     interface PageData {
+      /** The first paint's board: what the server read of the hub (stores/board.svelte.ts `servedBoard`). */
+      board?: import("#lib/cawco/served-board.js").ServedBoard<
+        import("#lib/cawco/projects.js").ProjectRow
+      > | null;
       /** Configure's card heights, as its layout reads them off the cookie (routes/(app)/config/+layout.server.ts). */
       cards?: import("#lib/cawco/config/cards.js").Cards;
       /** The folder-tab strips' last measured boxes, read from the pref by the app layout (+layout.server.ts). */
@@ -111,10 +116,12 @@ declare global {
         string,
         import("./lib/components/ui/fluid-tabs/fold-memory.js").FoldMeasure
       >;
+      /** The server's copy of each kept preference (platform/prefs.ts). */
+      kept?: Partial<Record<import("#lib/platform/prefs.js").Pref, string>>;
       /** The tabs the server landed the board's address on (app/+layout.server.ts `landOnDesk`). */
       landed?: string[];
-      /** The machines the hub holds, counted by the board's load. */
-      machineCount?: number | null;
+      /** The conversations' names the layout's server load read, by session. */
+      names?: Record<string, import("#lib/platform/hub-read.js").HubRead<string>>;
       /** The wide screen's resolved tabs, from the root layout load. */
       resolved?: string[];
       /** A project page's seed (workspace/project-seed.ts). */
