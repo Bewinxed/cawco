@@ -29,6 +29,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "design-previews/",
+  "apps/dashboard/src/lib/cawco/address/flow/",
+];
+
 const ROOT = resolve(import.meta.dir, "..");
 const PREVIEWS = join(ROOT, "design-previews");
 const SHARED = join(PREVIEWS, "state-switcher.js");

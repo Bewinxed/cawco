@@ -33,6 +33,9 @@ import { dirname, extname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { repoFiles } from "./lib/repo-files";
 
+/** The dashboard's classes and its stylesheets, read whole (lib/check-inputs.ts); the Tailwind that judges them comes with the lockfile. */
+export const checkReads = ["apps/dashboard/", "design/", "DESIGN.md"];
+
 const ROOT = join(import.meta.dir, "..");
 const DASHBOARD = join(ROOT, "apps/dashboard");
 const TOKENS = "apps/dashboard/src/lib/tokens/theme.css";

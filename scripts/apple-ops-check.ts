@@ -13,6 +13,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/apple/", "packages/"];
+
 const ROOT = join(import.meta.dir, "..");
 const APPLE = join(ROOT, "apps/apple");
 const SPEC = join(APPLE, "Packages/CawCoKit/Sources/CawCoAPI/openapi.json");
