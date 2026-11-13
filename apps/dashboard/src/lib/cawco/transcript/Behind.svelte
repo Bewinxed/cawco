@@ -1,6 +1,6 @@
 <!--
   A transcript that cannot be caught up says so in one line over the rows the
-  reader holds (client.svelte.ts `SessionState.behind`), and goes when the
+  reader holds (stores/sessions.svelte.ts `SessionState.behind`), and goes when the
   read lands. Its machine is reconnecting (the hub heard from it moments
   ago: a hub that just restarted, a dropped connection), a wait said with no
   toast, until the hub's deadline for it passes on the clock
@@ -30,7 +30,9 @@
   import { commonWords } from "@cawco/core/words/common";
   import { Button } from "#lib/components/ui/button/index.js";
   import { rise } from "#lib/platform/motion/curves.svelte.js";
-  import { cawco, type ReadFault, reconnectingNow } from "../client.svelte";
+  import { boardStore } from "../stores/board.svelte";
+  import type { ReadFault } from "../stores/sessions.svelte";
+  import { reconnectingNow } from "../stores/transcript-reads.svelte";
 
   let {
     fault,
@@ -47,7 +49,7 @@
     if (fault.reason !== "offline") {
       return "";
     }
-    const row = cawco.machines.find(
+    const row = boardStore.machines.find(
       (listed) => listed.machineId === fault.machineId
     );
     return row ? machineLabel(row.hostname) : fault.machineId;

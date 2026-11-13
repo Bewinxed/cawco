@@ -22,9 +22,9 @@
   import { failureWords } from "../../platform/hub-read";
   import { motionOk } from "../../platform/motion/curves.svelte";
   import { keepBlock, showArtifact } from "../artifact-api";
-  import { revealPreview } from "../client.svelte";
   import { readArtifacts } from "../files/files.svelte";
   import type { MarkdownBlockProps } from "../markdown-blocks";
+  import { revealPreview } from "../stores/previews.svelte";
   import {
     type BlockPlace,
     blockKey,

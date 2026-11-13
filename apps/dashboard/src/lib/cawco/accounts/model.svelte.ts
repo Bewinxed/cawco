@@ -3,8 +3,8 @@
  * account is called and drawn in, where it is signed in and what is wrong
  * with that, how a provider's routing reads in a line, and which accounts the
  * rail counts as faults. Everything here is derived from what `/api/accounts`
- * and `/api/accounts/providers` answered (`cawco.accounts`,
- * `cawco.accountProviders`) and the fleet's machines.
+ * and `/api/accounts/providers` answered (`accountsStore.accounts`,
+ * `accountsStore.accountProviders`) and the fleet's machines.
  */
 import {
   ACCOUNT_RULES,
@@ -25,7 +25,8 @@ import type { AccountHue, PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords as words } from "@cawco/core/words/accounts";
-import { cawco } from "../client.svelte";
+import { accountsStore } from "../stores/accounts.svelte";
+import { boardStore } from "../stores/board.svelte";
 
 /** The colour token an account is drawn in. */
 export const hueVar = (hue: AccountHue): string =>
@@ -56,13 +57,14 @@ export const nameOf = (
   if (account.kind === "api_key" && !account.label && account.email) {
     return words.keyTail(account.email.replace(ELLIPSIS, "").slice(-4));
   }
-  return accountNameAmong(account, cawco.accounts?.accounts ?? []);
+  return accountNameAmong(account, accountsStore.accounts?.accounts ?? []);
 };
 
 // ── Providers ───────────────────────────────────────────────────────────
 
 /** The picker's rows, as the hub serves them; empty until read. */
-export const choicesOf = (): ProviderChoice[] => cawco.accountProviders ?? [];
+export const choicesOf = (): ProviderChoice[] =>
+  accountsStore.accountProviders ?? [];
 
 /** A provider row as the picker names it: "OpenRouter API key", "Anthropic Console". */
 export function choiceLabel(choice: ProviderChoice): string {
@@ -108,7 +110,7 @@ export const harnessWords = (provider: AccountProvider): string =>
 /** The machines that run any of a provider's harnesses: those an account of it signs in on. */
 export function machinesFor(provider: AccountProvider) {
   const harnesses = providerHarnesses(provider);
-  return cawco.machines.filter((machine) =>
+  return boardStore.machines.filter((machine) =>
     machine.harnesses?.some((entry) =>
       harnesses.includes(entry.harness as HarnessKind)
     )
@@ -128,7 +130,7 @@ export const machineOnline = (machine: AccountMachine): boolean =>
 
 /** The hub's accounts (one provider's, given one), in fill-first order; empty until read. */
 export const accountsOf = (provider?: AccountProvider): Account[] =>
-  (cawco.accounts?.accounts ?? [])
+  (accountsStore.accounts?.accounts ?? [])
     .filter((one) => provider === undefined || one.provider === provider)
     .sort((a, b) => a.order - b.order);
 
@@ -164,7 +166,7 @@ export function groupsOf(): ProviderGroup[] {
  * A refusal written again reads a newer time.
  */
 export function refusedAccountWideAt(account: Account): number | null {
-  const times = (cawco.accounts?.signins ?? [])
+  const times = (accountsStore.accounts?.signins ?? [])
     .filter(
       (one) =>
         one.accountId === account.id &&
@@ -196,7 +198,7 @@ export function signinState(
  * not a problem.
  */
 export function problemOf(account: Account): string | null {
-  const signins = (cawco.accounts?.signins ?? []).filter(
+  const signins = (accountsStore.accounts?.signins ?? []).filter(
     (one) => one.accountId === account.id
   );
   const online = machinesFor(account.provider).filter(machineOnline);
@@ -254,14 +256,14 @@ const namedForNotice = (account: Account): string =>
 
 /** Every move whose notice nobody has acknowledged, newest first. */
 export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   if (!view) {
     return [];
   }
   return view.signins
     .flatMap((signin) => {
       const account = view.accounts.find((one) => one.id === signin.accountId);
-      const from = cawco.machines.find(
+      const from = boardStore.machines.find(
         (one) => one.machineId === signin.machineId
       );
       if (!(account && signin.movedAt !== null && signin.movedFrom && from)) {
@@ -294,7 +296,7 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
 export const rebalancesUnseen = (
   seen: ReadonlySet<string>
 ): RebalanceNotice[] =>
-  (cawco.accounts?.rebalances ?? []).filter((one) => !seen.has(one.id));
+  (accountsStore.accounts?.rebalances ?? []).filter((one) => !seen.has(one.id));
 
 /**
  * An account the rail counts as a fault: one a machine signed in as
@@ -310,7 +312,7 @@ function faulted(account: Account, signins: AccountSignin[]): boolean {
 
 /** The accounts the Accounts rail entry flags. */
 export function accountFaults(): number {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   return view
     ? view.accounts.filter((account) => faulted(account, view.signins)).length
     : 0;
@@ -320,7 +322,8 @@ export function accountFaults(): number {
 
 /** A provider's routing as the hub holds it (its defaults until saved). */
 export const routingOf = (provider: AccountProvider): ProviderRouting | null =>
-  cawco.accounts?.routing.find((one) => one.provider === provider) ?? null;
+  accountsStore.accounts?.routing.find((one) => one.provider === provider) ??
+  null;
 
 /** A strategy, as the picker draws it and its figure plays it. */
 export interface Strategy {

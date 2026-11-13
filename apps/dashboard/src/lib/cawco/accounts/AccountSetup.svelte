@@ -45,19 +45,21 @@
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { z } from "zod";
-  import {
-    cawco,
-    createAccount,
-    deleteAccount,
-    patchAccount,
-    putRouting,
-  } from "#lib/cawco/client.svelte.js";
+
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import StickyFoot from "#lib/cawco/config/StickyFoot.svelte";
   import {
     AtLimitSchema,
     StrategyChoiceSchema,
   } from "#lib/cawco/stored-shapes.js";
+  import {
+    accountsStore,
+    createAccount,
+    deleteAccount,
+    patchAccount,
+    putRouting,
+  } from "#lib/cawco/stores/accounts.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -149,7 +151,7 @@
   );
   /** The machines that run any of a row's harnesses. */
   const runsOn = (harnesses: HarnessKind[]) =>
-    cawco.machines.filter((machine) =>
+    boardStore.machines.filter((machine) =>
       machine.harnesses?.some((entry) =>
         harnesses.includes(entry.harness as HarnessKind)
       )
@@ -163,7 +165,7 @@
   const resumed = untrack(() => {
     const id = page.url.searchParams.get("account");
     return (
-      cawco.accounts?.accounts.find(
+      accountsStore.accounts?.accounts.find(
         (one) => one.id === id && one.setupStep !== undefined
       ) ?? null
     );
@@ -270,7 +272,7 @@
   /** The account being added: the one its sign-in joined, else the one made for it. */
   const accountId = $derived(joined?.accountId ?? createdId);
   const account = $derived(
-    cawco.accounts?.accounts.find((one) => one.id === accountId) ?? null
+    accountsStore.accounts?.accounts.find((one) => one.id === accountId) ?? null
   );
   /**
    * The machine's sign-in under this setup, made when there is none. Made
@@ -287,7 +289,7 @@
   function takeUpPending() {
     const id = createdId;
     const kind = choice?.signin;
-    for (const one of cawco.accounts?.pending ?? []) {
+    for (const one of accountsStore.accounts?.pending ?? []) {
       if (id === null || one.accountId !== id) {
         continue;
       }
@@ -306,7 +308,7 @@
     }
   }
 
-  const signins = $derived(cawco.accounts?.signins ?? []);
+  const signins = $derived(accountsStore.accounts?.signins ?? []);
   const stateOn = (machineId: string) =>
     accountId ? signinState(signins, accountId, machineId) : "signed-out";
   const doneOn = (machineId: string) =>
@@ -578,7 +580,7 @@
   /** Each account whose place the drag changed takes it, from 0. */
   async function saveOrder() {
     for (const [place, id] of order.entries()) {
-      const one = cawco.accounts?.accounts.find((a) => a.id === id);
+      const one = accountsStore.accounts?.accounts.find((a) => a.id === id);
       if (one && one.order !== place) {
         await patchAccount(id, { order: place });
       }

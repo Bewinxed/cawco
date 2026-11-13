@@ -54,14 +54,10 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-  import {
-    type BlockedRequest,
-    cawco,
-    type PendingPermission,
-    requestView,
-  } from "#lib/cawco/client.svelte.js";
+
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -93,6 +89,18 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
+  import {
+    projectsStore,
+    requestView,
+  } from "#lib/cawco/stores/projects.svelte.js";
+  import {
+    type BlockedRequest,
+    type PendingPermission,
+    sessionsStore,
+  } from "#lib/cawco/stores/sessions.svelte.js";
+  import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import BulkBar from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
@@ -224,12 +232,14 @@
   });
 
   const project = $derived(
-    cawco.project(projectId) ?? untrack(() => seed?.project) ?? null
+    projectsStore.project(projectId) ?? untrack(() => seed?.project) ?? null
   );
   const machine = $derived.by(() => {
     const primary = project ? checkoutOf(project) : undefined;
     return primary
-      ? (cawco.machines.find((row) => row.machineId === primary.machineId) ??
+      ? (boardStore.machines.find(
+          (row) => row.machineId === primary.machineId
+        ) ??
           untrack(() => seed?.machine) ??
           null)
       : null;
@@ -277,14 +287,22 @@
   const notSetUp = $derived(board.stages?.source === "none");
   /** The project's starters, live: a new set the hub writes replaces the one its stages carried. */
   const starters = $derived(
-    cawco.startersOf(projectId, "board", board.stages?.starters)
+    tickersStore.startersOf(projectId, "board", board.stages?.starters)
   );
   /** The empty Routines page's starters and the empty Decisions tab's, live as the board's. */
   const routineStarters = $derived(
-    cawco.startersOf(projectId, "routines", board.stages?.routineStarters)
+    tickersStore.startersOf(
+      projectId,
+      "routines",
+      board.stages?.routineStarters
+    )
   );
   const decisionStarters = $derived(
-    cawco.startersOf(projectId, "decisions", board.stages?.decisionStarters)
+    tickersStore.startersOf(
+      projectId,
+      "decisions",
+      board.stages?.decisionStarters
+    )
   );
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(here.searchParams.get("task"));
@@ -343,7 +361,7 @@
     project: () => project,
     machinesOnline: () =>
       seed?.machinesOnline ??
-      cawco.machines.some((row) => row.status === "online"),
+      boardStore.machines.some((row) => row.status === "online"),
     tasks: () => board.tasks,
     reading: () => reading.current,
   });
@@ -605,14 +623,14 @@
   let revealsSeen: { count: number | undefined; id: string } | null = null;
   $effect(() => {
     const id = lead.conversationId;
-    const count = id ? cawco.previewRequests[id] : undefined;
+    const count = id ? previewsStore.previewRequests[id] : undefined;
     untrack(() => {
       const seen = revealsSeen;
       revealsSeen = id ? { id, count } : null;
       if (!(id && seen?.id === id && count !== seen.count)) {
         return;
       }
-      const frame = cawco.previews[id];
+      const frame = previewsStore.previews[id];
       if (!(
         frame?.state === "open" &&
         frame.project === projectId &&
@@ -1040,7 +1058,7 @@
   // tasks the hub may have moved while the socket was down.
   let readFor = "";
   $effect(() => {
-    const live = cawco.status === "connected";
+    const live = connectionStore.status === "connected";
     const id = projectId;
     if (!(live && id)) {
       readFor = "";
@@ -1097,7 +1115,7 @@
   // hub says so, and the list is read again.
   let changesSeen = -1;
   $effect(() => {
-    const changes = cawco.tasksChangedOf(projectId);
+    const changes = tickersStore.tasksChangedOf(projectId);
     if (changesSeen !== -1 && changes !== changesSeen && board.list) {
       untrack(() => board.refresh());
     }
@@ -1109,7 +1127,8 @@
   let decisionsSeen = -1;
   $effect(() => {
     const changes =
-      cawco.decisionsChangedOf(projectId) + cawco.tasksChangedOf(projectId);
+      tickersStore.decisionsChangedOf(projectId) +
+      tickersStore.tasksChangedOf(projectId);
     if (decisionsSeen !== -1 && changes !== decisionsSeen) {
       untrack(() => decisions.read());
     }
@@ -1120,7 +1139,7 @@
   // and the views with it, since a view placed or made a tab moves the strip.
   let blocksSeen = -1;
   $effect(() => {
-    const changes = cawco.blocksChangedOf(projectId);
+    const changes = tickersStore.blocksChangedOf(projectId);
     if (blocksSeen !== -1 && changes !== blocksSeen) {
       untrack(() => {
         blocks.read();
@@ -1337,7 +1356,7 @@
       return null;
     }
     const progress = setupProgressOf({
-      messages: id ? (cawco.session(id)?.messages ?? []) : [],
+      messages: id ? (sessionsStore.session(id)?.messages ?? []) : [],
       name: project.name,
       named: project.name !== projectWords.placeholderName,
       open: setupAsks.map((one) => ({
@@ -2260,7 +2279,9 @@
 {#snippet viewPane()}
   <div
     data-slot="pane"
-    aria-busy={cawco.hub === "unreachable" || awaiting || reading.current}
+    aria-busy={connectionStore.hub === "unreachable" ||
+      awaiting ||
+      reading.current}
     class={[
       "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       PANE_INSET,

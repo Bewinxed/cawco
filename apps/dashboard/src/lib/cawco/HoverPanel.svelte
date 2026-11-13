@@ -44,8 +44,7 @@
    * one), and when a phone's preview sheet rises or takes the focus
    * (closePeeks).
    */
-  import type { Snippet } from "svelte";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
   import type { TransitionConfig } from "svelte/transition";
@@ -57,13 +56,13 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { onNavigate } from "$app/navigation";
+  import { provideEntrance } from "./hover-entrance";
+  import { sessionsStore } from "./stores/sessions.svelte";
   import {
-    cawco,
-    readTranscript,
     unwatchDelegate,
     watchDelegate,
-  } from "./client.svelte";
-  import { provideEntrance } from "./hover-entrance";
+  } from "./stores/subscriptions.svelte";
+  import { readTranscript } from "./stores/transcript-reads.svelte";
 
   let {
     key,
@@ -101,7 +100,7 @@
     if (!watch) {
       return false;
     }
-    const branch = cawco.session(watch);
+    const branch = sessionsStore.session(watch);
     return !branch || branch.loading || branch.hydrating;
   });
   // Landed: the hold is spent, and a later re-read never brings it back.
@@ -203,7 +202,7 @@
         return;
       }
       watchDelegate(id);
-      if (!cawco.session(id)?.messages.length) {
+      if (!sessionsStore.session(id)?.messages.length) {
         detach(readTranscript(id), "readTranscript");
       }
     });

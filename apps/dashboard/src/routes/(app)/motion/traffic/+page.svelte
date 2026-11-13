@@ -25,7 +25,10 @@
    * rendered the bug invisible.
    */
   import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
-  import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import {
+    blankSession,
+    type SessionState,
+  } from "#lib/cawco/stores/sessions.svelte.js";
   import { disclosureAt } from "#lib/cawco/transcript/disclosure.svelte.js";
   import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { buildRowsFrom } from "#lib/cawco/transcript/rows.js";
@@ -51,7 +54,7 @@
 
   /**
    * A live message, as the store places one: pushed onto the array the
-   * transcript holds, and the session's revision moved (client.svelte.ts
+   * transcript holds, and the session's revision moved (stores/sessions.svelte.ts
    * `rev`), which is what the transcript's build depends on for its rows.
    */
   function push(m: Omit<Message, "instanceId">): void {
@@ -382,7 +385,7 @@
       },
       /**
        * The session read it: the same row, moved to what its record says —
-       * which is all the store does (`place` in client.svelte.ts).
+       * which is all the store does (`place` in stores/transcripts.svelte.ts).
        */
       read: (id: string) => {
         const row = session.messages.find((message) => message.id === id);

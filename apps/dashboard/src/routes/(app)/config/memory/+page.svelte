@@ -1,6 +1,6 @@
 <script lang="ts">
   import { memoryWords as words } from "@cawco/core/words/memory";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import { deleteMemory, notDeleted } from "#lib/cawco/config/deletes.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
@@ -24,6 +24,8 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -43,7 +45,7 @@
   const fleet = $derived(store.fleet.value);
   const memory = $derived(fleet?.memory ?? null);
   const docs = $derived(fleet?.memoryDocs ?? []);
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   let filter = $state("");
   let busy = $state<Record<string, boolean>>({});
   /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
@@ -164,9 +166,9 @@
         href={fileHref(doc.path)}
         hue={HUE}
         icon={IconBook}
-        meta="{loadedInto(doc.scope, cawco.projects)} · {facts(doc)}{drafted(
-          doc.path
-        )}"
+        meta="{loadedInto(doc.scope, projectsStore.projects)} · {facts(
+          doc
+        )}{drafted(doc.path)}"
         mono
         name={docLabel(doc.path, doc.scope)}
       >

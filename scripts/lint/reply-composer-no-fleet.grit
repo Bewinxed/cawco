@@ -1,7 +1,7 @@
 language js
 
 // A comment card and its reply composer load no fleet store
-// (client.svelte.ts). biome.jsonc hands this plugin the modules they draw
+// (client.svelte.ts, the stores under stores/ and the socket under hub/). biome.jsonc hands this plugin the modules they draw
 // from. Those import the store's types alone (`import type`, which leaves
 // nothing in the built module), and never the session chip
 // (SessionReference.svelte, which reads the store): a session is drawn
@@ -13,7 +13,7 @@ language js
 JsImport() as $hit where {
   or {
     and {
-      $hit <: r"[\s\S]*[\"'](?:[^\"']*/cawco/|\.\.?/)client\.svelte(?:\.js)?[\"'][\s\S]*",
+      $hit <: r"[\s\S]*[\"'](?:[^\"']*/cawco/|\.\.?/)(?:client\.svelte(?:\.js)?|stores/[^\"']+|hub/[^\"']+)[\"'][\s\S]*",
       $hit <: not r"^import\s+type\b[\s\S]*"
     },
     $hit <: r"[\s\S]*[\"'][^\"']*SessionReference\.svelte[\"'][\s\S]*"

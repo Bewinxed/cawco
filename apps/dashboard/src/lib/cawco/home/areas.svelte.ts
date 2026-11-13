@@ -7,9 +7,11 @@
  */
 import { hubRequest } from "@cawco/core/hub-request";
 import { hubFetch } from "../../platform/hub-read";
-import { cawco } from "../client.svelte";
 import { devDebug } from "../dev-debug";
+import { connectionStore } from "../hub/socket.svelte";
 import type { Area } from "../served-board";
+import { boardStore } from "../stores/board.svelte";
+import { projectsStore } from "../stores/projects.svelte";
 
 /** The areas as last read, and whether this page has read them: until it has, the served board's (first-paint.ts `ServedBoard`). */
 const state = $state<{ areas: Area[]; read: boolean }>({
@@ -52,12 +54,12 @@ export const areaIdOf = (project: object | undefined): string | null => {
 export const areas = {
   /** Every area, in the person's order; read again as the projects change. */
   get list(): Area[] {
-    const { projects } = cawco;
-    if (projects !== readFor && cawco.hub === "connected") {
+    const { projects } = projectsStore;
+    if (projects !== readFor && connectionStore.hub === "connected") {
       readFor = projects;
       queueMicrotask(read);
     }
-    return state.read ? state.areas : (cawco.servedAreas ?? state.areas);
+    return state.read ? state.areas : (boardStore.servedAreas ?? state.areas);
   },
   /** An area's name, or null for one not (yet) read. */
   nameOf(id: string): string | null {

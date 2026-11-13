@@ -1,8 +1,8 @@
 <script lang="ts" module>
   import { cawHeadWords } from "@cawco/core/words/caw-head";
   import { needs as needCount } from "@cawco/core/words/helpers";
-  import { cawco } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
+  import { boardStore } from "./stores/board.svelte";
 
   /**
    * What he says with nothing to count: "All caught up" only once the fleet
@@ -472,7 +472,7 @@
   // his rim (the arcs are needs you's), so the beat is how it arrives.
   $effect(() => {
     const keys = [...needs.map((item) => item.key), ...cawNotices.keys];
-    if (!cawco.fleetRead) {
+    if (!boardStore.fleetRead) {
       return;
     }
     untrack(() => {

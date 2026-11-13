@@ -31,9 +31,9 @@ import {
   type OpenAt,
 } from "./artifact-names.svelte";
 import { barGlass } from "./bar-glass.svelte";
-import { cawco, revealPreview } from "./client.svelte";
 import { askPlan, type Thing } from "./reference-things.svelte";
 import { refusals } from "./refusals.svelte";
+import { previewsStore, revealPreview } from "./stores/previews.svelte";
 
 /** Whether `named` is a project's setup page, which opens in no panel (hub artifacts/service.ts `boardOf`). */
 const isSetupPage = (named: NamedArtifact): boolean =>
@@ -94,7 +94,7 @@ export async function openReference(
   const session = here ?? named.instanceId;
   askOpen(id, at);
   // Already in front: the pane opens the place where the page stands, with no show to load it again.
-  const panel = cawco.previews[session];
+  const panel = previewsStore.previews[session];
   if (panel?.state === "open" && panel.artifact.id === id) {
     revealPreview(session);
     return null;
@@ -128,7 +128,7 @@ export async function openArtifactIn(
 ): Promise<string | null> {
   const key = artifactOpenKey(id);
   askOpen(id, at);
-  const panel = cawco.previews[instanceId];
+  const panel = previewsStore.previews[instanceId];
   if (panel?.state === "open" && panel.artifact.id === id) {
     revealPreview(instanceId);
     refusals.delete(key);

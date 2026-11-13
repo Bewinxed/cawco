@@ -27,11 +27,13 @@
   import { configureWords } from "@cawco/core/words/configure";
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { listTasks, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconFolder, IconGlobe } from "#lib/icons.js";
   import { WhoDecides } from "./decides.svelte";
@@ -54,7 +56,7 @@
     who.lead = new CawLead({
       id: () => projectId ?? "",
       project: () => project ?? null,
-      machinesOnline: () => cawco.onlineMachines.length > 0,
+      machinesOnline: () => boardStore.onlineMachines.length > 0,
       tasks: () => tasks,
       reading: () => false,
     });
@@ -75,7 +77,7 @@
   const project = $derived(
     projectId === null
       ? undefined
-      : cawco.projects.find((one) => one.id === projectId)
+      : projectsStore.projects.find((one) => one.id === projectId)
   );
   /** The project's name as the page says it; empty until the hub's list has it, while the page waits. */
   const name = $derived(project?.name ?? "");
@@ -86,7 +88,9 @@
   const facts = (member: Member) => who.facts(member, project);
   /** Projects' names by their ids, for what waits under a kind. */
   const named = (ids: string[]) =>
-    ids.map((id) => cawco.projects.find((one) => one.id === id)?.name ?? id);
+    ids.map(
+      (id) => projectsStore.projects.find((one) => one.id === id)?.name ?? id
+    );
   const projectHref = $derived(
     projectId === null ? "" : `/project/${encodeURIComponent(projectId)}`
   );

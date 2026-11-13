@@ -75,11 +75,14 @@
   import Rail from "#lib/platform/motion/Rail.svelte";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { searchArtifacts } from "../artifact-api";
-  import { cawco } from "../client.svelte";
+
   import FindField from "../find/FindField.svelte";
   import { excerptParts } from "../find/find-rows";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import RowFault from "../RowFault.svelte";
+  import { needsStore } from "../stores/needs.svelte";
+  import { previewsStore } from "../stores/previews.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
@@ -131,14 +134,14 @@
    * OpenCode, pi).
    */
   const askLabel = $derived.by(() => {
-    const harness = cawco.session(instanceId)?.harness;
+    const harness = sessionsStore.session(instanceId)?.harness;
     const agent = harness ? accountsWords.harnesses[harness] : "the agent";
     return `Ask ${agent} for a page`;
   });
 
   /** The artifact on show in the session's panel: its card wears the selection pill. */
   const chosen = $derived.by(() => {
-    const preview = cawco.previews[instanceId];
+    const preview = previewsStore.previews[instanceId];
     return preview?.state === "open" ? preview.artifact.id : null;
   });
 
@@ -161,7 +164,7 @@
   /** The session's artifacts its needs-you mark is raised for (core `waitingOnYou`). */
   const waiting = $derived(
     new Set(
-      cawco.artifactNeedsOpen
+      needsStore.artifactNeedsOpen
         .filter((need) => need.instanceId === instanceId)
         .map((need) => need.artifactId)
     )
