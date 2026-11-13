@@ -42,6 +42,7 @@ import { LIVE_REPLY as LIVE } from "../markdown-blocks";
 import type { SessionState } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import type InlineBlock from "./InlineBlock.svelte";
+import { clearAfterFade } from "./mark-fade";
 
 /** Where a block stands in its conversation: its reply, and which fence of its name in it. */
 export interface BlockPlace {
@@ -227,11 +228,13 @@ export class ConversationBlocks {
         return;
       }
       this.marked = { key, state: "off" };
-      setTimeout(() => {
-        if (this.marked?.key === key && this.marked.state === "off") {
+      clearAfterFade(
+        () => this.marked,
+        key,
+        () => {
           this.marked = null;
         }
-      }, dur("--duration-panel"));
+      );
     }, dur("--duration-hold"));
   }
 }
