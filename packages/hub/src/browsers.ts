@@ -45,6 +45,7 @@
 
 import {
   BROWSER_HANDBACK,
+  BROWSER_INJECT_ADVERT,
   BROWSER_REMOVE,
   BROWSER_ROWS,
   BROWSER_SHIELD,
@@ -55,11 +56,13 @@ import {
   type BrowserHandedBackFrame,
   type BrowserKey,
   type BrowserListFrame,
+  type BrowserPasskeyAdvertArgs,
   type BrowserRow,
   type BrowserShieldArgs,
   type BrowserState,
   isBrowserKey,
   type ListedBrowser,
+  PASSKEY_ADVERT_MAX_AGE_MS,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
@@ -643,6 +646,97 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         machineName: deps.machineName(row.machineId),
         ...live.get(liveKey(row.machineId, row.key)),
       }));
+    },
+
+    /**
+     * A FIDO caBLE BLE advertisement captured on `sourceMachineId`: relayed
+     * to every other machine with a live browser whose take-over is active.
+     * Validates the service data and age, then sends
+     * `browser.injectAdvert` to each target machine's daemon in parallel.
+     */
+    relayPasskeyAdvert(
+      sourceMachineId: string,
+      args: BrowserPasskeyAdvertArgs
+    ): void {
+      // Validate: base64-decoded service data must be exactly 20 bytes.
+      let decoded: Buffer;
+      try {
+        decoded = Buffer.from(args.serviceData, "base64");
+      } catch {
+        console.warn(
+          `[browser] passkey advert from ${deps.machineName(sourceMachineId)}: service data is not valid base64`
+        );
+        return;
+      }
+      if (decoded.length !== 20) {
+        console.warn(
+          `[browser] passkey advert from ${deps.machineName(sourceMachineId)}: service data is ${decoded.length} bytes, expected 20`
+        );
+        return;
+      }
+
+      // Drop adverts that are too old.
+      const age = Date.now() - args.capturedAt;
+      if (age > PASSKEY_ADVERT_MAX_AGE_MS) {
+        console.warn(
+          `[browser] passkey advert from ${deps.machineName(sourceMachineId)}: ${age} ms old, dropped (max ${PASSKEY_ADVERT_MAX_AGE_MS} ms)`
+        );
+        return;
+      }
+
+      // TODO: check a fleet-level `passkeyRelay` setting once it exists.
+
+      // Find every other machine with a live browser whose take-over is active.
+      const targets = new Set<string>();
+      for (const row of db.browsers.list()) {
+        if (row.machineId !== sourceMachineId && row.takeover) {
+          targets.add(row.machineId);
+        }
+      }
+
+      if (targets.size === 0) {
+        return;
+      }
+
+      console.info(
+        `[browser] relaying passkey advert from ${deps.machineName(sourceMachineId)} to ${targets.size} machine(s)`
+      );
+
+      for (const machineId of targets) {
+        // Find the keys with active take-overs on this machine.
+        const keys = db.browsers
+          .list()
+          .filter(
+            (row) =>
+              row.machineId === machineId &&
+              row.machineId !== sourceMachineId &&
+              row.takeover
+          )
+          .map((row) => row.key);
+
+        for (const key of keys) {
+          deps
+            .call(
+              machineId,
+              BROWSER_INJECT_ADVERT,
+              [
+                {
+                  key,
+                  serviceData: args.serviceData,
+                  rssi: args.rssi,
+                  capturedAt: args.capturedAt,
+                  sourceMachineId,
+                },
+              ],
+              PASSKEY_ADVERT_MAX_AGE_MS
+            )
+            .catch((error) => {
+              console.warn(
+                `[browser] passkey inject to ${deps.machineName(machineId)} (${key}) failed: ${error instanceof Error ? error.message : String(error)}`
+              );
+            });
+        }
+      }
     },
   };
   return browsers;
