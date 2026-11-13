@@ -54,6 +54,7 @@ import {
   sessionLimits,
   sessionSubagents,
   sessionTaints,
+  passkeySettings,
   spendSettings,
   taskCommentIds,
   usageBuckets,
@@ -454,6 +455,10 @@ export interface ProjectsDb {
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
+  /** Whether passkey relay is enabled fleet-wide; false before any is set. */
+  readonly passkeyRelayEnabled: () => boolean;
+  /** Whether passkey relay is enabled fleet-wide. */
+  readonly setPasskeyRelay: (enabled: boolean) => void;
   /** What reaching a cap does where a project sets nothing. */
   readonly setSpendOnCap: (onCap: OnCap) => void;
   /** What reaching a cap does where a project sets nothing; its default before any is set. */
@@ -502,6 +507,14 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
       .from(spendSettings)
       .where(eq(spendSettings.id, SPEND_SETTINGS_ID))
       .get()?.value ?? "both";
+
+  /** Whether passkey relay is enabled across the fleet (`passkey_settings`): false until set. */
+  const fleetPasskeyRelay = (): boolean =>
+    db
+      .select({ enabled: passkeySettings.enabled })
+      .from(passkeySettings)
+      .where(eq(passkeySettings.id, "passkey"))
+      .get()?.enabled ?? false;
 
   /**
    * What stands above the projects read: their areas (`areaIds`, else every
@@ -707,6 +720,13 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
     setProjectCap: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
+    setPasskeyRelay: (enabled) => {
+      db.insert(passkeySettings)
+        .values({ id: "passkey", enabled })
+        .onConflictDoUpdate({ target: passkeySettings.id, set: { enabled } })
+        .run();
+    },
+    passkeyRelayEnabled: fleetPasskeyRelay,
     setSpendOnCap: (onCap) => {
       db.insert(spendSettings)
         .values({ id: SPEND_SETTINGS_ID, onCap })
