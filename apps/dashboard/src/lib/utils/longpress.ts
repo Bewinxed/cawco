@@ -20,7 +20,7 @@ const SLOP_PX = 10;
 
 export function enableLongPressMenus(): () => void {
   // Probe-visible marker: tells "not installed" apart from "not firing".
-  (globalThis as Record<string, unknown>).__longPressInstalled = true;
+  window.__longPressInstalled = true;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let startX = 0;
   let startY = 0;
@@ -47,7 +47,10 @@ export function enableLongPressMenus(): () => void {
       return cancel();
     }
     const [touch] = event.touches;
-    const target = event.target as HTMLElement;
+    const { target } = event;
+    if (!(target instanceof Element)) {
+      return;
+    }
     // Only where a menu actually is — a long press on a paragraph should keep
     // meaning what the platform says it means (text selection).
     // A trigger that draws its own box is the row (a work row is the trigger

@@ -56,7 +56,10 @@ export function repeatedKey<T>(
 ): Repeat<T> | null {
   const held = new Map<string, T>();
   for (let i = from; i < items.length; i += 1) {
-    const second = items[i] as T;
+    const second = items[i];
+    if (second === undefined) {
+      continue;
+    }
     const key = keyOf(second);
     const first =
       held.get(key) ??

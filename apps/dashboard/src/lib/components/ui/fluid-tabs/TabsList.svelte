@@ -378,26 +378,27 @@
     watching = requestAnimationFrame(step);
   }
   /** The come-forward under way, from one tab to another, and its frame. */
-  let forward: {
+  interface Forward {
     /** Its clock: the run on the track whose progress each pose is read at. */
     clock: Animation;
     /** The stack is ranked for the tab being chosen (past half way). */
     flipped: boolean;
-    /** The tab being chosen, and the tab it leaves. */
-    mover: HTMLElement;
-    leaving: HTMLElement;
-    /** Every tab's pose at the clock's progress `p`. */
-    poseAt: (p: number) => Map<HTMLElement, FoldPose>;
     frame: number;
     /** Placed by a gesture, not playing on its own. */
     held: boolean;
+    leaving: HTMLElement;
+    /** The tab being chosen, and the tab it leaves. */
+    mover: HTMLElement;
+    /** Every tab's pose at the clock's progress `p`. */
+    poseAt: (p: number) => Map<HTMLElement, FoldPose>;
     /**
      * The strip's scroll riding the clock, when the choice scrolls it
      * (`place`): from where it stood to where it shows the tab whole, over
      * the clock's progress from `p0`, where the ride began.
      */
     ride: { from: number; to: number; p0: number } | null;
-  } | null = null;
+  }
+  let forward: Forward | null = null;
   /** How far a come-forward's clock has gone, on its curve, 0 to 1. */
   const progressOf = (clock: Animation) => {
     const timing = clock.effect?.getComputedTiming();
@@ -455,7 +456,7 @@
       const before = Math.min(1, p / FLIP);
       const past = Math.max(0, (p - FLIP) / (1 - FLIP));
       return new Map(
-        items.map((item) => {
+        items.map((item): [HTMLElement, FoldPose] => {
           const a = start.get(item) ?? restPose([false, false]);
           const b = restPose(after.get(item) ?? [false, false]);
           const side = (k: 0 | 1) => {
@@ -482,7 +483,7 @@
             {
               spread: [s.spread, e.spread],
               tuck: [s.tuck, e.tuck],
-            } as FoldPose,
+            },
           ];
         })
       );
@@ -557,7 +558,7 @@
     if (paused) {
       clock.pause();
     }
-    const now = {
+    const now: Forward = {
       clock,
       flipped: false,
       mover,
@@ -565,7 +566,7 @@
       poseAt,
       frame: 0,
       held: paused,
-      ride: null as { from: number; to: number; p0: number } | null,
+      ride: null,
     };
     forward = now;
     /** The strip's scroll where the clock puts it, while it rides. */
@@ -775,7 +776,10 @@
   let node = $state<HTMLElement | undefined>();
 
   function onfocusin(event: FocusEvent): void {
-    const target = event.target as HTMLElement;
+    const { target } = event;
+    if (!(target instanceof Element)) {
+      return;
+    }
     const trigger = target.closest<HTMLElement>("[data-tab-index]");
     if (!trigger) {
       return;
@@ -814,12 +818,13 @@
     if (items.length === 0) {
       return;
     }
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    let to = (at + (step as number) + items.length) % items.length;
-    if (step === "start") {
-      to = 0;
-    } else if (step === "end") {
+    const active = document.activeElement;
+    const at = active instanceof HTMLElement ? items.indexOf(active) : -1;
+    let to = 0;
+    if (step === "end") {
       to = items.length - 1;
+    } else if (step !== "start") {
+      to = (at + step + items.length) % items.length;
     }
     event.preventDefault();
     items[to].focus();

@@ -50,7 +50,7 @@ interface ReferenceElement {
 const thing = (kind: ThingKind): ReferenceElement => ({
   find: (id) => (thingNamed(kind, id) ? id : null),
   get element() {
-    return ThingReference as unknown as Component<ElementProps>;
+    return ThingReference as Component<ElementProps>;
   },
 });
 
