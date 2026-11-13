@@ -89,11 +89,15 @@ const HUB_PATH_USERS: Record<string, string> = {
     "the transcript read, its answer and its body each under a limit of their own",
   "apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte":
     "a machine's picture or video, an element's src",
+  "apps/dashboard/src/lib/cawco/transcript/block-sources.ts":
+    "a block's picture, clip or sound from its machine, an element's src",
   "apps/dashboard/src/lib/cawco/artifact-api.ts":
     "an artifact's thumbnail, an element's src",
   "apps/dashboard/src/lib/cawco/project-tasks.ts":
     "a folder file's and an output's address, an element's src or a link",
   "apps/dashboard/src/routes/dev/artifact-panel/+page.svelte":
+    "the stand-in recognises the requests it answers by their path",
+  "apps/dashboard/src/lib/cawco/views/routines-fixture.ts":
     "the stand-in recognises the requests it answers by their path",
 };
 

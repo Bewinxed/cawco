@@ -4,11 +4,11 @@
  * skills and servers routine before and after it is turned on, and the
  * reads the page makes, keyed by the path each asks (hub-stand-in `hubAs`).
  */
-import { hubRequest } from "@cawco/core/hub-request";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { routinesWords } from "@cawco/core/words/routines";
 import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
 import type { Routine, RoutineRun } from "#lib/cawco/routines/routines-api.js";
+import { hub, hubPath } from "#lib/platform/hub.js";
 
 export const PROJECT = { id: "70ac3d41", name: "Cawco-Dev" };
 
@@ -185,14 +185,10 @@ const pageAnswers = (
   routines: Routine[],
   offered: boolean
 ): Record<string, unknown> => {
-  const path = (request: { path: string }) => request.path;
+  const project = hub.api.projects({ id: PROJECT.id });
   return {
-    [path(
-      hubRequest("GET /api/routines", { query: { projectId: PROJECT.id } })
-    )]: routines,
-    [path(
-      hubRequest("GET /api/projects/:id/ingress", { path: { id: PROJECT.id } })
-    )]: {
+    [hubPath(hub.api.routines)]: routines,
+    [hubPath(project.ingress)]: {
       connectorPolls: [],
       github: {
         connection: null,
@@ -203,20 +199,12 @@ const pageAnswers = (
       },
       routes: [],
     },
-    [path(
-      hubRequest("GET /api/projects/:id/relays", { path: { id: PROJECT.id } })
-    )]: [],
-    [path(
-      hubRequest("GET /api/actions", { query: { projectId: PROJECT.id } })
-    )]: {
+    [hubPath(project.relays)]: [],
+    [hubPath(hub.api.actions)]: {
       actions: [],
     },
-    [path(hubRequest("GET /api/connections"))]: { connections: [] },
-    [path(
-      hubRequest("GET /api/projects/:id/trim-routine", {
-        path: { id: PROJECT.id },
-      })
-    )]: { offered },
+    [hubPath(hub.api.connections)]: { connections: [] },
+    [hubPath(project["trim-routine"])]: { offered },
   };
 };
 
