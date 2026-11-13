@@ -1105,7 +1105,7 @@
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
     <iframe
       data-ready={!current || previewFrame.loaded || undefined}
-      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100"
+      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--duration-control) ease-out data-ready:opacity-100"
       style:--page-top={previewFrame.headRoomTaken || paneSheet.inGraph
         ? "0px"
         : "var(--side-room, 0px)"}
@@ -1277,7 +1277,7 @@
         undefined}
       data-slot="cover"
       aria-hidden={stageCover.stageWaiting ? undefined : "true"}
-      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
+      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--duration-control) ease-out data-ready:opacity-0"
       role={stageCover.stageWaiting ? "status" : undefined}
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
@@ -1296,7 +1296,7 @@
         }
       }}
     >
-      <!-- Unseen until the wait has lasted --dur-wait-grace, then fading up
+      <!-- Unseen until the wait has lasted --duration-wait-grace, then fading up
            (The Real Wait Rule); held still, pulse and all, once the cover is
            ready and fading out. The wrapper carries the wait, so the
            skeleton's own opacity is its pulse's. -->
@@ -1329,7 +1329,7 @@
         role="alert"
         transition:appear
       >
-        <p class="m-0 text-data-bad text-size-body font-medium">
+        <p class="m-0 text-error-9 text-size-body font-medium">
           {errorTitle(first.kind)}
           <code class="type-code">{errorPlace(first)}</code>
         </p>
@@ -1556,7 +1556,7 @@
   <!-- What stands over the page beside a pill, in the frame's box:
        the composer while a comment is written, the thread once it is, and
        the peek while the pointer rests on one. -->
-  <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two fifths of the well).
+  <!-- The size container a card's width reads (`--spacing-c-pin-card-reading-w`, two fifths of the well).
        It stands where the frame stands (a component artifact's stage, a page under the head's room), so a place the page says is a place on it. -->
   <div
     data-slot="pin-room"
@@ -1694,7 +1694,7 @@
       transition:appear
     >
       <p
-        class="flex-1 basis-c-draft-line min-w-0 m-0 text-data-bad text-size-body font-normal text-pretty wrap-anywhere"
+        class="flex-1 basis-c-draft-line min-w-0 m-0 text-error-9 text-size-body font-normal text-pretty wrap-anywhere"
       >
         {paneNotice.failure
           ? paneNotice.failure.message
