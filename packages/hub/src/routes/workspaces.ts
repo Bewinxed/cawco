@@ -7,8 +7,10 @@ import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
+
 import { discardCall } from "../work-item-calls";
-import { WorkItemRefusal } from "../work-item-state";
+import { workItemProblem } from "../work-item-state";
+import { workspaceOut } from "../work-out";
 import { sessionCallerRefusal } from "./session-caller";
 
 export const workspaceRoutes = ({
@@ -50,16 +52,11 @@ export const workspaceRoutes = ({
       // What a held workspace's clone holds that is nowhere else, as its
       // machine read it once its boundary was closed: what a discard saves
       // to a carry before deleting.
-      .get("/api/workspaces/:id/held", ({ params, status }) => {
+      .get("/api/workspaces/:id/held", ({ params }) => {
         try {
           return workItems.held(params.id);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          return status(
-            error instanceof WorkItemRefusal ? error.status : 502,
-            message
-          );
+          return workItemProblem(error);
         }
       })
       // Refused (409, in words naming what and how big) when its clone holds
@@ -84,7 +81,7 @@ export const workspaceRoutes = ({
             })
           ),
         },
-        async ({ params, body, request, server, status }) => {
+        async ({ params, body, request, server }) => {
           const caller = hubAuth.callerOf(request, addressOf(server, request));
           try {
             const { workspace, carry } = await workItems.archive(params.id, {
@@ -92,21 +89,16 @@ export const workspaceRoutes = ({
               anyway: body?.anyway === true && caller.kind === "owner",
             });
             workspaceArchived(workspace);
-            return { ...workspace, carry };
+            return { ...workspaceOut(workspace), carry };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )
       // What a workspace serves that waits on the person, each by its id,
       // name and link: what an archive of it waits on, which the person's
       // confirm names (dashboard LiveSessionMenu).
-      .get("/api/workspaces/:id/waiting", ({ params, status }) => {
+      .get("/api/workspaces/:id/waiting", ({ params }) => {
         try {
           return {
             waiting: workItems.waiting(params.id).map((one) => ({
@@ -115,12 +107,7 @@ export const workspaceRoutes = ({
             })),
           };
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          return status(
-            error instanceof WorkItemRefusal ? error.status : 502,
-            message
-          );
+          return workItemProblem(error);
         }
       })
       // `discard_workspace`: a workspace a session's delegates worked in,
@@ -139,13 +126,12 @@ export const workspaceRoutes = ({
             reason: t.Optional(t.String({ maxLength: 300 })),
           }),
         },
-        async ({ params, body, request, status }) => {
+        async ({ params, body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
             body.from,
-            "Session credential does not belong to the discard's requester",
-            status
+            "Session credential does not belong to the discard's requester"
           );
           if (stranger !== undefined) {
             return stranger;
@@ -158,12 +144,7 @@ export const workspaceRoutes = ({
               }),
             };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )

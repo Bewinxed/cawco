@@ -6,12 +6,13 @@ import { readPins } from "@cawco/core/comments/model";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../db/artifacts";
 import { byHandle, type Handled, namesAny } from "../handles";
 import { sessionLabel } from "../labels";
+
 import { isSetupPage } from "../setup";
 import type { ArtifactServiceDeps } from "./deps";
-import { ArtifactRefusal } from "./refusals";
 
 /** How a tool names an artifact: its id or handle, else its name. */
 const ARTIFACT_KEYS: Handled<{
@@ -25,10 +26,30 @@ const ARTIFACT_KEYS: Handled<{
 };
 
 /** The id of the one artifact among `rows` that `asked` names; thrown when it names none or several. */
-export const artifactByHandle = (
+const artifactByHandle = (
   asked: string,
   rows: readonly { id: string; kind: string; name: string }[]
 ): string => byHandle(asked, rows, ARTIFACT_KEYS, "artifact").id;
+
+/**
+ * The id of the one artifact among `rows` (read here) that `asked` names
+ * ({@link artifactByHandle}); refused in its words when it names none or
+ * several, or the read fails: a refusal of the call, never the hub's own
+ * fault.
+ */
+export const artifactNamed = (
+  asked: string,
+  rows: () => readonly { id: string; kind: string; name: string }[]
+) => {
+  try {
+    return artifactByHandle(asked, rows());
+  } catch (error) {
+    return problem(404, {
+      code: "artifact-unnamed",
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
 
 /** A whole artifact id, which needs no resolving. */
 const WHOLE_ID =
@@ -56,6 +77,13 @@ export interface AccessContext {
 }
 
 /** Who may do what to an artifact: a session's relationship to it (holder, maker, its delegation tree above or beside, the project it leads, the one it left the artifact in) and each act's rule over those. */
+/** Artifact `id` is not there for the session that asks: one it has not, or may not reach. */
+const noArtifact = (id: string) =>
+  problem(404, {
+    code: "artifact-unknown",
+    detail: artifactToolWords.noArtifact(id),
+  });
+
 export const createAccess = (ctx: AccessContext) => {
   const { db, deps, docs } = ctx;
 
@@ -76,13 +104,12 @@ export const createAccess = (ctx: AccessContext) => {
     (kind === "page" && owner.projectId
       ? db.projectPage(owner.projectId, name)
       : undefined) ?? db.byName(owner.id, kind, name);
-  const sessionOf = (id: string): InstanceRow => {
-    const row = deps.instance(id);
-    if (!row) {
-      throw new ArtifactRefusal(404, "Session not found.");
-    }
-    return row;
-  };
+  const sessionOf = (id: string) =>
+    deps.instance(id) ??
+    problem(404, {
+      code: "artifact-session-unknown",
+      detail: "Session not found.",
+    });
   /**
    * Whether `row` is another session's of `instance`'s delegation tree in
    * the same project ({@link ArtifactServiceDeps.tree}): the tree reads it,
@@ -164,44 +191,40 @@ export const createAccess = (ctx: AccessContext) => {
    * own never turns ambiguous by another's; refused when none or several
    * are (handles.ts).
    */
-  const whole = (instance: InstanceRow, asked: string): string => {
+  const whole = (instance: InstanceRow, asked: string) => {
     if (WHOLE_ID.test(asked)) {
       return asked;
     }
     const near = nameable(instance);
-    // A name that names none or several is a refusal of the call, never
-    // the hub's own fault.
-    try {
-      return artifactByHandle(
-        asked,
-        namesAny(asked, near, ARTIFACT_KEYS)
-          ? near
-          : [...near, ...leftInProject(instance)]
-      );
-    } catch (error) {
-      // biome-ignore lint/style/useErrorCause: the cause rides ArtifactRefusal's third argument, after its status, which the rule does not read
-      throw new ArtifactRefusal(
-        404,
-        error instanceof Error ? error.message : String(error),
-        { cause: error }
-      );
-    }
+    return artifactNamed(asked, () =>
+      namesAny(asked, near, ARTIFACT_KEYS)
+        ? near
+        : [...near, ...leftInProject(instance)]
+    );
+  };
+  /** The whole id of the artifact session `instanceId` names ({@link whole}). */
+  const namedIn = (instanceId: string, asked: string) => {
+    const session = sessionOf(instanceId);
+    return session instanceof ElysiaStatus ? session : whole(session, asked);
   };
   /** The session's artifact `id`; refused when it is another session's or not there. */
-  const own = (instance: InstanceRow, asked: string): ArtifactRow => {
+  const own = (instance: InstanceRow, asked: string) => {
     const id = whole(instance, asked);
+    if (id instanceof ElysiaStatus) {
+      return id;
+    }
     const row = db.get(id);
     if (row && row.instanceId !== instance.id && inTree(instance, row)) {
-      throw new ArtifactRefusal(
-        403,
-        artifactToolWords.othersArtifact(
+      return problem(403, {
+        code: "artifact-others",
+        detail: artifactToolWords.othersArtifact(
           `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`,
           row.instanceId?.slice(0, 8) ?? ""
-        )
-      );
+        ),
+      });
     }
     if (!row || row.instanceId !== instance.id) {
-      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+      return noArtifact(id);
     }
     return row;
   };
@@ -213,14 +236,15 @@ export const createAccess = (ctx: AccessContext) => {
    * (preview-routes.ts); a session's own tools keep to {@link own}, so no
    * agent changes another session's artifact.
    */
-  const panelHeld = (
-    panelId: string,
-    id: string
-  ): { owner: InstanceRow; row: ArtifactRow } => {
+  const panelHeld = (panelId: string, id: string) => {
+    const panel = sessionOf(panelId);
+    if (panel instanceof ElysiaStatus) {
+      return panel;
+    }
     const row = db.get(id);
     const owner = row ? holder(row) : undefined;
-    if (!(row && owner && sees(sessionOf(panelId), row))) {
-      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+    if (!(row && owner && sees(panel, row))) {
+      return noArtifact(id);
     }
     return { owner, row };
   };
@@ -370,8 +394,11 @@ export const createAccess = (ctx: AccessContext) => {
    * person's pins are answered before they go. Its content stays the
    * writer's while it is warm. Refused otherwise, naming who deletes it.
    */
-  const deletable = (instance: InstanceRow, asked: string): ArtifactRow => {
+  const deletable = (instance: InstanceRow, asked: string) => {
     const id = whole(instance, asked);
+    if (id instanceof ElysiaStatus) {
+      return id;
+    }
     const row = db.get(id);
     const writer = row && row.heldFor === null ? holder(row) : undefined;
     if (!(row && writer) || writer.id === instance.id) {
@@ -389,25 +416,31 @@ export const createAccess = (ctx: AccessContext) => {
       if (open === 0) {
         return row;
       }
-      throw new ArtifactRefusal(
-        409,
-        artifactToolWords.pinsOpenFirst(whose, open)
-      );
+      return problem(409, {
+        code: "artifact-pins-open",
+        detail: artifactToolWords.pinsOpenFirst(whose, open),
+      });
     }
-    throw new ArtifactRefusal(
-      403,
-      up
-        ? artifactToolWords.makerDeletes(whose)
-        : artifactToolWords.notInTree(whose)
-    );
+    return up
+      ? problem(403, {
+          code: "artifact-maker-deletes",
+          detail: artifactToolWords.makerDeletes(whose),
+        })
+      : problem(403, {
+          code: "artifact-not-in-tree",
+          detail: artifactToolWords.notInTree(whose),
+        });
   };
   /**
    * Artifact `id` for a change: the session owns it or made it (a delegate
    * goes on updating and reading what it handed to its parent), or its
    * writers left it in the session's project ({@link leftFor}).
    */
-  const revisable = (instance: InstanceRow, asked: string): ArtifactRow => {
+  const revisable = (instance: InstanceRow, asked: string) => {
     const id = whole(instance, asked);
+    if (id instanceof ElysiaStatus) {
+      return id;
+    }
     const row = db.get(id);
     if (row?.madeBy === instance.id) {
       return row;
@@ -423,13 +456,13 @@ export const createAccess = (ctx: AccessContext) => {
    * session's of its delegation tree ({@link inTree}); refused as not there
    * otherwise. Every change keeps to {@link own}.
    */
-  const viewable = (instance: InstanceRow, asked: string): ArtifactRow => {
+  const viewable = (instance: InstanceRow, asked: string) => {
     const id = whole(instance, asked);
-    const row = db.get(id);
-    if (row && sees(instance, row)) {
-      return row;
+    if (id instanceof ElysiaStatus) {
+      return id;
     }
-    throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+    const row = db.get(id);
+    return row && sees(instance, row) ? row : noArtifact(id);
   };
   /**
    * Artifact `id` for the person's show from session `instance`'s view:
@@ -437,12 +470,15 @@ export const createAccess = (ctx: AccessContext) => {
    * that none holds; refused as not there otherwise. Where it opens is
    * the show's ({@link Artifacts.show}).
    */
-  const showable = (instance: InstanceRow, asked: string): ArtifactRow => {
-    const row = db.get(whole(instance, asked));
-    if (row && (row.instanceId !== null || sees(instance, row))) {
-      return row;
+  const showable = (instance: InstanceRow, asked: string) => {
+    const id = whole(instance, asked);
+    if (id instanceof ElysiaStatus) {
+      return id;
     }
-    throw new ArtifactRefusal(404, artifactToolWords.noArtifact(asked));
+    const row = db.get(id);
+    return row && (row.instanceId !== null || sees(instance, row))
+      ? row
+      : noArtifact(asked);
   };
   /**
    * Where the person's show of `row` (`found`, or the version it is held
@@ -552,12 +588,18 @@ export const createAccess = (ctx: AccessContext) => {
    * when none. A held next version is read by
    * whoever reads its artifact: the parent reviews what its maker changed.
    */
-  const readable = (instance: InstanceRow, asked: string): ArtifactRow => {
+  const readable = (
+    instance: InstanceRow,
+    asked: string
+  ): ArtifactRow | NotReadable => {
     const id = whole(instance, asked);
+    if (id instanceof ElysiaStatus) {
+      return id;
+    }
     const next = db.get(id);
     if (next?.heldFor) {
-      readable(instance, next.heldFor);
-      return next;
+      const held = readable(instance, next.heldFor);
+      return held instanceof ElysiaStatus ? held : next;
     }
     const row =
       answerable(instance).find((one) => one.id === id) ??
@@ -566,11 +608,11 @@ export const createAccess = (ctx: AccessContext) => {
       (next && (inTree(instance, next) || leftFor(instance, next))
         ? next
         : undefined);
-    if (!row) {
-      throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
-    }
-    return row;
+    return row ?? noArtifact(id);
   };
+  /** Why {@link readable} reads no artifact: a name that names none, or an id it may not read. */
+  type NotReadable =
+    Exclude<ReturnType<typeof whole>, string> | ReturnType<typeof noArtifact>;
   /**
    * Whether the session is the one the artifact's marks go to
    * ({@link ArtifactServiceDeps.answersTo}, artifacts/taker.ts): its writer;
@@ -599,6 +641,7 @@ export const createAccess = (ctx: AccessContext) => {
     sees(owner, row) || projectPage(owner, row.id) !== undefined;
 
   return {
+    namedIn,
     above,
     answerable,
     deletable,

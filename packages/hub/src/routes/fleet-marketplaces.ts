@@ -4,7 +4,7 @@
 
 import { detach } from "@cawco/core/detach";
 import type { MarketplaceLink, MarketplaceRead } from "@cawco/core/fleet";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 
@@ -52,21 +52,24 @@ export const fleetMarketplaceRoutes = ({
     .delete(
       "/api/fleet/marketplace-links",
       { query: t.Object({ source: t.String({ minLength: 1 }) }) },
-      ({ query, status }) =>
+      ({ query }) =>
         dropMarketplaceLink(query.source.trim())
           ? { ok: true }
-          : status(
-              404,
-              `No refused link of ${query.source.trim()} is waiting to be let go.`
-            )
+          : problem(404, {
+              code: "no-refused-link-waiting",
+              detail: `No refused link of ${query.source.trim()} is waiting to be let go.`,
+            })
     )
-    .delete("/api/fleet/marketplaces/:name", ({ params, status }) => {
+    .delete("/api/fleet/marketplaces/:name", ({ params }) => {
       const trashed = db.trash.put(
         { kind: "marketplace", key: params.name },
         Date.now()
       );
       if (trashed === undefined) {
-        return status(404, `the fleet links no marketplace ${params.name}`);
+        return problem(404, {
+          code: "no-marketplace",
+          detail: `the fleet links no marketplace ${params.name}`,
+        });
       }
       fleetChanged();
       return undoable(trashed);

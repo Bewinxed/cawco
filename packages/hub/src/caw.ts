@@ -84,7 +84,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
-import { Elysia, status, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
@@ -93,7 +93,12 @@ import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
 import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
-import { AGENTS_FILE, personsTier, ROUTINE_ORIGIN } from "./memory";
+import {
+  AGENTS_FILE,
+  type Memory,
+  personsTier,
+  ROUTINE_ORIGIN,
+} from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import {
   folderReadWords,
@@ -106,14 +111,18 @@ import { typeFileProblem } from "./project-delegate-types";
 import {
   FOLDER_CONTENT_LIMIT,
   FOLDER_ENCODINGS,
-  FolderRefusal,
   folderContent,
   folderPath,
   listFolder,
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
-import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
+import {
+  type AnyProblem,
+  refusalAnswer,
+  refuser,
+  StatusRefusal,
+} from "./refusal";
 import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
@@ -432,18 +441,6 @@ const STAGES_FILE = "stages.md";
 /** A project's delegate types: a write there is a proposal the person approves (memory.ts `proposeType`). */
 const DELEGATES_DIR = "delegates/";
 
-/** A folder call, its refusal as the sentence Caw reads. */
-const folderCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
-  try {
-    return await call();
-  } catch (error) {
-    if (error instanceof FolderRefusal) {
-      throw new Error(error.message, { cause: error });
-    }
-    throw error;
-  }
-};
-
 /** stages.md as Caw writes it, refused with what does not read. */
 const stagesRead = (body: string | Uint8Array): void => {
   const reading = readStages(
@@ -477,9 +474,9 @@ const typeText = (
       `${rel} was not ${approved ? "written" : "proposed"}: a delegate type is text, not bytes.`
     );
   }
-  const problem = approved ? typeFileProblem(rel, body) : undefined;
-  if (problem) {
-    throw new Error(`${rel} was not written: ${problem}`);
+  const misfit = approved ? typeFileProblem(rel, body) : undefined;
+  if (misfit) {
+    throw new Error(`${rel} was not written: ${misfit}`);
   }
   return body;
 };
@@ -577,18 +574,16 @@ export interface CawDeps {
    * and drawn at the call `toolUseId` (memory.ts `proposeType`): nothing is
    * committed until they approve it.
    */
-  readonly proposeType: (
-    actor: InstanceRow,
-    path: string,
-    content: string,
-    toolUseId: string | undefined
-  ) => Promise<{ id: string; path: string; waiting: string }>;
+  readonly proposeType: Memory["proposeType"];
   /**
    * Renames the project as the dashboard's rename does (project-edit.ts),
-   * every client reading it again; answers the name as kept, a refusal
-   * thrown in its sentence.
+   * every client reading it again; answers the name as kept, or its
+   * refusal.
    */
-  readonly rename: (projectId: string, name: string) => Promise<string>;
+  readonly rename: (
+    projectId: string,
+    name: string
+  ) => Promise<string | AnyProblem>;
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -1198,11 +1193,25 @@ export const createCaw = ({
       ? `They asked from the ${BLOCK_PAGE_TITLES[place.page]} page: page "${place.page}"${place.position === null ? "" : `, position ${place.position}`}.`
       : "They asked from the views strip: no page.";
 
+  /** The views' refusal of project `projectId`; none when it keeps no view `name`, which is refused (a change keeps the view's place, so it is drafted without a page). */
+  const keptAlready = async (projectId: string, name: string) => {
+    const kept = await views.kept(projectId);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    if (kept.includes(name)) {
+      throw new Error(
+        `“${name}” is a kept view already, standing where the person put it: draft its change without a page.`
+      );
+    }
+  };
+
   /**
    * Caw's draft written (`view_draft`), as view_draft answers it. For a
    * page, a name that is a kept view's is refused (a change keeps the view's
    * place, so it is drafted without one); with a page, the draft stands
-   * there as a proposed block.
+   * there as a proposed block. A refusal of the view's or the block's is
+   * answered as it is.
    */
   const draftView = async (
     projectId: string,
@@ -1217,17 +1226,22 @@ export const createCaw = ({
       source: string;
     }
   ) => {
-    if (
-      input.page &&
-      (await folderCall(() => views.kept(projectId))).includes(input.name)
-    ) {
-      throw new Error(
-        `“${input.name}” is a kept view already, standing where the person put it: draft its change without a page.`
-      );
+    const unplaced = input.page
+      ? await keptAlready(projectId, input.name)
+      : undefined;
+    if (unplaced) {
+      return unplaced;
     }
-    const drafted = await folderCall(() =>
-      views.draft(projectId, input.name, input.source, { name: by }, session)
+    const drafted = await views.draft(
+      projectId,
+      input.name,
+      input.source,
+      { name: by },
+      session
     );
+    if (drafted instanceof ElysiaStatus) {
+      return drafted;
+    }
     const proposed = input.page
       ? blocks.propose(
           projectId,
@@ -1237,6 +1251,9 @@ export const createCaw = ({
           by
         )
       : null;
+    if (proposed instanceof ElysiaStatus) {
+      return proposed;
+    }
     return {
       ok: true as const,
       view: drafted.name,
@@ -1253,18 +1270,6 @@ export const createCaw = ({
     };
   };
 
-  /** A folder's refusal (a view the project does not keep) as Caw's, with its sentence. */
-  const refusedBy = (error: unknown): never => {
-    if (error instanceof FolderRefusal) {
-      const code = error.status;
-      return refuse(
-        code === 400 || code === 404 || code === 409 ? code : 400,
-        error.message
-      );
-    }
-    throw error;
-  };
-
   const bodyOf = (body: string): string =>
     body.trim() || refuse(400, "A message needs words.");
 
@@ -1279,7 +1284,10 @@ export const createCaw = ({
     change: readonly SetupPart[]
   ): Promise<SetupFacts> => {
     const project = projectOf(projectId);
-    const stages = await folderCall(() => stagesFileOf(projectId));
+    const stages = await stagesFileOf(projectId);
+    if (stages instanceof ElysiaStatus) {
+      throw new Error(stages.response.detail);
+    }
     const tasks: Record<string, string[]> = {};
     for (const indexed of db.taskIndex(projectId)) {
       tasks[indexed.stage] = [
@@ -1618,7 +1626,15 @@ export const createCaw = ({
       raw: string
     ): Promise<{ instanceId: string }> {
       const words = bodyOf(raw);
-      const kept = await views.view(projectId, name).catch(refusedBy);
+      const kept = await views.view(projectId, name);
+      if (kept instanceof ElysiaStatus) {
+        // The views' refusal (a view the project does not keep) as Caw's, with its sentence.
+        const code = kept.status;
+        return refuse(
+          code === 400 || code === 404 || code === 409 ? code : 400,
+          kept.response.detail
+        );
+      }
       const told = await tellYours(projectId, {
         by: "you",
         kind: "view-request",
@@ -1793,6 +1809,21 @@ export const createCaw = ({
         }
         return actor;
       };
+      /** `body` committed at `rel` in the project's folder as the session calling (`folder_write`). */
+      const committed = async (
+        projectId: string,
+        rel: string,
+        body: string | Uint8Array
+      ) => {
+        const written = await writeFolderFile(projectId, rel, body, {
+          author: { name: boardTitle(me()) },
+        });
+        if (written instanceof ElysiaStatus) {
+          return written;
+        }
+        folderChanged(projectId);
+        return { ok: true, path: rel, sha: written.sha };
+      };
       return [
         tool(
           "folder_read",
@@ -1800,18 +1831,12 @@ export const createCaw = ({
           { path: z.string().optional() },
           async ({ path }) => {
             const projectId = ours();
-            return await folderCall(() =>
-              readFolderFile(projectId, path ?? "").catch((error: unknown) => {
-                // No path, or a folder: its listing.
-                if (
-                  error instanceof FolderRefusal &&
-                  (error.status === 400 || error.status === 409)
-                ) {
-                  return listFolder(projectId, path ?? "");
-                }
-                throw error;
-              })
-            );
+            const file = await readFolderFile(projectId, path ?? "");
+            // No path, or a folder: its listing.
+            return file instanceof ElysiaStatus &&
+              (file.status === 400 || file.status === 409)
+              ? await listFolder(projectId, path ?? "")
+              : file;
           },
           folderReadWords
         ),
@@ -1825,7 +1850,10 @@ export const createCaw = ({
           },
           async ({ path, content, encoding }) => {
             const projectId = ours();
-            const rel = await folderCall(() => folderPath(path));
+            const rel = folderPath(path);
+            if (rel instanceof ElysiaStatus) {
+              return rel;
+            }
             // The setup page sent is the person's approval of AGENTS.md and
             // the delegate types its writer writes from it.
             const approved = setupsSent.get(projectId) === me().id;
@@ -1833,9 +1861,10 @@ export const createCaw = ({
             if (theirs) {
               throw new Error(`${rel} was not written: ${theirs}`);
             }
-            const body = await folderCall(() =>
-              folderContent(content, encoding)
-            );
+            const body = folderContent(content, encoding);
+            if (body instanceof ElysiaStatus) {
+              return body;
+            }
             if (rel.startsWith(DELEGATES_DIR)) {
               const type = typeText(rel, body, approved);
               if (!approved) {
@@ -1845,13 +1874,7 @@ export const createCaw = ({
             if (rel === STAGES_FILE) {
               stagesRead(body);
             }
-            const written = await folderCall(() =>
-              writeFolderFile(projectId, rel, body, {
-                author: { name: boardTitle(me()) },
-              })
-            );
-            folderChanged(projectId);
-            return { ok: true, path: rel, sha: written.sha };
+            return await committed(projectId, rel, body);
           },
           folderWrittenWords
         ),
@@ -1871,6 +1894,9 @@ export const createCaw = ({
             const projectId = ours();
             const by = boardTitle(me());
             const drafted = await draftView(projectId, me().id, by, input);
+            if (drafted instanceof ElysiaStatus) {
+              return drafted;
+            }
             api.notice(projectId, {
               title: `View · ${by} drafted “${drafted.view}”`,
               event: { kind: "view", name: drafted.view },
@@ -1888,9 +1914,7 @@ export const createCaw = ({
           },
           async ({ tool: name, args }) => {
             const projectId = ours();
-            return await folderCall(() =>
-              views.query(projectId, name, args ?? {})
-            );
+            return await views.query(projectId, name, args ?? {});
           },
           viewQueryWords
         ),
@@ -1918,7 +1942,8 @@ export const createCaw = ({
                 `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`
               );
             }
-            return { name: await rename(projectId, name) };
+            const renamed = await rename(projectId, name);
+            return typeof renamed === "string" ? { name: renamed } : renamed;
           },
           (named: { name: string }) => `Named the project “${named.name}”.`
         ),
@@ -1939,8 +1964,11 @@ export const createCaw = ({
 
 export type Caw = ReturnType<typeof createCaw>;
 
-const answer = refusalAnswer(CawRefusal, (error) =>
-  status(502, error instanceof Error ? error.message : String(error))
+const answer = refusalAnswer(CawRefusal, "caw-refused", (error) =>
+  problem(502, {
+    code: "caw-failed",
+    detail: error instanceof Error ? error.message : String(error),
+  })
 );
 
 const HARNESS = t.UnionEnum(HARNESSES);

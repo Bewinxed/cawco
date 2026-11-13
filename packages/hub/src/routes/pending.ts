@@ -5,7 +5,7 @@
 import { archiveRefusal } from "@cawco/core/archive";
 import type { ArtifactNeedsRead } from "@cawco/core/artifact-needs";
 import type { Envelope } from "@cawco/core/protocol";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { clientCopy } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import {
@@ -55,7 +55,7 @@ export const pendingRoutes = ({
           ]),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         if (body.kind === "archive") {
           const view = archiveView();
           const refused = body.ids.flatMap((id) => {
@@ -63,10 +63,10 @@ export const pendingRoutes = ({
             return why ? [`${id}: ${why}`] : [];
           });
           if (refused.length > 0) {
-            return status(
-              409,
-              `Not archived, still doing something. ${refused.join(" ")}`
-            );
+            return problem(409, {
+              code: "not-archived-still-doing",
+              detail: `Not archived, still doing something. ${refused.join(" ")}`,
+            });
           }
         }
         const instanceIds = body.ids;
