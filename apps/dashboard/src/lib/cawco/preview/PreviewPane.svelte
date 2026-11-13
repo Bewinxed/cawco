@@ -197,7 +197,7 @@
     type RailList,
     type RailSort,
   } from "./comment-rows";
-  import { FrameReferences } from "./frame-references.svelte";
+  import { FrameLinks } from "./frame-links.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
@@ -220,7 +220,6 @@
     previewError,
     previewErrorOf,
     previewKey,
-    previewOpenArtifact,
     previewPickPlace,
     previewPinAt,
     previewPinId,
@@ -957,8 +956,8 @@
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
-  /** The `cawco:` references the page's program names, answered with their faces: a page's only, the hub's set for it, empty for one with no program. */
-  const references = new FrameReferences(
+  /** The page's links, as its program names them (a page's only; none for one with no program): their faces said, and an ask to open one answered. */
+  const links = new FrameLinks(
     post,
     () => instanceId,
     () => (artifact?.kind === "page" ? artifact.id : null)
@@ -3336,22 +3335,9 @@
       turnedAway();
       return;
     }
-    if (references.heard(event.data)) {
-      return;
-    }
-    // A decision page's Open to draw or Open full: the artifact opens where
-    // a chip of it pressed in this session's conversation opens. Loaded on
-    // the press, as a pin's chip loads it: the artifact's own tab never
-    // reaches the conversation's code (page-imports-check.ts).
-    const opening = previewOpenArtifact(event.data);
-    if (opening) {
-      import("../reference-open.svelte")
-        .then(({ openReference }) =>
-          openReference(opening.artifact, { top: true }, instanceId)
-        )
-        .then((refused) =>
-          post({ jsonrpc: "2.0", id: opening.id, result: refused })
-        );
+    // A reference in a decision page's words, its Canvas's Open to draw,
+    // its Preview's Open full: opened only when the page links to it.
+    if (links.heard(event.data)) {
       return;
     }
     const ask = previewPickPlace(event.data);

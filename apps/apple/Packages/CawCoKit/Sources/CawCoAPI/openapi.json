@@ -9311,7 +9311,7 @@
         }
       }
     },
-    "/api/artifacts/{artifact}/references": {
+    "/api/artifacts/{artifact}/links": {
       "get": {
         "parameters": [
           {
@@ -9323,14 +9323,14 @@
             }
           }
         ],
-        "operationId": "getApiArtifactsByArtifactReferences",
+        "operationId": "getApiArtifactsByArtifactLinks",
         "responses": {
           "200": {
-            "description": "getApiArtifactsByArtifactReferences 200",
+            "description": "getApiArtifactsByArtifactLinks 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiArtifactsByArtifactReferences200"
+                  "$ref": "#/components/schemas/PageLinks"
                 }
               }
             }
@@ -32512,20 +32512,6 @@
           }
         ]
       },
-      "getApiArtifactsByArtifactReferences200": {
-        "type": "object",
-        "properties": {
-          "references": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "references"
-        ]
-      },
       "getApiPush200": {
         "type": "object",
         "properties": {
@@ -46239,6 +46225,30 @@
         "required": [
           "commit",
           "path"
+        ]
+      },
+      "PageLinks": {
+        "description": "What a page's program links to: all its frame may learn the faces of, and ask its host to open.",
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "description": "The artifacts its Canvas and Preview pieces show, by id.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "references": {
+            "description": "The `cawco:` references its words name.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "artifacts",
+          "references"
         ]
       },
       "CanvasExport": {

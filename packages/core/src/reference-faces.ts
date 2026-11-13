@@ -7,12 +7,12 @@
  * (ReferenceFace.svelte); a press asks the dashboard to open it, as a chip
  * of it pressed in the dashboard opens.
  *
- * Which references a page may learn of is the product's to say, never the
- * page's: the set is every reference its program's words name
- * ({@link programReferences}, run by the hub over the program it checked
- * and kept, `GET /api/artifacts/:artifact/references`). Nothing the page,
- * or any script in it, says adds to that set; a page with no program has
- * none.
+ * What a page may learn of and open is the product's to say, never the
+ * page's: its links ({@link PageLinks}), every reference its program's
+ * words name ({@link programReferences}) and every artifact its Canvas and
+ * Preview pieces show, read by the hub off the program it checked and kept
+ * (`GET /api/artifacts/:artifact/links`). Nothing the page, or any script
+ * in it, says adds to them; a page with no program has none.
  *
  * - The host to the page through the overlay: {@link REFERENCE_FACES}
  *   `{ faces }`, the face of each reference in the set, again each time
@@ -20,8 +20,10 @@
  *   its label alone, as a reference the dashboard knows nothing by draws
  *   everywhere.
  * - The page asks its host, a JSON-RPC ask: {@link OPEN_REFERENCE_ASK}
- *   `{ href }`, answered with the refusal's words, or null once it opened;
- *   a destination outside the set is refused.
+ *   `{ href }`, or `cawco/open-artifact` `{ artifact }` (a Canvas's Open to
+ *   draw, a Preview's Open full), answered with the refusal's words, or
+ *   null once it opened; a reference or an artifact outside its links is
+ *   refused.
  */
 import { Lexer } from "marked";
 import { ARTIFACT_KINDS, type ArtifactKind } from "./artifact-kinds";
@@ -197,8 +199,43 @@ export function programReferences(words: Iterable<string>): string[] {
   return [...found];
 }
 
-/** The set a host was given, each a `cawco:` destination; anything else left out. */
-export const referenceSetOf = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? [...new Set(value.filter(isReferenceHref))].slice(0, REFERENCES_MOST)
-    : [];
+/** What a page's program links to: all its frame may learn the faces of, and ask its host to open. */
+export interface PageLinks {
+  /** The artifacts its Canvas and Preview pieces show, by id. */
+  artifacts: string[];
+  /** The `cawco:` references its words name. */
+  references: string[];
+}
+
+/** The most artifacts one page's pieces show. Our call: a page shows a few dozen. */
+const ARTIFACTS_MOST = 200;
+/** The longest artifact id taken. Our call: an id is a UUID. */
+const ARTIFACT_ID_MOST = 100;
+
+/** A page's links as the hub said them, each entry whole; anything else left out. */
+export function pageLinksOf(value: unknown): PageLinks {
+  const raw = (typeof value === "object" && value !== null ? value : {}) as {
+    artifacts?: unknown;
+    references?: unknown;
+  };
+  return {
+    references: Array.isArray(raw.references)
+      ? [...new Set(raw.references.filter(isReferenceHref))].slice(
+          0,
+          REFERENCES_MOST
+        )
+      : [],
+    artifacts: Array.isArray(raw.artifacts)
+      ? [
+          ...new Set(
+            raw.artifacts.filter(
+              (one): one is string =>
+                typeof one === "string" &&
+                one.length > 0 &&
+                one.length <= ARTIFACT_ID_MOST
+            )
+          ),
+        ].slice(0, ARTIFACTS_MOST)
+      : [],
+  };
+}

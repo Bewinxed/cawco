@@ -934,11 +934,12 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
-    // The `cawco:` references its program names: all a dashboard framing it
-    // says faces of to the page, and opens for it (core reference-faces.ts).
-    .get("/api/artifacts/:artifact/references", ({ params }) => {
+    // What its program links to: the `cawco:` references its words name and
+    // the artifacts its pieces show, all a dashboard framing it says faces
+    // of to the page and opens for it (core reference-faces.ts).
+    .get("/api/artifacts/:artifact/links", ({ params }) => {
       try {
-        return { references: artifacts.references(params.artifact) };
+        return artifacts.links(params.artifact);
       } catch (error) {
         return refused(error);
       }

@@ -25,16 +25,11 @@
   import { artifactReached } from "#lib/cawco/files/reached.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
-  import { FrameReferences } from "#lib/cawco/preview/frame-references.svelte.js";
+  import { FrameLinks } from "#lib/cawco/preview/frame-links.svelte.js";
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
-  import {
-    previewError,
-    previewErrorOf,
-    previewOpenArtifact,
-  } from "#lib/cawco/preview/wire.js";
-  import { openReference } from "#lib/cawco/reference-open.svelte.js";
+  import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
   import { heardInput } from "#lib/cawco/reload.svelte.js";
   import { sessionHere } from "#lib/cawco/session-here.js";
   import { track } from "#lib/cawco/track.js";
@@ -174,8 +169,8 @@
     }
   }
 
-  /** The `cawco:` references the page's words draw, answered with their faces. */
-  const references = new FrameReferences(
+  /** The page's links, as its program names them: their faces said, and an ask to open one answered. */
+  const links = new FrameLinks(
     post,
     () => here?.(),
     () => artifactId
@@ -255,26 +250,6 @@
     }
   });
 
-  /**
-   * Whether `data` asked to open something, taken and answered: a
-   * reference in the page's words (`references`), or a Canvas's Open to
-   * draw or a Preview's Open full, whose artifact opens where a chip of it
-   * pressed here opens.
-   */
-  function opened(data: unknown): boolean {
-    if (references.heard(data)) {
-      return true;
-    }
-    const opening = previewOpenArtifact(data);
-    if (!opening) {
-      return false;
-    }
-    openReference(opening.artifact, { top: true }, here?.()).then((refused) =>
-      post({ jsonrpc: "2.0", id: opening.id, result: refused })
-    );
-    return true;
-  }
-
   // Only its own frame, from its own origin, is heard.
   $effect(() => {
     const heard = (event: MessageEvent) => {
@@ -290,7 +265,9 @@
         of?: unknown;
         type?: unknown;
       } | null;
-      if (opened(event.data)) {
+      // A reference in the page's words, a Canvas's Open to draw, a
+      // Preview's Open full: opened only when the page links to it.
+      if (links.heard(event.data)) {
         return;
       }
       const type = told?.type;
