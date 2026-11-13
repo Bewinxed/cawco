@@ -12,31 +12,30 @@ import { drawnFrom } from "./kept.svelte";
 /** A list that shows trees: the rail's Recent, the phone home's, and the running sessions a project unfolds in the rail's Projects. */
 export type TreeList = "rail-recent" | "home-recent" | "rail-projects";
 
-const LISTS: readonly TreeList[] = [
-  "rail-recent",
-  "home-recent",
-  "rail-projects",
-];
-
 const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
 
 const idsOf = (raw: string | null): string[] =>
   parseJson(raw, z.array(z.string()), []);
 
-const open = Object.fromEntries(
-  LISTS.map((list) => [
-    list,
-    new SvelteSet<string>(idsOf(stored("local", keyOf(list)))),
-  ])
-) as Record<TreeList, SvelteSet<string>>;
+/** The trees opened in `list`, as this browser last kept them. */
+const keptOpen = (list: TreeList): SvelteSet<string> =>
+  new SvelteSet(idsOf(stored("local", keyOf(list))));
+
+const open: Record<TreeList, SvelteSet<string>> = {
+  "rail-recent": keptOpen("rail-recent"),
+  "home-recent": keptOpen("home-recent"),
+  "rail-projects": keptOpen("rail-projects"),
+};
 
 /**
  * Parents whose older rows are out (older.ts, OlderRows), in each list on its
  * own: a session's older delegates. In memory, so a reload shuts them.
  */
-export const olderOpen = Object.fromEntries(
-  LISTS.map((list) => [list, new SvelteSet<string>()])
-) as Record<TreeList, SvelteSet<string>>;
+export const olderOpen: Record<TreeList, SvelteSet<string>> = {
+  "rail-recent": new SvelteSet(),
+  "home-recent": new SvelteSet(),
+  "rail-projects": new SvelteSet(),
+};
 
 export const openTrees = {
   has(id: string, list: TreeList): boolean {
