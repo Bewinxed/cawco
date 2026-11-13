@@ -64,9 +64,9 @@ export const dbCore = (
     walkOwned(
       "drop",
       { session_identities: () => revokeIdentities(tx, list) },
-      ({ table, column, drop }) => {
-        const name = sql.identifier(table);
-        const by = sql.identifier(column);
+      ({ column, drop }) => {
+        const name = column.table;
+        const by = sql.identifier(column.name);
         tx.run(
           drop === "delete"
             ? sql`DELETE FROM ${name} WHERE ${by} IN (${idList(list)})`
