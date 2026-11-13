@@ -31,7 +31,16 @@ export class PaneSheet {
   /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
   readonly keptDials = $derived.by(() => {
     const kept = this.#deps.paneDoc.view?.choices.dials?.value;
-    return stageDialsOf({ values: kept })?.values ?? {};
+    if (kept === undefined) {
+      return {};
+    }
+    const dials = stageDialsOf({ values: kept });
+    if (!dials) {
+      throw new Error(
+        `The artifact's doc keeps its dials as ${JSON.stringify(kept)}, not a map of dial names to numbers, words or switches`
+      );
+    }
+    return dials.values;
   });
 
   /** His tuning of every move as the artifact's doc keeps it (its `tuned` map): the design graph puts it back on each move's first read. */
