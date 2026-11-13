@@ -37,12 +37,15 @@ const OPTIONS: { [K in keyof Choices]: readonly Choices[K][] } = {
 function parse(raw: string | null): Partial<Choices> {
   const picked: Partial<Choices> = {};
   for (const part of (raw ?? "").split(",")) {
-    const [name, value] = part.split(":") as [keyof Choices, string];
-    if (
-      name in OPTIONS &&
-      (OPTIONS[name] as readonly string[]).includes(value)
-    ) {
-      (picked as Record<string, string>)[name] = value;
+    const [name, value] = part.split(":");
+    if (name === "ipad") {
+      picked.ipad = OPTIONS.ipad.find((one) => one === value) ?? picked.ipad;
+    } else if (name === "answer") {
+      picked.answer =
+        OPTIONS.answer.find((one) => one === value) ?? picked.answer;
+    } else if (name === "finished") {
+      picked.finished =
+        OPTIONS.finished.find((one) => one === value) ?? picked.finished;
     }
   }
   return picked;
