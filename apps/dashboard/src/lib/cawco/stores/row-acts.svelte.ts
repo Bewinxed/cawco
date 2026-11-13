@@ -6,13 +6,13 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { StopRequest } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { CONTROL_TIMEOUT_MS, DISCARD_TIMEOUT_MS } from "#lib/config.js";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { ask, rereadHub, send } from "../hub/socket.svelte";
 import { instanceIndex } from "./board.svelte";
@@ -138,15 +138,10 @@ export async function moveInstanceAccount(
   instanceId: string,
   accountId: string
 ): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/instances/:id/account", {
-      path: { id: instanceId },
-      body: { accountId },
-    })
+  await hubDone(
+    hub.api.instances({ id: instanceId }).account.post({ accountId }),
+    (refused) => hubRefusal(refused, accountsWords.notMovedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, accountsWords.notMovedThen);
-  }
 }
 
 /**
@@ -158,15 +153,10 @@ export async function renameInstance(
   instanceId: string,
   title: string
 ): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("PATCH /api/instances/:id", {
-      path: { id: instanceId },
-      body: { title },
-    })
+  await hubDone(
+    hub.api.instances({ id: instanceId }).patch({ title }),
+    (refused) => hubRefusal(refused, sidebarWords.notRenamedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.notRenamedThen);
-  }
 }
 
 /**
@@ -177,15 +167,10 @@ export async function renameInstance(
  */
 export async function keepSession(instanceId: string): Promise<Bounded<void>> {
   const target = session(instanceId);
-  const response = await hubFetch(
-    hubRequest("PATCH /api/instances/:id", {
-      path: { id: instanceId },
-      body: { kind: "mainline" },
-    })
+  await hubDone(
+    hub.api.instances({ id: instanceId }).patch({ kind: "mainline" }),
+    (refused) => hubRefusal(refused, sidebarWords.notKeptThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.notKeptThen);
-  }
 
   target.scratch = false;
   if (target.sessionId && target.machineId) {
