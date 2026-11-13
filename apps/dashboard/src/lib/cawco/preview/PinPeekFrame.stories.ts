@@ -11,7 +11,7 @@ import type { Pin } from "@cawco/core/comments/model";
 import PinPeekFrame from "./PinPeekFrame.svelte";
 
 /** Pin 1 on the design graph spec, as the hub keeps it: seven entries. */
-const PIN_1 = {
+const PIN_1: Pin = {
   id: "11ea50ff-2a28-483b-a278-43ddda24d3f5",
   number: 1,
   kind: "comment",
@@ -69,10 +69,10 @@ const PIN_1 = {
       at: "2026-11-01T09:09:09.790Z",
     },
   ],
-} as unknown as Pin;
+};
 
 /** Pin 5 on the design graph spec, as the hub keeps it. */
-const PIN_5 = {
+const PIN_5: Pin = {
   id: "406d9679-49a0-4213-bc5b-a9d0b34dd508",
   number: 5,
   kind: "comment",
@@ -100,10 +100,10 @@ const PIN_5 = {
       at: "2026-11-01T09:04:38.118Z",
     },
   ],
-} as unknown as Pin;
+};
 
 /** Pin 6 on the design graph spec, as the hub keeps it. */
-const PIN_6 = {
+const PIN_6: Pin = {
   id: "f629ad9d-7e60-4242-b5d0-4ecdf2a1fbf3",
   number: 6,
   kind: "comment",
@@ -139,10 +139,10 @@ const PIN_6 = {
       at: "2026-11-01T09:12:10.058Z",
     },
   ],
-} as unknown as Pin;
+};
 
 /** Pin 4 on the design graph spec, as the hub keeps it. */
-const PIN_4 = {
+const PIN_4: Pin = {
   id: "8cd72508-687f-4548-a960-a6ad2840c726",
   number: 4,
   kind: "comment",
@@ -166,7 +166,7 @@ const PIN_4 = {
       at: "2026-11-01T09:04:37.910Z",
     },
   ],
-} as unknown as Pin;
+};
 
 /** The well at a desk's width, 1440 by 800, and the pill near its top-left. */
 const DESK = {

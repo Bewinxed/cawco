@@ -187,10 +187,7 @@
       entry: entered.get(item.instanceId) ?? "none",
       questions: own.length,
       question: asking
-        ? (own[0] ? askDetailOf : askShortOf)(
-            asking.toolName,
-            asking.input as Parameters<typeof askShortOf>[1]
-          )
+        ? (own[0] ? askDetailOf : askShortOf)(asking.toolName, asking.input)
         : "",
     };
   };
@@ -353,7 +350,10 @@
       return;
     }
     const from = chip.getBoundingClientRect();
-    const copy = chip.cloneNode(true) as HTMLElement;
+    const copy = chip.cloneNode(true);
+    if (!(copy instanceof HTMLElement)) {
+      return;
+    }
     for (const name of ["data-key", "data-flip", "data-flip-enter", "id"]) {
       copy.removeAttribute(name);
     }
@@ -1048,9 +1048,8 @@
     }
     event.preventDefault();
     event.stopPropagation();
-    const field = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-shelf-row]"
-    );
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const field = target?.closest<HTMLElement>("[data-shelf-row]");
     const id = field?.dataset.shelfRow;
     if (id && reasons.has(id) && event.target instanceof HTMLInputElement) {
       detach(cancelReason(id), "cancelReason");
@@ -1104,9 +1103,9 @@
       closeShelf(true);
       return;
     }
+    const target = event.target instanceof HTMLElement ? event.target : null;
     const at = keys.indexOf(
-      (event.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset
-        .key ?? ""
+      target?.closest<HTMLElement>("[data-key]")?.dataset.key ?? ""
     );
     if (at < 0) {
       return;

@@ -12,14 +12,13 @@ import {
   type ShellShortcut,
   shellShortcutNamed,
 } from "@cawco/core/shell-shortcuts";
-import {
-  type ComponentDoc,
-  FORMS,
-  type Form,
-  type PropKind,
-  type PropMeta,
-  type SheetOnPage,
-  type Story,
+import type {
+  ComponentDoc,
+  Form,
+  PropKind,
+  PropMeta,
+  SheetOnPage,
+  Story,
 } from "@cawco/core/stage";
 import {
   STAGE_DIALS_WRITTEN,
@@ -44,9 +43,7 @@ const finite = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
 const record = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
+  value !== null && typeof value === "object" ? { ...value } : null;
 
 /** A URL the page may claim to be at: parseable, and on the preview origin. */
 export function previewUrl(value: unknown, origin: string): string | null {
@@ -181,12 +178,13 @@ export interface ViewBox {
 /** A finite box, or null. */
 export function previewBox(value: unknown): ViewBox | null {
   const raw = record(value);
-  const read = [raw?.x, raw?.y, raw?.w, raw?.h].map(finite);
-  if (read.some((n) => n === null)) {
-    return null;
-  }
-  const [x, y, w, h] = read as number[];
-  return { x, y, w, h };
+  const x = finite(raw?.x);
+  const y = finite(raw?.y);
+  const w = finite(raw?.w);
+  const h = finite(raw?.h);
+  return x !== null && y !== null && w !== null && h !== null
+    ? { x, y, w, h }
+    : null;
 }
 
 /** A pin standing on the page: its pill and the box of what it stands on, in the page's viewport, px. */
@@ -240,7 +238,7 @@ export function previewCompose(
           ? [
               {
                 anchor,
-                elements: (target.elements as unknown[]).slice(0, 4),
+                elements: target.elements.slice(0, 4),
               },
             ]
           : [];
@@ -260,7 +258,7 @@ export function previewCompose(
  * is checked again by the stage against the props it reads itself.
  */
 const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
-const KINDS = new Set<PropKind>([
+const KINDS: readonly PropKind[] = [
   "string",
   "number",
   "boolean",
@@ -273,7 +271,7 @@ const KINDS = new Set<PropKind>([
   "object",
   "array",
   "other",
-]);
+];
 const SHEET_BOUNDS = {
   stories: 100,
   components: 20,
@@ -313,8 +311,8 @@ function propOf(value: unknown): PropMeta | null {
   const raw = record(value);
   const type = record(raw?.type);
   const name = text(raw?.name, SHEET_BOUNDS.name);
-  const kind = type?.name as PropKind;
-  if (!(raw && type && name && KINDS.has(kind))) {
+  const kind = KINDS.find((one) => one === type?.name);
+  if (!(raw && type && name && kind)) {
     return null;
   }
   const token = kind.startsWith("token-");
@@ -403,15 +401,21 @@ function readOnlyOf(value: unknown): Story["readOnly"] {
   return raw && reason ? { read: raw.read === true, reason } : null;
 }
 
+/** Every name a form has: one per preset and `custom`; a preset the stage adds is a key missing here. */
+const FORM_NAMES = {
+  phone: "phone",
+  tablet: "tablet",
+  desk: "desk",
+  custom: "custom",
+} satisfies Record<Form["name"], Form["name"]>;
+
 /** A story's form as its page says it: a preset's name or `custom`, and a width. */
 function formOf(value: unknown): Form | null {
   const raw = record(value);
   const width = finite(raw?.width);
-  const name = raw?.name;
-  return width !== null &&
-    width > 0 &&
-    (name === "custom" || (typeof name === "string" && name in FORMS))
-    ? { name: name as Form["name"], width }
+  const named = Object.values(FORM_NAMES).find((one) => one === raw?.name);
+  return width !== null && width > 0 && named !== undefined
+    ? { name: named, width }
     : null;
 }
 
@@ -507,7 +511,6 @@ export type PageMessage = Record<string, unknown> & {
 /** A message the page posted, as one the pane answers, or null for any other. */
 export function pageMessage(value: unknown): PageMessage | null {
   const message = record(value);
-  return message && PAGE_MESSAGES.some((type) => type === message.type)
-    ? (message as PageMessage)
-    : null;
+  const type = PAGE_MESSAGES.find((one) => one === message?.type);
+  return message && type ? { ...message, type } : null;
 }
