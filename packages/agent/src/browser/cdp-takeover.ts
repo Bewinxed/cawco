@@ -81,6 +81,18 @@ const SHARP_QUALITY = 80;
  * (the sharpness check: about 250 ms from the last move to the sharp frame).
  */
 const SETTLE_MS = 150;
+/**
+ * How long a sharp picture already asked for is let finish before the
+ * page is laid out again or the link closes. Chromium takes it by laying
+ * the page out at its device pixels and restores the page only when it
+ * answers, on the session that asked (content page_handler.cc
+ * `CaptureScreenshot` sets the view's size, `ScreenshotCaptured` sets it
+ * back): a link closed first leaves the page at the picture's size, and a
+ * layout laid over it is undone when it answers. One takes about 100 ms;
+ * a bound so the gate never waits on a browser that stopped answering
+ * ({@link restoreWindows} sets the page right whatever this missed).
+ */
+const CAPTURE_MOST_MS = 500;
 /** Fingers a phone layout's page takes at once. */
 const TOUCH_POINTS = 5;
 /** A phone layout's page is never laid out smaller than this, CSS px: a sheet's least room. */
@@ -424,6 +436,8 @@ export class CdpTakeover {
   /** Frames sent; a sharp picture taken while one came is dropped. */
   #frames = 0;
   #settle: ReturnType<typeof setTimeout> | undefined;
+  /** The sharp picture asked for and not yet answered: settled either way. */
+  #capture: Promise<void> | undefined;
   /** The daemon's clock less the phone's, the least seen: a finger's time on this machine's clock, never ahead of it. */
   #skew: number | undefined;
   /** The page shown moved to another (a sign-in's popup, or back): the shield names it in the address. */
@@ -823,6 +837,9 @@ export class CdpTakeover {
         .call("Page.stopScreencast", {}, cast)
         .catch(() => undefined);
     }
+    // A sharp picture still being taken would lay its own page back out
+    // over this layout as it answers.
+    await this.#captured();
     const formMoved = before?.form !== layout?.form;
     await Promise.all(
       [...this.#sessions].flatMap(([session, kind]) => [
@@ -1083,12 +1100,26 @@ export class CdpTakeover {
    * taken (the page moved again; its own sharp picture follows).
    */
   async #sharpen(page: string): Promise<void> {
+    // Never one more once the page is to be laid out again or let go.
+    if (page !== this.#cast || this.#state !== "casting") {
+      return;
+    }
     const before = this.#frames;
-    const shot = await this.#link.call(
+    const asked = this.#link.call(
       "Page.captureScreenshot",
       { format: "jpeg", quality: SHARP_QUALITY },
       page
     );
+    const settled = asked.then(
+      () => undefined,
+      () => undefined
+    );
+    this.#capture = settled;
+    const shot = await asked.finally(() => {
+      if (this.#capture === settled) {
+        this.#capture = undefined;
+      }
+    });
     const laid = this.#laidSize();
     if (
       before !== this.#frames ||
@@ -1110,6 +1141,14 @@ export class CdpTakeover {
       return;
     }
     this.#send(jpeg);
+  }
+
+  /** The sharp picture in flight, answered, or let go after {@link CAPTURE_MOST_MS}: the page is its own again, as Chromium restores it on the answer. */
+  async #captured(): Promise<void> {
+    const capture = this.#capture;
+    if (capture) {
+      await readWithin(CAPTURE_MOST_MS, () => capture);
+    }
   }
 
   /** The CSS size the layout lays the page out at; none while no layout is held, for the browser's own viewport, or for a screencast alone. */
@@ -1153,15 +1192,22 @@ export class CdpTakeover {
   }
 
   /**
-   * Ends every view (with `code` and `why`) and the connection at once,
+   * Ends every view (with `code` and `why`) at once, then the connection,
    * which takes the screencast and every layout it set with it (Chromium
    * drops a session's overrides as its connection closes): the agent has
-   * the desktop's own again. Nothing here waits on Chromium, so a browser
-   * that no longer answers, or a link already gone, ends it all the same.
+   * the desktop's own again. A sharp picture already asked for is let
+   * finish first, within {@link CAPTURE_MOST_MS}, so Chromium sets the page
+   * back from its picture size before the session goes; nothing else waits
+   * on Chromium, so a browser that no longer answers, or a link already
+   * gone, ends it all the same.
    */
-  stop(code = 1001, why = "The person handed the browser back."): void {
+  async stop(
+    code = 1001,
+    why = "The person handed the browser back."
+  ): Promise<void> {
     this.#cast = undefined;
     this.#end(why, code);
+    await this.#captured();
     this.#link.close();
   }
 }

@@ -7,7 +7,7 @@
  * Northwind's with a "Continue with Google" popup. Nothing reaches a hub:
  * the page's Take over and Hand back are answered here, the hand-back as
  * the shield's does it (the take-over's link closed, the page loaded again
- * by GET), and while nobody holds the browser the view is the page's
+ * by GET, every page set to its window's size), and while nobody holds the browser the view is the page's
  * screencast alone, as the local host's watched view is (cdp-watch.ts).
  *
  * Everything else on the port is the dashboard's dev server (`vite dev`
@@ -25,6 +25,7 @@ import {
   type CdpViewer,
   cdpInputOf,
 } from "../packages/agent/src/browser/cdp-takeover";
+import { restoreWindows } from "../packages/agent/src/browser/own-size";
 import { browserExecutable } from "../packages/agent/src/capabilities";
 import {
   BROWSER_SCREEN,
@@ -209,10 +210,9 @@ const server = Bun.serve<Socket>({
     }
     if (url.pathname === "/__bench/takeover" && request.method === "POST") {
       if (!held) {
-        (await watch)?.stop(
-          BROWSER_VIEW_MOVED,
-          "The person took the browser over."
-        );
+        await (
+          await watch
+        )?.stop(BROWSER_VIEW_MOVED, "The person took the browser over.");
         watch = null;
         held = await CdpTakeover.start(devtools, targetId);
         since = Date.now();
@@ -220,10 +220,15 @@ const server = Bun.serve<Socket>({
       return benchState();
     }
     if (url.pathname === "/__bench/handback" && request.method === "POST") {
-      held?.stop(BROWSER_VIEW_MOVED, "The person handed the browser back.");
+      await held?.stop(
+        BROWSER_VIEW_MOVED,
+        "The person handed the browser back."
+      );
       held = null;
       since = null;
       await reloadPage();
+      // As the shield's release does before the gate opens.
+      await restoreWindows(devtools);
       return benchState();
     }
     if (VIEW_PATH.test(url.pathname)) {
