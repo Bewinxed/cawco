@@ -7,7 +7,7 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "include": ["*.ts", "scripts/**/*.ts"],
+  "include": ["*.ts", "scripts/**/*.ts", "vite/**/*.ts"],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/hub" }
