@@ -460,7 +460,10 @@ export interface WorkspaceWorkEnd {
  *   before it reads it as a `keep`, and deletes nothing that holds work.
  * Letting it go is {@link CONTROL_WORKSPACE_DISCARD}.
  */
-export type WorkspaceUnlanded = "keep" | "check" | "unmade" | "drop";
+export type WorkspaceUnlanded = (typeof WORKSPACE_UNLANDED)[number];
+
+/** Every {@link WorkspaceUnlanded}, for a reader of the wire to check against. */
+export const WORKSPACE_UNLANDED = ["keep", "check", "unmade", "drop"] as const;
 
 /** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip`, its items' handed-over outputs, `git status` passes over; `base`, the branch it lands on, named first as the branch its `head` is on when that branch holds it. */
 export interface WorkspaceArchive {
