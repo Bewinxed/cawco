@@ -108,6 +108,12 @@ export const mcpWords = {
   /** What the hub answers a write that names a secret it holds none of. */
   secretNotHeld: (field: string, key: string) =>
     `${key} in ${field} is marked as set, but this server holds no value for it. Send the value.`,
+  /** Under the name of a server that holds secrets, renamed: the new server would hold none. */
+  renameLeavesKeys:
+    "This server holds keys, and a new name makes a new server without them. Keep the name, or add the server again under the new one.",
+  /** What the hub answers a write that moves the address to another host and leaves a held secret unnamed. */
+  secretsLeft: (field: string, keys: string[]) =>
+    `${keys.join(", ")} in ${field} would be lost: the address moved to another host, which is sent none of the old secrets. Send each value again, or null to clear it.`,
   /** The admin tool's note on `config`: how a secret is read and written. */
   secretToolNote:
     'A secret reads as {secret:"set"}; in a put a string sets it, null clears it, left out keeps it.',

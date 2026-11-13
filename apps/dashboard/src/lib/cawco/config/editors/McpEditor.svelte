@@ -97,7 +97,16 @@
   /** One project's only (placed at its checkouts and workspaces); "" for every machine. */
   let projectId = $state(untrack(() => server?.projectId ?? ""));
 
-  const nameProblem = $derived(mcpNameProblem(serverName, taken));
+  /** A new name makes a new server, which holds none of this one's secrets: they are typed again, or the name stays. */
+  const keysStay = $derived(
+    heldEnv.length + heldHeaders.length > 0 || urlKeyHeld
+  );
+  const nameProblem = $derived(
+    mcpNameProblem(serverName, taken) ??
+      (server && keysStay && serverName.trim() !== server.name
+        ? words.renameLeavesKeys
+        : undefined)
+  );
   const filled = $derived.by(() => {
     if (mode === "bunx") {
       return pkg.trim() !== "";

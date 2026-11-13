@@ -20,14 +20,15 @@
  *
  * - a key left out of `env` or `headers` (or the whole map left out), or
  *   written as {@link SECRET_SET}, is not sent: the server keeps its value;
- * - a string replaces it;
+ * - a string replaces it (an empty string for a held key keeps it: a form's "not retyped");
  * - `null` clears it;
  * - a secret part written into `url` replaces its own, the others stay, and
  *   `urlSecret: null` clears every one.
  *
  * Nothing the server holds is carried to another host: a write that moves
  * `url` to another origin keeps none of its secrets, so a replaced address
- * never receives the old address's keys.
+ * never receives the old address's keys. Such a write that leaves a held
+ * secret unnamed is refused, not trimmed.
  */
 import type {
   ConfigInspection,
@@ -284,10 +285,14 @@ const applyNamed = (
   for (const [key, value] of Object.entries(named)) {
     if (value === null) {
       delete values[key];
-    } else if (!isSecretSet(value)) {
+    } else if (isSecretSet(value) || (value === "" && key in values)) {
+      // The mark, or an empty value for a held key, keeps what is held: an
+      // empty string is how a form says "not retyped", never a new secret.
+      if (!(key in values)) {
+        return { missing: key };
+      }
+    } else {
       values[key] = written(value);
-    } else if (!(key in values)) {
-      return { missing: key };
     }
   }
   return { values };
@@ -330,13 +335,38 @@ const carriesHeld = (
 export const mergeMcpSecrets = (
   sent: Record<string, unknown>,
   held: FleetMcpConfig | undefined,
-  problem: (field: string, key: string) => string
+  problem: (field: string, key: string) => string,
+  dropped: (field: string, keys: string[]) => string
 ): KeptMcpSecrets => {
   const heldRecord = held as Record<string, unknown> | undefined;
   const sentUrl = typeof sent.url === "string" ? sent.url : undefined;
   const carries = carriesHeld(sentUrl, heldRecord);
   const out: Record<string, unknown> = { ...sent };
   const { field, named, writes } = namesOf(sent);
+  const { urlSecret } = out;
+  // The other kind's secrets map is no field of this config: never stored.
+  delete out[field === "headers" ? "env" : "headers"];
+  const heldKeys = Object.keys(mapOf(heldRecord?.[field]) ?? {});
+  if (!carries && sentUrl !== undefined) {
+    // Another host receives none of the old secrets: a key not named anew
+    // would be lost without a word, so the write is refused.
+    const lost = heldKeys.filter((key) => {
+      const value = named?.[key];
+      return value === undefined || isSecretSet(value) || value === "";
+    });
+    const heldUrl = heldRecord?.url;
+    if (
+      typeof heldUrl === "string" &&
+      urlSecret !== null &&
+      hasSecretParts(splitUrl(heldUrl)) &&
+      !hasSecretParts(splitUrl(sentUrl))
+    ) {
+      lost.push("url");
+    }
+    if (lost.length > 0) {
+      return { ok: false, problem: dropped(field, lost) };
+    }
+  }
   if (writes) {
     const applied = applyNamed(
       (carries ? mapOf(heldRecord?.[field]) : undefined) ?? {},
@@ -348,7 +378,7 @@ export const mergeMcpSecrets = (
     }
     withField(out, field, applied.values);
   }
-  const { urlSecret, ...rest } = out;
+  const { urlSecret: _cut, ...rest } = out;
   const heldUrl = heldRecord?.url;
   if (
     sentUrl !== undefined &&
