@@ -154,8 +154,9 @@ const originOf = (url: string | undefined): string | undefined => {
 
 /**
  * A page the person had open while they held the browser, as the daemon's
- * log may name it: its origin (scheme, host and port) and nothing past it.
- * The log is read for diagnosis and quoted into reports, and a sign-in's
+ * log, or a hand-back's refusal (the panel's line, the log's "was not
+ * handed back"), may name it: its origin (scheme, host and port) and
+ * nothing past it. The log is read for diagnosis and quoted into reports, and a sign-in's
  * redirect or popup carries its code, state or token in its query or
  * fragment; nothing the person sees reaches it. An address with no origin
  * says its scheme alone (an `about:` page its name too, never a query), so
@@ -533,7 +534,7 @@ const reloadFront = async (
       .call("Page.navigate", { url: "about:blank" }, session)
       .catch((error: unknown) => {
         throw new Error(
-          `the page at ${originOf(url) ?? url} did not clear (${why(error)})`,
+          `the page at ${pageForLog(url)} did not clear (${why(error)})`,
           { cause: error }
         );
       });
