@@ -31,7 +31,7 @@
    */
   import { cawLoop } from "#lib/platform/feel.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
-  import type { CawLead } from "./caw-lead.svelte";
+  import type { SeatedLead } from "./caw-lead.svelte";
 
   let {
     lead,
@@ -39,7 +39,7 @@
     projectName,
     size = 48,
   }: {
-    lead: CawLead;
+    lead: SeatedLead;
     projectId: string;
     projectName: string;
     size?: number;

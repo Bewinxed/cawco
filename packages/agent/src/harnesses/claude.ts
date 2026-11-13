@@ -72,15 +72,19 @@ import {
   PERSON_AND_READ_TOOLS,
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import type { FleetMcpConfig, SessionInstruction } from "@cawco/core/fleet";
+import type { SessionInstruction } from "@cawco/core/fleet";
 import {
   INSPECT_CONFIG,
+  isFleetMcpConfig,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   READ_SKILL_FOLDER,
 } from "@cawco/core/fleet";
-import { maskMcpConfig } from "@cawco/core/fleet-secrets";
+import {
+  type FleetMcpConfigView,
+  maskMcpConfig,
+} from "@cawco/core/fleet-secrets";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
@@ -564,6 +568,21 @@ const toNeutral = (
  * payload is not a question result, which the caller treats as absent, never as
  * an empty answer.
  */
+/**
+ * A server's status as a screen is told it: its config's secrets said as
+ * set (core fleet-secrets.ts); a config of no shape the fleet knows, whose
+ * secrets could not be told apart, is left out.
+ */
+const withConfigMasked = (
+  server: McpServerStatus
+): Omit<McpServerStatus, "config"> & { config?: FleetMcpConfigView } => {
+  const { config, ...rest } = server;
+  const held: Record<string, unknown> | undefined = config && { ...config };
+  return held && isFleetMcpConfig(held)
+    ? { ...rest, config: maskMcpConfig(held) }
+    : rest;
+};
+
 function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
   if (typeof raw !== "object" || raw === null) {
     return null;
@@ -3951,14 +3970,7 @@ class ClaudeSession implements HarnessSession {
     // What a screen is told of a server's config says its secrets as set
     // (core fleet-secrets.ts), as every other read of a connector does.
     if (method === CONTROL_MCP_STATUS && Array.isArray(answer)) {
-      return answer.map((server: McpServerStatus) =>
-        server.config
-          ? {
-              ...server,
-              config: maskMcpConfig(server.config as unknown as FleetMcpConfig),
-            }
-          : server
-      );
+      return answer.map((server: McpServerStatus) => withConfigMasked(server));
     }
     return answer;
   }

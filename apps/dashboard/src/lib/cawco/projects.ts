@@ -34,6 +34,8 @@ export interface ProjectRow {
   account: string | null;
   /** What its sessions on {@link account} do at that account's limit. */
   accountAtLimit: ProjectAtLimit;
+  /** The area it sits in, as the hub's row names it (home/areas.svelte.ts `areaIdOf`); null for none. */
+  areaId?: string | null;
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
   /** The harness its Caw runs on. */

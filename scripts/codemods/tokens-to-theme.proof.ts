@@ -20,7 +20,7 @@
  *
  * Exits 1 on a difference or a rise.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import postcss, { type AtRule, type Rule } from "postcss";
 import { ROOT, repoFiles } from "../lib/repo-files";
@@ -228,10 +228,10 @@ function* mainTexts() {
 function* nowTexts(except = "") {
   for (const path of repoFiles(ROOTS)) {
     if (wanted(path) && !(except && path.endsWith(except))) {
-      try {
-        yield readFileSync(join(ROOT, path), "utf8");
-      } catch {
-        // deleted in the tree
+      const file = join(ROOT, path);
+      // A file git still lists that the tree has deleted is no source.
+      if (existsSync(file)) {
+        yield readFileSync(file, "utf8");
       }
     }
   }

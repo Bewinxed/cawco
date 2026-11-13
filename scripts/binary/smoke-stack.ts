@@ -222,6 +222,7 @@ async function wait(
   on: Watched,
   predicate: (s: string) => boolean = () => true
 ) {
+  let unanswered = "nothing yet";
   for (const end = Date.now() + READY_DEADLINE_MS; Date.now() < end;) {
     const exited = await on.exited();
     if (exited !== undefined) {
@@ -235,13 +236,15 @@ async function wait(
       if (res.ok && predicate(body)) {
         return body;
       }
-    } catch {
-      /* The service has not answered yet; the bounded poll continues. */
+    } catch (error) {
+      // The service has not answered yet; the bounded poll continues, and
+      // its last refusal is said if the deadline passes.
+      unanswered = error instanceof Error ? error.message : String(error);
     }
     await Bun.sleep(100);
   }
   throw new Error(
-    `Did not become ready within 120 s: ${url}; ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
+    `Did not become ready within 120 s: ${url} (last answer: ${unanswered}); ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
   );
 }
 async function openDashboard() {
@@ -362,8 +365,8 @@ async function stopStarted(): Promise<string | undefined> {
       await Bun.sleep(100);
     }
     return "it was still running 10 s after the stop";
-  } catch {
-    return "the hub stopped answering";
+  } catch (error) {
+    return `the hub stopped answering (${error instanceof Error ? error.message : String(error)})`;
   } finally {
     socket.close();
   }
@@ -699,11 +702,10 @@ try {
     );
   }
   devServer?.stop(true);
+  // A child that exited already is cleaned up; the rest are asked to end.
   for (const child of children) {
-    try {
+    if (child.exitCode === null) {
       child.kill("SIGTERM");
-    } catch {
-      /* A previously exited child is already cleaned up. */
     }
   }
   await Promise.all(
@@ -713,10 +715,9 @@ try {
         case "answered":
           break;
         case "unanswered":
-          try {
+          // One that exited during the grace period needs nothing more.
+          if (child.exitCode === null) {
             child.kill("SIGKILL");
-          } catch {
-            /* The child exited during the grace period. */
           }
           break;
         default:
