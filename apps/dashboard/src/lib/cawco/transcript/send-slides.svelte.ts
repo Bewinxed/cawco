@@ -193,8 +193,8 @@ export class SendSlides {
     const after = this.movedAfter;
     const settled = this.settledFrom;
     const timing = this.foldMove
-      ? { duration: dur("--dur-panel"), easing: ease("--ease-out") }
-      : { duration: dur("--dur-panel"), easing: ease("--ease-in-out") };
+      ? { duration: dur("--duration-panel"), easing: ease("--ease-out") }
+      : { duration: dur("--duration-panel"), easing: ease("--ease-in-out") };
     this.beforeMove = null;
     this.movedAfter = new Set();
     this.settledFrom = new Map();
