@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./browser": "./src/browser/browsers.ts",
+    "./passkey-inject": "./src/browser/passkey-inject.ts",
     "./capabilities": "./src/capabilities.ts",
     "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
