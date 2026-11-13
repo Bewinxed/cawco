@@ -16,6 +16,7 @@
  * call on a session's name alone.
  */
 
+import { hubClient, refusalText, unwrap } from "@cawco/agent/hub-client";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { refusalWords } from "@cawco/core/hub-refusal";
 import { type HubRequest, hubAt, hubRequest } from "@cawco/core/hub-request";
@@ -87,18 +88,16 @@ export const listTools = async (
   hub: string | undefined,
   instanceId: string
 ): Promise<string> => {
-  const response = await toolRoute(
-    hub,
-    hubRequest("GET /api/delegation/tools", { query: { instanceId } })
-  );
-  if (!response.ok) {
-    throw new ToolError(
-      `${response.status}: ${refusalWords(await response.text(), response.status)}`
-    );
+  const door = toolDoor();
+  if (!(door || hub)) {
+    throw new ToolError("no hub to call the tools of");
   }
-  const { tools } = (await response.json()) as {
-    tools: { name: string; description: string }[];
-  };
+  const { tools } = unwrap(
+    await hubClient(door ? "http://cawco" : (hub ?? ""), (url, init) =>
+      fetch(url, door ? { ...init, unix: door } : init)
+    ).api.delegation.tools.get({ query: { instanceId } }),
+    (refusal) => new ToolError(`${refusal.status}: ${refusalText(refusal)}`)
+  );
   return tools
     .map(
       ({ name, description }) =>

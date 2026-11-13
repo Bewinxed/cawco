@@ -7,3 +7,6 @@ declare module "@cawco/hub/app" {
 declare module "@cawco/hub/src/server" {
   export const createServer: () => void;
 }
+// The CommonJS `require` the planted require of the hub calls: this project
+// loads no runtime's types.
+declare function require(id: string): unknown;
