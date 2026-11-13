@@ -159,24 +159,13 @@ export const openUrl = (url: string): string => splitUrl(url).open;
 const hasSecretParts = (parts: UrlParts): boolean =>
   parts.query.length > 0 || parts.password !== undefined;
 
-/** Every secret value a server's config holds: each `env` and `headers` value whose name or shape reads as a credential, a URL's password and its secret query values. */
+/** Every secret value a server's config holds: each `env` and `headers` value whose name or shape reads as a credential, and the password and secret query values of any URL (the config's, or an env or header value that is one). */
 export const secretValuesOf = (config: FleetMcpConfig): string[] => {
   const record = config as unknown as Record<string, unknown>;
   const values: string[] = [];
-  for (const field of ["env", "headers"]) {
-    for (const [name, value] of Object.entries(mapOf(record[field]) ?? {})) {
-      // Only what reads as a credential, by its name or its shape: a
-      // `DEBUG=1` or an `Accept` value is no secret and stays in the text.
-      if (
-        typeof value === "string" &&
-        (SECRET_KEY.test(name) || looksSecret(value))
-      ) {
-        values.push(value);
-      }
-    }
-  }
-  if (typeof record.url === "string") {
-    const parts = splitUrl(record.url);
+  /** A URL's password and secret query values, raw and decoded. */
+  const urlParts = (url: string): void => {
+    const parts = splitUrl(url);
     if (parts.password) {
       values.push(parts.password, decoded(parts.password));
     }
@@ -184,6 +173,24 @@ export const secretValuesOf = (config: FleetMcpConfig): string[] => {
       const value = part.slice(part.indexOf("=") + 1);
       values.push(value, decoded(value));
     }
+  };
+  for (const field of ["env", "headers"]) {
+    for (const [name, value] of Object.entries(mapOf(record[field]) ?? {})) {
+      if (typeof value !== "string") {
+        continue;
+      }
+      // Only what reads as a credential, by its name or its shape: a
+      // `DEBUG=1` or an `Accept` value is no secret and stays in the text.
+      if (SECRET_KEY.test(name) || looksSecret(value)) {
+        values.push(value);
+      } else {
+        // A value that is a URL gives up its own secret parts alone.
+        urlParts(value);
+      }
+    }
+  }
+  if (typeof record.url === "string") {
+    urlParts(record.url);
   }
   return values.filter((value) => value !== "");
 };
