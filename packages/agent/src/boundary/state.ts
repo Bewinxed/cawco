@@ -332,7 +332,7 @@ const RETIRING_FILE = /^retiring-[^/]+\.json$/u;
 
 /** Every older boundary of workspace `id` recorded as still running beside the current one. */
 export const readRetiring = async (id: string): Promise<Retiring[]> => {
-  const names = await readdir(stateDir(id)).catch(() => [] as string[]);
+  const names = await readdir(stateDir(id)).catch(() => []);
   const records = await Promise.all(
     names
       .filter((name) => RETIRING_FILE.test(name))
