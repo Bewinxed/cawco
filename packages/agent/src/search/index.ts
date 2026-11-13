@@ -82,7 +82,7 @@ function syncFailure(error: unknown): string {
   if (!(error instanceof Error)) {
     return String(error);
   }
-  const { code } = error as Error & { code?: unknown };
+  const code = "code" in error ? error.code : undefined;
   return typeof code === "string" && !error.message.includes(code)
     ? `${error.message}, ${code}`
     : error.message;

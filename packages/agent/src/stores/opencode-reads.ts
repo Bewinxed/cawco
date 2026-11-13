@@ -132,7 +132,7 @@ const sessionsIn = (
   path: string,
   query: SessionQuery
 ): Promise<StoredSession[]> =>
-  readDb(path, [] as StoredSession[], (db) => {
+  readDb<StoredSession[]>(path, [], (db) => {
     if (
       !db
         .query(
@@ -173,12 +173,12 @@ export const opencodeReads = {
   ownChanges: (): Promise<Record<string, number>> =>
     readDb(machineDb(), {}, (db) =>
       Object.fromEntries(
-        (
-          db.query("SELECT id, time_updated FROM credential").all() as {
-            id: string;
-            time_updated: number;
-          }[]
-        ).map((row) => [row.id, row.time_updated])
+        db
+          .query<{ id: string; time_updated: number }, []>(
+            "SELECT id, time_updated FROM credential"
+          )
+          .all()
+          .map((row) => [row.id, row.time_updated])
       )
     ),
 
@@ -186,15 +186,16 @@ export const opencodeReads = {
   ownSignInTypes: (): Promise<Record<string, string>> =>
     readDb(machineDb(), {}, (db) =>
       Object.fromEntries(
-        (
-          db
-            .query(
-              "SELECT integration_id, json_extract(value, '$.type') AS type FROM credential WHERE active = 1"
-            )
-            .all() as { integration_id: string | null; type: string | null }[]
-        ).flatMap((row) =>
-          row.integration_id && row.type ? [[row.integration_id, row.type]] : []
-        )
+        db
+          .query<{ integration_id: string | null; type: string | null }, []>(
+            "SELECT integration_id, json_extract(value, '$.type') AS type FROM credential WHERE active = 1"
+          )
+          .all()
+          .flatMap((row) =>
+            row.integration_id && row.type
+              ? [[row.integration_id, row.type]]
+              : []
+          )
       )
     ),
 
@@ -207,21 +208,15 @@ export const opencodeReads = {
   ownCredentials: (): Promise<
     { id: string; integrationID: string; value: Record<string, unknown> }[]
   > =>
-    readDb(
-      machineDb(),
-      [] as {
-        id: string;
-        integrationID: string;
-        value: Record<string, unknown>;
-      }[],
-      (db) =>
-        (
-          db
-            .query(
-              "SELECT id, integration_id, value FROM credential WHERE active = 1 AND integration_id IS NOT NULL ORDER BY id"
-            )
-            .all() as { id: string; integration_id: string; value: string }[]
-        ).map((row) => ({
+    readDb<
+      { id: string; integrationID: string; value: Record<string, unknown> }[]
+    >(machineDb(), [], (db) =>
+      db
+        .query<{ id: string; integration_id: string; value: string }, []>(
+          "SELECT id, integration_id, value FROM credential WHERE active = 1 AND integration_id IS NOT NULL ORDER BY id"
+        )
+        .all()
+        .map((row) => ({
           id: row.id,
           integrationID: row.integration_id,
           value: z.record(z.string(), z.unknown()).parse(JSON.parse(row.value)),
@@ -230,14 +225,13 @@ export const opencodeReads = {
 
   /** The providers the active sign-ins are for (each one's integration), never their values. */
   ownIntegrations: (): Promise<string[]> =>
-    readDb(machineDb(), [] as string[], (db) =>
-      (
-        db
-          .query(
-            "SELECT DISTINCT integration_id FROM credential WHERE active = 1"
-          )
-          .all() as { integration_id: string | null }[]
-      ).flatMap((row) => (row.integration_id ? [row.integration_id] : []))
+    readDb<string[]>(machineDb(), [], (db) =>
+      db
+        .query<{ integration_id: string | null }, []>(
+          "SELECT DISTINCT integration_id FROM credential WHERE active = 1"
+        )
+        .all()
+        .flatMap((row) => (row.integration_id ? [row.integration_id] : []))
     ),
 
   /**

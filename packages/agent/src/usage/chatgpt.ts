@@ -39,20 +39,23 @@ export const chatgptBaseUrl = (): string =>
     ""
   );
 
-interface WindowRaw {
-  limit_window_seconds?: number | null;
-  reset_after_seconds?: number | null;
-  reset_at?: number | null;
-  used_percent?: number | null;
-}
+const WindowRaw = z.object({
+  limit_window_seconds: z.number().nullish(),
+  reset_after_seconds: z.number().nullish(),
+  reset_at: z.number().nullish(),
+  used_percent: z.number().nullish(),
+});
 
-interface UsageRaw {
-  plan_type?: string | null;
-  rate_limit?: {
-    primary_window?: WindowRaw | null;
-    secondary_window?: WindowRaw | null;
-  } | null;
-}
+const UsageRaw = z.object({
+  plan_type: z.string().nullish(),
+  rate_limit: z
+    .object({
+      primary_window: WindowRaw.nullish(),
+      secondary_window: WindowRaw.nullish(),
+    })
+    .nullish(),
+});
+type UsageRaw = z.infer<typeof UsageRaw>;
 
 const FIVE_HOURS_S = 18_000;
 const WEEK_WINDOW_S = 604_800;
@@ -143,7 +146,7 @@ export const readChatgptUsage = async (
             error: `ChatGPT's usage endpoint answered HTTP ${response.status}`,
           };
         }
-        const body = (await response.json()) as UsageRaw;
+        const body = UsageRaw.parse(await response.json());
         return {
           ok: true,
           plan: body.plan_type ?? null,
@@ -182,6 +185,8 @@ export interface ChatgptClaims {
   plan: string | null;
 }
 
+const CLAIMS_PART = z.record(z.string(), z.unknown()).catch({});
+
 /** A JWT's payload, unverified: it names who a token is, for a store the machine wrote itself. */
 export const chatgptClaims = (accessToken: string): ChatgptClaims => {
   let payload: Record<string, unknown> = {};
@@ -200,14 +205,10 @@ export const chatgptClaims = (accessToken: string): ChatgptClaims => {
   } catch {
     payload = {};
   }
-  const auth = (payload["https://api.openai.com/auth"] ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const profile = (payload["https://api.openai.com/profile"] ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const auth = CLAIMS_PART.parse(payload["https://api.openai.com/auth"] ?? {});
+  const profile = CLAIMS_PART.parse(
+    payload["https://api.openai.com/profile"] ?? {}
+  );
   const text = (value: unknown): string | null =>
     typeof value === "string" && value ? value : null;
   return {

@@ -53,7 +53,7 @@ async function requireNewOutput(output: string): Promise<void> {
   try {
     await lstat(output);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;
     }
     throw error;

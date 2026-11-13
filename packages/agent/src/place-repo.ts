@@ -43,6 +43,7 @@ import {
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
+import { z } from "zod";
 import { LFS_FILTERS } from "./git/lfs";
 import { configEnv } from "./git-credential";
 import { repoTop } from "./repo-top";
@@ -863,6 +864,16 @@ const unignored = (text: string, paths: readonly string[]): string => {
 const under = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}${sep}`);
 
+/** The rows a {@link placeLfs} control hands over (core `PlaceLfsRow`). */
+const PLACE_LFS_ROWS = z.array(
+  z.object({
+    bytes: z.number(),
+    count: z.number(),
+    paths: z.array(z.string()),
+    pattern: z.string(),
+  })
+);
+
 /**
  * {@link CONTROL_PLACE_LFS}: the large files a place's first commit left out
  * (`rows`, as its offer named them) committed through Git LFS, by
@@ -884,7 +895,7 @@ export const placeLfs = async (
   rows: unknown
 ): Promise<PlaceLfsMade> => {
   const root = String(path);
-  const offered = (Array.isArray(rows) ? rows : []) as PlaceLfsRow[];
+  const offered = PLACE_LFS_ROWS.catch([]).parse(rows);
   const patterns = offered.map((row) => row.pattern);
   const files = offered.flatMap((row) => row.paths);
   if (patterns.length === 0) {
