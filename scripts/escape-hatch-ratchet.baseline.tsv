@@ -63,6 +63,10 @@ as-unknown-as	Component<ElementProps>	apps/dashboard/src/lib/cawco/references.ts
 as-unknown-as	ConstructorParameters<typeof ExcalidrawBinding>[3]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
 as-unknown-as	Darwin	packages/agent/src/layer.ts	1
+as-unknown-as	Db	scripts/probe-kit/specs/preview-query.ts	1
+as-unknown-as	Db	scripts/probe-kit/specs/preview-reclaim.ts	1
+as-unknown-as	Deps	scripts/probe-kit/specs/preview-query.ts	1
+as-unknown-as	Deps	scripts/probe-kit/specs/preview-reclaim.ts	1
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte	1
 as-unknown-as	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	2
@@ -74,6 +78,7 @@ as-unknown-as	HookDraft	packages/hub/src/server.ts	1
 as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	InstanceRow	apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data.ts	2
 as-unknown-as	Libc	packages/agent/src/layer.ts	1
+as-unknown-as	InstanceRow	scripts/probe-kit/specs/recap-waits.ts	1
 as-unknown-as	Libc	packages/core/src/flock.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
