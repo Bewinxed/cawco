@@ -66,15 +66,16 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import type { PageBody } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
   type CanvasDial,
-  type CanvasGraph,
   FORMS,
   type FramePictureRead,
   type FrameRender,
   holdersOf,
   type Interaction,
+  interactionOf,
   type PageError,
   type Story,
   type SweepStep,
@@ -101,15 +102,10 @@ import {
   STAGE_SCROLLED,
   STAGE_TIME,
   type StageCompare,
-  type StageDialsWritten,
-  type StageDifferences,
-  type StageFault,
   type StageLaid,
   type StageReach,
   type StageReached,
   type StageReveal,
-  type StageScrolled,
-  type StageTime,
   type StateRef,
   shownName,
   stageCompareOf,
@@ -124,8 +120,30 @@ import { graphWords as words } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
-import { drew, firstWords, lookOf, partsOf, readAnimation } from "./measure";
+import {
+  drew,
+  firstWords,
+  keyframeEffectOf,
+  lookOf,
+  partsOf,
+  readAnimation,
+} from "./measure";
 import { nameOf, thingOf } from "./names";
+import {
+  type Column,
+  canvasOf,
+  detailsOf,
+  FAILED_LINE,
+  FORCED,
+  frameTick,
+  type Mode,
+  type Mounted,
+  type Page,
+  type PlayFn,
+  type Probe,
+  type Section,
+  type SectionFailure,
+} from "./page";
 import { allClass } from "./pseudo";
 import {
   answerMoves,
@@ -138,24 +156,12 @@ import {
   valuesOf,
 } from "./replays";
 import {
-  type Column,
-  detailsOf,
-  FAILED_LINE,
-  FORCED,
-  frameTick,
-  type Mode,
-  type Mounted,
-  type Page,
-  type Probe,
-  type Section,
-  type SectionFailure,
-} from "./runtime";
-import {
   frameAsViewport,
   windowHeight,
   windowRoom,
   windowWidth,
 } from "./viewport";
+import type { StageAnswer } from "./window-events";
 
 /** The most of a story's error a Preview's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
 const EMBED_WHY_MAX = 200;
@@ -229,9 +235,6 @@ interface Taken {
   target: Element | null;
 }
 
-/** A story's `play`, as the stage runs it (core stage-play.ts's context). */
-type PlayFn = (context: object) => Promise<void> | void;
-
 /** A section's stories as the rig read them, for the report. */
 type Reads = Map<Section, FrameRender[]>;
 
@@ -249,7 +252,7 @@ function takenOf(
   first: number,
   t0: number
 ): Taken | null {
-  const effect = animation.effect as KeyframeEffect | null;
+  const effect = keyframeEffectOf(animation);
   if (!((Number(effect?.getComputedTiming().duration) || 0) > 0)) {
     return null;
   }
@@ -314,7 +317,7 @@ function propertyOf(animation: Animation): string {
   ) {
     return animation.animationName;
   }
-  const effect = animation.effect as KeyframeEffect | null;
+  const effect = keyframeEffectOf(animation);
   const keys = new Set<string>();
   for (const frame of effect?.getKeyframes() ?? []) {
     for (const key of Object.keys(frame)) {
@@ -606,10 +609,10 @@ function drawingRender(
  * project's preview file decorates every story). Read as the wrapper, the
  * drawing measured 0 wide and the design graph's stage stood a sliver.
  */
-function ownRoot(body: HTMLElement): HTMLElement | null {
-  let el = body.firstElementChild as HTMLElement | null;
+function ownRoot(body: HTMLElement): Element | null {
+  let el = body.firstElementChild;
   while (el?.firstElementChild && getComputedStyle(el).display === "contents") {
-    el = el.firstElementChild as HTMLElement;
+    el = el.firstElementChild;
   }
   return el;
 }
@@ -759,7 +762,7 @@ export function bootStage(page: Page): Mode {
       scrollY > 0
     );
   addEventListener("scroll", edge, { passive: true });
-  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
+  const canvas = canvasOf();
   canvas.classList.add("cawco-stage");
   /** The one drawing: the live instance of the state the panel keeps. */
   const stage = newDrawing();
@@ -807,7 +810,7 @@ export function bootStage(page: Page): Mode {
   let live: Live | null = null;
   /** The move the last reach read, replayed as the Animation face plays, scrubs and tunes it; the page its clock. */
   const replays = new Replays(
-    (time) => tell<StageTime>(STAGE_TIME, time),
+    (time) => tell(STAGE_TIME, time),
     () => ringLit(),
     (el) => rootOf(el)
   );
@@ -846,8 +849,8 @@ export function bootStage(page: Page): Mode {
   const rootOf = (el: Element) => el === drawing || el === ownRoot(drawing);
 
   /** Tells the panel, through the overlay (preview overlay/page.ts relays each to the pane). */
-  const tell = <Message extends object>(type: string, message: Message) =>
-    dispatchEvent(new CustomEvent(type, { detail: message }));
+  const tell = <Type extends StageAnswer>(type: Type, body: PageBody<Type>) =>
+    dispatchEvent(new CustomEvent(type, { detail: body }));
 
   // Which way the page scrolled, said once it turns past a dead zone: the
   // panel's tools over the drawing's foot leave on the way down and come
@@ -868,7 +871,7 @@ export function bootStage(page: Page): Mode {
         from = top;
         if (now !== down) {
           down = now;
-          tell<StageScrolled>(STAGE_SCROLLED, { down });
+          tell(STAGE_SCROLLED, { down });
         }
       },
       { passive: true }
@@ -975,7 +978,7 @@ export function bootStage(page: Page): Mode {
     });
     canvas.append(card);
     fault = card;
-    tell<StageFault>(STAGE_FAULT, { on: target.ref, message: error.message });
+    tell(STAGE_FAULT, { on: target.ref, message: error.message });
     reread();
   }
 
@@ -1116,7 +1119,10 @@ export function bootStage(page: Page): Mode {
     ) {
       had.focus({ preventScroll: true });
     } else {
-      (document.activeElement as HTMLElement | null)?.blur();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement || active instanceof SVGElement) {
+        active.blur();
+      }
     }
   }
 
@@ -1298,7 +1304,7 @@ export function bootStage(page: Page): Mode {
   /** A reach's turn, once every reach before it is done. */
   async function reachTurn(asking: StageReach, mine: number): Promise<void> {
     const answer = (rest: Omit<StageReached, "ask" | "on">) =>
-      tell<StageReached>(STAGE_REACHED, {
+      tell(STAGE_REACHED, {
         ask: asking.ask,
         on: asking.to,
         ...rest,
@@ -1347,11 +1353,7 @@ export function bootStage(page: Page): Mode {
   /** The play that moves the drawing into `target`, when the panel asked for the move and its story has one. */
   function playOf(asking: StageReach, target: Target): PlayFn | null {
     const csf = page.csfOf(target.section.mod?.module ?? {}, target.ref.story);
-    return asking.play &&
-      asking.from !== null &&
-      typeof csf?.play === "function"
-      ? (csf.play as PlayFn)
-      : null;
+    return asking.play && asking.from !== null ? (csf?.play ?? null) : null;
   }
 
   /** Whether the live instance stands at `ref` of `section`, mounted and unfaulted. */
@@ -1536,7 +1538,7 @@ export function bootStage(page: Page): Mode {
     const said = JSON.stringify(laidOut);
     if (said !== laidSaid) {
       laidSaid = said;
-      tell<StageLaid>(STAGE_LAID, laidOut);
+      tell(STAGE_LAID, laidOut);
     }
     reread();
   }
@@ -1815,7 +1817,7 @@ export function bootStage(page: Page): Mode {
       lit = thing;
       ringLit();
     },
-    said: (time) => tell<StageTime>(STAGE_TIME, time),
+    said: (time) => tell(STAGE_TIME, time),
   });
 
   /* --- The agent's dials, turned in the panel --------------------------- */
@@ -1841,14 +1843,14 @@ export function bootStage(page: Page): Mode {
     const said = JSON.stringify(values);
     if (said !== writtenSaid) {
       writtenSaid = said;
-      tell<StageDialsWritten>(STAGE_DIALS_WRITTEN, { values });
+      tell(STAGE_DIALS_WRITTEN, { values });
     }
   }
 
   // The stage's floating head (the design graph's StagePane): the room it
   // takes over the page's top, which the column pads its top by.
-  addEventListener(STAGE_ROOM, (event) => {
-    const said = stageRoomOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_ROOM, (event) => {
+    const said = stageRoomOf(event.detail);
     if (said) {
       document.documentElement.style.setProperty(
         STAGE_ROOM_VAR,
@@ -1857,8 +1859,8 @@ export function bootStage(page: Page): Mode {
     }
   });
 
-  addEventListener(STAGE_DIALS, (event) => {
-    const asking = stageDialsOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_DIALS, (event) => {
+    const asking = stageDialsOf(event.detail);
     if (asking) {
       page.applyDials(asking.values);
     }
@@ -1966,7 +1968,7 @@ export function bootStage(page: Page): Mode {
       found = [];
       beside = false;
       arrange();
-      tell<StageDifferences>(STAGE_DIFFERENCES, {
+      tell(STAGE_DIFFERENCES, {
         ask: asking.ask,
         found,
         beside,
@@ -2058,7 +2060,7 @@ export function bootStage(page: Page): Mode {
   /** The differences as last read, told the panel for its last Compare ask. */
   function tellDifferences(): void {
     if (comparing) {
-      tell<StageDifferences>(STAGE_DIFFERENCES, {
+      tell(STAGE_DIFFERENCES, {
         ask: comparing.ask,
         found,
         beside,
@@ -2118,20 +2120,20 @@ export function bootStage(page: Page): Mode {
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
   drawingsAsViewport(() => (live && !frame.hidden ? [drawing] : []));
 
-  addEventListener(STAGE_REACH, (event) => {
-    const asking = stageReachOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_REACH, (event) => {
+    const asking = stageReachOf(event.detail);
     if (asking) {
       reach(asking);
     }
   });
-  addEventListener(STAGE_REVEAL, (event) => {
-    const asking = stageRevealOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_REVEAL, (event) => {
+    const asking = stageRevealOf(event.detail);
     if (asking) {
       reveal(asking);
     }
   });
-  addEventListener(STAGE_COMPARE, (event) => {
-    const asking = stageCompareOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_COMPARE, (event) => {
+    const asking = stageCompareOf(event.detail);
     if (asking) {
       compare(asking);
     }
@@ -2337,8 +2339,11 @@ export function bootStage(page: Page): Mode {
     const { story: storyName } = storyRefOf(name);
     // Found by the plans the stage wrote into the page: no other section is loaded, so none is drawn for it.
     const holders = holdersOf(page.files, page.plans, name);
+    const [only] = holders;
     const section =
-      holders.length === 1 ? page.sectionOf(holders[0] as string) : undefined;
+      holders.length === 1 && only !== undefined
+        ? page.sectionOf(only)
+        : undefined;
     if (holders.length === 0) {
       return {
         refused: `No states file of this canvas has a story ${name}: ${page.files.map((file) => `${file} has ${page.plans[file]?.stories.map((each) => each.name).join(", ") || "none"}`).join("; ")}.`,
@@ -2379,11 +2384,11 @@ export function bootStage(page: Page): Mode {
 
   /** The stage posed at `key` for its picture: mounted afresh at its story, at rest, its interaction forced on the drawing. */
   async function pose(key: string): Promise<{ h: number; w: number } | null> {
-    const [file, story, interaction] = key.split("|") as [
-      string,
-      string,
-      Interaction,
-    ];
+    const [file, story, picked] = key.split("|");
+    const interaction = interactionOf(picked);
+    if (file === undefined || story === undefined || !interaction) {
+      return null;
+    }
     if (posed?.key !== key) {
       const target = resolved({ file, story });
       if ("refused" in target) {
@@ -2614,7 +2619,7 @@ function bootColumn(page: Page): Mode {
     "cawco-column-page",
     embed ? "cawco-embed" : "cawco-map"
   );
-  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
+  const canvas = canvasOf();
   const column = document.createElement("div");
   column.className = "cawco-column";
   const waiting = waitingFor(sections[0]?.name ?? "the component");
@@ -2627,8 +2632,14 @@ function bootColumn(page: Page): Mode {
     column.append(el);
     return { section, el, drawings: new Map(), failedCard: null };
   });
-  const partOf = (section: Section) =>
-    parts.find((one) => one.section === section) as ColumnPart;
+  const columnParts = new Map(parts.map((one) => [one.section, one]));
+  const partOf = (section: Section): ColumnPart => {
+    const part = columnParts.get(section);
+    if (!part) {
+      throw new Error(`[cawco] ${section.file} has no part of the column`);
+    }
+    return part;
+  };
   const drawn = () => parts.flatMap((one) => [...one.drawings.values()]);
 
   /** The stories of `all` the page draws: a Preview's the ones it names, in its order; a card's every one, in its file's. */
@@ -2928,8 +2939,7 @@ function bootColumn(page: Page): Mode {
   // Every states file in order, once the page may load its stories: a Preview's once the page holding it says its whole graph is in the renderer (host.ts `graphPreloads`, core `CANVAS_EMBED_READY`), any other page's at once.
   page.quietly(
     (async () => {
-      await (window as unknown as { __cawcoGraph?: CanvasGraph }).__cawcoGraph
-        ?.go;
+      await window.__cawcoGraph?.go;
       for (const section of sections) {
         await page.loadSection(section);
       }

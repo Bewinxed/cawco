@@ -100,17 +100,22 @@ import {
   type StageFramework,
   type StageToolchain,
   sectionName,
+  stageFrameworkOf,
+  stageToolchainOf,
   sweptFiles,
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
-import {
-  originalPositionFor,
-  type SourceMapInput,
-  TraceMap,
-} from "@jridgewell/trace-mapping";
+import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
+import type {
+  Connect,
+  ErrorPayload,
+  HotPayload,
+  InferCustomEventPayload,
+  ViteDevServer,
+} from "vite";
 import { PACKAGE_TREES } from "../package-trees";
 import { propsOf } from "./docgen";
 import {
@@ -148,14 +153,8 @@ interface DevServer {
           discovered: Record<string, { processing?: Promise<void> }>;
         };
       } | null;
-      hot: {
-        send: (payload: unknown, ...rest: unknown[]) => void;
-        /** A page's event over Vite's HMR channel, with the page's client (one object per connection): the stage's own, and Vite's `vite:client:disconnect`. */
-        on: (
-          event: string,
-          listener: (data: unknown, client: object) => void
-        ) => void;
-      };
+      /** Vite's HMR channel to the pages: the stage's own events ({@link SECTION_HELD}, {@link SECTION_WRITTEN}) are typed by the augmentation of its `CustomEventMap` below. */
+      hot: ViteDevServer["environments"]["client"]["hot"];
       pluginContainer: {
         resolveId: (
           id: string,
@@ -180,7 +179,7 @@ interface DevServer {
   middlewares: {
     use: (
       handle: (
-        req: IncomingMessage,
+        req: Connect.IncomingMessage,
         res: ServerResponse,
         next: (error?: unknown) => void
       ) => void
@@ -269,9 +268,7 @@ const CANVAS_TOKENS = __CANVAS_TOKENS__;
 const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
-const framework = process.env.CAWCO_STAGE_FRAMEWORK as StageFramework;
 const kit = process.env.CAWCO_STAGE_KIT === "1";
-const toolchain = process.env.CAWCO_STAGE_TOOLCHAIN as StageToolchain;
 /**
  * The toolchain's caches, beside this file in the stage's own git-excluded
  * dir, never in `node_modules`: a place's `node_modules` (a symlink, a
@@ -293,14 +290,41 @@ const say = (word: string, rest: object = {}) => {
 // Nobody reads the stage's words any more: its daemon is gone, and so is it.
 process.stdout.on("error", () => process.exit(0));
 
+/** `value` of the environment variable `name`; the stage's `fatal` word, and its end, where it names none. */
+const environed = <T>(value: T | undefined, name: string): T => {
+  if (value === undefined) {
+    say("fatal", { message: `${name} names nothing the stage runs.` });
+    process.exit(1);
+  }
+  return value;
+};
+const framework = environed(
+  stageFrameworkOf(process.env.CAWCO_STAGE_FRAMEWORK),
+  "CAWCO_STAGE_FRAMEWORK"
+);
+const toolchain = environed(
+  stageToolchainOf(process.env.CAWCO_STAGE_TOOLCHAIN),
+  "CAWCO_STAGE_TOOLCHAIN"
+);
+
 /** An export map entry's file for an ES import: a string, or its `import` (then `default`) condition's. */
 const importOf = (entry: unknown): string | undefined => {
-  if (typeof entry === "string" || entry === undefined || entry === null) {
-    return (entry ?? undefined) as string | undefined;
+  if (typeof entry === "string") {
+    return entry;
   }
-  const conditions = entry as Record<string, unknown>;
-  return importOf(conditions.import ?? conditions.default);
+  if (typeof entry !== "object" || entry === null) {
+    return undefined;
+  }
+  const imported = "import" in entry ? entry.import : undefined;
+  const fallback = "default" in entry ? entry.default : undefined;
+  return importOf(imported ?? fallback);
 };
+
+/** An export map's entry for `subpath`; undefined where the map is none. */
+const exportedAs = (exports: unknown, subpath: string): unknown =>
+  typeof exports === "object" && exports !== null
+    ? Reflect.get(exports, subpath)
+    : undefined;
 
 /** A package's file for an ES import of its `subpath`, by its manifest's export map, else its `module` or `main` for its root. */
 function entryOf(
@@ -314,14 +338,10 @@ function entryOf(
     (exports &&
       !Object.keys(exports).some((key: string) => key.startsWith(".")));
   if (subpath !== ".") {
-    return sugar
-      ? undefined
-      : importOf((exports as Record<string, unknown> | undefined)?.[subpath]);
+    return sugar ? undefined : importOf(exportedAs(exports, subpath));
   }
   return (
-    importOf(
-      sugar ? exports : (exports as Record<string, unknown> | undefined)?.["."]
-    ) ??
+    importOf(sugar ? exports : exportedAs(exports, ".")) ??
     manifest.module ??
     manifest.main
   );
@@ -495,10 +515,12 @@ async function sheetOf(
     if (!(name && source)) {
       return Promise.resolve(null);
     }
-    if (!local.has(name)) {
-      local.set(name, resolved(source, abs));
+    let pending = local.get(name);
+    if (!pending) {
+      pending = resolved(source, abs);
+      local.set(name, pending);
     }
-    return local.get(name) as Promise<string | null>;
+    return pending;
   };
   const metaFile = await fileOf(read.meta.component);
   const owns = await Promise.all(
@@ -607,7 +629,7 @@ function sourceImports(file: string): Promise<string[]> {
 async function resolvedImports(file: string): Promise<string[]> {
   const text = readFileSync(file, "utf8");
   const sources = [
-    ...new Set([...text.matchAll(IMPORT_FROM)].map((one) => one[1] as string)),
+    ...new Set([...text.matchAll(IMPORT_FROM)].flatMap((one) => one[1] ?? [])),
   ];
   return (
     await Promise.all(sources.map((source) => resolved(source, file)))
@@ -646,6 +668,14 @@ async function drawnFrom(abs: string, text: string): Promise<string[]> {
 
 /** The event a canvas page sends the stage over Vite's HMR channel as it loads a section: `{ file }`, its states file from the root. */
 const SECTION_HELD = "cawco:section-held";
+
+/** The stage's own events over Vite's HMR channel, in Vite's own map of them (`vite/types/customEvent.d.ts`), so `hot.send` and `hot.on` carry their payloads. */
+declare module "vite/types/customEvent.d.ts" {
+  interface CustomEventMap {
+    [SECTION_HELD]: { file: string };
+    [SECTION_WRITTEN]: { file: string };
+  }
+}
 
 /** Each open page's sections: the states files (from the root) its canvas has loaded, by its connection to Vite's HMR (its hot channel's client). */
 const pageSections = new Map<object, Set<string>>();
@@ -1210,7 +1240,7 @@ function sourced(error: PageError): PageError {
   }
   let traced: ReturnType<typeof originalPositionFor>;
   try {
-    traced = originalPositionFor(new TraceMap(map as SourceMapInput), {
+    traced = originalPositionFor(new TraceMap(JSON.stringify(map)), {
       line: error.line,
       column: error.column - 1,
     });
@@ -1450,7 +1480,7 @@ const graphPreloads = (urls: string[], embed: boolean, key: string): string => {
 /** The canvas's page, through the project's own HTML transforms. */
 async function serveCanvas(
   dev: DevServer,
-  req: IncomingMessage,
+  req: Connect.IncomingMessage,
   res: ServerResponse,
   next: (error?: unknown) => void
 ): Promise<void> {
@@ -1480,7 +1510,7 @@ async function serveCanvas(
           "</head>",
           `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}</head>`
         ),
-        (req as IncomingMessage & { originalUrl?: string }).originalUrl
+        req.originalUrl
       ),
       key
     );
@@ -1632,7 +1662,7 @@ function keyedImports(code: string, key: string): string {
   const parts: string[] = [];
   let at = 0;
   for (const { start, end } of spans) {
-    const quote = code[start] as string;
+    const quote = code.charAt(start);
     const url = code.slice(start + 1, end - 1);
     const keyed = keyedUrl(url, key);
     if (keyed !== url) {
@@ -1687,7 +1717,7 @@ function mapApart(
   }
   return {
     code: `${code.slice(0, found.index)}\n//# sourceMappingURL=${MODULES_PATH}${key}${MAP_AT}${address}`,
-    map: Buffer.from(found[1] as string, "base64").toString("utf8"),
+    map: Buffer.from(found[1] ?? "", "base64").toString("utf8"),
   };
 }
 
@@ -1930,7 +1960,7 @@ async function settledClosureOf(
 
 /** `url` with `query` added, at the start of its query (Vite's `injectQuery`) or its end. */
 const withQuery = (url: string, query: string, first: boolean): string => {
-  const [path, search] = url.split("?") as [string, string | undefined];
+  const [path = url, search] = url.split("?");
   if (!search) {
     return `${path}?${query}`;
   }
@@ -2006,7 +2036,7 @@ function misfit(
   }
   const { name: kind, raw } = meta.type;
   if (kind === "enum") {
-    return meta.options?.includes(value as string | number)
+    return meta.options?.some((one) => one === value)
       ? null
       : `${name} takes one of ${meta.options?.map((one) => JSON.stringify(one)).join(", ")}; ${JSON.stringify(value)} is none of them.`;
   }
@@ -2015,7 +2045,7 @@ function misfit(
     kind === "token-size" ||
     kind === "token-font"
   ) {
-    return meta.options?.includes(value as string)
+    return meta.options?.some((one) => one === value)
       ? null
       : `${name} takes one of the design system's ${raw} names; ${JSON.stringify(value)} is none of them.`;
   }
@@ -2275,8 +2305,7 @@ async function reactComponent(file: string): Promise<string | null> {
   const text = readFileSync(file, "utf8");
   let name: string | null = null;
   if (CAPITAL_EXPORT.test(text)) {
-    const docgen =
-      (await import("react-docgen")) as typeof import("react-docgen");
+    const docgen = await import("react-docgen");
     try {
       const docs = docgen.parse(text, {
         filename: file,
@@ -2484,9 +2513,9 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
         })
       );
       card.moves = sheets.flatMap((sheet) =>
-        sheet.read.stories
-          .filter((story) => story.from && story.play)
-          .map((story) => ({ from: story.from as string, to: story.name }))
+        sheet.read.stories.flatMap((story) =>
+          story.from && story.play ? [{ from: story.from, to: story.name }] : []
+        )
       );
       if (ask.component) {
         card.props = (await propsOf(resolve(root, one.file), one.name)).props;
@@ -2566,34 +2595,37 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
   );
   // Each module under the story's import that reached it first, and the module that did.
   const under = new Map<ModuleNode, ModuleNode>([[story, story]]);
-  const parent = new Map<ModuleNode, ModuleNode>();
-  const queue: ModuleNode[] = [];
+  /** A module reached, with the top import it is under and the module that reached it. */
+  interface Reached {
+    by: ModuleNode;
+    from: ModuleNode;
+    mod: ModuleNode;
+  }
+  const queue: Reached[] = [];
   const reach = (mod: ModuleNode, by: ModuleNode, from: ModuleNode) => {
     if (!under.has(mod) && mod.transformResult) {
       under.set(mod, by);
-      parent.set(mod, from);
-      queue.push(mod);
+      queue.push({ mod, by, from });
     }
   };
   for (const top of story.importedModules) {
     reach(top, top, story);
   }
   // Breadth first: an array's iterator reaches what is pushed while it runs.
-  for (const mod of queue) {
+  for (const { mod, by } of queue) {
     for (const next of mod.importedModules) {
-      reach(next, under.get(mod) as ModuleNode, mod);
+      reach(next, by, mod);
     }
   }
   // Each module's project bytes with all it reached first, leaves up.
   const brought = new Map<ModuleNode, number>();
   const children = new Map<ModuleNode, ModuleNode[]>();
-  for (const mod of queue.toReversed()) {
+  for (const { mod, from: up } of queue.toReversed()) {
     const own = PREBUNDLED.test(mod.url)
       ? 0
       : (mod.transformResult?.code.length ?? 0);
     const total = own + (brought.get(mod) ?? 0);
     brought.set(mod, total);
-    const up = parent.get(mod) as ModuleNode;
     brought.set(up, (brought.get(up) ?? 0) + total);
     children.set(up, [...(children.get(up) ?? []), mod]);
   }
@@ -2633,8 +2665,7 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
   }
   // Modules under each module, counted where first reached.
   const countUnder = new Map<ModuleNode, number>();
-  for (const mod of queue.toReversed()) {
-    const up = parent.get(mod) as ModuleNode;
+  for (const { mod, from: up } of queue.toReversed()) {
     const mine =
       (countUnder.get(mod) ?? 0) + (PREBUNDLED.test(mod.url) ? 0 : 1);
     countUnder.set(mod, mine);
@@ -2796,19 +2827,21 @@ async function serveStage(
     await serveCanvas(dev, req, res, next);
     return;
   }
-  const files = named.map(storyFile);
-  if (named.length === 0 || files.some((one) => !one)) {
+  const mapped = named.map(storyFile);
+  const files = mapped.filter((one): one is string => one !== null);
+  const [file] = files;
+  if (file === undefined || files.length !== mapped.length) {
     json(res, 404, {
       error:
-        (named.map(notStatesFile).find(Boolean) as string | undefined) ??
+        named.map(notStatesFile).find(Boolean) ??
         "No file is named: a canvas names its states files as file=<path from the toolchain root>.",
     });
     return;
   }
   // A states file that isn't written is its section's problem, kept as the page's load keeps it: the read answers, the problem with it.
-  keepMissing(files as string[]);
+  keepMissing(files);
   if (path === REPORT_PATH) {
-    await reportOf(files as string[]).then(
+    await reportOf(files).then(
       (report) =>
         json(res, 200, {
           ...report,
@@ -2818,7 +2851,6 @@ async function serveStage(
     );
     return;
   }
-  const file = files[0] as string;
   const onDisk = existsSync(resolve(root, file));
   if (path === WEIGHT_PATH) {
     await (onDisk ? weightOf(file) : Promise.resolve(null)).then(
@@ -2891,11 +2923,7 @@ function keepMissing(files: string[]): void {
     if (existsSync(abs)) {
       if (kept?.kind === "missing") {
         stageErrors.delete(abs);
-        server?.environments.client.hot.send({
-          type: "custom",
-          event: SECTION_WRITTEN,
-          data: { file },
-        });
+        server?.environments.client.hot.send(SECTION_WRITTEN, { file });
         changed = true;
       }
     } else if (kept?.kind !== "missing") {
@@ -3006,16 +3034,26 @@ const PLACE_SUFFIX = / \(\d+:\d+\)$/u;
  * draws the frame and names the module. Any other error as it was.
  */
 function placedAt(error: unknown, file: string): unknown {
-  const loc = (error as { loc?: { column?: unknown; line?: unknown } } | null)
-    ?.loc;
-  if (!(error instanceof Error && typeof loc?.line === "number")) {
+  if (!(error instanceof Error && "loc" in error)) {
+    return error;
+  }
+  const { loc } = error;
+  const line =
+    typeof loc === "object" && loc !== null && "line" in loc
+      ? loc.line
+      : undefined;
+  if (typeof line !== "number") {
     return error;
   }
   const abs = resolve(root, file);
-  const column = typeof loc.column === "number" ? loc.column : 0;
+  const column =
+    typeof loc === "object" && loc !== null && "column" in loc
+      ? loc.column
+      : undefined;
+  const placed = typeof column === "number" ? column : 0;
   return Object.assign(new Error(error.message.replace(PLACE_SUFFIX, "")), {
-    loc: { file: abs, line: loc.line, column },
-    frame: codeFrame(abs, loc.line, column),
+    loc: { file: abs, line, column: placed },
+    frame: codeFrame(abs, line, placed),
   });
 }
 
@@ -3068,13 +3106,16 @@ function sectionProblem(named: string): string | null {
   );
 }
 
+/** A module id without its query. */
+const pathOfId = (id: string): string => id.split("?")[0] ?? id;
+
 /** The id of states file `file`'s section module in Vite's graph (from the root): the stage's address of it, `/@id/__x00__cawco:sheet/<file>.js`, unwrapped. */
 const sectionIdOf = (file: string): string =>
   `\0${VIRTUAL}${encodeURIComponent(file)}.js`;
 
 /** The states file (from the toolchain root) a section module's id (`\0cawco:sheet/<file>.js`) stands for; null for any other module. */
 function sectionOfId(id: string): string | null {
-  const bare = id.split("?")[0] as string;
+  const bare = pathOfId(id);
   return bare.startsWith(`\0${VIRTUAL}`)
     ? decodeURIComponent(bare.slice(VIRTUAL.length + 1, -".js".length))
     : null;
@@ -3083,9 +3124,7 @@ function sectionOfId(id: string): string | null {
 /** The key a module's problem is kept under: a section module's, its states file's (absolute); any other's, its own file. */
 function errorKeyOf(id: string): string {
   const section = sectionOfId(id);
-  return section === null
-    ? (id.split("?")[0] as string)
-    : resolve(root, section);
+  return section === null ? pathOfId(id) : resolve(root, section);
 }
 
 /** The folders whose story files the stage watches itself, and each story file's pending change. */
@@ -3127,15 +3166,6 @@ function watchStory(file: string): void {
   }).unref();
 }
 
-/** A compile error as Vite's server sends it the pages (`hot.send`, type `error`). */
-interface SentError {
-  frame?: string;
-  id?: string;
-  loc?: { column?: number; file?: string; line?: number };
-  message: string;
-  pluginCode?: string;
-}
-
 /**
  * The plugin: the sheet's page, its virtual module and its stories; every
  * compile error the client is sent, kept until its module compiles again
@@ -3150,8 +3180,7 @@ function cawcoStage() {
     const found = new Set<string>();
     const seen = new Set<ModuleNode>();
     const queue = [...(graph?.getModulesByFile(file) ?? [])];
-    while (queue.length > 0) {
-      const mod = queue.shift() as ModuleNode;
+    for (let mod = queue.shift(); mod; mod = queue.shift()) {
       if (seen.has(mod)) {
         continue;
       }
@@ -3203,16 +3232,13 @@ function cawcoStage() {
    * compile stops its own section, which no module graph links it to while
    * its load fails.
    */
-  const keepSent = (err: SentError) => {
+  const keepSent = (err: ErrorPayload["err"]) => {
     if (err.pluginCode === SECTION_MISSING) {
       return;
     }
     // The module's id is Vite's absolute path; a plugin's `loc.file` may be
     // its own (vite-plugin-svelte's is the bare file name).
-    const at = resolve(
-      root,
-      (err.id ?? err.loc?.file ?? "").split("?")[0] as string
-    );
+    const at = resolve(root, pathOfId(err.id ?? err.loc?.file ?? ""));
     const file = relative(root, at);
     stageErrors.set(at, {
       kind: "compile",
@@ -3253,7 +3279,8 @@ function cawcoStage() {
       if (!id.startsWith(`\0${VIRTUAL}`)) {
         return null;
       }
-      return sectionLoad(sectionOfId(id) as string);
+      const file = sectionOfId(id);
+      return file === null ? null : sectionLoad(file);
     },
     /**
      * An edit to a file a loaded section is drawn from ({@link drawnFrom}:
@@ -3354,20 +3381,30 @@ function cawcoStage() {
       nameFailedModules(dev);
       const { hot } = dev.environments.client;
       const send = hot.send.bind(hot);
-      hot.send = (payload: unknown, ...rest: unknown[]) => {
-        const sent = payload as { err?: SentError; type?: string } | undefined;
-        if (sent?.type === "error" && sent.err) {
+      function sendKept(payload: HotPayload): void;
+      function sendKept<Event extends string>(
+        event: Event,
+        data?: InferCustomEventPayload<Event>
+      ): void;
+      function sendKept(payload: HotPayload | string, data?: unknown): void {
+        if (typeof payload === "string") {
+          send(payload, data);
+          return;
+        }
+        if (payload.type === "error") {
           // A request no page made is answered with its error alone: no page hears it.
-          if (!pageAsks(sent.err.id)) {
+          if (!pageAsks(payload.err.id)) {
             return;
           }
-          keepSent(sent.err);
+          keepSent(payload.err);
         }
-        return send(payload, ...rest);
-      };
+        send(payload);
+      }
+      hot.send = sendKept;
       // Each section a page loads is held while the page is open: an edit checks only those.
       hot.on(SECTION_HELD, (data, client) => {
-        const named = (data as { file?: unknown } | null)?.file;
+        // A page runs the project's code: its word is checked, whatever the type says.
+        const named: unknown = data?.file;
         const file = typeof named === "string" ? storyFile(named) : null;
         if (file) {
           holdSection(client, file);
