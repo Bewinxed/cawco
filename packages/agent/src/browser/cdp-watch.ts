@@ -83,7 +83,7 @@ export const watchView = async (
     leave();
     if (cast.viewers === 0 && watched.get(key) === mine) {
       watched.delete(key);
-      cast.stop().catch(() => undefined);
+      cast.stop();
     }
   };
 };

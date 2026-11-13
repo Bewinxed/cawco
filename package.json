@@ -50,6 +50,7 @@
     "release:upload": "bun scripts/release/steps/upload.ts",
     "release:version": "bun scripts/release/steps/version.ts",
     "signal:check": "bun scripts/signal-check.ts",
+    "takeover:bench": "bun scripts/takeover-bench.ts",
     "test:binary": "bun scripts/binary-tests.ts",
     "test:e2e": "bun scripts/binary-tests.ts --only e2e",
     "test:smoke": "bun scripts/binary-tests.ts --only smoke",

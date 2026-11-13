@@ -4,20 +4,18 @@
  * browser's gate (every agent connection cut with 4423, new ones refused
  * with one sentence), brings the asking workspace's page to the front, and
  * gives the person control: a {@link CdpTakeover} of that page on either
- * host, in the layout of the device they hold, and on the container host
- * neko's `control/give` to their view's session when it names one. Hand
- * back ends the take-over's view, whose DevTools link takes the person's
- * layout with it (the agent's page is the desktop's again before the gate
- * opens), takes control away on the container host (neko's `control/take`
- * by the daemon's admin, then `control/reset` once the clipboard is emptied
- * as host), loads the
- * front page again by GET (nothing typed survives in a field), empties
- * neko's clipboard on the container host
- * (the local host's headless Chromium has no clipboard the person could
- * fill), opens the gate, and answers the page's origin and nothing else.
+ * host, in the layout of the device they hold. neko is the container
+ * host's picture only while nobody holds the browser; no viewer ever hosts
+ * it (its controls are locked, and only its admin gives them). Hand back
+ * ends the take-over's view, whose DevTools link takes the person's layout
+ * with it (the agent's page is the desktop's again before the gate opens),
+ * loads the front page again by GET (nothing typed survives in a field),
+ * empties neko's clipboard on the container host (the local host's
+ * headless Chromium has no clipboard the person could fill), opens the
+ * gate, and answers the page's origin and nothing else.
  *
  * The machine is the one truth of a take-over: its record's `takeover`
- * (with `shield.json` beside it for the page and the viewer), written here
+ * (with `shield.json` beside it for the page), written here
  * alone, and told to the hub on every change. It ends in one place,
  * {@link release}, whichever way it ends:
  *
@@ -79,6 +77,9 @@ const WATCH_MS = 5000;
 /** How long neko has to answer a control or clipboard call. */
 const NEKO_MS = 5000;
 
+/** How long a take-over's view, still starting as the take-over ends, is waited for before the gate opens. Our call. */
+const VIEW_START_MS = 5000;
+
 /** A take-over as the browser's dir keeps it. */
 const KeptSchema = z.object({
   origin: z.string().optional(),
@@ -86,8 +87,6 @@ const KeptSchema = z.object({
   since: z.number(),
   /** The page brought to the front: the one handed back reloads. */
   targetId: z.string().optional(),
-  /** The person's neko session given control (container host). */
-  viewer: z.string().optional(),
   workspaceId: z.string().optional(),
 });
 type Kept = z.infer<typeof KeptSchema>;
@@ -383,9 +382,8 @@ const viewFor = (
 
 /**
  * Take over: the gate closed, the asking workspace's page in front, control
- * the person's. Sent again for a browser already held (a viewer's neko
- * session now known), it keeps the take-over and gives control to the
- * viewer.
+ * the person's. Sent again for a browser already held, it keeps the
+ * take-over as it stands.
  */
 export const shieldBrowser = async (
   args: BrowserShieldArgs
@@ -397,8 +395,8 @@ export const shieldBrowser = async (
   // Closed before anything else: no agent reads the page from here on.
   gateOf(key)?.closeAll();
   const before = held.get(key);
-  // A take-over this daemon holds already (sent again with a viewer) keeps
-  // its browser as it runs: it is never started again under the person.
+  // A take-over this daemon holds already (sent again) keeps its browser
+  // as it runs: it is never started again under the person.
   if (!before) {
     await startBrowser({ key });
   }
@@ -455,15 +453,11 @@ export const shieldBrowser = async (
   // take-over's own screencast.
   endWatch(key, "The person took the browser over.");
   await viewFor(key, record, take);
-  if (record.host === "container" && args.viewer) {
-    await neko(record, `/room/control/give/${encodeURIComponent(args.viewer)}`);
-    take.viewer = args.viewer;
-  }
   await keep(key, take);
   await recordTakeover(key, take);
   watch();
   console.info(
-    `[browser] ${key} taken over${take.workspaceId ? ` for workspace ${take.workspaceId}` : ""}${args.viewer ? `, control given to neko session ${args.viewer}` : ""}`
+    `[browser] ${key} taken over${take.workspaceId ? ` for workspace ${take.workspaceId}` : ""}`
   );
   return rowOf(key);
 };
@@ -522,13 +516,15 @@ const reloadFront = async (
 };
 
 /**
- * Hand back: control taken from the person, the front page loaded again by
- * GET, the clipboard emptied, the gate open; answers the page's origin.
+ * Hand back: the take-over's view ended (the person's input and layout
+ * gone with its DevTools link), the front page loaded again by GET, the
+ * clipboard emptied, the gate open; answers the page's origin.
  *
- * On the container host the daemon's admin takes control first (neko
- * `control/take`): the person's input stops reaching the browser, and the
- * admin is the host neko serves the clipboard to (its room routes are
- * `HostsOnly`), so it can empty it; `control/reset` then leaves nobody
+ * On the container host the clipboard is the headful Chromium's own, which
+ * a page's copy (a code's Copy button, the person's own copy) fills while
+ * the person holds it. neko serves it only to its host (its room routes
+ * are `HostsOnly`), so the daemon's admin takes control (`control/take`),
+ * empties it, and gives control up again (`control/reset`), leaving nobody
  * hosting. A step that fails is said in the log and answered to the hub,
  * and the gate stays closed: the private period ends only whole.
  */
@@ -559,18 +555,14 @@ export const handBackBrowser = async (
     // The view's DevTools link closed first: the person's input stops,
     // and the layout it set goes with it, so the page the agent gets back
     // is laid out as the desktop's.
-    await step("ending the page's view", async () => {
-      await (await take.cdp)?.stop();
-    });
-    if (record.host === "container") {
-      await step("taking control from the person", () =>
-        neko(record, "/room/control/take")
-      );
-    }
+    await endView(take);
     origin = await step("loading the page again", () =>
       reloadFront(record, take.targetId)
     );
     if (record.host === "container") {
+      await step("taking neko's control to reach its clipboard", () =>
+        neko(record, "/room/control/take")
+      );
       await step("emptying the clipboard", () =>
         neko(record, "/room/clipboard", { text: "" })
       );
@@ -592,6 +584,27 @@ export const handBackBrowser = async (
 };
 
 /**
+ * Ends a take-over's view: its DevTools link closed at once, which takes
+ * the person's layout with it, whether Chromium answers or the link is
+ * already gone ({@link CdpTakeover.stop} waits on nothing). A view still
+ * starting is waited for {@link VIEW_START_MS}; one that has not started
+ * by then has had no view attached, so it laid nothing out, and the gate
+ * need not wait on it: it is ended as soon as it starts.
+ */
+const endView = async (take: Held): Promise<void> => {
+  const starting = take.cdp;
+  if (!starting) {
+    return;
+  }
+  const read = await readWithin(VIEW_START_MS, () => starting);
+  if (read.kind === "answered") {
+    read.value?.stop();
+    return;
+  }
+  starting.then((view) => view?.stop()).catch(() => undefined);
+};
+
+/**
  * The one place a take-over ends: forgotten here and in the browser's dir,
  * the gate open, and the hub told. The hand-back is told first, whoever
  * ended it (`said`), so the ask's call answers with the page's origin; then
@@ -604,10 +617,12 @@ const release = async (
   answer: BrowserHandback,
   said: BrowserHandedBackFrame["why"]
 ): Promise<void> => {
-  const view = held.get(key)?.cdp;
+  const take = held.get(key);
   tellHub(answer, said);
   held.delete(key);
-  await (await view)?.stop();
+  if (take) {
+    await endView(take);
+  }
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(key, undefined).catch((error: unknown) =>

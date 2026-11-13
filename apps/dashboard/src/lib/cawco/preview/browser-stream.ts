@@ -355,12 +355,14 @@ const PATCH_MOST = 0.25;
 
 /** The local browser's frames, or a take-over's on either host: a view that also says the layout it holds and its fingers. */
 export interface TakeoverStream extends BrowserStream, StreamInput {
-  /** A finger held still at a point: the word there selected, the button held for a drag. */
+  /** A finger held still at a point: the word there selected, and nothing under it activated. */
   hold: (x: number, y: number) => void;
   /** The layout the person holds: sent now, and first on every connection; frames of another size are dropped until the layout's come. */
   layout: (layout: TakeoverLayout | null) => void;
   /** The page loaded again. */
   reload: () => void;
+  /** The held finger dragged to a point: the selection carried to the word there. */
+  select: (x: number, y: number) => void;
   /** The fingers on a phone layout's page, in the stream's pixels, at `time` (ms since the epoch, the event's own). */
   touch: (
     phase: "start" | "move" | "end" | "cancel",
@@ -647,6 +649,7 @@ export const cdpStream = (
     },
     touch: (phase, points, time) => send({ t: "touch", phase, points, time }),
     hold: (x, y) => send({ t: "hold", x, y }),
+    select: (x, y) => send({ t: "select", x, y }),
     reload: () => send({ t: "reload" }),
     move: (x, y) => send({ t: "move", x, y }),
     button: (x, y, button, down) =>
