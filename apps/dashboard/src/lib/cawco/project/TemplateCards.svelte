@@ -20,6 +20,7 @@
    * and a tap on it again clears it (a radio group never unchecks, so that
    * tap is taken before the group's own).
    */
+  import { OFFERED_TEMPLATES } from "@cawco/core/views";
   import { onboardingWords } from "@cawco/core/words/onboarding";
   import { RadioGroup } from "bits-ui";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -101,7 +102,13 @@
       )) {
         const at = card.getBoundingClientRect();
         const grid = node.getBoundingClientRect();
-        next[card.dataset.template as TemplateName] = {
+        const template = OFFERED_TEMPLATES.find(
+          (one) => one === card.dataset.template
+        );
+        if (!template) {
+          continue;
+        }
+        next[template] = {
           top: at.top - grid.top - node.clientTop,
           left: at.left - grid.left - node.clientLeft,
           width: at.width,
@@ -174,7 +181,7 @@
     {disabled}
     class={iconCardsVariants({ class: "gap-y-space-8" })}
     onValueChange={(next) => {
-      selected = (next || null) as TemplateName | null;
+      selected = OFFERED_TEMPLATES.find((one) => one === next) ?? null;
     }}
     value={selected ?? ""}
     {@attach measure}
