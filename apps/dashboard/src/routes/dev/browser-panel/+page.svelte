@@ -55,10 +55,10 @@
 
   const W = 1280;
   const H = 800;
-  const ORIGIN = {
+  const ORIGIN: Record<string, string> = {
     long: "https://pr-2417-billing-settings-preview.staging.northwind-internal.dev",
     unreachable: "https://staging.northwind.dev",
-  } as Record<string, string>;
+  };
   const origin = ORIGIN[asked] ?? "https://app.northwind.dev";
 
   const mine = asked === "mine";
@@ -335,10 +335,10 @@
     // Only the view's socket: the dev server's own (Vite's) stays the browser's.
     const Real = window.WebSocket;
     window.WebSocket = new Proxy(Real, {
-      construct(target, args: [string, ...unknown[]]) {
+      construct(target, args: ConstructorParameters<typeof WebSocket>) {
         return String(args[0]).includes("/ws/browser/")
-          ? new BenchSocket(args[0])
-          : new target(...(args as [string]));
+          ? new BenchSocket(String(args[0]))
+          : new target(...args);
       },
     });
   }

@@ -151,8 +151,8 @@ export function curveTokenOf(easing: string): string | null {
   }
   const shape = shapeOf(easing);
   return (
-    [...CURVES, "--ease-goo"].find(
-      (name) => shapeOf(ease(name as `--ease-${string}`)) === shape
+    ([...CURVES, "--ease-goo"] as const).find(
+      (name) => shapeOf(ease(name)) === shape
     ) ?? null
   );
 }
@@ -329,7 +329,7 @@ function runsOf(clips: readonly Clip[]): Run[] {
   return groups.map(({ clips: own }) => {
     const ran = own.map(untune);
     return {
-      id: (own[0] as Clip).id,
+      id: own[0].id,
       clips: own,
       from: Math.min(...own.map(beginOf)),
       to: Math.max(...own.map(endOf)),
@@ -373,12 +373,12 @@ export function tracksOf(
   }
   return [...by.values()]
     .map((own) => [...own].sort(asRan))
-    .sort((a, b) => asRan(a[0] as Clip, b[0] as Clip))
+    .sort((a, b) => asRan(a[0], b[0]))
     .map((ran): Track => {
       const sorted = [...ran].sort((a, b) => beginOf(a) - beginOf(b));
       const runs = runsOf(sorted);
       const lengths = new Set(runs.map((run) => run.to - run.from));
-      const first = ran[0] as Clip;
+      const [first] = ran;
       return {
         id: first.id,
         clips: sorted,
@@ -389,7 +389,7 @@ export function tracksOf(
         kind: kindOf(sorted),
         setOff: Math.min(...sorted.map((clip) => clip.start)),
         sprung: sorted.some((clip) => clip.spring !== null),
-        begins: beginOf(sorted[0] as Clip),
+        begins: beginOf(sorted[0]),
         ends: Math.max(...sorted.map(endOf)),
         runs,
         length: lengths.size === 1 ? ([...lengths][0] ?? null) : null,
@@ -717,23 +717,26 @@ const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /** Whether `clip` differs from `was` in each value he may change. */
-const DIFFERS: Record<Timing, (clip: Clip, was: Clip) => boolean> = {
-  start: (clip, was) => clip.delay !== was.delay,
-  length: (clip, was) => clip.duration !== was.duration,
-  curve: (clip, was) => !sameCurve(clip, was),
-  values: (clip, was) => !same(clip.values, was.values),
-  legs: (clip, was) => !same(clip.legs, was.legs),
-  repeat: (clip, was) => clip.repeat !== was.repeat,
-};
+const DIFFERS: readonly (readonly [
+  Timing,
+  (clip: Clip, was: Clip) => boolean,
+])[] = [
+  ["start", (clip, was) => clip.delay !== was.delay],
+  ["length", (clip, was) => clip.duration !== was.duration],
+  ["curve", (clip, was) => !sameCurve(clip, was)],
+  ["values", (clip, was) => !same(clip.values, was.values)],
+  ["legs", (clip, was) => !same(clip.legs, was.legs)],
+  ["repeat", (clip, was) => clip.repeat !== was.repeat],
+];
 
 /** The values of the row he changed, read off each clip against the clip as the engine ran it. */
 export function editsOf(track: Track): Set<Timing> {
   const edits = new Set<Timing>();
   for (const clip of track.clips) {
     const { was } = clip;
-    for (const [value, differs] of Object.entries(DIFFERS)) {
+    for (const [value, differs] of DIFFERS) {
       if (was && differs(clip, was)) {
-        edits.add(value as Timing);
+        edits.add(value);
       }
     }
   }
@@ -852,27 +855,23 @@ export const tunedRecord = (move: string, clips: readonly Clip[]) =>
   });
 
 /** Each clip's identity across reads of one move: what moves, what it animates, and which of those it is. */
-const identities = (clips: readonly Clip[]): Map<Clip, string> => {
+const identities = (clips: readonly Clip[]): [Clip, string][] => {
   const seen = new Map<string, number>();
-  const named = new Map<Clip, string>();
-  for (const clip of clips) {
+  return clips.map((clip) => {
     const base = `${clip.element}\u0000${clip.property}`;
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
-    named.set(clip, `${base}\u0000${n}`);
-  }
-  return named;
+    return [clip, `${base}\u0000${n}`];
+  });
 };
 
 /** The tuned clips of a move by their identity, to put back on its next read. */
-export const tuningOf = (clips: readonly Clip[]): Map<string, Clip> => {
-  const named = identities(clips);
-  return new Map(
-    clips.flatMap((clip) =>
-      clip.was ? [[named.get(clip) as string, clip] as const] : []
+export const tuningOf = (clips: readonly Clip[]): Map<string, Clip> =>
+  new Map(
+    identities(clips).flatMap(([clip, name]) =>
+      clip.was ? [[name, clip] as const] : []
     )
   );
-};
 
 /**
  * A fresh read of a move with what he tuned on an earlier read put back:
@@ -886,9 +885,8 @@ export function withTuning(
   if (tuning.size === 0) {
     return [...clips];
   }
-  const named = identities(clips);
-  return clips.map((clip) => {
-    const tuned = tuning.get(named.get(clip) as string);
+  return identities(clips).map(([clip, name]) => {
+    const tuned = tuning.get(name);
     return tuned
       ? changed(clip, {
           delay: tuned.delay,

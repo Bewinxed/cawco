@@ -83,12 +83,7 @@ export function startForecast(): void {
  * hub's. Under `vite dev` only, written through `__cawcoDebug.usage`
  * (dev-debug.ts); every other build folds each read of it away.
  */
-export interface StagedUsage {
-  claude: ClaudeRings | null;
-  forecast: ProviderForecast;
-  openCode: RingAccount | null;
-}
-const bench = $state<{ staged: StagedUsage | null }>({ staged: null });
+const bench = $state<CawcoDebug["usage"]>({ staged: null });
 if (import.meta.env.DEV) {
   devDebug({ usage: bench });
 }

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { ClipKind } from "@cawco/core/stage-graph";
+  import { graphWords as words } from "@cawco/core/words/graph";
+  import interact from "interactjs";
   /**
    * A row's lane on the move's one scale (MoveFace: the ruler, every bar and
    * the playhead are placed by one rule, `t / scale` of the lane's width).
@@ -46,9 +49,7 @@
    * repeat glyph after them. While the lanes are zoomed (`view`), every
    * place and length is read on the part shown.
    */
-  import type { ClipKind } from "@cawco/core/stage-graph";
-  import { graphWords as words } from "@cawco/core/words/graph";
-  import interact from "interactjs";
+  import type { PointerEventHandler } from "svelte/elements";
   import { IconRepeat } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { numberOf } from "#lib/platform/motion/curves.svelte.js";
@@ -239,15 +240,19 @@
   };
   /** A leg's end dragged: its place across the bar on 10 ms steps, settling on another bar's edge it comes near unless ⌥ is held. */
   const legGrab =
-    (clip: Clip, leg: number, span: { from: number; to: number }) =>
-    (event: PointerEvent) => {
+    (
+      clip: Clip,
+      leg: number,
+      span: { from: number; to: number }
+    ): PointerEventHandler<HTMLElement> =>
+    (event) => {
       if (event.shiftKey || event.button !== 0) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
       onselect();
-      const node = event.currentTarget as HTMLElement;
+      const node = event.currentTarget;
       const bar = node.parentElement?.getBoundingClientRect();
       if (!bar) {
         return;
@@ -477,7 +482,7 @@
         </div>
       {/each}
       {#if legged(run)}
-        {@const clip = run.clips[0] as Clip}
+        {@const clip = run.clips[0]}
         {@const legs = legsHeld?.id === clip.id ? legsHeld.legs : clip.legs}
         {#each legs as offset, leg (leg)}
           <!-- Where leg `leg + 1` ends and the next begins: a slider of its own. -->
