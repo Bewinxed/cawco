@@ -468,6 +468,9 @@
     }
     clearTimeout(holdTimer);
     current.mode = "scroll";
+    if (point.x === current.last.x && point.y === current.last.y) {
+      return;
+    }
     // The page follows the finger: a finger up reads the page further down.
     stream?.wheel(point.x, point.y, {
       ctrlKey: false,
