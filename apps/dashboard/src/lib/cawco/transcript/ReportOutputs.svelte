@@ -26,10 +26,10 @@
   } = $props();
 
   const drawn = $derived.by(() => {
-    const by = {
-      pictures: [] as string[],
-      played: [] as string[],
-      chips: [] as string[],
+    const by: { pictures: string[]; played: string[]; chips: string[] } = {
+      pictures: [],
+      played: [],
+      chips: [],
     };
     for (const path of files) {
       const kind = deliverableKind(path);

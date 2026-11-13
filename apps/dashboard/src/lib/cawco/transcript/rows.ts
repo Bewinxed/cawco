@@ -188,8 +188,13 @@ export const movesOf = (
   );
 
 /** An account row's newest line: where the session is now. */
-export const moveOf = (row: Extract<Row, { kind: "account" }>): AccountMove =>
-  row.messages.at(-1)?.metadata?.accountMove as AccountMove;
+export const moveOf = (row: Extract<Row, { kind: "account" }>): AccountMove => {
+  const move = row.messages.at(-1)?.metadata?.accountMove;
+  if (!move) {
+    throw new Error(`The account row ${row.key} holds no move.`);
+  }
+  return move;
+};
 
 /**
  * Who has the floor, row by row: a speaker line appears only when the speaker
@@ -1186,7 +1191,7 @@ function tell(
       state: "compacting",
     });
   }
-  const tie: Tie = { rows, said, copied: false };
+  const tie: Tie = { rows, said, copy: null };
   const seen = told.map((each) => {
     const next = tieBoundary(each, messages, starts, tie);
     return next.state === "compacting" && !compacting
@@ -1206,7 +1211,8 @@ function tell(
 
 /** The rows and keys a fold's ties write to: copied before the first. */
 interface Tie {
-  copied: boolean;
+  /** The writable copy `said` is, once the first tie made it. */
+  copy: Map<string, string> | null;
   rows: Row[];
   said: ReadonlyMap<string, string>;
 }
@@ -1232,14 +1238,14 @@ function tieBoundary(
       ? { ...each, anchor }
       : each;
   }
-  if (!tie.copied) {
+  if (!tie.copy) {
     tie.rows = tie.rows.slice();
-    tie.said = new Map(tie.said);
-    tie.copied = true;
+    tie.copy = new Map(tie.said);
+    tie.said = tie.copy;
   }
   const own = tie.rows[r].key;
-  tie.rows[r] = { ...tie.rows[r], key: each.key } as Row;
-  (tie.said as Map<string, string>).set(own, each.key);
+  tie.rows[r] = { ...tie.rows[r], key: each.key };
+  tie.copy.set(own, each.key);
   return { ...each, boundary: own };
 }
 
@@ -1860,8 +1866,8 @@ function keptFrom(rows: Row[], before: readonly Row[]): Row[] {
 
 /** Whether two rows hold the same things: every field the same value, a list the same values in order. */
 function sameFields(a: Row, b: Row): boolean {
-  const left = a as unknown as Record<string, unknown>;
-  const right = b as unknown as Record<string, unknown>;
+  const left: Record<string, unknown> = a;
+  const right: Record<string, unknown> = b;
   const keys = Object.keys(left);
   return (
     keys.length === Object.keys(right).length &&
