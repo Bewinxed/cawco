@@ -1,8 +1,6 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
-as-unknown-as	{ __buttonBench: { start: () => void; stop: () => void }; }	apps/dashboard/src/routes/(app)/motion/button-pending/+page.svelte	1
-as-unknown-as	[string, string, string]	apps/dashboard/src/lib/cawco/find/mention.svelte.ts	1
 as-unknown-as	{ __cawcoDebug: { boardState: { fleetRead: boolean }; projectsState: { p	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: Bench }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-unknown-as	{ __cawcoDeliver: (data: unknown) => void }	packages/agent/src/chromium.ts	1
@@ -10,31 +8,6 @@ as-unknown-as	{ __cawcoGraph: CanvasGraph }	packages/agent/src/stage-host/canvas
 as-unknown-as	{ __cawcoGraph?: CanvasGraph }	packages/agent/src/stage-host/canvas/stage.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
 as-unknown-as	{ __rbReal?: Real }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
-as-unknown-as	{ __transcriptBuilds?: Record<string, number>; }	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
-as-unknown-as	{ __skeletonBench: Record<"load" | "wait", () => void>; }	scripts/probe-kit/specs/web/safari-blurs.ts	1
-as-unknown-as	{ __snaps: { id?: string }[] }	scripts/probe-kit/specs/canvas.ts	2
-as-unknown-as	{ __stateShape?: { els: Element[]; rest: Map<Element, Map<string, string	scripts/probe-kit/rendered-checks.ts	1
-as-unknown-as	{ __stateShape?: { rings?: Element[] }; __ringWas?: { el: Element | null	scripts/probe-kit/rendered-checks.ts	1
-as-unknown-as	{ __stateShape?: { rings?: HTMLElement[] }; __ringBefore?: Map<Element, 	scripts/probe-kit/rendered-checks.ts	1
-as-unknown-as	{ __stayed: boolean }	scripts/probe-kit/specs/preview-lock.ts	1
-as-unknown-as	{ __stayed: boolean }	scripts/probe-kit/specs/session-sheet.ts	3
-as-unknown-as	{ __stayed?: boolean }	scripts/probe-kit/specs/preview-lock.ts	1
-as-unknown-as	{ __stayed?: boolean }	scripts/probe-kit/specs/session-sheet.ts	3
-as-unknown-as	{ __strokeEnds: number; __docLog: string[][]; __docEls: Record<string, P	scripts/probe-kit/specs/canvas.ts	2
-as-unknown-as	{ __swapSeen: { first: { shape: number; ghost: number | null } | null; g	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ __swapSeen: typeof seen }	scripts/probe-kit/specs/canvas.ts	1
-as-unknown-as	{ __themesHeard: unknown[] }	scripts/probe-kit/specs/artifacts.ts	1
-as-unknown-as	{ __themesHeard?: unknown[] }	scripts/probe-kit/specs/artifacts.ts	1
-as-unknown-as	{ __thumbs: { captures: number } }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
-as-unknown-as	{ __thumbs: { png: string; scheme: string } }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
-as-unknown-as	{ __thumbs: typeof seen }	scripts/probe-kit/specs/web/thumbnail-schemes.ts	1
-as-unknown-as	{ __ticks?: number }	scripts/probe-kit/specs/preview-bound.ts	1
-as-unknown-as	{ __traffic: { landed: () => boolean } }	scripts/probe-kit/specs/web/traffic-longtask.ts	1
-as-unknown-as	{ __traffic: { load: (blocks: unknown[]) => void; patch: (next: Record<s	scripts/probe-kit/specs/web/traffic-longtask.ts	1
-as-unknown-as	{ __traffic: Bench }	scripts/probe-kit/specs/web/seek-words.ts	3
-as-unknown-as	{ __traffic: Record<string, never> }	scripts/probe-kit/specs/web/safari-blurs.ts	1
-as-unknown-as	{ __warmWatch?: MutationObserver }	scripts/probe-kit/specs/tab-return.ts	1
-as-unknown-as	{ __skeletonBench: { load: () => void; wait: () => void }; }	apps/dashboard/src/routes/(app)/motion/skeleton/+page.svelte	1
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ cawco?: Bridge }	packages/agent/src/stage-host/canvas/runtime.ts	1
@@ -92,9 +65,7 @@ as-unknown-as	Node[]	packages/agent/src/stage-host/story-file.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pictures	packages/agent/src/frame-picture.ts	5
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PinPeekFrame.stories.ts	4
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	ProjectDecisions	apps/dashboard/src/lib/cawco/decisions/DecisionsView.stories.ts	1
@@ -106,17 +77,10 @@ as-unknown-as	Readiness	packages/agent/src/artifact-picture.ts	1
 as-unknown-as	Readiness & { document: { body: { textContent: string | null } | null; f	packages/agent/src/artifact-picture.ts	1
 as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
-as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
-as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
-as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
-as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
@@ -413,10 +377,9 @@ suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/c
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/HoverPanel.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/preview/PinCard.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/grown.ts	2
-suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/queued-edit.svelte.ts	1
-suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/list-whole.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/older-pages.svelte.ts	1
+suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/queued-edit.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/components/ui/tooltip/glide-tip.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/hooks/follow-tail.ts	1
