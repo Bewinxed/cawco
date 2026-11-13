@@ -69,19 +69,14 @@
   import Words from "./Words.svelte";
   import { plainOf } from "./words";
 
-  let {
-    props,
-    renderNode,
-  }: OpenUIRenderProps<{
-    id: unknown;
-    question: unknown;
-    options: unknown[];
-    why?: unknown;
-    media?: unknown[];
-    multiple?: unknown;
-    note?: unknown;
-  }> = $props();
-
+  /** A node of the program's tree as the card reads it: its name, and what it holds. */
+  type Piece =
+    | {
+        typeName?: unknown;
+        props?: { children?: Piece | Piece[] };
+      }
+    | null
+    | undefined;
   type OptionNode = {
     props?: {
       id?: unknown;
@@ -90,22 +85,28 @@
       cost?: unknown;
       builds?: unknown;
       recommended?: unknown;
-      media?: unknown[];
+      media?: Piece[];
     };
   } | null;
 
+  let {
+    props,
+    renderNode,
+  }: OpenUIRenderProps<{
+    id: unknown;
+    question: unknown;
+    options: OptionNode[];
+    why?: unknown;
+    media?: Piece[];
+    multiple?: unknown;
+    note?: unknown;
+  }> = $props();
+
   /** Whether `value` holds an Image, in a Row or Column too. */
-  const holdsImage = (value: unknown): boolean => {
-    if (Array.isArray(value)) {
-      return value.some(holdsImage);
+  const holdsImage = (node: Piece | Piece[]): boolean => {
+    if (Array.isArray(node)) {
+      return node.some(holdsImage);
     }
-    const node = value as
-      | {
-          typeName?: unknown;
-          props?: { children?: unknown };
-        }
-      | null
-      | undefined;
     // A node with no children (a Preview, a Text) or an Option with no media ends here.
     if (!node) {
       return false;
@@ -118,7 +119,7 @@
   const multiple = $derived(props.multiple === true);
   const options = $derived(
     (Array.isArray(props.options) ? props.options : []).map((option) => {
-      const held = (option as OptionNode)?.props;
+      const held = option?.props;
       const optionId = String(held?.id ?? "");
       return {
         id: optionId,
@@ -254,9 +255,7 @@
     Array.isArray(props.media) &&
       props.media.length === 2 &&
       props.media.every((node) =>
-        DECISION_WELLS.some(
-          (well) => well === (node as { typeName?: unknown } | null)?.typeName
-        )
+        DECISION_WELLS.some((well) => well === node?.typeName)
       )
   );
 
@@ -322,9 +321,8 @@
     }
     const pointed = (event: Event) => {
       if (
-        (event.target as Element | null)?.closest(
-          "[data-option], [data-option-for]"
-        )
+        event.target instanceof Element &&
+        event.target.closest("[data-option], [data-option-for]")
       ) {
         arm();
       }
@@ -336,7 +334,10 @@
         event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
-        !(event.target as Element | null)?.closest("[data-option]")
+        !(
+          event.target instanceof Element &&
+          event.target.closest("[data-option]")
+        )
       ) {
         return;
       }

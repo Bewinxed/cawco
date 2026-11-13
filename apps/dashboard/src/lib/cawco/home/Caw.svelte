@@ -467,7 +467,10 @@
     }
     if (reducedMotion) {
       // The Caw on top of those on screen stays under the new one; a file still loading goes.
-      const top = layers.findLast((l) => l.shown) as Layer;
+      const top = layers.findLast((l) => l.shown);
+      if (!top) {
+        return;
+      }
       top.fade?.finish();
       layers = top.status === incoming ? [top] : [top, layerFor(incoming)];
       return;
@@ -533,7 +536,8 @@
    * fade ends and the fade out runs from the canvas's own style to its end.
    */
   function endFade(fade: Animation | undefined) {
-    const target = (fade?.effect as KeyframeEffect | null | undefined)?.target;
+    const target =
+      fade?.effect instanceof KeyframeEffect ? fade.effect.target : undefined;
     if (target?.isConnected && target.checkVisibility()) {
       fade?.commitStyles();
     }

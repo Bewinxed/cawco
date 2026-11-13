@@ -76,7 +76,11 @@
   let opener: HTMLElement | null = null;
   $effect(() => {
     if (open) {
-      opener = anchor ?? (document.activeElement as HTMLElement | null);
+      opener =
+        anchor ??
+        (document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null);
     }
   });
   /**

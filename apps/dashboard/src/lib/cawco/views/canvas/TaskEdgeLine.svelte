@@ -10,8 +10,19 @@
    * `handlesOf`), apart from the arrows and the trunk.
    * Tokens only; the arrow is the canvas's one marker (ViewCanvas).
    */
-  import { BaseEdge, type EdgeProps, getSmoothStepPath } from "@xyflow/svelte";
+  import {
+    BaseEdge,
+    type Edge,
+    type EdgeProps,
+    getSmoothStepPath,
+  } from "@xyflow/svelte";
   import type { TaskEdgeKind } from "../task-graph";
+
+  interface TaskEdgeData extends Record<string, unknown> {
+    kind: TaskEdgeKind;
+    landed: boolean;
+    marker: string;
+  }
 
   let {
     id,
@@ -22,11 +33,8 @@
     sourcePosition,
     targetPosition,
     data,
-  }: EdgeProps = $props();
+  }: EdgeProps<Edge<TaskEdgeData>> = $props();
 
-  const edge = $derived(
-    data as { kind: TaskEdgeKind; landed: boolean; marker: string }
-  );
   const route = $derived(
     getSmoothStepPath({
       sourceX,
@@ -43,24 +51,24 @@
 <!-- An edge's paint, inline on its path, one kind's own: it replaces Svelte
      Flow's `--xy-edge-stroke*` defaults, and a change restyles the path
      alone. -->
-{#if edge.kind === "part_of"}
+{#if data?.kind === "part_of"}
   <BaseEdge
     {id}
     path={route[0]}
     style="stroke: var(--color-nest-ink); stroke-width: var(--tree-line)"
   />
-{:else if edge.kind === "found_in"}
+{:else if data?.kind === "found_in"}
   <BaseEdge
     {id}
     path={route[0]}
     style="stroke: var(--color-ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4"
   />
-{:else}
+{:else if data}
   <BaseEdge
     {id}
-    markerEnd={`url(#${edge.marker})`}
+    markerEnd={`url(#${data.marker})`}
     path={route[0]}
-    style={edge.landed
+    style={data.landed
       ? "stroke: var(--color-border-control); stroke-width: var(--spacing-c-graph-edge)"
       : "stroke: var(--color-ink-muted); stroke-width: var(--spacing-c-graph-edge)"}
   />

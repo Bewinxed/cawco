@@ -363,7 +363,10 @@
     <div class="flex flex-wrap gap-space-2">
       <Tabs
         onValueChange={(next) => {
-          harness = next as Harness;
+          const picked = HARNESSES.find((one) => one === next);
+          if (picked) {
+            harness = picked;
+          }
         }}
         value={harness}
       >
@@ -374,7 +377,10 @@
       </Tabs>
       <Tabs
         onValueChange={(next) => {
-          grouping = next as Grouping;
+          const picked = GROUPINGS.find((one) => one === next);
+          if (picked) {
+            grouping = picked;
+          }
         }}
         value={grouping}
       >
@@ -566,10 +572,12 @@
     data-leaving
     inert
   >
-    {#each lines.filter((l) => l.row) as l (l.key)}
-      <div style:animation={leaveAnim(l.key)}>
-        {@render line(l.row as Item, false)}
-      </div>
+    {#each lines as l (l.key)}
+      {#if l.row}
+        <div style:animation={leaveAnim(l.key)}>
+          {@render line(l.row, false)}
+        </div>
+      {/if}
     {/each}
   </div>
 {/snippet}
