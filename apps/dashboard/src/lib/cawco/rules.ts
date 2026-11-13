@@ -1,7 +1,7 @@
 import { type Rule, type RuleDraft, ruleSettings } from "@cawco/core/rules";
 import { routinesWords } from "@cawco/core/words/routines";
 import { hub } from "#lib/platform/hub.js";
-import { couldNotOrAway } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubData } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -33,40 +33,29 @@ export interface RuleActivity {
   where: string;
 }
 
-export const loadRuleActivity = async (id: string) => {
-  const answer = await hub.api.rules({ id }).activity.get();
-  if (answer.error) {
-    throw couldNotOrAway("load what this rule has caught")(answer);
-  }
-  return answer.data;
-};
+export const loadRuleActivity = (id: string) =>
+  hubData(
+    hub.api.rules({ id }).activity.get(),
+    couldNotOrAway("load what this rule has caught")
+  );
 
 /** Create: the hub mints the id and answers with the whole rule. */
-export const createRule = async (draft: RuleDraft) => {
-  const answer = await hub.api.rules.post(draft);
-  if (answer.error) {
-    throw couldNotOrAway(`save ${draft.name || "the rule"}`)(answer);
-  }
-  return answer.data;
-};
+export const createRule = (draft: RuleDraft) =>
+  hubData(
+    hub.api.rules.post(draft),
+    couldNotOrAway(`save ${draft.name || "the rule"}`)
+  );
 
 /** Edit: strictly an existing id — the hub 404s anything it never minted. */
-export const saveRule = async (id: string, draft: RuleDraft) => {
-  const answer = await hub.api.rules({ id }).put(draft);
-  if (answer.error) {
-    throw couldNotOrAway(`save ${draft.name || "the rule"}`)(answer);
-  }
-  return answer.data;
-};
+export const saveRule = (id: string, draft: RuleDraft) =>
+  hubData(
+    hub.api.rules({ id }).put(draft),
+    couldNotOrAway(`save ${draft.name || "the rule"}`)
+  );
 
 /** Delete: the rule stops at once, into the hub's trash for its Undo (config/undo.ts). */
-export const removeRule = async (id: string, name: string) => {
-  const answer = await hub.api.rules({ id }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`delete ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const removeRule = (id: string, name: string) =>
+  hubData(hub.api.rules({ id }).delete(), couldNotOrAway(`delete ${name}`));
 
 /** A blank rule, on the defaults that make the common case one field of typing. */
 export const blankRule = (): RuleDraft => ({

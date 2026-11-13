@@ -1,32 +1,7 @@
-/**
- * The way into previews, from the dashboard (hub preview-access.ts). Every
- * frame loads its preview's own address; the browser's one pass lets it
- * through, the frames inside it too: on host mode's names set on the domain
- * every name stands under (core `PREVIEW_PASS_COOKIE`), on an origin's own
- * port on the host it stands on, which every port of it carries. That
- * cookie is HttpOnly and may sit on a domain this page isn't under, so the
- * page can't tell whether the browser holds one: it enters before its first
- * frame of a pass loads, as the app enters before every load, and a page
- * with no pass never asks the lock for a frame. An entry is one ticket,
- * spent at `/__cawco/enter` on the frame's origin beside the frames, never
- * in one. A frame turned away later (`cawco:locked`: its pass ran out or
- * was revoked since) enters again, then loads again; a loaded page whose
- * socket stays shut enters again, then opens its socket again
- * (PreviewPane `enterAgain`). One entry stands per
- * pass (a domain, or a host by its scheme), so the frames of one pass spend
- * one ticket, and an entry that landed after a frame last stood without a
- * pass (its load, or its page's word that it was let in) stands for that
- * frame too.
- */
-
-import { hubRequest } from "@cawco/core/hub-request";
-import {
-  hostModeDomain,
-  type PreviewTicket,
-  previewEnterUrl,
-} from "@cawco/core/preview/routes";
+import { hostModeDomain, previewEnterUrl } from "@cawco/core/preview/routes";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData, hubRefusal, unanswered } from "#lib/platform/hub-read.js";
 
 /**
  * Whether `origin` is an origin's own port: the dashboard's own host (core
@@ -66,15 +41,13 @@ const entries = new Map<string, Entry>();
 
 /** A ticket from the hub, spent on `origin`: null once spent, else why not. */
 async function enter(origin: string): Promise<string | null> {
-  const answer = await hubFetch(hubRequest("POST /api/preview-ticket")).catch(
-    () => null
-  );
-  if (!answer?.ok) {
-    return answer
-      ? (await hubRefusal(answer)).message
-      : "The hub didn't give this browser a pass to its previews.";
+  const answer = await hub.api["preview-ticket"].post().catch(() => null);
+  if (!answer || answer.error) {
+    return !answer || unanswered(answer)
+      ? "The hub didn't give this browser a pass to its previews."
+      : hubRefusal(answer).message;
   }
-  const { ticket } = (await answer.json()) as PreviewTicket;
+  const { ticket } = await hubData(answer);
   // The entry's answer is the preview's origin's, opaque to this page: its
   // pass is the browser's to keep, and the frame's next load says whether
   // it stood.

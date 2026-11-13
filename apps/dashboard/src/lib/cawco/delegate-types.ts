@@ -1,6 +1,6 @@
 import type { DelegateType } from "@cawco/core/delegate-types";
 import { hub } from "#lib/platform/hub.js";
-import { couldNotOrAway } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubData } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of delegate types: fetch wrappers in the shape
@@ -42,33 +42,28 @@ export interface ProjectTypes {
  * body is the fields the route takes: the name rides the path, and `role`
  * is a project type file's alone (core `DelegateType`).
  */
-export const saveDelegateType = async (draft: DelegateType) => {
-  const answer = await hub.api["delegate-types"]({ name: draft.name }).put({
-    description: draft.description,
-    harness: draft.harness,
-    model: draft.model,
-    effort: draft.effort,
-    skills: draft.skills,
-    denyTools: draft.denyTools,
-    mayStart: draft.mayStart,
-    account: draft.account,
-    connections: draft.connections,
-    startingSet: draft.startingSet,
-  });
-  if (answer.error) {
-    throw couldNotOrAway(`save ${draft.name || "the delegate type"}`)(answer);
-  }
-  return answer.data;
-};
+export const saveDelegateType = (draft: DelegateType) =>
+  hubData(
+    hub.api["delegate-types"]({ name: draft.name }).put({
+      description: draft.description,
+      harness: draft.harness,
+      model: draft.model,
+      effort: draft.effort,
+      skills: draft.skills,
+      denyTools: draft.denyTools,
+      mayStart: draft.mayStart,
+      account: draft.account,
+      connections: draft.connections,
+    }),
+    couldNotOrAway(`save ${draft.name || "the delegate type"}`)
+  );
 
 /** Deletes a type, into the hub's trash for its Undo (config/undo.ts). */
-export const removeDelegateType = async (name: string) => {
-  const answer = await hub.api["delegate-types"]({ name }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`delete ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const removeDelegateType = (name: string) =>
+  hubData(
+    hub.api["delegate-types"]({ name }).delete(),
+    couldNotOrAway(`delete ${name}`)
+  );
 
 /** A blank draft, on the defaults that make the common case one field of typing. */
 export const blankDelegateType = (): DelegateType => ({

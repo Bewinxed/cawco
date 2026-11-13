@@ -5,10 +5,12 @@ import { checkoutOf } from "#lib/cawco/projects.js";
 import type { Machine } from "#lib/cawco/stores/board.svelte.js";
 
 import { type FindSeed, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
+import { hubThrough } from "#lib/platform/hub.js";
 import {
   failureSentence,
   type HubFailure,
   type HubRead,
+  hubRead,
   readHub,
 } from "#lib/platform/hub-read.js";
 
@@ -87,7 +89,7 @@ export async function readProjectPage(
   const [projects, machines, tasks, stages, found, foundArchived] =
     await Promise.all([
       readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
-      readHub<Machine[]>(fetch, hubRequest("GET /api/agents")),
+      hubRead(hubThrough(fetch).api.agents.get()),
       readHub<TaskList>(
         fetch,
         hubRequest("GET /api/projects/:id/tasks", { path })
