@@ -6,10 +6,21 @@ import { browser } from "$app/env";
 type Theme = "light" | "dark" | "system";
 type Scheme = "light" | "dark";
 
-/** No stored choice follows the OS: neither scheme is the default. */
+/**
+ * No stored choice follows the OS: neither scheme is the default. A stored
+ * choice is one `set` wrote, so any other value is a fault said as one.
+ */
 function getInitialTheme(): Theme {
   const kept = stored("local", "cawco-theme");
-  return kept === "light" || kept === "dark" ? kept : "system";
+  if (kept === null) {
+    return "system";
+  }
+  if (kept === "light" || kept === "dark" || kept === "system") {
+    return kept;
+  }
+  throw new Error(
+    `The stored theme (cawco-theme) is ${JSON.stringify(kept)}, not light, dark or system`
+  );
 }
 
 function resolve(themeValue: Theme): Scheme {
