@@ -2,8 +2,10 @@
  * A stage as the setup page holds it (the decision library's `Stage`, or the
  * stages the hub kept): its name, its kind, its look and what its hooks do.
  */
+
 import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
 import { STAGE_COLORS, STAGE_ICONS, STAGE_KINDS } from "@cawco/core/views";
+import type { ElementNode } from "@openuidev/lang-core";
 
 export interface Stage {
   color?: StageColor;
@@ -61,15 +63,13 @@ export const stageOf = (
         String(held[key]),
       ])
     );
+  const icon = STAGE_ICONS.find((one) => one === held.icon);
+  const color = STAGE_COLORS.find((one) => one === held.color);
   return {
     name: String(held.name ?? ""),
     kind: asKind(held.kind),
-    ...(held.icon && (STAGE_ICONS as readonly string[]).includes(held.icon)
-      ? { icon: held.icon }
-      : {}),
-    ...(held.color && (STAGE_COLORS as readonly string[]).includes(held.color)
-      ? { color: held.color }
-      : {}),
+    ...(icon ? { icon } : {}),
+    ...(color ? { color } : {}),
     ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
   };
 };
@@ -84,9 +84,12 @@ export const storedStages = (list: Stage[]) =>
     ...hooks,
   }));
 
-interface Node<T> {
-  props?: Partial<T>;
-}
+/** A node of a parsed program that is a component's element. */
+export const isElement = (value: unknown): value is ElementNode =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  value.type === "element";
 
 /** A Setup element's props, read as data. */
 export const draftedOf = (props: {
@@ -100,14 +103,11 @@ export const draftedOf = (props: {
   aim: String(props.aim ?? ""),
   shape: String(props.shape ?? ""),
   stages: (Array.isArray(props.stages) ? props.stages : []).map((node) =>
-    stageOf(
-      ((node as Node<Stage>).props ?? {}) as Partial<Stage> &
-        Record<string, unknown>
-    )
+    stageOf(isElement(node) ? node.props : {})
   ),
   delegates: (Array.isArray(props.delegates) ? props.delegates : []).map(
     (node): SetupDelegate => {
-      const held = (node as Node<SetupDelegate>).props ?? {};
+      const held: Record<string, unknown> = isElement(node) ? node.props : {};
       return {
         id: String(held.id ?? ""),
         name: String(held.name ?? held.id ?? ""),

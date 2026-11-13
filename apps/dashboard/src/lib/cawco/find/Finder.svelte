@@ -108,12 +108,16 @@
   // ---- Keys ----
   const step = (n: number) => finder.move(phone ? -n : n);
   /** The caret is in the words, not at their end: ← and → move it. */
-  const inWords = (event: KeyboardEvent) => {
-    const input = event.currentTarget as HTMLInputElement;
+  const inWords = (
+    event: KeyboardEvent & { currentTarget: HTMLInputElement }
+  ) => {
+    const input = event.currentTarget;
     return input.selectionStart !== input.value.length;
   };
 
-  function onkeydown(event: KeyboardEvent) {
+  function onkeydown(
+    event: KeyboardEvent & { currentTarget: HTMLInputElement }
+  ) {
     // The field's Escape is the finder's alone: the layer it hangs in (the
     // glass's card, which closes on an Escape from anywhere else in it)
     // never hears it, nor one an input method takes.
@@ -226,8 +230,8 @@
     });
   });
 
-  const typedText = (event: Event) => {
-    finder.text = (event.currentTarget as HTMLInputElement).value;
+  const typedText = (event: Event & { currentTarget: HTMLInputElement }) => {
+    finder.text = event.currentTarget.value;
     finder.chosen = null;
     finder.peeked = null;
     finder.unfolded.clear();
@@ -436,11 +440,14 @@
       (s) => s.lead.length + s.units.length > 0
     );
     const ordered = phone ? [...sections].reverse() : sections;
-    return ordered.flatMap((s, i) => [
-      ...(i > 0 ? [{ t: "rule", key: `rule:${s.key}` } as Item] : []),
-      ...s.lead,
-      ...(phone ? [...s.units].reverse() : s.units).flat(),
-    ]);
+    return ordered.flatMap((s, i): Item[] => {
+      const rule: Item[] = i > 0 ? [{ t: "rule", key: `rule:${s.key}` }] : [];
+      return [
+        ...rule,
+        ...s.lead,
+        ...(phone ? [...s.units].reverse() : s.units).flat(),
+      ];
+    });
   });
 
   /** What the footer says ↵ does on the active row. */
@@ -679,7 +686,7 @@
       {/each}
     </div>
   {:else if item.t === "fold"}
-    {@const first = item.entry.results[0] as FindResult}
+    {@const first = item.entry.results[0]}
     {@const Glyph = kindGlyph(first)}
     {@const open = finder.unfolded.has(item.key)}
     {@const count = item.entry.results.length}

@@ -47,15 +47,16 @@ export const pendingOf = (
 /** The flow under `key`, made (and caught up from the hub) when there is none. */
 function flow<T extends SigninFlow | DeviceFlow>(
   key: string,
-  make: () => T,
+  Kind: new (account: () => Promise<string>, machineId: string) => T,
+  account: () => Promise<string>,
   accountId: string | null,
   machineId: string
 ): T {
-  const held = flows.get(key) as T | undefined;
-  if (held) {
+  const held = flows.get(key);
+  if (held instanceof Kind) {
     return held;
   }
-  const made = make();
+  const made = new Kind(account, machineId);
   made.resume(pendingOf(accountId, machineId));
   flows.set(key, made);
   return made;
@@ -67,8 +68,7 @@ export const pasteFlow = (
   account: () => Promise<string>,
   machineId: string,
   accountId: string | null
-): SigninFlow =>
-  flow(key, () => new SigninFlow(account, machineId), accountId, machineId);
+): SigninFlow => flow(key, SigninFlow, account, accountId, machineId);
 
 /** A provider's device-code flow. */
 export const deviceFlow = (
@@ -76,8 +76,7 @@ export const deviceFlow = (
   account: () => Promise<string>,
   machineId: string,
   accountId: string | null
-): DeviceFlow =>
-  flow(key, () => new DeviceFlow(account, machineId), accountId, machineId);
+): DeviceFlow => flow(key, DeviceFlow, account, accountId, machineId);
 
 /** The flow under `key`, if one is under way or has an outcome to show. */
 export const heldFlow = (key: string): SigninFlow | DeviceFlow | undefined =>
