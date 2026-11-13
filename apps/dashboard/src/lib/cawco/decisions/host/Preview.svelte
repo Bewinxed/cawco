@@ -98,6 +98,7 @@
     previewsNeedWords,
     previewUnreachedWords,
   } from "@cawco/core/words/preview-reach";
+  import { z } from "zod";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -164,16 +165,17 @@
         return { parts: [said], w: said.w };
       }
       // The stage drew each story at its own width: a shape of another width than the one named is none of this picture's.
-      const drawn = stories.map((one) => {
+      const parts: { h: number; w: number }[] = [];
+      for (const one of stories) {
         const shape = shapes?.drawn[one];
-        return shape && (namedWidth === null || shape.w === namedWidth)
-          ? shape
-          : undefined;
-      });
-      if (stories.length === 0 || !drawn.every((one) => one !== undefined)) {
+        if (!shape || (namedWidth !== null && shape.w !== namedWidth)) {
+          return null;
+        }
+        parts.push(shape);
+      }
+      if (parts.length === 0) {
         return null;
       }
-      const parts = drawn as { h: number; w: number }[];
       return { parts, w: Math.max(...parts.map((one) => one.w)) };
     }
   );
@@ -296,15 +298,17 @@
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
     const heard = (event: MessageEvent) => {
-      const said = event.data as {
-        down?: unknown;
-        height?: unknown;
-        rest?: unknown;
-        type?: unknown;
-        urls?: unknown;
-        why?: unknown;
-        width?: unknown;
-      } | null;
+      const said = z
+        .looseObject({
+          down: z.unknown(),
+          height: z.unknown(),
+          rest: z.unknown(),
+          type: z.unknown(),
+          urls: z.unknown(),
+          why: z.unknown(),
+          width: z.unknown(),
+        })
+        .safeParse(event.data).data;
       if (event.source !== frame?.contentWindow) {
         return;
       }
@@ -460,7 +464,7 @@
    * Preview names (core `CANVAS_EMBED_FAILED`); null for any other message.
    */
   const failureIn = (
-    said: { down?: unknown; type?: unknown; why?: unknown } | null
+    said: { down?: unknown; type?: unknown; why?: unknown } | undefined
   ): string | null => {
     const why = typeof said?.why === "string" ? said.why : null;
     if (said?.type === "cawco:down") {

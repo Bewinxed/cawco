@@ -104,7 +104,6 @@
     type SessionDraft,
     startContinuation,
   } from "../continue.svelte";
-  import type { DraftContent } from "../draft-store";
   import { EFFORT_OPTIONS } from "../effort-levels";
   import { inspectMachine } from "../fleet";
   import { answeredOr, didntAnswer } from "../hub/control";
@@ -240,9 +239,8 @@
     if (!open) {
       return null;
     }
-    return parkedStart(spawning.shown)
-      ? parkKey(spawning.shown as string)
-      : keptKey();
+    const { shown } = spawning;
+    return shown !== null && parkedStart(shown) ? parkKey(shown) : keptKey();
   });
   /** Where the tab keeps the form's picks while it is open on no start. */
   const FORM_KEY = "cawco:new-session-form";
@@ -1504,23 +1502,24 @@
     }
     let stale = false;
     const timer = setTimeout(() => {
-      Promise.all(ids.map((id) => inspectLocation(id, path)))
+      Promise.all(
+        ids.map(async (id) => ({ id, read: await inspectLocation(id, path) }))
+      )
         .then((reads) => {
           if (stale) {
             return;
           }
-          const quiet = ids
-            .map((id, index) => quietOn(id, reads[index] as Bounded<boolean>))
+          const quiet = reads
+            .map(({ id, read }) => quietOn(id, read))
             .find(Boolean);
           if (quiet) {
             // Not verified: a press waits on nothing, and says this.
             unanswered = quiet;
             return;
           }
-          missingMachines = ids.filter((_, index) => {
-            const read = reads[index] as Bounded<boolean>;
-            return read.kind === "answered" && read.value;
-          });
+          missingMachines = reads
+            .filter(({ read }) => read.kind === "answered" && read.value)
+            .map(({ id }) => id);
           verifiedLocation = key;
         })
         .catch(() => {
@@ -2011,7 +2010,7 @@
     beginStart({
       id,
       draft,
-      content: $state.snapshot(firstMessage.keep) as DraftContent,
+      content: $state.snapshot(firstMessage.keep),
       ...(continueFrom ? { continueFrom } : {}),
       ...(prefill ? { prefill: placeOf(prefill) } : {}),
       replacing: spawning.shown,

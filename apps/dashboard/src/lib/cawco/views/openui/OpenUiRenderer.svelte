@@ -21,7 +21,6 @@
     ElementNode,
     EvaluationContext,
     Library,
-    McpClientLike,
     OpenUIError,
     ParseResult,
     QueryManager,
@@ -42,10 +41,11 @@
   export type OpenUIComponent = Component<OpenUIRenderProps<any>>;
   type OpenUILibrary = Library<OpenUIComponent>;
 
-  /** Query()'s tools: a plain object of async functions by tool name, or an MCP client. */
-  export type OpenUIToolProvider =
-    | Record<string, (args: Record<string, unknown>) => Promise<unknown>>
-    | McpClientLike;
+  /** Query()'s tools: a plain object of async functions by tool name. */
+  export type OpenUIToolProvider = Record<
+    string,
+    (args: Record<string, unknown>) => Promise<unknown>
+  >;
 
   /** A form field's stored `{ value, componentType }`, read as its value. */
   const unwrap = (value: unknown): unknown =>
@@ -53,13 +53,14 @@
     typeof value === "object" &&
     !Array.isArray(value) &&
     "value" in value
-      ? (value as { value: unknown }).value
+      ? value.value
       : value;
 
   const isElement = (value: unknown): value is ElementNode =>
     typeof value === "object" &&
     value !== null &&
-    (value as { type?: unknown }).type === "element";
+    "type" in value &&
+    value.type === "element";
 
   /** Reads its arguments, and nothing more: what a derived or an effect also re-runs on. */
   const dependsOn = (..._values: unknown[]): void => undefined;
@@ -79,7 +80,6 @@
     createStreamingParser,
     evaluate,
     evaluateRoot,
-    extractToolResult,
     ToolNotFoundError,
   } from "@openuidev/lang-core";
   import { untrack } from "svelte";
@@ -140,23 +140,11 @@
       if (current === null || current === undefined) {
         throw new Error("[openui] toolProvider is null");
       }
-      if (typeof (current as McpClientLike).callTool === "function") {
-        return extractToolResult(
-          await (current as McpClientLike).callTool({
-            name: toolName,
-            arguments: args,
-          })
-        );
-      }
-      const map = current as Record<
-        string,
-        (a: Record<string, unknown>) => Promise<unknown>
-      >;
-      const fn = map[toolName];
+      const fn = current[toolName];
       if (!fn) {
-        throw new ToolNotFoundError(toolName, Object.keys(map));
+        throw new ToolNotFoundError(toolName, Object.keys(current));
       }
-      return fn(args);
+      return await fn(args);
     },
   };
   const hasProvider = $derived(
@@ -298,22 +286,20 @@
     untrack(() => {
       manager.evaluateQueries(
         statements.map((statement) => {
-          const deps: Record<string, unknown> = {};
-          for (const ref of statement.deps ?? []) {
-            deps[ref] = snapshot[ref];
-          }
+          const deps = Object.fromEntries(
+            (statement.deps ?? []).map((ref) => [ref, snapshot[ref]])
+          );
+          const tool = statement.toolAST && evaluate(statement.toolAST, ctx);
+          const refresh =
+            statement.refreshAST && evaluate(statement.refreshAST, ctx);
           return {
             statementId: statement.statementId,
-            toolName: statement.toolAST
-              ? (evaluate(statement.toolAST, ctx) as string)
-              : "",
+            toolName: typeof tool === "string" ? tool : "",
             args: statement.argsAST ? evaluate(statement.argsAST, ctx) : null,
             defaults: statement.defaultsAST
               ? evaluate(statement.defaultsAST, ctx)
               : null,
-            refreshInterval: statement.refreshAST
-              ? (evaluate(statement.refreshAST, ctx) as number)
-              : undefined,
+            refreshInterval: typeof refresh === "number" ? refresh : undefined,
             deps: Object.keys(deps).length > 0 ? deps : undefined,
             complete: statement.complete,
           };
@@ -330,12 +316,13 @@
     const manager = queries;
     untrack(() =>
       manager.registerMutations(
-        statements.map((statement) => ({
-          statementId: statement.statementId,
-          toolName: statement.toolAST
-            ? (evaluate(statement.toolAST, ctx) as string)
-            : "",
-        }))
+        statements.map((statement) => {
+          const tool = statement.toolAST && evaluate(statement.toolAST, ctx);
+          return {
+            statementId: statement.statementId,
+            toolName: typeof tool === "string" ? tool : "",
+          };
+        })
       )
     );
   });
