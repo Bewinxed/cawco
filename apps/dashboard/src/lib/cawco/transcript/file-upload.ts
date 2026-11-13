@@ -5,12 +5,13 @@
  * because only it says how far an upload has gone.
  */
 import type { FileAttachment } from "@cawco/core/attachments";
-import { hubRequest } from "@cawco/core/hub-request";
 import { z } from "zod";
+import { hub, hubPath } from "#lib/platform/hub.js";
 import {
   HUB_UNREACHABLE,
   HUB_UNREACHABLE_HEADER,
   HubUnreachable,
+  refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 
@@ -22,9 +23,8 @@ export function uploadFile(
   return new Promise((resolve, reject) => {
     // Its bytes as they are, which no JSON body holds: the route reads the
     // request whole (hub server.ts `POST /api/files`).
-    const route = hubRequest("POST /api/files");
     const request = new XMLHttpRequest();
-    request.open(route.method, route.path);
+    request.open("POST", hubPath(hub.api.files));
     request.setRequestHeader(
       "Content-Type",
       blob.type || "application/octet-stream"
@@ -49,7 +49,9 @@ export function uploadFile(
               request.getResponseHeader(HUB_UNREACHABLE_HEADER) ?? "",
           },
         });
-        refusedOrUnreached(answer).then(reject, reject);
+        refusedOf(answer)
+          .then((refused) => reject(refusedOrUnreached(refused)))
+          .catch(reject);
         return;
       }
       const { ref, size, mediaType } = z

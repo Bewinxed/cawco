@@ -13,8 +13,8 @@
 
 import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { hubRequest } from "@cawco/core/hub-request";
-import { hubFetch } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import { devDebug } from "../dev-debug";
 import { accountsStore, followAccounts } from "../stores/accounts.svelte";
 import { boardStore } from "../stores/board.svelte";
@@ -37,15 +37,13 @@ const state = $state({
 
 async function readForecast(): Promise<void> {
   try {
-    const response = await hubFetch(
-      hubRequest("GET /api/accounts/forecast", {
-        query: { provider: "anthropic" },
-      })
-    );
-    if (!response.ok) {
+    const answer = await hub.api.accounts.forecast.get({
+      query: { provider: "anthropic" },
+    });
+    if (answer.error) {
       return;
     }
-    state.forecast = (await response.json()) as ProviderForecast;
+    state.forecast = await hubData(answer);
     state.read = true;
     state.cause = "data";
     state.now = Date.now();

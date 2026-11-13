@@ -9,52 +9,25 @@
 
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { RelayView } from "@cawco/core/relays";
-import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
+import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
+import type { Treaty } from "@elysia/eden";
 import { type HubClient, hub } from "#lib/platform/hub.js";
-import { type Refused, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import { hubData, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
 
 /** A routine, as the hub answers it (times in ms), with its newest runs. */
-export interface Routine {
-  createdBy: string;
-  cron: string;
-  disabledReason: string | null;
-  enabled: boolean;
-  /** When an agent's routine turns itself off unless kept; null for the owner's. */
-  expiresAt: number | null;
-  id: string;
-  keep: boolean;
-  lastSlot: number | null;
-  name: string;
-  /** Its runs ahead, as the hub's scheduler will start them (hub `nextRunsOf`): the next week's, at most 288, epoch ms. */
-  nextRuns: number[];
-  nextSlot: number;
-  projectId: string | null;
-  prompt: string;
-  runs: RoutineRun[];
-  target: RoutineTarget;
-  timeZone: string;
-}
+export type Routine = Treaty.Data<typeof hub.api.routines.get>[number];
 
-/** A route that sends a service's events to a routine (ingress.ts `EventRouteView`). */
-interface EventRoute {
-  author: string | null;
-  branch: string | null;
-  enabled: boolean;
-  id: string;
-  kinds: string[];
-  label: string | null;
-  /** When an event it fits last went to its routine; null when none has. */
-  lastDeliveryAt: number | null;
-  regex: string | null;
-  routineId: string;
-  /** The service its source is, as a provider mark names it (lower case). */
-  service: string;
-  source: string;
-}
+/** What the page reads of `GET /api/projects/:id/ingress`. */
+type IngressRead = Treaty.Data<
+  ReturnType<typeof hub.api.projects>["ingress"]["get"]
+>;
+
+/** A route that sends a service's events to a routine (ingress.ts `EventRouteView`), with the service its source is, as a provider mark names it (lower case). */
+type EventRoute = IngressRead["routes"][number] & { service: string };
 
 /** A source read on a schedule: a connector poll, or the repository's GitHub poller. */
 export interface Poll {
@@ -87,23 +60,6 @@ export interface RoutinesPage {
 }
 
 /**
- * A read through Eden's client: its answer, or its refusal thrown as
- * {@link refusedOrUnreached} reads it.
- */
-async function answered<T>(
-  answer: Promise<
-    | { data: T; error: null }
-    | { data: null; error: Refused["error"]; response: Response }
-  >
-): Promise<T> {
-  const read = await answer;
-  if (read.error) {
-    throw refusedOrUnreached(read);
-  }
-  return read.data;
-}
-
-/**
  * The project's routines page, each part read at once, through `client`:
  * the live hub, or a states file's stand-in (hub-seam.ts).
  */
@@ -114,12 +70,18 @@ export async function readRoutinesPage(
   const project = client.api.projects({ id: projectId });
   const [routines, ingress, relays, actions, connections, trim] =
     await Promise.all([
-      answered(client.api.routines.get({ query: { projectId } })),
-      answered(project.ingress.get()),
-      answered(project.relays.get()),
-      answered(client.api.actions.get({ query: { projectId } })),
-      answered(client.api.connections.get()),
-      answered(project["trim-routine"].get()),
+      hubData(
+        client.api.routines.get({ query: { projectId } }),
+        refusedOrUnreached
+      ),
+      hubData(project.ingress.get(), refusedOrUnreached),
+      hubData(project.relays.get(), refusedOrUnreached),
+      hubData(
+        client.api.actions.get({ query: { projectId } }),
+        refusedOrUnreached
+      ),
+      hubData(client.api.connections.get(), refusedOrUnreached),
+      hubData(project["trim-routine"].get(), refusedOrUnreached),
     ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(
@@ -207,38 +169,31 @@ export interface RoutineFormHub {
  * project's delegate type catalog.
  */
 export const routineFormHub: RoutineFormHub = {
-  create: async (projectId, draft) => {
-    const answer = await hub.api.routines.post({
-      projectId,
-      target: draft.target,
-      name: draft.name.trim(),
-      prompt: draft.prompt.trim(),
-      cron: draft.cron.trim(),
-      timeZone: draft.timeZone,
-      delegateType: draft.delegateType,
-    });
-    if (answer.error) {
-      throw refusedOrUnreached(answer);
-    }
-    return answer.data;
-  },
-  preview: async (cron, timeZone) => {
-    const answer = await hub.api.routines.schedule.get({
-      query: { cron: cron.trim(), timeZone },
-    });
-    if (answer.error) {
-      throw refusedOrUnreached(answer);
-    }
-    return answer.data;
-  },
+  create: (projectId, draft) =>
+    hubData(
+      hub.api.routines.post({
+        projectId,
+        target: draft.target,
+        name: draft.name.trim(),
+        prompt: draft.prompt.trim(),
+        cron: draft.cron.trim(),
+        timeZone: draft.timeZone,
+        delegateType: draft.delegateType,
+      }),
+      refusedOrUnreached
+    ),
+  preview: (cron, timeZone) =>
+    hubData(
+      hub.api.routines.schedule.get({
+        query: { cron: cron.trim(), timeZone },
+      }),
+      refusedOrUnreached
+    ),
   types: async (projectId) => {
-    const answer = await hub.api
-      .projects({ id: projectId })
-      ["delegate-types"].get();
-    if (answer.error) {
-      throw refusedOrUnreached(answer);
-    }
-    const catalog = answer.data;
+    const catalog = await hubData(
+      hub.api.projects({ id: projectId })["delegate-types"].get(),
+      refusedOrUnreached
+    );
     return catalog.types.map(({ name, description }) => ({
       name,
       description,
@@ -247,66 +202,40 @@ export const routineFormHub: RoutineFormHub = {
 };
 
 /** Pauses or resumes a routine, or keeps one past its days: the routine after. */
-export const updateRoutine = async (
+export const updateRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
-) => {
-  const answer = await hub.api.routines({ id: routineId }).patch(change);
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+) =>
+  hubData(
+    hub.api.routines({ id: routineId }).patch(change),
+    refusedOrUnreached
+  );
 
 /** Runs a routine now, beside its schedule: the run the hub started. */
-export const runRoutineNow = async (routineId: string) => {
-  const answer = await hub.api.routines({ id: routineId }).run.post();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const runRoutineNow = (routineId: string) =>
+  hubData(hub.api.routines({ id: routineId }).run.post(), refusedOrUnreached);
 
 /** Deletes a routine; its past runs stay in the project's history. */
-export const deleteRoutine = async (routineId: string) => {
-  const answer = await hub.api.routines({ id: routineId }).delete();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const deleteRoutine = (routineId: string) =>
+  hubData(hub.api.routines({ id: routineId }).delete(), refusedOrUnreached);
 
 /**
  * The person's answer to Caw's suggestion of the unused skills and servers
  * routine: `on` makes it, answered; `dismissed` waves the suggestion away.
  */
-export const answerTrimOffer = async (
+export const answerTrimOffer = (
   projectId: string,
   answer: "on" | "dismissed"
-) => {
-  const sent = await hub.api
-    .projects({ id: projectId })
-    ["trim-routine"].post({ answer });
-  if (sent.error) {
-    throw refusedOrUnreached(sent);
-  }
-  return sent.data;
-};
+) =>
+  hubData(
+    hub.api.projects({ id: projectId })["trim-routine"].post({ answer }),
+    refusedOrUnreached
+  );
 
 /** The fleet switch for the routine (Configure › Skills): whether it is on. */
-export const readFleetTrim = async () => {
-  const answer = await hub.api["trim-routine"].fleet.get();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const readFleetTrim = () =>
+  hubData(hub.api["trim-routine"].fleet.get(), refusedOrUnreached);
 
 /** Flips the fleet switch: on turns the routine on in every project. */
-export const setFleetTrim = async (on: boolean) => {
-  const answer = await hub.api["trim-routine"].fleet.put({ on });
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const setFleetTrim = (on: boolean) =>
+  hubData(hub.api["trim-routine"].fleet.put({ on }), refusedOrUnreached);

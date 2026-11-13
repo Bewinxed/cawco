@@ -15,7 +15,7 @@ import type {
 } from "@cawco/core/usage/types";
 import { windowLabel, windowSpan } from "@cawco/core/usage/windows";
 import { hub } from "#lib/platform/hub.js";
-import { hubRefusal } from "#lib/platform/hub-read.js";
+import { hubData } from "#lib/platform/hub-read.js";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -66,13 +66,11 @@ export function summaryReader(): (
     if (known) {
       return known;
     }
-    const answer = await hub.api.usage.summary.get({
-      query: { harness, groupBy, since },
-    });
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    const summary = answer.data;
+    const summary = await hubData(
+      hub.api.usage.summary.get({
+        query: { harness, groupBy, since },
+      })
+    );
     cache.set(key, summary);
     return summary;
   };
