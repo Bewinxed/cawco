@@ -37,8 +37,9 @@
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
-  import { cawco } from "./client.svelte";
+
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
+  import { usageStore } from "./stores/usage.svelte";
   import { claudeGap } from "./usage";
   import Figure from "./usage/Figure.svelte";
   import { startForecast, usage } from "./usage/forecast.svelte";
@@ -361,7 +362,7 @@
   };
 
   /** Why there is nothing to draw: a normal state, never a fake 0%. */
-  const limitsRead = $derived(cawco.usageLimitsRead && usage.read);
+  const limitsRead = $derived(usageStore.usageLimitsRead && usage.read);
   const empty = $derived(
     limitsRead ? "Sign in to see limits" : "Reading limits…"
   );
@@ -372,8 +373,8 @@
    * it, in the Usage page's words (usage.ts `claudeGap`).
    */
   const gap = $derived(
-    !shown && cawco.usageLimitsRead && usage.read
-      ? claudeGap(cawco.claudeLimits)
+    !shown && usageStore.usageLimitsRead && usage.read
+      ? claudeGap(usageStore.claudeLimits)
       : null
   );
 
@@ -390,7 +391,7 @@
     has: boolean,
     readings: { error?: string | null }[]
   ): string | null {
-    if (!cawco.usageLimitsRead || has) {
+    if (!usageStore.usageLimitsRead || has) {
       return null;
     }
     const error =
@@ -418,7 +419,7 @@
         text: noteOf(
           "Claude",
           Boolean(claude),
-          Object.values(cawco.claudeLimits)
+          Object.values(usageStore.claudeLimits)
         ),
       },
       {
@@ -427,7 +428,7 @@
         text: noteOf(
           "opencode Go",
           Boolean(openCode),
-          Object.values(cawco.openCodeGoLimits)
+          Object.values(usageStore.openCodeGoLimits)
         ),
       },
     ].filter((note) => note.text !== null && !(gap && note.id === "Claude"))

@@ -12,7 +12,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
-  import { cawco, isFailed } from "./client.svelte";
+
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import {
@@ -22,6 +22,10 @@
     sessionTitle,
   } from "./session-names.svelte";
   import { cawOf } from "./session-status";
+  import { asksStore } from "./stores/asks.svelte";
+  import { boardStore, isFailed } from "./stores/board.svelte";
+  import { sessionsStore } from "./stores/sessions.svelte";
+  import { workItemsStore } from "./stores/work-items.svelte";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
@@ -41,7 +45,7 @@
 
   type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
   const toneOf = (of: string): Tone => {
-    const row = cawco.instanceIndex.byId.get(of);
+    const row = boardStore.instanceIndex.byId.get(of);
     if (row && isFailed(row)) {
       return "failed";
     }
@@ -49,10 +53,12 @@
     if (row?.status === "stopping") {
       return "stopping";
     }
-    if ((cawco.session(of)?.pending ?? []).some((each) => !each.routedTo)) {
+    if (
+      (sessionsStore.session(of)?.pending ?? []).some((each) => !each.routedTo)
+    ) {
       return "needs";
     }
-    if (cawco.activityOf(of) === "working") {
+    if (asksStore.activityOf(of) === "working") {
       return "live";
     }
     return row?.status === "stopped" ? "done" : "idle";
@@ -69,7 +75,7 @@
   /** The row the tail ends on: the question waiting, or the failure. */
   const noteOf = (of: string, shownTone: Tone): TailNote | null => {
     if (shownTone === "needs") {
-      const asking = (cawco.session(of)?.pending ?? []).find(
+      const asking = (sessionsStore.session(of)?.pending ?? []).find(
         (each) => !each.routedTo
       );
       if (asking) {
@@ -83,11 +89,11 @@
     if (shownTone === "failed") {
       // A delegate whose work item failed fails for the item's reason; its
       // session's own error is only the process's.
-      const item = cawco.workItemFor(of);
+      const item = workItemsStore.workItemFor(of);
       const why =
         item?.state === "failed"
           ? item.firstLines.error
-          : cawco.instanceIndex.byId.get(of)?.lastError;
+          : boardStore.instanceIndex.byId.get(of)?.lastError;
       return {
         key: "fail",
         kind: "fail",
@@ -97,7 +103,7 @@
     return null;
   };
 
-  const row = $derived(cawco.instanceIndex.byId.get(id));
+  const row = $derived(boardStore.instanceIndex.byId.get(id));
   /** The hub's answer, for a session this browser holds no row of (session-names.svelte.ts). */
   const answer = $derived(row ? undefined : sessionAnswer(id));
   const tone = $derived(answer ? NAMED_TONE[answer.state] : toneOf(id));

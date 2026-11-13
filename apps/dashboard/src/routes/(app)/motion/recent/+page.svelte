@@ -76,13 +76,16 @@
 
   /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
   interface Bench {
+    accountsState: { accounts: unknown };
     adoptInstances: (rows: InstanceRow[]) => void;
     areas: {
       areas: { id: string; name: string; position: number }[];
       read: boolean;
     };
+    boardState: { machines: unknown[] };
     frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
     leaveHub: () => void;
+    projectsState: { projects: unknown[]; projectsRead: boolean };
     standHub: (
       answer: (
         instanceId: string,
@@ -94,12 +97,6 @@
       control: (machineId: string, method: string, args: unknown[]) => unknown
     ) => void;
     standStored: (stored: StoredRecent) => void;
-    state: {
-      accounts: unknown;
-      machines: unknown[];
-      projects: unknown[];
-      projectsRead: boolean;
-    };
   }
   const debug = (globalThis as unknown as { __cawcoDebug: Bench }).__cawcoDebug;
 
@@ -536,7 +533,7 @@
     const held = real ? [] : [...olderRows, olderCheck];
     const wrapped = new Set([...rows, ...held].map((row) => row.sessionId));
     const listed = new Set(rows.map((row) => row.id));
-    const projects = debug.state.projects as MemberProject[];
+    const projects = debug.projectsState.projects as MemberProject[];
     debug.standStored({
       rows: real ? [] : olderRows.filter((row) => !listed.has(row.id)),
       transcripts: Object.entries(listing).flatMap(([machineId, infos]) =>
@@ -688,18 +685,18 @@
   ];
 
   function standReal(from: Real): void {
-    debug.state.machines = from.agents;
+    debug.boardState.machines = from.agents;
     debug.areas.areas = from.areas.areas;
     debug.areas.read = true;
-    debug.state.projects = from.projects;
-    debug.state.projectsRead = true;
+    debug.projectsState.projects = from.projects;
+    debug.projectsState.projectsRead = true;
     rows = from.instances;
     adopt();
     standStored();
   }
 
   function standSketch(): void {
-    debug.state.machines = [
+    debug.boardState.machines = [
       { machineId: OBELISK, hostname: OBELISK, os: "linux-x64" },
       { machineId: MINI, hostname: MINI, os: "darwin-arm64" },
     ].map((machine) => ({
@@ -734,7 +731,7 @@
     if (stays) {
       // The accounts a session's details offer: two of Claude's, signed in
       // on both machines.
-      debug.state.accounts = {
+      debug.accountsState.accounts = {
         accounts: ACCOUNTS.map((account, order) => ({
           ...account,
           atPlanLimit: "move",
@@ -766,32 +763,34 @@
         ),
       };
     }
-    debug.state.projects = PROJECTS.map(([id, name, area, machineId]) => ({
-      id,
-      name,
-      areaId: area,
-      cawHarness: "claude",
-      cawModel: null,
-      conversationInstanceId: null,
-      createdAt: new Date(now - 30 * DAY_MS).toISOString(),
-      eventsOn: true,
-      lands: "main",
-      lfsConnection: null,
-      lfsUrl: null,
-      links: [],
-      places: [
-        {
-          id: `${id}-place`,
-          isPrimary: true,
-          kind: "checkout",
-          machineId,
-          path: `/srv/${name}`,
-        },
-      ],
-      primaryPlaceId: `${id}-place`,
-      review: false,
-    }));
-    debug.state.projectsRead = true;
+    debug.projectsState.projects = PROJECTS.map(
+      ([id, name, area, machineId]) => ({
+        id,
+        name,
+        areaId: area,
+        cawHarness: "claude",
+        cawModel: null,
+        conversationInstanceId: null,
+        createdAt: new Date(now - 30 * DAY_MS).toISOString(),
+        eventsOn: true,
+        lands: "main",
+        lfsConnection: null,
+        lfsUrl: null,
+        links: [],
+        places: [
+          {
+            id: `${id}-place`,
+            isPrimary: true,
+            kind: "checkout",
+            machineId,
+            path: `/srv/${name}`,
+          },
+        ],
+        primaryPlaceId: `${id}-place`,
+        review: false,
+      })
+    );
+    debug.projectsState.projectsRead = true;
     adopt();
     listing = storedListing(
       now,

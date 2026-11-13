@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import { traitsOf } from "@cawco/core/harness/traits";
+  import { storedStore } from "../stores/stored.svelte";
 
   const HOME = /^\/(home|Users)\/[^/]+/u;
 </script>
@@ -7,12 +8,13 @@
 <script lang="ts">
   import { accountProvidersOf } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
-  import type {
-    EffortLevel,
-    HarnessKind,
-    PermissionMode,
+  import {
+    EFFORT_NONE,
+    type EffortLevel,
+    type HarnessKind,
+    isEffortLevel,
+    type PermissionMode,
   } from "@cawco/core/harness/kinds";
-  import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
   import { spawnWords } from "@cawco/core/words/spawn";
@@ -44,20 +46,10 @@
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
-  import {
-    answeredOr,
-    cawco,
-    holdDetails,
-    latestCommandFor,
-    machineConnected,
-    refreshContext,
-    relaunchSession,
-    settingFault,
-    showContext,
-    submitCommand,
-  } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
+  import { answeredOr } from "../hub/control";
+  import { connectionStore } from "../hub/socket.svelte";
   import { describingRow, modelLabel } from "../models.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
   import RowFault from "../RowFault.svelte";
@@ -69,6 +61,18 @@
     effortNotExposed,
     NO_EFFORT_MODEL,
   } from "../spawn/ToolChips.svelte";
+  import { accountsStore } from "../stores/accounts.svelte";
+  import { boardStore, machineConnected } from "../stores/board.svelte";
+  import { settingFault, submitCommand } from "../stores/commands.svelte";
+  import { latestCommandFor } from "../stores/ledger.svelte";
+  import {
+    holdDetails,
+    refreshContext,
+    showContext,
+  } from "../stores/session-detail.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
+  import { relaunchSession } from "../stores/turns.svelte";
+  import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
   import ProviderLimit from "../usage/ProviderLimit.svelte";
@@ -120,14 +124,14 @@
     };
   }
   const uid = $props.id();
-  const session = $derived(cawco.session(sessionId));
-  const row = $derived(cawco.instanceIndex.byId.get(sessionId));
+  const session = $derived(sessionsStore.session(sessionId));
+  const row = $derived(boardStore.instanceIndex.byId.get(sessionId));
   const context = $derived(contextOf(sessionId));
   const machineId = $derived(
     session?.machineId || row?.machineId || context?.machine
   );
   const machine = $derived(
-    cawco.machines.find((item) => item.machineId === machineId)
+    boardStore.machines.find((item) => item.machineId === machineId)
   );
   const harness = $derived(
     (kept?.harness || session?.harness || row?.harness || context?.harness) as
@@ -137,7 +141,7 @@
     machine?.harnesses?.find((item) => item.harness === harness)
   );
   const cwd = $derived(session?.cwd || row?.cwd || context?.cwd || "");
-  const stats = $derived(cawco.statsOf(sessionId));
+  const stats = $derived(sessionsStore.statsOf(sessionId));
   /**
    * A transcript started outside CawCo that no session wraps: what its
    * first message resumes it with (client `ResumePlan`), read on its
@@ -147,7 +151,7 @@
   const resume = $derived(
     kept
       ? null
-      : cawco.resumePlan(
+      : storedStore.resumePlan(
           sessionId,
           machineId && harness ? { machineId, cwd, harness } : null
         )
@@ -175,7 +179,7 @@
   const providerLimit = $derived.by(() => {
     if (traitsOf(harness).providerLimit === "account") {
       const accountId = row?.accountId;
-      const claude = accountId ? cawco.claudeLimits[accountId] : undefined;
+      const claude = accountId ? usageStore.claudeLimits[accountId] : undefined;
       const limit = firstToStop(limitRows("Claude", claude, limitNow));
       return limit && claude ? { ...limit, seenAt: claude.fetchedAt } : null;
     }
@@ -183,7 +187,7 @@
       traitsOf(harness).providerLimit === "go" &&
       model?.startsWith("opencode-go/")
     ) {
-      const go = speakingReading(cawco.openCodeGoLimits)?.reading;
+      const go = speakingReading(usageStore.openCodeGoLimits)?.reading;
       const limit = firstToStop(limitRows("opencode", go, limitNow));
       return limit && go ? { ...limit, seenAt: go.fetchedAt } : null;
     }
@@ -254,11 +258,11 @@
    * hub is reachable ({@link accountOpen}).
    */
   const machineAway = $derived(!(machineId && machineConnected(machineId)));
-  const editable = $derived(!machineAway && cawco.liveId(sessionId));
+  const editable = $derived(!machineAway && boardStore.liveId(sessionId));
   /** The settings take picks: a live session's changes, or a stored transcript's resume, once its machine has said what it ran with. */
   const settable = $derived(editable || !!resume?.run);
   /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
-  const accountOpen = $derived(cawco.status === "connected");
+  const accountOpen = $derived(connectionStore.status === "connected");
   /** Why the live controls are locked, and until when. */
   const lockedWords = $derived.by(() => {
     const what = kept
@@ -330,7 +334,7 @@
   });
   onDestroy(() => stopWaiting());
   // The card draws this session's reading while it is mounted: its turns'
-  // ends read it again only while one does (client.svelte.ts `showContext`).
+  // ends read it again only while one does (stores/session-detail.svelte.ts `showContext`).
   $effect(() => showContext(sessionId));
   /**
    * A copy the browser refused (the link, the working directory): said
@@ -350,7 +354,7 @@
     }
   }
   // While this card stands, its settings' failures are said on its lines,
-  // under the control that asked, and nowhere else (client.svelte.ts).
+  // under the control that asked, and nowhere else (stores/commands.svelte.ts).
   $effect(() => holdDetails(sessionId));
   const reading = $derived(
     (askPending || !!session?.contextPending) && stats.totalTokens === null
@@ -392,7 +396,9 @@
    * feedback line says while the move is in flight.
    */
   const accountName = (id: string | null | undefined) => {
-    const account = cawco.accounts?.accounts.find((one) => one.id === id);
+    const account = accountsStore.accounts?.accounts.find(
+      (one) => one.id === id
+    );
     return account ? nameOf(account) : "another account";
   };
   type Slot = "model" | "permission" | "effort" | "account";
@@ -498,7 +504,7 @@
     if (slot === "model" && kept) {
       return kept.refused;
     }
-    // Kept for the session (client.svelte.ts `settingFault`), so a reload
+    // Kept for the session (stores/commands.svelte.ts `settingFault`), so a reload
     // says it again here.
     return settingFault(sessionId, kinds[slot])?.words ?? null;
   }
@@ -604,7 +610,7 @@
 
   function changeModel(next: string) {
     if (resume) {
-      cawco.pickResume(sessionId, { model: next });
+      storedStore.pickResume(sessionId, { model: next });
       return;
     }
     if (!(editable && machineId) || pending("model") || next === model) {
@@ -614,7 +620,7 @@
   }
   function changeEffort(next: EffortLevel) {
     if (resume) {
-      cawco.pickResume(sessionId, { effort: next });
+      storedStore.pickResume(sessionId, { effort: next });
       return;
     }
     if (
@@ -628,7 +634,7 @@
   }
   async function changePermission(next: PermissionMode) {
     if (resume) {
-      cawco.pickResume(sessionId, { permissionMode: next });
+      storedStore.pickResume(sessionId, { permissionMode: next });
       return;
     }
     if (
@@ -991,7 +997,8 @@
                 label: transcriptWords.machineSignIn,
                 provider: accountProvidersOf(harness, resume.model)[0] ?? "",
               }}
-              onpick={(account) => cawco.pickResume(sessionId, { account })}
+              onpick={(account) =>
+                storedStore.pickResume(sessionId, { account })}
               readonly={!accountOpen}
               size="compact"
             />

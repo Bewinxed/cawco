@@ -14,9 +14,10 @@ import {
   IconRenew as Working,
 } from "#lib/icons.js";
 import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
-import { cawco, isFailed, isStale } from "../client.svelte";
 import { type NamedSession, sessionAnswer } from "../session-names.svelte";
 import { STALLED_LABEL } from "../session-status";
+import { asksStore } from "../stores/asks.svelte";
+import { boardStore, isFailed, isStale } from "../stores/board.svelte";
 
 export type StatusTone = "working" | "attention" | "failed" | "quiet";
 
@@ -63,7 +64,7 @@ const ANSWERED: Record<NamedSession["state"], SessionStatusOf> = {
  * `../session-status`'s `sessionStatus`, which is a row's mark status.
  */
 export function sessionStatusOf(sessionId: string): SessionStatusOf {
-  const row = cawco.instanceIndex.byId.get(sessionId);
+  const row = boardStore.instanceIndex.byId.get(sessionId);
   if (row && isFailed(row)) {
     return { label: "Failed", icon: Failed, tone: "failed" };
   }
@@ -84,7 +85,7 @@ export function sessionStatusOf(sessionId: string): SessionStatusOf {
   if (row?.status === "stopped") {
     return { label: STOPPED_LABEL, icon: Pause, tone: "quiet" };
   }
-  const activity = cawco.activityOf(sessionId);
+  const activity = asksStore.activityOf(sessionId);
   if (activity === "blocked") {
     return { label: "Needs you", icon: Attention, tone: "attention" };
   }
