@@ -119,7 +119,7 @@ final class MachineInventoryView: UIStackView {
             case .mcp:
                 for row in inspection.mcp {
                     body.addArrangedSubview(entry(name: row.name, scope: row.scope.rawValue, managed: row.managed, shadowedBy: row.shadowedBy?.rawValue,
-                                                  description: nil, machine: machine) { [weak self] key in self?.adopt(row, key: key) })
+                                                  description: nil, machine: machine) { [weak self] key in self?.adopt(row, machine: machine, key: key) })
                 }
             case .skills where (inspection.skills ?? []).isEmpty:
                 body.addArrangedSubview(note(Words.Skills.noSkillsAtAll))
@@ -257,15 +257,15 @@ final class MachineInventoryView: UIStackView {
         }
     }
 
-    /// Takes a server into the fleet, so every machine gets it (`saveMcpServer(name, config, true)`).
-    private func adopt(_ row: Components.Schemas.DiscoveredMcp, key: String) {
+    /// Takes a server into the fleet, so every machine gets it (`adoptMcpServer`: the hub reads its config off the machine, keys and all, and no screen is sent them).
+    private func adopt(_ row: Components.Schemas.DiscoveredMcpView, machine: MachineRow, key: String) {
         busy.insert(key)
         adoptFailed.remove(key)
         render()
         Task { @MainActor [weak self, hub] in
             do {
                 let config = try JSONDecoder().decode(Operations.PutApiFleetMcpByName.Input.Body.JsonPayload.self,
-                                                      from: JSONEncoder().encode(Adoption(config: row.config, enabled: true)))
+                                                      from: JSONEncoder().encode(Adoption(fromMachine: machine.machineId, enabled: true)))
                 let response = try await hub.api.fleet.putMCP(.init(path: .init(name: row.name), body: .json(config)))
                 switch response {
                 case .ok:
@@ -292,7 +292,7 @@ final class MachineInventoryView: UIStackView {
     }
 
     private struct Adoption: Encodable {
-        let config: Components.Schemas.FleetMcpConfig
+        let fromMachine: String
         let enabled: Bool
     }
 

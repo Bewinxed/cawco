@@ -2,7 +2,7 @@ public import CawCoAPI
 public import Foundation
 import OpenAPIRuntime
 
-public typealias FleetMcpServer = Components.Schemas.FleetMcpServer
+public typealias FleetMcpServer = Components.Schemas.FleetMcpServerView
 
 /// How a fleet MCP server runs, as its editor holds it (McpEditor.svelte
 /// `build`): a command every machine runs (bunx and a package is one), or
@@ -19,8 +19,9 @@ public enum McpRun: Equatable, Sendable {
         }
     }
 
-    /// The server's stored config, read back (fleet.ts `isRemoteMcp`: a remote one has an endpoint).
-    public init(_ config: Components.Schemas.FleetMcpConfig) {
+    /// The server's stored config, as a read says it (fleet.ts `isRemoteMcp`: a remote one has an endpoint).
+    /// A secret reads as set, never as its value: its line comes back with an empty value, and an empty value is not sent.
+    public init(_ config: Components.Schemas.FleetMcpConfigView) {
         if let remote = config.value3 {
             self = .remote(transport: remote._type.rawValue, url: remote.url, headers: Self.pairs(remote.headers))
         } else if let remote = config.value2 {
@@ -46,15 +47,15 @@ public enum McpRun: Equatable, Sendable {
     }
 
     private static func pairs(_ container: OpenAPIObjectContainer?) -> [(key: String, value: String)] {
-        (container?.value ?? [:]).compactMap { key, value in (value as? String).map { (key, $0) } }.sorted { $0.key < $1.key }
+        (container?.value ?? [:]).keys.sorted().map { (key: $0, value: "") }
     }
 
-    /// The config as the hub stores it; blank pairs dropped (`pairsToRecord`).
+    /// The config as a write says it: blank pairs dropped, and a line left with no value not sent, so the hub keeps the secret it holds (`pairsToWrite`).
     var json: [String: Any] {
         let record = { (rows: [(key: String, value: String)]) -> [String: String] in
             Dictionary(rows.compactMap { row in
                 let key = row.key.trimmingCharacters(in: .whitespaces)
-                return key.isEmpty ? nil : (key, row.value)
+                return key.isEmpty || row.value.isEmpty ? nil : (key, row.value)
             }, uniquingKeysWith: { _, last in last })
         }
         switch self {

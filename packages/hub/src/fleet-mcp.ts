@@ -440,7 +440,11 @@ export class FleetMcp {
           }
         },
         (error: unknown) => {
-          console.warn(`[fleet-mcp] ${name} re-probe failed:`, error);
+          // Its words only: a fetch error carries the address, which may hold a key.
+          console.warn(
+            `[fleet-mcp] ${name} re-probe failed:`,
+            error instanceof Error ? error.message : "not an Error"
+          );
         }
       );
     });
