@@ -16,8 +16,7 @@
    * slot while the top row dissolves under the mask; rows that come faster
    * than one lift queue and play back to back, so the tail never skips.
    */
-  import type { Component } from "svelte";
-  import { tick, untrack } from "svelte";
+  import { type Component, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import {
     describeTool,
@@ -38,10 +37,12 @@
     motionOk,
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import { entrance } from "../hover-entrance";
   import MessageBody from "../MessageBody.svelte";
   import { sessionAnswer, sessionFacts } from "../session-names.svelte";
+  import { boardStore } from "../stores/board.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import type { Message } from "../types";
 
   let {
@@ -167,7 +168,7 @@
     return null;
   }
 
-  const branch = $derived(cawco.session(instanceId));
+  const branch = $derived(sessionsStore.session(instanceId));
   /**
    * A session the board does not hold (it moved more than a day ago) whose
    * transcript has nothing here yet (unread, on its way, or its read
@@ -177,7 +178,7 @@
   const answer = $derived(
     instanceId &&
       !branch?.messages.length &&
-      !cawco.instanceIndex.byId.has(instanceId)
+      !boardStore.instanceIndex.byId.has(instanceId)
       ? sessionAnswer(instanceId)
       : undefined
   );

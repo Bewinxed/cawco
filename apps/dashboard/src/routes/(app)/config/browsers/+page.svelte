@@ -8,12 +8,12 @@
    * each port's answer, the certificate's end, who proved it from outside),
    * with Check the stream relay again, Add a name while none stands, and
    * Stop and Remove the stream relay asked in place. The card is the one
-   * Caw's Needs you draws, from the same journey, live (client.svelte.ts
+   * Caw's Needs you draws, from the same journey, live (stores/relay.svelte.ts
    * `relayJourney`).
    */
   import type { RelayJourneyView } from "@cawco/core/stream-relay";
   import { onMount } from "svelte";
-  import { cawco, readRelayJourney } from "#lib/cawco/client.svelte.js";
+
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
@@ -22,6 +22,10 @@
     proveOnStart,
     stepsHere,
   } from "#lib/cawco/relay/relay.svelte.js";
+  import {
+    readRelayJourney,
+    relayStore,
+  } from "#lib/cawco/stores/relay.svelte.js";
   import { failureWords } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("browsers");
@@ -41,7 +45,7 @@
     });
   });
 
-  const journey = $derived(cawco.relayJourney);
+  const journey = $derived(relayStore.relayJourney);
   // The start's tick proves the relay from this screen, once.
   $effect(() => proveOnStart(journey));
 
@@ -74,7 +78,7 @@
     {#if journey}
       <RelayJourney
         candidates={journey.candidates}
-        domain={cawco.relayDomain}
+        domain={relayStore.relayDomain}
         machine={journey.machine}
         onact={actOnRelayCard}
         steps={stepsHere(journey.steps)}

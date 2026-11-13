@@ -41,12 +41,7 @@
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import {
-    cawco,
-    type HeldSend,
-    type PendingPermission,
-    type SendExtras,
-  } from "#lib/cawco/client.svelte.js";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { rowHref } from "#lib/cawco/links.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
@@ -56,6 +51,13 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import type { SendExtras } from "#lib/cawco/send-store.js";
+  import { asksStore } from "#lib/cawco/stores/asks.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
+  import type { HeldSend } from "#lib/cawco/stores/session-start.svelte.js";
+  import type { PendingPermission } from "#lib/cawco/stores/sessions.svelte.js";
+  import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
@@ -154,17 +156,19 @@
    * his start making it (the person's words drawn, his session on its way).
    * He stands after its rows (CawAtWork) in the bare working line's place.
    */
-  const atWork = $derived(shown !== null && (unborn || cawco.busyOf(shown)));
+  const atWork = $derived(
+    shown !== null && (unborn || asksStore.busyOf(shown))
+  );
   /** Waiting on you while at work: a question of his holds him. */
   const heldOnYou = $derived(
-    shown !== null && cawco.activityOf(shown) === "blocked"
+    shown !== null && asksStore.activityOf(shown) === "blocked"
   );
   /** What he is on now, under him: the tool under way, else at work. */
   const doing = $derived.by(() => {
     if (heldOnYou) {
       return conversationWords.status.waiting;
     }
-    const tool = shown ? cawco.currentToolOf(shown) : null;
+    const tool = shown ? asksStore.currentToolOf(shown) : null;
     return tool
       ? [tool.name, tool.glance].filter(Boolean).join(" · ")
       : conversationWords.status.working;
@@ -194,7 +198,7 @@
    * no panel, the project's page draws it; core `setupLanding`.)
    */
   const previewOpen = $derived(
-    shown !== null && cawco.previews[shown]?.state === "open"
+    shown !== null && previewsStore.previews[shown]?.state === "open"
   );
   // Caw showing something brings Preview to the front, and so does a card
   // of his pressed in the transcript: each a reveal (client `revealPreview`),
@@ -203,12 +207,12 @@
   // conversation: another one coming on show is no reveal. With nothing left
   // to show the panel is his conversation.
   let revealsSeen = untrack(() => ({
-    count: shown ? cawco.previewRequests[shown] : undefined,
+    count: shown ? previewsStore.previewRequests[shown] : undefined,
     id: shown,
   }));
   $effect(() => {
     const id = shown;
-    const count = id ? cawco.previewRequests[id] : undefined;
+    const count = id ? previewsStore.previewRequests[id] : undefined;
     const open = previewOpen;
     untrack(() => {
       const seen = revealsSeen;
@@ -324,10 +328,12 @@
   /** The project's starters its stages carried, read for the hero. */
   let startersRead = $state<ProjectStarter[] | undefined>(undefined);
   /** The project's starters, live: a new set the hub writes replaces the read one. */
-  const starters = $derived(cawco.startersOf(projectId, "board", startersRead));
+  const starters = $derived(
+    tickersStore.startersOf(projectId, "board", startersRead)
+  );
   $effect(() => {
     const pid = projectId;
-    if (!(shown === null && pid && cawco.status === "connected")) {
+    if (!(shown === null && pid && connectionStore.status === "connected")) {
       return;
     }
     untrack(() => {
@@ -617,7 +623,7 @@
           />
         </div>
       {/if}
-    {:else if !(fresh || cawco.liveRead)}
+    {:else if !(fresh || boardStore.liveRead)}
       <!-- The fleet's first snapshot is not in: whether the project has a
            conversation is not known yet, so nothing claims it has none. -->
       <TranscriptSkeleton />

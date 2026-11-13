@@ -48,7 +48,6 @@
   } from "../platform/motion/share.svelte";
   import { stored } from "../platform/storage";
   import { epochOf } from "./board.svelte";
-  import { type BoardRow, cawco, type ProjectRow } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
@@ -78,6 +77,7 @@
     delegatesByTop,
     inFront,
   } from "./home/session-branches";
+  import type { BoardRow } from "./links";
   import { rowHref } from "./links";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
@@ -89,12 +89,16 @@
   import ProjectMark from "./ProjectMark.svelte";
   import { endAtRail } from "./project-end.svelte";
   import { openProjectPress, setRailSheet } from "./project-press";
+  import type { ProjectRow } from "./projects";
   import { folderOf } from "./projects";
   import RailProjectEnd from "./RailProjectEnd.svelte";
   import { rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
+  import { asksStore } from "./stores/asks.svelte";
+  import { boardStore } from "./stores/board.svelte";
+  import { projectsStore } from "./stores/projects.svelte";
   import TreeLine from "./TreeLine.svelte";
   import { type FlatRow, flatTree, lineAttrs } from "./tree-lines";
   import UsageMeter from "./UsageMeter.svelte";
@@ -207,7 +211,7 @@
 
   /** Pinned first, then by name. */
   const orderedProjects = $derived.by(() =>
-    [...cawco.projects].sort((a, b) => {
+    [...projectsStore.projects].sort((a, b) => {
       const pa = rail.isPinned(a.id) ? 0 : 1;
       const pb = rail.isPinned(b.id) ? 0 : 1;
       if (pa !== pb) {
@@ -224,7 +228,7 @@
    */
   const runningIn = $derived.by(() => {
     const running = new Map<string, BoardRow[]>();
-    for (const row of cawco.runningInstances) {
+    for (const row of boardStore.runningInstances) {
       if (row.projectId && !isDelegate(row)) {
         const held = running.get(row.projectId);
         if (held) {
@@ -242,7 +246,7 @@
 
   /** Each listed top's delegates, at any depth: read only while a project's sessions are out. */
   const delegatesOf = $derived(
-    delegatesByTop(cawco.listedInstances, cawco.listedById)
+    delegatesByTop(boardStore.listedInstances, boardStore.listedById)
   );
 
   /** Projects' unfolded sessions keep their own open delegates (open-trees). */
@@ -282,7 +286,7 @@
 
   /** The machines' order, the fleet's. */
   const machinePlace = (id: string): number => {
-    const at = cawco.machines.findIndex((m) => m.machineId === id);
+    const at = boardStore.machines.findIndex((m) => m.machineId === id);
     return at === -1 ? Number.MAX_SAFE_INTEGER : at;
   };
 
@@ -474,8 +478,8 @@
    * tone; else the ones running, never their delegates.
    */
   const fleetCount = $derived(
-    cawco.waitingCount ||
-      cawco.runningInstances.filter((row) => !isDelegate(row)).length
+    asksStore.waitingCount ||
+      boardStore.runningInstances.filter((row) => !isDelegate(row)).length
   );
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
@@ -817,7 +821,7 @@
                    the kit's active and hover inks are for a plain count, and
                    on the live fill the active one reads 3.3:1. -->
               <Sidebar.MenuBadge
-                data-blocked={cawco.waitingCount > 0 || undefined}
+                data-blocked={asksStore.waitingCount > 0 || undefined}
                 data-flip="pop box"
                 tone="live"
               >
@@ -898,7 +902,7 @@
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
           <p class="px-space-3 type-meta text-ink-muted" data-flip>
-            {cawco.machines.length === 0
+            {boardStore.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}
           </p>

@@ -96,17 +96,6 @@
   } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
   import { goto } from "$app/navigation";
-  import {
-    answeredOr,
-    cawco,
-    didntAnswer,
-    type ForkSource,
-    forkSession,
-    machineFs,
-    placementFor,
-    projectAtFolder,
-    spawnSession,
-  } from "../client.svelte";
   import Choice from "../config/Choice.svelte";
   import {
     type ContinueSource,
@@ -118,6 +107,8 @@
   import type { DraftContent } from "../draft-store";
   import { EFFORT_OPTIONS } from "../effort-levels";
   import { inspectMachine } from "../fleet";
+  import { answeredOr, didntAnswer } from "../hub/control";
+  import { connectionStore } from "../hub/socket.svelte";
   import { conversationHref } from "../links";
   import MachineAway from "../MachineAway.svelte";
   import { awayWords, MachineWait } from "../machine-wait.svelte";
@@ -137,6 +128,15 @@
     rememberSpawn,
     spawnPrefs,
   } from "../spawnPrefs.svelte";
+  import { accountsStore, placementFor } from "../stores/accounts.svelte";
+  import { boardStore } from "../stores/board.svelte";
+  import { machineFs } from "../stores/machines";
+  import { projectAtFolder, projectsStore } from "../stores/projects.svelte";
+  import {
+    type ForkSource,
+    forkSession,
+    spawnSession,
+  } from "../stores/session-start.svelte";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -405,7 +405,7 @@
     Boolean(machineIds.length && cwd.trim()) && verifiedLocation !== locationKey
   );
   const machine = $derived(
-    cawco.machines.find((row) => row.machineId === machineId)
+    boardStore.machines.find((row) => row.machineId === machineId)
   );
   /**
    * Whether the first machine is connected, as a value: every board publish
@@ -414,7 +414,7 @@
    */
   const machineOnline = $derived(machine?.status === "online");
   const offlineMachine = $derived(
-    cawco.machines.find(
+    boardStore.machines.find(
       (row) => machineIds.includes(row.machineId) && row.status !== "online"
     )
   );
@@ -459,7 +459,7 @@
    * places on. Null while unread and for no machine. A new answer replaces
    * the last only when it lands: until then the chip keeps what it showed.
    * Placement weighs every account's readings and bench, so it is asked again
-   * whenever the hub's accounts view moves (`cawco.accounts` is replaced only
+   * whenever the hub's accounts view moves (`accountsStore.accounts` is replaced only
    * when it differs): Auto never names an account that has since run out.
    */
   /** How long a folder being typed rests before placement is asked about it, ms. */
@@ -475,7 +475,7 @@
    */
   let placementRefusal = $state<string | null>(null);
   $effect(() => {
-    const view = cawco.accounts;
+    const view = accountsStore.accounts;
     const query = {
       harness,
       machineId,
@@ -500,7 +500,7 @@
               // OpenCode model can bill to more than one (core
               // accountProvidersOf), and the first may have none here.
               provider:
-                (cawco.accounts?.accounts ?? []).find(
+                (accountsStore.accounts?.accounts ?? []).find(
                   (one) => one.id === preview.accountId
                 )?.provider ?? providerOf(query.harness, preview.model),
             };
@@ -550,13 +550,13 @@
     // The provider's accounts signed in on the chosen machine: those a
     // session there can run on.
     const signedIn = new Set(
-      (cawco.accounts?.signins ?? [])
+      (accountsStore.accounts?.signins ?? [])
         .filter(
           (one) => one.machineId === machineId && one.state === "signed-in"
         )
         .map((one) => one.accountId)
     );
-    const own = (cawco.accounts?.accounts ?? [])
+    const own = (accountsStore.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider && signedIn.has(one.id))
       .sort((a, b) => a.order - b.order);
     if (continueFrom || forking || own.length < 2) {
@@ -602,7 +602,7 @@
         }
         return {
           id: one.id,
-          name: accountNameAmong(one, cawco.accounts?.accounts ?? []),
+          name: accountNameAmong(one, accountsStore.accounts?.accounts ?? []),
           nick: one.label,
           email: one.email,
           color: `var(--color-account-${one.hue})`,
@@ -690,7 +690,9 @@
       ? cwd.trim()
       : `${cwd.trim().replace(/\/+$/u, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
-  const project = $derived(cawco.projects.find((row) => row.id === projectId));
+  const project = $derived(
+    projectsStore.projects.find((row) => row.id === projectId)
+  );
   /** A fork its source had no mode for (spawn/new-session `startFork`): Start forks it. Never on a continuation. */
   const forking = $derived(continueFrom ? undefined : prefill?.fork);
   /**
@@ -700,9 +702,9 @@
    */
   const sourceProject = $derived.by(() => {
     const id = continueFrom
-      ? cawco.instanceIndex.byId.get(continueFrom.instanceId)?.projectId
+      ? boardStore.instanceIndex.byId.get(continueFrom.instanceId)?.projectId
       : undefined;
-    return id ? cawco.project(id) : null;
+    return id ? projectsStore.project(id) : null;
   });
   const locked = $derived(
     Boolean(
@@ -771,7 +773,7 @@
     project && moveTo
       ? [moveTo, moveFrom?.machineId ?? ""].map(
           (id) =>
-            cawco.machines.find((row) => row.machineId === id)?.status ===
+            boardStore.machines.find((row) => row.machineId === id)?.status ===
             "online"
         )
       : []
@@ -831,7 +833,10 @@
     const id = project?.id;
     const target = moveTo;
     const from = moveFrom?.id;
-    if (!(open && key && id && target && from) || cawco.hub !== "connected") {
+    if (
+      !(open && key && id && target && from) ||
+      connectionStore.hub !== "connected"
+    ) {
       return;
     }
     if (untrack(() => moveRead?.for === key)) {
@@ -888,9 +893,9 @@
       : spawnWords.machines.running(running);
   };
   const machineItems = $derived<MachineItem[]>(
-    cawco.machines.map((row, i) => {
+    boardStore.machines.map((row, i) => {
       const online = row.status === "online";
-      const running = cawco.liveOn(row.machineId).length;
+      const running = boardStore.liveOn(row.machineId).length;
       // With a project chosen, each row says where it is there, or that
       // Start clones it there first (design §1b).
       const place = project ? checkoutOn(project, row.machineId) : undefined;
@@ -928,13 +933,13 @@
   interface Offered {
     machine: string | undefined;
     place: NonNullable<ReturnType<typeof checkoutOn>>;
-    row: (typeof cawco.projects)[number];
+    row: (typeof projectsStore.projects)[number];
   }
   const projectItems = $derived<ProjectItem[]>(
-    cawco.projects
+    projectsStore.projects
       .flatMap((row): Offered[] => {
         if (machineIds.length === 0) {
-          return cawco.machines.flatMap((one) => {
+          return boardStore.machines.flatMap((one) => {
             const place = checkoutOn(row, one.machineId);
             return place ? [{ row, place, machine: one.hostname }] : [];
           });
@@ -987,7 +992,8 @@
     if (!locationUnverified && missingMachines.length) {
       const names = missingMachines.map(
         (id) =>
-          cawco.machines.find((row) => row.machineId === id)?.hostname ?? id
+          boardStore.machines.find((row) => row.machineId === id)?.hostname ??
+          id
       );
       return spawnWords.form.folderMissing(names.join(", "));
     }
@@ -1014,11 +1020,12 @@
       return "";
     }
     const there =
-      cawco.machines.find((row) => row.machineId === moveTo)?.hostname ??
+      boardStore.machines.find((row) => row.machineId === moveTo)?.hostname ??
       moveTo;
     const from = moveFrom?.machineId;
     const source =
-      cawco.machines.find((row) => row.machineId === from)?.hostname ?? from;
+      boardStore.machines.find((row) => row.machineId === from)?.hostname ??
+      from;
     // One size, history and large files together: step 2 splits them.
     const { bytes, lfsBytes, uncommittedFiles } = moveEstimated;
     const size =
@@ -1031,7 +1038,7 @@
     return spawnWords.form.moveReading(what, there, work, size);
   });
   const reading = $derived.by(() => {
-    if (cawco.hub !== "connected") {
+    if (connectionStore.hub !== "connected") {
       return spawnWords.form.hubUnreachable;
     }
     if (moveTo) {
@@ -1051,7 +1058,7 @@
             offlineMachine
           ) &&
           missingMachines.length &&
-          cawco.hub === "connected"
+          connectionStore.hub === "connected"
         )
   );
   const summarizerEntries = $derived(
@@ -1117,7 +1124,9 @@
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(failure !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
-  const readingSaysWhy = $derived(cawco.hub !== "connected" || failure !== "");
+  const readingSaysWhy = $derived(
+    connectionStore.hub !== "connected" || failure !== ""
+  );
   /** A clean start its harness can't make (core `cleanStartRefusal`); null when it can, or none is asked. */
   const cleanRefused = $derived(
     clean && !(forking || continueFrom)
@@ -1131,7 +1140,7 @@
       placementRefusal !== null ||
       modeRefused !== null ||
       modeUnchosen ||
-      cawco.hub !== "connected" ||
+      connectionStore.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
       unreadable ||
@@ -1401,7 +1410,10 @@
       return;
     }
     const id = remembered;
-    if (id !== null && cawco.machines.some((row) => row.machineId === id)) {
+    if (
+      id !== null &&
+      boardStore.machines.some((row) => row.machineId === id)
+    ) {
       untrack(() => {
         machineIds = [id];
       });
@@ -1543,7 +1555,7 @@
       return "";
     }
     const where =
-      cawco.machines.find((row) => row.machineId === forking.machineId)
+      boardStore.machines.find((row) => row.machineId === forking.machineId)
         ?.hostname ?? forking.machineId;
     return spawnWords.form.forkWhere(
       forking.harness,
@@ -1802,7 +1814,7 @@
     } catch {
       unreadable = true;
       const host =
-        cawco.machines.find((row) => row.machineId === target)?.hostname ??
+        boardStore.machines.find((row) => row.machineId === target)?.hostname ??
         target;
       if (open) {
         await tick();
@@ -1845,7 +1857,7 @@
     id: string | undefined,
     target: string
   ): string | undefined {
-    const attached = id ? cawco.project(id) : null;
+    const attached = id ? projectsStore.project(id) : null;
     return attached && placedOn(attached, target) ? attached.id : undefined;
   }
   /**
@@ -1990,7 +2002,7 @@
    * `force`: the form is closing on a press the folder check held.
    */
   async function start(force = false) {
-    if (busy || cawco.hub !== "connected" || heldBack(force)) {
+    if (busy || connectionStore.hub !== "connected" || heldBack(force)) {
       return;
     }
     submission += 1;
@@ -2220,7 +2232,7 @@
     submission += 1;
     onclose();
     await tick();
-    await goto(conversationHref(target, cawco.instanceIndex));
+    await goto(conversationHref(target, boardStore.instanceIndex));
   }
   function keydown(event: KeyboardEvent) {
     if (!open || event.defaultPrevented || event.isComposing) {
@@ -2399,8 +2411,9 @@
             </span>
           {:else}
             <ProjectChip
-              home={cawco.machines.find((row) => row.machineId === machineId)
-                ?.home}
+              home={boardStore.machines.find(
+                (row) => row.machineId === machineId
+              )?.home}
               onchange={(value) => {
                 popover = value ? "project" : null;
               }}
@@ -2532,8 +2545,9 @@
               value: place.id,
               label: spawnWords.form.moveFromFolder(
                 tilde(place.path),
-                cawco.machines.find((row) => row.machineId === place.machineId)
-                  ?.hostname ?? place.machineId
+                boardStore.machines.find(
+                  (row) => row.machineId === place.machineId
+                )?.hostname ?? place.machineId
               ),
             }))}
             value={moveFrom.id}

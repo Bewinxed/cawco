@@ -51,46 +51,19 @@
   import { page } from "$app/state";
   import { frameSize } from "../platform/frame-observer";
   import { deadlineIn, failureWords } from "../platform/hub-read";
-  import {
-    cawco,
-    clearReadFault,
-    commandFault,
-    type ForkSource,
-    faultMessage,
-    holdForStart,
-    keepServedAway,
-    keepServedPage,
-    loadMcpServers,
-    machineConnected,
-    openSession,
-    type PendingPermission,
-    type ReadCause,
-    type ReadFault,
-    readFaultOf,
-    readTranscript,
-    reconnectingNow,
-    refreshCommands,
-    resumeStored,
-    type SendExtras,
-    type ServerTail,
-    type SessionState,
-    seededSession,
-    sendFailureNotice,
-    submitCommand,
-    unwatchDelegate,
-    watchDelegate,
-  } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
   import { findIn } from "./find/conversation-find.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
+  import { connectionStore } from "./hub/socket.svelte";
   import { rowHref } from "./links";
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
-  import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import { planProgress, planShows } from "./plan";
+  import PlanPane from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import {
     listTasks,
@@ -103,9 +76,47 @@
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import { planAsked } from "./reference-things.svelte";
+  import type { SendExtras } from "./send-store";
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
+  import { asksStore } from "./stores/asks.svelte";
+  import { boardStore, machineConnected } from "./stores/board.svelte";
+  import { commandFault, submitCommand } from "./stores/commands.svelte";
+  import { sendFailureNotice } from "./stores/ledger.svelte";
+  import { offersStore } from "./stores/offers.svelte";
+  import { plansStore } from "./stores/plans.svelte";
+  import {
+    loadMcpServers,
+    refreshCommands,
+  } from "./stores/session-detail.svelte";
+  import type { ForkSource } from "./stores/session-start.svelte";
+  import { holdForStart } from "./stores/session-start.svelte";
+  import {
+    type PendingPermission,
+    type ReadFault,
+    type SessionState,
+    sessionsStore,
+  } from "./stores/sessions.svelte";
+  import { resumeStored, storedStore } from "./stores/stored.svelte";
+  import {
+    openSession,
+    unwatchDelegate,
+    watchDelegate,
+  } from "./stores/subscriptions.svelte";
+  import { tickersStore } from "./stores/tickers.svelte";
+  import {
+    clearReadFault,
+    faultMessage,
+    keepServedAway,
+    keepServedPage,
+    type ReadCause,
+    readFaultOf,
+    readTranscript,
+    reconnectingNow,
+    type ServerTail,
+  } from "./stores/transcript-reads.svelte";
+  import { seededSession } from "./stores/transcripts.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
@@ -249,7 +260,7 @@
    * (`waitingAsks`), each leading back to its card.
    */
   const connectsOpen = $derived(
-    (cawco.session(viewId)?.pending ?? []).flatMap((request) =>
+    (sessionsStore.session(viewId)?.pending ?? []).flatMap((request) =>
       request.connectAsk &&
       connectSignIns.of(request.requestId).stage !== "done"
         ? [{ requestId: request.requestId, server: request.connectAsk.server }]
@@ -259,7 +270,7 @@
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
-  const plan = $derived(cawco.planOf(viewId));
+  const plan = $derived(plansStore.planOf(viewId));
   const planProgressNow = $derived(
     planShows(plan) && plan ? planProgress(plan) : null
   );
@@ -290,7 +301,7 @@
       besideStages = null;
       return;
     }
-    track(cawco.tasksChangedOf(projectId));
+    track(tickersStore.tasksChangedOf(projectId));
     untrack(() => {
       readBeside(projectId).catch(() => undefined);
     });
@@ -332,11 +343,11 @@
    * wrong for every live session opened from the sidebar, which arrived with a
    * context and so was never opened at all.
    */
-  const isLive = $derived(cawco.rowOf(viewId) !== undefined);
+  const isLive = $derived(boardStore.rowOf(viewId) !== undefined);
 
   /** Asks the hub holds under this id with no session behind it (a project's memory proposal, hub memory.ts). */
   const rowless = $derived(
-    isLive ? [] : parkedAsks(cawco.session(viewId)?.pending ?? [])
+    isLive ? [] : parkedAsks(sessionsStore.session(viewId)?.pending ?? [])
   );
   /**
    * An ask is answered where it was made: one a curator run made opens that
@@ -447,8 +458,8 @@
     // Tracking the connection and the live session's machineId (neither
     // written by the read below) re-runs this the moment it becomes
     // answerable, so the transcript reads back instead of staying empty.
-    track(cawco.status);
-    track(cawco.session(id)?.machineId);
+    track(connectionStore.status);
+    track(sessionsStore.session(id)?.machineId);
     untrack(() => {
       // What the last read said stands while this pass reads again: a
       // reconnect re-reads behind a "no session" or an offline card, and
@@ -468,7 +479,7 @@
     // collapsed, scrollTop clamped, the view lurched, and the follow rode the
     // rebuild. That was the tab-switch scroll hijack. The stream heals any gap
     // on its own.
-    const held = cawco.session(id);
+    const held = sessionsStore.session(id);
     // A newest page taken is the transcript in hand, an empty one too (a
     // session nothing has been said in): its stream follows it, resumed by
     // the socket's next connection, and the socket's status moving asks
@@ -484,7 +495,7 @@
       });
       return;
     }
-    // A read that failed waits on what can answer it (client.svelte.ts
+    // A read that failed waits on what can answer it (stores/transcript-reads.svelte.ts
     // `readFailed`: the backoff, its machine's deadline or return) or on Try
     // again: the socket's status moving is neither, and read again on it, a
     // transcript whose machine is away was asked once per status it passed.
@@ -552,7 +563,7 @@
     const present = here;
     untrack(() => {
       if (!present) {
-        const held = cawco.session(viewId);
+        const held = sessionsStore.session(viewId);
         leftUnread =
           seenBefore && !(held?.initialized && held.messages.length > 0);
         return;
@@ -616,7 +627,7 @@
    */
   let live = $state(false);
   $effect(() => {
-    const held = cawco.session(viewId);
+    const held = sessionsStore.session(viewId);
     if (!held) {
       return;
     }
@@ -625,8 +636,10 @@
     }
   });
 
-  const session = $derived(live || !seeded ? cawco.session(viewId) : seeded);
-  const machineId = $derived(cawco.session(viewId)?.machineId ?? "");
+  const session = $derived(
+    live || !seeded ? sessionsStore.session(viewId) : seeded
+  );
+  const machineId = $derived(sessionsStore.session(viewId)?.machineId ?? "");
 
   /**
    * The load opened the conversation at one of its records (`?at=`,
@@ -673,8 +686,8 @@
    */
   const continuedTo = $derived.by((): { id: string; title: string } | null => {
     // The rows while the board lists them; else its newest page's word.
-    const next = cawco.rowOf(viewId)?.continuedInto;
-    const to = next && cawco.rowOf(next);
+    const next = boardStore.rowOf(viewId)?.continuedInto;
+    const to = next && boardStore.rowOf(next);
     if (to) {
       return { id: to.id, title: instanceTitle(to) };
     }
@@ -838,7 +851,7 @@
   );
   const awayOnline = $derived(
     awayMachine !== null &&
-      cawco.machines.some(
+      boardStore.machines.some(
         (machine) =>
           machine.machineId === awayMachine && machine.status === "online"
       )
@@ -876,7 +889,7 @@
   // back (`machineConnected`): across a hub restart the page reconnects first.
   const liveForCommands = $derived(
     !!session &&
-      cawco.liveId(viewId) &&
+      boardStore.liveId(viewId) &&
       !!machineId &&
       machineConnected(machineId)
   );
@@ -911,7 +924,7 @@
     return () => unwatchDelegate(id);
   });
 
-  const commands = $derived(cawco.commandsOf(viewId));
+  const commands = $derived(sessionsStore.commandsOf(viewId));
 
   /** The session's skills: a `/name` of one in its transcript draws as its chip. */
   const sessionSkills = $derived(skillsOf(commands));
@@ -928,7 +941,7 @@
    * and tool, for chips that mostly had nothing to show.
    */
   const candidates = $derived.by((): SuggestCandidate[] => {
-    const tooling = cawco.toolingOf(viewId);
+    const tooling = sessionsStore.toolingOf(viewId);
     const skills: SuggestCandidate[] = commands
       .filter((command) => command.type === "skill")
       .map((command) => ({
@@ -1008,8 +1021,8 @@
    * `asksUnder`), each with the name of the delegate that asked.
    */
   const asksUnder = $derived(
-    cawco.asksUnder(viewId).map((row) => {
-      const asker = cawco.instanceIndex.byId.get(row.instanceId);
+    asksStore.asksUnder(viewId).map((row) => {
+      const asker = boardStore.instanceIndex.byId.get(row.instanceId);
       return {
         ...row,
         asker: asker
@@ -1042,7 +1055,7 @@
         request,
         machine: machineId || undefined,
       })),
-    ...cawco.blocked
+    ...asksStore.blocked
       .filter((row) => row.request.originInstanceId === viewId)
       .map((row) => ({ request: row.request, machine: row.machineId })),
     ...asksUnder
@@ -1144,9 +1157,9 @@
   });
 
   /** "Make this a project", when the hub offered it to this session. */
-  const projectOffer = $derived(cawco.projectOfferOf(viewId));
+  const projectOffer = $derived(offersStore.projectOfferOf(viewId));
   /** The project the offer joined: the card says so where it stood. */
-  const projectJoin = $derived(cawco.projectJoinOf(viewId));
+  const projectJoin = $derived(offersStore.projectJoinOf(viewId));
 
   /** What this conversation has half-written, whichever composer draws it; docked, the panel's. */
   const draft = untrack(() => docked?.draft) ?? new ComposerDraft();
@@ -1182,7 +1195,7 @@
    * Why this session's last send failed, said over its composer's field; or
    * else a command of it that failed with nowhere else to say it (a stop, a
    * model change with its details card closed, an answer whose card has
-   * gone), with Try again where a try can go (client.svelte.ts
+   * gone), with Try again where a try can go (stores/commands.svelte.ts
    * `commandFault`).
    */
   const failedCommand = $derived(commandFault(viewId));
@@ -1217,7 +1230,7 @@
     // A transcript stored on its machine that no session wraps has no row
     // either: the first send on its page resumes it as a session of
     // CawCo's, these words its first prompt.
-    const stored = cawco.storedSource(viewId, storedWhere);
+    const stored = storedStore.storedSource(viewId, storedWhere);
     if (stored) {
       return await resumeWith(stored, text, extras, id);
     }
@@ -1244,7 +1257,7 @@
   const storedNote = $derived(
     // Read as the page opens, so its machine has said what it ran with by
     // the time a message is sent.
-    !resuming && cawco.resumePlan(viewId, storedWhere)
+    !resuming && storedStore.resumePlan(viewId, storedWhere)
       ? transcriptWords.startedOutside
       : ""
   );

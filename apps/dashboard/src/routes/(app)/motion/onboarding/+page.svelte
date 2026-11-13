@@ -41,7 +41,7 @@
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
+
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -59,6 +59,11 @@
   } from "#lib/cawco/project/setup.fixtures.js";
   import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
+  import {
+    blankSession,
+    sessionsStore,
+  } from "#lib/cawco/stores/sessions.svelte.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -163,8 +168,8 @@
     globalThis as unknown as {
       __cawcoDebug: {
         frame: (frame: PulseFrame) => void;
-        state: {
-          projects: unknown[];
+        projectsState: { projects: unknown[] };
+        sessionsState: {
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };
         adoptInstances: (rows: InstanceRow[]) => void;
@@ -193,7 +198,7 @@
     review: false,
   };
   if (beat !== "first-run") {
-    debug.state.projects.push(row);
+    debug.projectsState.projects.push(row);
     debug.adoptInstances([
       {
         id: ID,
@@ -219,7 +224,7 @@
     if (beat === "questions") {
       session.pending = PR_ASKS.map((ask) => ask.request);
     }
-    debug.state.sessions[ID] = session;
+    debug.sessionsState.sessions[ID] = session;
     // Held on a question with nothing else to do, he has ended his turn
     // (core asks.ts `askQuestionWords`): at rest, so his composer offers
     // Send, not Stop.
@@ -256,7 +261,7 @@
   const STAGE_BEAT_MS = 900;
   let writing: ReturnType<typeof setInterval> | undefined;
   function answered(requestId: string, result: PermissionResult) {
-    const session = debug.state.sessions[ID];
+    const session = debug.sessionsState.sessions[ID];
     const parked = session?.pending.find((one) => one.requestId === requestId);
     if (!(session && parked)) {
       return;
@@ -359,7 +364,7 @@
       }
       sending = false;
       at = "set";
-      const session = debug.state.sessions[ID];
+      const session = debug.sessionsState.sessions[ID];
       if (session) {
         session.messages = [...session.messages, doneOf(draft.length)];
       }
@@ -380,7 +385,7 @@
   const lead = new CawLead({
     id: () => PROJECT,
     machinesOnline: () => true,
-    project: () => cawco.project(PROJECT),
+    project: () => projectsStore.project(PROJECT),
     reading: () => false,
     tasks: () => [],
   });
@@ -401,7 +406,7 @@
   const progress = $derived(
     notSetUp
       ? setupProgressOf({
-          messages: cawco.session(ID)?.messages ?? [],
+          messages: sessionsStore.session(ID)?.messages ?? [],
           name,
           named,
           open: asks.map((one) => ({ blocks: blocks(one) })),
@@ -426,14 +431,17 @@
   /** His panel stands docked beside the page while it is open and anchored, as the page's `docked`. */
   const docked = $derived(lead.open && lead.anchor !== null);
   const none = () => undefined;
-  const project = $derived(cawco.project(PROJECT));
+  const project = $derived(projectsStore.project(PROJECT));
 
   onMount(() => () => {
     clearInterval(writing);
     debug.leaveHub();
-    delete debug.state.sessions[ID];
+    delete debug.sessionsState.sessions[ID];
     debug.adoptInstances([]);
-    debug.state.projects.splice(debug.state.projects.indexOf(row), 1);
+    debug.projectsState.projects.splice(
+      debug.projectsState.projects.indexOf(row),
+      1
+    );
   });
 </script>
 
