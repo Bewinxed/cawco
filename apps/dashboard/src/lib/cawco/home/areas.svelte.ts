@@ -5,8 +5,8 @@
  * server.ts `projectAreas`). Each project names its area (`areaId`); the
  * names and their order are the areas'.
  */
-import { hubRequest } from "@cawco/core/hub-request";
-import { hubFetch } from "../../platform/hub-read";
+import { hub } from "#lib/platform/hub.js";
+import { hubRead } from "#lib/platform/hub-read.js";
 import { devDebug } from "../dev-debug";
 import { connectionStore } from "../hub/socket.svelte";
 import type { Area } from "../served-board";
@@ -29,19 +29,13 @@ let asked = 0;
 async function read(): Promise<void> {
   asked += 1;
   const ticket = asked;
-  try {
-    const response = await hubFetch(hubRequest("GET /api/areas"));
-    if (!response.ok) {
-      return;
-    }
-    const { areas } = (await response.json()) as { areas: Area[] };
-    // Reads overlap when the projects change fast: the newest answer stands.
-    if (ticket === asked) {
-      state.areas = areas;
-      state.read = true;
-    }
-  } catch {
-    // The next change of the projects reads them again; the last read stands.
+  // A read that fails leaves the last one standing: the next change of the
+  // projects reads them again.
+  const answer = await hubRead(hub.api.areas.get());
+  // Reads overlap when the projects change fast: the newest answer stands.
+  if (answer.ok && ticket === asked) {
+    state.areas = answer.value.areas;
+    state.read = true;
   }
 }
 
