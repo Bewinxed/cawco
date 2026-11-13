@@ -31,6 +31,20 @@ type DiffLayout = Omit<
 const THEMES = { light: CODE_THEME, dark: CODE_THEME };
 
 /**
+ * The face, size and line height of the product's code wells (`type-code`:
+ * --font-mono, --text-code, --leading-code), in the library's own variables
+ * (dist/style.js reads --diffs-font-family, --diffs-font-size and
+ * --diffs-line-height off the host). Custom properties inherit into the
+ * shadow root, so the host rule carries them; the library's own sheet leaves
+ * them unset.
+ */
+const CODE_FACE = `:host {
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: var(--text-code);
+  --diffs-line-height: var(--leading-code);
+}`;
+
+/**
  * A FileDiff on the house theme. The library's shadow root says
  * `color-scheme: light dark`, which follows the OS; the app's scheme is the
  * theme class (app.css), so the diff is told it, and told again on every
@@ -42,6 +56,7 @@ export function houseDiff(layout: DiffLayout): FileDiff<undefined, undefined> {
     ...layout,
     overflow: "wrap",
     preferredHighlighter: "highlights",
+    unsafeCSS: CODE_FACE,
     theme: THEMES,
     themeType: untrack(() => theme.resolved),
   });
