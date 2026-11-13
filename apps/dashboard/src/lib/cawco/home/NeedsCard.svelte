@@ -115,15 +115,6 @@
   import { isTyping } from "#lib/utils/typing.js";
   import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
-  import {
-    answerFor,
-    cawco,
-    decideAction,
-    type PermissionAnswer,
-    permissionAnswer,
-    submitCommand,
-    takeOverBrowser,
-  } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import { conversationHref, rowHref } from "../links";
@@ -138,6 +129,15 @@
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { span } from "../span";
+  import {
+    type PermissionAnswer,
+    permissionAnswer,
+  } from "../stores/asks.svelte";
+  import { boardStore } from "../stores/board.svelte";
+  import { takeOverBrowser } from "../stores/browsers.svelte";
+  import { answerFor, submitCommand } from "../stores/commands.svelte";
+  import { decideAction } from "../stores/needs.svelte";
+  import { relayStore } from "../stores/relay.svelte";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import {
@@ -185,7 +185,7 @@
       return item.kind === "artifact" ? needLinkOf(item.href) : item.href;
     }
     // An ask opens where it was made (`askView`).
-    return conversationHref(askView(item), cawco.instanceIndex);
+    return conversationHref(askView(item), boardStore.instanceIndex);
   });
   /** What it asks for, in the words it is asked: its second line. */
   const want = $derived.by(() => {
@@ -695,7 +695,7 @@
   >
     <RelayJourney
       candidates={item.journey.candidates}
-      domain={cawco.relayDomain}
+      domain={relayStore.relayDomain}
       machine={item.journey.machine}
       onact={actOnRelayCard}
       row

@@ -86,14 +86,6 @@
   import { carry, waiting } from "../../platform/motion/share.svelte";
   import { readJson, writeJson } from "../../platform/storage";
   import { stopWords } from "../accounts/switch.svelte";
-  import {
-    cawco,
-    faultMessage,
-    readOlderPage,
-    readTranscript,
-    reconnectingNow,
-    type SessionState,
-  } from "../client.svelte";
   import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
@@ -102,6 +94,14 @@
   import { LIVE_REPLY, provideMarkdownBlocks } from "../markdown-blocks";
   import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
+  import { boardStore } from "../stores/board.svelte";
+  import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
+  import {
+    faultMessage,
+    readOlderPage,
+    readTranscript,
+    reconnectingNow,
+  } from "../stores/transcript-reads.svelte";
   import type { Message } from "../types";
   import { provideBlockSources } from "../views/openui/block-media";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -248,7 +248,8 @@
     transcriptSources(() => ({
       instanceId: session.instanceId,
       machineId: session.machineId,
-      projectId: cawco.instanceIndex.byId.get(session.instanceId)?.projectId,
+      projectId: boardStore.instanceIndex.byId.get(session.instanceId)
+        ?.projectId,
     }))
   );
   provideMarkdownBlocks(TranscriptBlock);
@@ -1290,7 +1291,7 @@
    * (switch.svelte.ts `stopWords`); every older one stays history.
    */
   const stop = $derived.by(() => {
-    const instance = cawco.instanceIndex.byId.get(session.instanceId);
+    const instance = boardStore.instanceIndex.byId.get(session.instanceId);
     const words = instance ? stopWords(instance) : undefined;
     const key = words
       ? rows.findLast((one) => one.kind === "account")?.key
@@ -3337,7 +3338,7 @@
    * store's read lands, and a page put in front of it would go with it.
    */
   function paged(): SessionState | null {
-    const store = cawco.session(session.instanceId);
+    const store = sessionsStore.session(session.instanceId);
     return store === session ? store : null;
   }
 
@@ -4149,7 +4150,7 @@
     // server's stand-in for it (see `SessionPane`): the store's session takes
     // their place the moment its read is in, with the turn in flight on the
     // end. Drawn first, they would be moved under the reader.
-    const store = cawco.session(session.instanceId);
+    const store = sessionsStore.session(session.instanceId);
 
     const reading =
       session.loading || (store !== null && store !== session && store.loading);
@@ -5164,7 +5165,7 @@
    */
   const behind = $derived(
     renderedRows.length > 0
-      ? (cawco.session(session.instanceId)?.behind ?? null)
+      ? (sessionsStore.session(session.instanceId)?.behind ?? null)
       : null
   );
 </script>

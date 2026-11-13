@@ -5,7 +5,7 @@
  * ones listed and the ones behind its "N older" row (older.ts).
  */
 import { topsIn } from "@cawco/core/project-membership";
-import type { BoardRow } from "../client.svelte";
+import type { BoardRow } from "../links";
 import { DELEGATE_WINDOW, listedOf, type Reading } from "../older";
 import { tree } from "../tree";
 import { lastAt } from "./home-state.svelte";

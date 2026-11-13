@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { InstanceRow } from "@cawco/core/protocol";
   import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
   /**
    * The page's lead, as Rings: can you keep going, on which account, what
@@ -18,8 +19,10 @@
   import { IconKey, IconRefresh } from "#lib/icons.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import AccountName from "../accounts/AccountName.svelte";
-  import { cawco, type InstanceRow } from "../client.svelte";
+
   import OpenCodeLogo from "../OpenCodeLogo.svelte";
+  import { projectsStore } from "../stores/projects.svelte";
+  import { usageStore } from "../stores/usage.svelte";
   import { claudeGap, extraUsageLine, money } from "../usage";
   import Figure from "./Figure.svelte";
   import { startForecast, usage } from "./forecast.svelte";
@@ -47,17 +50,19 @@
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
   const now = $derived(usage.now);
-  const read = $derived(usage.read && cawco.usageLimitsRead);
+  const read = $derived(usage.read && usageStore.usageLimitsRead);
 
   /** The fleet's real spend, the hub's one figure; null while read or failed. */
-  const spend = $derived(cawco.spend);
+  const spend = $derived(usageStore.spend);
 
   /** Why there is no Claude tile, and what to do about it (usage.ts `claudeGap`). */
-  const claudeUnknown = $derived(claude ? null : claudeGap(cawco.claudeLimits));
+  const claudeUnknown = $derived(
+    claude ? null : claudeGap(usageStore.claudeLimits)
+  );
 
   /** Claude's extra usage, as each account's Claude Code last said it. */
   const extraText = $derived(
-    claude ? extraUsageLine(cawco.claudeLimits, claude.accounts) : ""
+    claude ? extraUsageLine(usageStore.claudeLimits, claude.accounts) : ""
   );
 
   /**
@@ -92,7 +97,7 @@
   const titleOf = (row: InstanceRow) =>
     row.title ?? row.derivedTitle ?? "untitled session";
   const projectOf = (row: InstanceRow) =>
-    row.projectId ? (cawco.project(row.projectId)?.name ?? null) : null;
+    row.projectId ? (projectsStore.project(row.projectId)?.name ?? null) : null;
   const tokens = (row: InstanceRow) => {
     const count = row.keepAlive?.contextTokens;
     return count ? `${Math.round(count / 1000)}k` : "";

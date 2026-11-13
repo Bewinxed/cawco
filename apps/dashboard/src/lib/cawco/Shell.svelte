@@ -65,7 +65,7 @@
   import { store, stored } from "../platform/storage";
   import { floor } from "../platform/visible-viewport.svelte";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
-  import { cawco } from "./client.svelte";
+
   import { SECTIONS } from "./config/sections";
   import ConnectWindow from "./connect/ConnectWindow.svelte";
   import { connect } from "./connect/installs.svelte";
@@ -90,6 +90,7 @@
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
   import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
+  import { projectsStore } from "./stores/projects.svelte";
   import { composerBindings } from "./workspace/composer-dock.svelte";
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
@@ -1339,7 +1340,7 @@
         if (id === "new") {
           return "New project";
         }
-        return (id ? cawco.project(id)?.name : undefined) ?? "Project";
+        return (id ? projectsStore.project(id)?.name : undefined) ?? "Project";
       // Configure's rail names Configure and the section chosen in it: the
       // bar repeats neither (DESIGN.md, The Title Bars Follow Liquid Glass
       // Rule); on a phone, where the rail is a page of its own, the bar

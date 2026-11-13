@@ -19,10 +19,11 @@
 import type { FindConversation } from "@cawco/core/find";
 import { SvelteMap } from "svelte/reactivity";
 import { browser } from "$app/env";
-import { cawco } from "./client.svelte";
 import { findNames } from "./find/find-client";
 import { age, rowOf } from "./find/find-rows";
 import { resolveSessionTitle } from "./links";
+import { boardStore } from "./stores/board.svelte";
+import { continuationsStore } from "./stores/continuations.svelte";
 
 /** The shortest id part that names a session (the hub's resolver's own). */
 const SHORT_ID = 6;
@@ -62,8 +63,8 @@ function onlyStarting(
 
 /** The id a name has among the rows this browser holds, or null. */
 function heldId(name: string): string | null {
-  const rows = cawco.instanceIndex.byId;
-  const former = cawco.formerIds;
+  const rows = boardStore.instanceIndex.byId;
+  const former = continuationsStore.formerIds;
   if (rows.has(name)) {
     return name;
   }
@@ -181,7 +182,7 @@ export function sessionAnswer(name: string): NamedSession | undefined {
  */
 export function sessionTitle(name: string): string | null {
   const id = sessionNamed(name) ?? name;
-  const row = cawco.instanceIndex.byId.get(id);
+  const row = boardStore.instanceIndex.byId.get(id);
   if (row) {
     return resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });
   }
@@ -198,7 +199,7 @@ export function sessionTitle(name: string): string | null {
  */
 export function sessionPlace(name: string): string {
   const id = sessionNamed(name) ?? name;
-  const row = cawco.instanceIndex.byId.get(id);
+  const row = boardStore.instanceIndex.byId.get(id);
   if (row) {
     return row.cwd || row.machineId;
   }
