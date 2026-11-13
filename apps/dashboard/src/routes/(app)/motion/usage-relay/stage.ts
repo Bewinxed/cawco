@@ -5,7 +5,7 @@
  * (usage-relay) and the Usage page's (usage-limits).
  *
  * Written through `__cawcoDebug` (lib/cawco/dev-debug.ts), which the dev
- * server alone has: the usage store's bench view, and the client's own word
+ * server alone has: the usage store's bench view, and the usage store's own word
  * that the limits were read.
  */
 import { claudeRings, openCodeRing } from "#lib/cawco/usage/rings.js";
@@ -44,7 +44,7 @@ export function stageUsage(n: number, stop: string | null = null) {
   debug().usageState.usageLimitsRead = true;
 }
 
-/** What the client said of the limits before the bench stood its own in. */
+/** What the usage store said of the limits before the bench stood its own in. */
 let readBefore: boolean | undefined;
 
 /** Hands the usage store back to the hub's forecast. */

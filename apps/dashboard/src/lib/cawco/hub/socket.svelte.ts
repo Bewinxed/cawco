@@ -222,12 +222,19 @@ interface HubWiring {
   take: (message: unknown) => void;
 }
 
+/** A wiring port nothing has filled ({@link wireHub}) fails by name when it is called. */
+const unwired = (port: string) => () => {
+  throw new Error(
+    `socket: the ${port} port was called before the client wired the hub (wireHub)`
+  );
+};
+
 let wiring: HubWiring = {
-  take: () => undefined,
+  take: unwired("take"),
   onConnect: [],
   onClose: [],
   onTeardown: [],
-  reread: () => Promise.resolve(false),
+  reread: unwired("reread"),
 };
 
 /**
