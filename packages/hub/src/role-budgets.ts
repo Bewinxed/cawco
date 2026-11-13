@@ -127,9 +127,13 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * on the component canvas and that a preview's app holds no CawCo sign-in
  * (the rule lived only in the owner's private memory documents; worker
  * 30,613, delegate 11,278 measured).
+ * 2026-11-13: admin_mcp_servers' `config` says how a connector secret reads
+ * and is written (it reads as set and is never read back; the owner approved
+ * write-only secrets that day), the one place an agent learns that a put keeps
+ * what it leaves out (worker 30,641 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_620,
+  worker: 30_650,
   delegate: 11_300,
   overseer: 770,
   "web-facing": 3400,

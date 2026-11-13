@@ -4099,7 +4099,7 @@ public enum Words {
         }
 
         /// The admin tool's note on `config`: how a secret is read and written.
-        public static let secretToolNote = "A secret reads as {secret:\"set\"}. In a put a string replaces it, null clears it, left out keeps it."
+        public static let secretToolNote = "A secret reads as {secret:\"set\"}; in a put a string sets it, null clears it, left out keeps it."
 
         public static let addPair = "Add"
 

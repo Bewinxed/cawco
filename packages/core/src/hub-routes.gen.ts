@@ -3860,7 +3860,7 @@ export interface components {
       action: "put" | "remove";
       /** @description Every project in one area instead (its id or name), as the area holds them when read. null: none. */
       areaId?: string | null;
-      /** @description Required for put. stdio: { command, args? }; remote: { type: "http"|"sse", url }. A secret reads as {secret:"set"}. In a put a string replaces it, null clears it, left out keeps it. */
+      /** @description Required for put. stdio: { command, args? }; remote: { type: "http"|"sse", url }. A secret reads as {secret:"set"}; in a put a string sets it, null clears it, left out keeps it. */
       config?: {
         [key: string]: unknown;
       };

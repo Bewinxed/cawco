@@ -110,7 +110,7 @@ export const mcpWords = {
     `${key} in ${field} is marked as set, but this server holds no value for it. Send the value.`,
   /** The admin tool's note on `config`: how a secret is read and written. */
   secretToolNote:
-    'A secret reads as {secret:"set"}. In a put a string replaces it, null clears it, left out keeps it.',
+    'A secret reads as {secret:"set"}; in a put a string sets it, null clears it, left out keeps it.',
   addPair: "Add",
   removePair: (key: string) => `Remove ${key}`,
   where: "Where it applies",
