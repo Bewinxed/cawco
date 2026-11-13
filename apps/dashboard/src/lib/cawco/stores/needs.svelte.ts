@@ -10,9 +10,9 @@ import type {
   ArtifactNeedNotice,
 } from "@cawco/core/artifact-needs";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { LawBroken } from "@cawco/core/invariant";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData, hubDone } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
 import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
@@ -78,9 +78,7 @@ export function takeQuestionsMoved(): void {
 /** Fleet watch's needs-you notices, as the hub holds them now. */
 export async function readWatchNotices(): Promise<void> {
   const mark = readLeaves();
-  const read = await load<{ notices: FleetWatchNotice[] }>(
-    hubRequest("GET /api/fleet-watch/notices")
-  );
+  const read = await load(hubData(hub.api["fleet-watch"].notices.get()));
   if (read && !heardSince("fleet_watch.notices", mark)) {
     needsState.watchNotices = read.notices;
   }
@@ -89,9 +87,7 @@ export async function readWatchNotices(): Promise<void> {
 /** The approved actions waiting on you, as the hub holds them now. */
 export async function readWaitingActions(): Promise<void> {
   const mark = readLeaves();
-  const read = await load<{ actions: ApprovedActionView[] }>(
-    hubRequest("GET /api/actions/waiting")
-  );
+  const read = await load(hubData(hub.api.actions.waiting.get()));
   if (read && !heardSince("actions", mark)) {
     needsState.actions = read.actions;
   }
@@ -108,22 +104,11 @@ export async function decideAction(
   action: Pick<ApprovedActionView, "argsHash" | "id">,
   decision: "approve" | "deny" | "checked"
 ): Promise<void> {
-  const path = { id: action.id };
-  const response = await hubFetch(
-    decision === "approve"
-      ? hubRequest("POST /api/actions/:id/approve", {
-          path,
-          body: { argsHash: action.argsHash },
-        })
-      : hubRequest(
-          decision === "deny"
-            ? "POST /api/actions/:id/deny"
-            : "POST /api/actions/:id/checked",
-          { path }
-        )
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response);
+  const act = hub.api.actions({ id: action.id });
+  if (decision === "approve") {
+    await hubDone(act.approve.post({ argsHash: action.argsHash }));
+  } else {
+    await hubDone(decision === "deny" ? act.deny.post() : act.checked.post());
   }
 }
 

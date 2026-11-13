@@ -8,7 +8,12 @@ import type { Bounded } from "@cawco/core/bounded";
 import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
-import { couldNot, hubRefusal, type Refused } from "#lib/platform/hub-read.js";
+import {
+  couldNot,
+  hubData,
+  hubRefusal,
+  type Refused,
+} from "#lib/platform/hub-read.js";
 import { machineControl } from "./stores/machines";
 
 /**
@@ -31,11 +36,9 @@ export async function setPolicy(
   id: string,
   patch: { required?: boolean; pinnedVersion?: string | null }
 ) {
-  const answer = await hub.api.tools({ id }).put(patch);
-  if (answer.error) {
-    throw couldNot("save that policy", answer);
-  }
-  return answer.data;
+  return await hubData(hub.api.tools({ id }).put(patch), (refused) =>
+    couldNot("save that policy", refused)
+  );
 }
 
 /**
@@ -97,14 +100,10 @@ function signinRefusal(refused: Refused): ToolSigninRefusal {
  * machine waits for its code. One already waiting answers its kept link.
  */
 export async function beginToolSignin(machineId: string, toolId: string) {
-  const answer = await hub.api
-    .machines({ machineId })
-    .tools({ toolId })
-    .signin.post();
-  if (answer.error) {
-    throw signinRefusal(answer);
-  }
-  return answer.data;
+  return await hubData(
+    hub.api.machines({ machineId }).tools({ toolId }).signin.post(),
+    signinRefusal
+  );
 }
 
 /** Types the pasted code into the machine's waiting sign-in: the tool's status there, its sign-in read again. */
@@ -113,12 +112,11 @@ export async function completeToolSignin(
   toolId: string,
   code: string
 ) {
-  const answer = await hub.api
-    .machines({ machineId })
-    .tools({ toolId })
-    .signin.complete.post({ code });
-  if (answer.error) {
-    throw signinRefusal(answer);
-  }
-  return answer.data;
+  return await hubData(
+    hub.api
+      .machines({ machineId })
+      .tools({ toolId })
+      .signin.complete.post({ code }),
+    signinRefusal
+  );
 }

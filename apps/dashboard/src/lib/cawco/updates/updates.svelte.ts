@@ -9,7 +9,6 @@ import type {
   BinaryUpdateChannels,
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
-import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
@@ -18,10 +17,11 @@ import { hub } from "#lib/platform/hub.js";
 import {
   failureClause,
   failureSentence,
+  hubData,
   hubFailure,
-  hubFetch,
   hubRefusal,
   hubSaid,
+  unanswered,
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -139,20 +139,15 @@ class Updates {
 
   async loadPolicy(): Promise<void> {
     try {
-      const response = await hubFetch(
-        hubRequest("GET /api/binary-updates/settings")
-      );
+      const answer = await hub.api["binary-updates"].settings.get();
       // Its record damaged: the hub's own words, and Reset offered.
-      if (response.status === 409) {
+      if (answer.error && answer.error.status === 409) {
         this.policy = null;
         this.damaged = true;
-        this.problem = failureSentence(await hubFailure(response));
+        this.problem = failureSentence(hubFailure(answer));
         return;
       }
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      this.policy = (await response.json()) as BinaryUpdatePolicy;
+      this.policy = await hubData(answer);
       this.damaged = false;
       this.problem = null;
     } catch (error) {
@@ -165,11 +160,10 @@ class Updates {
    * with) and updates come back on. The hub's refusal is the error.
    */
   async resetPolicy(): Promise<void> {
-    const resetAnswer = await hub.api["binary-updates"].settings.reset.post();
-    if (resetAnswer.error) {
-      throw hubRefusal(resetAnswer, updatesWords.policyNotResetThen);
-    }
-    this.policy = resetAnswer.data;
+    this.policy = await hubData(
+      hub.api["binary-updates"].settings.reset.post(),
+      (refused) => hubRefusal(refused, updatesWords.policyNotResetThen)
+    );
     this.damaged = false;
     this.problem = null;
     await this.loadChannels();
@@ -186,16 +180,14 @@ class Updates {
   ): Promise<boolean> {
     this.settingRefused.delete(setting);
     this.keep();
-    const response = await hubFetch(
-      hubRequest("PUT /api/binary-updates/settings", {
-        body: {
-          channel: next.channel,
-          autoUpdate: next.autoUpdate,
-        },
-      })
-    ).catch(() => null);
-    if (!response?.ok) {
-      const why = response ? await hubSaid(response) : "the hub did not answer";
+    const answer = await hub.api["binary-updates"].settings.put({
+      channel: next.channel,
+      autoUpdate: next.autoUpdate,
+    });
+    if (answer.error) {
+      const why = unanswered(answer)
+        ? "the hub did not answer"
+        : hubSaid(answer);
       this.settingRefused.set(setting, {
         policy: next,
         reason:
@@ -206,17 +198,15 @@ class Updates {
       this.keep();
       return false;
     }
-    this.policy = (await response.json()) as BinaryUpdatePolicy;
+    this.policy = await hubData(answer);
     await this.loadChannels();
     return true;
   }
 
   async loadChannels(): Promise<void> {
-    const response = await hubFetch(
-      hubRequest("GET /api/binary-updates/channels")
-    ).catch(() => null);
-    if (response?.ok) {
-      this.channels = (await response.json()) as BinaryUpdateChannels;
+    const answer = await hub.api["binary-updates"].channels.get();
+    if (!answer.error) {
+      this.channels = await hubData(answer);
     }
   }
 
@@ -224,18 +214,18 @@ class Updates {
   async refreshChannels(): Promise<boolean> {
     this.settingRefused.delete("check");
     this.keep();
-    const response = await hubFetch(
-      hubRequest("POST /api/binary-updates/channels")
-    ).catch(() => null);
-    if (!response?.ok) {
-      const why = response ? await hubSaid(response) : "the hub did not answer";
+    const answer = await hub.api["binary-updates"].channels.post();
+    if (answer.error) {
+      const why = unanswered(answer)
+        ? "the hub did not answer"
+        : hubSaid(answer);
       this.settingRefused.set("check", {
         reason: updatesWords.noNewBuilds(why),
       });
       this.keep();
       return false;
     }
-    this.channels = (await response.json()) as BinaryUpdateChannels;
+    this.channels = await hubData(answer);
     return true;
   }
 
@@ -252,29 +242,25 @@ class Updates {
     this.commanded.add(machineId);
     this.refused.delete(machineId);
     this.keep();
-    let response: Response;
-    try {
-      response = await hubFetch(
-        hubRequest("POST /api/agents/:machineId/update", {
-          path: { machineId },
-          body: {
-            commandId: newId(),
-            version: machine.binaryUpdate?.availableVersion,
-          },
-        })
-      );
-    } catch {
+    const answer = await hub.api
+      .agents({ machineId })
+      .update.post({
+        commandId: newId(),
+        version: machine.binaryUpdate?.availableVersion,
+      })
+      .catch(() => null);
+    if (!answer?.error || unanswered(answer)) {
       return;
     }
-    if (response.status === 404) {
+    if (answer.status === 404) {
       this.refuse(machineId, {
         act: "install",
         reason: updatesWords.notConnected(name),
       });
-    } else if (response.status === 500) {
+    } else if (answer.status === 500) {
       this.refuse(machineId, {
         act: "install",
-        reason: `${name} could not start the update: ${await hubSaid(response)}. It keeps the build it runs; Retry to install it again.`,
+        reason: `${name} could not start the update: ${hubSaid(answer)}. It keeps the build it runs; Retry to install it again.`,
       });
     }
   }
@@ -302,16 +288,14 @@ class Updates {
     const { machineId } = machine;
     this.refused.delete(machineId);
     this.keep();
-    const response = await hubFetch(
-      hubRequest("POST /api/binary-updates/machines/:machineId/cancel", {
-        path: { machineId },
-      })
-    ).catch(() => null);
-    if (!response?.ok) {
+    const answer = await hub.api["binary-updates"]
+      .machines({ machineId })
+      .cancel.post();
+    if (answer.error) {
       // The install it meant to call off goes on: still this tab's to follow.
       this.refused.set(machineId, {
         act: "cancel",
-        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${response ? await hubSaid(response) : "the hub did not answer"}. It still installs; Retry to call it off.`,
+        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${unanswered(answer) ? "the hub did not answer" : hubSaid(answer)}. It still installs; Retry to call it off.`,
       });
       this.keep();
       return;
