@@ -273,8 +273,8 @@
     >
       <Button
         class="w-full"
-        onclick={(event: MouseEvent) =>
-          newSession(undefined, event.currentTarget as HTMLElement)}
+        onclick={(event: MouseEvent & { currentTarget: HTMLElement }) =>
+          newSession(undefined, event.currentTarget)}
         size="lg"
       >
         <IconPlus />
