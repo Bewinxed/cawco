@@ -37,7 +37,6 @@
   import {
     describeTool,
     getDiffInfo,
-    type ToolCallStatus,
     type ToolDescriptor,
   } from "#lib/components/features/tool-cards/descriptors.js";
   import MemoryBody from "#lib/components/features/tool-cards/MemoryBody.svelte";
@@ -129,8 +128,7 @@
     if (!SEND_TO_USER.test(name)) {
       return [];
     }
-    const attached = (m.metadata?.toolInput as { attachments?: unknown })
-      ?.attachments;
+    const attached = m.metadata?.toolInput?.attachments;
     return Array.isArray(attached)
       ? shownAttachments(
           attached.filter((path): path is string => typeof path === "string")
@@ -195,10 +193,7 @@
     if (!ANSWERING_CALL.test(name) || m.metadata?.toolStatus === "error") {
       return null;
     }
-    const input = (m.metadata?.toolInput ?? {}) as {
-      files?: unknown;
-      text?: unknown;
-    };
+    const input = m.metadata?.toolInput ?? {};
     const reply = typeof input.text === "string" ? input.text.trim() : "";
     const files = Array.isArray(input.files)
       ? input.files.filter((file): file is string => typeof file === "string")
@@ -365,9 +360,9 @@
     const meta = m.metadata ?? {};
     return describeTool(
       meta.toolName,
-      (meta.toolInput ?? undefined) as Record<string, unknown> | undefined,
+      meta.toolInput,
       asString(meta.toolResult),
-      (meta.toolStatus ?? "pending") as ToolCallStatus,
+      meta.toolStatus ?? "pending",
       (server) =>
         mcpServerHost(
           sessionsStore.session(m.instanceId)?.mcp ?? null,
@@ -382,10 +377,10 @@
      a refusal with its harness's tags off, each renderer's has-body rule. */
 
   /** The input field a prose body sets (a skill's arguments), as written. */
-  const proseOf = (input: Record<string, unknown> | undefined): string =>
-    typeof input?.[PROSE_FIELD] === "string"
-      ? (input[PROSE_FIELD] as string)
-      : "";
+  const proseOf = (input: Record<string, unknown> | undefined): string => {
+    const prose = input?.[PROSE_FIELD];
+    return typeof prose === "string" ? prose : "";
+  };
 
   /* A diff fact is one string carrying two opposite meanings — `+14 −6` from an
      edit, a lone `+38` from a write. The descriptor's own `diff` tone is what
@@ -460,8 +455,7 @@
     {@const failed = m.metadata?.toolStatus === "error"}
     {@const fields = inputFields(m.metadata?.toolInput)}
     {@const result = resultField(m.metadata?.toolResult)}
-    {@const toolInput = (m.metadata?.toolInput ?? undefined) as
-      Record<string, unknown> | undefined}
+    {@const toolInput = m.metadata?.toolInput}
     {@const changes =
       d.expanded === "diff"
         ? getDiffInfo(toolInput, m.metadata?.toolName, m.metadata?.toolDiff)
@@ -913,24 +907,25 @@
             </div>
           {/if}
           {#if d.expanded === "image" && machine && !failed}
-            {@const input = m.metadata?.toolInput as {
-              path: string;
-              caption?: string;
-            }}
-            <div
-              data-slot="shots"
-              class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
-            >
-              <Shot
-                alt={input.caption ?? pathLeaf(input.path)}
-                captions={captionsOf(machine(), input.path)}
-                caption={input.caption}
-                path={input.path}
-                size="card"
-                src={machineMedia(machine(), input.path)}
-                video={isVideo(input.path)}
-              />
-            </div>
+            {@const path = toolInput?.path}
+            {@const caption = toolInput?.caption}
+            {#if typeof path === "string"}
+              {@const shown = typeof caption === "string" ? caption : undefined}
+              <div
+                data-slot="shots"
+                class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
+              >
+                <Shot
+                  alt={shown ?? pathLeaf(path)}
+                  captions={captionsOf(machine(), path)}
+                  caption={shown}
+                  {path}
+                  size="card"
+                  src={machineMedia(machine(), path)}
+                  video={isVideo(path)}
+                />
+              </div>
+            {/if}
           {/if}
           {#if machine && !failed && sentAttachments(m).length}
             <div

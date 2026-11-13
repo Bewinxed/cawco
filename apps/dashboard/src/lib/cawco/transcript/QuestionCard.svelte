@@ -1,11 +1,7 @@
 <script lang="ts">
   import { QUESTION_UNSHOWN } from "@cawco/core/ask-tools";
   import { questionsOf } from "@cawco/core/question";
-  import type {
-    UserAnswers,
-    UserQuestion,
-    UserQuestionResult,
-  } from "@cawco/core/session-messages";
+  import type { UserAnswers, UserQuestion } from "@cawco/core/session-messages";
   import { untrack } from "svelte";
   import {
     chipsVariants,
@@ -42,15 +38,11 @@
     asker?: string;
   } = $props();
 
-  const input = $derived(
-    (message.metadata?.toolInput ?? {}) as Record<string, unknown>
-  );
+  const input = $derived(message.metadata?.toolInput ?? {});
   const questions = $derived<UserQuestion[]>(
     questionsOf(message.metadata?.toolName ?? "", input) ?? []
   );
-  const result = $derived(
-    message.metadata?.toolUseResult as UserQuestionResult | undefined
-  );
+  const result = $derived(message.metadata?.toolUseResult);
   const answered = $derived(result?.outcome === "answered");
   const dismissed = $derived(result?.outcome === "dismissed");
   /**

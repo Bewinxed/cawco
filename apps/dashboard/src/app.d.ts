@@ -43,10 +43,10 @@ declare global {
     }
     // interface Locals {}
     interface PageData {
-      /** The machines the hub holds, counted by the board's load. */
-      machineCount?: number | null;
       /** The tabs the server landed the board's address on (app/+layout.server.ts `landOnDesk`). */
       landed?: string[];
+      /** The machines the hub holds, counted by the board's load. */
+      machineCount?: number | null;
       /** The wide screen's resolved tabs, from the root layout load. */
       resolved?: string[];
       /** A project page's seed (workspace/project-seed.ts). */

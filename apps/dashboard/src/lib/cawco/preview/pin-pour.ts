@@ -55,9 +55,13 @@ const steps = (r: number) =>
 export function roundedBox(rect: Rect, radii: Radii): PathD {
   const { x, y, w, h } = rect;
   const most = Math.max(0, Math.min(w, h) / 2);
-  const [tl, tr, br, bl] = radii.map((r) =>
-    Math.max(0, Math.min(r, most))
-  ) as Radii;
+  const clamped = (r: number) => Math.max(0, Math.min(r, most));
+  const [tl, tr, br, bl]: Radii = [
+    clamped(radii[0]),
+    clamped(radii[1]),
+    clamped(radii[2]),
+    clamped(radii[3]),
+  ];
   const out: PathD = [];
   const turn = (cx: number, cy: number, r: number, from: number) => {
     if (r <= TOLERANCE) {

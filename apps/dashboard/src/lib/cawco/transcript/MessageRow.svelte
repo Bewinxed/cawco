@@ -508,8 +508,8 @@
     stripBuilt = true;
   }
   /** A plain strip button took the focus or a press: the strip is built, and the real button takes it. */
-  function reachStrip(event: Event): void {
-    const plain = event.currentTarget as HTMLElement;
+  function reachStrip(event: Event & { currentTarget: HTMLElement }): void {
+    const plain = event.currentTarget;
     const label = plain.getAttribute("aria-label") ?? "";
     const held = plain.parentElement;
     const pressed = event.type === "click";
@@ -531,8 +531,8 @@
     stripFocused =
       event.target instanceof Element && event.target.matches(":focus-visible");
   }
-  function stripBlur(event: FocusEvent): void {
-    const held = event.currentTarget as HTMLElement;
+  function stripBlur(event: FocusEvent & { currentTarget: HTMLElement }): void {
+    const held = event.currentTarget;
     if (!(
       event.relatedTarget instanceof Node && held.contains(event.relatedTarget)
     )) {
