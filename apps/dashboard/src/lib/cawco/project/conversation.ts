@@ -11,18 +11,10 @@
 import { detach } from "@cawco/core/detach";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { newId } from "#lib/platform/id.js";
-import {
-  answeredOr,
-  conversationStart,
-  drawFirstPrompt,
-  type HeldSend,
-  nameConversation,
-  type SendExtras,
-  spawnSession,
-  withdrawFirstPrompt,
-} from "../client.svelte";
 import { continuationStageWords } from "../continue.svelte";
 import type { DraftContent } from "../draft-store";
+import { answeredOr } from "../hub/control";
+import type { SendExtras } from "../send-store";
 import {
   askedFor,
   beginStart,
@@ -31,6 +23,13 @@ import {
   parked,
   planAsks,
 } from "../spawn/parked.svelte";
+import { conversationStart, nameConversation } from "../stores/projects.svelte";
+import {
+  drawFirstPrompt,
+  type HeldSend,
+  spawnSession,
+  withdrawFirstPrompt,
+} from "../stores/session-start.svelte";
 
 /**
  * Starts it; its session's id. Throws the hub's refusal, or why it can't

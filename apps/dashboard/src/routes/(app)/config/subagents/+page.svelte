@@ -4,7 +4,6 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
   import { configureWords } from "@cawco/core/words/configure";
-  import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteAgent } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -19,9 +18,11 @@
     pushAgents,
     saveAgent,
   } from "#lib/cawco/fleet.js";
+  import { didntAnswer } from "#lib/cawco/hub/control.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -44,7 +45,7 @@
   const HUE = section.hue;
 
   const agents = $derived(store.fleet.value?.agents ?? []);
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   const online = $derived(
     machines.filter((machine) => machine.status === "online")
   );

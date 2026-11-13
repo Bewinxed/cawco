@@ -30,9 +30,13 @@ import { z } from "zod";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { listAttachments, listFiles } from "../artifact-api";
-import { cawco, storedReadWaits } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { extensionOf } from "../lightbox/extension";
+import { boardStore } from "../stores/board.svelte";
+import { needsStore } from "../stores/needs.svelte";
+import { previewsStore } from "../stores/previews.svelte";
+import { sessionsStore } from "../stores/sessions.svelte";
+import { storedReadWaits } from "../stores/transcript-reads.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 import { onArtifactReached } from "./reached";
@@ -106,7 +110,7 @@ const attachmentReads = new SessionReads<SessionAttachment>(
     if (waits?.on === "machine") {
       throw new Error(
         machineFaultWords(
-          machineCalled(waits.machine.machineId, cawco.machines),
+          machineCalled(waits.machine.machineId, boardStore.machines),
           "offline"
         )
       );
@@ -302,7 +306,7 @@ const attachmentsReadAt = new Map<string, string>();
 
 /** The newest of the session's loaded messages that carried an attachment, by its id; "" for none. */
 const newestCarrying = (instanceId: string): string => {
-  const messages = cawco.session(instanceId)?.messages ?? [];
+  const messages = sessionsStore.session(instanceId)?.messages ?? [];
   for (let at = messages.length - 1; at >= 0; at -= 1) {
     const message = messages[at];
     if (
@@ -323,7 +327,7 @@ const newestCarrying = (instanceId: string): string => {
  */
 const waitingKey = (instanceId: string): string =>
   JSON.stringify([
-    cawco.artifactNeeds
+    needsStore.artifactNeeds
       .filter((need) => need.instanceId === instanceId)
       .map((need) => [
         need.artifactId,
@@ -331,7 +335,7 @@ const waitingKey = (instanceId: string): string =>
         need.parked,
         need.pending,
       ]),
-    cawco.artifactNotices
+    needsStore.artifactNotices
       .filter((notice) => notice.instanceId === instanceId)
       .map((notice) => [notice.artifactId, notice.parts]),
   ]);
@@ -348,7 +352,7 @@ export function followFiles(instanceId: string | null): void {
   if (!instanceId) {
     return;
   }
-  const held = `${cawco.previews[instanceId]?.artifacts?.join(",") ?? ""}|${waitingKey(instanceId)}`;
+  const held = `${previewsStore.previews[instanceId]?.artifacts?.join(",") ?? ""}|${waitingKey(instanceId)}`;
   if (artifactsReadAt.get(instanceId) !== held) {
     artifactsReadAt.set(instanceId, held);
     readArtifacts(instanceId);
@@ -359,13 +363,13 @@ export function followFiles(instanceId: string | null): void {
   if (waits?.on === "board") {
     return;
   }
-  // The machine back, its transcript is read again first (client.svelte.ts
+  // The machine back, its transcript is read again first (stores/transcript-reads.svelte.ts
   // `readBehind`): the attachments are read once that lands, by the newest
   // message it brings, not before it and again after.
   if (
     !waits &&
     attachmentsReadAt.get(instanceId)?.startsWith("away:") &&
-    cawco.session(instanceId)?.loading
+    sessionsStore.session(instanceId)?.loading
   ) {
     return;
   }

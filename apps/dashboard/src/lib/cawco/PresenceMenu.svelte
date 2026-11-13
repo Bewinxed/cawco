@@ -31,7 +31,7 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { cawco } from "./client.svelte";
+
   import { instanceTitle } from "./home/home-state.svelte";
   import {
     allowHere,
@@ -45,6 +45,7 @@
     setAwayAfter,
     setMachineCounts,
   } from "./person.svelte";
+  import { boardStore } from "./stores/board.svelte";
 
   /** HH:MM in this browser's zone. */
   const clock = (at: number | null): string | null =>
@@ -61,7 +62,7 @@
     if (!view?.on) {
       return null;
     }
-    const row = cawco.instanceIndex.byId.get(view.on);
+    const row = boardStore.instanceIndex.byId.get(view.on);
     return row ? instanceTitle(row) : null;
   });
   /** What the dot says: here, away, or appearing away. */
