@@ -152,6 +152,28 @@ const originOf = (url: string | undefined): string | undefined => {
   return origin === "null" ? undefined : origin;
 };
 
+/**
+ * A page the person had open while they held the browser, as the daemon's
+ * log may name it: its origin (scheme, host and port) and nothing past it.
+ * The log is read for diagnosis and quoted into reports, and a sign-in's
+ * redirect or popup carries its code, state or token in its query or
+ * fragment; nothing the person sees reaches it. An address with no origin
+ * says its scheme alone (an `about:` page its name too, never a query), so
+ * a `data:` page's content stays out as well.
+ */
+const pageForLog = (url: string): string => {
+  if (!URL.canParse(url)) {
+    return "an address that does not parse";
+  }
+  const parsed = new URL(url);
+  if (parsed.origin !== "null") {
+    return parsed.origin;
+  }
+  return parsed.protocol === "about:"
+    ? `about:${parsed.pathname}`
+    : parsed.protocol;
+};
+
 interface Page {
   targetId: string;
   url: string;
@@ -642,8 +664,14 @@ const restorePages = async (key: BrowserKey): Promise<void> => {
   }
   const { stuck, again, loaded } = read.value;
   if (stuck.length > 0) {
+    // Each page by its origin alone (pageForLog): the restore answers full
+    // addresses, and what the person had open stays out of the log.
+    const pages = (urls: string[]) =>
+      urls.length > 0
+        ? `${urls.length} (${urls.map(pageForLog).join(", ")})`
+        : "none";
     console.info(
-      `[browser] ${key}: off their window's size after the take-over: ${stuck.join(", ")}; moved again: ${again.map((one) => `${one.url} (${one.moves} moves)`).join(", ") || "none"}; loaded again: ${loaded.join(", ") || "none"}`
+      `[browser] ${key}: off their window's size after the take-over: ${pages(stuck)}; moved again: ${again.length > 0 ? `${again.length} (${again.map((one) => `${pageForLog(one.url)}, ${one.moves} moves`).join("; ")})` : "none"}; loaded again: ${pages(loaded)}`
     );
   }
 };
