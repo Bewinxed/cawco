@@ -22,9 +22,18 @@ export const browserWords = {
   /** The stream's floating control on a touch screen while you have control: the phone's keyboard, typing into the page. */
   showKeyboard: "Show keyboard",
   hideKeyboard: "Hide keyboard",
-  /** On a phone, the page drawn twice its size to read and tap, and back to the screen's width. */
-  zoomIn: "Zoom in on the page",
-  zoomOut: "Fit the page to the screen",
+  /** The take-over's layout switch in the head: the page laid out as a phone's or as a desktop's, and its one-button form. */
+  layout: "Layout",
+  phoneLayout: "Phone layout",
+  deskLayout: "Desktop layout",
+  toPhoneLayout: "Desktop layout: switch to phone",
+  toDeskLayout: "Phone layout: switch to desktop",
+  /** In the head's More while you have control: the page loaded again in the layout you're in. */
+  reloadPage: "Reload page",
+  /** The desktop layout on a phone: the whole page in view, and back to reading size. */
+  fitPage: "Fit the page",
+  /** The desktop layout on a phone, zoomed in: the whole page in small, the part in view marked. */
+  overview: "Where you are on the page",
   /** The field the phone's keyboard types into, for a screen reader. */
   keyboardField: "Type into the browser",
   /** The head's buttons, and while they go. */

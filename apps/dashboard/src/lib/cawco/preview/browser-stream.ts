@@ -1,24 +1,28 @@
 /**
  * A browser artifact's stream in the panel (Projects spec §5.11, "The
- * view"), on the hub's own origin (hub browser-routes.ts), one of two ways
- * by the browser's host:
+ * view"), on the hub's own origin (hub browser-routes.ts), one of two ways:
  *
- * - **container** (`/ws/browser/<instance>/<artifact>/api/ws`): neko's
- *   signaling. neko offers (`signal/provide`, its ICE servers the hub's), this
- *   screen answers, the video comes on an `RTCPeerConnection` and the
- *   person's input goes back on the data channel neko opens, as neko's own
- *   client sends it (m1k1o/neko client/core/src/transport/webrtc.ts and
- *   input/datachannel.ts: "big-endian binary messages", an opcode, a u16
- *   length, the fields). neko takes input only from the session it hosts,
- *   which the shield gives control to (agent shield.ts `control/give`).
- * - **local** (`/ws/browser/<instance>/<artifact>/cdp`): the local
- *   browser's one page as JPEG frames, each a 4-byte header (its CSS width
- *   and height, u16 big-endian) and the picture; input goes back as JSON
- *   (agent cdp-takeover.ts `CdpInput`).
+ * - **video** (`/ws/browser/<instance>/<artifact>/api/ws`): the container
+ *   host's screen while nobody holds it, watched alone: neko's signaling.
+ *   neko offers (`signal/provide`, its ICE servers the hub's), this screen
+ *   answers, and the video comes on an `RTCPeerConnection` (m1k1o/neko
+ *   client/core/src/transport/webrtc.ts).
+ * - **frames** (`/ws/browser/<instance>/<artifact>/cdp`): one page as JPEG
+ *   frames, each a 4-byte header (its CSS width and height, u16
+ *   big-endian) and the picture; input goes back as JSON (agent
+ *   cdp-takeover.ts `CdpInput`). The local browser's page in front while
+ *   nobody holds it, and the person's take-over on either host, in the
+ *   layout they hold.
  *
  * Neither keeps anything of the page: the frames are drawn and dropped.
  */
-import { BROWSER_VIEW_MOVED } from "@cawco/core/browser";
+import {
+  BROWSER_SCREEN,
+  BROWSER_VIEW_MOVED,
+  type TakeoverFocus,
+  type TakeoverLayout,
+  type TakeoverTouchPoint,
+} from "@cawco/core/browser";
 import { z } from "zod";
 import type { Typed } from "./keyboard-sink";
 
@@ -36,8 +40,6 @@ export type StreamState =
   | { kind: "no-codec"; codec: string };
 
 export interface StreamEvents {
-  /** neko's session for this view, once it introduced it; the shield gives it control. */
-  session: (id: string | null) => void;
   state: (state: StreamState) => void;
 }
 
@@ -52,15 +54,12 @@ interface StreamInput {
   wheel: (x: number, y: number, event: WheelInput) => void;
 }
 
-/** What a wheel step needs of an event: a real WheelEvent, or a finger's drag said as one. */
-type WheelInput = Pick<
-  WheelEvent,
-  "ctrlKey" | "deltaMode" | "deltaX" | "deltaY" | "timeStamp"
->;
+/** What a wheel step needs of an event: a real WheelEvent, or two fingers' scroll said as one. */
+type WheelInput = Pick<WheelEvent, "deltaMode" | "deltaX" | "deltaY">;
 
-export interface BrowserStream extends StreamInput {
+export interface BrowserStream {
   close: () => void;
-  /** The page's size in the stream's pixels (neko's screen, the local page's CSS size); null before the first. */
+  /** The page's size in the stream's pixels (neko's screen, the page's CSS size); null before the first. */
   size: () => { width: number; height: number } | null;
 }
 
@@ -82,18 +81,50 @@ const closedHow = (code: number): "moved" | "refused" | "lost" => {
 };
 /** Waits before opening a lost socket again, longest last. Our call. */
 const RETRY_MS = [1000, 2000, 5000, 10_000] as const;
+
+/**
+ * A view's socket opened again as it closes, with what the well says: at
+ * once when what it shows moved, only by Try again when the hub refused
+ * it, else after the next of {@link RETRY_MS}, its tries counted until it
+ * opens (`opened`). `said` is what the far end said as it closed, when it
+ * said more than the close.
+ */
+const reopening = (events: StreamEvents, open: () => void) => {
+  let tries = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  return {
+    opened: () => {
+      tries = 0;
+    },
+    closed: (event: CloseEvent, said: string | null = null) => {
+      const how = closedHow(event.code);
+      if (how === "moved") {
+        open();
+        return;
+      }
+      const named = event.reason || `closed with ${event.code}`;
+      if (how === "refused") {
+        events.state({ kind: "refused", why: event.reason || said || named });
+        return;
+      }
+      events.state({ kind: "lost", why: said ?? named });
+      const wait = RETRY_MS[Math.min(tries, RETRY_MS.length - 1)];
+      tries += 1;
+      retry = setTimeout(open, wait);
+    },
+    stop: () => clearTimeout(retry),
+  };
+};
 /** ICE failures in a row before the view says the stream didn't connect. Our call: neko's client gives up after 10 at a growing backoff; a person waits less. */
 const ICE_TRIES = 3;
 const ICE_BACKOFF_MS = 1500;
-/** neko's wheel: a step per this many px of delta, the first of a gesture at once (its overlay.ts `WHEEL_STEP`). */
-const WHEEL_STEP = 53;
+/** A wheel's line, px, for a wheel that counts in lines. */
 const WHEEL_LINE = 19;
-const WHEEL_GESTURE_MS = 250;
 /** An answer whose video section this browser rejected (port 0), and the offer's first video codec. */
 const VIDEO_REJECTED = /^m=video 0 /mu;
 const VIDEO_CODEC = /^m=video[\s\S]*?a=rtpmap:\d+ ([\w-]+)/mu;
 
-/** The hub's socket for a view: `kind` is neko's signaling or the local browser's frames. */
+/** The hub's socket for a view: `kind` is neko's signaling or the page's frames. */
 export const streamUrl = (
   instanceId: string,
   artifactId: string,
@@ -105,87 +136,9 @@ export const streamUrl = (
   return `${scheme}//${location.host}${path}?token=${encodeURIComponent(viewer)}`;
 };
 
-/**
- * X11 keysyms for the keys a keyboard names (X.Org keysymdef.h): a
- * character is its Latin-1 code, else `0x01000000` plus its code point.
- */
-const KEYSYMS: Record<string, number> = {
-  Backspace: 0xff_08,
-  Tab: 0xff_09,
-  Enter: 0xff_0d,
-  Escape: 0xff_1b,
-  Delete: 0xff_ff,
-  Home: 0xff_50,
-  ArrowLeft: 0xff_51,
-  ArrowUp: 0xff_52,
-  ArrowRight: 0xff_53,
-  ArrowDown: 0xff_54,
-  PageUp: 0xff_55,
-  PageDown: 0xff_56,
-  End: 0xff_57,
-  Insert: 0xff_63,
-  ContextMenu: 0xff_67,
-  CapsLock: 0xff_e5,
-  Shift: 0xff_e1,
-  Control: 0xff_e3,
-  Alt: 0xff_e9,
-  AltGraph: 0xfe_03,
-  Meta: 0xff_eb,
-};
-for (let n = 1; n <= 12; n += 1) {
-  KEYSYMS[`F${n}`] = 0xff_be + n - 1;
-}
-const LATIN1_LAST = 0xff;
-const UNICODE_KEYSYM = 0x01_00_00_00;
-
-/** The keysym of a keyboard event's key; undefined for a key X has none for ("Unidentified", "Dead"). */
-const keysymOf = (key: string): number | undefined => {
-  const named = KEYSYMS[key];
-  if (named !== undefined) {
-    return named;
-  }
-  const point = key.codePointAt(0);
-  if (point === undefined || [...key].length !== 1) {
-    return;
-  }
-  return point <= LATIN1_LAST ? point : UNICODE_KEYSYM + point;
-};
-
-/**
- * Whether a key of neko's keymap (its US layout) types `point`: printable
- * ASCII. Any other character goes as GTK's Unicode entry, never as its own
- * keysym. neko types a keysym no key has by putting it on a spare key and
- * pressing that key at once (neko 3.2.0 server/pkg/xorg/xorg.c `XKey`,
- * `XkbAddKeyKeysym`). Chromium's own keymap never hears of the new key: it
- * turns XKB on and selects no XkbMapNotify, so the X server sends it no
- * MappingNotify (xorg-server xkb/xkbEvents.c `XkbSendLegacyMapNotify`). Its
- * character comes from GTK's input method alone, whose keymap catches up on
- * GTK's own X connection, and a press handled before it did typed nothing:
- * é and 🙂 lost in 3 of 10 runs on the image's Chromium 155.
- */
-const onLayout = (point: number): boolean => point >= 0x20 && point <= 0x7e;
-
-/** A UTF-16 surrogate standing alone: no character, so nothing to enter. */
-const loneSurrogate = (point: number): boolean =>
-  point >= 0xd8_00 && point <= 0xdf_ff;
-
-/** A key pressed for a shortcut, not to type: Ctrl, Meta or Alt held (AltGr, which types, aside). */
-const shortcut = (event: KeyboardEvent): boolean =>
-  (event.ctrlKey || event.metaKey || event.altKey) &&
-  !event.getModifierState("AltGraph");
-
 /** The ctrl key pressed with V: the paste comes as the browser's own paste event, with the person's text. */
 const pastes = (event: KeyboardEvent): boolean =>
   (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v";
-
-const NEKO_OP = {
-  move: 1,
-  scroll: 2,
-  keyDown: 3,
-  keyUp: 4,
-  buttonDown: 5,
-  buttonUp: 6,
-} as const;
 
 const NekoMessageSchema = z.object({
   event: z.string(),
@@ -193,7 +146,7 @@ const NekoMessageSchema = z.object({
 });
 type NekoMessage = z.infer<typeof NekoMessageSchema>;
 
-/** neko's stream into `video`, with its input on the data channel. */
+/** neko's stream into `video`: the container host's screen, watched. */
 export const nekoStream = (
   url: string,
   video: HTMLVideoElement,
@@ -201,15 +154,13 @@ export const nekoStream = (
 ): BrowserStream => {
   let socket: WebSocket | null = null;
   let peer: RTCPeerConnection | null = null;
-  let channel: RTCDataChannel | null = null;
   let held: RTCIceCandidateInit[] = [];
   let screen: { width: number; height: number } | null = null;
   let closed = false;
-  let tries = 0;
   let iceFailures = 0;
+  /** The wait before ICE is asked again. */
   let retry: ReturnType<typeof setTimeout> | undefined;
   let refusedWhy: string | null = null;
-  const wheel = { x: 0, y: 0, at: 0 };
 
   const send = (event: string, payload?: unknown) => {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -217,35 +168,9 @@ export const nekoStream = (
     }
   };
 
-  /** One input message: its opcode, its length and its big-endian fields (`[bytes, value]`, negative bytes signed). */
-  const input = (op: number, ...fields: [number, number][]) => {
-    if (channel?.readyState !== "open") {
-      return;
-    }
-    const length = fields.reduce((sum, [bytes]) => sum + Math.abs(bytes), 0);
-    const view = new DataView(new ArrayBuffer(3 + length));
-    view.setUint8(0, op);
-    view.setUint16(1, length);
-    let at = 3;
-    for (const [bytes, value] of fields) {
-      if (bytes === 1) {
-        view.setUint8(at, value);
-      } else if (bytes === 2) {
-        view.setUint16(at, value);
-      } else if (bytes === -2) {
-        view.setInt16(at, value);
-      } else {
-        view.setUint32(at, value);
-      }
-      at += Math.abs(bytes);
-    }
-    channel.send(view.buffer);
-  };
-
   const closePeer = () => {
     peer?.close();
     peer = null;
-    channel = null;
   };
 
   const requestPeer = () => {
@@ -291,10 +216,6 @@ export const nekoStream = (
       video.srcObject = streams[0] ?? new MediaStream([track]);
       video.play().catch(() => undefined);
     };
-    at.ondatachannel = ({ channel: opened }) => {
-      opened.binaryType = "arraybuffer";
-      channel = opened;
-    };
     at.onconnectionstatechange = () => {
       if (peer !== at) {
         return;
@@ -320,13 +241,10 @@ export const nekoStream = (
     const payload = message.payload ?? {};
     switch (message.event) {
       case "system/init": {
-        tries = 0;
+        again.opened();
         const size = payload.screen_size as
           { width: number; height: number } | undefined;
         screen = size ? { width: size.width, height: size.height } : null;
-        events.session(
-          typeof payload.session_id === "string" ? payload.session_id : null
-        );
         requestPeer();
         return;
       }
@@ -386,107 +304,17 @@ export const nekoStream = (
       }
       socket = null;
       closePeer();
-      events.session(null);
-      const how = closedHow(event.code);
-      if (how === "moved") {
-        open();
-        return;
-      }
-      if (how === "refused") {
-        events.state({
-          kind: "refused",
-          why: event.reason || refusedWhy || `closed with ${event.code}`,
-        });
-        return;
-      }
-      events.state({
-        kind: "lost",
-        why: refusedWhy ?? (event.reason || `closed with ${event.code}`),
-      });
-      const wait = RETRY_MS[Math.min(tries, RETRY_MS.length - 1)];
-      tries += 1;
-      retry = setTimeout(open, wait);
+      again.closed(event, refusedWhy);
     };
   };
+  const again = reopening(events, open);
   open();
-
-  const press = (keysym: number, down: boolean) =>
-    input(down ? NEKO_OP.keyDown : NEKO_OP.keyUp, [4, keysym]);
-  const tap = (keysym: number) => {
-    press(keysym, true);
-    press(keysym, false);
-  };
-  const shift = KEYSYMS.Shift as number;
-  const control = KEYSYMS.Control as number;
-  const enter = KEYSYMS.Enter as number;
-
-  /**
-   * A character no key of neko's layout has, as GTK's Unicode entry:
-   * Ctrl+Shift+U, the code point's hex digits, then Return, which commits
-   * it. Every key is on the layout, so neko remaps nothing, and all of it
-   * goes in order on the one data channel. The image's Chromium runs ibus's
-   * GTK module with no ibus daemon (packages/agent/browser/chromium.conf's
-   * GTK_IM_MODULE), which hands the keys to GTK's simple input method and
-   * shows Chromium none of its preedit, so Chromium keeps U and the digits
-   * from the page; the Return that commits reaches it as a "Process"
-   * keydown (229, Chromium input_method_auralinux.cc
-   * `DispatchImeFilteredKeyPressEvent`) where Space's would be a Space, and
-   * then the character. GTK keeps Ctrl's and Shift's releases inside the
-   * entry, so both are pressed and released again after it and the page's
-   * keys stand released; Shift is left down when the person holds it
-   * (`holdShift`).
-   */
-  const unicodeEntry = (point: number, holdShift: boolean) => {
-    press(control, true);
-    press(shift, true);
-    tap(keysymOf("U") as number);
-    press(shift, false);
-    press(control, false);
-    for (const digit of point.toString(16)) {
-      tap(keysymOf(digit) as number);
-    }
-    tap(enter);
-    press(shift, true);
-    if (!holdShift) {
-      press(shift, false);
-    }
-    tap(control);
-  };
-
-  /** One character the keyboard field typed: a newline as Enter, a key of the layout as its keysym (a capital with Shift), any other as GTK's Unicode entry. */
-  const typeChar = (char: string) => {
-    if (char === "\n") {
-      tap(enter);
-      return;
-    }
-    const point = char.codePointAt(0) as number;
-    if (loneSurrogate(point)) {
-      console.warn(
-        `[cawco] browser keyboard: a lone surrogate (U+${point.toString(16).toUpperCase()}) is no character to type; dropped.`
-      );
-      return;
-    }
-    if (!onLayout(point)) {
-      unicodeEntry(point, false);
-      return;
-    }
-    // neko finds a keysym's key under the modifiers held now, and puts one
-    // no key has on a spare key whose second level is its capital: a
-    // capital typed without Shift lands as its small letter.
-    const capital = char !== char.toLowerCase();
-    if (capital) {
-      press(shift, true);
-    }
-    tap(point);
-    if (capital) {
-      press(shift, false);
-    }
-  };
 
   return {
     close: () => {
       closed = true;
       clearTimeout(retry);
+      again.stop();
       closePeer();
       socket?.close();
       socket = null;
@@ -497,72 +325,6 @@ export const nekoStream = (
       (video.videoWidth
         ? { width: video.videoWidth, height: video.videoHeight }
         : null),
-    move: (x, y) => input(NEKO_OP.move, [2, x], [2, y]),
-    button: (x, y, button, down) => {
-      input(NEKO_OP.move, [2, x], [2, y]);
-      // X numbers buttons from 1: left, middle, right.
-      input(down ? NEKO_OP.buttonDown : NEKO_OP.buttonUp, [4, button + 1]);
-    },
-    wheel: (x, y, event) => {
-      input(NEKO_OP.move, [2, x], [2, y]);
-      const first = event.timeStamp - wheel.at > WHEEL_GESTURE_MS;
-      if (first) {
-        wheel.x = 0;
-        wheel.y = 0;
-      }
-      wheel.at = event.timeStamp;
-      const scale = event.deltaMode === 0 ? 1 : WHEEL_LINE;
-      wheel.x += event.deltaX * scale;
-      wheel.y += event.deltaY * scale;
-      const step = (axis: "x" | "y") => {
-        const value = wheel[axis];
-        if (!first && Math.abs(value) < WHEEL_STEP) {
-          return 0;
-        }
-        wheel[axis] = 0;
-        return Math.sign(value);
-      };
-      const dx = step("x");
-      const dy = step("y");
-      if (dx || dy) {
-        input(NEKO_OP.scroll, [-2, dx], [-2, dy], [1, event.ctrlKey ? 1 : 0]);
-      }
-    },
-    key: (event, down) => {
-      // Ctrl+V's V waits for the browser's paste, which carries the text.
-      if (down && pastes(event)) {
-        return;
-      }
-      // A character off the layout, typed rather than pressed for a
-      // shortcut, is entered on its press; its release sends nothing.
-      const point =
-        [...event.key].length === 1 ? event.key.codePointAt(0) : undefined;
-      if (point !== undefined && !onLayout(point) && !shortcut(event)) {
-        if (down) {
-          unicodeEntry(point, event.shiftKey);
-        }
-        return;
-      }
-      const keysym = keysymOf(event.key);
-      if (keysym !== undefined) {
-        press(keysym, down);
-      }
-    },
-    type: ({ back, text }) => {
-      for (let n = 0; n < back; n += 1) {
-        tap(KEYSYMS.Backspace as number);
-      }
-      for (const char of text) {
-        typeChar(char);
-      }
-    },
-    paste: (text) => {
-      // The person's clipboard into the browser's, then its paste keystroke.
-      send("clipboard/set", { text });
-      press(control, true);
-      tap(keysymOf("v") as number);
-      press(control, false);
-    },
   };
 };
 
@@ -575,30 +337,190 @@ const modifiersOf = (event: KeyboardEvent | MouseEvent): number =>
 
 const BUTTONS = ["left", "middle", "right"] as const;
 
+/** What the take-over's daemon says beside its frames (agent cdp-takeover.ts). */
+const FocusSchema = z.object({
+  t: z.literal("focus"),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+
 /**
- * The local browser's page into `canvas`, frame by frame; `drawn` is told
- * each frame's size once it is on the canvas.
+ * How much of a soft frame may change and still be drawn over the sharp
+ * picture as a patch, as a share of the frame: a caret's blink or a letter
+ * typed is, a scroll is not (the whole frame is drawn then). Our call.
+ */
+const PATCH_MOST = 0.25;
+
+/** The local browser's frames, or a take-over's on either host: a view that also says the layout it holds and its fingers. */
+export interface TakeoverStream extends BrowserStream, StreamInput {
+  /** A finger held still at a point: the word there selected, the button held for a drag. */
+  hold: (x: number, y: number) => void;
+  /** The layout the person holds: sent now, and first on every connection; frames of another size are dropped until the layout's come. */
+  layout: (layout: TakeoverLayout | null) => void;
+  /** The page loaded again. */
+  reload: () => void;
+  /** The fingers on a phone layout's page, in the stream's pixels, at `time` (ms since the epoch, the event's own). */
+  touch: (
+    phase: "start" | "move" | "end" | "cancel",
+    points: TakeoverTouchPoint[],
+    time: number
+  ) => void;
+}
+
+/** The CSS size a layout's frames come at. */
+const laidSize = (layout: TakeoverLayout): { width: number; height: number } =>
+  layout.form === "phone"
+    ? { width: layout.width, height: layout.height }
+    : BROWSER_SCREEN;
+
+/**
+ * A changed region between two frames' pixels, or null when none changed.
+ * A JPEG's blocks are coded each on its own, so a region the page did not
+ * change decodes to the very same pixels in the next frame.
+ */
+const changed = (
+  before: Uint32Array,
+  now: Uint32Array,
+  width: number,
+  height: number
+): { x: number; y: number; w: number; h: number } | null => {
+  let top = height;
+  let bottom = -1;
+  let left = width;
+  let right = -1;
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      if (before[row + x] !== now[row + x]) {
+        top = Math.min(top, y);
+        bottom = y;
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+      }
+    }
+  }
+  return bottom < 0
+    ? null
+    : { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
+};
+
+/**
+ * A browser's page into `canvas`, frame by frame: the local browser's
+ * while nobody holds it, a take-over's on either host. `drawn` is told
+ * each frame's size once it is on the canvas; `focus`, where the page's
+ * focus stands once a desktop layout is laid out.
+ *
+ * The daemon sends the screencast's frames, one image px per CSS px, and
+ * once the page is still a sharp picture at the layout's scale. A frame
+ * after a sharp picture that changes little of it (a caret's blink, a
+ * letter typed) is drawn over it as a patch, so text does not go soft and
+ * sharp again with every blink; one that changes more is drawn whole.
  */
 export const cdpStream = (
   url: string,
   canvas: HTMLCanvasElement,
   events: StreamEvents,
-  drawn: (width: number, height: number) => void
-): BrowserStream => {
+  drawn: (width: number, height: number) => void,
+  focus: (at: TakeoverFocus) => void = () => undefined
+): TakeoverStream => {
   let socket: WebSocket | null = null;
   let size: { width: number; height: number } | null = null;
   let closed = false;
-  let tries = 0;
-  let retry: ReturnType<typeof setTimeout> | undefined;
   /** A frame being decoded: the next waits, and only the newest is kept. */
   let decoding = false;
   let next: ArrayBuffer | null = null;
+  /** The layout the person holds; null while watching. */
+  let held: TakeoverLayout | null = null;
+  /** The canvas holds a sharp picture, patched since by soft frames at most. */
+  let sharp = false;
+  /** The last soft frame, and its pixels once read: what a patch is measured against. */
+  let soft: { picture: ImageBitmap; pixels: Uint32Array | null } | null = null;
   const context = canvas.getContext("2d");
+  let reader: OffscreenCanvasRenderingContext2D | null = null;
 
   const send = (message: object) => {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
     }
+  };
+
+  /** A picture's pixels, one word each. */
+  const pixelsOf = (picture: ImageBitmap): Uint32Array | null => {
+    if (
+      !reader ||
+      reader.canvas.width !== picture.width ||
+      reader.canvas.height !== picture.height
+    ) {
+      reader = new OffscreenCanvas(picture.width, picture.height).getContext(
+        "2d",
+        { willReadFrequently: true }
+      );
+    }
+    if (!reader) {
+      return null;
+    }
+    reader.drawImage(picture, 0, 0);
+    const { data } = reader.getImageData(0, 0, picture.width, picture.height);
+    return new Uint32Array(data.buffer);
+  };
+
+  /** Keeps `picture` as the last soft frame, its pixels with it once read. */
+  const keepSoft = (picture: ImageBitmap, pixels: Uint32Array | null) => {
+    if (soft && soft.picture !== picture) {
+      soft.picture.close();
+    }
+    soft = { picture, pixels };
+  };
+
+  const whole = (picture: ImageBitmap) => {
+    if (canvas.width !== picture.width || canvas.height !== picture.height) {
+      canvas.width = picture.width;
+      canvas.height = picture.height;
+    }
+    context?.drawImage(picture, 0, 0);
+  };
+
+  /** A soft frame over the sharp picture: only what it changed, when that is little. */
+  const patched = (picture: ImageBitmap, width: number): boolean => {
+    const last = soft;
+    if (!(
+      sharp &&
+      context &&
+      last &&
+      last.picture.width === picture.width &&
+      last.picture.height === picture.height
+    )) {
+      return false;
+    }
+    const before = last.pixels ?? pixelsOf(last.picture);
+    const now = pixelsOf(picture);
+    if (!(before && now)) {
+      return false;
+    }
+    keepSoft(picture, now);
+    const box = changed(before, now, picture.width, picture.height);
+    if (!box) {
+      return true;
+    }
+    if (box.w * box.h > picture.width * picture.height * PATCH_MOST) {
+      return false;
+    }
+    const k = canvas.width / width;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      picture,
+      box.x,
+      box.y,
+      box.w,
+      box.h,
+      box.x * k,
+      box.y * k,
+      box.w * k,
+      box.h * k
+    );
+    return true;
   };
 
   const draw = async (frame: ArrayBuffer) => {
@@ -607,6 +529,15 @@ export const cdpStream = (
       const header = new DataView(frame, 0, 4);
       const width = header.getUint16(0);
       const height = header.getUint16(2);
+      const expected = held ? laidSize(held) : null;
+      // A frame of the layout before the one asked for (still on its way
+      // as the layout changed) would draw a desktop page in a phone's box.
+      if (
+        expected &&
+        (width !== expected.width || height !== expected.height)
+      ) {
+        return;
+      }
       const picture = await createImageBitmap(
         new Blob([frame.slice(4)], { type: "image/jpeg" })
       );
@@ -614,12 +545,20 @@ export const cdpStream = (
         picture.close();
         return;
       }
-      if (canvas.width !== picture.width || canvas.height !== picture.height) {
-        canvas.width = picture.width;
-        canvas.height = picture.height;
+      if (picture.width > width) {
+        // The still page's sharp picture: drawn whole, kept until it changes.
+        whole(picture);
+        picture.close();
+        sharp = true;
+      } else if (!patched(picture, width)) {
+        whole(picture);
+        sharp = false;
+        if (held?.form === "phone") {
+          keepSoft(picture, null);
+        } else {
+          picture.close();
+        }
       }
-      context?.drawImage(picture, 0, 0);
-      picture.close();
       size = { width, height };
       drawn(width, height);
     } catch {
@@ -634,19 +573,38 @@ export const cdpStream = (
     }
   };
 
+  const heard = (text: string) => {
+    try {
+      const said = FocusSchema.safeParse(JSON.parse(text));
+      if (said.success) {
+        focus(said.data);
+      }
+    } catch {
+      // Not the daemon's JSON: nothing to act on.
+    }
+  };
+
   const open = () => {
     events.state({ kind: "connecting" });
     const at = new WebSocket(url);
     at.binaryType = "arraybuffer";
     socket = at;
     let first = true;
+    // The layout first, before any input: the daemon lays the page out in
+    // it again on every connection (it cleared it when the last view left).
+    at.onopen = () => {
+      if (held) {
+        send({ t: "layout", layout: held });
+      }
+    };
     at.onmessage = (event) => {
       if (typeof event.data === "string") {
+        heard(event.data);
         return;
       }
       if (first) {
         first = false;
-        tries = 0;
+        again.opened();
         events.state({ kind: "live" });
       }
       if (decoding) {
@@ -660,40 +618,36 @@ export const cdpStream = (
         return;
       }
       socket = null;
-      const how = closedHow(event.code);
-      // The person took it over: its frames come on the take-over's own
-      // screencast from the socket opened again now.
-      if (how === "moved") {
-        open();
-        return;
-      }
-      if (how === "refused") {
-        events.state({
-          kind: "refused",
-          why: event.reason || `closed with ${event.code}`,
-        });
-        return;
-      }
-      events.state({
-        kind: "lost",
-        why: event.reason || `closed with ${event.code}`,
-      });
-      const wait = RETRY_MS[Math.min(tries, RETRY_MS.length - 1)];
-      tries += 1;
-      retry = setTimeout(open, wait);
+      // Moved (the person took it over: its frames come on the take-over's
+      // own screencast), it opens again now.
+      again.closed(event);
     };
   };
-  events.session(null);
+  const again = reopening(events, open);
   open();
 
   return {
     close: () => {
       closed = true;
-      clearTimeout(retry);
+      again.stop();
       socket?.close();
       socket = null;
+      soft?.picture.close();
+      soft = null;
     },
     size: () => size,
+    layout: (layout) => {
+      held = layout;
+      sharp = false;
+      soft?.picture.close();
+      soft = null;
+      if (layout) {
+        send({ t: "layout", layout });
+      }
+    },
+    touch: (phase, points, time) => send({ t: "touch", phase, points, time }),
+    hold: (x, y) => send({ t: "hold", x, y }),
+    reload: () => send({ t: "reload" }),
     move: (x, y) => send({ t: "move", x, y }),
     button: (x, y, button, down) =>
       send({

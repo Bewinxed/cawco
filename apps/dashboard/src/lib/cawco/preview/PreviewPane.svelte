@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TakeoverLayout } from "@cawco/core/browser";
   import {
     type ActivityLine,
     type ChangedItem,
@@ -85,7 +86,11 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarSegments,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -106,8 +111,12 @@
     IconInteract,
     IconInteractLinear,
     IconLock,
+    IconMonitor,
+    IconMonitorLinear,
     IconPen,
     IconPenLinear,
+    IconPhone,
+    IconPhoneLinear,
     IconRefresh,
     IconRefreshLinear,
     IconSend,
@@ -3809,6 +3818,9 @@
   });
   /** The browser's stream is drawn in the well (BrowserView): there is a page to take over. */
   let browserViewing = $state(false);
+  /** The layout the taken-over page is in (BrowserView `form`): the head's switch. */
+  let browserForm = $state<TakeoverLayout["form"]>("desk");
+  let browserView = $state<BrowserView>();
   let browserActing = $state(false);
   /** Take over from the panel, or Hand back while the person holds it; a refusal on the pane's line. */
   async function browserControl() {
@@ -3993,6 +4005,20 @@
     return () => watch.disconnect();
   });
   /** The mode's glyph and word, for its one-button form. */
+  /** The taken-over page's layouts, as the head's switch names them. */
+  const LAYOUT_SEGMENTS = [
+    {
+      value: "phone",
+      label: browserWords.phoneLayout,
+      icon: IconPhoneLinear,
+    },
+    {
+      value: "desk",
+      label: browserWords.deskLayout,
+      icon: IconMonitorLinear,
+    },
+  ] as const;
+
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
     comment: IconCommentLinear,
@@ -4013,34 +4039,64 @@
     }
   }
 
-  /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
-  const headItems = $derived.by(() => {
+  /** A browser's head controls: Take over or Hand back, while held its layout switch and Reload page, and its address. */
+  function browserItems(row: NonNullable<typeof browserRow>): HeadItem[] {
     const all: HeadItem[] = [];
-    if (isBrowser && browserRow) {
-      const shows = browserHead(browserRow, {
-        online: browserMachine.online,
-        viewing: browserViewing,
-        sheet: !!sheet,
+    const shows = browserHead(row, {
+      online: browserMachine.online,
+      viewing: browserViewing,
+      sheet: !!sheet,
+    });
+    if (shows.control) {
+      all.push({
+        key: "control",
+        priority: HEAD_PRIORITY.control,
+        bar: controlBar,
+        menu: controlMenu,
+        place: "prominent",
       });
-      if (shows.control) {
+    }
+    // Held, the page's layout is the head's to switch, in the mode's
+    // place (its centre, one glyph where the head is narrow). Reload page
+    // stands in the glass on a desk, as a page's Reload does; a phone's
+    // head holds Close, the switch and Hand back alone (a More beside them
+    // leaves the switch no room), so there it stands at the page's foot
+    // (BrowserView).
+    if (row.takeover) {
+      all.push({
+        key: "layout",
+        priority: HEAD_PRIORITY.mode,
+        bar: layoutBar,
+        compact: layoutCompact,
+        menu: layoutMenu,
+        group: true,
+        place: "centre",
+      });
+      if (!sheet) {
         all.push({
-          key: "control",
-          priority: HEAD_PRIORITY.control,
-          bar: controlBar,
-          menu: controlMenu,
-          place: "prominent",
-        });
-      }
-      if (shows.address) {
-        all.push({
-          key: "address",
-          priority: HEAD_PRIORITY.address,
-          bar: addressBar,
-          menu: addressMenu,
-          place: "lead",
+          key: "reload-page",
+          priority: HEAD_PRIORITY.reload,
+          bar: reloadPageBar,
+          menu: reloadPageMenu,
         });
       }
     }
+    if (shows.address) {
+      all.push({
+        key: "address",
+        priority: HEAD_PRIORITY.address,
+        bar: addressBar,
+        menu: addressMenu,
+        place: "lead",
+      });
+    }
+    return all;
+  }
+
+  /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
+  const headItems = $derived.by(() => {
+    const all: HeadItem[] =
+      isBrowser && browserRow ? browserItems(browserRow) : [];
     // A decision page's one Send is its own, at its foot (its doc's
     // `ownSend`): the head stands none for it.
     if (artifact && unsentCount > 0 && !view?.ownSend) {
@@ -4258,6 +4314,68 @@
     {#if holding}<IconLock />{:else}<IconGlobe />{/if}<span
       >{holding ? browserWords.handBack : browserWords.takeOver}</span
     >
+  </DropdownMenu.Item>
+{/snippet}
+
+<!-- The taken-over page's layout, the head's segmented control (the
+     kit's BarSegments): the phone's or the desktop's, symbols alone. -->
+{#snippet layoutBar()}
+  <BarSegments
+    label={browserWords.layout}
+    onValueChange={(next) => {
+      browserForm = next;
+    }}
+    segments={LAYOUT_SEGMENTS}
+    value={browserForm}
+  />
+{/snippet}
+<!-- Where the head has no room for both segments: the layout the page is
+     in, one glyph, which switches to the other. -->
+{#snippet layoutCompact()}
+  <BarGlass form="group">
+    <BarItem
+      icon={browserForm === "phone" ? IconPhoneLinear : IconMonitorLinear}
+      label={browserForm === "phone"
+        ? browserWords.toDeskLayout
+        : browserWords.toPhoneLayout}
+      onclick={() => {
+        browserForm = browserForm === "phone" ? "desk" : "phone";
+      }}
+      props={{ "data-slot": "browser-layout" }}
+    />
+  </BarGlass>
+{/snippet}
+{#snippet layoutMenu()}
+  <DropdownMenu.Group>
+    <DropdownMenu.GroupHeading>{browserWords.layout}</DropdownMenu.GroupHeading>
+    <DropdownMenu.RadioGroup
+      onValueChange={(next) => {
+        browserForm = next === "phone" ? "phone" : "desk";
+      }}
+      value={browserForm}
+    >
+      <DropdownMenu.RadioItem value="phone"
+        ><IconPhone /><span>{browserWords.phoneLayout}</span
+        ></DropdownMenu.RadioItem
+      >
+      <DropdownMenu.RadioItem value="desk"
+        ><IconMonitor /><span>{browserWords.deskLayout}</span
+        ></DropdownMenu.RadioItem
+      >
+    </DropdownMenu.RadioGroup>
+  </DropdownMenu.Group>
+{/snippet}
+{#snippet reloadPageBar()}
+  <BarItem
+    data-slot="other"
+    icon={IconRefreshLinear}
+    label={browserWords.reloadPage}
+    onclick={() => browserView?.reloadPage()}
+  />
+{/snippet}
+{#snippet reloadPageMenu()}
+  <DropdownMenu.Item onSelect={() => browserView?.reloadPage()}>
+    <IconRefresh /><span>{browserWords.reloadPage}</span>
   </DropdownMenu.Item>
 {/snippet}
 
@@ -4711,9 +4829,11 @@
     ></div>
   {:else if isBrowser && artifact}
     <BrowserView
+      bind:this={browserView}
       addressAtFoot={!!sheet}
       artifactId={artifact.id}
       browser={browserRow}
+      bind:form={browserForm}
       {instanceId}
       machine={browserMachine}
       bind:viewing={browserViewing}

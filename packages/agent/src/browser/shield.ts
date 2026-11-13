@@ -3,10 +3,14 @@
  * nothing the person types or sees reaches any agent. Take over closes the
  * browser's gate (every agent connection cut with 4423, new ones refused
  * with one sentence), brings the asking workspace's page to the front, and
- * gives the person control: neko's `control/give` to their view's session on
- * the container host, a {@link CdpTakeover} of that page on the local host.
- * Hand back takes control away (neko's `control/take` by the daemon's admin,
- * then `control/reset` once the clipboard is emptied as host), loads the
+ * gives the person control: a {@link CdpTakeover} of that page on either
+ * host, in the layout of the device they hold, and on the container host
+ * neko's `control/give` to their view's session when it names one. Hand
+ * back ends the take-over's view, whose DevTools link takes the person's
+ * layout with it (the agent's page is the desktop's again before the gate
+ * opens), takes control away on the container host (neko's `control/take`
+ * by the daemon's admin, then `control/reset` once the clipboard is emptied
+ * as host), loads the
  * front page again by GET (nothing typed survives in a field), empties
  * neko's clipboard on the container host
  * (the local host's headless Chromium has no clipboard the person could
@@ -90,7 +94,7 @@ type Kept = z.infer<typeof KeptSchema>;
 
 /** A take-over this process holds. */
 interface Held extends Kept {
-  /** The local host's view of its page, started once (restore or shield, whichever comes first). */
+  /** The take-over's view of its page, started once (restore or shield, whichever comes first). */
   cdp?: Promise<CdpTakeover | undefined>;
   /** Views the hub counts (its sockets for neko or the CDP bridge). */
   hubViewers: number;
@@ -347,23 +351,33 @@ const recordTakeover = async (key: BrowserKey, take: Held | undefined) => {
   browsersChanged();
 };
 
-/** The local host's view of the take-over's page: started once, whoever asks first. */
+/**
+ * The take-over's view of its page, on either host: started once, whoever
+ * asks first. The page it shows is the address's (a sign-in's popup while
+ * it stands).
+ */
 const viewFor = (
   key: BrowserKey,
   record: BrowserRecord,
   take: Held
 ): Promise<CdpTakeover | undefined> | undefined => {
-  if (record.host !== "local" || !take.targetId) {
+  if (!take.targetId) {
     return;
   }
   take.cdp ??= CdpTakeover.start(
     `http://127.0.0.1:${portsOf(record).devtools}`,
     take.targetId
-  ).catch((error: unknown): undefined => {
-    console.warn(
-      `[browser] ${key}'s take-over view did not start: ${why(error)}`
-    );
-  });
+  ).then(
+    (view) => {
+      view.onShown = (targetId) => setFront(key, targetId);
+      return view;
+    },
+    (error: unknown): undefined => {
+      console.warn(
+        `[browser] ${key}'s take-over view did not start: ${why(error)}`
+      );
+    }
+  );
   return take.cdp;
 };
 
@@ -542,14 +556,16 @@ export const handBackBrowser = async (
         throw new Error(failure, { cause: error });
       }
     };
+    // The view's DevTools link closed first: the person's input stops,
+    // and the layout it set goes with it, so the page the agent gets back
+    // is laid out as the desktop's.
+    await step("ending the page's view", async () => {
+      await (await take.cdp)?.stop();
+    });
     if (record.host === "container") {
       await step("taking control from the person", () =>
         neko(record, "/room/control/take")
       );
-    } else {
-      await step("ending the page's view", async () => {
-        await (await take.cdp)?.stop();
-      });
     }
     origin = await step("loading the page again", () =>
       reloadFront(record, take.targetId)
@@ -579,15 +595,19 @@ export const handBackBrowser = async (
  * The one place a take-over ends: forgotten here and in the browser's dir,
  * the gate open, and the hub told. The hand-back is told first, whoever
  * ended it (`said`), so the ask's call answers with the page's origin; then
- * the record, whose frame every screen follows.
+ * the record, whose frame every screen follows. The take-over's view is
+ * ended before the gate opens, whichever way it ends: the layout its
+ * DevTools link set dies with the link, and no agent meets the person's.
  */
 const release = async (
   key: BrowserKey,
   answer: BrowserHandback,
   said: BrowserHandedBackFrame["why"]
 ): Promise<void> => {
+  const view = held.get(key)?.cdp;
   tellHub(answer, said);
   held.delete(key);
+  await (await view)?.stop();
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(key, undefined).catch((error: unknown) =>
@@ -612,11 +632,12 @@ export const browserViewers = (key: BrowserKey, count: number): void => {
 };
 
 /**
- * A view of the local host's browser (the machine's preview listener's
+ * A view of a browser (the machine's preview listener's
  * `/__cawco/browser/<key>/cdp`): while the person holds it, the take-over's
- * frames and their input onto the page; while nobody does, the page in
- * front's frames alone, its input dropped (cdp-watch.ts). Undefined when
- * `key` is no live local browser, or shows no page.
+ * frames and their input onto the page, on either host; while nobody does,
+ * the local host's page in front's frames alone, its input dropped
+ * (cdp-watch.ts), the container host's being neko's. Undefined when `key`
+ * is no live browser held here or local, or shows no page.
  */
 export const cdpView = async (
   key: BrowserKey,
@@ -683,7 +704,6 @@ const watchOnce = async (): Promise<void> => {
     // The browser stopped (Stop, its machine, its container), and the
     // registry cleared its take-over: answered as a hand-back with no page.
     if (!record?.takeover) {
-      await (await take.cdp)?.stop();
       await release(
         key,
         {
@@ -728,8 +748,8 @@ const tellHub = (
 
 /**
  * The daemon starting: every browser its records say is taken over is held
- * again (its `shield.json`, else what its record's `takeover` says), with a
- * local host's view of its page started again, until the person hands back.
+ * again (its `shield.json`, else what its record's `takeover` says), with
+ * its view of its page started again, until the person hands back.
  * Its gate starts closed: the registry closes a gate it makes for a record
  * that holds a take-over (browsers.ts `gateFor`). A browser that stopped
  * meanwhile has its take-over released by the watch.

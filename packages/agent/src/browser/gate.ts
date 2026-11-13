@@ -115,6 +115,10 @@ const BROWSER_ENDS = new Set([
   "Browser.crash",
   "Browser.crashGpuProcess",
 ]);
+// No `Emulation.*` call is refused: Playwright sends them as it sets up
+// every page, and an agent's override never meets the person's layout, as
+// a take-over closes every agent connection first and Chromium drops an
+// override with the connection that set it (cdp-takeover.ts).
 /** Methods that hand a connection the whole browser, whatever it names. */
 const WIDE_METHODS = new Set([
   "Target.attachToBrowserTarget",

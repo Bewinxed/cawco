@@ -317,7 +317,7 @@ export function stopPreviews(): void {
   browserListener = undefined;
 }
 
-/** A take-over view's socket on the browser listener (local host): its frames out, its input in. */
+/** A take-over view's socket on the browser listener: its frames out, its input in. */
 interface CdpSocket {
   cdp: BrowserKey;
   closed: boolean;
@@ -330,9 +330,9 @@ type BrowserSocket = PreviewSocket | CdpSocket;
 
 const isCdp = (data: BrowserSocket): data is CdpSocket => "cdp" in data;
 
-/** What the hub tells a view of a browser that is no live local one here, or that shows no page (shield.ts `cdpView`). */
+/** What the hub tells a view of a browser that is neither held nor a live local one here, or that shows no page (shield.ts `cdpView`). */
 const NO_VIEW =
-  "This browser is no live local browser on this machine, or shows no page.";
+  "This browser is neither taken over nor a live local browser on this machine, or shows no page.";
 
 const cdpSocket: WebSocketHandler<CdpSocket> = {
   open(socket) {
@@ -461,19 +461,16 @@ async function liveBrowser(
   }
 }
 
-/** The local host's take-over view of `key` (shield.ts `cdpView`), as a socket. */
+/**
+ * The take-over view of `key` (shield.ts `cdpView`), as a socket: on either
+ * host while the person holds it, and the local host's page in front while
+ * nobody does (the container host's is neko's).
+ */
 function takeoverView(
   request: Request,
   server: Server<BrowserSocket>,
-  key: BrowserKey,
-  record: BrowserRecord
+  key: BrowserKey
 ): Response | undefined {
-  if (record.host !== "local") {
-    return refused(
-      404,
-      `${key} runs in a container: its view is neko's, not the take-over's.`
-    );
-  }
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return refused(400, "The take-over view is a WebSocket.");
   }
@@ -556,7 +553,7 @@ async function serveBrowser(
     return live;
   }
   return rest === "cdp"
-    ? takeoverView(request, server, live.key, live.record)
+    ? takeoverView(request, server, live.key)
     : toNeko(request, server, live.key, live.record, `/${rest}${url.search}`);
 }
 
