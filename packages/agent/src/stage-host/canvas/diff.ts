@@ -84,7 +84,7 @@ function partsOf(root: Element): Part[] {
         el instanceof HTMLSelectElement
           ? el.value
           : "",
-      disabled: (el as HTMLButtonElement).disabled === true,
+      disabled: "disabled" in el && el.disabled === true,
     });
   }
   return parts;

@@ -12,6 +12,7 @@
    * Dock, Undock, Done and Remove, which go to whoever holds the slot it
    * stands in.
    */
+  import { pageSaid } from "@cawco/core/page-wire";
   import {
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
@@ -40,6 +41,37 @@
       return;
     }
     const actions = stage.at ? stage.actions[stage.at] : undefined;
+    // What the canvas's own page says (core page-wire `PageSays`).
+    const said = pageSaid(event.data);
+    if (said?.type === "cawco:pictured") {
+      stage.pictured?.();
+      return;
+    }
+    if (said?.type === "cawco:drawn") {
+      stage.heardDrawn(said.count);
+      return;
+    }
+    if (said?.type === "cawco:dock") {
+      actions?.dock?.();
+      return;
+    }
+    if (said?.type === "cawco:undock") {
+      actions?.undock?.();
+      return;
+    }
+    if (said?.type === "cawco:done") {
+      actions?.done?.();
+      return;
+    }
+    if (said?.type === "cawco:remove") {
+      actions?.remove?.();
+      return;
+    }
+    // A held stroke snapped to its shape, for the app that plays its selection tick.
+    if (said?.type === "cawco:snap") {
+      window.parent.postMessage(event.data, location.origin);
+      return;
+    }
     switch (type) {
       case PAGE_TOUCHED_MESSAGE:
         heardInput();
@@ -53,27 +85,9 @@
       case PREVIEW_LOCKED_MESSAGE:
         stage.turnedAway();
         break;
-      case "cawco:pictured":
-        stage.pictured?.();
-        break;
       // Whether the page's doc reached the hub, and how much it holds: what a send waits on.
       case "cawco:sync":
         stage.heardLink(event.data.state, event.data.error);
-        break;
-      case "cawco:drawn":
-        stage.heardDrawn(event.data.count);
-        break;
-      case "cawco:dock":
-        actions?.dock?.();
-        break;
-      case "cawco:undock":
-        actions?.undock?.();
-        break;
-      case "cawco:done":
-        actions?.done?.();
-        break;
-      case "cawco:remove":
-        actions?.remove?.();
         break;
       // A Comment on the canvas's ink: the composer is its slot holder's.
       case "cawco:compose":
@@ -89,10 +103,8 @@
         }
         break;
       }
-      // A press on an element (no drag), for whoever hosts the dashboard (the Decisions tab);
-      // a held stroke snapped to its shape, for the app that plays its selection tick.
+      // A press on an element (no drag), for whoever hosts the dashboard (the Decisions tab).
       case "cawco:element-press":
-      case "cawco:snap":
         window.parent.postMessage(event.data, location.origin);
         break;
       default:
