@@ -34,6 +34,7 @@ as-unknown-as	{ __traffic: { load: (blocks: unknown[]) => void; patch: (next: Re
 as-unknown-as	{ __traffic: Bench }	scripts/probe-kit/specs/web/seek-words.ts	3
 as-unknown-as	{ __traffic: Record<string, never> }	scripts/probe-kit/specs/web/safari-blurs.ts	1
 as-unknown-as	{ __warmWatch?: MutationObserver }	scripts/probe-kit/specs/tab-return.ts	1
+as-unknown-as	{ __skeletonBench: { load: () => void; wait: () => void }; }	apps/dashboard/src/routes/(app)/motion/skeleton/+page.svelte	1
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ cawco?: Bridge }	packages/agent/src/stage-host/canvas/runtime.ts	1
@@ -114,8 +115,6 @@ as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
 as-unknown-as	typeof RTCPeerConnection	apps/dashboard/src/routes/dev/browser-panel/+page.svelte	1
 as-unknown-as	typeof WebSocket	packages/preview/src/overlay/doc-worker.ts	1
-as-unknown-as	VirtualizerHandle	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
-as-unknown-as	typeof WebSocket	scripts/probe-kit/specs/composer-canvas.ts	1
 as-unknown-as	W[]	packages/core/src/usage/windows.ts	1
 as-unknown-as	WebSocketHandler<ListenerSocket>	packages/hub/src/preview.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte	1
