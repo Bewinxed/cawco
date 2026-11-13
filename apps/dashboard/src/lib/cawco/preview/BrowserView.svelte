@@ -498,8 +498,9 @@
   $effect(() => {
     track(again);
     const kind = source;
-    const media = kind === "video" ? video : canvas;
-    if (!(live && kind && media)) {
+    const screenVideo = kind === "video" ? video : undefined;
+    const screenCanvas = kind === "video" ? undefined : canvas;
+    if (!(live && kind && (screenVideo || screenCanvas))) {
       return;
     }
     const events = {
@@ -507,17 +508,20 @@
         streamState = next;
       },
     };
-    const opened = untrack(() => {
-      if (kind === "video") {
+    const open = (): BrowserStream | null => {
+      if (screenVideo) {
         return nekoStream(
           streamUrl(instanceId, artifactId, "api", viewer),
-          media as HTMLVideoElement,
+          screenVideo,
           events
         );
       }
+      if (!screenCanvas) {
+        return null;
+      }
       const made = cdpStream(
         streamUrl(instanceId, artifactId, "cdp", viewer),
-        media as HTMLCanvasElement,
+        screenCanvas,
         events,
         counted,
         focused
@@ -525,7 +529,11 @@
       made.layout(laid);
       frames = made;
       return made;
-    });
+    };
+    const opened = untrack(open);
+    if (!opened) {
+      return;
+    }
     stream = opened;
     return () => {
       opened.close();
@@ -1092,7 +1100,7 @@
       frames.type(typed);
     }
     // A composition's field is the IME's until it ends.
-    if ((event as InputEvent).isComposing) {
+    if (event instanceof InputEvent && event.isComposing) {
       return;
     }
     const caret = now.length;

@@ -11,10 +11,6 @@ import type {
   TranscriptBlock,
 } from "@cawco/core/transcript-types";
 
-type JsonPrimitive = string | number | boolean | null;
-export type JsonValue =
-  JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-
 /**
  * One row of a transcript: a block the hub built, or one this tab drew itself
  * (a send on its way, a failure it saw).
