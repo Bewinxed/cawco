@@ -38,7 +38,7 @@ targets:
       storeKitConfiguration: StoreKit/CawCo.storekit
     dependencies:
       - package: CawCoKit
-        products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]
+        products: [CawCoAPI, CawCoCable, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]
       # Embedded in PlugIns: opens each push's sealed alert on the device.
       - target: NotificationService
     settings:

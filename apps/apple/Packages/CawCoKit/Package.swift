@@ -14,6 +14,7 @@ let package = Package(
     platforms: [.iOS("18.0"), .macCatalyst("18.0")],
     products: [
         .library(name: "CawCoAPI", targets: ["CawCoAPI"]),
+        .library(name: "CawCoCable", targets: ["CawCoCable"]),
         .library(name: "CawCoCore", targets: ["CawCoCore"]),
         .library(name: "CawCoPush", targets: ["CawCoPush"]),
         .library(name: "CawCoDesign", targets: ["CawCoDesign"]),
@@ -33,6 +34,14 @@ let package = Package(
         .package(url: "https://github.com/square/Valet", from: "5.1.1"),
     ],
     targets: [
+        // The caBLE authenticator bridge: lets the app act as a FIDO2
+        // passkey authenticator for remote browsers through the tunnel
+        // server, without BLE proximity. Extension-safe: CryptoKit and
+        // Foundation only.
+        .target(
+            name: "CawCoCable",
+            swiftSettings: concurrency
+        ),
         // The hub's wire types and client, generated at build time from
         // openapi.json (written by packages/hub/scripts/openapi.ts).
         .target(
@@ -53,6 +62,7 @@ let package = Package(
             name: "CawCoCore",
             dependencies: [
                 "CawCoAPI",
+                "CawCoCable",
                 "CawCoPush",
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
