@@ -1196,11 +1196,6 @@
                   "instanceId": {
                     "minLength": 1,
                     "type": "string"
-                  },
-                  "viewer": {
-                    "minLength": 1,
-                    "maxLength": 200,
-                    "type": "string"
                   }
                 }
               }

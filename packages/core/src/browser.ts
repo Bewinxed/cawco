@@ -220,11 +220,9 @@ export interface BrowserAskedPage {
  * parked ({@link BROWSER_PAGE}): that page comes to the front, and the
  * take-over is refused when it is closed. With none (a take-over from a
  * session's panel), the newest page of `workspaceId` (the session's door),
- * else the page the view shows now. `origin` is the page the ask named;
- * `viewer` is the person's neko session on the container host, once their
- * view has one. Sent again (with the viewer, or after the daemon
- * restarted) it keeps the take-over it holds and gives control to that
- * viewer. Answers the {@link BrowserRow}.
+ * else the page the view shows now. `origin` is the page the ask named.
+ * Sent again (after the daemon restarted) it keeps the take-over it holds.
+ * Answers the {@link BrowserRow}.
  */
 export const BROWSER_SHIELD = "browser.shield";
 export interface BrowserShieldArgs {
@@ -232,7 +230,6 @@ export interface BrowserShieldArgs {
   origin?: string;
   requestId?: string;
   targetId?: string;
-  viewer?: string;
   workspaceId?: string;
 }
 
@@ -267,7 +264,7 @@ export interface BrowserViewersArgs {
  */
 export const BROWSER_VIEWER_TOKEN = "browser.viewerToken";
 export interface BrowserViewerSession {
-  /** neko's id for the session: the one `browser.shield`'s `viewer` gives control to. */
+  /** neko's id for the session: the relay credentials minted for its video are named for it (hub browser-routes.ts `iceServersFor`). */
   session: string;
   token: string;
 }
@@ -345,9 +342,10 @@ export interface TakeoverTouchPoint {
  * (first on every connection, and on each change), the fingers on a
  * phone layout's page at `time` (the phone's own clock, ms since the
  * epoch: the page's fling takes its speed from the fingers' spacing), a
- * finger held still on it (`hold`), which selects the word under it, and
- * the page loaded again (`reload`: a site that chose its markup by touch
- * as it loaded takes the layout's).
+ * finger held still on it (`hold`), which selects the word under it and
+ * activates nothing, that finger dragged on (`select`), which carries the
+ * selection to the word under it, and the page loaded again (`reload`: a
+ * site that chose its markup by touch as it loaded takes the layout's).
  */
 export type TakeoverMessage =
   | { t: "layout"; layout: TakeoverLayout }
@@ -358,7 +356,26 @@ export type TakeoverMessage =
       time: number;
     }
   | { t: "hold"; x: number; y: number }
+  | { t: "select"; x: number; y: number }
   | { t: "reload" };
+
+/**
+ * Everything a take-over's view sends its daemon, as JSON text (agent
+ * cdp-takeover.ts `cdpInputOf`): the person's pointer, wheel, keys and
+ * words, in the page's CSS px, and the {@link TakeoverMessage}s.
+ */
+export type TakeoverInput =
+  | {
+      t: "move" | "down" | "up";
+      x: number;
+      y: number;
+      button?: "left" | "middle" | "right";
+      modifiers?: number;
+    }
+  | { t: "wheel"; x: number; y: number; dx: number; dy: number }
+  | { t: "key"; type: "down" | "up"; key: string; modifiers?: number }
+  | { t: "text"; text: string }
+  | TakeoverMessage;
 
 /** What a take-over's daemon tells its view beside the frames: where the page's focus stands, in its CSS px, once a desktop layout is laid out. */
 export interface TakeoverFocus {

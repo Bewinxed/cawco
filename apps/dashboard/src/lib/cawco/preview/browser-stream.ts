@@ -9,8 +9,8 @@
  *   client/core/src/transport/webrtc.ts).
  * - **frames** (`/ws/browser/<instance>/<artifact>/cdp`): one page as JPEG
  *   frames, each a 4-byte header (its CSS width and height, u16
- *   big-endian) and the picture; input goes back as JSON (agent
- *   cdp-takeover.ts `CdpInput`). The local browser's page in front while
+ *   big-endian) and the picture; input goes back as JSON (core
+ *   `TakeoverInput`). The local browser's page in front while
  *   nobody holds it, and the person's take-over on either host, in the
  *   layout they hold.
  *
@@ -20,6 +20,7 @@ import {
   BROWSER_SCREEN,
   BROWSER_VIEW_MOVED,
   type TakeoverFocus,
+  type TakeoverInput,
   type TakeoverLayout,
   type TakeoverTouchPoint,
 } from "@cawco/core/browser";
@@ -442,7 +443,7 @@ export const cdpStream = (
   const context = canvas.getContext("2d");
   let reader: OffscreenCanvasRenderingContext2D | null = null;
 
-  const send = (message: object) => {
+  const send = (message: TakeoverInput) => {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
     }
