@@ -16,12 +16,14 @@
     "dist",
     "src/canvas-host",
     "src/file-viewer",
+    "src/in-page",
     "src/stage-host/canvas"
   ],
   "references": [
     { "path": "../core" },
     { "path": "../jsonl-parser" },
     { "path": "../preview" },
-    { "path": "../hub" }
+    { "path": "../hub" },
+    { "path": "./src/in-page" }
   ]
 }
