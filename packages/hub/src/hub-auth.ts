@@ -246,10 +246,6 @@ const PAIRINGS_HELD = 20;
 const TOUCH_EVERY_MS = 60_000;
 /** How long one approved CLI run may act as the person. */
 const CLI_RUN_MS = 15 * 60_000;
-/** How long a token lent to a previewed app's requests stands ({@link lend}). */
-const LENT_MS = 60_000;
-/** A lent token with less than this left is replaced by a fresh one. */
-const LENT_RENEW_MS = 20_000;
 
 const sha256 = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
@@ -402,8 +398,6 @@ export const createHubAuth = ({
     string,
     { expiresAt: number; id: string; name: string }
   >();
-  /** The token lent to each device's previewed apps now, by device id. */
-  const lent = new Map<string, { expiresAt: number; token: string }>();
   /** Machine proofs taken within the skew window: each is taken once. */
   const spent = new Map<string, number>();
 
@@ -744,35 +738,6 @@ export const createHubAuth = ({
       path,
     });
     return refusal(caller, request.method, path);
-  };
-
-  /**
-   * A short-lived token that is paired device `deviceId` itself, for the
-   * hub's preview listener to put on the requests it relays for that
-   * device's pass: the browser's own owner cookie never reaches a previewed
-   * app (agent and hub strip every `cawco-` cookie), so a previewed
-   * dashboard's socket and calls would reach the hub as no one. It stands
-   * {@link LENT_MS}, is kept in memory only, and goes with a device that is
-   * no longer paired; null for a device the hub does not know.
-   */
-  const lend = (deviceId: string): string | null => {
-    const now = Date.now();
-    const held = lent.get(deviceId);
-    if (held && held.expiresAt - now > LENT_RENEW_MS) {
-      return held.token;
-    }
-    const row = db.devices().find((device) => device.id === deviceId);
-    if (!row) {
-      return null;
-    }
-    if (held) {
-      runs.delete(sha256(held.token));
-    }
-    const token = newToken();
-    const expiresAt = now + LENT_MS;
-    runs.set(sha256(token), { id: row.id, name: row.name, expiresAt });
-    lent.set(deviceId, { token, expiresAt });
-    return token;
   };
 
   const clientAddress = (header: Headers, address: string | null) =>
@@ -1261,7 +1226,6 @@ export const createHubAuth = ({
     gate,
     hold,
     holdsMachine,
-    lend,
     mintMachineKey,
     mode,
     modeFor,

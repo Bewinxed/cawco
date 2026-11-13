@@ -21,7 +21,6 @@ import { readWithin } from "@cawco/core/bounded";
 import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
 import { FILE_VIEWER_ASSETS, fileViewerFile } from "@cawco/core/file-viewer";
-import { OWNER_COOKIE } from "@cawco/core/hub-auth";
 import type { PageFaultReport } from "@cawco/core/page-faults";
 import { passDomainRefusal } from "@cawco/core/pass-domain";
 import {
@@ -752,31 +751,6 @@ export async function loadedOnce(
   }
 }
 
-/**
- * The token lent to a request's previewed app: the paired device whose pass
- * the request carries, as the hub's auth lends it (hub-auth.ts `lend`).
- * Set where the listener lets the request through, read where it is
- * relayed on ({@link upstreamHeaders}); a session's pass lends none.
- */
-const lentTo = new WeakMap<Request, string>();
-
-/**
- * The person's pass is a paired device's: what a previewed app calls the hub
- * with is that device, lent for a minute ({@link lentTo}), never a session's.
- */
-const lendTo = (
-  request: Request,
-  lock: PassLock,
-  instanceId: string,
-  lend: (deviceId: string) => string | null
-): void => {
-  const pass = passOf(request, lock, instanceId);
-  const token = pass?.scope === null && pass.deviceId && lend(pass.deviceId);
-  if (token) {
-    lentTo.set(request, token);
-  }
-};
-
 /** `cookie` without the dashboard's own (core `DASHBOARD_COOKIE`). */
 const appCookies = (header: string | null): string | null => {
   if (!header) {
@@ -798,20 +772,13 @@ const appCookies = (header: string | null): string | null => {
  */
 const upstreamHeaders = (request: Request, direct: boolean): Headers => {
   const headers = proxyHeaders(request.headers);
-  const lent = lentTo.get(request);
   if (!direct) {
     headers.delete("if-none-match");
     headers.delete("if-modified-since");
   }
   const cookies = appCookies(headers.get("cookie"));
-  // A previewed dashboard calls the hub as its person: the owner cookie the
-  // browser holds for the dashboard's own origin is stripped above, so what
-  // the app passes on to the hub is the device's lent token ({@link lentTo}),
-  // under the name the hub reads (core `OWNER_COOKIE`).
-  const given = lent ? `${OWNER_COOKIE}=${lent}` : null;
-  const all = [cookies, given].filter(Boolean).join("; ");
-  if (all) {
-    headers.set("cookie", all);
+  if (cookies) {
+    headers.set("cookie", cookies);
   } else {
     headers.delete("cookie");
   }
@@ -1354,10 +1321,7 @@ export function createPreviewListeners(
   {
     listens,
     after,
-    lend,
   }: {
-    /** A token that is paired device `deviceId` for a minute, null for one no longer paired (hub-auth.ts `lend`). */
-    lend: (deviceId: string) => string | null;
     /** False for a hub built only to be read (server.ts `serves`): it opens no listener, and every ask for an origin's port is refused. */
     listens: boolean;
     /** Runs `run` once after `ms`, on the hub's lifetime (lifetime.ts `after`): host mode's next try at a port held at start. */
@@ -1472,9 +1436,6 @@ export function createPreviewListeners(
       const stopped = atTheLock(request, lock, instanceId);
       if (stopped) {
         return framedBy(stopped, ancestorsOf(instanceId));
-      }
-      if (instanceId) {
-        lendTo(request, lock, instanceId, lend);
       }
       // A page served here (a decision page) asks whether the hub reaches
       // one of its embeds' origins, which this browser didn't.
