@@ -364,7 +364,10 @@ export async function editAndResend(
         // Not known to have restarted at the rewind point: the new wording is not sent.
         return rewound;
       case "answered":
-        submitCommand(instanceId, machineId, "send", { text: content });
+        submitCommand(instanceId, machineId, {
+          kind: "send",
+          intent: { text: content },
+        });
         return rewound;
       default:
         unhandled("read", rewound);

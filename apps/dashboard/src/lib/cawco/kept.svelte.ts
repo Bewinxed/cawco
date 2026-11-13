@@ -15,7 +15,7 @@ import { stored } from "../platform/storage";
 /** The server's copy of localStorage's `key`, as this page was rendered with it; null for none. */
 function servedRaw(key: string): string | null {
   const pref = KEPT[key];
-  const { kept } = page.data as { kept?: Partial<Record<Pref, string>> };
+  const { kept } = page.data;
   return (pref && kept?.[pref]) ?? null;
 }
 

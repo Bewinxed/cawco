@@ -31,7 +31,6 @@
   import ProjectPage from "../project/ProjectPage.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
-  import type { ServerTail } from "../stores/transcript-reads.svelte";
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
   import { composerFleet } from "../transcript/composer-fleet";
   import {
@@ -75,7 +74,7 @@
     if (browser) {
       return takeProjectSeed(projectId);
     }
-    const { seed } = page.data as { seed?: ProjectSeed | null };
+    const { seed } = page.data;
     return seed?.id === projectId ? seed : null;
   };
 
@@ -84,9 +83,7 @@
    * the server: the address's, or the one the layout landed the board's
    * address on (+page.server.ts).
    */
-  const servedTail = $derived(
-    (page.data as { tail?: ServerTail | null }).tail ?? null
-  );
+  const servedTail = $derived(page.data.tail ?? null);
 
   /** The active conversation, as this group's composer writes to it; none when it cannot be written to. */
   const bound = $derived(
