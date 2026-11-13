@@ -3,55 +3,38 @@
   /**
    * The one code surface the console opens into — a tool result's output and a
    * markdown fence share it, on the house code theme (code-theme.ts): a
-   * token's colour names a syntax role, app.css maps each role to a house code
-   * token that carries both appearances, so a theme switch repaints without
-   * tokenizing a line again; a
-   * grammar the highlighter does not carry falls back to a plain mono well.
+   * token's colour names a syntax role, design.css maps each role to a house
+   * code token that carries both appearances, so a theme switch repaints
+   * without tokenizing a line again; a grammar Highlights has no lexer for
+   * falls back to a plain mono well.
    */
   import {
-    type AgentCodeTokenLines,
-    type AgentCodeTokens,
     agentCodeLanguage,
-    cachedTokens,
-    paintableTokens,
+    highlightsLoaded,
+    loadHighlights,
     tokenize,
   } from "./agent-code";
 
   let { text, language }: { text: string; language?: string | null } = $props();
 
-  const lang = $derived(agentCodeLanguage(language));
-
-  let painted = $state<AgentCodeTokens | null>(null);
-
-  // The tokens that may paint right now: the ones in hand while a fresh batch is
-  // pending, so a streaming block stays coloured between frames.
-  const lines = $derived.by<AgentCodeTokenLines | null>(() => {
-    if (!lang) {
-      return null;
-    }
-    return (
-      paintableTokens(painted, text, lang) ??
-      cachedTokens(text, lang)?.lines ??
-      null
-    );
-  });
+  // Plain until Highlights has loaded; after that every block is tokenized on
+  // the frame it has its text, so a streaming block never falls back to plain.
+  let ready = $state(highlightsLoaded());
 
   $effect(() => {
-    if (!lang) {
-      return;
+    if (language && !ready) {
+      detach(
+        loadHighlights().then(() => {
+          ready = true;
+        }),
+        "load highlights"
+      );
     }
-    let live = true;
-    detach(
-      tokenize(text, lang).then((result) => {
-        if (live) {
-          painted = result;
-        }
-      }),
-      "tokenize"
-    );
-    return () => {
-      live = false;
-    };
+  });
+
+  const lines = $derived.by(() => {
+    const lang = ready ? agentCodeLanguage(language) : null;
+    return lang ? tokenize(text, lang) : null;
   });
 </script>
 

@@ -1,6 +1,6 @@
 /**
  * What every diff is drawn with, in one place, so no FileDiff falls back to
- * a library default: the house code theme (code-theme.ts) in place of the
+ * a library default: the house code theme, tokenized by Highlights (code-theme.ts) in place of the
  * library's own palette, the app's scheme in place of the OS's, and long
  * lines wrapped in place of scrolled (diffs.com: "Long line handling:
  * 'scroll' (default) or 'wrap'") — a diff stands in a column and never
@@ -15,7 +15,7 @@ import { untrack } from "svelte";
 import { theme } from "#lib/theme.svelte.js";
 import { CODE_THEME, codeTheme } from "./code-theme";
 
-registerCustomTheme(CODE_THEME, codeTheme);
+registerCustomTheme(CODE_THEME, () => Promise.resolve(codeTheme), "zed");
 
 type DiffLayout = Omit<
   FileDiffOptions<undefined, undefined>,
@@ -24,7 +24,7 @@ type DiffLayout = Omit<
 
 /**
  * The house theme on both sides. Named alone, a theme brings its own scheme
- * (Shiki's css-variables theme calls itself dark) and the library ignores
+ * (the theme's `appearance` is one scheme) and the library ignores
  * `themeType`; as a pair, `themeType` picks the scheme, and the one theme's
  * variables resolve through light-dark() in it.
  */
@@ -41,6 +41,7 @@ export function houseDiff(layout: DiffLayout): FileDiff<undefined, undefined> {
   const diff = new FileDiff<undefined, undefined>({
     ...layout,
     overflow: "wrap",
+    preferredHighlighter: "highlights",
     theme: THEMES,
     themeType: untrack(() => theme.resolved),
   });

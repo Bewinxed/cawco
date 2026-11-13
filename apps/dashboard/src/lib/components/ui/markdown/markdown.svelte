@@ -371,11 +371,11 @@
   >
     <!-- A fence is code, and the console has one surface for code: the same well a
 	     tool result opens into, painted by the same highlighter. Streamdown can
-	     highlight fences itself, but it resolves one shiki theme at a time and
+	     highlight fences itself, but it resolves one theme at a time and
 	     writes it as inline colours — registering a custom pair through its
 	     `shikiThemes` pins every fence to whichever theme is listed first, and
 	     following the appearance instead means re-tokenizing every block on every
-	     switch, through a second shiki with a second cache. Ours paints each token
+	     switch, through a second highlighter with a second cache. Ours paints each token
 	     with a house code token that carries both appearances. The well is
 	     `not-prose`, so prose's `pre` and `code` dressing leaves it alone;
 	     inline code (`codespan`) keeps it, because it is prose, not a
