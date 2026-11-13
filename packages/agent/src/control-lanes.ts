@@ -5,6 +5,7 @@
  */
 
 import type { ControlPayload } from "@cawco/core/protocol";
+import { fieldOf } from "./json-field";
 
 /** The queue key a control waits in; `undefined` for the default (`machine:<method>`). */
 export type ControlLane = (control: ControlPayload) => string | undefined;
@@ -42,7 +43,7 @@ export const commandLane: ControlLane = (control) =>
  * a hub asking again for a step in flight waits on that one run.
  */
 export const moveLane: ControlLane = (control) =>
-  `move:${(control.args?.[0] as { jobId?: string } | undefined)?.jobId}`;
+  `move:${fieldOf(control.args?.[0], "jobId")}`;
 
 /** A late create must finish before its discard; different workspace ids do not queue together. */
 export const workspaceCreateLane: ControlLane = (control) =>
@@ -50,4 +51,4 @@ export const workspaceCreateLane: ControlLane = (control) =>
 
 /** A workspace's other controls, in its create's lane, by the workspace its first argument names. */
 export const workspaceLane: ControlLane = (control) =>
-  `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
+  `workspace:${fieldOf(control.args?.[0], "id")}`;

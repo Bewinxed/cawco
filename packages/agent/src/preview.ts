@@ -152,9 +152,13 @@ const machineRoute = (pathname: string): string | undefined => {
     segments.some(
       (_, at) =>
         at + route.length <= segments.length &&
-        route.every((name, i) =>
-          named(segments[at + i] as string, name, i === route.length - 1)
-        )
+        route.every((name, i) => {
+          const segment = segments[at + i];
+          return (
+            segment !== undefined &&
+            named(segment, name, i === route.length - 1)
+          );
+        })
     )
   )?.join("/");
 };
@@ -299,11 +303,23 @@ export function previewNetworks(): string[] {
   );
 }
 
+const BROWSER_LISTEN_ARGS = z.object({
+  token: z.string(),
+}) satisfies z.ZodType<BrowserListenArgs>;
+
+/** The TCP port `server` listens on; every listener here binds one. */
+const portOf = (server: Server<unknown>): number => {
+  if (server.port === undefined) {
+    throw new Error("a preview listener has no port");
+  }
+  return server.port;
+};
+
 /** What the register tells the hub this process is serving, each with the token of the start that made it and the source key it named. */
 export function servingPreviews(): ServingPreview[] {
   return [...previews].map(([instanceId, { listener, token, for: key }]) => ({
     instanceId,
-    port: listener.port as number,
+    port: portOf(listener),
     token,
     for: key,
   }));
@@ -384,31 +400,53 @@ const cdpSocket: WebSocketHandler<CdpSocket> = {
   },
 };
 
+const isCdpSocket = (
+  socket: ServerWebSocket<BrowserSocket>
+): socket is ServerWebSocket<CdpSocket> => isCdp(socket.data);
+
+const isPreviewSocket = (
+  socket: ServerWebSocket<BrowserSocket>
+): socket is ServerWebSocket<PreviewSocket> => !isCdp(socket.data);
+
+/** `socket` handled by the half its data names: a take-over view's, or a preview's. */
+const bySocket = <R>(
+  socket: ServerWebSocket<BrowserSocket>,
+  view: (socket: ServerWebSocket<CdpSocket>) => R,
+  preview: (socket: ServerWebSocket<PreviewSocket>) => R
+): R | undefined => {
+  if (isCdpSocket(socket)) {
+    return view(socket);
+  }
+  if (isPreviewSocket(socket)) {
+    return preview(socket);
+  }
+};
+
 const browserSocket: WebSocketHandler<BrowserSocket> = {
   open: (socket) =>
-    isCdp(socket.data)
-      ? cdpSocket.open?.(socket as ServerWebSocket<CdpSocket>)
-      : previewWebSocket.open?.(socket as ServerWebSocket<PreviewSocket>),
+    bySocket(
+      socket,
+      (view) => cdpSocket.open?.(view),
+      (shown) => previewWebSocket.open?.(shown)
+    ),
   message: (socket, message) =>
-    isCdp(socket.data)
-      ? cdpSocket.message(socket as ServerWebSocket<CdpSocket>, message)
-      : previewWebSocket.message(
-          socket as ServerWebSocket<PreviewSocket>,
-          message
-        ),
-  drain: (socket) => {
-    if (!isCdp(socket.data)) {
-      previewWebSocket.drain?.(socket as ServerWebSocket<PreviewSocket>);
-    }
-  },
+    bySocket(
+      socket,
+      (view) => cdpSocket.message(view, message),
+      (shown) => previewWebSocket.message(shown, message)
+    ),
+  drain: (socket) =>
+    bySocket(
+      socket,
+      () => undefined,
+      (shown) => previewWebSocket.drain?.(shown)
+    ),
   close: (socket, code, reason) =>
-    isCdp(socket.data)
-      ? cdpSocket.close?.(socket as ServerWebSocket<CdpSocket>, code, reason)
-      : previewWebSocket.close?.(
-          socket as ServerWebSocket<PreviewSocket>,
-          code,
-          reason
-        ),
+    bySocket(
+      socket,
+      (view) => cdpSocket.close?.(view, code, reason),
+      (shown) => previewWebSocket.close?.(shown, code, reason)
+    ),
 };
 
 /** `/__cawco/browser/<key>/api/…` or `/__cawco/browser/<key>/cdp` (core `browserMount`). */
@@ -509,7 +547,7 @@ async function toNeko(
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
     return upgradePreview(
       request,
-      server as unknown as Server<PreviewSocket>,
+      server,
       `ws://127.0.0.1:${http}${at}`,
       headers,
       { hop: "agent browser listener", instanceId: null }
@@ -566,13 +604,14 @@ async function serveBrowser(
  * answers `token` alone. Answers the port it listens on.
  */
 export function listenBrowsers(args: unknown): { port: number } {
-  const { token } = (args ?? {}) as Partial<BrowserListenArgs>;
-  if (typeof token !== "string" || token.length === 0) {
+  const asked = BROWSER_LISTEN_ARGS.safeParse(args);
+  if (!asked.success || asked.data.token.length === 0) {
     throw new Error("browser.listen names the hub's token for it.");
   }
+  const { token } = asked.data;
   if (browserListener) {
     browserListener.token = Buffer.from(token);
-    return { port: browserListener.listener.port as number };
+    return { port: portOf(browserListener.listener) };
   }
   const listener = Bun.serve<BrowserSocket>({
     hostname: "0.0.0.0",
@@ -601,7 +640,7 @@ export function listenBrowsers(args: unknown): { port: number } {
     },
   });
   browserListener = { listener, token: Buffer.from(token) };
-  return { port: listener.port as number };
+  return { port: portOf(listener) };
 }
 
 /** Why a request to `source`'s port got no answer, in the down page's words. */
@@ -638,7 +677,8 @@ async function folderRoot(dir: string): Promise<string> {
     throw new Error("Directory must be an absolute path.");
   }
   const root = await realpath(dir).catch((error: unknown) => {
-    const code = (error as { code?: unknown } | null)?.code;
+    const code =
+      error instanceof Error && "code" in error ? error.code : undefined;
     throw typeof code === "string" && NOT_THERE.has(code)
       ? new Error(folderGone(causeOf(error)))
       : error;
@@ -809,11 +849,14 @@ async function start(
   ) {
     throw new Error("Port must be an integer from 1 to 65535.");
   }
-  const root = dir === undefined ? undefined : await folderRoot(dir);
-  const source: Exclude<PreviewSource, { page: string }> =
-    port === undefined
-      ? { dir: root as string }
-      : portSource(port, { workspace, stage, serve });
+  let source: Exclude<PreviewSource, { page: string }>;
+  if (dir !== undefined) {
+    source = { dir: await folderRoot(dir) };
+  } else if (port === undefined) {
+    throw new Error("Pass exactly one of port or dir.");
+  } else {
+    source = portSource(port, { workspace, stage, serve });
+  }
   await stopNow(instanceId);
   // A workspace no boundary runs refuses the preview in so many words. A
   // sheet's stage or a served preview's server is woken by its first
@@ -1204,5 +1247,5 @@ async function start(
     for: options.for,
     network: "port" in source ? networkOf(source) : undefined,
   });
-  return { port: listener.port as number };
+  return { port: portOf(listener) };
 }

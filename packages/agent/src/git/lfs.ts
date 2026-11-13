@@ -66,7 +66,7 @@ export const lfsPins = (
   ["lfs.pushurl", endpoint],
   [`lfs.${endpoint}.locksverify`, "false"],
   ...(signed
-    ? ([[`lfs.${endpoint}.access`, "basic"]] as [string, string][])
+    ? ([[`lfs.${endpoint}.access`, "basic"]] satisfies [string, string][])
     : []),
 ];
 
@@ -95,7 +95,7 @@ export const declaredPins = (
     ],
     ...(host === originHost
       ? []
-      : ([[`credential.${host}.helper`, ""]] as [string, string][])),
+      : ([[`credential.${host}.helper`, ""]] satisfies [string, string][])),
   ];
 };
 

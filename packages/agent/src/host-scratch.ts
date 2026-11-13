@@ -23,6 +23,7 @@ import {
   OUTPUTS_DIR,
   type WorkspaceOutputs,
 } from "@cawco/core/workspace/controls";
+import { fieldOf } from "./json-field";
 import { removeTree } from "./remove-tree";
 
 /** A workspace id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
@@ -31,10 +32,7 @@ const WORKSPACE_ID =
 
 /** The host workspace id `asked` names, as a control's `{ id }` or a spawn's string; refused for anything else. */
 const hostId = (asked: unknown): string => {
-  const id =
-    typeof asked === "string"
-      ? asked
-      : (asked as { id?: unknown } | null | undefined)?.id;
+  const id = typeof asked === "string" ? asked : fieldOf(asked, "id");
   if (typeof id !== "string" || !WORKSPACE_ID.test(id)) {
     throw new Error(workWords.hostScratchUnnamed);
   }
@@ -125,7 +123,7 @@ export const hostOutputs = async (
   asked: unknown
 ): Promise<WorkspaceOutputs | { listed: HostOutputListed[] }> => {
   const id = hostId(asked);
-  return (asked as { read?: unknown }).read === true
+  return fieldOf(asked, "read") === true
     ? await outputsOf(id)
     : { listed: await outputsListed(id) };
 };

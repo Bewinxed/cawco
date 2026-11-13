@@ -108,20 +108,31 @@ async function standingOf(
   };
 }
 
+const TOKEN_CLAIMS = z.object({
+  "https://api.openai.com/auth": z
+    .object({
+      chatgpt_data_residency: z.unknown(),
+      chatgpt_compute_residency: z.unknown(),
+    })
+    .optional(),
+  chatgpt_compute_residency: z.unknown(),
+});
+
 /** The residency the access token's ChatGPT account asks of a request; never the token itself. */
 function accountFacts(access: string): { residency?: string } {
-  let claims: Record<string, unknown> | undefined;
+  let said: unknown;
   try {
-    claims = JSON.parse(
+    said = JSON.parse(
       Buffer.from(access.split(".")[1] ?? "", "base64url").toString()
     );
   } catch {
     return {};
   }
+  const parsed = TOKEN_CLAIMS.safeParse(said);
+  const claims = parsed.success ? parsed.data : undefined;
   const text = (value: unknown) =>
     typeof value === "string" && value ? value : undefined;
-  const auth = claims?.["https://api.openai.com/auth"] as
-    Record<string, unknown> | undefined;
+  const auth = claims?.["https://api.openai.com/auth"];
   // Residency-enforced workspaces require the data (else compute) residency.
   const residency =
     text(auth?.chatgpt_data_residency) ??
