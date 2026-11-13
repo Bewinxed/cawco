@@ -20,6 +20,9 @@ import { dirname, join, relative, resolve } from "node:path";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { compile, preprocess } from "svelte/compiler";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/"];
+
 const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const SRC = process.argv[2] ? resolve(process.argv[2]) : join(DASHBOARD, "src");
 const UNUSED = "/* (unused) ";

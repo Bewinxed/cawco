@@ -14,6 +14,9 @@
 import { dirname, resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
+
 const APP_CSS = "src/app.css";
 /** The tokens and the utilities over them. */
 const THEME = "src/lib/tokens/theme.css";

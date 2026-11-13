@@ -26,6 +26,9 @@ import { compile as compileTailwind } from "@tailwindcss/node";
 import { compile as compileSvelte } from "svelte/compiler";
 import { repoFiles } from "../../../scripts/lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
+
 const ROOT = join(import.meta.dir, "..");
 const SRC = join(ROOT, "src");
 const STYLE = /<style\b/u;

@@ -39,6 +39,9 @@
  */
 import { resolve } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
+
 const ROOT = resolve(import.meta.dir, "..");
 const RULES: {
   name: string;
