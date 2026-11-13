@@ -225,9 +225,9 @@
                         failed={key in adoptFailed}
                         label={words.adopt}
                         onclick={() =>
-                          kind === "mcp"
-                            ? adoptServer(machine, row as DiscoveredMcpView)
-                            : adopt(machine, row as DiscoveredSkill)}
+                          "path" in row
+                            ? adopt(machine, row)
+                            : adoptServer(machine, row)}
                         pending={busy[key] === true}
                         pendingLabel={words.adopting}
                         size="sm"

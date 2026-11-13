@@ -40,26 +40,39 @@ interface Refusal {
   readonly title: string;
 }
 
-const state = $state({
-  /** The person as the hub last said; null until read. */
-  view: null as PersonView | null,
-  /** This browser's permissions; null until read. */
-  permissions: null as DeskPermissions | null,
-  /** A press on its way: Appear away (`away`), the away clock (`clock`), this browser's report (`desk`), a machine by id, or this browser (`allow`). */
-  pending: null as string | null,
-  /** The hub's or the browser's refusal of the last press: its words, and what refused. */
-  refusal: null as Refusal | null,
-  /** What the last press asked this browser for: the row says it until the row leaves. */
-  asked: null as DeskAsk | null,
-  /** The machine this browser is on, as the hub tied it; null when none is. */
-  thisMachine: null as string | null,
-  /** The onboarding row was put away in this browser. */
-  skipped: false,
-  /** This browser's permissions were just granted from the row: it ticks a moment, then leaves. */
-  ticked: false,
-  /** This browser's report was turned on here (presence.ts `deskReportOn`). */
-  reportOn: false,
+interface PersonState {
   /** This browser's report was answered here, yes or no (presence.ts `deskAnswered`). */
+  answered: boolean;
+  /** What the last press asked this browser for: the row says it until the row leaves. */
+  asked: DeskAsk | null;
+  /** A press on its way: Appear away (`away`), the away clock (`clock`), this browser's report (`desk`), a machine by id, or this browser (`allow`). */
+  pending: string | null;
+  /** This browser's permissions; null until read. */
+  permissions: DeskPermissions | null;
+  /** The hub's or the browser's refusal of the last press: its words, and what refused. */
+  refusal: Refusal | null;
+  /** This browser's report was turned on here (presence.ts `deskReportOn`). */
+  reportOn: boolean;
+  /** The onboarding row was put away in this browser. */
+  skipped: boolean;
+  /** The machine this browser is on, as the hub tied it; null when none is. */
+  thisMachine: string | null;
+  /** This browser's permissions were just granted from the row: it ticks a moment, then leaves. */
+  ticked: boolean;
+  /** The person as the hub last said; null until read. */
+  view: PersonView | null;
+}
+
+const state = $state<PersonState>({
+  view: null,
+  permissions: null,
+  pending: null,
+  refusal: null,
+  asked: null,
+  thisMachine: null,
+  skipped: false,
+  ticked: false,
+  reportOn: false,
   answered: false,
 });
 
@@ -432,7 +445,7 @@ export function showDeskAlert(
     body: frame.body,
     tag: frame.collapseId,
     renotify: frame.renotify,
-  } as NotificationOptions & { renotify: boolean });
+  });
   answerDesk(frame.collapseId, "notification");
   shown.onclick = () => {
     window.focus();

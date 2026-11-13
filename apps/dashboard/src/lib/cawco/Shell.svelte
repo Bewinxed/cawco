@@ -95,7 +95,7 @@
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { projectOfTab, tabOfPath } from "./workspace/tabs";
-  import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
+  import { workspace } from "./workspace/workspace.svelte";
 
   // The sidebar primitives (SidebarMenuButton etc.) call `useSidebar()` which
   // needs a context. The Shell manages its own layout (resize, mobile sheet),
@@ -264,10 +264,13 @@
    * says, and a state write a frame would render the slider for nothing. It
    * catches up on release.
    */
-  function startDrag(event: PointerEvent) {
-    const handle = event.currentTarget as HTMLElement;
+  function startDrag(event: PointerEvent & { currentTarget: HTMLElement }) {
+    const handle = event.currentTarget;
     // The grip is a child of the rail it resizes.
-    const rail = handle.parentElement as HTMLElement;
+    const rail = handle.parentElement;
+    if (!rail) {
+      return;
+    }
     handle.setPointerCapture(event.pointerId);
     // Coalesced to a frame: a 120 Hz pointer emitting two moves in one frame
     // would otherwise pay for the layout twice and show one of them.
@@ -305,7 +308,7 @@
    * tweens it.
    */
   let railStep: Animation | undefined;
-  function resizeKey(event: KeyboardEvent) {
+  function resizeKey(event: KeyboardEvent & { currentTarget: HTMLElement }) {
     const step = event.shiftKey ? 32 : 8;
     let next: number;
     switch (event.key) {
@@ -325,8 +328,10 @@
         return;
     }
     event.preventDefault();
-    const rail = (event.currentTarget as HTMLElement)
-      .parentElement as HTMLElement;
+    const rail = event.currentTarget.parentElement;
+    if (!rail) {
+      return;
+    }
     const from = rail.getBoundingClientRect().width;
     railStep?.cancel();
     setRail(next);
@@ -847,9 +852,9 @@
   // board's address on what a desk puts in front, whose address the
   // workspace writes in its place.
   const landed = workspace.serve(
-    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null,
-    (page.data as { resolved?: string[] }).resolved ?? [],
-    (page.data as { landed?: string[] }).landed ?? []
+    page.data.workspace ?? null,
+    page.data.resolved ?? [],
+    page.data.landed ?? []
   );
   if (browser && !landed) {
     workspace.followUrl(location.href);
@@ -951,7 +956,10 @@
     }
     // Scrolls do not bubble; they are heard on their way down.
     const heard = ({ target }: Event) => {
-      const box = target as HTMLElement;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      const box = target;
       if (box === node || box.dataset.keepScroll !== undefined) {
         railScroll.set(nameOf(box), box.scrollTop);
       }
@@ -1036,7 +1044,7 @@
     for (
       let at: HTMLElement | null = node;
       at;
-      at = at.offsetParent as HTMLElement | null
+      at = at.offsetParent instanceof HTMLElement ? at.offsetParent : null
     ) {
       left += at.offsetLeft + (at === node ? 0 : at.clientLeft);
     }

@@ -292,9 +292,7 @@
   const streamed = $derived(plainStreaming(stream.text));
 
   const glanceOf = (message: Message): string =>
-    getToolGlance(
-      message.metadata?.toolInput as Record<string, unknown> | undefined
-    );
+    getToolGlance(message.metadata?.toolInput);
 
   function answer(request: PendingPermission, kind: PermissionAnswer): void {
     if (!session) {
