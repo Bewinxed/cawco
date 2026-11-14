@@ -25,6 +25,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { type ToolUpdateState, toolUpdateOf } from "@cawco/core/tool-updates";
 import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
+import { toolUpdateWords } from "@cawco/core/words/tool-updates";
 import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
@@ -41,8 +42,12 @@ import { TRY_AGAIN } from "./unanswered";
 /** Where the fix stands, as the hub's cell for it says. */
 type HarnessFix =
   | { phase: "idle" }
-  /** An install runs there: CawCo's own (`byCawco`), or a press's; to `to` when known. */
-  | { byCawco: boolean; phase: "running"; to?: string }
+  /**
+   * An install runs there: CawCo's own (`byCawco`), or a person's press
+   * (`byPerson`; neither from a machine too old to say who started it); to
+   * `to` when known.
+   */
+  | { byCawco: boolean; byPerson: boolean; phase: "running"; to?: string }
   /** An install or update that ran and left it refused: the machine's words. */
   | { phase: "failed"; said: string };
 
@@ -146,6 +151,7 @@ const fixOf = (
     return {
       phase: "running",
       byCawco: update.startedBy === "cawco",
+      byPerson: update.startedBy === "person",
       ...(update.to ? { to: update.to } : {}),
     };
   }
@@ -196,15 +202,32 @@ export const harnessWords = {
     ),
   pressing: (block: HarnessBlock): string =>
     installs(block) ? "Installing…" : "Updating…",
-  running: (block: HarnessBlock): string =>
-    block.fix.phase === "running" && block.fix.byCawco
-      ? toolWords.cawcoPutting(
-          installs(block),
-          block.spec.name,
-          block.machine,
-          block.fix.to
+  /**
+   * An install under way, as one waiting line saying who started it (core
+   * `ToolStatus.startedBy`): CawCo, the person's press, or neither said (a
+   * machine too old to say); the version it puts on when known.
+   */
+  running: (block: HarnessBlock): string => {
+    const { fix, kind, machine, spec } = block;
+    const to =
+      (fix.phase === "running" ? fix.to : undefined) ?? spec.exactVersion;
+    if (fix.phase === "running" && fix.byCawco) {
+      return toolWords.cawcoPutting(
+        kind === "not-installed",
+        spec.name,
+        machine,
+        to
+      );
+    }
+    return fix.phase === "running" && fix.byPerson
+      ? toolUpdateWords.youPutting(
+          kind === "not-installed",
+          spec.name,
+          machine,
+          to
         )
-      : `${installs(block) ? "Installing" : "Updating"} ${block.spec.name} on ${block.machine}. It goes on if you close this.`,
+      : `${installs(block) ? "Installing" : "Updating"} ${spec.name} on ${machine}. It goes on if you close this.`;
+  },
   failed: (block: HarnessBlock, said: string): string =>
     `${block.spec.name} didn't ${installs(block) ? "install" : "update"} on ${block.machine}. ${said}`,
   /** The row's word while it is refused, or while its fix runs. */
