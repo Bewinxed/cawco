@@ -73,7 +73,11 @@ export interface RoutinesDb {
   readonly run: (id: string) => RoutineRunRow | undefined;
   readonly runOfItem: (workItemId: string) => RoutineRunRow | undefined;
   /** A routine's runs, newest first. */
-  readonly runs: (routineId: string, limit: number) => RoutineRunRow[];
+  readonly runs: (
+    routineId: string,
+    limit: number,
+    skip?: number
+  ) => RoutineRunRow[];
   /** A routine's runs started at or after `since` (ms): how many, and the dollars they spent. */
   readonly runsSince: (
     routineId: string,
@@ -237,13 +241,14 @@ export const routinesDb = (db: BunSQLiteDatabase): RoutinesDb => {
         .from(routineRuns)
         .where(eq(routineRuns.workItemId, workItemId))
         .get(),
-    runs: (routineId, limit) =>
+    runs: (routineId, limit, skip = 0) =>
       db
         .select()
         .from(routineRuns)
         .where(eq(routineRuns.routineId, routineId))
         .orderBy(desc(routineRuns.startedAt), desc(routineRuns.attempt))
         .limit(limit)
+        .offset(skip)
         .all(),
     liveRuns: () =>
       db

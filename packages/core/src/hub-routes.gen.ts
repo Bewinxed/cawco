@@ -269,6 +269,7 @@ export interface components {
     "GET /api/actions": {
       query?: {
         projectId?: string;
+        skip?: number;
         state?:
           | "proposed"
           | "approved"
@@ -913,6 +914,14 @@ export interface components {
     "GET /api/routines/:id": {
       path: {
         id: string | number;
+      };
+    };
+    "GET /api/routines/:id/runs": {
+      path: {
+        id: string | number;
+      };
+      query: {
+        skip: number;
       };
     };
     "GET /api/routines/schedule": {

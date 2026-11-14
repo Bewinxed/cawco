@@ -245,8 +245,8 @@ export const ingressWords = (view: IngressView): string => {
     view.events.length === 0
       ? "No inbound events yet."
       : lines(
-          view.eventsMore
-            ? routineToolWords.eventsCut(view.events.length)
+          view.eventsMore > 0
+            ? routineToolWords.eventsCut(view.eventsMore, view.eventsNext)
             : "Newest inbound events:",
           view.events.map(
             (event) =>
@@ -282,16 +282,18 @@ const actionLine = (action: ApprovedActionView, now: number): string =>
 export const actionListWords = ({
   actions,
   more,
+  next,
 }: {
   actions: ApprovedActionView[];
-  more: boolean;
+  more: number;
+  next: number;
 }): string => {
   const now = Date.now();
   return actions.length === 0
     ? "No approved actions."
     : lines(
-        more
-          ? routineToolWords.actionsCut(actions.length)
+        more > 0
+          ? routineToolWords.actionsCut(more, next)
           : `${count(actions.length, "action")}, newest first; action_cancel takes the handle:`,
         actions.map((action) => actionLine(action, now))
       );

@@ -64,8 +64,10 @@ export interface InboundEventView {
 export interface IngressView {
   connectorPolls: ConnectorPollView[];
   events: InboundEventView[];
-  /** Events older than those in {@link events} exist. */
-  eventsMore: boolean;
+  /** How many events are older than those in {@link events}. */
+  eventsMore: number;
+  /** The `skip` that reads the page of older events after {@link events}. */
+  eventsNext: number;
   github: {
     connection: string | null;
     polled: boolean;

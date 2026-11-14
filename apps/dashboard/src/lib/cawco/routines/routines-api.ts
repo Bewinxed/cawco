@@ -47,8 +47,8 @@ export interface Poll {
 
 export interface RoutinesPage {
   actions: ApprovedActionView[];
-  /** The project has older actions than `actions` lists. */
-  actionsMore: boolean;
+  /** How many older actions than `actions` lists the project has. */
+  actionsMore: number;
   polls: Poll[];
   relays: RelayView[];
   routes: EventRoute[];
@@ -131,6 +131,28 @@ export async function readRoutinesPage(
     trimOffered: trim.offered,
   };
 }
+
+/** A page of a routine's runs after `skip` of them, newest first. */
+export const readRoutineRuns = (
+  routineId: string,
+  skip: number,
+  client: HubClient = hub
+) =>
+  hubData(
+    client.api.routines({ id: routineId }).runs.get({ query: { skip } }),
+    refusedOrUnreached
+  );
+
+/** A page of the project's actions after `skip` of them, newest first. */
+export const readActions = (
+  projectId: string,
+  skip: number,
+  client: HubClient = hub
+) =>
+  hubData(
+    client.api.actions.get({ query: { projectId, skip } }),
+    refusedOrUnreached
+  );
 
 /** What a routine made by hand is: `POST /api/routines`'s fields the form sets. */
 export interface RoutineDraft {

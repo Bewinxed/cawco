@@ -70,8 +70,14 @@ export interface IngressDb {
   /** Each of a project's routes' newest delivered event, in one query. */
   readonly deliveries: (projectId: string) => Delivery[];
   readonly event: (id: string) => InboundEventRow | undefined;
+  /** How many events a project has received. */
+  readonly eventCount: (projectId: string) => number;
   /** A project's events, newest first. */
-  readonly events: (projectId: string, limit: number) => InboundEventRow[];
+  readonly events: (
+    projectId: string,
+    limit: number,
+    skip?: number
+  ) => InboundEventRow[];
   readonly githubPoller: (projectId: string) => GitHubPollerRow | undefined;
   readonly githubPollers: () => GitHubPollerRow[];
   /**
@@ -229,14 +235,21 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         )
         .groupBy(inboundEvents.routeId)
         .all(),
-    events: (projectId, limit) =>
+    events: (projectId, limit, skip = 0) =>
       db
         .select()
         .from(inboundEvents)
         .where(eq(inboundEvents.projectId, projectId))
         .orderBy(desc(inboundEvents.receivedAt))
         .limit(limit)
+        .offset(skip)
         .all(),
+    eventCount: (projectId) =>
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(inboundEvents)
+        .where(eq(inboundEvents.projectId, projectId))
+        .get()?.n ?? 0,
     setEvent: (id, patch) => {
       db.update(inboundEvents).set(patch).where(eq(inboundEvents.id, id)).run();
     },

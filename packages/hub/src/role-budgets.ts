@@ -129,9 +129,12 @@ import {
  * ask (tsk-369, the owner's "A card's pick settles notes" on card
  * `note-settle`); its description says what they do and when they are
  * accepted (worker 30,799, curator 1,316 measured).
+ * 2026-11-14: action_list and event_route_list take `skip`, so an agent reads
+ * the older actions and events a page leaves out (their answers say how many
+ * and which skip reads on) (worker 30,828 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_800,
+  worker: 30_840,
   delegate: 11_340,
   overseer: 770,
   "web-facing": 3400,

@@ -156,7 +156,7 @@ const MATCH_TEXT_MAX = PAYLOAD_MAX;
 const REGEX_MAX = 200;
 /** The most inbox lines one send carries; the rest are counted. */
 const INBOX_SHOWN = 30;
-/** Events an ingress view lists; `eventsMore` says there are older ones. */
+/** Events an ingress view lists a page of; `eventsMore` counts the older ones, which `skip` reaches. */
 const EVENTS_SHOWN = 50;
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
@@ -1171,20 +1171,23 @@ export const createIngress = ({
     return github;
   };
 
-  const view = (projectId: string) => {
+  const view = (projectId: string, skip = 0) => {
     const github = githubOf(projectId);
     if (github instanceof ElysiaStatus) {
       return github;
     }
     const delivered = deliveredBy(store.deliveries(projectId));
-    // One past what is listed: it says there are older events.
-    const events = store.events(projectId, EVENTS_SHOWN + 1);
+    const events = store.events(projectId, EVENTS_SHOWN, skip);
     const seen: IngressView = {
       github,
       routes: store.routes(projectId).map((row) => routeView(row, delivered)),
       connectorPolls: store.connectorPolls(projectId).map(pollView),
-      events: events.slice(0, EVENTS_SHOWN).map(eventView),
-      eventsMore: events.length > EVENTS_SHOWN,
+      events: events.map(eventView),
+      eventsNext: skip + events.length,
+      eventsMore: Math.max(
+        store.eventCount(projectId) - skip - events.length,
+        0
+      ),
     };
     return seen;
   };
@@ -1615,10 +1618,10 @@ export const createIngress = ({
       EVENT_ROUTE_CREATE_DEFINITION.run(({ routine, ...rest }) =>
         Promise.resolve(createRoute({ ...rest, routineId: routine }, me()))
       ),
-      EVENT_ROUTE_LIST_DEFINITION.run(() => {
+      EVENT_ROUTE_LIST_DEFINITION.run(({ skip }) => {
         const projectId = scopeOf(me());
         return Promise.resolve(
-          projectId instanceof ElysiaStatus ? projectId : view(projectId)
+          projectId instanceof ElysiaStatus ? projectId : view(projectId, skip)
         );
       }),
       EVENT_ROUTE_UPDATE_DEFINITION.run(({ id, routine, ...rest }) => {
@@ -1824,7 +1827,9 @@ const EVENT_ROUTE_CREATE_DEFINITION = defineTool(
 const EVENT_ROUTE_LIST_DEFINITION = defineTool(
   "event_route_list",
   "Your project's event routes, whether its GitHub repo is polled (and why not), its connector polls and newest inbound events.",
-  {},
+  {
+    skip: z.number().int().min(0).optional(),
+  },
   ingressWords
 );
 

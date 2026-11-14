@@ -3133,18 +3133,13 @@ public enum Words {
 
         public static let more = "More"
 
-        /// Under the approved actions ledger when the project has more than it lists.
-        public static func actionsWindow(listed: Int) -> String {
-            "The newest \(listed) actions. Older ones are not listed here."
+        /// Under the approved actions ledger: reads the next page of the project's older actions.
+        public static func moreActions(count: Int) -> String {
+            "Show \(count) more \(count == 1 ? "action" : "actions")"
         }
 
         public static func moreRuns(count: Int) -> String {
             "Show \(count) more \(count == 1 ? "run" : "runs")"
-        }
-
-        /// Under the whole ledger when the routine has had more runs than the hub lists.
-        public static func runsWindow(listed: Int, total: Int) -> String {
-            "The newest \(listed) of \(total) runs. Earlier ones stay in the project's history."
         }
 
         public static let less = "Less"

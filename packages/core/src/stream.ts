@@ -306,12 +306,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    take a `search` and answer `more` beside `targets`, the connection
  *    reaching repositories past the first pages. A page built for 62 sends
  *    no `search` and reads the same bytes, and reloads first.
+ * 64: the routines page's `more` on the actions list and an ingress view's
+ *    `eventsMore` count the older actions and events (numbers, where 63 sent
+ *    booleans), and each list takes a `skip` to read them. A page built for
+ *    63 reads a number as a flag, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 63;
+export const WIRE_PROTOCOL = 64;
 
 /**
  * What a session's stream carries: the changes each frame made to its

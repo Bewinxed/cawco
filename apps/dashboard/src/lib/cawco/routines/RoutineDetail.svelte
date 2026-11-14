@@ -19,15 +19,21 @@
    * 3. Actions, when its runs proposed any: the Approved actions table
    *    (ActionsTable), without the routine's name, which is the row's.
    */
+  import { hubSeam } from "#lib/cawco/hub-live.js";
   import { rowHref } from "#lib/cawco/links.js";
   import Markdown from "#lib/cawco/Markdown.svelte";
   import { since } from "#lib/cawco/rules.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import ActionsTable from "./ActionsTable.svelte";
   import RunStatus, { type Status } from "./RunStatus.svelte";
-  import type { Routine, RoutineRun } from "./routines-api";
+  import {
+    type Routine,
+    type RoutineRun,
+    readRoutineRuns,
+  } from "./routines-api";
   import ScheduleStrip from "./ScheduleStrip.svelte";
   import { exactOf, scheduleOf } from "./schedule";
 
@@ -40,21 +46,47 @@
     actions?: ApprovedActionView[];
   } = $props();
 
+  const hub = hubSeam();
+
   /** The strip's now, read as the detail opens. */
   const now = Date.now();
   const scheduleWords = $derived(
     scheduleOf(routine.cron, routine.timeZone, routine.nextSlot).words
   );
 
-  /** The runs shown first: the newest five; a button shows the rest the hub sent. */
+  /** The runs shown first: the newest five; a button shows the rest, then reads older pages from the hub. */
   const SHOWN = 5;
   let allRuns = $state(false);
-  const recent = $derived(
-    allRuns ? routine.runs : routine.runs.slice(0, SHOWN)
-  );
-  const unshown = $derived(routine.runs.length - recent.length);
-  /** Runs it has had that the hub did not send. */
-  const unsent = $derived(routine.runsTotal - routine.runs.length);
+  /** Older runs read from the hub past the ones the routine carries. */
+  let older = $state<RoutineRun[]>([]);
+  let reading = $state(false);
+  let readFault = $state<string | null>(null);
+  const held = $derived([
+    ...routine.runs,
+    ...older.filter((one) => !routine.runs.some((run) => run.id === one.id)),
+  ]);
+  const recent = $derived(allRuns ? held : held.slice(0, SHOWN));
+  /** Runs the routine has had that are not on screen: held, or still at the hub. */
+  const unshown = $derived(Math.max(routine.runsTotal - recent.length, 0));
+
+  /** More runs: those already held first, then the hub's next page. */
+  async function showMore(): Promise<void> {
+    if (!allRuns && held.length > recent.length) {
+      allRuns = true;
+      return;
+    }
+    allRuns = true;
+    reading = true;
+    readFault = null;
+    try {
+      const page = await readRoutineRuns(routine.id, held.length, hub.client);
+      older = [...older, ...page.runs];
+    } catch (error) {
+      readFault = failureWords(error);
+    } finally {
+      reading = false;
+    }
+  }
   /** Where a run is read whole: its session; null for a run no session took. */
   const runHref = (run: RoutineRun): string | null =>
     run.instanceId ? rowHref(run.instanceId) : null;
@@ -287,15 +319,15 @@
         <Button
           data-more-runs
           class="-ms-space-2 self-start"
-          onclick={() => {
-            allRuns = true;
-          }}
+          disabled={reading}
+          onclick={showMore}
           size="xs"
           variant="ghost">{words.moreRuns(unshown)}</Button
         >
-      {:else if unsent > 0}
-        <p class="m-0 type-meta text-ink-muted" data-slot="runs-window">
-          {words.runsWindow(routine.runs.length, routine.runsTotal)}
+      {/if}
+      {#if readFault}
+        <p class="m-0 type-meta text-status-fail-ink" role="status">
+          {readFault}
         </p>
       {/if}
     </section>

@@ -861,19 +861,22 @@ export const createActions = ({
     );
   };
 
-  /** The newest {@link LISTED} actions, and whether older ones exist that are not listed. */
+  /**
+   * A page of {@link LISTED} actions, newest first, after `skip` of them; `more`
+   * counts the older ones past it, which the next `skip` reaches (`next`).
+   */
   const listed = (
     projectId: string | undefined,
-    state?: ActionState
-  ): { actions: ApprovedActionView[]; more: boolean } => {
-    // One past what is listed: it says there are older actions.
-    const rows = store.list(projectId, LISTED + 1);
+    state?: ActionState,
+    skip = 0
+  ): { actions: ApprovedActionView[]; more: number; next: number } => {
+    const rows = store.list(projectId, LISTED, skip);
     return {
       actions: rows
-        .slice(0, LISTED)
         .filter((row) => state === undefined || row.state === state)
         .map(view),
-      more: rows.length > LISTED,
+      more: Math.max(store.count(projectId) - skip - rows.length, 0),
+      next: skip + rows.length,
     };
   };
   const list = (
@@ -921,13 +924,13 @@ export const createActions = ({
           said: "Waiting for the owner's approval.",
         };
       }),
-      ACTION_LIST_DEFINITION.run(async ({ state }) => {
+      ACTION_LIST_DEFINITION.run(async ({ state, skip }) => {
         const projectId = projectOf(me());
         if (projectId instanceof ElysiaStatus) {
           return projectId;
         }
-        await titlesOf(store.list(projectId, LISTED));
-        return listed(projectId, state);
+        await titlesOf(store.list(projectId, LISTED, skip));
+        return listed(projectId, state, skip);
       }),
       ACTION_CANCEL_DEFINITION.run(({ id }) => {
         const projectId = projectOf(me());
@@ -937,7 +940,9 @@ export const createActions = ({
             : cancel(
                 byHandle(
                   id,
-                  list(projectId),
+                  // Every action of the project, not a page: a handle from
+                  // any page of action_list names one.
+                  store.list(projectId, store.count(projectId)).map(view),
                   {
                     id: (action) => action.id,
                     said: (action) =>
@@ -1006,9 +1011,11 @@ export const actionRoutes = (actions: Actions) =>
           /** A project's actions; every project's when left out. */
           projectId: t.Optional(t.String()),
           state: t.Optional(STATE),
+          /** Actions to pass over, newest first: the `next` of the page before. */
+          skip: t.Optional(t.Integer({ minimum: 0 })),
         }),
       },
-      ({ query }) => actions.listed(query.projectId, query.state)
+      ({ query }) => actions.listed(query.projectId, query.state, query.skip)
     )
     .get("/api/actions/waiting", () => ({ actions: actions.waiting() }))
     .get("/api/actions/:id", ({ params }) => actions.get(params.id))
@@ -1071,6 +1078,7 @@ const ACTION_LIST_DEFINITION = defineTool(
   "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
   {
     state: z.enum(ACTION_STATES).optional(),
+    skip: z.number().int().min(0).optional(),
   },
   actionListWords
 );

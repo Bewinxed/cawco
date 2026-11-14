@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ApprovedActionView } from "@cawco/core/actions";
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { detach } from "@cawco/core/detach";
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
@@ -96,6 +97,7 @@
     type Poll,
     type Routine,
     type RoutinesPage,
+    readActions,
     readRoutinesPage,
     runRoutineNow,
     updateRoutine,
@@ -253,7 +255,32 @@
   });
 
   const routines = $derived(page?.routines ?? []);
-  const actions = $derived(page?.actions ?? []);
+  /** Older actions read past the page's own, by Show more. */
+  let olderActions = $state<ApprovedActionView[]>([]);
+  let readingActions = $state(false);
+  let actionsFault = $state<string | null>(null);
+  const actions = $derived([
+    ...(page?.actions ?? []),
+    ...olderActions.filter(
+      (one) => !page?.actions.some((action) => action.id === one.id)
+    ),
+  ]);
+  /** Actions the project has that are not on screen. */
+  const actionsLeft = $derived(
+    Math.max((page?.actionsMore ?? 0) - olderActions.length, 0)
+  );
+  async function moreActions(): Promise<void> {
+    readingActions = true;
+    actionsFault = null;
+    try {
+      const next = await readActions(project.id, actions.length, hub.client);
+      olderActions = [...olderActions, ...next.actions];
+    } catch (error) {
+      actionsFault = message(error);
+    } finally {
+      readingActions = false;
+    }
+  }
   const routes = $derived(page?.routes ?? []);
   const polls = $derived(page?.polls ?? []);
   const empty = $derived(page !== null && routines.length === 0);
@@ -1535,13 +1562,21 @@
     <div data-slot="ledger">
       <ActionsTable {actions} label={words.actions} {routineNames} />
     </div>
-    {#if page?.actionsMore}
-      <p
-        class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
-        data-slot="actions-window"
-      >
-        {words.actionsWindow(actions.length)}
-      </p>
+    {#if actionsLeft > 0}
+      <div class="flex flex-col items-start gap-space-1 p-space-2">
+        <Button
+          data-more-actions
+          disabled={readingActions}
+          onclick={moreActions}
+          size="xs"
+          variant="ghost">{words.moreActions(actionsLeft)}</Button
+        >
+        {#if actionsFault}
+          <p class="m-0 type-meta text-status-fail-ink" role="status">
+            {actionsFault}
+          </p>
+        {/if}
+      </div>
     {/if}
   {/if}
 {/snippet}

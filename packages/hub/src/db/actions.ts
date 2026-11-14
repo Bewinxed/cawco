@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type ActionState, actions } from "./schema";
 
@@ -34,6 +34,8 @@ export interface ActionsDb {
    * it, it was cancelled, or it is not due): then nothing is called.
    */
   readonly claim: (id: string, now: Date) => ActionRow | undefined;
+  /** How many actions a project has, or every project's. */
+  readonly count: (projectId: string | undefined) => number;
   /** Approved actions due at `now`, soonest first. */
   readonly due: (now: Date) => ActionRow[];
   readonly get: (id: string) => ActionRow | undefined;
@@ -41,7 +43,11 @@ export interface ActionsDb {
   readonly inStates: (states: readonly ActionState[]) => ActionRow[];
   readonly insert: (row: ActionRow) => ActionRow;
   /** A project's actions, newest first. */
-  readonly list: (projectId: string | undefined, limit: number) => ActionRow[];
+  readonly list: (
+    projectId: string | undefined,
+    limit: number,
+    skip?: number
+  ) => ActionRow[];
   /** The soonest time an approved action is due, or nothing. */
   readonly nextDue: () => Date | null | undefined;
   /**
@@ -84,13 +90,25 @@ export const actionsDb = (db: BunSQLiteDatabase): ActionsDb => {
         .all(),
     get,
     insert: (row) => db.insert(actions).values(row).returning().get(),
-    list: (projectId, limit) => {
+    count: (projectId) => {
+      const query = db.select({ n: sql<number>`count(*)` }).from(actions);
+      const scoped =
+        projectId === undefined
+          ? query
+          : query.where(eq(actions.projectId, projectId));
+      return scoped.get()?.n ?? 0;
+    },
+    list: (projectId, limit, skip = 0) => {
       const query = db.select().from(actions);
       const scoped =
         projectId === undefined
           ? query
           : query.where(eq(actions.projectId, projectId));
-      return scoped.orderBy(desc(actions.createdAt)).limit(limit).all();
+      return scoped
+        .orderBy(desc(actions.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .all();
     },
     nextDue: () => {
       const rows = db

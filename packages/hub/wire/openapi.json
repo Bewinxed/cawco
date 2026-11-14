@@ -1294,6 +1294,15 @@
                 "unknown"
               ]
             }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
           }
         ],
         "operationId": "getApiActions",
@@ -29365,6 +29374,62 @@
         }
       }
     },
+    "/api/routines/{id}/runs": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "operationId": "getApiRoutinesByIdRuns",
+        "responses": {
+          "200": {
+            "description": "getApiRoutinesByIdRuns 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiRoutinesByIdRuns200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiRoutinesByIdRuns 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiRoutinesByIdRuns404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiRoutinesByIdRuns 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiRoutinesByIdRuns422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/rules": {
       "get": {
         "operationId": "getApiRules",
@@ -44167,8 +44232,12 @@
             }
           },
           "eventsMore": {
-            "description": "Events older than those in {@link events} exist.",
-            "type": "boolean"
+            "description": "How many events are older than those in {@link events}.",
+            "type": "number"
+          },
+          "eventsNext": {
+            "description": "The `skip` that reads the page of older events after {@link events}.",
+            "type": "number"
           },
           "github": {
             "type": "object",
@@ -44240,6 +44309,7 @@
           "connectorPolls",
           "events",
           "eventsMore",
+          "eventsNext",
           "github",
           "routes"
         ]
@@ -75011,12 +75081,16 @@
             }
           },
           "more": {
-            "type": "boolean"
+            "type": "number"
+          },
+          "next": {
+            "type": "number"
           }
         },
         "required": [
           "actions",
-          "more"
+          "more",
+          "next"
         ]
       },
       "getApiActions422": {
@@ -106261,6 +106335,156 @@
           "status",
           "title",
           "type"
+        ]
+      },
+      "getApiRoutinesByIdRuns200": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoutineRunView"
+            }
+          }
+        },
+        "required": [
+          "runs"
+        ]
+      },
+      "getApiRoutinesByIdRuns404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "routine-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiRoutinesByIdRuns422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
         ]
       },
       "getApiRoutinesSchedule400": {

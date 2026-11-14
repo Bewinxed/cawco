@@ -168,7 +168,7 @@ const MIN_GAP_MS = 500;
 /** How long a run waits for its machine to be online before it is skipped. */
 const PLACE_WAIT_MS = 60_000;
 const PLACE_POLL_MS = 1000;
-/** Runs a routine's view lists: the newest; its `runsTotal` says how many it has had, and the dashboard says so beside them. */
+/** Runs a routine's view lists, and a page of `/api/routines/:id/runs` holds: the newest; its `runsTotal` says how many it has had. */
 const RUNS_SHOWN = 20;
 /** The longest delivered output a project note carries. */
 const NOTE_MAX = 4000;
@@ -2608,6 +2608,14 @@ export const createRoutines = ({
     return row instanceof ElysiaStatus ? row : viewOf(row);
   };
 
+  /** A page of a routine's runs after `skip` of them, newest first: how its view reaches past the {@link RUNS_SHOWN} it carries. */
+  const runsPage = (id: string, skip: number) => {
+    const row = routineOf(id);
+    return row instanceof ElysiaStatus
+      ? row
+      : { runs: store.runs(row.id, RUNS_SHOWN, skip).map(runView) };
+  };
+
   // --- tools -------------------------------------------------------------------
 
   /** How a tool's `id` names a routine: its id, handle or name (handles.ts). */
@@ -2782,6 +2790,7 @@ export const createRoutines = ({
     ensureCurator,
     fleetTrim,
     get,
+    runsPage,
     inboxPassed,
     itemEnded,
     sendLeft,
@@ -2869,6 +2878,16 @@ export const routineRoutes = (routines: Routines) =>
       ({ body }) => routines.create(body, "owner")
     )
     .get("/api/routines/:id", ({ params }) => routines.get(params.id))
+    .get(
+      "/api/routines/:id/runs",
+      {
+        query: t.Object({
+          /** Runs to pass over, newest first. */
+          skip: t.Integer({ minimum: 0 }),
+        }),
+      },
+      ({ params, query }) => routines.runsPage(params.id, query.skip)
+    )
     .patch(
       "/api/routines/:id",
       {
