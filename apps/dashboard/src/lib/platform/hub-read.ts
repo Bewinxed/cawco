@@ -147,50 +147,6 @@ export function hubSaid(refused: Refused): string {
 }
 
 /**
- * A request through core's door (`hubRequest`) and its JSON answer, for the
- * callers whose route the hub's types still misstate (a `Response` in its
- * answer, a `Date` sent as a string), until they ask through Eden
- * ({@link hubData}). Refused, `failure`'s error is thrown: the hub's
- * refusal in its own words ({@link hubRefusal}) unless the caller words it
- * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`).
- * Answered, its body is read by {@link jsonOf}.
- */
-export async function hubJson<T>(
-  request: HubRequest,
-  {
-    failure = hubRefusal,
-    init,
-  }: {
-    failure?: Refusal;
-    init?: RequestInit;
-  } = {}
-): Promise<T> {
-  const response = await hubFetch(request, init);
-  if (!response.ok) {
-    throw failure(await refusedOf(response));
-  }
-  return await jsonOf<T>(response);
-}
-
-/**
- * An answered request's body as JSON, whatever type it says it is: Elysia
- * sends a route's bare `true`, number or string as text, and that is the
- * route's answer. A body that is no JSON at all (a proxy's page, an empty
- * answer) is the hub not answering, thrown as {@link noAnswer}.
- */
-async function jsonOf<T>(response: Response): Promise<T> {
-  try {
-    return await response.json();
-  } catch (error) {
-    // A read cut off (its signal aborted, the network gone) rejects as it is.
-    if (!(error instanceof SyntaxError)) {
-      throw error;
-    }
-    throw new Error(`${noAnswer(response.status)}.`, { cause: error });
-  }
-}
-
-/**
  * An answer as Eden's client hands one back (hub.ts): answered, its `data`;
  * refused, its `error` and the answer itself ({@link Refused}).
  */
@@ -506,8 +462,7 @@ export function couldNot(attempt: string, refused: Refused): Error {
  * A hub request sent from this page: `request` as core's door built it
  * (`hubRequest`, held to what its route takes), with `init`'s own signal,
  * keepalive or other headers beside it, through `through`: the page's
- * `fetch`, or a load's own: the door {@link hubJson}
- * send through, for the callers still waiting on the hub's types.
+ * `fetch`, or a load's own, for the callers still waiting on the hub's types.
  */
 export const hubFetch = (
   request: HubRequest,
