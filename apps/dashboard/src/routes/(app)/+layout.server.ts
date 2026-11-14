@@ -1,7 +1,5 @@
-import type { FramePayload } from "@cawco/core/frames";
 import { harnessNamed } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
-import type { Envelope, InstanceRow, SessionPulse } from "@cawco/core/protocol";
+import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
 import { servedBoardOf } from "#lib/cawco/first-paint.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
 import type { ProjectRow } from "#lib/cawco/projects.js";
@@ -27,7 +25,7 @@ import {
 } from "#lib/cawco/workspace/tree.js";
 import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
 import { hubThrough } from "#lib/platform/hub.js";
-import { type HubRead, hubRead, readHub } from "#lib/platform/hub-read.js";
+import { type HubRead, hubRead } from "#lib/platform/hub-read.js";
 import {
   clampRail,
   FOLD_BOXES_PREF,
@@ -81,8 +79,7 @@ async function readWaits(
 ): Promise<{ waits: Wait[]; cancelled: Set<string> } | null> {
   const hub = hubThrough(fetch);
   const [pending, artifacts, moves] = await Promise.all([
-    // The hub types a pending envelope's payload as unknown; read as client.svelte.ts reads it.
-    readHub<Envelope<FramePayload>[]>(fetch, hubRequest("GET /api/pending")),
+    hubRead(hub.api.pending.get()),
     hubRead(hub.api["artifact-needs"].get()),
     hubRead(hub.api.moves.get()),
   ]);
@@ -91,12 +88,7 @@ async function readWaits(
   }
   const waits: Wait[] = [];
   for (const { payload } of pending.value) {
-    // The hub tags an ask its delegate's parent answers on the frame
-    // itself, past its declared shape, as the store reads it.
-    if (
-      payload.kind === "permission_request" &&
-      !routedToParent(payload as { routedTo?: string })
-    ) {
+    if (payload.kind === "permission_request" && !routedToParent(payload)) {
       waits.push({ opens: askOpens(payload), raisedAt: payload.raisedAt });
     }
   }

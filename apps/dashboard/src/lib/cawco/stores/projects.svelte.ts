@@ -13,7 +13,6 @@ import type {
 } from "@cawco/core/forgotten-project";
 import type { ProjectStopFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import {
   type CawInitiated,
@@ -29,10 +28,7 @@ import {
   answerOf,
   hubData,
   hubDone,
-  hubFetch,
-  hubJson,
   hubRefusal,
-  refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
@@ -40,7 +36,7 @@ import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
 import { rereadHub } from "../hub/socket.svelte";
 import { presenceClientId } from "../presence";
-import type { ProjectPlace, ProjectRow } from "../projects";
+import type { ProjectRow } from "../projects";
 import { servedBoard } from "./board.svelte";
 import { minute } from "./clock.svelte";
 import { reconcileRows } from "./same";
@@ -92,16 +88,10 @@ export async function editProject(
   }
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
-  const response = await hubFetch(
-    hubRequest("PATCH /api/projects/:id", {
-      path: { id: projectId },
-      body: change,
-    })
+  const row = await hubData(
+    hub.api.projects({ id: projectId }).patch(change),
+    (refused) => hubRefusal(refused, projectWords.notChangedThen)
   );
-  if (!response.ok) {
-    throw hubRefusal(await refusedOf(response), projectWords.notChangedThen);
-  }
-  const row = (await response.json()) as ProjectRow;
   keepProject(row, asked);
   return row;
 }
@@ -125,16 +115,10 @@ export async function addProjectPlace(
   path: string
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/places", {
-      path: { id: projectId },
-      body: { machineId, path },
-    })
+  const row = await hubData(
+    hub.api.projects({ id: projectId }).places.post({ machineId, path }),
+    (refused) => hubRefusal(refused, projectWords.placeNotAddedThen)
   );
-  if (!response.ok) {
-    throw hubRefusal(await refusedOf(response), projectWords.placeNotAddedThen);
-  }
-  const row = (await response.json()) as ProjectRow;
   keepProject(row, asked);
   return row;
 }
@@ -169,16 +153,11 @@ export async function createProject(project: {
   template?: StagesTemplate;
   prompt: string;
   promptId: string;
-}): Promise<ProjectRow & { place: ProjectPlace }> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects", { body: { ...project, caw: true } })
+}) {
+  const created = await hubData(
+    hub.api.projects.post({ ...project, caw: true }),
+    (refused) => hubRefusal(refused, projectWords.notMadeThen)
   );
-  if (!response.ok) {
-    throw hubRefusal(await refusedOf(response), projectWords.notMadeThen);
-  }
-  const created = (await response.json()) as ProjectRow & {
-    place: ProjectPlace;
-  };
   await rereadHub();
   return created;
 }
@@ -192,17 +171,10 @@ export async function projectAtFolder(project: {
   name: string;
   cwd: string;
   machineId: string;
-}): Promise<ProjectRow & { place: ProjectPlace; placeAdded: boolean }> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects", { body: project })
+}) {
+  const created = await hubData(hub.api.projects.post(project), (refused) =>
+    hubRefusal(refused, projectWords.notSavedThen)
   );
-  if (!response.ok) {
-    throw hubRefusal(await refusedOf(response), projectWords.notSavedThen);
-  }
-  const created = (await response.json()) as ProjectRow & {
-    place: ProjectPlace;
-    placeAdded: boolean;
-  };
   await rereadHub();
   return created;
 }
@@ -432,9 +404,7 @@ export async function restoreProject(
 /** Reads the projects again, as the hub has them now. */
 export async function readProjects(): Promise<void> {
   const asked = projectsLeave();
-  const projects = await load(
-    hubJson<ProjectRow[]>(hubRequest("GET /api/projects"))
-  );
+  const projects = await load(hubData(hub.api.projects.get()));
   if (projects) {
     keepProjects(projects, asked);
   }

@@ -10,10 +10,9 @@
 
 import { detach } from "@cawco/core/detach";
 import type { FramePayload } from "@cawco/core/frames";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { hub } from "#lib/platform/hub.js";
-import { hubData, hubJson } from "#lib/platform/hub-read.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { devDebug } from "./dev-debug";
 import { heardSince } from "./heard";
@@ -47,7 +46,6 @@ import { notices } from "./notices.svelte";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { handlePlanMessage } from "./plan";
 import { presenceAgain } from "./presence";
-import type { ProjectRow } from "./projects";
 import { checkServedBuild } from "./served-build.svelte";
 import { accountsState, readAccounts } from "./stores/accounts.svelte";
 import {
@@ -256,8 +254,8 @@ async function refresh(): Promise<boolean> {
   const asked = projectsLeave();
   const { mark } = asked;
   const [projects, pending, usage] = await Promise.all([
-    load(hubJson<ProjectRow[]>(hubRequest("GET /api/projects"))),
-    load(hubJson<Envelope<FramePayload>[]>(hubRequest("GET /api/pending"))),
+    load(hubData(hub.api.projects.get())),
+    load(hubData(hub.api.pending.get())),
     // Read on connect, not only broadcast on change: a dashboard opened
     // between reports has missed the frames.
     load(hubData(hub.api.usage.limits.get())),
