@@ -232,6 +232,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiAccountsHomeCredentials 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsHomeCredentials504"
+                }
+              }
+            }
           }
         }
       }
@@ -306,6 +316,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiAccountsMoveLogin503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAccountsMoveLogin 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsMoveLogin504"
                 }
               }
             }
@@ -458,12 +478,22 @@
               }
             }
           },
-          "503": {
-            "description": "getApiAccountsPlacement 503",
+          "502": {
+            "description": "getApiAccountsPlacement 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiAccountsPlacement503"
+                  "$ref": "#/components/schemas/getApiAccountsPlacement502"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAccountsPlacement 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsPlacement504"
                 }
               }
             }
@@ -1003,6 +1033,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "deleteApiAccountsByIdMachinesByMachineId 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineId504"
+                }
+              }
+            }
           }
         }
       }
@@ -1075,6 +1115,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSignin503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSignin 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSignin504"
                 }
               }
             }
@@ -1175,6 +1225,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSigninComplete503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSigninComplete504"
                 }
               }
             }
@@ -1790,12 +1850,12 @@
               }
             }
           },
-          "500": {
-            "description": "getApiAgentsByMachineIdBusy 500",
+          "502": {
+            "description": "getApiAgentsByMachineIdBusy 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiAgentsByMachineIdBusy500"
+                  "$ref": "#/components/schemas/getApiAgentsByMachineIdBusy502"
                 }
               }
             }
@@ -1895,12 +1955,12 @@
               }
             }
           },
-          "500": {
-            "description": "getApiAgentsByMachineIdCommands 500",
+          "502": {
+            "description": "getApiAgentsByMachineIdCommands 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiAgentsByMachineIdCommands500"
+                  "$ref": "#/components/schemas/getApiAgentsByMachineIdCommands502"
                 }
               }
             }
@@ -1977,12 +2037,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiAgentsByMachineIdInspect 500",
+          "502": {
+            "description": "postApiAgentsByMachineIdInspect 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdInspect500"
+                  "$ref": "#/components/schemas/postApiAgentsByMachineIdInspect502"
                 }
               }
             }
@@ -4031,6 +4091,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiBrowsersByKeyHandback 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyHandback504"
+                }
+              }
+            }
           }
         }
       }
@@ -4121,6 +4191,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiBrowsersByKeyRemove503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiBrowsersByKeyRemove 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyRemove504"
                 }
               }
             }
@@ -4217,6 +4297,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiBrowsersByKeyStart 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyStart504"
+                }
+              }
+            }
           }
         }
       }
@@ -4307,6 +4397,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiBrowsersByKeyStop503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiBrowsersByKeyStop 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyStop504"
                 }
               }
             }
@@ -4408,6 +4508,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiBrowsersByKeyTakeover503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiBrowsersByKeyTakeover 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyTakeover504"
                 }
               }
             }
@@ -8326,12 +8436,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetHooksAdopt 500",
+          "502": {
+            "description": "postApiFleetHooksAdopt 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksAdopt500"
+                  "$ref": "#/components/schemas/postApiFleetHooksAdopt502"
                 }
               }
             }
@@ -8455,12 +8565,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetHooksPeek 500",
+          "502": {
+            "description": "postApiFleetHooksPeek 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksPeek500"
+                  "$ref": "#/components/schemas/postApiFleetHooksPeek502"
                 }
               }
             }
@@ -8553,12 +8663,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetHooksPush 500",
+          "502": {
+            "description": "postApiFleetHooksPush 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksPush500"
+                  "$ref": "#/components/schemas/postApiFleetHooksPush502"
                 }
               }
             }
@@ -9509,12 +9619,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetMemoryAdopt 500",
+          "502": {
+            "description": "postApiFleetMemoryAdopt 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryAdopt500"
+                  "$ref": "#/components/schemas/postApiFleetMemoryAdopt502"
                 }
               }
             }
@@ -9837,12 +9947,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetMemoryPeek 500",
+          "502": {
+            "description": "postApiFleetMemoryPeek 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryPeek500"
+                  "$ref": "#/components/schemas/postApiFleetMemoryPeek502"
                 }
               }
             }
@@ -9925,12 +10035,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetMemoryPush 500",
+          "502": {
+            "description": "postApiFleetMemoryPush 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryPush500"
+                  "$ref": "#/components/schemas/postApiFleetMemoryPush502"
                 }
               }
             }
@@ -10628,12 +10738,12 @@
               }
             }
           },
-          "500": {
-            "description": "postApiFleetSkillsByNamePush 500",
+          "502": {
+            "description": "postApiFleetSkillsByNamePush 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetSkillsByNamePush500"
+                  "$ref": "#/components/schemas/postApiFleetSkillsByNamePush502"
                 }
               }
             }
@@ -11928,12 +12038,12 @@
               }
             }
           },
-          "500": {
-            "description": "patchApiInstancesById 500",
+          "502": {
+            "description": "patchApiInstancesById 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/patchApiInstancesById500"
+                  "$ref": "#/components/schemas/patchApiInstancesById502"
                 }
               }
             }
@@ -12474,6 +12584,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifacts500"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiInstancesByIdArtifacts 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifacts502"
                 }
               }
             }
@@ -13311,6 +13431,16 @@
               }
             }
           },
+          "502": {
+            "description": "getApiInstancesByIdArtifactsByArtifact 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsByArtifact502"
+                }
+              }
+            }
+          },
           "503": {
             "description": "getApiInstancesByIdArtifactsByArtifact 503",
             "content": {
@@ -13536,6 +13666,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/patchApiInstancesByIdArtifactsByArtifact500"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "patchApiInstancesByIdArtifactsByArtifact 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiInstancesByIdArtifactsByArtifact502"
                 }
               }
             }
@@ -15182,12 +15322,12 @@
               }
             }
           },
-          "500": {
-            "description": "getApiInstancesByIdAttachments 500",
+          "502": {
+            "description": "getApiInstancesByIdAttachments 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiInstancesByIdAttachments500"
+                  "$ref": "#/components/schemas/getApiInstancesByIdAttachments502"
                 }
               }
             }
@@ -15265,12 +15405,32 @@
               }
             }
           },
+          "502": {
+            "description": "getApiInstancesByIdContinue 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdContinue502"
+                }
+              }
+            }
+          },
           "503": {
             "description": "getApiInstancesByIdContinue 503",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiInstancesByIdContinue503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiInstancesByIdContinue 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdContinue504"
                 }
               }
             }
@@ -15530,12 +15690,32 @@
               }
             }
           },
+          "502": {
+            "description": "postApiInstancesByIdContinue 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdContinue502"
+                }
+              }
+            }
+          },
           "503": {
             "description": "postApiInstancesByIdContinue 503",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdContinue503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiInstancesByIdContinue 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdContinue504"
                 }
               }
             }
@@ -16338,12 +16518,12 @@
               }
             }
           },
-          "500": {
-            "description": "getApiInstancesByIdTranscript 500",
+          "502": {
+            "description": "getApiInstancesByIdTranscript 502",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiInstancesByIdTranscript500"
+                  "$ref": "#/components/schemas/getApiInstancesByIdTranscript502"
                 }
               }
             }
@@ -17206,6 +17386,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSignin 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiMachinesByMachineIdToolsByToolIdSignin504"
+                }
+              }
+            }
           }
         }
       }
@@ -17286,6 +17476,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiMachinesByMachineIdToolsByToolIdSigninComplete503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSigninComplete 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiMachinesByMachineIdToolsByToolIdSigninComplete504"
                 }
               }
             }
@@ -30314,6 +30514,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiStreamRelayAct503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiStreamRelayAct 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiStreamRelayAct504"
                 }
               }
             }
@@ -61645,79 +61855,39 @@
         ]
       },
       "deleteApiAccountsByIdMachinesByMachineId409": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "did-not-answer-within"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "did-not-sign-out"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "did-not-sign-out"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "deleteApiAccountsByIdMachinesByMachineId422": {
@@ -61771,10 +61941,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineId504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -74526,10 +74736,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiAccountsHomeCredentials504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -74779,11 +75029,10 @@
                 "type": "string"
               },
               "status": {
+                "type": "number",
                 "enum": [
-                  400,
-                  503
-                ],
-                "type": "number"
+                  400
+                ]
               },
               "title": {
                 "type": "string"
@@ -74902,13 +75151,13 @@
           }
         ]
       },
-      "getApiAccountsPlacement503": {
+      "getApiAccountsPlacement502": {
         "type": "object",
         "properties": {
           "code": {
             "type": "string",
             "enum": [
-              "placement-refused"
+              "spawn-default-unnamed"
             ]
           },
           "detail": {
@@ -74918,11 +75167,46 @@
             "type": "string"
           },
           "status": {
+            "type": "number",
             "enum": [
-              400,
-              503
-            ],
-            "type": "number"
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiAccountsPlacement504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
           },
           "title": {
             "type": "string"
@@ -75590,7 +75874,7 @@
           "type"
         ]
       },
-      "getApiAgentsByMachineIdBusy500": {
+      "getApiAgentsByMachineIdBusy502": {
         "type": "object",
         "properties": {
           "code": {
@@ -75608,7 +75892,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -75641,6 +75925,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -75657,6 +75944,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -75805,7 +76093,7 @@
           }
         ]
       },
-      "getApiAgentsByMachineIdCommands500": {
+      "getApiAgentsByMachineIdCommands502": {
         "type": "object",
         "properties": {
           "code": {
@@ -75823,7 +76111,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -75856,6 +76144,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -75872,6 +76163,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -76064,6 +76356,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -76080,6 +76375,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -84917,44 +85213,8 @@
           }
         ]
       },
-      "getApiInstancesByIdArtifactsByArtifact503": {
+      "getApiInstancesByIdArtifactsByArtifact502": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "picture-no-daemon"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -84973,7 +85233,7 @@
               "status": {
                 "type": "number",
                 "enum": [
-                  503
+                  502
                 ]
               },
               "title": {
@@ -85009,7 +85269,7 @@
               "status": {
                 "type": "number",
                 "enum": [
-                  503
+                  502
                 ]
               },
               "title": {
@@ -85026,20 +85286,27 @@
               "title",
               "type"
             ]
-          },
+          }
+        ]
+      },
+      "getApiInstancesByIdArtifactsByArtifact503": {
+        "anyOf": [
           {
             "type": "object",
             "properties": {
               "code": {
                 "type": "string",
                 "enum": [
-                  "picture-save-unanswered"
+                  "machine-away"
                 ]
               },
               "detail": {
                 "type": "string"
               },
               "instance": {
+                "type": "string"
+              },
+              "machineId": {
                 "type": "string"
               },
               "status": {
@@ -85058,42 +85325,7 @@
             "required": [
               "code",
               "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "picture-undrawn"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -85206,42 +85438,6 @@
               "title",
               "type"
             ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stage-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
           }
         ]
       },
@@ -85251,7 +85447,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "stage-machine-late"
+              "machine-silent"
             ]
           },
           "detail": {
@@ -86409,13 +86605,16 @@
           "code": {
             "type": "string",
             "enum": [
-              "stage-machine-away"
+              "machine-away"
             ]
           },
           "detail": {
             "type": "string"
           },
           "instance": {
+            "type": "string"
+          },
+          "machineId": {
             "type": "string"
           },
           "status": {
@@ -86434,6 +86633,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -86445,7 +86645,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "stage-machine-late"
+              "machine-silent"
             ]
           },
           "detail": {
@@ -87375,7 +87575,7 @@
           "type"
         ]
       },
-      "getApiInstancesByIdAttachments500": {
+      "getApiInstancesByIdAttachments502": {
         "type": "object",
         "properties": {
           "code": {
@@ -87393,7 +87593,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -87426,6 +87626,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -87442,6 +87645,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -87666,6 +87870,39 @@
           }
         ]
       },
+      "getApiInstancesByIdContinue502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiInstancesByIdContinue503": {
         "type": "object",
         "properties": {
@@ -87681,10 +87918,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiInstancesByIdContinue504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -88930,7 +89207,7 @@
           "type"
         ]
       },
-      "getApiInstancesByIdTranscript500": {
+      "getApiInstancesByIdTranscript502": {
         "type": "object",
         "properties": {
           "code": {
@@ -88948,7 +89225,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -88981,6 +89258,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -88997,6 +89277,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -109770,13 +110051,10 @@
                 "type": "string"
               },
               "status": {
+                "type": "number",
                 "enum": [
-                  400,
-                  500,
-                  503,
-                  504
-                ],
-                "type": "number"
+                  400
+                ]
               },
               "title": {
                 "type": "string"
@@ -110039,7 +110317,7 @@
           }
         ]
       },
-      "patchApiInstancesById500": {
+      "patchApiInstancesById502": {
         "type": "object",
         "properties": {
           "code": {
@@ -110055,13 +110333,10 @@
             "type": "string"
           },
           "status": {
+            "type": "number",
             "enum": [
-              400,
-              500,
-              503,
-              504
-            ],
-            "type": "number"
+              502
+            ]
           },
           "title": {
             "type": "string"
@@ -110084,7 +110359,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "mode-refused"
+              "machine-away"
             ]
           },
           "detail": {
@@ -110093,14 +110368,14 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
+            "type": "number",
             "enum": [
-              400,
-              500,
-              503,
-              504
-            ],
-            "type": "number"
+              503
+            ]
           },
           "title": {
             "type": "string"
@@ -110112,6 +110387,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -110123,7 +110399,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "mode-refused"
+              "machine-silent"
             ]
           },
           "detail": {
@@ -110133,13 +110409,10 @@
             "type": "string"
           },
           "status": {
+            "type": "number",
             "enum": [
-              400,
-              500,
-              503,
               504
-            ],
-            "type": "number"
+            ]
           },
           "title": {
             "type": "string"
@@ -112695,6 +112968,42 @@
           "type"
         ]
       },
+      "patchApiInstancesByIdArtifactsByArtifact502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "artifact-screen-unopened"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "patchApiInstancesByIdArtifactsByArtifact503": {
         "anyOf": [
           {
@@ -112704,78 +113013,6 @@
                 "type": "string",
                 "enum": [
                   "artifact-canvas-no-screen"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-screen-no-daemon"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-screen-unopened"
                 ]
               },
               "detail": {
@@ -112847,13 +113084,16 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "page-machine-away"
+                  "machine-away"
                 ]
               },
               "detail": {
                 "type": "string"
               },
               "instance": {
+                "type": "string"
+              },
+              "machineId": {
                 "type": "string"
               },
               "status": {
@@ -112872,6 +113112,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -113103,7 +113344,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "page-machine-late"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -120492,10 +120733,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdSignin504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -120892,10 +121173,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdSigninComplete504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -121014,81 +121335,39 @@
         ]
       },
       "postApiAccountsMoveLogin409": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "home-login-refused"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "enum": [
-                  409,
-                  422,
-                  503
-                ],
-                "type": "number"
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "home-login-refused"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "home-login-refused"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiAccountsMoveLogin422": {
@@ -121109,12 +121388,10 @@
                 "type": "string"
               },
               "status": {
+                "type": "number",
                 "enum": [
-                  409,
-                  422,
-                  503
-                ],
-                "type": "number"
+                  422
+                ]
               },
               "title": {
                 "type": "string"
@@ -121235,7 +121512,47 @@
           "code": {
             "type": "string",
             "enum": [
-              "home-login-refused"
+              "machine-away"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsMoveLogin504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
             ]
           },
           "detail": {
@@ -121245,12 +121562,10 @@
             "type": "string"
           },
           "status": {
+            "type": "number",
             "enum": [
-              409,
-              422,
-              503
-            ],
-            "type": "number"
+              504
+            ]
           },
           "title": {
             "type": "string"
@@ -122011,7 +122326,7 @@
           }
         ]
       },
-      "postApiAgentsByMachineIdInspect500": {
+      "postApiAgentsByMachineIdInspect502": {
         "type": "object",
         "properties": {
           "code": {
@@ -122029,7 +122344,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -122062,6 +122377,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -122078,6 +122396,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -122270,6 +122589,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -122286,6 +122608,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -122297,7 +122620,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "didnt-finish-update-within"
+              "machine-silent"
             ]
           },
           "detail": {
@@ -123012,79 +123335,79 @@
         ]
       },
       "postApiBrowsersByKeyHandback503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiBrowsersByKeyHandback504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiBrowsersByKeyRemove200": {
@@ -123386,79 +123709,79 @@
         ]
       },
       "postApiBrowsersByKeyRemove503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiBrowsersByKeyRemove504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiBrowsersByKeyStart400": {
@@ -123710,79 +124033,79 @@
         ]
       },
       "postApiBrowsersByKeyStart503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiBrowsersByKeyStart504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiBrowsersByKeyStop400": {
@@ -124034,79 +124357,79 @@
         ]
       },
       "postApiBrowsersByKeyStop503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiBrowsersByKeyStop504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiBrowsersByKeyTakeover200": {
@@ -124452,79 +124775,79 @@
         ]
       },
       "postApiBrowsersByKeyTakeover503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "browser-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiBrowsersByKeyTakeover504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiConnections400": {
@@ -126761,7 +127084,7 @@
           }
         ]
       },
-      "postApiFleetHooksAdopt500": {
+      "postApiFleetHooksAdopt502": {
         "type": "object",
         "properties": {
           "code": {
@@ -126779,7 +127102,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -126812,6 +127135,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -126828,6 +127154,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -127005,7 +127332,7 @@
           }
         ]
       },
-      "postApiFleetHooksPeek500": {
+      "postApiFleetHooksPeek502": {
         "type": "object",
         "properties": {
           "code": {
@@ -127023,7 +127350,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -127056,6 +127383,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -127072,6 +127402,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -127296,7 +127627,7 @@
           }
         ]
       },
-      "postApiFleetHooksPush500": {
+      "postApiFleetHooksPush502": {
         "type": "object",
         "properties": {
           "code": {
@@ -127314,7 +127645,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -127347,6 +127678,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -127363,6 +127697,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -127666,6 +128001,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -127682,6 +128020,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -128302,7 +128641,7 @@
           }
         ]
       },
-      "postApiFleetMemoryAdopt500": {
+      "postApiFleetMemoryAdopt502": {
         "type": "object",
         "properties": {
           "code": {
@@ -128320,7 +128659,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -128353,6 +128692,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -128369,6 +128711,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -128510,7 +128853,7 @@
           }
         ]
       },
-      "postApiFleetMemoryPeek500": {
+      "postApiFleetMemoryPeek502": {
         "type": "object",
         "properties": {
           "code": {
@@ -128528,7 +128871,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -128561,6 +128904,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -128577,6 +128923,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -128765,7 +129112,7 @@
           }
         ]
       },
-      "postApiFleetMemoryPush500": {
+      "postApiFleetMemoryPush502": {
         "type": "object",
         "properties": {
           "code": {
@@ -128783,7 +129130,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -128816,6 +129163,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -128832,6 +129182,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -129248,7 +129599,7 @@
           }
         ]
       },
-      "postApiFleetSkillsByNamePush500": {
+      "postApiFleetSkillsByNamePush502": {
         "type": "object",
         "properties": {
           "code": {
@@ -129266,7 +129617,7 @@
           "status": {
             "type": "number",
             "enum": [
-              500
+              502
             ]
           },
           "title": {
@@ -129299,6 +129650,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -129315,6 +129669,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -129479,6 +129834,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -129495,6 +129853,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -129834,6 +130193,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -129850,6 +130212,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -133167,8 +133530,9 @@
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
                   "artifact-canvas-undrawn",
-                  "artifact-screen-no-daemon",
                   "artifact-screen-unopened",
+                  "machine-away",
+                  "machine-silent",
                   "preview-no-listener",
                   "preview-owner-gone",
                   "preview-port-unopened",
@@ -133187,6 +133551,7 @@
                   409,
                   413,
                   422,
+                  502,
                   503,
                   504
                 ],
@@ -133366,8 +133731,9 @@
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
                   "artifact-canvas-undrawn",
-                  "artifact-screen-no-daemon",
                   "artifact-screen-unopened",
+                  "machine-away",
+                  "machine-silent",
                   "preview-no-listener",
                   "preview-owner-gone",
                   "preview-port-unopened",
@@ -133386,6 +133752,7 @@
                   409,
                   413,
                   422,
+                  502,
                   503,
                   504
                 ],
@@ -134377,8 +134744,9 @@
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
                   "artifact-canvas-undrawn",
-                  "artifact-screen-no-daemon",
                   "artifact-screen-unopened",
+                  "machine-away",
+                  "machine-silent",
                   "preview-no-listener",
                   "preview-owner-gone",
                   "preview-port-unopened",
@@ -134397,6 +134765,7 @@
                   409,
                   413,
                   422,
+                  502,
                   503,
                   504
                 ],
@@ -134455,6 +134824,99 @@
           "type"
         ]
       },
+      "postApiInstancesByIdArtifacts502": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-screen-unopened"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "enum": [
+                  "artifact-canvas-elements-many",
+                  "artifact-canvas-mermaid-long",
+                  "artifact-canvas-no-screen",
+                  "artifact-canvas-screen-unjoined",
+                  "artifact-canvas-unconverted",
+                  "artifact-canvas-undrawn",
+                  "artifact-screen-unopened",
+                  "machine-away",
+                  "machine-silent",
+                  "preview-no-listener",
+                  "preview-owner-gone",
+                  "preview-port-unopened",
+                  "preview-ports-taken"
+                ],
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  409,
+                  413,
+                  422,
+                  502,
+                  503,
+                  504
+                ],
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
       "postApiInstancesByIdArtifacts503": {
         "anyOf": [
           {
@@ -134499,151 +134961,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-folder-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "artifact-preview-unstarted"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-screen-no-daemon"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-screen-unopened"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-serve-machine-away"
                 ]
               },
               "detail": {
@@ -134787,13 +135105,16 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "page-machine-away"
+                  "machine-away"
                 ]
               },
               "detail": {
                 "type": "string"
               },
               "instance": {
+                "type": "string"
+              },
+              "machineId": {
                 "type": "string"
               },
               "status": {
@@ -134812,6 +135133,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -134929,42 +135251,6 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string",
-                "enum": [
-                  "stage-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
                 "enum": [
                   "artifact-canvas-elements-many",
                   "artifact-canvas-mermaid-long",
@@ -134972,8 +135258,9 @@
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
                   "artifact-canvas-undrawn",
-                  "artifact-screen-no-daemon",
                   "artifact-screen-unopened",
+                  "machine-away",
+                  "machine-silent",
                   "preview-no-listener",
                   "preview-owner-gone",
                   "preview-port-unopened",
@@ -134992,6 +135279,7 @@
                   409,
                   413,
                   422,
+                  502,
                   503,
                   504
                 ],
@@ -135094,78 +135382,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-folder-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-serve-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "folder-git-unanswered"
                 ]
               },
@@ -135202,43 +135418,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "page-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stage-machine-late"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -135279,8 +135459,9 @@
                   "artifact-canvas-screen-unjoined",
                   "artifact-canvas-unconverted",
                   "artifact-canvas-undrawn",
-                  "artifact-screen-no-daemon",
                   "artifact-screen-unopened",
+                  "machine-away",
+                  "machine-silent",
                   "preview-no-listener",
                   "preview-owner-gone",
                   "preview-port-unopened",
@@ -135299,6 +135480,7 @@
                   409,
                   413,
                   422,
+                  502,
                   503,
                   504
                 ],
@@ -138770,13 +138952,16 @@
           "code": {
             "type": "string",
             "enum": [
-              "stage-machine-away"
+              "machine-away"
             ]
           },
           "detail": {
             "type": "string"
           },
           "instance": {
+            "type": "string"
+          },
+          "machineId": {
             "type": "string"
           },
           "status": {
@@ -138795,6 +138980,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -138806,7 +138992,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "stage-machine-late"
+              "machine-silent"
             ]
           },
           "detail": {
@@ -143305,13 +143491,16 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "page-machine-away"
+                  "machine-away"
                 ]
               },
               "detail": {
                 "type": "string"
               },
               "instance": {
+                "type": "string"
+              },
+              "machineId": {
                 "type": "string"
               },
               "status": {
@@ -143330,6 +143519,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -143381,7 +143571,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "page-machine-late"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -145522,6 +145712,39 @@
           }
         ]
       },
+      "postApiInstancesByIdContinue502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "postApiInstancesByIdContinue503": {
         "type": "object",
         "properties": {
@@ -145537,10 +145760,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdContinue504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -145745,6 +146008,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -145761,6 +146027,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -145772,7 +146039,7 @@
           "code": {
             "type": "string",
             "enum": [
-              "image-generation-did-not"
+              "machine-silent"
             ]
           },
           "detail": {
@@ -149751,10 +150018,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiMachinesByMachineIdToolsByToolIdSignin504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -149959,10 +150266,50 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
               503
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiMachinesByMachineIdToolsByToolIdSigninComplete504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
           },
           "title": {
@@ -156384,39 +156731,115 @@
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "caw-home-unsaid"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "caw-home-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-default-unnamed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-start-failed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend503": {
@@ -156452,6 +156875,46 @@
             "required": [
               "code",
               "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine-away"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  503
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -156501,6 +156964,42 @@
                 "type": "string",
                 "enum": [
                   "folder-git-unanswered"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  504
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -167057,6 +167556,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "work-item-session-unreached"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "work-item-tree-stopping"
                 ]
               },
@@ -167533,42 +168068,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "unknown-fields"
                 ]
               },
@@ -167749,42 +168248,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "design-clone-unread"
                 ]
               },
@@ -167855,46 +168318,7 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string",
-                "enum": [
-                  "work-item-session-unreached"
-                ]
-              },
-              "detail": {
                 "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "work-item-spawn-failed"
-                ]
               },
               "detail": {
                 "type": "string"
@@ -168014,6 +168438,9 @@
               "instance": {
                 "type": "string"
               },
+              "machineId": {
+                "type": "string"
+              },
               "status": {
                 "type": "number",
                 "enum": [
@@ -168030,6 +168457,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -168149,42 +168577,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "workspace-folder-unmade"
                 ]
               },
@@ -168265,7 +168657,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-unanswered"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -177306,6 +177698,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "work-item-session-unreached"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "work-item-tree-stopping"
                 ]
               },
@@ -177706,42 +178134,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "unknown-fields"
                 ]
               },
@@ -177922,42 +178314,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "design-clone-unread"
                 ]
               },
@@ -177992,46 +178348,7 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string",
-                "enum": [
-                  "work-item-session-unreached"
-                ]
-              },
-              "detail": {
                 "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "work-item-spawn-failed"
-                ]
               },
               "detail": {
                 "type": "string"
@@ -178151,6 +178468,9 @@
               "instance": {
                 "type": "string"
               },
+              "machineId": {
+                "type": "string"
+              },
               "status": {
                 "type": "number",
                 "enum": [
@@ -178167,6 +178487,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -178286,42 +178607,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "workspace-folder-unmade"
                 ]
               },
@@ -178402,7 +178687,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-unanswered"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -185549,6 +185834,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "work-item-session-unreached"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "work-item-tree-stopping"
                 ]
               },
@@ -185949,42 +186270,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "unknown-fields"
                 ]
               },
@@ -186165,42 +186450,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "design-clone-unread"
                 ]
               },
@@ -186235,46 +186484,7 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string",
-                "enum": [
-                  "work-item-session-unreached"
-                ]
-              },
-              "detail": {
                 "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "work-item-spawn-failed"
-                ]
               },
               "detail": {
                 "type": "string"
@@ -186394,6 +186604,9 @@
               "instance": {
                 "type": "string"
               },
+              "machineId": {
+                "type": "string"
+              },
               "status": {
                 "type": "number",
                 "enum": [
@@ -186410,6 +186623,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -186529,42 +186743,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "workspace-folder-unmade"
                 ]
               },
@@ -186645,7 +186823,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-unanswered"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -191308,42 +191486,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "unknown-fields"
                 ]
               },
@@ -191473,39 +191615,115 @@
         ]
       },
       "postApiProjectsByIdViewRequests502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "caw-home-unsaid"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "caw-home-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-default-unnamed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-start-failed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiProjectsByIdViewRequests503": {
@@ -191561,40 +191779,7 @@
               "instance": {
                 "type": "string"
               },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
+              "machineId": {
                 "type": "string"
               },
               "status": {
@@ -191613,6 +191798,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -191664,7 +191850,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-unanswered"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -195365,42 +195551,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "unknown-fields"
                 ]
               },
@@ -195530,39 +195680,115 @@
         ]
       },
       "postApiProjectsByIdViewsByNameAsks502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "caw-home-unsaid"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "caw-home-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-default-unnamed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-start-failed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiProjectsByIdViewsByNameAsks503": {
@@ -195618,40 +195844,7 @@
               "instance": {
                 "type": "string"
               },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
+              "machineId": {
                 "type": "string"
               },
               "status": {
@@ -195670,6 +195863,7 @@
             "required": [
               "code",
               "detail",
+              "machineId",
               "status",
               "title",
               "type"
@@ -195721,7 +195915,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-start-unanswered"
+                  "machine-silent"
                 ]
               },
               "detail": {
@@ -198604,79 +198798,79 @@
         ]
       },
       "postApiStreamRelayAct503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stream-relay-machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stream-relay-machine-late"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "machineId",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiStreamRelayAct504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-silent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiStreamRelayProof409": {
@@ -204950,6 +205144,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -204966,6 +205163,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"
@@ -205929,6 +206127,9 @@
           "instance": {
             "type": "string"
           },
+          "machineId": {
+            "type": "string"
+          },
           "status": {
             "type": "number",
             "enum": [
@@ -205945,6 +206146,7 @@
         "required": [
           "code",
           "detail",
+          "machineId",
           "status",
           "title",
           "type"

@@ -332,12 +332,20 @@ import type { TailnetServing } from "./tailnet-https";
  *    `lastPingUsage`, a Who decides member's `reach`, and an archived
  *    workspace's `ports`. A page built for 67 may hold them as required,
  *    so it reloads first.
+ * 69: every answer about a machine says its cause: away is 503
+ *    `machine-away`, naming its machine in the body and the headers, where
+ *    a browser's, the stream relay's, a stage's, a page's, a preview's and
+ *    a credential move's calls answered their own codes; silent is 504
+ *    `machine-silent`, where those and a session's PATCH, generate_image
+ *    and agent update answered theirs; a machine's failure is 502, where a
+ *    spawn's start answered 422 and a placement 503. A page built for 68
+ *    reads those codes and members closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 68;
+export const WIRE_PROTOCOL = 69;
 
 /**
  * What a session's stream carries: the changes each frame made to its
