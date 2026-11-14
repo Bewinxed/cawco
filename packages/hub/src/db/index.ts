@@ -262,9 +262,8 @@ const make = async (path: string): Promise<DbShape> => {
   await applyMigrations(db, db.$client, path);
 
   const core: DbCore = dbCore(db, boardChangeLog(db.$client));
-  // The fleet's delegate types: their own table, on this connection, the
-  // hub's one writer to its file.
-  const delegateTypes = makeDelegateTypes(db.$client);
+  // The fleet's delegate types, seeded once.
+  const delegateTypes = makeDelegateTypes(db);
 
   runOpenedSteps(db);
 

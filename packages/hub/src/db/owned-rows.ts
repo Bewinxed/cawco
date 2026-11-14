@@ -39,6 +39,8 @@ import {
   githubPollers,
   inboundEvents,
   instanceAliases,
+  instanceMayStart,
+  instanceStartingSet,
   instances,
   lfsOffers,
   lfsRefusals,
@@ -180,6 +182,14 @@ export const OWNED_ROWS = [
   { column: ruleState.instanceId, fold: "drop", drop: "delete" },
   { column: movedFromSessions.instanceId, fold: "drop" },
   { column: limitStops.instanceId, drop: "delete" },
+  // What a session may start and starts with: its own, never a former's
+  // (a fold gives the survivor its oldest row's list, foldInto).
+  {
+    column: instanceMayStart.instanceId,
+    fold: "custom",
+    drop: "delete",
+  },
+  { column: instanceStartingSet.instanceId, fold: "drop", drop: "delete" },
   // What a machine re-joining under a new id moves (rekeyMachine order);
   // `goesWithMachine` is what deleteMachine takes with it.
   { column: agents.machineId, rekey: "custom" },

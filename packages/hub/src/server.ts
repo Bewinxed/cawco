@@ -55,7 +55,7 @@ import {
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
-import { sessionMayStart, startsAny } from "@cawco/core/delegate-types";
+import { startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
@@ -6238,7 +6238,7 @@ export const createServer = (
     // A leaf stays a leaf across a restart: the daemon builds the toolset
     // from the payload, and a restore that dropped this would hand a leaf
     // delegate the spawning tools back.
-    ...(row.mayStart ? { mayStart: row.mayStart } : {}),
+    mayStart: row.mayStart,
     ...typeSettingsOf(row),
   });
 
@@ -6336,7 +6336,8 @@ export const createServer = (
       kind: row.kind === "scratch" ? "scratch" : "mainline",
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
-      mayStart: row.mayStart ?? undefined,
+      mayStart: row.mayStart,
+      startingSet: row.startingSet,
       // The turn its last launch had open is handed back once this one is up.
       keepTurn: true,
     });
@@ -7744,7 +7745,8 @@ export const createServer = (
       const began = db.instanceBySessionId(
         payload.resume.sessionKey
       )?.startingSet;
-      return began ? { startingSet: began } : {};
+      // A conversation no row began: everything installed, as it started.
+      return { startingSet: began ?? null };
     }
     const named = payload.delegateType;
     const project = payload.projectId
@@ -7764,7 +7766,8 @@ export const createServer = (
       starters: project?.template ? TEMPLATE_SKILLS[project.template] : [],
       named: payload.skills,
     });
-    return set ? { startingSet: set } : {};
+    // No set of its type's or its project's: everything installed.
+    return { startingSet: set ?? null };
   }
 
   /** The machines connected now, in the order the hub keeps them. */
@@ -9565,7 +9568,7 @@ export const createServer = (
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
     // A leaf picks from the few types it may start: Jev's pick from the
     // whole catalog would only be refused.
-    if (parent && !startsAny(sessionMayStart(parent))) {
+    if (parent && !startsAny(parent.mayStart)) {
       return {};
     }
     const projectId = parent?.projectId ?? null;

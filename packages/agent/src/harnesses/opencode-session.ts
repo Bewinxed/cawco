@@ -31,10 +31,10 @@ import { atProviderLimit } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { MayStart } from "@cawco/core/delegate-types";
 import {
+  ANY_TYPE,
+  type MayStart,
   SPAWNING_TOOLS,
-  sessionMayStart,
   spawningToolAllowed,
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
@@ -1192,9 +1192,9 @@ export class OpencodeSession implements HarnessSession {
   async #rules(): Promise<OpencodeRule[]> {
     return [
       ...(this.#onlySkills ? skillAllowlist(this.#onlySkills) : []),
-      ...deniedSpawningTools(sessionMayStart({ mayStart: this.#mayStart })).map(
-        deny
-      ),
+      // Absent: a hub from before every spawn carried its row's list, for
+      // a session nobody delegated (core `SpawnPayload.mayStart`).
+      ...deniedSpawningTools(this.#mayStart ?? [ANY_TYPE]).map(deny),
       ...this.#deniedRules,
       ...(this.#onlyServers
         ? await mcpOutside(this.#client, this.#directory, this.#onlyServers)

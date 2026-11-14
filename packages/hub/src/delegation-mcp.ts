@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
-import { parseConnectionTool } from "@cawco/core/delegate-types";
+import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -245,7 +245,9 @@ export const toolViewOf = (
   // A connection with no session is OpenCode's shared discovery
   // ({@link requestBinding}).
   harness: actor?.harness ?? "opencode",
-  mayStart: actor?.mayStart ?? undefined,
+  // Shared discovery lists every tool a session may be listed, a spawning
+  // one included; a session's own list is its row's.
+  mayStart: actor ? actor.mayStart : [ANY_TYPE],
   hasParent: !actor || !!actor.parentInstanceId,
   lands,
   workItem: !actor || !!actor.workItemId,
@@ -1281,10 +1283,10 @@ export function createDelegationMcp(options: {
     };
   };
 
-  /** The server's instructions for the session `bound`. */
+  /** The server's instructions for the session `bound`; with none, shared discovery's, as {@link toolViewOf} lists its tools. */
   const instructionsFor = (bound: InstanceRow | undefined): string =>
     handoffInstructions(
-      { mayStart: bound?.mayStart ?? undefined },
+      { mayStart: bound ? bound.mayStart : [ANY_TYPE] },
       listableOf(bound),
       options.decidesKinds()
     );

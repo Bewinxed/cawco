@@ -4,11 +4,17 @@ import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
 import { and, asc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
 import { idList } from "./id-list";
-import { conversationsOf, putConversations } from "./instances";
+import {
+  conversationsOf,
+  mayStartOf,
+  putConversations,
+  putMayStart,
+} from "./instances";
 import { walkOwned } from "./owned-rows";
 import {
   instanceAliases,
   instanceConversations,
+  instanceMayStart,
   instances,
   limitEvents,
   type PriorConversation,
@@ -217,6 +223,15 @@ export const foldDb = (core: DbCore): FoldDb => {
           ),
         // Its identity too: the session it is now holds its own.
         session_identities: () => revokeIdentities(tx, gone),
+        // What it may start is the session's as it began: its oldest row's.
+        instance_may_start: () => {
+          if (root.id !== survivorId) {
+            putMayStart(tx, survivorId, mayStartOf(tx, root.id));
+          }
+          tx.delete(instanceMayStart)
+            .where(inArray(instanceMayStart.instanceId, gone))
+            .run();
+        },
       },
       ({ column, fold }) => {
         const name = column.table;
@@ -271,7 +286,6 @@ export const foldDb = (core: DbCore): FoldDb => {
         role: first("role"),
         delegateType: first("delegateType"),
         delegateTypeProject: first("delegateTypeProject"),
-        mayStart: first("mayStart"),
         derivedTitle: root.derivedTitle ?? survivor.derivedTitle,
         ...(survivor.titleSource === "owner"
           ? {}

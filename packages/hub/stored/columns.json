@@ -5921,12 +5921,6 @@
       "skills"
     ]
   },
-  "instances.may_start": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
   "instances.model_usage_seen": {
     "type": "object",
     "propertyNames": {
@@ -6337,27 +6331,6 @@
       "dir",
       "path",
       "root"
-    ]
-  },
-  "instances.starting_set": {
-    "type": "object",
-    "properties": {
-      "skills": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "servers": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      }
-    },
-    "required": [
-      "skills",
-      "servers"
     ]
   },
   "instances.tooling": {

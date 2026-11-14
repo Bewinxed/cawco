@@ -7,7 +7,11 @@
  * prints each and fails over {@link ROLE_TOOL_BUDGET}.
  */
 import { estimateTokens } from "@cawco/core/continuation";
-import { SESSION_ROLES, type SessionRole } from "@cawco/core/delegate-types";
+import {
+  ANY_TYPE,
+  SESSION_ROLES,
+  type SessionRole,
+} from "@cawco/core/delegate-types";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   definedTools,
@@ -241,5 +245,9 @@ const sampleOf = (role: SessionRole): InstanceRow => ({
   sessionId: null,
   status: "running",
   kind: "mainline",
+  // A session nobody delegated work to, as a person's: a role's sample
+  // that is a delegate says its own.
+  mayStart: [ANY_TYPE],
+  startingSet: null,
   ...SAMPLES[role],
 });

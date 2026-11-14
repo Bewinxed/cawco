@@ -1181,10 +1181,10 @@ export interface InstanceRow {
   machineId: string;
   /**
    * The delegate types the session may start ({@link MayStart}): `["any"]`
-   * an orchestrator's, any other list a leaf's (the empty one by default).
-   * Null on a session nobody delegated, which may start any.
+   * an orchestrator's (a session nobody delegated work to starts as one),
+   * any other list a leaf's.
    */
-  mayStart?: MayStart | null;
+  mayStart: MayStart;
   model?: string | null;
   /**
    * Who started it ({@link SessionOrigin}), as the hub stamped it at its
@@ -1255,7 +1255,7 @@ export interface InstanceRow {
    * SpawnPayload.startingSet}): written by its first spawn and kept, so every
    * launch of it starts with the same set. Null: everything installed.
    */
-  startingSet?: import("./delegate-types").StartingSet | null;
+  startingSet: import("./delegate-types").StartingSet | null;
   status: InstanceStatus;
   /**
    * What the session is called: the owner's rename, else the name the session

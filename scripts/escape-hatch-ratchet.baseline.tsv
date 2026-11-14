@@ -297,7 +297,6 @@ suppression	biome-ignore lint/correctness/noUndeclaredVariables	apps/dashboard/s
 suppression	biome-ignore lint/correctness/noUnusedInstantiation	packages/core/src/hooks.ts	1
 suppression	biome-ignore lint/performance/noDelete	apps/dashboard/src/lib/cawco/config/editors/DelegateTypeEditor.svelte	1
 suppression	biome-ignore lint/performance/noDelete	packages/hub/src/pending.ts	1
-suppression	biome-ignore lint/performance/noNamespaceImport	packages/hub/drizzle.config.ts	1
 suppression	biome-ignore lint/plugin/no-raw-css-values	apps/dashboard/src/design.css	5
 suppression	biome-ignore lint/plugin/no-raw-css-values	packages/hub/skills/decision-page/kit/page.css	3
 suppression	biome-ignore lint/plugin/no-raw-motion	apps/dashboard/src/app.css	3

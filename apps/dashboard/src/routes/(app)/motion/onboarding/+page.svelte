@@ -191,6 +191,8 @@
         cwd: "/srv/cawco/projects/pr-team",
         harness: "claude",
         kind: "mainline",
+        mayStart: ["any"],
+        startingSet: null,
         launchDir: "known",
         machineId: "hub",
         sessionId: null,

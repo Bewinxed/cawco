@@ -1,7 +1,6 @@
 import { DECIDES_RULE, type Kind } from "@cawco/core/decides";
 import {
   type MayStart,
-  sessionMayStart,
   spawningToolAllowed,
   startsAny,
 } from "@cawco/core/delegate-types";
@@ -347,11 +346,8 @@ export interface ToolView {
   readonly hasParent?: boolean;
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
   readonly lands?: ItemEnd;
-  /**
-   * The delegate types THIS session may start (core `MayStart`): its row's
-   * list; absent, a session nobody delegated, which may start any.
-   */
-  readonly mayStart?: MayStart;
+  /** The delegate types THIS session may start (core `MayStart`): its row's list. */
+  readonly mayStart: MayStart;
   /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
   readonly workItem?: boolean;
 }
@@ -588,7 +584,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "handoff",
-      handoffDescription(sessionMayStart(view).length === 0),
+      handoffDescription(view.mayStart.length === 0),
       { ...handoffShape(), inputs: inputsParameter() },
       (asked, _format, bound) => handed(bound.actions)(asked),
       sentence
@@ -1370,7 +1366,7 @@ export function handoffTools(view: ToolView) {
   ];
   return all.filter(
     (entry) =>
-      spawningToolAllowed(entry.name, sessionMayStart(view)) &&
+      spawningToolAllowed(entry.name, view.mayStart) &&
       (!["finish_item", "wait_item"].includes(entry.name) || !!view.workItem)
   );
 }
@@ -1488,7 +1484,7 @@ export function handoffInstructions(
     ? `\n\ngenerate_image makes images on any model through this machine's own sign-in to an image provider (the fleet's default, ${DEFAULT_IMAGE_PROVIDER} unless changed, or the one provider names): this session makes its own.`
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
-  const mayStart = sessionMayStart(view);
+  const { mayStart } = view;
   if (!startsAny(mayStart)) {
     // A leaf that may start a few types hands them the work they name and
     // waits on their reports like any parent.

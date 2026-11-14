@@ -123,14 +123,6 @@ export type MayStart = string[];
 /** The one word in a {@link MayStart} list that is every type; no type may be named it. */
 export const ANY_TYPE = "any";
 
-/**
- * What a session may start, off its row or its spawn: none said (null or
- * absent) is a session nobody delegated, which may start any.
- */
-export const sessionMayStart = (session: {
-  mayStart?: MayStart | null;
-}): MayStart => session.mayStart ?? [ANY_TYPE];
-
 /** Whether a session that may start `mayStart` orchestrates: it may start any type. */
 export const startsAny = (mayStart: readonly string[]): boolean =>
   mayStart.includes(ANY_TYPE);

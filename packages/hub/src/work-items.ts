@@ -47,7 +47,6 @@ import {
   type MayStart,
   mayStartType,
   narrowMayStart,
-  sessionMayStart,
   startsAny,
 } from "@cawco/core/delegate-types";
 import type { BriefTarget } from "@cawco/core/fleet";
@@ -236,7 +235,7 @@ export const mayStartRefusal = (
   parent: Pick<InstanceRow, "delegateType" | "mayStart">,
   type: string | null
 ): string | undefined => {
-  const may = sessionMayStart(parent);
+  const may = parent.mayStart;
   if (startsAny(may) || (type !== null && mayStartType(may, type))) {
     return undefined;
   }
@@ -2945,7 +2944,7 @@ export const createWorkItems = ({
       ...(request.clean ? { clean: true } : {}),
       mayStart: narrowMayStart(
         request.mayStart ?? type?.mayStart ?? [],
-        sessionMayStart(parent)
+        parent.mayStart
       ),
       ...(request.account ? { account: request.account } : {}),
       ...(request.role ? { role: request.role } : {}),
@@ -3338,7 +3337,7 @@ export const createWorkItems = ({
    * session's). A card-settling start is the hub's, whoever asks.
    */
   const mayStartIt = (request: WorkItemRequest, parent: Parent) => {
-    if (request.settlesCards || startsAny(sessionMayStart(parent))) {
+    if (request.settlesCards || startsAny(parent.mayStart)) {
       return;
     }
     const target = briefTarget(request, parent);

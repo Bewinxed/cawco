@@ -1301,12 +1301,14 @@ export const createSpawns = (ctx: SpawnsContext) => {
   >;
   /**
    * What a session started to go on from `source` (a continuation, a plan
-   * change's new session) carries over on the same harness: its delegate
-   * type with the tools that type denies, its toolset, the types it may
-   * start, and the starting set it began with, never one resolved anew. On
-   * another harness it is no longer that type, and carries none of it. A
-   * start that goes on from none resolves its set as any start does
-   * ({@link startingSetOf}).
+   * change's new session) carries over: the types it may start, on any
+   * harness (a leaf goes on as a leaf); and on the same harness its delegate
+   * type with the tools that type denies, its toolset, and the starting set
+   * it began with, never one resolved anew. On another harness it is no
+   * longer that type, and starts with everything installed. A start that
+   * goes on from none resolves its set as any start does
+   * ({@link startingSetOf}), and its list as its row opens
+   * (db/instances.ts `openInstance`).
    */
   const carriedFrom = (
     source: CarriedSource | undefined,
@@ -1323,19 +1325,22 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (!source) {
       return { row: ctx.startingSetOf, spawn: {} };
     }
+    const { mayStart } = source;
     if (source.harness !== harness) {
-      return { row: () => ({}), spawn: {} };
+      return {
+        row: () => ({ mayStart, startingSet: null }),
+        spawn: { mayStart },
+      };
     }
     const type = ctx.typeSettingsOf(source);
-    const mayStart = source.mayStart ? { mayStart: source.mayStart } : {};
     return {
       row: () => ({
         ...(type.delegateType ? { delegateType: type.delegateType } : {}),
         ...(source.role ? { role: source.role } : {}),
-        ...mayStart,
-        ...(source.startingSet ? { startingSet: source.startingSet } : {}),
+        mayStart,
+        startingSet: source.startingSet,
       }),
-      spawn: { ...type, ...mayStart },
+      spawn: { ...type, mayStart },
     };
   };
 

@@ -45111,7 +45111,7 @@
             "type": "string"
           },
           "mayStart": {
-            "description": "The delegate types a session may start, by name. `[\"any\"]` ({@link * ANY_TYPE}) is every type: the session orchestrates. Any other list, the\nempty one included, makes it a leaf for every role rule (its toolset, its\nmemory, its budget): a leaf may start the types it names and nothing else,\nand the hub refuses any other start before anything spawns.",
+            "description": "The delegate types the session may start ({@link MayStart}): `[\"any\"]`\nan orchestrator's (a session nobody delegated work to starts as one),\nany other list a leaf's.",
             "type": "array",
             "items": {
               "type": "string"
@@ -45282,6 +45282,7 @@
           "kind",
           "launchDir",
           "machineId",
+          "mayStart",
           "status"
         ]
       },
@@ -83550,6 +83551,7 @@
               "type": "string"
             },
             "mayStart": {
+              "description": "The delegate types it may start (core `MayStart`): `[\"any\"]`, else the ones it names.",
               "type": "array",
               "items": {
                 "type": "string"
@@ -83616,25 +83618,8 @@
               "$ref": "#/components/schemas/Stall"
             },
             "startingSet": {
-              "type": "object",
-              "properties": {
-                "servers": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "skills": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              },
-              "required": [
-                "servers",
-                "skills"
-              ]
+              "description": "The skills and MCP servers it starts with (core `StartingSet`); null: everything installed.",
+              "$ref": "#/components/schemas/StartingSet"
             },
             "status": {
               "$ref": "#/components/schemas/InstanceStatus"
@@ -83675,6 +83660,7 @@
             "kind",
             "launchDir",
             "machineId",
+            "mayStart",
             "origin",
             "runningDelegates",
             "status",
@@ -109648,6 +109634,7 @@
             "type": "string"
           },
           "mayStart": {
+            "description": "The delegate types it may start (core `MayStart`): `[\"any\"]`, else the ones it names.",
             "type": "array",
             "items": {
               "type": "string"
@@ -109690,25 +109677,8 @@
             "type": "string"
           },
           "startingSet": {
-            "type": "object",
-            "properties": {
-              "servers": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "skills": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "servers",
-              "skills"
-            ]
+            "description": "The skills and MCP servers it starts with (core `StartingSet`); null: everything installed.",
+            "$ref": "#/components/schemas/StartingSet"
           },
           "status": {
             "$ref": "#/components/schemas/InstanceStatus"
@@ -109746,6 +109716,7 @@
           "kind",
           "launchDir",
           "machineId",
+          "mayStart",
           "origin",
           "status",
           "updatedAt",
