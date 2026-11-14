@@ -724,11 +724,17 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         toolId,
         ...(newest ? { newest } : {}),
       });
-      const updated = ctx.db.agentTools(message.machineId)[toolId]?.version;
+      const cell = ctx.db.agentTools(message.machineId)[toolId];
+      const updated = cell?.version;
+      // The version it puts on, when known: the one version a copy behind
+      // is wanted at, else the release it is sent to reach.
+      const to =
+        cell?.wants && !cell.wants.orNewer ? cell.wants.version : newest;
       ctx.db.setAgentToolCell(message.machineId, {
         id: toolId,
         state: "installing",
         ...(updated ? { version: updated } : {}),
+        ...(to ? { to } : {}),
         at: Date.now(),
       });
       ctx.publishInstances(message.machineId);

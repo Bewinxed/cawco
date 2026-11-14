@@ -48,6 +48,15 @@ export const claudeVersionPath = (): string =>
   join(cawcoDataDir(), "claude-version.json");
 
 /**
+ * Each tool CawCo installed on this machine, by tool id: where the copy it
+ * put on is, with which method, which version and when (agent tools.ts
+ * `recordInstall`). What says a copy is CawCo's own (core `ToolCopy`), so
+ * the fleet updates it unasked and never a person's own.
+ */
+export const toolInstallsPath = (): string =>
+  join(cawcoDataDir(), "tool-installs.json");
+
+/**
  * The stages that answered as the agent last ended (agent stage.ts
  * `carryStages`), which the next agent starts again at their ports
  * (`resumeStages`): an agent's restart, which every update is, leaves each

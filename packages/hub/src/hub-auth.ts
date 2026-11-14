@@ -127,6 +127,10 @@ const RULES: readonly [string, RegExp, Access][] = [
   // checks a commit again (scripts/release.ts `gatePassed`).
   ["GET", /^\/api\/landing-gate$/u, "machine"],
   ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/u, "machine"],
+  // What the fleet does with a copy of a tool CawCo doesn't run, which a
+  // build's pins ask before they go on ahead of its swap (agent
+  // pin-record.ts `fleetToolUpdates`).
+  ["GET", /^\/api\/tool-updates$/u, "machine"],
   // A file a reader attached, by the hash a send names: the session's
   // machine fetches it (agent attachments.ts).
   ["GET", /^\/api\/files\/[0-9a-f]{64}$/u, "machine"],
