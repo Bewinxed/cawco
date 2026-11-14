@@ -120,6 +120,11 @@ export const harnessRefusedWords = {
    */
   keepsNo: (name: string, what: string, undone: string) =>
     `${name} keeps no ${what} CawCo can set, so ${undone}.`,
+  /** Needs you's notice for a stored conversation's deletion that keeps failing (hub session-lifecycle.ts): its title. */
+  notDeletedTitle: "A conversation wasn't deleted",
+  /** Its body: where, how often, the machine's last words, and that CawCo goes on trying. */
+  notDeleted: (name: string, machine: string, tries: number, said: string) =>
+    `${name} on ${machine} didn't delete this conversation's stored transcript in ${tries} tries. The last said: ${said}${/[.!?]$/u.test(said) ? "" : "."} CawCo keeps trying every few minutes, and this goes once it's deleted.`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**

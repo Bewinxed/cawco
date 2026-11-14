@@ -111,7 +111,7 @@ import {
   type HarnessConfigKind,
   harnessConfigProblem,
 } from "@cawco/core/harness-config";
-import { harnessRefusal } from "@cawco/core/harness-refusal";
+import { harnessRefusal, harnessSpec } from "@cawco/core/harness-refusal";
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
@@ -249,7 +249,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { connectWords } from "@cawco/core/words/connect";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
-import { harnessWords } from "@cawco/core/words/harness";
+import { harnessRefusedWords, harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import {
   machineFaultWords,
@@ -4033,10 +4033,7 @@ export const createServer = (
    * `newest`: the release an install of a tool CawCo keeps current was sent
    * to reach (tool-releases.ts), which its answer settles for that machine.
    */
-  const pendingInstalls = new Map<
-    string,
-    { machineId: string; newest?: string; toolId: string }
-  >();
+  const pendingInstalls: HubContext["pendingInstalls"] = new Map();
   /**
    * Transcript deletes somebody is waiting on, by `requestId`: when the
    * machine says the transcript is gone, the rows that named it go too —
@@ -5849,6 +5846,27 @@ export const createServer = (
       }
       publishInstances(machineId);
     },
+    // A deletion that keeps failing is said in Needs you, once while it
+    // stands (a hub restart drops notices of ended sessions, and the next
+    // failure says it again); it goes when the deletion lands.
+    deleteFailing: (row, error, attempts) => {
+      if (db.watchNotices().some((notice) => notice.instanceId === row.id)) {
+        return;
+      }
+      watchPort
+        .now()
+        ?.tellYou(
+          row,
+          harnessRefusedWords.notDeletedTitle,
+          harnessRefusedWords.notDeleted(
+            harnessSpec(row.harness).name,
+            machineName(row.machineId),
+            attempts,
+            error
+          )
+        );
+    },
+    deleteDone: (id) => watchPort.now()?.untell(id),
     deleteTranscript: async (row) => {
       if (!row.sessionId) {
         return true;

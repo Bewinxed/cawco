@@ -13,11 +13,28 @@ interface Snapshot {
   custody: SessionCustody;
 }
 
+/**
+ * How many failed tries of a transcript's deletion in a row before it is
+ * said to the person: the retries back off 30 s, 1, 2, 4 min (db
+ * `noteEndFailure`), so a harness CLI an update holds away for a minute is
+ * waited out unsaid, and one that keeps refusing is said within about
+ * seven minutes. Our call.
+ */
+const DELETE_TOLD_AFTER = 4;
+
 export const createSessionLifecycle = (ports: {
   db: DbShape;
   send: (machineId: string, payload: NamedStop) => boolean;
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
+  /**
+   * A transcript's deletion that has failed {@link DELETE_TOLD_AFTER} times
+   * in a row, with the last failure's words: said to the person (server.ts,
+   * a notice in Needs you), once while it stands.
+   */
+  deleteFailing: (row: InstanceRow, error: string, attempts: number) => void;
+  /** That deletion landed: what was said of it goes. */
+  deleteDone: (id: string) => void;
   confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
   /** The rows this reconcile read (db `ownedToReconcile`): the machine's removed opencode sessions among them are recovered. */
   recoverRemoved: (
@@ -63,14 +80,20 @@ export const createSessionLifecycle = (ports: {
           generation(current) === generation(row)
         ) {
           ports.db.finishTranscriptDelete(row.id);
+          ports.deleteDone(row.id);
           ports.changed(row.machineId, row.id);
         }
       })
       .catch((error: unknown) => {
-        ports.db.noteEndFailure(
-          row.id,
-          error instanceof Error ? error.message : String(error)
-        );
+        const words = error instanceof Error ? error.message : String(error);
+        ports.db.noteEndFailure(row.id, words);
+        // Stored and retried (the row's end intent, its attempts and next
+        // try), so a hub restart or a machine away for a day only delays
+        // it; past a few tries it is said, as no deletion is quietly owed.
+        const attempts = ports.db.ownedInstance(row.id)?.endAttempts ?? 0;
+        if (attempts >= DELETE_TOLD_AFTER) {
+          ports.deleteFailing(row, words, attempts);
+        }
         ports.changed(row.machineId);
       })
       .finally(() => deleting.delete(row.id));

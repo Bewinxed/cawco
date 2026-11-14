@@ -1130,7 +1130,14 @@ export class SessionSupervisor {
       call: (tool, code) =>
         completeToolSignin(String(tool), String(code ?? "")),
     },
-    installTool: { call: (...args) => this.#installTool(args) },
+    // Each ask in a lane of its own, never queued behind another: a second
+    // ask of the same tool while its install runs joins it (tools.ts
+    // `installTool`), where queued it ran a second install once the first
+    // ended (host run 49045442, two dashboards pressing at once).
+    installTool: {
+      call: (...args) => this.#installTool(args),
+      lane: (control) => `install:${control.requestId}`,
+    },
     // A delta, held as it arrived and kept on disk (#holdDelta): answered
     // at once with the generation kept (ACK; READY for a welcome), its
     // policy and items applied after (#writePolicy, #convergeSoon), each
