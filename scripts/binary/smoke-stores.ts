@@ -73,7 +73,7 @@ export const runStores = async (): Promise<void> => {
   reader.close();
   writer.close();
   const usage = await storeWork("usage.scan", Date.now());
-  const sessions = new Set(found.map((hit) => hit.sessionId));
+  const sessions = new Set(found.conversations.map((hit) => hit.sessionId));
   const said = {
     signIns: rows.kind === "answered" ? rows.value : rows,
     indexedThroughBefore: through,

@@ -229,6 +229,8 @@ export interface SearchOptions {
   toolOutput?: boolean;
   /** Each moment carries the words around its snippet ({@link Moment.context}). */
   context?: boolean;
+  /** The words are a finished query, not one being typed: a short last word is searched whole ({@link matchQueries}). */
+  submitted?: boolean;
 }
 
 /** What a listing with no words asks for: one author's documents, newest first. */
@@ -659,23 +661,34 @@ export interface SyncResult {
  * expressions (porter stemming matches its other forms), and whether the
  * last may also match as the start of longer ones: the word a person is
  * still typing, once it has {@link PREFIX_MIN} letters. A shorter last word
- * after others is left out until it has them: half a word that short says
- * nothing yet, and required whole it would empty the answer between
- * keystrokes. Alone, a short word is searched as itself.
+ * after others, while the query is being typed, is left out until it has
+ * them (and returned as `dropped`, for the answer to say): half a word that
+ * short says nothing yet, and required whole it would empty the answer
+ * between keystrokes. A query that is not being typed (`submitted`: an
+ * agent's, or one the person sent) searches a short last word whole, as a
+ * lone short word always is.
  *
  * Only the last word is a prefix: FTS5 reads every term a prefix expands to
  * whole before a rowid range or another word narrows it, so a prefix costs
  * what all its expansions' documents cost (a common word's, 51 ms on 400,000
  * documents, where the same word whole in the newest tier cost 0.4 ms).
  */
-export function matchQueries(text: string): { prefix: boolean; words: string[] } {
+export function matchQueries(
+  text: string,
+  submitted = false,
+): { dropped: string | null; prefix: boolean; words: string[] } {
   const typed = text
     .split(/\s+/)
     .map((t) => t.replaceAll('"', ""))
     .filter((t) => t.length > 0);
   const last = typed.at(-1) ?? "";
-  const words = typed.length > 1 && last.length < PREFIX_MIN ? typed.slice(0, -1) : typed;
-  return { words, prefix: words.length === typed.length && last.length >= PREFIX_MIN };
+  const drops = !submitted && typed.length > 1 && last.length < PREFIX_MIN;
+  const words = drops ? typed.slice(0, -1) : typed;
+  return {
+    words,
+    dropped: drops ? last : null,
+    prefix: !drops && last.length >= PREFIX_MIN,
+  };
 }
 
 /** `words` quoted as FTS5 phrases, the last also as a prefix when `prefix`, joined by `join`. */
@@ -1409,7 +1422,7 @@ export class TranscriptIndex {
   }
 
   #searchNow(query: string, options: SearchOptions): ConversationHit[] {
-    const { words, prefix } = matchQueries(query);
+    const { words, prefix } = matchQueries(query, options.submitted);
     if (words.length === 0) {
       return [];
     }

@@ -187,6 +187,12 @@ export interface FindRequest {
    */
   signal?: AbortSignal;
   /**
+   * The words are a finished query, not one being typed (core
+   * `TranscriptQuery.submitted`): an agent's `find` says so, so a short last
+   * word is searched and not left out.
+   */
+  submitted?: true;
+  /**
    * The machines match what tools answered too (core `TranscriptQuery`
    * `toolOutput`): an agent's `find` asks it (find-tool.ts); the person's
    * Find matches what was said, thought and called.
@@ -942,7 +948,18 @@ export const createFind = (deps: FindDeps) => {
       indexedThrough: null,
       indexing: false,
       tookMs: null,
+      unreadTranscripts: 0,
     }));
+
+  /** The coverage of machines asked: each one's, and the short last word a typed query left out of what they searched. */
+  const askedCoverage = (asked: Asked[]): FindCoverage => {
+    const dropped = asked.find((each) => each.answer?.dropped)?.answer?.dropped;
+    return {
+      asked: true,
+      machines: asked.map((each) => each.coverage),
+      ...(dropped ? { droppedWord: dropped } : {}),
+    };
+  };
 
   /** One machine asked, and how it went: its answer, or why it gave none. */
   const askOne = async (
@@ -965,6 +982,7 @@ export const createFind = (deps: FindDeps) => {
           indexedThrough: null,
           indexing: false,
           tookMs: null,
+          unreadTranscripts: 0,
         },
         answer: null,
       };
@@ -988,6 +1006,7 @@ export const createFind = (deps: FindDeps) => {
           indexedThrough: null,
           indexing: false,
           tookMs,
+          unreadTranscripts: 0,
         },
         answer: null,
       };
@@ -1005,6 +1024,7 @@ export const createFind = (deps: FindDeps) => {
           answer.indexedThrough > 0 ? answer.indexedThrough : null,
         indexing: answer.catchingUp,
         tookMs,
+        unreadTranscripts: answer.unreadTranscripts ?? 0,
       },
       answer,
     };
@@ -1139,8 +1159,17 @@ export const createFind = (deps: FindDeps) => {
         query.words
       );
     }
-    return { asked: true, machines: asked.map((each) => each.coverage) };
+    return askedCoverage(asked);
   };
+
+  /** How the words are asked, as the machines' query carries it: what tools answered too, the words around each moment, a finished query. */
+  const askedHow = (
+    asks: Pick<FindRequest, "context" | "submitted" | "toolOutput">
+  ): Pick<TranscriptQuery, "context" | "submitted" | "toolOutput"> => ({
+    ...(asks.toolOutput ? { toolOutput: true } : {}),
+    ...(asks.context ? { context: true } : {}),
+    ...(asks.submitted ? { submitted: true } : {}),
+  });
 
   /**
    * Every machine `request` reaches, asked for `words` (none: a listing of
@@ -1152,7 +1181,10 @@ export const createFind = (deps: FindDeps) => {
   const askMachines = (
     words: string,
     author: TranscriptQuery["author"],
-    asks: Pick<FindRequest, "caller" | "context" | "signal" | "toolOutput">,
+    asks: Pick<
+      FindRequest,
+      "caller" | "context" | "signal" | "submitted" | "toolOutput"
+    >,
     where: FindWhere | undefined,
     held: Names,
     limit: number
@@ -1176,8 +1208,7 @@ export const createFind = (deps: FindDeps) => {
           {
             limit,
             ...(author ? { author } : {}),
-            ...(asks.toolOutput ? { toolOutput: true } : {}),
-            ...(asks.context ? { context: true } : {}),
+            ...askedHow(asks),
             ...(where?.projectId
               ? { sessions: sessionsOn(machine.machineId) }
               : {}),
@@ -1250,7 +1281,7 @@ export const createFind = (deps: FindDeps) => {
           ) ?? 0) >= LISTED_DOCS
       ),
       coverage: transcripts
-        ? { asked: true, machines: asked.map((each) => each.coverage) }
+        ? askedCoverage(asked)
         : { asked: false, machines: unasked(held.machines) },
       namesMs,
       transcriptsMs: transcripts

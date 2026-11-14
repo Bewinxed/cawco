@@ -103,6 +103,8 @@ export class TranscriptSearchService {
   #indexedThrough = 0;
   /** A sync of this index has ever finished: else one running is a catch-up. */
   #whole = false;
+  /** How many transcripts the last finished sync could not read. */
+  #unread = 0;
   /** The last failed sync's reason, logged once; null once a sync succeeds. */
   #failing: string | null = null;
   readonly #firstSync = Promise.withResolvers<void>();
@@ -160,7 +162,7 @@ export class TranscriptSearchService {
 
   async #syncOnce(): Promise<void> {
     const startedAt = Date.now();
-    await this.#writer.work("sync", startedAt, (through) => {
+    this.#unread = await this.#writer.work("sync", startedAt, (through) => {
       this.#indexedThrough = Math.max(this.#indexedThrough, Number(through));
     });
     this.#syncedAt = startedAt;
@@ -216,7 +218,7 @@ export class TranscriptSearchService {
     );
     // No words and an author: that author's words, newest first, off the
     // index's author-and-time order (fts5.ts `listed`), never a scan.
-    const conversations = await this.#conversations(
+    const { conversations, dropped } = await this.#conversations(
       query,
       limit,
       options,
@@ -224,6 +226,8 @@ export class TranscriptSearchService {
     );
     return {
       conversations,
+      ...(dropped === null ? {} : { dropped }),
+      unreadTranscripts: this.#unread,
       // Only a sync of an index that was never whole is a catch-up: a slow
       // sync of a whole one answers from it, as far as `indexedThrough`.
       catchingUp: this.#syncing !== null && !this.#whole,
@@ -320,7 +324,7 @@ export class TranscriptSearchService {
    * and an author, that author's words newest first, off the index's author
    * and time order (fts5.ts `listed`), never a scan.
    */
-  #conversations(
+  async #conversations(
     query: string,
     limit: number,
     options: TranscriptQuery | undefined,
@@ -332,7 +336,7 @@ export class TranscriptSearchService {
       ...(options?.before ? { before: options.before } : {}),
     };
     if (query.trim() === "" && author !== undefined) {
-      return this.#reader.read(
+      const conversations = await this.#reader.read(
         "listed",
         {
           author,
@@ -344,8 +348,9 @@ export class TranscriptSearchService {
         },
         signal
       );
+      return { conversations, dropped: null };
     }
-    return this.#reader.read(
+    return await this.#reader.read(
       "search",
       {
         query,
@@ -355,6 +360,7 @@ export class TranscriptSearchService {
           ...narrowed,
           ...(options?.toolOutput ? { toolOutput: true } : {}),
           ...(options?.context ? { context: true } : {}),
+          ...(options?.submitted ? { submitted: true } : {}),
         },
       },
       signal

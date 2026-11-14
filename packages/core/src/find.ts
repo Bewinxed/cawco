@@ -44,6 +44,12 @@ export interface TranscriptQuery {
   /** Only words said at or after this ISO time: a listing's window start. */
   since?: string;
   /**
+   * The words are a finished query, not one being typed (an agent's `find`):
+   * a short last word is searched whole instead of left out (jsonl-parser
+   * fts5.ts `matchQueries`).
+   */
+  submitted?: true;
+  /**
    * Match what tools returned too (the index's `output`): an agent's `find`
    * asks for it, so it finds a command's output or an error another session
    * saw; the person's Find matches what was said, thought and called.
@@ -109,6 +115,12 @@ export interface TranscriptAnswer {
   catchingUp: boolean;
   conversations: TranscriptConversation[];
   /**
+   * The short last word a query being typed left out (jsonl-parser fts5.ts
+   * `matchQueries`); absent when none was, or from an agent that does not
+   * say.
+   */
+  dropped?: string;
+  /**
    * How far its index has come, ms epoch: every transcript as it stood then
    * is in it (the start of its last finished sync; in a catch-up, every
    * transcript last written before then). 0 when it can say no time yet.
@@ -118,6 +130,8 @@ export interface TranscriptAnswer {
   queryMs: number;
   /** What bringing the index up to date took before the query (0 when it was fresh, or a sync was already running), ms. */
   syncMs: number;
+  /** How many transcripts its last sync could not read: missing from every search until it can; absent from an agent that does not say. */
+  unreadTranscripts?: number;
 }
 
 /**
@@ -461,6 +475,8 @@ export interface FindMachineCoverage {
   reason: string | null;
   /** What it took to answer, ms (its sync, its query and the wire). */
   tookMs: number | null;
+  /** How many transcripts it could not read ({@link TranscriptAnswer.unreadTranscripts}): its part is short by them. */
+  unreadTranscripts: number;
 }
 
 /**
@@ -471,6 +487,8 @@ export interface FindMachineCoverage {
  */
 export interface FindCoverage {
   asked: boolean;
+  /** The short last word the machines left out of the words being typed ({@link TranscriptAnswer.dropped}); absent when none was. */
+  droppedWord?: string;
   machines: FindMachineCoverage[];
 }
 

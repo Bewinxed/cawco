@@ -63,6 +63,7 @@ import {
 } from "@cawco/core/find-match";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
+import { searchWords } from "@cawco/core/words/search";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import {
@@ -662,16 +663,26 @@ const unsearchedOf = (coverage: FindPage["coverage"], now: number): string[] =>
           ];
         }
         const through = whenOf(machine.indexedThrough);
+        const unread =
+          machine.unreadTranscripts > 0
+            ? [
+                searchWords.unreadTranscripts(
+                  machine.unreadTranscripts,
+                  machine.name
+                ),
+              ]
+            : [];
         if (machine.indexing) {
           return [
+            ...unread,
             `${machine.name}: catching up, ${through ? `indexed through ${through}` : "nothing indexed yet"}, so its part may be short`,
           ];
         }
         return through &&
           machine.indexedThrough !== null &&
           now - machine.indexedThrough > STALE_MS
-          ? [`${machine.name}: indexed through ${through}`]
-          : [];
+          ? [...unread, `${machine.name}: indexed through ${through}`]
+          : unread;
       })
     : [];
 
@@ -1146,6 +1157,8 @@ export const createFindTool = (deps: FindToolDeps) => {
       transcripts: true,
       // Everything: what was said, and what tools returned in any session.
       toolOutput: true,
+      // A finished query: a short last word is searched, never left out.
+      submitted: true,
       // The words around each moment, for the secret filter to read.
       context: true,
       where,

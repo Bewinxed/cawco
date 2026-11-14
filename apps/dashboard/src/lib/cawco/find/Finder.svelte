@@ -26,6 +26,7 @@
    */
   import { findInWords } from "@cawco/core/words/find-in";
   import { findSecretWords } from "@cawco/core/words/find-secrets";
+  import { searchWords } from "@cawco/core/words/search";
   import { tick, untrack } from "svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -271,6 +272,8 @@
         saidRows.length > 0 ||
         finder.missing.length > 0 ||
         finder.indexing.length > 0 ||
+        finder.unread.length > 0 ||
+        finder.droppedWord !== null ||
         finder.by !== null)
   );
   const machineCount = $derived(
@@ -285,7 +288,10 @@
   );
   /** The coverage line stands when the answer is short: a machine missing, or one still indexing. */
   const short = $derived(
-    finder.missing.length > 0 || finder.indexing.length > 0
+    finder.missing.length > 0 ||
+      finder.indexing.length > 0 ||
+      finder.unread.length > 0 ||
+      finder.droppedWord !== null
   );
   const machines = (n: number) => (n === 1 ? "1 machine" : `${n} machines`);
   /**
@@ -780,6 +786,17 @@
         {indexingNames}
         {finder.indexing.length === 1 ? "is" : "are"} still indexing<span
           class="px-space-1">·</span
+        >
+      {/if}
+      {#each finder.unread as machine (machine.machineId)}
+        {searchWords.unreadTranscripts(
+          machine.unreadTranscripts,
+          machine.name
+        )}<span class="px-space-1">·</span>
+      {/each}
+      {#if finder.droppedWord !== null}
+        {searchWords.droppedWord(finder.droppedWord)}<span class="px-space-1"
+          >·</span
         >
       {/if}
       <button

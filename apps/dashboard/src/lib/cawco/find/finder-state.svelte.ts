@@ -387,6 +387,14 @@ export class FinderState {
   indexing = $derived(
     (this.coverage?.machines ?? []).filter((m) => m.answered && m.indexing)
   );
+  /** Machines that answered but could not read some of their transcripts: their part is short by them. */
+  unread = $derived(
+    (this.coverage?.machines ?? []).filter(
+      (m) => m.answered && m.unreadTranscripts > 0
+    )
+  );
+  /** The short last word the machines left out of the words being typed; null when none was. */
+  droppedWord = $derived(this.coverage?.droppedWord ?? null);
   /** Asking the machines for the words in the field now. */
   searching = $derived(
     this.typed &&
@@ -405,6 +413,8 @@ export class FinderState {
       this.everywhereNow !== null &&
       this.missing.length === 0 &&
       this.indexing.length === 0 &&
+      this.unread.length === 0 &&
+      this.droppedWord === null &&
       this.namesNow.results.length === 0 &&
       this.saidRows.length === 0
   );

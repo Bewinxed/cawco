@@ -40102,6 +40102,10 @@
           "asked": {
             "type": "boolean"
           },
+          "droppedWord": {
+            "description": "The short last word the machines left out of the words being typed ({@link TranscriptAnswer.dropped}); absent when none was.",
+            "type": "string"
+          },
           "machines": {
             "type": "array",
             "items": {
@@ -40264,13 +40268,18 @@
           "tookMs": {
             "description": "What it took to answer, ms (its sync, its query and the wire).",
             "type": "number"
+          },
+          "unreadTranscripts": {
+            "description": "How many transcripts it could not read ({@link TranscriptAnswer.unreadTranscripts}): its part is short by them.",
+            "type": "number"
           }
         },
         "required": [
           "answered",
           "indexing",
           "machineId",
-          "name"
+          "name",
+          "unreadTranscripts"
         ]
       },
       "FindMoment": {

@@ -40,6 +40,7 @@ import { opencodeDatabases } from "@cawco/core/paths/harnesses";
 import type { TranscriptDoc, TranscriptFile } from "@cawco/jsonl-parser";
 import {
   type ListOptions,
+  matchQueries,
   type PlacesOptions,
   type SearchOptions,
   TranscriptIndex,
@@ -70,7 +71,7 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
    * commits them, the watermarks written only when they moved. `tell` hears
    * how far a long catch-up has come.
    */
-  sync: async (startedAt: number, tell: Tell): Promise<void> => {
+  sync: async (startedAt: number, tell: Tell): Promise<number> => {
     const docs: TranscriptDoc[] = [];
     const meta: Record<string, string> = {};
     const moved = new Map<string, number>();
@@ -95,7 +96,7 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
         path,
       })),
     ];
-    await index.sync(files, {
+    const synced = await index.sync(files, {
       docs,
       meta,
       ended: { [INDEXED_THROUGH]: String(startedAt) },
@@ -104,6 +105,10 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
     for (const [key, watermark] of moved) {
       watermarks.set(key, watermark);
     }
+    for (const { path, error } of synced.errors) {
+      console.warn(`[search] transcript ${path} could not be read: ${error}`);
+    }
+    return synced.errors.length;
   },
   /** A deleted transcript's documents forgotten; how many. */
   forget: (sessionId: string) =>
@@ -116,7 +121,11 @@ const readOps = (index: TranscriptIndex) => ({
   places: (options: PlacesOptions) => Promise.resolve(index.places(options)),
   listed: (options: ListOptions) => Promise.resolve(index.listed(options)),
   search: (args: { query: string; options: SearchOptions }) =>
-    Promise.resolve(index.search(args.query, args.options)),
+    Promise.resolve({
+      conversations: index.search(args.query, args.options),
+      // The word a typed query left out ({@link matchQueries}), for the answer to say.
+      dropped: matchQueries(args.query, args.options.submitted).dropped,
+    }),
 });
 
 /** A search process's role: the index's one writer, or a reader beside it. */
