@@ -21,7 +21,7 @@ export const hubDatabaseWords = {
    * of the checkout's or the build's.
    */
   outOfCopy: (copy: string) =>
-    `The copy from before the update is ${copy}: putting it in place of this database restores the hub as it was before the update, without what it stored since.`,
+    `The copy from before the update is ${copy}: putting it in place of this database lets this hub start, and loses what the hub stored since the update.`,
   /** The way out where the hub is a build. */
   outOfBuild: "Install the build that migrated it, or a newer one.",
   /** `cawco status` on the hub's machine, when the hub does not answer and its last start stopped for this. */
