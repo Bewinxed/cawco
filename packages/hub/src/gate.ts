@@ -1,6 +1,7 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { isMachinePath, type MachinePath } from "@cawco/core/machine-path";
 import type { DeclaredStep, RunsOnCapability } from "@cawco/core/project-gate";
+import { workWords } from "@cawco/core/words/work";
 import { shellQuote } from "@cawco/core/shell-quote";
 import {
   CONTROL_WORKSPACE_AT,
@@ -39,11 +40,16 @@ export const failedWith = (result: CommandResult): string =>
   (result.stderr || result.stdout).trim() || `exit ${result.exitCode}`;
 /** How much of each stream a gate step keeps: the report and the delegate read this. */
 const GATE_TAIL = 4000;
-/** A step's command result, each stream cut to its last {@link GATE_TAIL} characters. */
+/** A stream cut to its last {@link GATE_TAIL} characters, a notice of what was cut at its head. */
+const tailOf = (stream: string): string =>
+  stream.length > GATE_TAIL
+    ? `${workWords.gateCut(stream.length - GATE_TAIL)}${stream.slice(-GATE_TAIL)}`
+    : stream;
+/** A step's command result, each stream cut to its tail ({@link tailOf}). */
 const gateTails = (result: CommandResult): CommandResult => ({
   exitCode: result.exitCode,
-  stdout: result.stdout.slice(-GATE_TAIL),
-  stderr: result.stderr.slice(-GATE_TAIL),
+  stdout: tailOf(result.stdout),
+  stderr: tailOf(result.stderr),
 });
 /** One landing gate step, as the hub ran it: `result` holds the stream tails. */
 export interface StepOutcome {

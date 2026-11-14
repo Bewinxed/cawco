@@ -86,6 +86,9 @@ export const workWords = {
    */
   inputsCleared: (why: string) =>
     `${why} What of them had landed was removed, so none of them was delivered.`,
+  /** Heads a gate step's stream cut to its tail (hub gate.ts `gateTails`): the cut part may hold the failure, so the reader runs the step itself. */
+  gateCut: (cut: number) =>
+    `… (${cut} chars cut; run the step yourself to read it whole)\n`,
   /** An item's outputs that add up past the bytes the copy takes (hub landing-run.ts `outputsProblem`). */
   outputsTooLarge: (mib: string, limitMib: number) =>
     `The outputs add up to ${mib} MiB; the copy stops at ${limitMib} MiB in all. Hand in fewer or smaller files.`,
