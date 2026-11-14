@@ -23,12 +23,10 @@
    * sweep's 390) reads the phone panel, never the desk popover drawn over
    * the switches.
    */
-  import { cawHeadWords } from "@cawco/core/words/caw-head";
   import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
   import { MediaQuery } from "svelte/reactivity";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
-  import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
-  import CawPanel from "#lib/cawco/home/CawPanel.svelte";
+  import CawBenchPop from "#lib/cawco/home/CawBenchPop.svelte";
   import type { CawFeed } from "#lib/cawco/home/caw-feed.svelte.js";
   import type {
     AskItem,
@@ -41,8 +39,6 @@
     type UpdateMachine,
   } from "#lib/cawco/updates/model.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { page } from "$app/state";
@@ -404,20 +400,7 @@
     actOnUpdate: () => undefined,
   };
 
-  /* ── The popover, hanging from his glass ───────────────────────────── */
-  /*
-   * It hangs from the top bar's own glass (Shell's `[data-bar-group]`, his
-   * group on the desk and his own glass on a phone), where NeedsCaw hangs
-   * it, so it stands where it stands in the product. The glass draws its
-   * joined foot while it hangs, as it does for his own panel.
-   */
   let open = $state(true);
-  let glass = $state<HTMLElement | null>(null);
-  $effect(() => {
-    glass = document.querySelector<HTMLElement>("[data-bar-group]");
-  });
-  /** Placed by the viewport, as GlassCard places the product's card. */
-  const placement = $derived(glassPlacement(glass, drawer.current));
 </script>
 
 <svelte:head>
@@ -426,38 +409,10 @@
 
 <!-- On the desk, and as the stage alone (in the phone frame, or under the
      desk line); the page around the frame has none. -->
-{#if glass && (stageOnly || width === "desk")}
-  <Popover.Root bind:open>
-    {#key generation}
-      <HangCard
-        data-caw-pop
-        align="end"
-        anchor={glass}
-        aria-label="Needs you"
-        frame="caw"
-        collisionPadding={placement.collisionPadding}
-        customAnchor={glass}
-        escapeKeydownBehavior="ignore"
-        glass
-        interactOutsideBehavior="ignore"
-        side="bottom"
-        sideOffset={placement.sideOffset}
-        trapFocus={false}
-        bind:joined={
-          () => barGlass.joined,
-          (joined) => {
-            barGlass.joined = joined;
-          }
-        }
-      >
-        <CawPanel
-          {feed}
-          onchoose={() => undefined}
-          quiet={cawHeadWords.caughtUp}
-        />
-      </HangCard>
-    {/key}
-  </Popover.Root>
+{#if stageOnly || width === "desk"}
+  {#key generation}
+    <CawBenchPop {feed} bind:open />
+  {/key}
 {/if}
 
 {#if !stageOnly}

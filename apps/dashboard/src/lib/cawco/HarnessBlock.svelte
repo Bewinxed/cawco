@@ -5,17 +5,21 @@
    * machine's own sentence, and its one fix as a press, Update pi, Install
    * OpenCode 2.0.29 (Install, with none there). A copy CawCo updates by
    * itself (CawCo's own, while the fleet updates such copies: the block's
-   * `auto`) takes no press, and the block shows that update running; only
+   * `auto`) takes no press: the block says CawCo is updating it and to
+   * which version, or that it waits for the machine's pause to end; only
    * an update that failed offers Retry (`offersPress`). The fix is the hub's tool cell
    * (harness-block.svelte.ts), so its progress and its outcome come back
    * after a reload, on every dashboard, and go on when this is closed. A
    * failed one says why in the machine's words, and the press reads Retry.
    * Nothing here once the harness runs: the surface it stood in goes on.
    */
+  import { toolUpdateWords } from "@cawco/core/words/tool-updates";
+  import { toolWords } from "@cawco/core/words/tools";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconDownload, IconWarningTriangle } from "#lib/icons.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconDownload, IconNotYet, IconWarningTriangle } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { appear } from "#lib/platform/motion/curves.svelte.js";
   import {
@@ -26,6 +30,7 @@
     harnessWords as words,
   } from "./harness-block.svelte";
   import { didntAnswer } from "./hub/control";
+  import { boardStore } from "./stores/board.svelte";
   import { TRY_AGAIN } from "./unanswered";
 
   let {
@@ -47,6 +52,16 @@
   let asking = $state(false);
 
   const running = $derived(block.fix.phase === "running");
+  /**
+   * CawCo updates it with no press (`auto`): the block says so, to which
+   * version, and that the session starts once it lands; a machine its
+   * owner paused, that it waits for the pause's end.
+   */
+  const byCawco = $derived(block.auto && block.fix.phase !== "failed");
+  const paused = $derived(
+    (boardStore.machines.find((one) => one.machineId === machineId)
+      ?.pausedUntil ?? null) !== null
+  );
 
   // A copy CawCo updates by itself takes no press, so the block itself
   // follows it: once the update lands, the surface says so and the session
@@ -90,19 +105,47 @@
   data-phase={block.fix.phase}
   class="flex min-w-0 flex-col gap-space-2"
 >
-  <p
-    data-slot="why"
-    class="mark-line type-meta flex items-start gap-space-2 text-ink-strong wrap-anywhere"
-  >
-    <span class="mark-cell"
-      ><IconWarningTriangle
-        aria-hidden="true"
-        class="size-icon-md flex-none text-status-attn-glyph"
-      /></span
+  {#if byCawco}
+    <!-- Nothing waits on the person: one line, CawCo's own update with its
+         version, the ledger's spinner beside it (the not-yet ring while the
+         machine is paused); no warning, and the refusal it answers is not
+         said again. -->
+    <p
+      data-slot="progress"
+      class="mark-line flex min-w-0 items-center gap-space-2 type-meta text-ink-strong"
+      role="status"
     >
-    <span class="min-w-0">{block.why}</span>
-  </p>
-  {#if offersPress(block) || running}
+      <span class="mark-cell grid w-icon-md place-items-center"
+        >{#if paused && !running}<IconNotYet
+            class="size-icon-md text-ink-muted"
+          />{:else}<Spinner />{/if}</span
+      ><span class="min-w-0"
+        >{paused && !running
+          ? toolUpdateWords.autoPaused(block.spec.name, block.machine)
+          : toolWords.cawcoPutting(
+              block.kind === "not-installed",
+              block.spec.name,
+              block.machine,
+              (block.fix.phase === "running" ? block.fix.to : undefined) ??
+                block.spec.exactVersion
+            )}</span
+      >
+    </p>
+  {:else}
+    <p
+      data-slot="why"
+      class="mark-line type-meta flex items-start gap-space-2 text-ink-strong wrap-anywhere"
+    >
+      <span class="mark-cell"
+        ><IconWarningTriangle
+          aria-hidden="true"
+          class="size-icon-md flex-none text-status-attn-glyph"
+        /></span
+      >
+      <span class="min-w-0">{block.why}</span>
+    </p>
+  {/if}
+  {#if !byCawco && (offersPress(block) || running)}
     <div
       data-slot="row"
       class="flex min-w-0 flex-wrap items-center gap-space-2"

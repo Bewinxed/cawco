@@ -1604,13 +1604,15 @@
   <EmptyState
     pad="transcript"
     icon={fault.reason === "offline" ? IconLaptop : IconAlert}
-    line={faultLine}
+    line={fault.reason === "refused" && unreadFix ? undefined : faultLine}
     role="alert"
     title={faultTitle}
   >
     {#snippet action()}
       <!-- A read its machine's harness CLI refuses: its fix, as a start
-           it blocks shows it, and the read comes once that lands. -->
+           it blocks shows it, and the read comes once that lands. The
+           block says why, so the state's own line stands down: one fact,
+           said once. -->
       {#if fault.reason === "refused" && unreadFix}
         <HarnessBlock
           block={unreadFix.block}
