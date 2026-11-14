@@ -2134,16 +2134,6 @@
               }
             }
           },
-          "404": {
-            "description": "postApiAgentsByMachineIdUpdate 404",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUpdate404"
-                }
-              }
-            }
-          },
           "422": {
             "description": "postApiAgentsByMachineIdUpdate 422",
             "content": {
@@ -2160,6 +2150,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiAgentsByMachineIdUpdate500"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAgentsByMachineIdUpdate 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUpdate503"
                 }
               }
             }
@@ -122176,42 +122176,6 @@
           "type"
         ]
       },
-      "postApiAgentsByMachineIdUpdate404": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "machine-offline"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              404
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiAgentsByMachineIdUpdate422": {
         "anyOf": [
           {
@@ -122331,6 +122295,42 @@
             "type": "number",
             "enum": [
               500
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAgentsByMachineIdUpdate503": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "machine-away"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
           },
           "title": {

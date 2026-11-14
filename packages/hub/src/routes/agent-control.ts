@@ -17,9 +17,10 @@ import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
+import type { RouteSet } from "../machine-answers";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
-import { unansweredStatus } from "../machine-reads";
+import { awayStatus, unansweredStatus } from "../machine-reads";
 
 import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
@@ -46,15 +47,17 @@ export const agentUpdateBody = t.Object({
 
 /**
  * A machine's update, what its route answers: the machine pulls, installs,
- * rebuilds and restarts what it serves, then says what it actually did.
+ * rebuilds and restarts what it serves, then says what it actually did; a
+ * machine not connected is {@link awayStatus}, named on `set`.
  */
 export const agentUpdate =
-  ({
-    callAgent,
-    machineFault,
-    machineName,
-  }: Pick<HubContext, "callAgent" | "machineFault" | "machineName">) =>
-  async (machineId: string, body: Static<typeof agentUpdateBody>) => {
+  (ctx: Pick<HubContext, "callAgent" | "machineName"> & MachineReadsContext) =>
+  async (
+    machineId: string,
+    body: Static<typeof agentUpdateBody>,
+    set: RouteSet
+  ) => {
+    const { callAgent, machineName } = ctx;
     const answer = await callAgent(
       machineId,
       UPDATE_CAWCO,
@@ -66,16 +69,8 @@ export const agentUpdate =
         // A machine that restarts the hub as part of its update answers
         // into a socket that no longer exists, so this is not proof that
         // nothing happened — only that the hub stopped hearing about it.
-        // Not connected stays 404 machine-offline, the one away answer not
-        // yet awayStatus's 503: the frozen iOS app's `installUpdate`
-        // handles only 404 here and would show a running install. Held
-        // until the owner decides the app hold; the move is ready on the
-        // branch cawco/agent-update-away.
         return answer.reason === "dead"
-          ? problem(404, {
-              code: "machine-offline",
-              detail: machineFault(machineId, "offline"),
-            })
+          ? awayStatus(ctx, set, machineId)
           : problem(504, {
               code: "didnt-finish-update-within",
               detail: `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
@@ -133,7 +128,7 @@ export const agentControlRoutes = (
       .post(
         "/api/agents/:machineId/update",
         { body: agentUpdateBody },
-        ({ params, body }) => update(params.machineId, body)
+        ({ params, body, set }) => update(params.machineId, body, set)
       )
       // What a machine really has, fleet or not (NEW.md §11) — and what a session
       // in `cwd` would see. Nothing is stored: this is the machine's own word at

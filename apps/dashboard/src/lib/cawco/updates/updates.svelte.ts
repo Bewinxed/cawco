@@ -15,6 +15,7 @@ import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
 import {
+  awayOf,
   failureClause,
   failureSentence,
   hubAsk,
@@ -256,7 +257,7 @@ class Updates {
     if (!answer || answer.ok) {
       return;
     }
-    if (answer.refused.response.status === 404) {
+    if (awayOf(answer.refused)) {
       this.refuse(machineId, {
         act: "install",
         reason: updatesWords.notConnected(name),
