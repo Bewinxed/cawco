@@ -96,6 +96,7 @@ import {
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
+import { newerDatabase } from "@cawco/core/migrations-ahead";
 import {
   markerIsLive,
   ownIdentity,
@@ -399,22 +400,13 @@ async function endUndecided(
   tries: number,
   why: string
 ): Promise<void> {
-  // A rollback that could not put the database back: the database the trial
-  // left stays, and the person is told where the copy from before it is.
-  const unrestored =
-    trial.decision === "roll-back" &&
-    trial.dbBackup &&
-    trial.dbPath &&
-    !trial.dbRestored
-      ? ` ${updatesWords.databaseLeftAsTrialLeft(trial.dbPath, trial.dbBackup, trial.previous)}`
-      : "";
   await writeState({
     phase: "failed",
     failedVersion: trial.version,
     hubSilentTrials: undefined,
     unconfirmedVersion: trial.version,
     heldChildren: undefined,
-    error: `${updatesWords.trialUndecided(trial.version, tries, why)}${unrestored}`,
+    error: updatesWords.trialUndecided(trial.version, tries, why),
   });
   await rm(trialPath(), { force: true });
   await say(`ended ${trial.version} undecided after ${tries} resumes: ${why}`);
@@ -1251,8 +1243,10 @@ async function confirm(trial: TrialMarker): Promise<void> {
  * while it restarts them (the hub keeps this machine's new starts), `current`
  * and the installation point at the previous build, the database copy replaces
  * the database the trial left (which is kept beside it with its journal or
- * WAL, until a later rollback's replaces it, {@link putBackup}),
- * and every unit that runs from `current` is restarted, so none is left on the
+ * WAL, until a later rollback's replaces it, {@link putBackup}; a copy that
+ * cannot go in is said, and the build rolled back to runs on the database the
+ * trial left, or, where the trial migrated it, its hub stays stopped saying
+ * so), and every unit that runs from `current` is restarted, so none is left on the
  * build that failed. A keeper handed over to the build that failed is handed
  * over again, to the build rolled back to, which keeps the sessions the failed
  * build's keeper started where they run until each ends or sleeps: the keeper
@@ -1276,12 +1270,28 @@ async function rollBack(start: TrialMarker): Promise<void> {
     installedVersion: trial.previous,
   });
   await say(`roll back ${trial.version} -> ${trial.previous}: current moved`);
+  // The copy goes back, or the rollback goes on without it: either way the
+  // units restart below, so the build rolled back to runs, on the copy or on
+  // the database the trial left (its hub stops on that only when the trial
+  // migrated it, core migrations-ahead.ts), and the state says which.
   const { dbBackup, dbPath } = trial;
+  let notPutBack: string | undefined;
   if (dbBackup && dbPath && !trial.dbRestored) {
-    const aside = await restoreDatabase(dbPath, dbBackup, trial.version);
-    trial = { ...trial, dbRestored: true };
-    await writeJsonAtomic(trialPath(), trial);
-    await dropOlderAsides(dbPath, aside);
+    try {
+      const aside = await restoreDatabase(dbPath, dbBackup, trial.version);
+      trial = { ...trial, dbRestored: true };
+      await writeJsonAtomic(trialPath(), trial);
+      await dropOlderAsides(dbPath, aside);
+    } catch (error) {
+      notPutBack = updatesWords.databaseNotPutBack(
+        dbPath,
+        message(error),
+        dbBackup,
+        trial.previous,
+        newerDatabase(dbPath) !== undefined
+      );
+      await say(`roll back ${trial.version}: ${notPutBack}`);
+    }
   }
   // Before the units restart, so the agent rolled back to starts beside its own.
   const pinsBack = await putBackPins(trial.version, trial.previous);
@@ -1318,7 +1328,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
     error: [
       trial.reason ?? "The new build did not become healthy",
       trial.dbPath === undefined || trial.dbRestored !== true
-        ? undefined
+        ? notPutBack
         : updatesWords.databasePutBack(asideOf(trial.dbPath, trial.version)),
       rollbackWords(cause, failed, trial),
       pinsBack,
@@ -1400,7 +1410,7 @@ async function stopHub(version: string): Promise<void> {
  * restarts start it again after a stop; launchd's KeepAlive) refuses the
  * database before it opens it. A hub still holding it is stopped again; one
  * still there after {@link SERVICE_TIMEOUT_MS} throws, and the database is
- * left as it is: the trial keeps its rollback, which a resumed helper finishes.
+ * left as it is: the rollback goes on without the copy ({@link rollBack}).
  */
 async function holdDatabase(db: string, version: string): Promise<void> {
   const end = Date.now() + SERVICE_TIMEOUT_MS;
@@ -1430,8 +1440,9 @@ async function holdDatabase(db: string, version: string): Promise<void> {
 /**
  * The hub is stopped, gone and held off while its database is swapped
  * ({@link holdDatabase}); the copy goes in ({@link putBackup}); the hub's lock
- * is let go, and the restart that follows starts the hub on the copy. The
- * database the trial left, moved aside.
+ * is let go, and the restart that follows starts the hub on the copy, or, when
+ * the copy did not go in (this throws why), on the database as the trial left
+ * it. The database the trial left, moved aside.
  */
 async function restoreDatabase(
   db: string,
@@ -1439,16 +1450,16 @@ async function restoreDatabase(
   version: string
 ): Promise<string> {
   await holdDatabase(db, version);
-  let aside: string;
   try {
-    aside = await putBackup(db, backup, version);
+    return await putBackup(db, backup, version);
   } finally {
     await releaseDatabase(db);
+    // launchd's job was booted out by the stop: loaded again whether or not
+    // the copy went in, so the restart that follows has a hub to start.
+    if (process.platform === "darwin") {
+      await startAgain(["hub"]);
+    }
   }
-  if (process.platform === "darwin") {
-    await startAgain(["hub"]);
-  }
-  return aside;
 }
 
 /** Where a rollback of `version` moves the database the trial left. */
@@ -1527,9 +1538,7 @@ async function putBackup(
     }
   } catch (error) {
     await rm(restoring, { force: true });
-    throw new Error(updatesWords.databaseNotPutBack(db, message(error)), {
-      cause: error,
-    });
+    throw error;
   }
   if (!existsSync(aside) && existsSync(db)) {
     await addName(db, aside);

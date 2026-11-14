@@ -9,7 +9,7 @@ import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
 import { isServiceId } from "@cawco/agent/service-manager/units";
-import { SERVICE_IDS } from "@cawco/core/binary-installation";
+import { readUpdateState, SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import {
   hubCredentialSocket,
@@ -24,6 +24,7 @@ import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { hubDatabaseWords } from "@cawco/core/words/hub-database";
+import { updatesWords } from "@cawco/core/words/updates";
 import { dataOf, reached } from "@cawco/hub/client";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { ownerRead } from "./owner";
@@ -408,16 +409,26 @@ const printFleet = (agents: AgentRow[]): void => {
 };
 
 /**
- * On the hub's machine, why its last start stopped before it opened its
- * database, as that start wrote it beside the database (core paths/hub.ts
- * `hubStoppedPath`); a start that opens it removes it. Said where the hub
- * does not answer, as why.
+ * On the hub's machine, what is known of why the hub does not answer: why its
+ * last start stopped before it opened its database, as that start wrote it
+ * beside the database (core paths/hub.ts `hubStoppedPath`; a start that opens
+ * it removes it), and the last update's failure in the words the update wrote
+ * (core binary-installation.ts `readUpdateState`), each a line. Said where
+ * the hub does not answer, as why.
  */
 const hubDown = async (): Promise<string | undefined> => {
   const file = Bun.file(hubStoppedPath(hubDbPath()));
-  return (await file.exists())
-    ? hubDatabaseWords.down((await file.text()).trim())
-    : undefined;
+  const update = await readUpdateState();
+  const lines = [
+    (await file.exists())
+      ? hubDatabaseWords.down((await file.text()).trim())
+      : undefined,
+    (update?.phase === "failed" || update?.phase === "failed-rolled-back") &&
+    update.error
+      ? updatesWords.lastFailed(update.error)
+      : undefined,
+  ].filter((line) => line !== undefined);
+  return lines.length > 0 ? lines.join("\ncawco: ") : undefined;
 };
 
 const status = async (args: Args): Promise<number> => {
