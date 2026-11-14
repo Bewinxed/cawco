@@ -160,7 +160,7 @@ import {
   canvasProblem,
   specOf,
 } from "./component";
-import type { ArtifactServiceDeps } from "./deps";
+import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
 import { createFacts, metaOf, stateOf } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind } from "./kinds/component";
@@ -196,7 +196,6 @@ import {
   type CanvasExport,
   type CommentRead,
   type Created,
-  type HandedArtifactFile,
   type Making,
   type Opened,
   type PageBroken,
@@ -3150,9 +3149,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       name: `${base}.json`,
       bytes: async ({ session, machineId }) => {
         const pass = deps.browse(session, row);
-        // The receiver's inputs throw what they cannot write (work-items.ts).
         if (pass instanceof ElysiaStatus) {
-          throw new Error(pass.response.detail);
+          return pass;
         }
         const unreached = await deps.workspaceReach(pass.url, machineId);
         return jsonFile(
