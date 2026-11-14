@@ -89,6 +89,9 @@ export const workWords = {
   /** Heads a gate step's stream cut to its tail (hub gate.ts `gateTails`): the cut part may hold the failure, so the reader runs the step itself. */
   gateCut: (cut: number) =>
     `… (${cut} chars cut; run the step yourself to read it whole)\n`,
+  /** A task's acceptance criteria past the most one judgement reads (hub tasks.ts `acceptanceOf`). */
+  criteriaTooMany: (named: number, limit: number) =>
+    `The acceptance criteria hold ${named} criteria; a task states ${limit} at most, so every one is judged. Merge some or split the task.`,
   /** An item's outputs that add up past the bytes the copy takes (hub landing-run.ts `outputsProblem`). */
   outputsTooLarge: (mib: string, limitMib: number) =>
     `The outputs add up to ${mib} MiB; the copy stops at ${limitMib} MiB in all. Hand in fewer or smaller files.`,

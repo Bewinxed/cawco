@@ -110,6 +110,7 @@ import { taskTarget, waitHandle, waitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
+import { workWords } from "@cawco/core/words/work";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { WorkItemRow } from "./db/project-work";
 import type { Tracker } from "./db/schema";
@@ -167,6 +168,8 @@ import {
 import {
   ARCHIVE_DIR,
   archivePath,
+  CRITERIA_MAX,
+  criteriaOf,
   EXTRA_KEY,
   type ExtraValue,
   fileTaskNumber,
@@ -866,6 +869,22 @@ const block = (what: string, text: string) => {
   return text.trim();
 };
 
+/** Acceptance criteria as {@link block} takes them, and refused past the criteria one judgement reads. */
+const acceptanceOf = (text: string) => {
+  const criteria = block("acceptance criteria", text);
+  if (criteria instanceof ElysiaStatus) {
+    return criteria;
+  }
+  const named = criteriaOf(criteria).length;
+  if (named > CRITERIA_MAX) {
+    return problem(400, {
+      code: "task-text-too-long",
+      detail: workWords.criteriaTooMany(named, CRITERIA_MAX),
+    });
+  }
+  return criteria;
+};
+
 const todoText = (text: string) => {
   const line = oneLine("to-do", text, TODO_LIMIT);
   if (!(line instanceof ElysiaStatus) && TODO_MARKER_START.test(line)) {
@@ -1403,9 +1422,7 @@ const patchWords = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
     return text;
   }
   const criteria =
-    acceptance === undefined
-      ? undefined
-      : block("acceptance criteria", acceptance);
+    acceptance === undefined ? undefined : acceptanceOf(acceptance);
   if (criteria instanceof ElysiaStatus) {
     return criteria;
   }
@@ -5029,7 +5046,7 @@ export const createTasks = (store: TaskStore) => {
     if (description instanceof ElysiaStatus) {
       return description;
     }
-    const acceptance = block("acceptance criteria", draft.acceptance ?? "");
+    const acceptance = acceptanceOf(draft.acceptance ?? "");
     if (acceptance instanceof ElysiaStatus) {
       return acceptance;
     }

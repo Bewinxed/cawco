@@ -1,8 +1,8 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { isMachinePath, type MachinePath } from "@cawco/core/machine-path";
 import type { DeclaredStep, RunsOnCapability } from "@cawco/core/project-gate";
-import { workWords } from "@cawco/core/words/work";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BUNDLE,

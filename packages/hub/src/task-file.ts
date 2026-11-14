@@ -961,8 +961,8 @@ const todosOf = (lines: string[], section: BodySection | undefined) => {
   return todos;
 };
 
-/** The most acceptance criteria one task is judged on (jev-placement.ts `jevJudged`). */
-const CRITERIA_MAX = 20;
+/** The most acceptance criteria one task states: one judgement reads that many (jev-placement.ts `jevJudged`), so a task past it is refused when written (tasks.ts `acceptanceOf`). */
+export const CRITERIA_MAX = 20;
 
 /** A task's acceptance criteria, one each: its list items, else the whole text as one. */
 export const criteriaOf = (acceptance: string): string[] => {
@@ -970,8 +970,7 @@ export const criteriaOf = (acceptance: string): string[] => {
     .split("\n")
     .map((line) => CRITERION_LINE.exec(line.replace(CR, ""))?.[3]?.trim())
     .filter((item): item is string => Boolean(item));
-  const all = items.length > 0 ? items : [acceptance.trim()].filter(Boolean);
-  return all.slice(0, CRITERIA_MAX);
+  return items.length > 0 ? items : [acceptance.trim()].filter(Boolean);
 };
 
 /** A comment entry's heading line (`addComment`): the hub's actor's, or a carried comment's source and URL. */
@@ -1268,11 +1267,7 @@ export class TaskDoc {
       return 0;
     }
     let ticked = 0;
-    for (
-      let at = section.at + 1;
-      at < section.end && ticked < CRITERIA_MAX;
-      at += 1
-    ) {
+    for (let at = section.at + 1; at < section.end; at += 1) {
       const item = CRITERION_LINE.exec(this.body[at].replace(CR, ""));
       const words = item?.[3]?.trim();
       if (item && words) {
