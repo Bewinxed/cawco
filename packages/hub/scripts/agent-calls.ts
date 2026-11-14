@@ -183,6 +183,24 @@ const isLiteral = (
   ts.isNoSubstitutionTemplateLiteral(node) ||
   ts.isTemplateExpression(node);
 
+/**
+ * The agent's own local-URL helper (delegation.ts `harnessMcpUrl`) builds a
+ * URL on this machine's gateway. The gateway relays most of what it is asked
+ * to the hub (`/api/delegation/…`, `/mcp/cawco`, `/mcp/fleet/…`), and
+ * answers the hosted MCP servers itself (mcp-oauth.ts `hostedRoutes`:
+ * mcp-host.ts `HOSTED_PATH`, mcp-gate.ts `GATE_PATH`), which no hub route
+ * ever answers.
+ */
+const LOCAL_URL_HELPER = "harnessMcpUrl";
+const GATEWAY_OWN = /^\/mcp\/(?:local|gate)\//u;
+
+/** Whether `node` is an argument of a call to the local-URL helper. */
+const isLocalUrl = (node: ts.Node): boolean =>
+  ts.isCallExpression(node.parent) &&
+  ts.isIdentifier(node.parent.expression) &&
+  node.parent.expression.text === LOCAL_URL_HELPER &&
+  node.parent.arguments.includes(node as ts.Expression);
+
 /** Every hub call the agent's source builds. */
 export const agentCalls = (files: SourceFile[]): AgentCalls => {
   const calls: AgentCalls = new Map();
@@ -201,7 +219,11 @@ export const agentCalls = (files: SourceFile[]): AgentCalls => {
       if (isLiteral(node) && !ts.isTemplateSpan(node.parent)) {
         const line =
           file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
+        const local = isLocalUrl(node);
         for (const built of render(file, node, 0)) {
+          if (local && GATEWAY_OWN.test(built)) {
+            continue;
+          }
           for (const { pattern, lines } of hubPathsIn(built)) {
             record(path, pattern, line + lines);
           }
