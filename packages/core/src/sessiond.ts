@@ -202,9 +202,10 @@ export interface SessiondProcInfo {
    * The signal a dead child was killed by. With `exitCode` it is the whole of
    * how it ended: a child killed by a signal has no exit code, and a reader
    * that learns of the death from a listing (not a `proc.exit`) has nothing
-   * else to say it is over.
+   * else to say it is over. The OS names it through Node, and a platform can
+   * name one `NodeJS.Signals` does not list: held as the provider's string.
    */
-  signal?: NodeJS.Signals;
+  signal?: string;
   /** A dead child's last words on stderr ({@link SessiondExit.stderr}). */
   stderr?: string;
 }
@@ -279,7 +280,8 @@ interface SessiondExit {
   /** The process that exited: what a {@link SessiondRelease} of it names. Absent from a keeper that predates it. */
   pid?: number;
   procId: string;
-  signal: NodeJS.Signals | null;
+  /** The signal it was killed by, as the OS names it ({@link SessiondProcInfo.signal}). */
+  signal: string | null;
   /**
    * The last of what the child wrote on stderr, as bytes the keeper never
    * read (sessiond server.ts `STDERR_TAIL_BYTES`): what a process that

@@ -2871,50 +2871,6 @@ const SessionToolingShape = declared(
 export const SessionToolingSchema = SessionToolingShape;
 export type SessionToolingOutput = z.output<typeof SessionToolingShape>;
 
-const SignalsShape = declared(
-  z.enum([
-    "SIGABRT",
-    "SIGALRM",
-    "SIGBUS",
-    "SIGCHLD",
-    "SIGCONT",
-    "SIGFPE",
-    "SIGHUP",
-    "SIGILL",
-    "SIGINT",
-    "SIGIO",
-    "SIGIOT",
-    "SIGKILL",
-    "SIGPIPE",
-    "SIGPOLL",
-    "SIGPROF",
-    "SIGPWR",
-    "SIGQUIT",
-    "SIGSEGV",
-    "SIGSTKFLT",
-    "SIGSTOP",
-    "SIGSYS",
-    "SIGTERM",
-    "SIGTRAP",
-    "SIGTSTP",
-    "SIGTTIN",
-    "SIGTTOU",
-    "SIGUNUSED",
-    "SIGURG",
-    "SIGUSR1",
-    "SIGUSR2",
-    "SIGVTALRM",
-    "SIGWINCH",
-    "SIGXCPU",
-    "SIGXFSZ",
-    "SIGBREAK",
-    "SIGLOST",
-    "SIGINFO",
-  ]),
-  "Signals",
-  "@types/node/process.d.ts"
-);
-
 const SessiondProcInfoShape = declared(
   z.object({
     alive: z.boolean(),
@@ -2923,7 +2879,7 @@ const SessiondProcInfoShape = declared(
     head: z.number(),
     pid: z.number(),
     procId: z.string(),
-    signal: SignalsShape.optional(),
+    signal: z.string().optional(),
     stderr: z.string().optional(),
   }),
   "SessiondProcInfo",
@@ -2984,7 +2940,7 @@ const SessiondExitShape = declared(
     exitCode: z.number().nullable(),
     pid: z.number().optional(),
     procId: z.string(),
-    signal: SignalsShape.nullable(),
+    signal: z.string().nullable(),
     stderr: z.string().optional(),
     type: z.literal("proc.exit"),
   }),
