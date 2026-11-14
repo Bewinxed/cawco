@@ -79,6 +79,14 @@ export const harnessRefusedWords = {
    * machine refuses that CLI; the refusal's own sentence follows it (hub
    * history.ts `refusedRead`).
    */
+  /**
+   * A stored conversation its machine reads only through the harness's CLI,
+   * asked while an install of that CLI runs there and no server of a
+   * version CawCo runs could answer it (hub history.ts `refusedRead`): the
+   * page reads it again by itself once the install lands.
+   */
+  updatingUnread: (name: string, machine: string, to: string | undefined) =>
+    `CawCo is putting ${name}${to ? ` ${to}` : ""} on ${machine} right now, and this conversation is read through ${name}, so it shows here again by itself once that lands`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**
