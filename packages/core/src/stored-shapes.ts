@@ -3414,6 +3414,25 @@ export const ModeAskShape = declared(
 );
 export type ModeAskOutput = z.output<typeof ModeAskShape>;
 
+const ToolCopyShape = declared(
+  z.union([
+    z.object({ at: z.number().optional(), by: z.literal("cawco") }),
+    z.object({ by: z.literal("person") }),
+  ]),
+  "ToolCopy",
+  "packages/core/src/tools.ts"
+);
+export const ToolCopySchema = ToolCopyShape;
+export type ToolCopyOutput = z.output<typeof ToolCopyShape>;
+
+const ToolWantsShape = declared(
+  z.object({ orNewer: z.boolean(), version: z.string() }),
+  "ToolWants",
+  "packages/core/src/tools.ts"
+);
+export const ToolWantsSchema = ToolWantsShape;
+export type ToolWantsOutput = z.output<typeof ToolWantsShape>;
+
 const WaitWitnessShape = declared(
   z.object({ target: z.string(), value: z.string() }),
   "WaitWitness",

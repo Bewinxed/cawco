@@ -487,7 +487,9 @@ import type {
   StyleDeltaOutput,
   TextAttachmentOutput,
   TokenKindOutput,
+  ToolCopyOutput,
   ToolSigninOutput,
+  ToolWantsOutput,
   UserAnswersOutput,
   UserQuestionAnsweredOutput,
   UserQuestionDismissedOutput,
@@ -514,7 +516,9 @@ import type {
 import type { WaitWitness as WaitWitnessType } from "./task-views";
 import type {
   NamedToolSignin as NamedToolSigninType,
+  ToolCopy as ToolCopyType,
   ToolSignin as ToolSigninType,
+  ToolWants as ToolWantsType,
 } from "./tools";
 import type {
   GithubProject as GithubProjectType,
@@ -789,6 +793,8 @@ prove<
     Same<StoppedCommandsOutput, StoppedCommandsType>,
     Same<SendRefusalOutput, SendRefusalType>,
     Same<ModeAskOutput, ModeAskType>,
+    Same<ToolCopyOutput, ToolCopyType>,
+    Same<ToolWantsOutput, ToolWantsType>,
     Same<WaitWitnessOutput, WaitWitnessType>,
     Same<WorkspaceCutOutput, WorkspaceCutType>,
     Same<WorkspaceHoldingOutput, WorkspaceHoldingType>,

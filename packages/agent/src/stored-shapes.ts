@@ -151,3 +151,16 @@ const MediaMeasurementShape = declared(
 );
 export const MediaMeasurementSchema = MediaMeasurementShape;
 export type MediaMeasurementOutput = z.output<typeof MediaMeasurementShape>;
+
+const ToolInstallRecordShape = declared(
+  z.object({
+    at: z.number(),
+    method: z.string().optional(),
+    path: z.string(),
+    version: z.string().optional(),
+  }),
+  "ToolInstallRecord",
+  "packages/agent/src/tools.ts"
+);
+export const ToolInstallRecordSchema = ToolInstallRecordShape;
+export type ToolInstallRecordOutput = z.output<typeof ToolInstallRecordShape>;
