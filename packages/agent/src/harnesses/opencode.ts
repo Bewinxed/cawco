@@ -136,7 +136,12 @@ import {
   ReattachFailed,
   SessionAddressRefused,
 } from "../harness";
-import { readJson, writeJson } from "../json-file";
+import {
+  readJson,
+  readJsonOrLeave,
+  readOwnJson,
+  writeJson,
+} from "../json-file";
 import { KeeperPool } from "../keepers";
 import { enterSpawn, inView, overlaySync, viewMember } from "../layer";
 import { isMachineAgent } from "../machine-agent";
@@ -887,7 +892,10 @@ const syncOpencodeMcp = async (
       report[name] = { state: "removed" };
     }
   }
-  const stored = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
+  const stored = await readJsonOrLeave<Record<string, unknown>>(
+    OPENCODE_CONFIG,
+    "taking CawCo's servers out of OpenCode's config"
+  );
   const mcp = recordOf(stored?.mcp);
   const servers = recordOf(mcp.servers);
   const ours = ["cawco", ...managed, ...names];
@@ -990,7 +998,7 @@ const placeOpencodeMcp = async (
   live: readonly string[]
 ): Promise<Record<string, FleetItemState>> => {
   const was =
-    (await readJson<Record<string, string>>(OPENCODE_PLACED_SEEN)) ?? {};
+    (await readOwnJson<Record<string, string>>(OPENCODE_PLACED_SEEN)) ?? {};
   const now = serversByPlace(desired);
   if (placedRevisionMoved(was, now, live)) {
     const revision = await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(
@@ -1039,7 +1047,10 @@ const dropPlanAgentEntry = async (ours: boolean): Promise<void> => {
   if (!ours) {
     return;
   }
-  const stored = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
+  const stored = await readJsonOrLeave<Record<string, unknown>>(
+    OPENCODE_CONFIG,
+    "putting OpenCode's plan agent back"
+  );
   const agents = recordOf(stored?.agents);
   const { disabled, ...planRest } = recordOf(agents.plan);
   if (!stored || disabled !== true) {
@@ -1167,7 +1178,7 @@ const OPENCODE_CAPABILITIES: HarnessCapabilities = {
 const TAGS_PATH = join(OPENCODE_DIR, "cawco-tags.json");
 
 const readTags = async (): Promise<Record<string, string>> =>
-  (await readJson<Record<string, string>>(TAGS_PATH)) ?? {};
+  (await readOwnJson<Record<string, string>>(TAGS_PATH)) ?? {};
 
 const writeTag = async (
   sessionId: string,
@@ -2289,7 +2300,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(() => "")
     ).trim();
     // The fleet's servers too: a server takes them in its launch config.
-    const fleet = await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);
+    const fleet =
+      await readOwnJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);
     // The catalog too: a server reads it only as it starts.
     const catalog = holdsCatalog() ? await catalogDigest() : "";
     if (!(placed || (fleet && Object.keys(fleet).length > 0) || catalog)) {
@@ -4423,7 +4435,7 @@ class OpencodeHarness implements Harness<"opencode"> {
 
   async #keptFacts(): Promise<ServerFacts | null> {
     if (this.#facts === undefined) {
-      this.#facts = await readJson<ServerFacts>(OPENCODE_SERVER_FACTS);
+      this.#facts = await readOwnJson<ServerFacts>(OPENCODE_SERVER_FACTS);
     }
     return this.#facts ?? null;
   }
@@ -4553,8 +4565,11 @@ class OpencodeHarness implements Harness<"opencode"> {
    * name ({@link #currentFacts}). No server is started for it that stays.
    */
   async providerList(): Promise<{ id: string; name: string }[]> {
+    // A list that couldn't be read is never empty: with no binary on disk
+    // (npm moving it aside, or none ever put on), the machine's report leaves
+    // OpenCode's list out and the hub keeps its last (daemon.ts `readPart`).
     if ((await opencodeBinary()) === undefined) {
-      return [];
+      throw new Error(harnessRefusedWords.noBinaryUnlisted("OpenCode"));
     }
     return (await this.#currentFacts()).providers;
   }
@@ -4662,7 +4677,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     const plugin = await this.#plugin();
     const fleet = (await isMachineAgent())
-      ? recordOf(await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP))
+      ? recordOf(await readOwnJson<Record<string, unknown>>(OPENCODE_FLEET_MCP))
       : {};
     return {
       ...STATIC_POLICY,
@@ -6339,8 +6354,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     title: string,
     _dir?: string
   ): Promise<void> {
+    // Renamed only through OpenCode's server: with no binary on disk, nothing
+    // was renamed, which is said, never answered as done.
     if ((await opencodeBinary()) === undefined) {
-      return;
+      throw new Error(
+        harnessRefusedWords.noBinaryUndone(
+          "OpenCode",
+          "this conversation wasn't renamed"
+        )
+      );
     }
     assertOpencodeKey(sessionKey, "renameSession");
     await (
@@ -6361,8 +6383,15 @@ class OpencodeHarness implements Harness<"opencode"> {
   }
 
   async deleteSession(sessionKey: string, _dir?: string): Promise<void> {
+    // Deleted only through OpenCode's server: with no binary on disk, nothing
+    // was deleted, which is said, never answered as done.
     if ((await opencodeBinary()) === undefined) {
-      return;
+      throw new Error(
+        harnessRefusedWords.noBinaryUndone(
+          "OpenCode",
+          "this conversation wasn't deleted"
+        )
+      );
     }
     assertOpencodeKey(sessionKey, "deleteSession");
     await (
@@ -6495,7 +6524,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   ): Promise<FleetSyncReport["mcp"]> {
     const states: FleetSyncReport["mcp"] = {};
     const serversBefore = canonicalJson(
-      await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
+      await readOwnJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
     );
     const mcp = await syncOpencodeMcp(config.mcp, sidecar.mcp ?? [], states);
     await dropPlanAgentEntry(sidecar.planAgentDisabled === true);
@@ -6518,7 +6547,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     }
     const serversMoved =
       canonicalJson(
-        await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
+        await readOwnJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
       ) !== serversBefore;
     // Poke the watcher now rather than up to 2 s later.
     await this.#configTick(serversMoved);
@@ -7099,7 +7128,7 @@ async function setHome(sessionIds: string[], home: string): Promise<void> {
 
 // ----------------------------------------------------- session homes
 async function readHomes(): Promise<Record<string, string>> {
-  return (await readJson<Record<string, string>>(SESSION_HOMES)) ?? {};
+  return (await readOwnJson<Record<string, string>>(SESSION_HOMES)) ?? {};
 }
 
 /**

@@ -13,7 +13,7 @@
  *   is one JSON object (an empty one is `{}`, as the engine reads it);
  * - `unread`: there and not read, with why. A file at mode 000, in a folder
  *   at mode 000, malformed, a folder, a pipe or a socket in its place, a
- *   symlink loop, a file too large. A pipe is never opened: a read of one
+ *   symlink loop or a link to nothing, a file too large. A pipe is never opened: a read of one
  *   waits for a writer, and an agent that read `settings.json` at its start
  *   while a pipe stood there never registered (host run 84ca5c0e).
  *
@@ -24,10 +24,8 @@
  * log and skips its step, which runs again at its next turn. And a file
  * whose content would not change is not written at all.
  */
-import { readFile, stat } from "node:fs/promises";
-import { errnoCode } from "@cawco/core/absent";
-import { writeStateFile } from "@cawco/core/state-file";
 import { toolWords } from "@cawco/core/words/tools";
+import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
 
 /**
  * The largest settings file read: a settings file is a few kilobytes, and
@@ -45,48 +43,24 @@ export type SettingsFile =
 /** A settings file that may be written: one read, or nothing there. */
 export type WritableSettings = Exclude<SettingsFile, { state: "unread" }>;
 
-const errorWords = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-/** The settings file at `path` ({@link SettingsFile}): stat first, so nothing but a regular file of a settings file's size is ever opened. */
+/**
+ * The settings file at `path` ({@link SettingsFile}), read as every JSON
+ * file is (json-on-disk.ts: stat first, a regular file of a settings file's
+ * size alone opened, a link to nothing or a loop unread), and one JSON
+ * object; an empty file is no settings, as Claude Code's engine reads it
+ * ("if(e.trim()==="")return {settings:{},errors:[],loadState:"loaded"}").
+ */
 export const readSettingsFile = async (path: string): Promise<SettingsFile> => {
-  let info: Awaited<ReturnType<typeof stat>>;
-  try {
-    info = await stat(path);
-  } catch (error) {
-    const code = errnoCode(error);
-    return code === "ENOENT" || code === "ENOTDIR"
-      ? { state: "absent" }
-      : { state: "unread", why: errorWords(error) };
+  const read = await readJsonOnDisk(path, SETTINGS_FILE_LIMIT);
+  if (read.state !== "read") {
+    return read;
   }
-  if (!info.isFile()) {
-    return { state: "unread", why: toolWords.settingsNotAFile };
-  }
-  if (info.size > SETTINGS_FILE_LIMIT) {
-    return {
-      state: "unread",
-      why: toolWords.settingsTooLarge(info.size, SETTINGS_FILE_LIMIT),
-    };
-  }
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    return { state: "unread", why: errorWords(error) };
-  }
-  // The engine reads an empty file as no settings ("if(e.trim()==="")return
-  // {settings:{},errors:[],loadState:"loaded"}").
-  if (text.trim() === "") {
+  const { value } = read;
+  if (value === undefined) {
     return { state: "read", settings: {} };
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    return { state: "unread", why: errorWords(error) };
-  }
-  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-    ? { state: "read", settings: parsed as Record<string, unknown> }
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? { state: "read", settings: value as Record<string, unknown> }
     : { state: "unread", why: toolWords.settingsNotAnObject };
 };
 
@@ -97,8 +71,10 @@ export const settingsOf = (read: WritableSettings): Record<string, unknown> =>
 /**
  * `next` written over the settings file at `path` that {@link readSettingsFile}
  * found `read` (never an unread one: the type keeps it out), whole and moved
- * into place (core `writeStateFile`): a half-written settings file is a
- * machine whose next `claude` starts with none of the person's settings.
+ * into place (json-on-disk.ts `writeOnDisk`): a half-written settings file
+ * is a machine whose next `claude` starts with none of the person's
+ * settings. A `settings.json` that is a symlink (a dotfiles repository's)
+ * is written through: its target is replaced, the link stays.
  * Nothing is written when `next` is what the file holds already, or nothing
  * is there and `next` holds nothing. Whether it wrote.
  */
@@ -110,6 +86,6 @@ export const writeSettingsFile = async (
   if (JSON.stringify(next) === JSON.stringify(settingsOf(read))) {
     return false;
   }
-  await writeStateFile(path, JSON.stringify(next, null, 2));
+  await writeOnDisk(path, JSON.stringify(next, null, 2));
   return true;
 };

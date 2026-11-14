@@ -88,21 +88,38 @@ export const harnessRefusedWords = {
   updatingUnread: (name: string, machine: string, to: string | undefined) =>
     `CawCo is updating ${name} on ${machine}${to ? ` to ${to}` : ""}`,
   /**
-   * A stored conversation its machine reads only through the harness's
-   * CLI, asked while no copy of that CLI is on disk there (agent opencode.ts
-   * `#transcript`: npm moves it aside while it installs): the read fails
-   * with this, and the hub says the install under way when one is (hub
-   * history.ts `refusedRead`).
-   */
-  /**
    * A stored conversation read through the harness's CLI whose read failed
    * while its machine, connected again, had not yet said which tools it has
    * (hub history.ts `refusedRead`): why isn't known until it does.
    */
   toolsUnsaid: (machine: string) =>
     `${machine} hasn't said which tools it has since it connected, so why this conversation can't be read isn't known yet. Try again in a moment.`,
+  /**
+   * A stored conversation its machine reads only through the harness's
+   * CLI, asked while no copy of that CLI is on disk there (agent opencode.ts
+   * `#transcript`: npm moves it aside while it installs): the read fails
+   * with this, and the hub says the install under way when one is (hub
+   * history.ts `refusedRead`).
+   */
   noBinaryUnread: (name: string) =>
     `${name} isn't on this machine right now, so this conversation can't be read. ${name} still keeps it, and it shows here once ${name} is back.`,
+  /**
+   * An act on a stored conversation that only the harness's CLI does
+   * (agent opencode.ts `renameSession`, `deleteSession`), asked while no
+   * copy of it is on disk: nothing was done. `undone` says what wasn't.
+   */
+  noBinaryUndone: (name: string, undone: string) =>
+    `${name} isn't on this machine right now, so ${undone}. Try again once ${name} is back.`,
+  /** The providers a harness's CLI signs in to, asked while no copy of it is on disk (agent opencode.ts `providerList`). */
+  noBinaryUnlisted: (name: string) =>
+    `${name} isn't on this machine right now, so the providers it signs in to can't be listed`,
+  /**
+   * An act on a stored conversation that the harness keeps nothing for
+   * (pi: no name or tag CawCo can set, its capabilities say so): nothing
+   * was done. `what` is what it keeps none of, `undone` what wasn't done.
+   */
+  keepsNo: (name: string, what: string, undone: string) =>
+    `${name} keeps no ${what} CawCo can set, so ${undone}.`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**

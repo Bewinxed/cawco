@@ -11,7 +11,7 @@
  * fleet.ts's (`syncSkillFiles`, `syncMemory`), given each harness's paths.
  */
 
-import { readJson } from "../json-file";
+import { readOwnJson } from "../json-file";
 
 /** What this harness's fleet directory was last synced to, by skill hash. */
 export interface FleetSidecar {
@@ -28,7 +28,7 @@ export interface FleetSidecar {
 }
 
 export const readSidecar = async (path: string): Promise<FleetSidecar> => {
-  const stored = await readJson<Partial<FleetSidecar>>(path);
+  const stored = await readOwnJson<Partial<FleetSidecar>>(path);
   return {
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),

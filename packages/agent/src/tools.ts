@@ -776,7 +776,11 @@ const recordInstall = (id: string, record: ToolInstallRecord): Promise<void> =>
  * copy stays the person's. A copy whose settings could not be read is not
  * taken, and the pass is not marked done, so the next start asks again: a
  * read that failed is no word that its updates are off, and marking it
- * done would leave that copy out of CawCo's care for good. A fleet pin held it at its version but left
+ * done would leave that copy out of CawCo's care for good. The same for a
+ * copy not found, unless two looks agree there is none with no install of
+ * it running (a copy an update moved aside is away for a moment: host run
+ * 84ca5c0e marked the pass done then, with nothing taken), and for a copy
+ * that didn't say its version. A fleet pin held it at its version but left
  * it CawCo's to install (the pin is CawCo's policy, not a hand install), so
  * it is taken too, and stays held by the pin (hub tool-releases.ts
  * `keptReleases` keeps no release for a pinned tool). A read that fails
@@ -794,42 +798,91 @@ const takeOverKept = async (): Promise<void> => {
     if (file.installs[spec.id]) {
       continue;
     }
-    const copy = await findCopy(spec);
-    const version = copy ? await probeVersion(spec, copy.path) : undefined;
-    if (!(copy && version)) {
-      continue;
-    }
-    const off = spec.updatesOff
-      ? await switchedOff(spec.updatesOff, true)
-      : undefined;
-    if (off && "unread" in off) {
+    const decided = await takeOverOne(spec, at);
+    if (decided === "unknown") {
       unread = true;
-      console.info(
-        `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} is not taken into CawCo's care yet: its settings could not be read (${off.unread ?? "it said nothing"}), so whether its automatic updates are off isn't known; the next start asks again`
-      );
-      continue;
+    } else if (decided !== "left") {
+      taken[spec.id] = decided;
     }
-    if (off) {
-      console.info(
-        `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} stays the person's: its automatic updates were off, so CawCo was not keeping it current`
-      );
-      continue;
-    }
-    taken[spec.id] = {
-      path: copy.path,
-      version,
-      ...(copy.method ? { method: copy.method.label } : {}),
-      takenOver: true,
-      at,
-    };
-    console.info(
-      `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} is CawCo's from now on: CawCo was keeping it current before it kept a record of its own installs`
-    );
   }
+  // Done only when every copy that could be there was read and decided, or
+  // established as none (`unread` otherwise): the next start runs it again.
   await writeInstalls("the copies CawCo was keeping current", (now) => ({
     installs: { ...taken, ...now.installs },
     ...(unread ? {} : { tookOverAt: at }),
   }));
+};
+
+/**
+ * One tool's part of {@link takeOverKept}: its copy's record as CawCo's
+ * from `at`, `left` (none there, established; or one the person turned the
+ * updates off on), or `unknown` (not found while it may be moving, no
+ * version said, settings unread), said on the log.
+ */
+const takeOverOne = async (
+  spec: ToolSpec,
+  at: number
+): Promise<ToolInstallRecord | "left" | "unknown"> => {
+  const copy = await findCopy(spec);
+  if (!copy) {
+    // None found is "there is none" only once two looks agree on it while
+    // no install of the tool runs here: mid-update the copy is away for a
+    // moment, and a pass marked done then never took it in.
+    if (await noneThere(spec)) {
+      return "left";
+    }
+    console.info(
+      `[tools] ${spec.name} is not taken into CawCo's care yet: no copy was found while ${installing.has(spec.id) ? "an install of it ran" : "it was moving"}, so whether there is one isn't known; the next start looks again`
+    );
+    return "unknown";
+  }
+  const where = shownPath(copy.path);
+  const version = await probeVersion(spec, copy.path);
+  if (!version) {
+    console.info(
+      `[tools] ${spec.name} at ${where} is not taken into CawCo's care yet: it didn't say its version, so whether CawCo was keeping it current isn't known; the next start asks again`
+    );
+    return "unknown";
+  }
+  const off = spec.updatesOff
+    ? await switchedOff(spec.updatesOff, true)
+    : undefined;
+  if (off && "unread" in off) {
+    console.info(
+      `[tools] ${spec.name} ${version} at ${where} is not taken into CawCo's care yet: its settings could not be read (${off.unread ?? "it said nothing"}), so whether its automatic updates are off isn't known; the next start asks again`
+    );
+    return "unknown";
+  }
+  if (off) {
+    console.info(
+      `[tools] ${spec.name} ${version} at ${where} stays the person's: its automatic updates were off, so CawCo was not keeping it current`
+    );
+    return "left";
+  }
+  console.info(
+    `[tools] ${spec.name} ${version} at ${where} is CawCo's from now on: CawCo was keeping it current before it kept a record of its own installs`
+  );
+  return {
+    path: copy.path,
+    version,
+    ...(copy.method ? { method: copy.method.label } : {}),
+    takenOver: true,
+    at,
+  };
+};
+
+/**
+ * Whether `spec` has no copy here, established: two looks
+ * {@link COPY_SETTLE_MS} apart find none, and no install of it ran across
+ * them (one of this agent's own; a copy an update moves aside is away for
+ * the update's moment). Anything else is not known.
+ */
+const noneThere = async (spec: ToolSpec): Promise<boolean> => {
+  if (installing.has(spec.id)) {
+    return false;
+  }
+  await Bun.sleep(COPY_SETTLE_MS);
+  return !(installing.has(spec.id) || (await findCopy(spec)));
 };
 
 /** {@link takeOverKept}, once a process: every read of the tools waits on it. */
