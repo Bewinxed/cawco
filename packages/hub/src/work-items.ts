@@ -128,6 +128,7 @@ import type {
   WorkBudget,
   WorkItemSubmission,
 } from "./db/stored-types";
+import type { designOnBase } from "./design-system";
 import { failedWith } from "./gate";
 import {
   capableMachines,
@@ -153,12 +154,14 @@ import {
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
+import type { Plans } from "./plans";
 import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
-import type { AnyProblem, ProblemStatus } from "./refusal";
+import type { AnyProblem, ProblemsOf } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo, TodoChanges } from "./task-file";
+import type { Tasks } from "./tasks";
 
 import { unwatchedMode } from "./unwatched-mode";
 import { CAWCO_TOOL } from "./web-reads";
@@ -170,6 +173,7 @@ import {
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
 } from "./work-item-state";
+import { budgetProblem, globOf, ownsProblem } from "./work-limits";
 import type { WorkPlace } from "./work-place";
 import {
   createWorkspaces,
@@ -238,6 +242,11 @@ export interface PersonWait {
   cards: { artifactId: string; card: string | null; title: string }[];
 }
 
+/** Why a design check cannot say: its project's task could not be read, or its workspace's base branch (design-verify.ts `hold`). */
+export type DesignHoldProblem =
+  | ProblemsOf<ReturnType<Tasks["get"]>>
+  | ProblemsOf<ReturnType<typeof designOnBase>>;
+
 /**
  * What a start that waits for a machine's pause says after the pause's
  * words ({@link notPaused}): `delegate` queues it, and it starts once the
@@ -251,35 +260,7 @@ const queuesStart = (stopped: { response: { code: string } }): boolean =>
   stopped.response.code === "work-item-owns-overlap" ||
   stopped.response.code === "work-item-machine-paused";
 
-// --- file ownership ------------------------------------------------------------
-
-/** Globs one work item may own, and how long one may run. */
-const OWNS_LIMIT = 50;
-const GLOB_LIMIT = 200;
 const GLOB_WILD = /[*?[{]/u;
-const LEADING_DOT_SLASH = /^(\.\/)+/u;
-const TRAILING_SLASH = /\/+$/u;
-
-/** A glob as ownership compares it: no leading `./`, no trailing `/`. */
-const globOf = (raw: string): string =>
-  raw.trim().replace(LEADING_DOT_SLASH, "").replace(TRAILING_SLASH, "");
-
-/** Why owned globs cannot stand, or nothing when they can. */
-export const ownsProblem = (owns: string[]): string | undefined => {
-  if (owns.length > OWNS_LIMIT) {
-    return `owns names ${owns.length} globs; it stops at ${OWNS_LIMIT}.`;
-  }
-  for (const raw of owns) {
-    const glob = globOf(raw);
-    if (!glob || glob.length > GLOB_LIMIT) {
-      return `owns: “${raw}” is not a glob of ${GLOB_LIMIT} characters or fewer.`;
-    }
-    if (glob.startsWith("/") || glob.split("/").includes("..")) {
-      return `owns: “${raw}” reaches outside the repository; name files from its root, like src/theme/** or docs/theme.md.`;
-    }
-  }
-  return undefined;
-};
 
 /**
  * Whether two owned globs may name one file, judged conservatively on their
@@ -331,23 +312,6 @@ const sameRepo = (a: RepoRef, b: RepoRef): boolean =>
         b.path.startsWith(`${a.path}/`));
 
 // --- budgets ---------------------------------------------------------------------
-
-/** Why a budget cannot stand, or nothing when it can. */
-export const budgetProblem = (budget: WorkBudget): string | undefined => {
-  const { usd, turns, minutes } = budget;
-  if (usd !== undefined && !(Number.isFinite(usd) && usd > 0)) {
-    return "budget.usd is a number of dollars above 0.";
-  }
-  for (const [name, value] of [
-    ["turns", turns],
-    ["minutes", minutes],
-  ] as const) {
-    if (value !== undefined && !(Number.isInteger(value) && value >= 1)) {
-      return `budget.${name} is a whole number from 1.`;
-    }
-  }
-  return undefined;
-};
 
 /** What an item has used of a budget: dollars, turns ended, minutes since it started. */
 interface BudgetUse {
@@ -727,7 +691,7 @@ interface WorkItemDeps extends Pick<
   readonly designHold: (
     item: WorkItemRow,
     submission: WorkItemSubmission
-  ) => Promise<string | undefined | AnyProblem>;
+  ) => Promise<string | undefined | DesignHoldProblem>;
   /**
    * The {@link WorkItems.finishingFor} hold on `instanceId` is over: what it
    * kept at the hub goes now, in order (sends.ts `releaseOwed`).
@@ -816,7 +780,9 @@ interface WorkItemDeps extends Pick<
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
    * these; or its refusal.
    */
-  readonly planSteps: (instanceId: string) => Promise<PlanStep[] | AnyProblem>;
+  readonly planSteps: (
+    instanceId: string
+  ) => Promise<PlanStep[] | ProblemsOf<ReturnType<Plans["read"]>>>;
   /**
    * A project's first work item on `machineId`, which holds no checkout of
    * it: the machine is sent the project's rows from now on (server.ts
@@ -926,13 +892,16 @@ interface WorkItemDeps extends Pick<
    * and tick or propose them as the hub. Without it the link is off.
    */
   readonly todos?: {
-    read: (projectId: string, taskId: string) => Promise<Todo[] | AnyProblem>;
+    read: (
+      projectId: string,
+      taskId: string
+    ) => Promise<Todo[] | ProblemsOf<ReturnType<Tasks["get"]>>>;
     write: (
       projectId: string,
       taskId: string,
       changes: TodoChanges,
       reason: string
-    ) => Promise<AnyProblem | undefined>;
+    ) => Promise<ProblemsOf<ReturnType<Tasks["todos"]>> | undefined>;
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
@@ -2669,15 +2638,8 @@ export const createWorkItems = ({
       // (design-verify.ts), and its pass runs this again. Holding ends
       // nothing, so it comes before the leftovers below.
       const held = await designHold(item, request);
-      // Said again across the import cycle the design check is made through (design-verify.ts).
       if (held !== undefined && typeof held !== "string") {
-        return problem<ProblemStatus, { code: string; detail: string }>(
-          held.status,
-          {
-            code: held.response.code,
-            detail: held.response.detail,
-          }
-        );
+        return held;
       }
       if (held) {
         return held;

@@ -207,7 +207,7 @@ import {
 } from "./task-waits";
 import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
 import { isLive } from "./work-item-state";
-import { budgetProblem, ownsProblem } from "./work-items";
+import { budgetProblem, ownsProblem } from "./work-limits";
 import { outputsFolder } from "./workspaces";
 
 /** Who is changing a task: what stage moves they may make, and whom the commit is by. */

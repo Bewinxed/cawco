@@ -2,10 +2,10 @@ import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DelegateResult } from "./delegate-result";
 import type { AttemptAsk, Dispatcher } from "./dispatch";
-import type { AnyProblem, ProblemStatus } from "./refusal";
 
 import type { createTreeStops } from "./tree-stops";
 import type { WorkItemRequest, WorkItemStart, WorkItems } from "./work-items";
+import type { DiscardAsked, Discarded } from "./workspace-discards";
 import type { Unlanded } from "./workspaces";
 
 /** What the work-item calls act through (server.ts's hub context holds each). */
@@ -63,26 +63,13 @@ export interface WorkItemCallsDeps {
     from: string,
     id: string,
     reason: string | undefined
-  ) => Promise<
-    | { recorded: string }
-    | { approved: boolean }
-    | ReturnType<
-        typeof problem<400, { code: "discard-ask-reason"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<
-          404,
-          { code: "discard-ask-session-unknown"; detail: string }
-        >
-      >
-    | AnyProblem
-  >;
+  ) => Promise<DiscardAsked>;
   /** Workspace `id` discarded for `from` (artifact-events.ts `discarded`): what it says, or the problem that stopped it. */
   readonly discarded: (
     from: string,
     id: string,
     arg2?: { approved?: boolean }
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<Discarded>;
   /** A session as the fleet names it. */
   readonly sessionName: (row: {
     derivedTitle?: string | null;
@@ -225,28 +212,10 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
     if ("recorded" in decided) {
       return decided.recorded;
     }
-    // Said again across the import cycle the discard is made through (artifact-events.ts).
     if (!("approved" in decided)) {
-      return problem<ProblemStatus, { code: string; detail: string }>(
-        decided.status,
-        {
-          code: decided.response.code,
-          detail: decided.response.detail,
-        }
-      );
+      return decided;
     }
-    const discarded = await ctx.discarded(from, id, {
-      approved: decided.approved,
-    });
-    return typeof discarded === "string"
-      ? discarded
-      : problem<ProblemStatus, { code: string; detail: string }>(
-          discarded.status,
-          {
-            code: discarded.response.code,
-            detail: discarded.response.detail,
-          }
-        );
+    return await ctx.discarded(from, id, { approved: decided.approved });
   },
 });
 

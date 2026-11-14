@@ -47,6 +47,7 @@ import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
 import { isLive } from "./work-item-state";
 import type { PersonWait } from "./work-items";
+import type { DiscardAsked, Discarded } from "./workspace-discards";
 
 /** A picture's number in a comments delivery's words (core comments.ts `attachedLine`). */
 const PICTURE_NUMBER = /\(picture (\d+) of this message/gu;
@@ -765,7 +766,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     from: string,
     id: string,
     { approved = false }: { approved?: boolean } = {}
-  ) => {
+  ): Promise<Discarded> => {
     const archived = await ctx.workItems.discardFor(from, id, {
       approved,
     });
@@ -795,7 +796,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     from: string,
     id: string,
     reason: string | undefined
-  ) => {
+  ): Promise<DiscardAsked> => {
     const asked = ctx.workItems.discardable(from, id);
     if (asked instanceof ElysiaStatus) {
       return asked;

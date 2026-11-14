@@ -146,12 +146,12 @@ import { BUDGET, LANDS, MODE } from "./tasks";
 import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
 import { isRoutineParent, routineParent } from "./work-item-state";
 import {
-  budgetProblem,
   DEFAULT_DELEGATE_TYPE,
   titleProblem,
   type WorkItemRequest,
   type WorkItems,
 } from "./work-items";
+import { budgetProblem } from "./work-limits";
 import type { WorkPlace } from "./work-place";
 
 /** What a delegate's headline says to stay silent. */

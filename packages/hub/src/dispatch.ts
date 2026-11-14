@@ -175,7 +175,6 @@ import {
 } from "./tasks";
 import { isLive } from "./work-item-state";
 import {
-  budgetProblem,
   type CloneRef,
   DEFAULT_DELEGATE_TYPE,
   SESSION_TITLE_MAX,
@@ -183,6 +182,7 @@ import {
   type WorkItemStart,
   type WorkItems,
 } from "./work-items";
+import { budgetProblem } from "./work-limits";
 import { capitalized, type WorkAsk, type WorkPlace } from "./work-place";
 
 /** What the dispatcher needs of the hub. */

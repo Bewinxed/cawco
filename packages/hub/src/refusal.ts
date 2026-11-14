@@ -13,6 +13,9 @@ export interface AnyProblem extends Pick<
   "~status" | "response" | "status"
 > {}
 
+/** What a call answers instead of its value: the problems in its result (a function's, or its promise's), read off the function. */
+export type ProblemsOf<R> = Extract<Awaited<R>, { readonly "~status": true }>;
+
 /**
  * Every status the hub answers a problem with: a refusal's, never a 2xx. A
  * problem passed on is said again at one of these, never at `number`:
