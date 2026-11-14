@@ -207,17 +207,30 @@ const ownedAsks = (db: DbShape): Envelope[] => {
  */
 const taken = (envelope: Envelope): ParkedAsk => ParkedAskShape.parse(envelope);
 
+/** A session process's ask as it arrives, before the hub stamps its `presentation`: that field is the hub's to write. */
+const ArrivingAskShape = ParkedAskShape.extend({
+  payload: ParkedAskShape.shape.payload.omit({ presentation: true }),
+});
+
+/**
+ * The fields a session process's ask is unreadable by, as dotted paths
+ * (`payload.toolName`); none when `remember` can take it. Reads the ask
+ * untouched, so an unreadable one is never stamped, parked or broadcast.
+ */
+export const unreadFields = (envelope: Envelope): string[] | undefined => {
+  const read = ArrivingAskShape.safeParse(envelope);
+  return read.success
+    ? undefined
+    : [...new Set(read.error.issues.map((issue) => issue.path.join(".")))];
+};
+
 const make = (db: DbShape): PendingShape => {
   const parked = db.parkedAsks;
-  // A machine's envelope, taken into CawCo's type as it is kept: what the
-  // machine stamped beside its declared keys is left out (core
-  // stored-json.ts `received`).
-  const kept = parked;
   // What the hub held parked when it last stopped, by request id. The asks
   // the hub owns join it as the presenter stamps them (`presentWith`): an ask
   // is a `ParkedAsk` once it says what it asks.
   const requests = new Map<string, ParkedAsk>(
-    kept
+    parked
       .list()
       .flatMap((envelope) =>
         envelope.requestId ? [[envelope.requestId, envelope] as const] : []
@@ -234,7 +247,7 @@ const make = (db: DbShape): PendingShape => {
       return false;
     }
     requests.delete(requestId);
-    kept.drop(requestId);
+    parked.drop(requestId);
     settledIds.add(requestId);
     settled?.(envelope, outcome ?? "answered", said);
     return true;
@@ -285,9 +298,9 @@ const make = (db: DbShape): PendingShape => {
       // A process's prompt the hub now owns (asks.ts `keep`) is read back
       // from its row, no longer from the process's kept copy.
       if (outlivesHub) {
-        kept.save(requestId, ask);
+        parked.save(requestId, ask);
       } else {
-        kept.drop(requestId);
+        parked.drop(requestId);
       }
       return true;
     },
@@ -301,7 +314,7 @@ const make = (db: DbShape): PendingShape => {
       // biome-ignore lint/performance/noDelete: the payload is broadcast verbatim, so the field must be absent, not present-but-undefined.
       delete payload.routedTo;
       if (payload.askId === undefined) {
-        kept.save(requestId, envelope);
+        parked.save(requestId, envelope);
       } else {
         db.asks.unroute(requestId);
       }

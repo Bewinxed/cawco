@@ -6,10 +6,11 @@ import { detach } from "@cawco/core/detach";
 import type { Envelope } from "@cawco/core/protocol";
 import { asLastErrorKind } from "@cawco/core/relaunch";
 import { PROVIDER_RETRY } from "@cawco/core/session-messages";
+import { unreadAskWords } from "@cawco/core/words/ask-lines";
 import { briefingsObserve } from "../briefings";
 import type { HubContext } from "../hub-context";
 import { peek } from "../payload-peeks";
-import { outlivesSession } from "../pending";
+import { outlivesSession, unreadFields } from "../pending";
 import { type FrameAnswer, type FrameRun, onSessionFrame } from "./frame-run";
 import { runTurnEnded } from "./turn-ended";
 import { type TurnEndedContext, turnEndedStepsOf } from "./turn-ended-steps";
@@ -107,6 +108,20 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     const { message, agentFrame } = run;
     const { kind, body } = agentFrame;
     if (message.requestId && kind === "permission_request") {
+      // An ask the hub cannot read is told back to its session before
+      // anything is stamped, parked, pushed or broadcast: the process
+      // that sent it would otherwise wait on a prompt no screen shows.
+      const unread = unreadFields(message);
+      if (unread) {
+        console.warn(
+          `[hub] ask unreadable session=${message.instanceId ?? "none"} request=${message.requestId} fields=${unread.join(",")}`
+        );
+        detach(
+          ctx.withdrawUnshown(message, unreadAskWords(unread)),
+          "ask withdrawal"
+        );
+        return "stop";
+      }
       const [owner] = ctx.db.getInstancesByIds([message.instanceId ?? ""]);
       // An ask from a process this hub holds no live row for, or from
       // an earlier launch of the row, is cancelled at admission

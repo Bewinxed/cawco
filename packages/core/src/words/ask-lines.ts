@@ -8,6 +8,10 @@ import { clockWords, dayWords } from "./account-lines";
 export const unshownAskMessage = (question: boolean, why: string): string =>
   `${question ? QUESTION_UNSHOWN : "This permission request couldn't be shown"} (${why}).`;
 
+/** Why the hub could not show an ask whose fields it could not read, said to the session that sent it; `fields` are dotted paths. */
+export const unreadAskWords = (fields: readonly string[]): string =>
+  `the hub could not read the ask: ${fields.join(", ") || "its whole body"} ${fields.length > 1 ? "are" : "is"} missing or of the wrong kind`;
+
 /** What an approve ask's call answers at once, in one paragraph. */
 export const askRecordedWords = (ask: { id: string; link: string }): string =>
   `Recorded as ${ask.link}: it waits on the person. Carry on with work that doesn't depend on it; the answer arrives as a message that names it. Don't ask it again, and don't do it another way. With nothing else to do, end your turn: the answer wakes you.`;
