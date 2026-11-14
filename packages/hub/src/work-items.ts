@@ -122,6 +122,7 @@ import {
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { ElysiaStatus, problem } from "elysia";
+import type { HandedReceiver } from "./artifacts/shapes";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
 import type {
@@ -449,6 +450,31 @@ const NO_INPUTS: Inputs = {
   machineId: "",
   files: [],
   held: [],
+};
+
+/**
+ * The hub's own `files` with their bytes, each made for `receiver` that is
+ * made for its reader alone (a preview's pass); or the first one's problem
+ * that could not be made for it, before anything is written.
+ */
+const heldFor = async (files: HandedFile[], receiver: HandedReceiver) => {
+  const made = await Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      bytes:
+        typeof file.bytes === "function"
+          ? await file.bytes(receiver)
+          : file.bytes,
+    }))
+  );
+  const held: { bytes: HandedBytes; name: string; size: number }[] = [];
+  for (const { name, bytes } of made) {
+    if (bytes instanceof ElysiaStatus) {
+      return bytes;
+    }
+    held.push({ name, bytes, size: handedSize(bytes) });
+  }
+  return held;
 };
 
 /** A sentence's closing stops and space, which an inputs line ends once. */
@@ -3631,7 +3657,9 @@ export const createWorkItems = ({
    * first byte is written. A set that fails partway is taken out again
    * (core `CONTROL_INPUTS_CLEAR`) and the failure said, so nothing of it is
    * taken for delivered ({@link sendInputs}). Answers the folder as the
-   * machine named it, none when there was nothing to hand.
+   * machine named it, none when there was nothing to hand; or, before
+   * anything is written, the problem of a file it could not make for
+   * `receiver` (a preview its browser opens nothing of).
    */
   const handInto = async (
     machineId: string,
@@ -3654,15 +3682,10 @@ export const createWorkItems = ({
         detail: inputsLine(older),
       });
     }
-    const held = await Promise.all(
-      inputs.held.map(async (file) => {
-        const bytes =
-          typeof file.bytes === "function"
-            ? await file.bytes({ session: receiver, machineId })
-            : file.bytes;
-        return { name: file.name, bytes, size: handedSize(bytes) };
-      })
-    );
+    const held = await heldFor(inputs.held, { session: receiver, machineId });
+    if (held instanceof ElysiaStatus) {
+      return held;
+    }
     const needed = [...held, ...inputs.admitted].reduce(
       (sum, file) => sum + file.size,
       0

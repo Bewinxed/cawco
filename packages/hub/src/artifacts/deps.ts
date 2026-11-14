@@ -36,6 +36,7 @@ import type {
   Browsed,
   CanvasScreen,
   DesignAsk,
+  HandedReceiver,
   MarksDelivery,
   MarksOutcome,
   PageFrom,
@@ -71,6 +72,23 @@ type OriginRefused =
   | Exclude<ReturnType<PreviewListeners["address"]>, { port: number }>
   | Exclude<ReturnType<PreviewListeners["embed"]>, { port: number }>;
 
+/** Why session `instance`'s own browser opens no artifact (preview-browse.ts `browseAt`): its origin refused, or no pass named. */
+export type BrowseProblem =
+  | OriginRefused
+  | ReturnType<typeof problem<503, { code: "browse-unnamed"; detail: string }>>;
+
+/**
+ * One file of an artifact handed to another session (hub handed-inputs.ts):
+ * its bytes, or, for a preview's pass, the bytes made for the session it is
+ * handed to once that session stands, in the workspace it reads them in, or
+ * why that session's browser opens nothing ({@link ArtifactServiceDeps.browse}).
+ */
+export interface HandedArtifactFile {
+  bytes:
+    Buffer | ((receiver: HandedReceiver) => Promise<Buffer | BrowseProblem>);
+  name: string;
+}
+
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
   acknowledged: () => readonly string[];
@@ -102,15 +120,7 @@ export interface ArtifactServiceDeps {
    * may read (`artifact_browse`, preview-browse.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
-  browse: (
-    instance: InstanceRow,
-    row: ArtifactRow
-  ) =>
-    | Browsed
-    | OriginRefused
-    | ReturnType<
-        typeof problem<503, { code: "browse-unnamed"; detail: string }>
-      >;
+  browse: (instance: InstanceRow, row: ArtifactRow) => Browsed | BrowseProblem;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
   /**
