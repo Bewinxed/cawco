@@ -165,17 +165,11 @@ export class SlashMenu {
       kind: command.type,
       source: command.source,
     }));
-    return (
-      rows
-        .filter(
-          (row) =>
-            !needle ||
-            row.id.toLowerCase().includes(needle) ||
-            row.label.toLowerCase().includes(needle)
-        )
-        // Grouped and scrollable, so the cap only guards a pathological list; a
-        // real session's commands all fit inside it and read under their source.
-        .slice(0, 100)
+    return rows.filter(
+      (row) =>
+        !needle ||
+        row.id.toLowerCase().includes(needle) ||
+        row.label.toLowerCase().includes(needle)
     );
   });
   /**

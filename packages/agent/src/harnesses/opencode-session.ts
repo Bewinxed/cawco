@@ -2680,29 +2680,42 @@ export class OpencodeSession implements HarnessSession {
    * has just sent and the server has not delivered yet is left to its events.
    */
   async #endMissedTurn(revision: number): Promise<void> {
-    const read = await askOpencode(
-      (options) =>
-        this.#client.message.list(
-          { sessionID: this.#opencodeSessionId(), order: "desc", limit: 100 },
-          options
-        ),
-      this.#lifetime.signal
-    );
-    let listed: (typeof read & { kind: "answered" })["value"];
-    switch (read.kind) {
-      case "answered":
-        listed = read.value;
-        break;
-      case "unanswered":
-        // The turn stays as it is; the caller says why.
-        throw new Error(notAnswered("the session's last messages", read));
-      default:
-        unhandled("read", read);
-    }
+    // Newest first, a page at a time, until the newest `user` message is read
+    // or the list ends: each step of a turn is a message, so a long turn's
+    // prompt lies past any one page.
+    const newestFirst: SessionMessageInfo[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = cursor;
+      const read = await askOpencode(
+        (options) =>
+          this.#client.message.list(
+            {
+              sessionID: this.#opencodeSessionId(),
+              order: "desc",
+              limit: 100,
+              ...(page ? { cursor: page } : {}),
+            },
+            options
+          ),
+        this.#lifetime.signal
+      );
+      switch (read.kind) {
+        case "answered":
+          newestFirst.push(...read.value.data);
+          cursor = read.value.cursor.next ?? undefined;
+          break;
+        case "unanswered":
+          // The turn stays as it is; the caller says why.
+          throw new Error(notAnswered("the session's last messages", read));
+        default:
+          unhandled("read", read);
+      }
+    } while (cursor && !newestFirst.some((row) => row.type === "user"));
     if (!this.#snapshotCurrent(revision)) {
       return;
     }
-    const rows = [...listed.data].reverse();
+    const rows = newestFirst.reverse();
     const asked = rows.findLastIndex((row) => row.type === "user");
     const prompt = rows[asked];
     if (

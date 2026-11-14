@@ -5,10 +5,12 @@ import {
   eq,
   exists,
   getTableColumns,
+  gte,
   inArray,
   isNotNull,
   isNull,
   notExists,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -111,6 +113,15 @@ export interface IngressDb {
     projectId: string,
     connection: string | null
   ) => void;
+  /**
+   * A project's events received since `since` (ms) that no route in
+   * `routeIds` took, counted by source and kind in one query, most first.
+   */
+  readonly unroutedCounts: (
+    projectId: string,
+    since: number,
+    routeIds: readonly string[]
+  ) => { source: string; kind: string; count: number }[];
   /** `seenAt: null` drops what it saw with it: its next call only looks. */
   readonly updateConnectorPoll: (
     id: string,
@@ -243,6 +254,29 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         .orderBy(desc(inboundEvents.receivedAt))
         .limit(limit)
         .offset(skip)
+        .all(),
+    unroutedCounts: (projectId, since, routeIds) =>
+      db
+        .select({
+          source: inboundEvents.source,
+          kind: inboundEvents.kind,
+          count: sql<number>`count(*)`,
+        })
+        .from(inboundEvents)
+        .where(
+          and(
+            eq(inboundEvents.projectId, projectId),
+            gte(inboundEvents.receivedAt, new Date(since)),
+            routeIds.length > 0
+              ? or(
+                  isNull(inboundEvents.routedTo),
+                  notInArray(inboundEvents.routedTo, [...routeIds])
+                )
+              : undefined
+          )
+        )
+        .groupBy(inboundEvents.source, inboundEvents.kind)
+        .orderBy(desc(sql`count(*)`))
         .all(),
     eventCount: (projectId) =>
       db

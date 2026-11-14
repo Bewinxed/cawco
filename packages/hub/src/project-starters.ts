@@ -85,8 +85,6 @@ const QUIET_MS = STARTERS_QUIET_MS;
 const GAP_MS = STARTERS_GAP_MS;
 /** The latest commits of the landed branch Jev reads (landed.ts). */
 const COMMITS_READ = 5;
-/** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */
-const UNROUTED_READ = 200;
 
 /** What asks for a project's starters, as its set and its log line name it. */
 export type StartersTrigger =
@@ -198,32 +196,8 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     now: number
   ): StarterInputs["unrouted"] => {
     const since = now - STARTER_RECENT_DAYS * DAY_MS;
-    const routineIds = new Set(
-      db.routines.list(projectId).map((routine) => routine.id)
-    );
-    const counts = new Map<
-      string,
-      { kind: string; source: string; n: number }
-    >();
-    for (const event of db.ingress.events(projectId, UNROUTED_READ)) {
-      if (
-        event.receivedAt.getTime() < since ||
-        (event.routedTo !== null && routineIds.has(event.routedTo))
-      ) {
-        continue;
-      }
-      const key = `${event.source} ${event.kind}`;
-      const held = counts.get(key) ?? {
-        source: event.source,
-        kind: event.kind,
-        n: 0,
-      };
-      held.n += 1;
-      counts.set(key, held);
-    }
-    return [...counts.values()]
-      .sort((a, b) => b.n - a.n)
-      .map(({ source, kind, n }) => ({ source, kind, count: n }));
+    const routineIds = db.routines.list(projectId).map((routine) => routine.id);
+    return db.ingress.unroutedCounts(projectId, since, routineIds);
   };
 
   /** The folder's, the tasks' and the checkouts' reads {@link gather} takes; the first refused read's refusal. */

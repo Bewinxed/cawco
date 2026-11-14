@@ -97,7 +97,7 @@ const canvasFields = {
       { maxItems: CANVAS_SPEC_LIMITS.edges }
     )
   ),
-  group: t.Optional(t.Record(storyRef, storyRef, { maxProperties: 200 })),
+  group: t.Optional(t.Record(storyRef, storyRef)),
   dials: t.Optional(
     t.Array(
       t.Object({

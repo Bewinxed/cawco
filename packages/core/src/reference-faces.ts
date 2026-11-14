@@ -33,12 +33,8 @@ export const REFERENCE_FACES = "cawco:reference-faces";
 /** The page's ask to open one. */
 export const OPEN_REFERENCE_ASK = "cawco/open-reference";
 
-/** The most references one page's words are drawn with. Our call: a long page names a few dozen. */
-const REFERENCES_MOST = 200;
 /** The longest destination a reference is followed by. Our call: an id is short. */
 const REFERENCE_HREF_MOST = 400;
-/** The longest words a face carries. Our call: a task's title, a step's text. */
-const WORDS_MOST = 2000;
 
 /** A reference's mark before its words. */
 export type ReferenceMark =
@@ -63,15 +59,12 @@ export interface ReferenceFace {
   words: string | null;
 }
 
-/** A string of at most `most` characters, or null; undefined when it is neither. */
-const wordsOf = (
-  value: unknown,
-  most = WORDS_MOST
-): string | null | undefined => {
+/** A string, or null; undefined when it is neither. */
+const wordsOf = (value: unknown): string | null | undefined => {
   if (value === null) {
     return null;
   }
-  return typeof value === "string" && value.length <= most ? value : undefined;
+  return typeof value === "string" ? value : undefined;
 };
 
 const isArtifactKind = (value: unknown): value is ArtifactKind =>
@@ -106,7 +99,7 @@ function faceOf(value: unknown): ReferenceFace | null {
   }
   const raw = value as Record<string, unknown>;
   const words = wordsOf(raw.words);
-  const state = wordsOf(raw.state, 200);
+  const state = wordsOf(raw.state);
   const title = wordsOf(raw.title);
   const mark = markOf(raw.mark);
   return words === undefined ||
@@ -131,7 +124,7 @@ export function referenceFacesOf(
     return {};
   }
   const faces: Record<string, ReferenceFace | null> = {};
-  for (const [href, face] of Object.entries(value).slice(0, REFERENCES_MOST)) {
+  for (const [href, face] of Object.entries(value)) {
     if (!isReferenceHref(href)) {
       continue;
     }
@@ -183,16 +176,13 @@ export function referenceRuns(text: string): ReferenceRun[] {
   return runs;
 }
 
-/** The references `words` name, each once, in the order first written, at most {@link REFERENCES_MOST}. */
+/** The references `words` name, each once, in the order first written. */
 export function programReferences(words: Iterable<string>): string[] {
   const found = new Set<string>();
   for (const text of words) {
     for (const run of referenceRuns(text)) {
       if ("href" in run) {
         found.add(run.href);
-        if (found.size >= REFERENCES_MOST) {
-          return [...found];
-        }
       }
     }
   }
@@ -207,8 +197,6 @@ export interface PageLinks {
   references: string[];
 }
 
-/** The most artifacts one page's pieces show. Our call: a page shows a few dozen. */
-const ARTIFACTS_MOST = 200;
 /** The longest artifact id taken. Our call: an id is a UUID. */
 const ARTIFACT_ID_MOST = 100;
 
@@ -220,10 +208,7 @@ export function pageLinksOf(value: unknown): PageLinks {
   };
   return {
     references: Array.isArray(raw.references)
-      ? [...new Set(raw.references.filter(isReferenceHref))].slice(
-          0,
-          REFERENCES_MOST
-        )
+      ? [...new Set(raw.references.filter(isReferenceHref))]
       : [],
     artifacts: Array.isArray(raw.artifacts)
       ? [
@@ -235,7 +220,7 @@ export function pageLinksOf(value: unknown): PageLinks {
                 one.length <= ARTIFACT_ID_MOST
             )
           ),
-        ].slice(0, ARTIFACTS_MOST)
+        ]
       : [],
   };
 }

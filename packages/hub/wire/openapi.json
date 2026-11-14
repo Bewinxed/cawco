@@ -12301,8 +12301,7 @@
                         "maxLength": 1100,
                         "type": "string"
                       }
-                    },
-                    "maxProperties": 200
+                    }
                   },
                   "html": {
                     "minLength": 1,
