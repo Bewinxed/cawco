@@ -5840,27 +5840,31 @@ export const createWorkItems = ({
      * already under way, a retired one cut again ({@link withClone}), and
      * from then on held (workspaces.ts `holdsOf`) until the answered release, called
      * once the continuation's job is filed (its record holds it from there)
-     * or has failed to be. Throws why there is no clone.
+     * or has failed to be. Why there is no clone is the hub's own 409
+     * `continuation-unplaced`: no workspace, an archived one that is not cut
+     * again, or a clone gone from its machine.
      */
-    async continuable(itemId: string): Promise<() => void> {
+    async continuable(itemId: string) {
+      const unplaced = (detail: string) =>
+        problem(409, { code: "continuation-unplaced", detail });
       const item = db.workItem(itemId);
       if (!item) {
-        throw new Error(`work item ${itemId} has no workspace`);
+        return unplaced(`work item ${itemId} has no workspace`);
       }
       const { workspaceId } = item;
       return await workspaces.inWorkspaceTurn(workspaceId, async () => {
         const [workspace] = db.workspacesNamed(workspaceId);
         if (!workspace) {
-          throw new Error(`work item ${itemId} has no workspace`);
+          return unplaced(`work item ${itemId} has no workspace`);
         }
         if (
           workspace.state === "archived" &&
           !workspaces.recuttable(workspace)
         ) {
-          throw new Error(workspaces.archivedWords(workspace));
+          return unplaced(workspaces.archivedWords(workspace));
         }
         if (!(await withClone(workspace))) {
-          throw new Error(
+          return unplaced(
             `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(db, workspace.machineId)}`
           );
         }

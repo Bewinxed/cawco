@@ -369,8 +369,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            `${ctx.machineName(where.machineId)} could not say when session ${where.sessionId} started: ${answer.value.error ?? "it gave no reason"}`
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail: `${ctx.machineName(where.machineId)} could not say when session ${where.sessionId} started: ${answer.value.error ?? "it gave no reason"}`,
+            })
           );
         }
         break;
@@ -380,8 +383,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     const created = (answer.value.result as NeutralSessionInfo | null)
       ?.createdAt;
     if (!created) {
-      throw new Error(
-        `${where.harness} does not report when session ${where.sessionId} started`
+      throw new MachineProblem(
+        problem(502, {
+          code: "machine-call-failed",
+          detail: `${where.harness} does not report when session ${where.sessionId} started`,
+        })
       );
     }
     return new Date(created).toISOString();
@@ -407,8 +413,11 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            `${ctx.machineName(where.machineId)} could not read git in ${where.cwd}: ${answer.value.error ?? "it gave no reason"}`
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail: `${ctx.machineName(where.machineId)} could not read git in ${where.cwd}: ${answer.value.error ?? "it gave no reason"}`,
+            })
           );
         }
         return answer.value.result as GitChanges;

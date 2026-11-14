@@ -7,6 +7,7 @@ import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { NamedSpawn } from "@cawco/core/protocol";
+import type { problem } from "elysia";
 import type { DbShape } from "./db";
 import { awayProblem, MachineProblem } from "./machine-answers";
 import type { HubSocket } from "./wire-socket";
@@ -27,6 +28,23 @@ export class MachineAway extends MachineProblem {
     this.machineId = machineId;
   }
 }
+
+/** A continuation's source with nothing to continue from: no such session (404), or no transcript yet (409) (continuations.ts `prepareContinuation`). */
+export type ContinuationUnfound =
+  | ReturnType<
+      typeof problem<404, { code: "continuation-no-session"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "continuation-no-transcript"; detail: string }
+      >
+    >;
+
+/** A work item's continuation with no clone to go on in (work-items.ts `continuable`). */
+export type ContinuationUnplaced = ReturnType<
+  typeof problem<409, { code: "continuation-unplaced"; detail: string }>
+>;
 
 /**
  * Where a conversation lives, resolved from its id alone. `sessionId` is the

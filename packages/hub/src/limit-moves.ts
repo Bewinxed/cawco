@@ -24,6 +24,7 @@ import {
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { relaunchWords } from "@cawco/core/words/relaunch";
+import { ElysiaStatus } from "elysia";
 import { machineAccount } from "./accounts";
 import { pricedTokens, projectedMove, usdWords } from "./admission";
 import { accountsRead } from "./at-limit";
@@ -1381,8 +1382,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     };
     let release: () => void = () => undefined;
     try {
-      release = await ctx.cloneForContinuation(row.id);
+      const held = await ctx.cloneForContinuation(row.id);
+      if (held instanceof ElysiaStatus) {
+        return held.response.detail;
+      }
+      release = held;
       const prepared = await ctx.prepareContinuation(row.id);
+      if (prepared instanceof ElysiaStatus) {
+        return prepared.response.detail;
+      }
       const request: ContinueRequest = {
         summarizer: summarizerOf(row),
         target: {

@@ -45,10 +45,14 @@ import type {
   PreparedContinuation,
 } from "./db/stored-types";
 import type { createForgePosts } from "./forge-posts";
-import type { ContinueOutcome } from "./hub-shapes";
+import type {
+  ContinuationUnfound,
+  ContinuationUnplaced,
+  ContinueOutcome,
+} from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import type { ControlResult, Unanswered } from "./machine-answers";
-import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
+import { awayProblem, silentProblem } from "./machine-answers";
 import { machineOut } from "./machine-out";
 import type { MachinePause, PauseCaller } from "./machine-pause";
 import type { createOpenItems } from "./open-items";
@@ -72,7 +76,9 @@ export interface SessionCallsDeps {
     harness?: HarnessKind,
     instanceId?: string
   ) => Promise<Bounded<ControlResult>>;
-  readonly cloneForContinuation: (sourceId: string) => Promise<() => void>;
+  readonly cloneForContinuation: (
+    sourceId: string
+  ) => Promise<(() => void) | ContinuationUnplaced>;
   /** The session's workspace's own state, and Jev's word on a cold session that holds nothing unlanded. */
   readonly coldReading: (
     row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
@@ -109,7 +115,7 @@ export interface SessionCallsDeps {
     sourceId: string,
     note?: string | undefined,
     asksOnly?: boolean
-  ) => Promise<PreparedContinuation>;
+  ) => Promise<PreparedContinuation | ContinuationUnfound>;
   readonly projectTypes: ProjectDelegateTypes;
   readonly publishInstances: (machineId: string) => void;
   readonly reportedContextOf: (
@@ -139,10 +145,6 @@ export interface FollowupAsk {
 
 /** What a continue asks for, as its route takes it. */
 export type ContinueAsk = Static<typeof continueBody>;
-
-/** A thrown value in its own words. */
-const thrownWords = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 /** The delegate types a session lists. */
 const delegateTypesCalls = ({
@@ -277,55 +279,57 @@ export const continuationCalls = ({
    * models is checked before anything starts (a plain 409); then the hub
    * starts the job and answers with its ids at once. The job's stages reach
    * every dashboard on the `instances` frames (`continuations`); nothing about
-   * the request that started it can stop it, only its Cancel. A machine
-   * that is away, silent or failing is answered as its `MachineProblem`.
+   * the request that started it can stop it, only its Cancel. A source with
+   * nothing to continue from, or no clone to go on in, is the hub's own 4xx;
+   * a machine that is away, silent or failing is thrown as its
+   * `MachineProblem`, which Elysia answers, and any other throw is the hub's
+   * own failure, Elysia's 500.
    */
   continueFrom: async (sourceId: string, body: ContinueAsk) => {
     const { askedBy, ...request } = body;
     const asker: ContinuationAsker = askedBy
       ? { kind: "session", id: askedBy }
       : { kind: "person" };
-    let prepared: PreparedContinuation;
-    let why: string | undefined;
-    let release: () => void = () => undefined;
+    const release = await cloneForContinuation(sourceId);
+    if (release instanceof ElysiaStatus) {
+      return release;
+    }
+    // The clone is let go however this ends: a filed job's record holds the
+    // source's workspace from then on (workspaces.ts `holdsOf`), and what
+    // is thrown (a machine's cause, the hub's own failure) goes on to Elysia.
     try {
-      release = await cloneForContinuation(sourceId);
-      prepared = await prepareContinuation(sourceId, body.note, body.asksOnly);
-      why = await continuationRefusal(prepared, request, asker);
-    } catch (error) {
-      release();
-      if (error instanceof MachineProblem) {
-        return error.value();
+      const prepared = await prepareContinuation(
+        sourceId,
+        body.note,
+        body.asksOnly
+      );
+      if (prepared instanceof ElysiaStatus) {
+        return prepared;
       }
-      return problem(422, {
-        code: "thrown-words",
-        detail: thrownWords(error),
-      });
-    }
-    if (why) {
+      const why = await continuationRefusal(prepared, request, asker);
+      if (why) {
+        return problem(409, { code: "continuation-refused", detail: why });
+      }
+      // What the source's process holds that ending it would lose: the
+      // job waits for it, and the caller hears so at once.
+      const inFlight = await inFlightFor(sourceId);
+      if ("refusal" in inFlight) {
+        return problem(422, {
+          code: "work-in-flight",
+          detail: inFlight.refusal,
+        });
+      }
+      const row = startContinuation(prepared, request, asker, inFlight.work);
+      const job = continuationJob(row);
+      return {
+        continuationId: row.id,
+        targetInstanceId: row.targetInstanceId,
+        summariserInstanceId: row.summariserInstanceId,
+        ...(job.waiting ? { waiting: job.waiting } : {}),
+      };
+    } finally {
       release();
-      return problem(409, { code: "continuation-refused", detail: why });
     }
-    // What the source's process holds that ending it would lose: the
-    // job waits for it, and the caller hears so at once.
-    const inFlight = await inFlightFor(sourceId);
-    if ("refusal" in inFlight) {
-      release();
-      return problem(422, {
-        code: "work-in-flight",
-        detail: inFlight.refusal,
-      });
-    }
-    const row = startContinuation(prepared, request, asker, inFlight.work);
-    // Its record holds the source's workspace from here (workspaces.ts `holdsOf`).
-    release();
-    const job = continuationJob(row);
-    return {
-      continuationId: row.id,
-      targetInstanceId: row.targetInstanceId,
-      summariserInstanceId: row.summariserInstanceId,
-      ...(job.waiting ? { waiting: job.waiting } : {}),
-    };
   },
 });
 

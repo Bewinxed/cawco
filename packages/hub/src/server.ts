@@ -9405,20 +9405,25 @@ export const createServer = (
    * turn. Our own call: the summary is written on the source's harness at
    * its default model, and the new session runs on the source's harness and
    * model, in its mode. Answers the new session's id and how the job ends
-   * (nothing once it started, else why not); throws why it could not begin.
+   * (nothing once it started, else why not); the hub's problem when its
+   * source has no clone or nothing to continue from; throws why else it
+   * could not begin.
    */
   const continueAttempt = async (
     row: InstanceRow,
     taskId: string,
     comment: string
-  ): Promise<{
-    ended: Promise<string | undefined>;
-    targetInstanceId: string;
-  }> => {
+  ) => {
     const release = await cloneForContinuation(row.id);
+    if (release instanceof ElysiaStatus) {
+      return release;
+    }
     let job: ContinuationRow;
     try {
       const prepared = await prepareContinuation(row.id, comment);
+      if (prepared instanceof ElysiaStatus) {
+        return prepared;
+      }
       const { harness } = prepared.source;
       const request: ContinueRequest = {
         summarizer: summarizerOf(row),
@@ -9437,7 +9442,10 @@ export const createServer = (
     } finally {
       release();
     }
-    return {
+    const begun: {
+      ended: Promise<string | undefined>;
+      targetInstanceId: string;
+    } = {
       targetInstanceId: job.targetInstanceId,
       ended: settledContinuation(job.id).then((settled) => {
         if (settled?.stage === "started") {
@@ -9448,6 +9456,7 @@ export const createServer = (
           : (settled?.error ?? "the continuation failed");
       }),
     };
+    return begun;
   };
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
   // as a task is filed; Attach or spawn as you comment on a task (a live

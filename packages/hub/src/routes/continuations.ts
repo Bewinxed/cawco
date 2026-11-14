@@ -1,14 +1,9 @@
-import { Elysia, problem, t, ValidationError } from "elysia";
+import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
 import type { HubContext } from "../hub-context";
-import { MachineProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { continuationCalls } from "../session-calls";
 import { firstValidationIssue } from "../validation-issue";
 import { continueBody } from "./session-bodies";
-
-/** A thrown value in its own words. */
-const thrownWords = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 export const continuationRoutes = (
   ctx: Pick<
@@ -44,30 +39,25 @@ export const continuationRoutes = (
             asks: t.Optional(t.Boolean()),
           }),
         },
+        // A machine's cause is thrown as its MachineProblem, and anything
+        // else thrown is the hub's own failure: Elysia answers both.
         async ({ params, query }) => {
-          try {
-            const prepared = await prepareContinuation(
-              params.id,
-              query.note,
-              query.asks === true
-            );
-            return {
-              asks: prepared.extracted.asks.length,
-              liveContextTokens: prepared.liveContextTokens,
-              summariseInputTokens: prepared.summariseInputTokens,
-              openingTokens: prepared.openingTokens,
-              compacted: prepared.compacted,
-              entries: prepared.entries,
-            };
-          } catch (error) {
-            if (error instanceof MachineProblem) {
-              return error.value();
-            }
-            return problem(422, {
-              code: "thrown-words",
-              detail: thrownWords(error),
-            });
+          const prepared = await prepareContinuation(
+            params.id,
+            query.note,
+            query.asks === true
+          );
+          if (prepared instanceof ElysiaStatus) {
+            return prepared;
           }
+          return {
+            asks: prepared.extracted.asks.length,
+            liveContextTokens: prepared.liveContextTokens,
+            summariseInputTokens: prepared.summariseInputTokens,
+            openingTokens: prepared.openingTokens,
+            compacted: prepared.compacted,
+            entries: prepared.entries,
+          };
         }
       )
       // Continue in new session. The fit of both models is checked before
