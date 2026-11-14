@@ -138,7 +138,7 @@ import type {
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import type { TellProblem } from "./caw-problems";
+import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -159,7 +159,7 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
-import type { AnyProblem, ProblemStatus } from "./refusal";
+import type { Memory } from "./memory";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
@@ -198,15 +198,10 @@ export interface DispatchDeps {
   ) => ReturnType<WorkItems["briefing"]>;
   /**
    * The brief's project context for an attempt at `task` (memory.ts
-   * `contextFor`): AGENTS.md and the knowledge files it needs, or "". Typed
-   * here, not from memory.ts, whose import would close a cycle back to
-   * this file (memory → presenters/project → ingress → dispatch); the
+   * `contextFor`): AGENTS.md and the knowledge files it needs, or "". The
    * folder's problem is passed up.
    */
-  readonly context: (
-    projectId: string,
-    task: TaskView
-  ) => Promise<string | AnyProblem>;
+  readonly context: Memory["contextFor"];
   /**
    * The project's conversation, started now if it has none (caw.ts
    * `conversationFor`): for your ask on or off, for the dispatcher's own
@@ -216,7 +211,7 @@ export interface DispatchDeps {
   readonly conversationFor: (
     projectId: string,
     by: Origin
-  ) => Promise<InstanceRow | TellProblem | undefined>;
+  ) => ReturnType<Caw["conversationFor"]>;
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -1243,15 +1238,8 @@ export const createDispatcher = ({
         )
       : [];
     const known = await context(project.id, task);
-    // Said again across the import cycle the context is read through (memory.ts).
     if (typeof known !== "string") {
-      return problem<ProblemStatus, { code: string; detail: string }>(
-        known.status,
-        {
-          code: known.response.code,
-          detail: known.response.detail,
-        }
-      );
+      return known;
     }
     return (design: string) =>
       briefOf({

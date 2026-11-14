@@ -15,7 +15,7 @@ import {
   CancelledNotificationSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ElysiaStatus, problem } from "elysia";
+import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ACTION_DEFINITIONS, ACTION_TOOLS, type Actions } from "./actions";
 import type { AdminCalls } from "./admin-calls";
@@ -79,7 +79,7 @@ import {
   type ProjectSettings,
   projectSettingsListed,
 } from "./project-settings";
-import type { AnyProblem, ProblemStatus } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { RELAY_DEFINITIONS, RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -840,17 +840,8 @@ export function createDelegationMcp(options: {
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
         startAttempt: attemptCut(options.startAttempt, started),
-        // Said again across the import cycle task-tools.ts is in.
         artifactNamed: options.artifactNamed
-          ? (asked) => {
-              const named = options.artifactNamed?.(actor.id, asked) ?? asked;
-              return named instanceof ElysiaStatus
-                ? problem<ProblemStatus, { code: string; detail: string }>(
-                    named.status,
-                    { code: named.response.code, detail: named.response.detail }
-                  )
-                : named;
-            }
+          ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
           : undefined,
         retryAttempt: attemptCut(options.retryAttempt, started),
         tasks: options.tasks,

@@ -21,18 +21,16 @@ import {
   type ResultArtifactKind,
 } from "@cawco/core/deliverables";
 import { LANDS_MODES } from "@cawco/core/injected";
-import {
-  PLAN_STEP_PRIORITIES,
-  PLAN_STEP_STATUSES,
-  type SessionPlan,
-} from "@cawco/core/plan";
+import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
-import type { AttemptStart } from "@cawco/core/task-views";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
+import type { Artifacts } from "./artifacts/service";
 import { BUILD_TITLE, type DesignOffers } from "./design-offers";
+import type { Dispatcher } from "./dispatch";
 import type { JevTasks } from "./jev-tasks";
 import { tool } from "./mcp-tool";
+import type { PlanChanges } from "./plan-changes";
 import type { WrittenStep } from "./plans";
 import {
   attemptStartWords,
@@ -47,7 +45,6 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
-import type { AnyProblem, ProblemStatus } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import { TASK_TOOL_NAMES } from "./task-tool-names";
@@ -56,22 +53,18 @@ import { sessionActor, type Tasks, type TaskView } from "./tasks";
 export type TaskTool = (typeof TASK_TOOL_NAMES)[number];
 export const TASK_TOOLS: ReadonlySet<string> = new Set(TASK_TOOL_NAMES);
 
+/** `named` of the artifacts, asked for the calling session. */
+type SessionArtifactNamed = (asked: string) => ReturnType<Artifacts["named"]>;
+
 export interface TaskToolContext {
   actor: InstanceRow;
   /** It changes tasks (roles.ts `changesAnyTask`): its todo_write and task_comment name any task, not only its own work item's. */
   anyTask: boolean;
   /**
    * The whole id of the artifact the actor names by its name, handle or
-   * id (artifacts/service.ts `named`), or its refusal, said again across
-   * the import cycle (this file and the artifacts' deps).
+   * id (artifacts/service.ts `named`), or its refusal.
    */
-  artifactNamed?: (
-    asked: string
-  ) =>
-    | string
-    | ReturnType<
-        typeof problem<ProblemStatus, { code: string; detail: string }>
-      >;
+  artifactNamed?: SessionArtifactNamed;
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -98,13 +91,13 @@ export interface TaskToolContext {
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart | AnyProblem>;
+  ) => ReturnType<Dispatcher["retryAttempt"]>;
   /** Starts an attempt at a task, reporting to `parent` (dispatch.ts); without it task_start refuses. */
   startAttempt?: (
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart | AnyProblem>;
+  ) => ReturnType<Dispatcher["startAttempt"]>;
   /** A plan step's wait as this session writes it, read as a task's wait is (task-waits.ts `readWait`) and kept as a file keeps it. */
   stepWait?: (written: string) => ReturnType<Tasks["keptWait"]>;
   tasks: Tasks;
@@ -115,10 +108,7 @@ export interface TaskToolContext {
    * `written`), answering what it is owed of the person's changes; without
    * it the session scope refuses.
    */
-  writePlan?: (
-    row: InstanceRow,
-    written: { steps?: WrittenStep[]; spec?: string }
-  ) => Promise<(SessionPlan & { personChanged?: string }) | AnyProblem>;
+  writePlan?: PlanChanges["written"];
 }
 
 /**
@@ -135,13 +125,7 @@ const resultArtifact = (
     name?: string;
     primary?: boolean;
   },
-  artifactNamed: (
-    asked: string
-  ) =>
-    | string
-    | ReturnType<
-        typeof problem<ProblemStatus, { code: string; detail: string }>
-      >
+  artifactNamed: SessionArtifactNamed
 ) => {
   const shown = {
     ...(written.name ? { name: written.name } : {}),
@@ -185,13 +169,7 @@ const resultArtifact = (
 /** A result's artifacts as `task_result` takes them ({@link resultArtifact}); the first refusal when one names nothing. */
 const resultArtifacts = (
   written: Parameters<typeof resultArtifact>[0][],
-  artifactNamed: (
-    asked: string
-  ) =>
-    | string
-    | ReturnType<
-        typeof problem<ProblemStatus, { code: string; detail: string }>
-      >
+  artifactNamed: SessionArtifactNamed
 ) => {
   const artifacts: ResultArtifact[] = [];
   for (const one of written) {
