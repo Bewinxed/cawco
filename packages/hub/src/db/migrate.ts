@@ -24,6 +24,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { DbCore } from "./core";
+import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
@@ -82,6 +83,14 @@ export const MIGRATION_STEPS: readonly Step[] = [
     at: "migrator",
     run: (client) => {
       dropGraphPlaces(client);
+    },
+  },
+  {
+    name: "delegate-types-hand-shape",
+    before: "0397_may_start_tables",
+    at: "migrator",
+    run: (client) => {
+      delegateTypesHandShape(client);
     },
   },
   {

@@ -2724,6 +2724,13 @@
       "when": 1794665364546,
       "tag": "0396_drop_dead_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 397,
+      "version": "6",
+      "when": 1794672715968,
+      "tag": "0397_may_start_tables",
+      "breakpoints": true
     }
   ]
 }

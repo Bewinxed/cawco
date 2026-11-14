@@ -124,6 +124,8 @@
       cwd: "/bench",
       harness: "claude",
       kind: "mainline",
+      mayStart: ["any"],
+      startingSet: null,
       launchDir: "known",
       machineId: "bench",
       sessionId: null,

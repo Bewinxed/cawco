@@ -408,6 +408,7 @@ export const createStartHolds = (
       kind: row.kind ?? undefined,
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
+      startingSet: row.startingSet,
     });
     // A relaunch is the hub's own launch: it goes in its turn.
     const sent = sendSpawn(

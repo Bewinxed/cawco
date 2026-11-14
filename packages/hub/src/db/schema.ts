@@ -1191,13 +1191,15 @@ export const instances = sqliteTable("instances", {
    */
   chosenEffort: text("chosen_effort").$type<EffortLevel>(),
   /**
-   * The delegate types the session may start (core `MayStart`): `["any"]` an
-   * orchestrator's; any other list a leaf's, the empty one what a `delegate`
-   * call means unless it or its type says otherwise. Every spawn with a
-   * parent says which; null is a session nobody delegated, and it may start
-   * any.
+   * The session may start any delegate type (core `MayStart` `["any"]`): an
+   * orchestrator. False: a leaf, which may start the types its
+   * {@link instanceMayStart} rows name and nothing else (none, with none).
+   * Written as its row opens (db/instances.ts `openInstance`): a session
+   * nobody delegated work to may start any, every other says its list.
    */
-  mayStart: storedJson(z.array(z.string()))("may_start"),
+  mayStartAny: integer("may_start_any", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /**
    * The toolset the session runs in (§5.3), written once by its first spawn:
    * a delegate type's `role` for its work item's session. Null: derived
@@ -1218,13 +1220,15 @@ export const instances = sqliteTable("instances", {
    */
   clean: integer("clean", { mode: "boolean" }).notNull().default(false),
   /**
-   * The skills and MCP servers it starts with (core `SpawnPayload.startingSet`):
-   * written by its first spawn and never after, and every spawn of the row
-   * carries it (server.ts `bounded`). Null: everything installed.
+   * It starts with every installed skill and MCP server: no starting set
+   * (core `SpawnPayload.startingSet` absent). False: it starts with the ones
+   * its {@link instanceStartingSet} rows name, CawCo's own joined (none
+   * beyond those, with none). Written by its first spawn and never after,
+   * and every spawn of the row carries it (launches.ts `rowKeeps`).
    */
-  startingSet: storedJson(
-    z.object({ skills: z.array(z.string()), servers: z.array(z.string()) })
-  )("starting_set"),
+  startsWithAll: integer("starts_with_all", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /**
    * What was last *written down* about the session — history, not liveness.
    *
@@ -1292,6 +1296,152 @@ export const mcpToolListings = sqliteTable("mcp_tool_listings", {
   toolsHash: text("tools_hash").notNull(),
   listedAt: timestamp("listed_at").notNull(),
 });
+
+/**
+ * The delegate types a leaf session may start ({@link instances.mayStartAny}
+ * false), one row each; none: it starts none.
+ */
+export const instanceMayStart = sqliteTable(
+  "instance_may_start",
+  {
+    instanceId: sessionColumn("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    delegateType: text("delegate_type").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.delegateType] })]
+);
+
+/** What a starting set names: a skill, as a session's listing names it, or an MCP server, by its fleet name (core `StartingSet`). */
+export type StartingSetKind = "skill" | "server";
+
+/**
+ * The skills and MCP servers a session starts with when it has a starting
+ * set ({@link instances.startsWithAll} false), one row each.
+ */
+export const instanceStartingSet = sqliteTable(
+  "instance_starting_set",
+  {
+    instanceId: sessionColumn("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<StartingSetKind>().notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.instanceId, table.kind, table.name] }),
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
+    check(
+      "instance_starting_set_kind",
+      sql`${sql.identifier("kind")} in ('skill', 'server')`
+    ),
+  ]
+);
+
+/**
+ * The fleet's delegate types (core `DelegateType`): the presets a
+ * `delegate` call's `type` names (db/delegate-types.ts). Its lists are the
+ * `delegate_type_*` tables, keyed by its name.
+ */
+export const delegateTypes = sqliteTable("delegate_types", {
+  name: text("name").primaryKey(),
+  description: text("description").notNull(),
+  harness: text("harness").$type<HarnessKind>().notNull(),
+  model: text("model").notNull(),
+  /** Null: its model's default. */
+  effort: text("effort").$type<EffortLevel>(),
+  /** The account its sessions prefer; null: the provider's strategy chooses. */
+  account: text("account"),
+  /**
+   * Its sessions may start any type (core `MayStart` `["any"]`). False: the
+   * types its {@link delegateTypeMayStart} rows name, none with none.
+   */
+  mayStartAny: integer("may_start_any", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * Its sessions start with every installed skill and MCP server: it has no
+   * starting set. False: the ones its {@link delegateTypeStartingSet} rows
+   * name, CawCo's own joined.
+   */
+  startsWithAll: integer("starts_with_all", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  createdAt: timestamp("created_at").notNull(),
+});
+
+/**
+ * One row, `seeded`, once the default delegate types were ever written: an
+ * emptied {@link delegateTypes} stays empty (db/delegate-types.ts).
+ */
+export const delegateTypesMeta = sqliteTable("delegate_types_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
+/** The column every list of a delegate type is keyed by: its name, its rows going with it. */
+const delegateTypeName = () =>
+  text("type_name")
+    .notNull()
+    .references(() => delegateTypes.name, { onDelete: "cascade" });
+
+/** The delegate types a type's sessions may start, one row each (core `DelegateType.mayStart`). */
+export const delegateTypeMayStart = sqliteTable(
+  "delegate_type_may_start",
+  {
+    typeName: delegateTypeName(),
+    delegateType: text("delegate_type").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.typeName, table.delegateType] })]
+);
+
+/** A type's starting set, one row per skill or server (core `DelegateType.startingSet`). */
+export const delegateTypeStartingSet = sqliteTable(
+  "delegate_type_starting_set",
+  {
+    typeName: delegateTypeName(),
+    kind: text("kind").$type<StartingSetKind>().notNull(),
+    name: text("name").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.typeName, table.kind, table.name] }),
+    check(
+      "delegate_type_starting_set_kind",
+      sql`${sql.identifier("kind")} in ('skill', 'server')`
+    ),
+  ]
+);
+
+/** The skills a type's sessions are started with, one row each (core `DelegateType.skills`). */
+export const delegateTypeSkills = sqliteTable(
+  "delegate_type_skills",
+  {
+    typeName: delegateTypeName(),
+    skill: text("skill").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.typeName, table.skill] })]
+);
+
+/** The tools a type's sessions are denied, one row each (core `DelegateType.denyTools`). */
+export const delegateTypeDenyTools = sqliteTable(
+  "delegate_type_deny_tools",
+  {
+    typeName: delegateTypeName(),
+    tool: text("tool").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.typeName, table.tool] })]
+);
+
+/** The connections a type's sessions may call, one row each (core `DelegateType.connections`). */
+export const delegateTypeConnections = sqliteTable(
+  "delegate_type_connections",
+  {
+    typeName: delegateTypeName(),
+    connection: text("connection").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.typeName, table.connection] })]
+);
 
 /** Completion identity survives agent and hub restarts, independently of live custody. */
 export const completedTurns = sqliteTable(

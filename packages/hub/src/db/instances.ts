@@ -1,6 +1,11 @@
 /** Session rows: opening, listing, ending, settling and what keeps one on the board. */
 
-import type { MayStart, StartingSet } from "@cawco/core/delegate-types";
+import {
+  ANY_TYPE,
+  type MayStart,
+  type StartingSet,
+  startsAny,
+} from "@cawco/core/delegate-types";
 import type {
   EffortLevel,
   HarnessKind,
@@ -37,6 +42,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { z } from "zod";
 import type { DbCore } from "./core";
 import type { FoldMoved } from "./owned-rows";
 import { projectHoldingOf } from "./projects";
@@ -46,6 +52,8 @@ import {
   delegateEvents,
   instanceAliases,
   instanceConversations,
+  instanceMayStart,
+  instanceStartingSet,
   instances,
   limitEvents,
   lineAnchors,
@@ -96,8 +104,37 @@ type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
  * A session's stored row, its `cwd` named as {@link MachinePath}, which the
  * API's schema reads as the string it is on the wire.
  */
-type StoredInstanceRow = Omit<typeof instances.$inferSelect, "cwd"> & {
+type StoredInstanceRow = Omit<
+  typeof instances.$inferSelect,
+  "cwd" | "mayStartAny" | "startsWithAll"
+> & {
   cwd: MachinePath;
+  /** The delegate types it may start (core `MayStart`): `["any"]`, else the ones it names. */
+  mayStart: MayStart;
+  /** The skills and MCP servers it starts with (core `StartingSet`); null: everything installed. */
+  startingSet: StartingSet | null;
+};
+
+const NAMES = z.array(z.string());
+const SET = z.object({ skills: NAMES, servers: NAMES });
+
+/**
+ * A session's lists as every read of its whole row carries them (core
+ * `InstanceRow.mayStart`, `.startingSet`), off its two flags and its
+ * {@link instanceMayStart} and {@link instanceStartingSet} rows, each list
+ * in name order: `["any"]` when it may start any, else the types it names;
+ * null when it starts with everything installed, else the skills and
+ * servers its set names. SQLite builds each as JSON, read back here.
+ */
+const sessionLists = {
+  mayStart:
+    sql<MayStart>`CASE WHEN ${instances.mayStartAny} THEN json_array(${ANY_TYPE}) ELSE (SELECT json_group_array(${instanceMayStart.delegateType}) FROM ${instanceMayStart} WHERE ${instanceMayStart.instanceId} = ${instances.id}) END`.mapWith(
+      (value: string): MayStart => NAMES.parse(JSON.parse(value))
+    ),
+  startingSet:
+    sql<StartingSet | null>`CASE WHEN ${instances.startsWithAll} THEN NULL ELSE json_object('skills', json((SELECT json_group_array(${instanceStartingSet.name}) FROM ${instanceStartingSet} WHERE ${instanceStartingSet.instanceId} = ${instances.id} AND ${instanceStartingSet.kind} = 'skill')), 'servers', json((SELECT json_group_array(${instanceStartingSet.name}) FROM ${instanceStartingSet} WHERE ${instanceStartingSet.instanceId} = ${instances.id} AND ${instanceStartingSet.kind} = 'server'))) END`.mapWith(
+      (value: string): StartingSet | null => SET.parse(JSON.parse(value))
+    ),
 };
 
 /**
@@ -146,7 +183,7 @@ type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
  */
 interface SettledInstance {
   resumes: boolean;
-  row: typeof instances.$inferSelect;
+  row: StoredInstanceRow;
 }
 
 /** How long a session that stopped moving stays in the listings the rails read. */
@@ -196,6 +233,15 @@ interface AdoptedChildren {
 }
 
 const {
+  mayStartAny: _mayStartAny,
+  startsWithAll: _startsWithAll,
+  ...storedColumns
+} = getTableColumns(instances);
+
+/** A {@link StoredInstanceRow}'s columns: every one, its lists read whole in place of their flags. */
+const wholeColumns = { ...storedColumns, ...sessionLists };
+
+const {
   endRetryAt: _endRetryAt,
   endAttempts: _endAttempts,
   machineRemoved: _machineRemoved,
@@ -210,7 +256,7 @@ const {
   tooling: _tooling,
   commands: _commands,
   ...publicColumns
-} = getTableColumns(instances);
+} = wholeColumns;
 
 /**
  * The board's rows: each with whether its work item is live (starting or
@@ -234,7 +280,7 @@ const {
   tooling: _ownTooling,
   commands: _ownCommands,
   ...ownedColumns
-} = getTableColumns(instances);
+} = wholeColumns;
 
 /** A row its machine still holds: not removed, not discarded, not being ended (a stop keeps it). */
 const keptInstances = () =>
@@ -279,6 +325,74 @@ const asListed = <
 >(
   row: Row
 ): Row => (row.title ? row : { ...row, title: row.derivedTitle });
+
+/** What session `id` may start, off its flag and its rows (core `MayStart`); none when no row holds it. */
+export const mayStartOf = (tx: Pick<Tx, "select">, id: string): MayStart =>
+  tx
+    .select({ mayStart: sessionLists.mayStart })
+    .from(instances)
+    .where(eq(instances.id, id))
+    .get()?.mayStart ?? [];
+
+/**
+ * Writes what session `id` may start in place of what it had: its flag,
+ * and the types it names when it may not start any.
+ */
+export const putMayStart = (
+  tx: Pick<Tx, "delete" | "insert" | "update">,
+  id: string,
+  mayStart: MayStart
+): void => {
+  const any = startsAny(mayStart);
+  tx.update(instances)
+    .set({ mayStartAny: any })
+    .where(eq(instances.id, id))
+    .run();
+  tx.delete(instanceMayStart).where(eq(instanceMayStart.instanceId, id)).run();
+  if (!any && mayStart.length > 0) {
+    tx.insert(instanceMayStart)
+      .values(
+        mayStart.map((delegateType) => ({ instanceId: id, delegateType }))
+      )
+      .onConflictDoNothing()
+      .run();
+  }
+};
+
+/**
+ * Writes what session `id` starts with in place of what it had: null,
+ * everything installed; else the skills and servers its set names.
+ */
+const putStartingSet = (
+  tx: Pick<Tx, "delete" | "insert" | "update">,
+  id: string,
+  set: StartingSet | null
+): void => {
+  tx.update(instances)
+    .set({ startsWithAll: set === null })
+    .where(eq(instances.id, id))
+    .run();
+  tx.delete(instanceStartingSet)
+    .where(eq(instanceStartingSet.instanceId, id))
+    .run();
+  const entries = set
+    ? [
+        ...set.skills.map((name) => ({
+          instanceId: id,
+          kind: "skill" as const,
+          name,
+        })),
+        ...set.servers.map((name) => ({
+          instanceId: id,
+          kind: "server" as const,
+          name,
+        })),
+      ]
+    : [];
+  if (entries.length > 0) {
+    tx.insert(instanceStartingSet).values(entries).onConflictDoNothing().run();
+  }
+};
 
 /** A session's prior conversations, oldest first. */
 export const conversationsOf = (
@@ -623,7 +737,12 @@ export interface InstancesDb {
     /** The settled spawn mode; null only when the harness reports no modes. */
     permissionMode: string | null;
     model?: string;
-    /** The delegate types it may start (core `MayStart`); absent leaves the column alone. */
+    /**
+     * The delegate types it may start (core `MayStart`). Absent at its first
+     * spawn: a session nobody delegated work to, which may start any (none
+     * for a work item's session or a summariser); absent later leaves what
+     * it had.
+     */
     mayStart?: MayStart;
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
@@ -633,8 +752,11 @@ export interface InstancesDb {
     delegateType?: { name: string; projectId?: string };
     /** Started clean (core `SpawnPayload.clean`); set at its first spawn, never after. */
     clean?: boolean;
-    /** What it starts with (core `SpawnPayload.startingSet`); set at its first spawn, never after. */
-    startingSet?: StartingSet;
+    /**
+     * What it starts with (core `SpawnPayload.startingSet`), null for
+     * everything installed; set at its first spawn, never after.
+     */
+    startingSet: StartingSet | null;
     /** The account placement chose; a row that has one keeps it. */
     accountId?: string;
     /** The account its start named, as placed; a row that has one keeps it. */
@@ -738,7 +860,7 @@ export interface InstancesDb {
      */
     heldIds: string[],
     graceMs: number
-  ) => { promoted: string[]; settled: (typeof instances.$inferSelect)[] };
+  ) => { promoted: string[]; settled: StoredInstanceRow[] };
   /**
    * Marks every running instance on the machine that `liveIds` does not name as
    * unknown: those belong to a daemon that is gone, and the hub cannot tell
@@ -928,7 +1050,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     listed: string[]
   ) =>
     db
-      .select()
+      .select(wholeColumns)
       .from(instances)
       .where(
         and(
@@ -1532,6 +1654,14 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           return;
         }
       }
+      // A row opened with no list is a session nobody delegated work to
+      // (core `SpawnPayload.mayStart`), which may start any; one that runs a
+      // work item, or a continuation's summariser, never chose any and
+      // starts none (migration 0397 reads a row from before it the same).
+      const opened =
+        mayStart ?? (workItemId || kind === "summariser" ? [] : [ANY_TYPE]);
+      // Its first spawn: no row yet, or one held for a move and never spawned.
+      const first = !existing || existing.spawnedAt === null;
       db.insert(instances)
         .values({
           id,
@@ -1548,13 +1678,11 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           kind,
           permissionMode,
           model,
-          mayStart,
           workItemId,
           role,
           delegateType: delegateType?.name,
           delegateTypeProject: delegateType?.projectId,
           clean,
-          startingSet,
           accountId,
           namedAccount,
           forkedFrom,
@@ -1582,8 +1710,6 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             kind,
             permissionMode,
             ...(model ? { model } : {}),
-            // Presence, not truth: a leaf's empty list has to land.
-            ...(mayStart === undefined ? {} : { mayStart }),
             // A session keeps the account it started on: its transcript and
             // its prompt cache are that account's.
             ...(accountId
@@ -1639,6 +1765,17 @@ export const instancesDb = (core: DbCore): InstancesDb => {
           },
         })
         .run();
+      // Its lists: both written by its first spawn; what it may start
+      // again whenever a start says it (a leaf's empty list included),
+      // its set never after. Until they are, the row's flags read narrow.
+      db.transaction((tx) => {
+        if (first) {
+          putMayStart(tx, id, opened);
+          putStartingSet(tx, id, startingSet);
+        } else if (mayStart !== undefined) {
+          putMayStart(tx, id, mayStart);
+        }
+      });
     },
     holdMovingInstance: ({
       id,

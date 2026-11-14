@@ -90,6 +90,36 @@ function seedProjects(db: HubDb): string[] {
   return projects;
 }
 
+/** What a delegate may start, as `delegate` calls and their types say it. */
+const DELEGATE_MAY_START = [
+  [],
+  [],
+  [],
+  ["browser"],
+  ["browser", "advisor"],
+  ["any"],
+];
+
+/** Starting sets a session's type or project gave it; none (everything installed) for most. */
+const STARTING_SETS = [
+  { skills: ["code-review", "frontend-design"], servers: ["github"] },
+  { skills: [], servers: [] },
+];
+
+/** A delegate's row: its parent and what it may start, or, every ninth, a work item's that named no list (a row from before every delegate's start named one). */
+const delegatedFrom = (parent: Seeded, s: number) =>
+  s % 9 === 0
+    ? { parentInstanceId: parent.id, workItemId: id("wi", s) }
+    : { parentInstanceId: parent.id, mayStart: pick(DELEGATE_MAY_START) };
+
+/** A session's kind: a share scratch, a few a continuation's summariser. */
+const kindOf = (s: number): "mainline" | "scratch" | "summariser" => {
+  if (s % 25 === 0) {
+    return "scratch";
+  }
+  return s % 37 === 0 ? "summariser" : "mainline";
+};
+
 /** Sessions, a share of them delegates, each with its sends; half ended, a tenth failed. */
 function seedSessions(db: HubDb, projects: string[]): Seeded[] {
   const sessions: Seeded[] = [];
@@ -106,9 +136,10 @@ function seedSessions(db: HubDb, projects: string[]): Seeded[] {
       harness: pick(HARNESSES),
       origin: parent ? "delegate" : "person",
       projectId,
-      ...(parent ? { parentInstanceId: parent.id, mayStart: [] } : {}),
+      ...(parent ? delegatedFrom(parent, s) : {}),
+      startingSet: s % 11 === 0 ? pick(STARTING_SETS) : null,
       title: pick(WORDS),
-      kind: s % 25 === 0 ? "scratch" : "mainline",
+      kind: kindOf(s),
       permissionMode: "bypassPermissions",
       model: "model-a",
     });
@@ -195,13 +226,67 @@ function seedWorkspaces(db: HubDb, sessions: Seeded[]): void {
   }
 }
 
+/** The fleet's own delegate types beside the seeded defaults, each list of a type in use. */
+function seedDelegateTypes(db: HubDb): void {
+  db.delegateTypes.put({
+    name: "browser",
+    description:
+      "Drives the person's browser through a flow and reports what it saw.",
+    harness: "claude",
+    model: "model-a",
+    effort: "medium",
+    denyTools: ["Write", "Edit"],
+    skills: ["browser-use"],
+    startingSet: { skills: ["browser-use"], servers: ["chrome-devtools"] },
+  });
+  db.delegateTypes.put({
+    name: "coordinator",
+    description:
+      "Splits a large change into delegates and lands them in order.",
+    harness: "claude",
+    model: "model-a",
+    mayStart: ["any"],
+    connections: ["github-dev"],
+  });
+  db.delegateTypes.put({
+    name: "tester",
+    description:
+      "Checks a change in the browser and may hand the clicking to browser.",
+    harness: "opencode",
+    model: "model-a",
+    mayStart: ["browser", "advisor"],
+    startingSet: { skills: [], servers: [] },
+  });
+}
+
+/**
+ * Values no code of the hub writes but a hand edit of the database could:
+ * a session's list and set, and a delegate type's denied tools, that are not
+ * the JSON their column held. Migration 0397 places each as the narrow value.
+ */
+function seedUnreadable(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  sqlite.run(
+    "UPDATE instances SET may_start = 'browser, advisor' WHERE id = (SELECT id FROM instances WHERE parent_instance_id IS NOT NULL ORDER BY id LIMIT 1)"
+  );
+  sqlite.run(
+    `UPDATE instances SET starting_set = '{"skills":"all"}' WHERE id = (SELECT id FROM instances ORDER BY id DESC LIMIT 1)`
+  );
+  sqlite.run(
+    "UPDATE delegate_types SET deny_tools = 'Write Edit' WHERE name = 'tester'"
+  );
+  sqlite.close();
+}
+
 async function seed(dbPath: string, home: string): Promise<void> {
   const { db, lifetime } = await hubInProcess(dbPath, home);
   const projects = seedProjects(db);
   const sessions = seedSessions(db, projects);
   seedTasks(db, projects);
   seedWorkspaces(db, sessions);
+  seedDelegateTypes(db);
   lifetime.close();
+  seedUnreadable(dbPath);
 }
 
 const out = flag("--seed");
