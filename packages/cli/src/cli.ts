@@ -11,7 +11,11 @@ import { toHttpBase } from "@cawco/agent/discovery";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { hubCredentialSocket } from "@cawco/core/paths/hub";
+import {
+  hubCredentialSocket,
+  hubDbPath,
+  hubStoppedPath,
+} from "@cawco/core/paths/hub";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import type { AgentRow } from "@cawco/core/protocol";
 import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
@@ -19,6 +23,7 @@ import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
+import { hubDatabaseWords } from "@cawco/core/words/hub-database";
 import { dataOf, reached } from "@cawco/hub/client";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { ownerRead } from "./owner";
@@ -402,10 +407,24 @@ const printFleet = (agents: AgentRow[]): void => {
   }
 };
 
+/**
+ * On the hub's machine, why its last start stopped before it opened its
+ * database, as that start wrote it beside the database (core paths/hub.ts
+ * `hubStoppedPath`); a start that opens it removes it. Said where the hub
+ * does not answer, as why.
+ */
+const hubDown = async (): Promise<string | undefined> => {
+  const file = Bun.file(hubStoppedPath(hubDbPath()));
+  return (await file.exists())
+    ? hubDatabaseWords.down((await file.text()).trim())
+    : undefined;
+};
+
 const status = async (args: Args): Promise<number> => {
+  const down = await hubDown();
   const hub = await resolve(args);
   if (!hub) {
-    console.error(NO_HUB);
+    console.error(down ? `cawco: ${down}` : NO_HUB);
     return 1;
   }
 
@@ -424,7 +443,7 @@ const status = async (args: Args): Promise<number> => {
   );
   if (asked.kind === "unanswered") {
     console.error(
-      `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`
+      `\ncawco: ${down ?? `${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`}`
     );
     return 1;
   }
@@ -433,7 +452,7 @@ const status = async (args: Args): Promise<number> => {
     reached(answer);
   } catch (error) {
     console.error(
-      `\ncawco: ${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`
+      `\ncawco: ${down ?? `${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`}`
     );
     return 1;
   }

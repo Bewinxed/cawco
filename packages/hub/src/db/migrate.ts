@@ -4,15 +4,17 @@
  * here is keyed to a journal tag, and each runs once, in its place.
  */
 import type { Database } from "bun:sqlite";
-import { readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
+import {
+  journalWhens,
+  MIGRATIONS_DIR,
+  newerDatabase,
+} from "@cawco/core/migrations-ahead";
 import { ownIdentity } from "@cawco/core/process-identity";
-import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
-import { z } from "zod";
 import type { DbCore } from "./core";
 import { dropGraphPlaces } from "./drop-graph-places";
 import { mergeProjectPages } from "./merge-project-pages";
@@ -20,27 +22,6 @@ import { FILE_HASHES } from "./migration-names";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
-
-/**
- * Defined only in the published package's bundle (scripts/build-binary.ts),
- * where this module is `cli.js` and the migrations sit beside it.
- */
-declare const __CAWCO_RELEASE__: boolean | undefined;
-
-/** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
-const MIGRATIONS_DIR = standalone
-  ? runtimeTree("drizzle")
-  : Bun.fileURLToPath(
-      new URL(
-        typeof __CAWCO_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
-        import.meta.url
-      )
-    );
-
-/** Drizzle's journal of the SQL migrations (`meta/_journal.json`). */
-const Journal = z.object({
-  entries: z.array(z.object({ tag: z.string(), when: z.number() })),
-});
 
 /** Where a step's work runs. */
 type Step =
@@ -120,14 +101,6 @@ export const MIGRATION_STEPS: readonly Step[] = [
   },
 ];
 
-/** Each migration's `when` by its tag, as the journal keeps it. */
-const journalWhens = (): Map<string, number> => {
-  const journal = Journal.parse(
-    JSON.parse(readFileSync(join(MIGRATIONS_DIR, "meta/_journal.json"), "utf8"))
-  );
-  return new Map(journal.entries.map(({ tag, when }) => [tag, when]));
-};
-
 /** The step's `when`, its place in the journal: refused for a tag no migration holds (migrations-check checks every one). */
 const whenOf = (whens: Map<string, number>, tag: string): number => {
   const when = whens.get(tag);
@@ -140,13 +113,19 @@ const whenOf = (whens: Map<string, number>, tag: string): number => {
 /**
  * Every SQL migration, with each code step beside the migrator in its place,
  * then what runs on the connection after the last one. Foreign keys are off
- * for the migrations and on from then on.
+ * for the migrations and on from then on. A database a newer build migrated
+ * is not opened (core migrations-ahead.ts): this throws its words before anything
+ * runs on it, for every hub that opens one (a start, migrations:check's hub).
  */
 export const applyMigrations = async (
   db: BunSQLiteDatabase,
   client: Database,
   path: string
 ): Promise<void> => {
+  const newer = newerDatabase(path);
+  if (newer) {
+    throw new Error(newer);
+  }
   // A marker for the update helper: while it names a live process the hub is
   // migrating, and the helper's wait for a healthy start does not run down.
   const migrating = `${path}.migrating`;
