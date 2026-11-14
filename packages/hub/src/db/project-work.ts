@@ -266,6 +266,7 @@ export interface WorkRowsDb {
         | "summary"
         | "headline"
         | "error"
+        | "endedBlocked"
         | "endedAt"
         | "dismissedAt"
         | "dismissReason"

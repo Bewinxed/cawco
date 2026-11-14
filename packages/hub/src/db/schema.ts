@@ -1706,6 +1706,15 @@ export const workItems = sqliteTable(
      * review shows.
      */
     error: text("error"),
+    /**
+     * Its last end was a blocked `finish_item`: the session could not go on
+     * for something outside its control, the command and its error in
+     * {@link error}. Set by that finish alone; a rerun clears it. Its state
+     * says failed or, for landed work, done (work-items.ts `finish`).
+     */
+    endedBlocked: integer("ended_blocked", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: stampedNow("created_at"),
     endedAt: timestamp("ended_at"),
     /**

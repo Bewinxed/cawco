@@ -5045,6 +5045,7 @@ export const createWorkItems = ({
         state: "running",
         result: null,
         error: null,
+        endedBlocked: false,
         stoppedBy: null,
         endedAt: null,
         dismissedAt: null,
@@ -6006,6 +6007,7 @@ export const createWorkItems = ({
         const ended = finish(item, {
           state: "failed",
           error,
+          endedBlocked: true,
           headline: request.headline,
           ...LANDING_ENDED,
         });

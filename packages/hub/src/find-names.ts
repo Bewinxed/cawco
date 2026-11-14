@@ -129,7 +129,7 @@ const reportOf = (
     return null;
   }
   let outcome: "done" | "failed" | "blocked" | null = null;
-  if (item.blocked) {
+  if (item.endedBlocked) {
     outcome = "blocked";
   } else if (item.state === "done" || item.state === "failed") {
     outcome = item.state;

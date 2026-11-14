@@ -68,11 +68,11 @@ export type FindInstanceRow = {
 const BRIEF_OPENING = 400;
 
 export interface FindWorkItemRow {
-  /** Its `finish_item` said something outside its control stopped it. */
-  blocked: boolean;
   brief: string;
   createdAt: Date;
   endedAt: Date | null;
+  /** Its last end was a blocked `finish_item` (work_items `ended_blocked`). */
+  endedBlocked: boolean;
   headline: string | null;
   id: string;
   instanceId: string;
@@ -328,10 +328,7 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         parentInstanceId: workItems.parentInstanceId,
         title: workItems.title,
         brief: sql<string>`substr(${workItems.brief}, 1, ${BRIEF_OPENING})`,
-        blocked:
-          sql<boolean>`json_extract(${workItems.submission}, '$.blocked') IS NOT NULL`.mapWith(
-            Boolean
-          ),
+        endedBlocked: workItems.endedBlocked,
         headline: workItems.headline,
         state: workItems.state,
         lands: workItems.lands,
