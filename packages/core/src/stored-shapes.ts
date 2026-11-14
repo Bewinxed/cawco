@@ -1666,12 +1666,12 @@ export type HarnessCapabilitiesOutput = z.output<
 const ModelInfoShape = declared(
   z.object({
     contextWindow: z.number().optional(),
-    defaultEffort: EffortLevelShape.nullable().optional(),
+    defaultEffort: z.string().nullable().optional(),
     description: z.string().optional(),
     displayName: z.string(),
     released: z.string().optional(),
     resolvedModel: z.string().optional(),
-    supportedEffortLevels: z.array(EffortLevelShape).optional(),
+    supportedEffortLevels: z.array(z.string()).optional(),
     supportsAdaptiveThinking: z.boolean().optional(),
     supportsAutoMode: z.boolean().optional(),
     supportsEffort: z.boolean().optional(),

@@ -8,20 +8,9 @@
           "type": "number"
         },
         "defaultEffort": {
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ]
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "description": {
@@ -39,14 +28,7 @@
         "supportedEffortLevels": {
           "type": "array",
           "items": {
-            "type": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ]
+            "type": "string"
           }
         },
         "supportsAdaptiveThinking": {
@@ -412,20 +394,9 @@
               "type": "number"
             },
             "defaultEffort": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "low",
-                    "medium",
-                    "high",
-                    "xhigh",
-                    "max"
-                  ]
-                },
-                {
-                  "type": "null"
-                }
+              "type": [
+                "string",
+                "null"
               ]
             },
             "description": {
@@ -443,14 +414,7 @@
             "supportedEffortLevels": {
               "type": "array",
               "items": {
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "xhigh",
-                  "max"
-                ]
+                "type": "string"
               }
             },
             "supportsAdaptiveThinking": {

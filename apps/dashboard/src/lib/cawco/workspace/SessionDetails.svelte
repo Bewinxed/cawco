@@ -195,7 +195,9 @@
   });
   const modelInfo = $derived(model ? describingRow(model) : null);
   const efforts = $derived(
-    report?.capabilities.effort ? (modelInfo?.supportedEffortLevels ?? []) : []
+    report?.capabilities.effort
+      ? (modelInfo?.supportedEffortLevels ?? []).filter(isEffortLevel)
+      : []
   );
   /**
    * Why the effort chip shows no level, when it shows none: the harness has no

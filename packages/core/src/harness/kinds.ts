@@ -212,15 +212,22 @@ export interface ModelInfo {
   contextWindow?: number;
   /**
    * The effort the CLI applies when a spawn omits effort, measured by the
-   * harness. Null when the model takes none; absent when not measured.
+   * harness. Null when the model takes none; absent when not measured. The
+   * harness's own word, held as a string: a level a later release adds must
+   * not refuse the catalog, and a reader narrows with {@link isEffortLevel}.
    */
-  defaultEffort?: EffortLevel | null;
+  defaultEffort?: string | null;
   description?: string;
   displayName: string;
   /** ISO date the model was released, when the catalog source says. */
   released?: string;
   resolvedModel?: string;
-  supportedEffortLevels?: EffortLevel[];
+  /**
+   * The effort levels the model takes, in the harness's own words (Claude
+   * Code's model list): held as strings for the same reason as
+   * `defaultEffort`, and narrowed with {@link isEffortLevel} where read.
+   */
+  supportedEffortLevels?: string[];
   supportsAdaptiveThinking?: boolean;
   supportsAutoMode?: boolean;
   /**
