@@ -61,7 +61,7 @@ export const frameStagesOf = (ctx: FrameStagesContext): FrameStage[] => {
     stages0.catalogMoved,
     stages0.fleetConverging,
     stages0.browserHandedBack,
-    stages0.passkeyRelayHeard,
+    stages0.passkeyHeard,
     stages0.streamRelayHeard,
     stages0.moveProgressed,
     stages0.accountBorrowed,
