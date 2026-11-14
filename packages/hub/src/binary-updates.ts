@@ -300,6 +300,34 @@ export function createBinaryUpdates(options: Options) {
     return policy;
   };
 
+  /** Look for the newest build and have every online machine look now: what the check route answers. */
+  const check = async () => {
+    if ("damaged" in held) {
+      return problem(409, {
+        code: "update-policy-damaged",
+        detail: refused(),
+      });
+    }
+    // A look of its own, begun after the ask: one a poll began earlier
+    // (before a release was published, as ship's announce asks right
+    // after) would answer what the host held then.
+    const found = await look();
+    // Every online machine looks now, as it does when the policy changes,
+    // rather than at its next poll a minute on: a person who asked for a
+    // check sees each machine's answer to what it found. One that does not
+    // answer (restarting) looks at its own next poll; the check stands.
+    const policy = policyNow();
+    await Promise.allSettled(
+      options.online().map((id) => options.configure(id, policy))
+    );
+    return {
+      version: found.manifest.version,
+      sequence: found.manifest.sequence,
+      channel: found.manifest.channel,
+      notes: found.manifest.notes,
+    };
+  };
+
   // A damaged policy record: every route that needs the policy answers 409
   // with its words (`refused`), and Reset is the way out.
   const routes = new Elysia()
@@ -338,32 +366,7 @@ export function createBinaryUpdates(options: Options) {
     .get("/api/binary-updates/machines", () => ({
       machines: Object.fromEntries(options.states()),
     }))
-    .post("/api/binary-updates/check", async () => {
-      if ("damaged" in held) {
-        return problem(409, {
-          code: "update-policy-damaged",
-          detail: refused(),
-        });
-      }
-      // A look of its own, begun after the ask: one a poll began earlier
-      // (before a release was published, as ship's announce asks right
-      // after) would answer what the host held then.
-      const found = await look();
-      // Every online machine looks now, as it does when the policy changes,
-      // rather than at its next poll a minute on: a person who asked for a
-      // check sees each machine's answer to what it found. One that does not
-      // answer (restarting) looks at its own next poll; the check stands.
-      const policy = policyNow();
-      await Promise.allSettled(
-        options.online().map((id) => options.configure(id, policy))
-      );
-      return {
-        version: found.manifest.version,
-        sequence: found.manifest.sequence,
-        channel: found.manifest.channel,
-        notes: found.manifest.notes,
-      };
-    })
+    .post("/api/binary-updates/check", () => check())
     .get("/api/binary-updates/channels", () => channels(false))
     .post("/api/binary-updates/channels", () => channels(true))
     // A machine tells the hub it is installing before it starts, so no start is
@@ -495,5 +498,5 @@ export function createBinaryUpdates(options: Options) {
       };
     }
   };
-  return { offered, routes };
+  return { check, offered, routes };
 }
