@@ -76,10 +76,11 @@ export type OlderRead =
 /**
  * Why a stored transcript could not be read. `refused`: its machine refuses
  * the harness CLI it reads the conversation through (history.ts
- * `refusedRead`), until it runs one CawCo runs.
+ * `refusedRead`), until it runs one CawCo runs. `updating`: an install of
+ * that CLI runs there now, and no server of it could answer meanwhile.
  */
 export interface HistoryFault {
-  fault: "missing" | "offline" | "timeout" | "failed" | "refused";
+  fault: "missing" | "offline" | "timeout" | "failed" | "refused" | "updating";
   machineId?: string;
   message: string;
 }

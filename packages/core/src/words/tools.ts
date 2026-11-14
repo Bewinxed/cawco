@@ -151,6 +151,19 @@ export const toolWords = {
     `CawCo can't install ${name} ${version} here, the version the fleet pins: ${listed(unpinnable)} can't install a chosen version${unmet.length ? `, and ${unmet.join("; ")}` : ""}. Remove the pin, or install ${name} ${version} on the machine yourself.`,
   /** No install method runs here: why each method's need can't serve, in catalog order. */
   noInstaller: (why: string[]) => `no installer runs here: ${why.join("; ")}`,
+  /**
+   * A machine's harness block while CawCo itself puts the CLI on (core
+   * `ToolStatus.startedBy` `cawco`: its update of its own copy, or adding a
+   * machine): who does it, what, where and to what, and that nothing waits
+   * on the person. A press's own progress is the block's other words.
+   */
+  cawcoPutting: (
+    installs: boolean,
+    name: string,
+    machine: string,
+    to: string | undefined
+  ) =>
+    `CawCo is ${installs ? "installing" : "updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}. Nothing to press: sessions there carry on, and this clears by itself once it lands.`,
   /** Configure → CLI tools: the cell while CawCo updates a copy that is there. */
   updating: "Updating…",
   /** Configure → CLI tools: the mark beside a copy's version that its last update left older. */

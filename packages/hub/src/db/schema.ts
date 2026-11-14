@@ -351,6 +351,8 @@ export const agentTools = sqliteTable(
     triedAt: timestamp("tried_at"),
     /** On `installing`: the version being put on (core `ToolStatus.to`). */
     goingTo: text("going_to"),
+    /** On `installing`: who started it (core `ToolStatus.startedBy`). */
+    startedBy: text("started_by").$type<"cawco" | "person">(),
     /** When this was learnt. */
     at: timestamp("at").notNull(),
   },

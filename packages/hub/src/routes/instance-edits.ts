@@ -121,6 +121,15 @@ export const instanceEditRoutes = (
                 code: "harness-refused",
                 detail: page.message,
               });
+            // An install of that CLI runs there now: the CLI is held by
+            // the install for its seconds (423 Locked, RFC 4918 §11.3), its
+            // own code, so a reader shows the install under way and reads
+            // again once it lands rather than offering one.
+            case "updating":
+              return problem(423, {
+                code: "harness-updating",
+                detail: page.message,
+              });
             case "failed":
               break;
           }
@@ -159,6 +168,11 @@ export const instanceEditRoutes = (
             case "refused":
               return problem(424, {
                 code: "harness-refused",
+                detail: read.message,
+              });
+            case "updating":
+              return problem(423, {
+                code: "harness-updating",
                 detail: read.message,
               });
             case "failed":

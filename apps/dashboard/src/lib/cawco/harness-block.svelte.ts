@@ -25,6 +25,7 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { type ToolUpdateState, toolUpdateOf } from "@cawco/core/tool-updates";
 import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
+import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import { failureWords } from "#lib/platform/hub-read.js";
@@ -40,16 +41,18 @@ import { TRY_AGAIN } from "./unanswered";
 /** Where the fix stands, as the hub's cell for it says. */
 type HarnessFix =
   | { phase: "idle" }
-  | { phase: "running" }
+  /** An install runs there: CawCo's own (`byCawco`), or a press's; to `to` when known. */
+  | { byCawco: boolean; phase: "running"; to?: string }
   /** An install or update that ran and left it refused: the machine's words. */
   | { phase: "failed"; said: string };
 
 export interface HarnessBlock {
   /**
-   * CawCo updates it with no press: a copy it put there, while the fleet
-   * updates such copies (core tool-updates.ts `due`). A copy the person
-   * installed, or one from a machine too old to say whose it is, takes the
-   * press.
+   * CawCo puts it on with no press: an install CawCo started runs now (core
+   * `ToolStatus.startedBy`), or a copy it put there waits for its update
+   * while the fleet updates such copies (core tool-updates.ts `due`). A
+   * copy the person installed, or one from a machine too old to say whose
+   * it is, takes the press.
    */
   auto: boolean;
   /** What fixes it: an update, or an install. */
@@ -105,7 +108,9 @@ export function harnessBlockOf(
     spec,
     why,
     fix: fixOf(spec, tool, update),
-    auto: update?.kind === "due",
+    auto:
+      update?.kind === "due" ||
+      (update?.kind === "updating" && update.startedBy === "cawco"),
   };
 }
 
@@ -137,8 +142,12 @@ const fixOf = (
   tool: ToolStatus | undefined,
   update: ToolUpdateState | undefined
 ): HarnessFix => {
-  if (tool?.state === "installing") {
-    return { phase: "running" };
+  if (update?.kind === "updating") {
+    return {
+      phase: "running",
+      byCawco: update.startedBy === "cawco",
+      ...(update.to ? { to: update.to } : {}),
+    };
   }
   if (update?.kind === "failed") {
     return {
@@ -166,12 +175,16 @@ const installs = (block: Pick<HarnessBlock, "kind" | "spec">): boolean =>
   block.kind === "not-installed" || block.spec.exactVersion !== undefined;
 
 /**
- * Whether the block offers its press: always, but for a copy CawCo updates
- * by itself ({@link HarnessBlock.auto}), which takes the press (Retry) only
- * once that update failed.
+ * Whether the block offers its press: always, but while CawCo itself puts
+ * the CLI on, and for a copy CawCo updates by itself ({@link
+ * HarnessBlock.auto}), which takes the press (Retry) only once that update
+ * failed.
  */
 export const offersPress = (block: HarnessBlock): boolean =>
-  block.kind === "not-installed" || !block.auto || block.fix.phase === "failed";
+  !(block.fix.phase === "running" && block.fix.byCawco) &&
+  (block.kind === "not-installed" ||
+    !block.auto ||
+    block.fix.phase === "failed");
 
 /** A block's words for the press, its progress and its outcome. */
 export const harnessWords = {
@@ -184,7 +197,14 @@ export const harnessWords = {
   pressing: (block: HarnessBlock): string =>
     installs(block) ? "Installing…" : "Updating…",
   running: (block: HarnessBlock): string =>
-    `${installs(block) ? "Installing" : "Updating"} ${block.spec.name} on ${block.machine}. It goes on if you close this.`,
+    block.fix.phase === "running" && block.fix.byCawco
+      ? toolWords.cawcoPutting(
+          installs(block),
+          block.spec.name,
+          block.machine,
+          block.fix.to
+        )
+      : `${installs(block) ? "Installing" : "Updating"} ${block.spec.name} on ${block.machine}. It goes on if you close this.`,
   failed: (block: HarnessBlock, said: string): string =>
     `${block.spec.name} didn't ${installs(block) ? "install" : "update"} on ${block.machine}. ${said}`,
   /** The row's word while it is refused, or while its fix runs. */
