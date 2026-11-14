@@ -60,6 +60,9 @@
     // A problem a function could return is returned, never thrown as its
     // detail (packages/hub/src/refusal.ts).
     "./scripts/lint/problem-detail-thrown.grit",
+    // A machine away is 503 machine-away and one silent 504 machine-silent,
+    // made in packages/hub/src/machine-answers.ts alone.
+    "./scripts/lint/machine-answers.grit",
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",

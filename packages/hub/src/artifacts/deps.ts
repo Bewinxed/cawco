@@ -268,7 +268,7 @@ export interface ArtifactServiceDeps {
     | AwayProblem
     | SilentProblem
     | ReturnType<
-        typeof problem<503, { code: "picture-save-failed"; detail: string }>
+        typeof problem<502, { code: "picture-save-failed"; detail: string }>
       >
     | ReturnType<
         typeof problem<400, { code: "picture-save-refused"; detail: string }>
@@ -344,7 +344,7 @@ export interface ArtifactServiceDeps {
     | OriginRefused
     | AwayProblem
     | SilentProblem
-    | ReturnType<typeof problem<503, { code: "picture-none"; detail: string }>>
+    | ReturnType<typeof problem<502, { code: "picture-none"; detail: string }>>
   >;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
@@ -405,7 +405,7 @@ export interface ArtifactServiceDeps {
     | SilentProblem
     | ReturnType<
         typeof problem<
-          503,
+          502,
           { code: "artifact-screen-unopened"; detail: string }
         >
       >

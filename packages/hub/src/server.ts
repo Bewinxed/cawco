@@ -4925,7 +4925,7 @@ export const createServer = (
           throw unreachable(asked);
       }
       if (!asked.value.ok) {
-        return problem(503, {
+        return problem(502, {
           code: "artifact-screen-unopened",
           detail: `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`,
         });

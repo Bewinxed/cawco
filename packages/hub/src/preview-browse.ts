@@ -281,7 +281,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       { png?: unknown; cut?: PictureCut } | undefined;
     const png = told?.png;
     if (!asked.value.ok || typeof png !== "string") {
-      return problem(503, {
+      return problem(502, {
         code: "picture-none",
         detail:
           asked.value.error ??
@@ -334,7 +334,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const saved = asked.value.result as WorkspaceSaved | undefined;
     if (!(asked.value.ok && saved)) {
-      return problem(503, {
+      return problem(502, {
         code: "picture-save-failed",
         detail: `The picture wasn't saved: ${asked.value.error ?? "its machine answered nothing"}.`,
       });

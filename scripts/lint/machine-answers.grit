@@ -1,0 +1,77 @@
+language js
+
+// Every hub answer about a machine says its cause (the owner's machine-status
+// rule, 2026-11-10): a machine away is 503 machine-away, made by
+// awayProblem, which names it; one silent is 504 machine-silent, made by
+// silentProblem (packages/hub/src/machine-answers.ts, the one file that
+// writes either). So no other hub file writes a 503 or a 504 itself, nor
+// either code: a new one goes through those two, or is a cause that is no
+// machine's, named below with why.
+//
+// Not a machine's, each by its code:
+// - the hub's own state or build: task-attempts-off, task-retries-off (a hub
+//   built without attempts), hubs-build-cannot-install (no release key),
+//   preview-no-listener, preview-ports-taken, preview-port-unopened,
+//   preview-host-mode-unopened (the hub's own preview listeners),
+//   folder-git-missing (no git on the hub's machine), refused (the hub still
+//   fetching a release archive, binary-updates.ts), browse-unnamed (a
+//   preview origin this hub cannot name), mcp-signed-out (an MCP server the
+//   fleet is not signed in to);
+// - a server outside the fleet or the hub's own deadline: site-did-not-answer
+//   (a site's favicon), folder-git-unanswered (git in a project folder),
+//   hub-unanswered (a server an admin call waits on), followup-state-unanswered
+//   and image-hub-unanswered (the hub's own answer to a tool);
+// - a canvas's screen or a session, not its machine: artifact-canvas-no-screen,
+//   artifact-canvas-undrawn, artifact-canvas-screen-unjoined,
+//   artifact-comment-undelivered.
+//
+// Known, and owed their split (each says a machine away or silent among
+// other causes in one sentence): a preview's start (preview-service.ts
+// `PreviewReach`, `down: "machine"`), answered artifact-preview-unstarted,
+// artifact-show-unstarted, artifact-sheet-unshown and
+// artifact-unanswered-unhanded; and a decision page's tasks asked of Caw
+// (decisions.ts), decision-tasks-unasked.
+or {
+  or {
+    `problem($status, $fields)`,
+    `status($status, $fields)`
+  } as $hit where {
+    $filename <: includes "packages/hub/src/",
+    $filename <: not includes "packages/hub/src/machine-answers.ts",
+    $status <: or { `503`, `504`, `"Service Unavailable"`, `"Gateway Timeout"` },
+    $fields <: not contains or {
+      `code: "task-attempts-off"`,
+      `code: "task-retries-off"`,
+      `code: "hubs-build-cannot-install"`,
+      `code: "preview-no-listener"`,
+      `code: "preview-ports-taken"`,
+      `code: "preview-port-unopened"`,
+      `code: "preview-host-mode-unopened"`,
+      `code: "folder-git-missing"`,
+      `code: "refused"`,
+      `code: "browse-unnamed"`,
+      `code: "mcp-signed-out"`,
+      `code: "site-did-not-answer"`,
+      `code: "folder-git-unanswered"`,
+      `code: "hub-unanswered"`,
+      `code: "followup-state-unanswered"`,
+      `code: "image-hub-unanswered"`,
+      `code: "artifact-canvas-no-screen"`,
+      `code: "artifact-canvas-undrawn"`,
+      `code: "artifact-canvas-screen-unjoined"`,
+      `code: "artifact-comment-undelivered"`,
+      `code: "artifact-preview-unstarted"`,
+      `code: "artifact-show-unstarted"`,
+      `code: "artifact-sheet-unshown"`,
+      `code: "artifact-unanswered-unhanded"`,
+      `code: "decision-tasks-unasked"`
+    },
+    register_diagnostic(span=$hit, message="A 503 is a machine away and a 504 a machine silent (the owner's machine-status rule): answer awayProblem or silentProblem (packages/hub/src/machine-answers.ts). A cause that is no machine's is named, with why, in scripts/lint/machine-answers.grit.")
+  },
+  `code: $code` as $hit where {
+    $filename <: includes "packages/hub/src/",
+    $filename <: not includes "packages/hub/src/machine-answers.ts",
+    $code <: or { `"machine-away"`, `"machine-silent"` },
+    register_diagnostic(span=$hit, message="machine-away and machine-silent are made by awayProblem and silentProblem alone (packages/hub/src/machine-answers.ts), so the away one names its machine.")
+  }
+}
