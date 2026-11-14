@@ -10,7 +10,6 @@ import { secondsOf } from "@cawco/core/time";
 import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
-import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";
 import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 
@@ -223,22 +222,16 @@ export const claudeHostVersion = async (): Promise<
 };
 
 /**
- * The fix a refusal ends on when the machine's Claude Code answered with no
- * version (one still answering clears by itself, `claudeVersionUnsaid`):
- * the press that runs Claude Code's own updater on the machine (core
- * TOOL_CATALOG's `claude`), wherever the refusal stands in the dashboard
- * (`HarnessBlock`). With no version to compare, the hub sends no update of
- * its own (hub tool-releases.ts `updatesOwed`).
+ * The fix a refusal ends on, a copy older than the floor's and one that
+ * said no version alike: the press that runs Claude Code's own updater on
+ * the machine (core TOOL_CATALOG's `claude`), wherever the refusal stands
+ * in the dashboard (`HarnessBlock`). Whether the hub sends that update with
+ * no press is the fleet's choice and whose the copy is (hub
+ * tool-installs.ts `keepRunnable`): the machine's tool status says it, not
+ * this sentence.
  */
 const UPDATE_FIX =
   "Update Claude Code on this machine, and CawCo runs it again: nothing was started or signed in.";
-
-/**
- * The fix a refusal of a copy older than the floor ends on: the hub sends
- * the update itself, as it does for any copy older than Claude Code's newest
- * release (hub tool-releases.ts), so there is nothing to press.
- */
-const UPDATING_FIX = `${toolWords.updatesItself("Claude Code")}: nothing was started or signed in.`;
 
 /**
  * Why CawCo runs nothing of this machine's Claude Code, in one sentence;
@@ -259,7 +252,7 @@ export const versionRefusal = (
         return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;
       }
       return olderThan(version.value, CLAUDE_VERSION_FLOOR)
-        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short. ${UPDATING_FIX}`
+        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short. ${UPDATE_FIX}`
         : undefined;
     default:
       return version satisfies never;

@@ -126,6 +126,8 @@ import {
   StarterOutcomeSchema,
   StoppedCommandsSchema,
   StreamRelayStateSchema,
+  ToolCopySchema,
+  ToolWantsSchema,
   TrackerSyncStateSchema,
   WaitWitnessSchema,
   WorkspaceCutSchema,
@@ -135,7 +137,7 @@ import {
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
-import { TOOL_STATES } from "@cawco/core/tools";
+import { TOOL_STATES, TOOL_UPDATES } from "@cawco/core/tools";
 import { TRACKERS } from "@cawco/core/trackers";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { USAGE_HARNESSES } from "@cawco/core/usage/types";
@@ -419,6 +421,14 @@ export const agentTools = sqliteTable(
     detail: text("detail"),
     /** For a tool with its own sign-in: whether it is signed in there, as the machine last read it. */
     signin: storedJson(NamedToolSigninSchema)("signin"),
+    /** Whose the copy there is, as the machine judged it (core `ToolCopy`); null from an older machine, or with no copy. */
+    copy: storedJson(ToolCopySchema)("copy"),
+    /** While the copy there is one its CawCo does not run: the version it runs (core `ToolWants`). */
+    wants: storedJson(ToolWantsSchema)("wants"),
+    /** When the install attempt whose words `detail` holds ran (core `ToolStatus.triedAt`). */
+    triedAt: timestamp("tried_at"),
+    /** On `installing`: the version being put on (core `ToolStatus.to`). */
+    goingTo: text("going_to"),
     /** When this was learnt. */
     at: timestamp("at").notNull(),
   },
@@ -3781,6 +3791,23 @@ export const cardSettlings = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.card] })]
 );
+/** The one row of {@link toolUpdateSettings}. */
+export const TOOL_UPDATES_ID = "tools";
+
+/**
+ * What the fleet does with a machine's copy of a tool at a version CawCo
+ * does not run (core `ToolUpdates`) — one row, keyed `'tools'`, following
+ * the {@link spendSettings} precedent. No row reads as core's
+ * `TOOL_UPDATES_DEFAULT`, "update".
+ */
+export const toolUpdateSettings = sqliteTable("tool_update_settings", {
+  /** Always `'tools'`. */
+  id: text("id").primaryKey(),
+  updates: storedEnum(z.enum(TOOL_UPDATES))("updates")
+    .notNull()
+    .default("update"),
+});
+
 /** The one row of {@link fleetWatchSettings}. */
 export const FLEET_WATCH_ID = "fleet-watch";
 

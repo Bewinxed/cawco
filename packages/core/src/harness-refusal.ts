@@ -14,7 +14,6 @@ import type { HarnessKind } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
 import { type ToolSpec, type ToolStatus, toolRuns, toolSpec } from "./tools";
 import { harnessRefusedWords } from "./words/harness";
-import { toolWords } from "./words/tools";
 
 export type HarnessRefusalKind = "not-installed" | "version";
 
@@ -89,13 +88,12 @@ export const harnessRefusal = (
       ),
     };
   }
-  // A CLI CawCo keeps at its newest release (core `ToolSpec.release`) is
-  // updated with no press.
-  const fix = spec.release
-    ? `${toolWords.updatesItself(spec.name)}.`
-    : harnessRefusedWords.pressFix(
-        harnessRefusedWords.press(kind, spec.name, spec.exactVersion)
-      );
+  // The press, whatever the tool: whether the hub updates a copy CawCo
+  // doesn't run with no press is the fleet's choice and whose the copy is
+  // (core tool-updates.ts), which the machine's tool status says.
+  const fix = harnessRefusedWords.pressFix(
+    harnessRefusedWords.press(kind, spec.name, spec.exactVersion)
+  );
   return {
     kind,
     spec,
