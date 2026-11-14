@@ -340,6 +340,11 @@ export const routinesWords = {
  * page's words: agent-facing, so none of them reach the app.
  */
 export const routineToolWords = {
+  /** A connector poll's item whose id or version is over a key part's bound: refused, never cut. */
+  keyPartOver: (max: number): string =>
+    `an item's id or version is over ${max} characters, the most a key part holds`,
+  /** An event route's regex over its bound. */
+  regexOver: (max: number): string => `regex is at most ${max} characters.`,
   /** An event route's regex, beside it: how much of each event it reads. */
   regexReads: (kib: number): string =>
     `(reads the first ${kib} KiB of an event)`,

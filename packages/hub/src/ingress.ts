@@ -68,6 +68,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
 import { configurePage } from "@cawco/core/words/configure";
+import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
@@ -245,9 +246,7 @@ const keyPart = (value: unknown): string | undefined => {
   }
   const part = String(value);
   if (part.length > KEY_PART_MAX) {
-    throw new Error(
-      `an item's id or version is over ${KEY_PART_MAX} characters, the most a key part holds`
-    );
+    throw new Error(routineToolWords.keyPartOver(KEY_PART_MAX));
   }
   return part;
 };
@@ -295,7 +294,7 @@ const defined = <T extends object>(
  */
 const regexProblem = (regex: string): string | undefined => {
   if (regex.length > REGEX_MAX) {
-    return `regex is at most ${REGEX_MAX} characters.`;
+    return routineToolWords.regexOver(REGEX_MAX);
   }
   try {
     re2(regex);
