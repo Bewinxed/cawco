@@ -153,8 +153,7 @@ export function hubSaid(refused: Refused): string {
  * ({@link hubData}). Refused, `failure`'s error is thrown: the hub's
  * refusal in its own words ({@link hubRefusal}) unless the caller words it
  * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`).
- * Answered, its body is read by {@link jsonOf}, as {@link readHub} reads a
- * load's.
+ * Answered, its body is read by {@link jsonOf}.
  */
 export async function hubJson<T>(
   request: HubRequest,
@@ -507,7 +506,7 @@ export function couldNot(attempt: string, refused: Refused): Error {
  * A hub request sent from this page: `request` as core's door built it
  * (`hubRequest`, held to what its route takes), with `init`'s own signal,
  * keepalive or other headers beside it, through `through`: the page's
- * `fetch`, or a load's own: the door {@link hubJson} and {@link readHub}
+ * `fetch`, or a load's own: the door {@link hubJson}
  * send through, for the callers still waiting on the hub's types.
  */
 export const hubFetch = (
@@ -661,21 +660,4 @@ export function failureWords(error: unknown): string {
 /** {@link failureWords} without its closing stop, for a sentence of the caller's that carries it. */
 export function failureClause(error: unknown): string {
   return failureWords(error).replace(FINAL_STOP, "");
-}
-
-/**
- * Reads `request` through the given fetch (a load's own): refused, why, as
- * the load shows it; answered, its body read by {@link jsonOf}, as
- * {@link hubJson} reads one.
- */
-export async function readHub<T>(
-  fetch: typeof globalThis.fetch,
-  request: HubRequest,
-  init: RequestInit = {}
-): Promise<HubRead<T>> {
-  const response = await fetchHub(fetch, "", request, init);
-  if (!response.ok) {
-    return { ok: false, ...hubFailure(await refusedOf(response)) };
-  }
-  return { ok: true, value: await jsonOf<T>(response) };
 }
