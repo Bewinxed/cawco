@@ -192,12 +192,7 @@ export class SetupDraftSource {
           `The setup page's program did not read (${asked.refused.response.status}).`
         );
       }
-      // The route is typed as the file it serves; Eden hands back its bytes
-      // (an ArrayBuffer for a type it does not know) or its text, and a Blob
-      // reads either as text.
-      const read = asked.ok
-        ? setupIn(await new Blob([asked.value]).text())
-        : null;
+      const read = asked.ok ? setupIn(await asked.value.text()) : null;
       if (newest()) {
         this.drafted = read?.drafted ?? null;
         this.cards = read?.cards ?? [];

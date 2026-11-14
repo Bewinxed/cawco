@@ -322,7 +322,7 @@
         if (one.kind === "text" && !(one.ref in texts)) {
           texts[one.ref] = "";
           hubAsk(hub.api.files({ hash: fileHash(one.ref) }).get())
-            .then((got) => (got.ok ? new Response(got.value).text() : ""))
+            .then((got) => (got.ok ? got.value.text() : ""))
             .then((read) => {
               texts[one.ref] = read;
             })

@@ -283,21 +283,60 @@ export async function refusedOf(fetched: Response): Promise<Refused> {
   };
 }
 
+/** The content types a hub answer is read by as data, never as a file: JSON, a stream, a bare string, a form. */
+const DATA_TYPES = new Set([
+  "application/json",
+  "application/problem+json",
+  "text/event-stream",
+  "text/plain",
+  "multipart/form-data",
+]);
+
+/**
+ * Whether a 2xx answer is a file: it names a content type and that type is
+ * none of the data types ({@link DATA_TYPES}). Eden reads such a body by its
+ * type (images and video through `text()`, which corrupts them, an
+ * `application/octet-stream` as an ArrayBuffer, text that looks like JSON as
+ * a value), where the route's type says Blob: so it is read as the Blob it
+ * is, bytes and type unchanged ({@link fileOf}). A refusal is never a file:
+ * it is read as before, whatever its type (a proxy's HTML page).
+ */
+function isFile(response: Response): boolean {
+  const type = response.headers.get("content-type")?.split(";")[0].trim();
+  return (
+    type !== undefined &&
+    type !== "" &&
+    response.status >= 200 &&
+    response.status < 300 &&
+    !DATA_TYPES.has(type)
+  );
+}
+
+/**
+ * Eden's `onResponse` (hub.ts): a file answer's Blob, which Eden then hands
+ * back as `data`; undefined for any other answer, which Eden reads itself
+ * (a value other than undefined supplies `data` and skips its own read).
+ */
+export async function fileOf(response: Response): Promise<Blob | undefined> {
+  return isFile(response) ? await response.blob() : undefined;
+}
+
 /**
  * `response`'s body as Eden's client reads one, by its `Content-Type`
- * (@elysia/eden 2.0.0-rc.1, src/treaty2: the `switch` on `Content-Type`
- * once the answer is in; dates left as strings, `parseDate: false`).
+ * (@elysia/eden 2.0.0-rc.1, src/treaty2: `onResponse` first, here
+ * {@link fileOf}, then the `switch` on `Content-Type`; dates left as
+ * strings, `parseDate: false`).
  */
 async function bodyIn(response: Response): Promise<unknown> {
+  if (isFile(response)) {
+    return await response.blob();
+  }
   const type = response.headers.get("content-type")?.split(";")[0];
   if (type === "text/event-stream") {
     return streamResponse(response, { parseDate: false });
   }
   if (type === "application/json" || type === "application/problem+json") {
     return JSON.parse(await response.text());
-  }
-  if (type === "application/octet-stream") {
-    return await response.arrayBuffer();
   }
   if (type === "multipart/form-data") {
     return Object.fromEntries(await response.formData());

@@ -8,18 +8,22 @@
  * proxy reaches the hub. Sent through `through` when given (a load's own
  * `fetch`), else the page's `fetch` as it stands at each call, so the leaving
  * gate on it (leaving.ts) holds; each answer handed to Eden as it may read
- * it ({@link readable}). Dates stay the strings the hub sent
+ * it ({@link readable}), a file's as its Blob ({@link fileOf}). Dates stay the
+ * strings the hub sent
  * (`parseDate: false`): Eden would otherwise make every ISO string a `Date`
  * its route doesn't type.
  */
 import type { HubApp } from "@cawco/hub/app";
 import { treaty } from "@elysia/eden";
-import { readable } from "./hub-read";
+import { fileOf, readable } from "./hub-read";
 
 export const hubThrough = (through?: typeof fetch) =>
   treaty<HubApp>("", {
     keepDomain: true,
     parseDate: false,
+    // A file answer is its Blob (hub-read.ts `fileOf`), not what Eden reads
+    // by its type.
+    onResponse: fileOf,
     // A proxy of fetch, so it keeps what else fetch carries (Bun types its
     // `preconnect`), sending through `through`, else the page's `fetch` as
     // it stands at this call.
