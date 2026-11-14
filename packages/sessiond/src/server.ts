@@ -113,11 +113,31 @@ const STDERR_TAIL_BYTES = 4096;
 const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
 
 /**
- * The graceful window between stdin-EOF and SIGKILL during drain, mirroring
- * the agent's existing drain discipline (its
- * `DRAIN_TIMEOUT_MS = 8_000`).
+ * How long the service manager gives this keeper to stop before it
+ * SIGKILLs the whole unit: no CawCo unit sets a stop timeout, so it is the
+ * manager's default, 90 s ("DefaultTimeoutStopSec= ... default to 90 s in
+ * the system manager and 90 s in the user manager",
+ * https://www.freedesktop.org/software/systemd/man/latest/systemd-system.conf.html;
+ * core run-captured.ts quotes it).
  */
-const DRAIN_TIMEOUT_MS = 8000;
+const STOP_TIMEOUT_MS = 90_000;
+
+/**
+ * What a drain needs after its grace, inside the stop timeout: the process
+ * table read, the trees' SIGKILL and the cgroups' kill. Taken from the drain
+ * under load that was still running 30 s after its SIGTERM
+ * ({@link SessiondServer.drain}), so all of that, grace included, fits.
+ */
+const DRAIN_KILL_MS = 30_000;
+
+/**
+ * The graceful window between stdin-EOF and SIGKILL during drain: what the
+ * stop timeout leaves once the kill has its time ({@link STOP_TIMEOUT_MS}
+ * less {@link DRAIN_KILL_MS}, 60 s), so a harness still writing its
+ * transcript on a loaded machine is not killed mid-write while the manager
+ * has not yet run out.
+ */
+const DRAIN_TIMEOUT_MS = STOP_TIMEOUT_MS - DRAIN_KILL_MS;
 
 /**
  * How long what a child started gets to end by itself once the child is gone,

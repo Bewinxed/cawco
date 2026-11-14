@@ -53,19 +53,44 @@ const secretsOf = (): string[] => [
   ...declaredSecrets,
 ];
 
-/** A declared LFS credential (HTTP Basic), and each part it decodes to, taken out of what git says from now on. */
+/**
+ * How long a Basic credential's user part must be to be held. A token passed
+ * as the user is long; the users that are not secrets ("git", "x", "oauth2")
+ * are six characters or fewer, and scrubbing them out of everything git
+ * prints would wreck it.
+ */
+const USER_HELD_MIN = 8;
+
+/**
+ * The parts of an HTTP Basic credential that are held besides the value
+ * itself, as RFC 7617 splits it: the user-id is what comes before the first
+ * colon (it has none), the password all that follows it (it may have some).
+ * The password is held whole whenever it is not empty; the user only from
+ * {@link USER_HELD_MIN} characters.
+ */
+const basicParts = (basic: string): string[] => {
+  const decoded = Buffer.from(basic, "base64").toString();
+  const colon = decoded.indexOf(":");
+  const user = colon < 0 ? decoded : decoded.slice(0, colon);
+  const password = colon < 0 ? "" : decoded.slice(colon + 1);
+  return [
+    ...(password === "" ? [] : [password]),
+    ...(user.length >= USER_HELD_MIN ? [user] : []),
+  ];
+};
+
+/** A declared LFS credential (HTTP Basic), and each part it decodes to ({@link basicParts}), taken out of what git says from now on. */
 export const holdDeclaredSecret = (basic: string): void => {
   declaredSecrets.add(basic);
-  for (const part of Buffer.from(basic, "base64").toString().split(":")) {
-    if (part.length >= 8) {
-      declaredSecrets.add(part);
-    }
+  for (const part of basicParts(basic)) {
+    declaredSecrets.add(part);
   }
 };
 
 /**
  * `work` with an outside remote's credential taken out of all it says, for
- * as long as it runs: the Basic value and each part of what it decodes to.
+ * as long as it runs: the Basic value and each part of what it decodes to
+ * ({@link basicParts}).
  */
 export const holdingRemote = async <T>(
   basic: string | undefined,
@@ -74,13 +99,7 @@ export const holdingRemote = async <T>(
   if (!basic) {
     return await work();
   }
-  const held = [
-    basic,
-    ...Buffer.from(basic, "base64")
-      .toString()
-      .split(":")
-      .filter((part) => part.length >= 4),
-  ];
+  const held = [basic, ...basicParts(basic)];
   for (const secret of held) {
     remoteSecrets.set(secret, (remoteSecrets.get(secret) ?? 0) + 1);
   }
