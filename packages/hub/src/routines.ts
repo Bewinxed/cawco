@@ -107,7 +107,7 @@ import type {
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
-import { Cron, DateTime, Option, Result } from "effect";
+import { Cron, DateTime } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import { type Caw, isProjectConversation } from "./caw";
@@ -119,7 +119,7 @@ import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { SentMessageRow } from "./db/sends";
 import type { WorkBudget } from "./db/stored-types";
 import { byHandle, type Handled, namesAny } from "./handles";
-import { eventData } from "./ingress";
+import { eventData } from "./inbound-event";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
@@ -133,7 +133,14 @@ import {
 } from "./presenters/project";
 import { handle } from "./presenters/words";
 import type { Push } from "./push";
-
+import {
+  cronOf,
+  EVENT_SLOT,
+  INBOX_SLOT,
+  nextRunsOf,
+  slotLabel,
+} from "./routine-schedule";
+import type { RoutineView } from "./routine-view";
 import { budgetParameter } from "./task-tools";
 import { BUDGET, LANDS, MODE } from "./tasks";
 import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
@@ -152,12 +159,6 @@ const NO_REPLY = "NO_REPLY";
 /** What a delegate's headline says to fail the run. */
 const AUTOMATION_FAILED = "AUTOMATION_FAILED";
 
-/**
- * A run an inbound event started (ingress.ts): its slot is `event:<event
- * id>`, so an event runs a routine once, and its retry reads the same event.
- */
-const EVENT_SLOT = "event:";
-
 /** How long an agent's routine lives unless kept. */
 const AGENT_LIFETIME_MS = 7 * DAY_MS;
 /** The longest the scheduler sleeps between looks: expiry and a machine coming back are seen within it. */
@@ -174,8 +175,6 @@ const NOTE_MAX = 4000;
 /** A conversation run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
 const CAW_OFF = "Caw is off, so only your words wake him";
 
-/** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */
-const INBOX_SLOT = "inbox:";
 /** The soonest a full inbox runs the curator again after its last run began. */
 const INBOX_REST_MS = HOUR_MS;
 const CURATOR_NAME = "Memory curator";
@@ -222,52 +221,6 @@ const targetStays = (from: RoutineTarget, to: RoutineTarget) => {
     });
   }
 };
-
-/**
- * Where a routine was made: the session whose `routine_create` call made
- * it, and how its notice names that session.
- */
-interface RoutineMadeIn {
-  by: RoutineMadeEvent["by"];
-  instanceId: string;
-}
-
-/** A routine, as the routes and tools answer it (times in ms), with its newest runs. */
-export interface RoutineView {
-  budget: WorkBudget | null;
-  createdAt: number;
-  createdBy: string;
-  cron: string;
-  dailyCapUsd: number | null;
-  delegateType: string | null;
-  disabledReason: string | null;
-  enabled: boolean;
-  expiresAt: number | null;
-  id: string;
-  keep: boolean;
-  lands: LandsMode;
-  lastSlot: number | null;
-  /** Where a session made it; null for yours, the hub's, and those made before the hub kept where. */
-  madeIn: RoutineMadeIn | null;
-  /** What the making turn said just before its call, one paragraph; null when it said nothing or a session did not make it. */
-  madeWhy: string | null;
-  /** The mode a conversation run starts the project's conversation in when it has none; null: the project's. */
-  mode: OfferedMode | null;
-  name: string;
-  /**
-   * Its runs ahead, as the scheduler will start them (`nextRunsOf`): the next
-   * week's, at most 288, epoch ms; a paused routine's too.
-   */
-  nextRuns: number[];
-  nextSlot: number;
-  projectId: string | null;
-  prompt: string;
-  runs: RoutineRunView[];
-  /** Its schedule in words, and its next run. */
-  schedule: RoutineSchedule;
-  target: RoutineTarget;
-  timeZone: string;
-}
 
 /** What a new routine is made of. */
 export interface RoutineInput {
@@ -395,90 +348,12 @@ const noProject = problem(409, {
   detail: "no project",
 });
 
-/** A schedule, parsed; refused with Effect's own words when it does not parse. */
-const parsedCache = new Map<string, Cron.Cron>();
-const cronOf = (expression: string, timeZone: string) => {
-  const key = `${expression}\0${timeZone}`;
-  const cached = parsedCache.get(key);
-  if (cached) {
-    return cached;
-  }
-  if (Option.isNone(DateTime.zoneMakeNamed(timeZone))) {
-    return problem(400, {
-      code: "routine-time-zone-unknown",
-      detail: `“${timeZone}” is not an IANA time zone; name one like Europe/London or America/New_York.`,
-    });
-  }
-  const parsed = Cron.parse(expression, timeZone);
-  if (Result.isFailure(parsed)) {
-    return problem(400, {
-      code: "routine-cron-unparsed",
-      detail: `“${expression}” is not a cron schedule: ${parsed.failure.message}. Give five fields (minute hour day month weekday), or six with seconds first.`,
-    });
-  }
-  parsedCache.set(key, parsed.success);
-  return parsed.success;
-};
-
 /**
  * The newest slot at or before `now`. `Cron.prev` is strict and works in
  * whole seconds, so it is asked from the next whole second.
  */
 const newestDue = (cron: Cron.Cron, now: number): Date =>
   Cron.prev(cron, new Date(now + 1000));
-
-/** How far ahead a routine's runs are told: a week, the dashboard's strip. */
-const NEXT_RUNS_SPAN_MS = 7 * DAY_MS;
-/**
- * At most this many: one day of a routine that runs every five minutes
- * (12 an hour × 24), so the strip draws a whole day of any schedule as
- * fine as that; a finer one (every minute) is told its next 288, the strip
- * spanning to the last of them. An hourly routine's week (168) is whole.
- */
-const NEXT_RUNS_MAX = 288;
-
-/**
- * A routine's runs ahead of `now`, as the scheduler will start them: Effect's
- * `Cron.sequence` on the same parsed cron and zone the hub runs it by
- * (`cronOf`), over the next week and at most `NEXT_RUNS_MAX`, epoch ms.
- */
-export const nextRunsOf = (cron: string, timeZone: string, now: number) => {
-  const parsed = cronOf(cron, timeZone);
-  if (parsed instanceof ElysiaStatus) {
-    return parsed;
-  }
-  const runs: number[] = [];
-  for (const at of Cron.sequence(parsed, new Date(now))) {
-    const time = at.getTime();
-    if (time >= now + NEXT_RUNS_SPAN_MS || runs.length >= NEXT_RUNS_MAX) {
-      break;
-    }
-    runs.push(time);
-  }
-  return runs;
-};
-
-/** `09:00`, a slot's time in the routine's zone; `test`, `by hand` for the others. */
-export const slotLabel = (slot: string, timeZone: string): string => {
-  if (slot.startsWith("test:")) {
-    return "test";
-  }
-  if (slot.startsWith("now:")) {
-    return "by-hand";
-  }
-  if (slot.startsWith(EVENT_SLOT)) {
-    return "event";
-  }
-  if (slot.startsWith(INBOX_SLOT)) {
-    return "inbox";
-  }
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(slot));
-};
 
 /** A cron field that repeats (`*`, `*\/15`, `0-30/5`) rather than naming fixed values. */
 const REPEATS = /[*/]/u;

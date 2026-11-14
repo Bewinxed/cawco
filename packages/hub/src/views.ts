@@ -63,7 +63,7 @@ import {
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
 
-import { nextRunsOf, slotLabel } from "./routines";
+import { nextRunsOf, slotLabel } from "./routine-schedule";
 import type { Tasks } from "./tasks";
 import { unrecognizedKeys } from "./unrecognized-keys";
 

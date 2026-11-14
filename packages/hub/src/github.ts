@@ -56,7 +56,7 @@ import type { WaitTarget } from "@cawco/core/wait-targets";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";
-import type { InboundEvent } from "./ingress";
+import type { InboundEvent } from "./inbound-event";
 import type { GitHubWaitState } from "./task-waits";
 
 /** What {@link normalizeGitHub} reads: a polled object's kind, or a webhook's event name. */

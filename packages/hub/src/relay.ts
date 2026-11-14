@@ -82,6 +82,7 @@ import {
   relayListWords,
   relayRemovedWords,
 } from "./presenters/project";
+import type { RelayCreated } from "./relay-created";
 
 /** The most a delivery's body holds: 1 MiB. */
 const RELAY_BODY_MAX = 1024 * 1024;
@@ -134,17 +135,6 @@ export interface RelayInput {
   signatureHeader?: string | null;
   /** generic: a header with the Unix time the signature covers. */
   timestampHeader?: string | null;
-}
-
-/** What creating a relay answers: the relay, and the routes a conversation may propose for it. */
-export interface RelayCreated {
-  relay: RelayView;
-  /** Event routes for the project's routines, to propose to the owner (event_route_create), never made here. */
-  suggestedRoutes: {
-    note: string;
-    routines: { id: string; name: string }[];
-    source: string;
-  };
 }
 
 export interface RelayDeps {

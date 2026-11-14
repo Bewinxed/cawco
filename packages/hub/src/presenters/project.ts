@@ -13,10 +13,11 @@ import type {
   ConnectorPollView,
   EventRouteView,
   IngressView,
-} from "../ingress";
+} from "../ingress-views";
 import type { FolderFile, FolderListing } from "../project-folder";
-import type { RelayCreated } from "../relay";
-import { type RoutineView, slotLabel } from "../routines";
+import type { RelayCreated } from "../relay-created";
+import { slotLabel } from "../routine-schedule";
+import type { RoutineView } from "../routine-view";
 import {
   ago,
   ahead,

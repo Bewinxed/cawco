@@ -48,7 +48,7 @@ import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus } from "elysia";
 import type { TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type { TrackersDb } from "./db/trackers";
-import type { InboundEvent } from "./ingress";
+import type { InboundEvent } from "./inbound-event";
 import type { GitHubWaitState } from "./task-waits";
 import type { TaskActor, Tasks, TaskView } from "./tasks";
 import { intoFile } from "./tracker-adapter";
