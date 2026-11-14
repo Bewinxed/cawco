@@ -78,21 +78,24 @@
   let policyRefused = $state<Record<string, string>>({});
   const cellKey = (machineId: string, toolId: string): string =>
     `${machineId}:${toolId}`;
-  /** Machines with a copy there: one being updated (a version beside its progress) still has it. */
-  const installedOn = (spec: ToolSpec): number =>
-    machines.filter((machine) => {
-      const tool = machine.tools?.[spec.id];
-      return (
-        tool?.state === "installed" ||
-        (tool?.state === "installing" && tool.version !== undefined)
-      );
-    }).length;
-
   /** A copy of the tool is there: installed, or being updated or refused with its version kept. */
   const hasCopy = (tool: ToolStatus | undefined): boolean =>
     tool?.state === "installed" ||
     ((tool?.state === "installing" || tool?.state === "failed") &&
       tool.version !== undefined);
+  /**
+   * Machines with a copy there: one being updated (a version beside its
+   * progress) still has it, and so does one at a version CawCo doesn't run,
+   * which its row shows by that version ({@link cantRunOn}).
+   */
+  const installedOn = (spec: ToolSpec): number =>
+    machines.filter((machine) => hasCopy(machine.tools?.[spec.id])).length;
+  /** Machines whose copy is at a version CawCo doesn't run: the row's "can't run". */
+  const cantRunOn = (spec: ToolSpec): number =>
+    machines.filter((machine) => {
+      const tool = machine.tools?.[spec.id];
+      return tool?.state === "failed" && tool.version !== undefined;
+    }).length;
   /** Machines whose copy of a tool with its own sign-in reads signed in. */
   const signedInOn = (spec: ToolSpec): number =>
     machines.filter((machine) => {
@@ -722,7 +725,7 @@
                 <IconExternal class="size-icon-sm" />
               </a>
               <span data-slot="num" class="num type-meta text-ink-muted"
-                >{installedOn(spec)}/{machines.length} installed{#if spec.signin && signedInOn(spec) > 0}{` · ${toolWords.signedInCount(signedInOn(spec))}`}{/if}</span
+                >{installedOn(spec)}/{machines.length} installed{#if cantRunOn(spec) > 0}{` · ${toolWords.cantRunCount(cantRunOn(spec))}`}{/if}{#if spec.signin && signedInOn(spec) > 0}{` · ${toolWords.signedInCount(signedInOn(spec))}`}{/if}</span
               >
             </span>
             <label

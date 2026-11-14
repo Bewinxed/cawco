@@ -14,7 +14,7 @@
   } from "@cawco/core/continuation";
   import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import { cleanStartRefusal } from "@cawco/core/harness";
+  import { cleanStartRefusal, HARNESS_TOOL } from "@cawco/core/harness";
   import {
     type EffortLevel,
     HARNESSES,
@@ -476,8 +476,14 @@
    * waits on it.
    */
   let placementRefusal = $state<string | null>(null);
-  /** The Configure page that puts the refusal right; null when none does. */
-  let placementFix = $state<"accounts" | "cli-tools" | null>(null);
+  /**
+   * The Configure page that puts the refusal right, and where on it: the
+   * harness's own CLI's ledger on Command-line tools; null when no page does.
+   */
+  let placementFix = $state<{
+    href: string;
+    slug: "accounts" | "cli-tools";
+  } | null>(null);
   $effect(() => {
     const view = accountsStore.accounts;
     const query = {
@@ -517,7 +523,14 @@
           if (!stale) {
             placement = null;
             placementRefusal = failureWords(cause);
-            placementFix = cause instanceof PlacementRefused ? cause.fix : null;
+            const fix = cause instanceof PlacementRefused ? cause.fix : null;
+            placementFix = fix && {
+              slug: fix,
+              href:
+                fix === "cli-tools"
+                  ? `/config/cli-tools#tool-${HARNESS_TOOL[query.harness]}`
+                  : `/config/${fix}`,
+            };
           }
         });
     }, PLACEMENT_SETTLE_MS);
@@ -2672,7 +2685,7 @@
         <AlertDescription>
           <a
             class="rounded-xs text-link-ink no-underline hover:text-link-hover"
-            href="/config/{placementFix}">Open {configurePage(placementFix)}</a
+            href={placementFix.href}>Open {configurePage(placementFix.slug)}</a
           >
         </AlertDescription>
       {/if}

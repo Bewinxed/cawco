@@ -205,6 +205,8 @@ export const toolWords = {
   signinHead: "Sign-in",
   /** The ledger head's count, after "n/m installed", only above 0. */
   signedInCount: (count: number) => `${count} signed in`,
+  /** The ledger head's count of copies at a version CawCo doesn't run (their rows' "can't run"), after "n/m installed", only above 0. */
+  cantRunCount: (count: number) => `${count} can't run`,
   signedIn: "Signed in",
   signedOut: "Not signed in",
   signinUnknown: "Unknown",
