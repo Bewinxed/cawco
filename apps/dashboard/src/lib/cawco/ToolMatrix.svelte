@@ -291,9 +291,9 @@
   {@const shown = toolStatus?.state ?? "unknown"}
   {@const failed = cellKey(machine.machineId, spec.id) in refused}
   <!-- A copy there at a version CawCo doesn't run (older than its floor, or
-       not its one version) is the probe's, and carries that version; an
-       attempt that failed carries none (agent tools.ts), but on a tool CawCo
-       keeps current, whose failures keep the copy's version. -->
+       not its one version) carries that version, the probe's word on it and
+       an attempt's that left it there alike (core ToolStatus `triedAt` says
+       which); an attempt that failed with no copy there carries none. -->
   {@const outdated = toolStatus?.state === "failed" && !!toolStatus.version}
   <!-- CawCo keeps it at its newest release by itself (core ToolSpec.release:
        Claude Code): no press updates it, and a failed update takes Retry. -->

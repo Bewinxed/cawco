@@ -1396,6 +1396,8 @@ export interface ClosureContext {
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
   unstrand: (instanceId: string) => void;
+  /** A person's Update of a tool on every machine behind on it (tool-installs.ts `updateAll`). */
+  updateAll: (toolId: string) => { away: string[]; sent: string[] };
   usageCounter: UsageCounter;
   waitingForProcess: Set<string>;
   wakeForSend: (

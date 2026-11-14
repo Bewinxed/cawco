@@ -5,10 +5,8 @@
  * can't install, and how a refused harness and its row read when CawCo
  * updates it with no press. The agent says {@link toolWords.behind},
  * {@link toolWords.updatesOff}, {@link toolWords.autoUpdatesOff},
- * {@link toolWords.cannotPin},
- * {@link toolWords.updatesItself} and {@link toolWords.updatingItself}
- * (agent tools.ts, claude-version.ts); the dashboard says the rest
- * (ToolMatrix.svelte, harness-block.svelte.ts). The app draws none of it,
+ * and {@link toolWords.cannotPin} (agent tools.ts); the dashboard says the
+ * rest (ToolMatrix.svelte, harness-block.svelte.ts). The app draws none of it,
  * so it is not written into it (scripts/words-swift.ts).
  */
 /** Where a tool sign-in's refusal turns to quoting the tool's own screen. */
@@ -153,14 +151,6 @@ export const toolWords = {
     `CawCo can't install ${name} ${version} here, the version the fleet pins: ${listed(unpinnable)} can't install a chosen version${unmet.length ? `, and ${unmet.join("; ")}` : ""}. Remove the pin, or install ${name} ${version} on the machine yourself.`,
   /** No install method runs here: why each method's need can't serve, in catalog order. */
   noInstaller: (why: string[]) => `no installer runs here: ${why.join("; ")}`,
-  /**
-   * The fix a refused harness's sentence ends on when CawCo updates its CLI
-   * with no press (Claude Code older than CawCo's floor).
-   */
-  updatesItself: (name: string) =>
-    `CawCo updates ${name} and runs it once the update lands`,
-  /** The tail of the tool probe's word on a copy older than CawCo's floor, for a CLI CawCo updates by itself. */
-  updatingItself: "CawCo updates it.",
   /** Configure → CLI tools: the cell while CawCo updates a copy that is there. */
   updating: "Updating…",
   /** Configure → CLI tools: the mark beside a copy's version that its last update left older. */

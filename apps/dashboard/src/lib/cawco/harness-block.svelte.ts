@@ -22,6 +22,7 @@ import {
   harnessSpec,
 } from "@cawco/core/harness-refusal";
 import { machineLabel } from "@cawco/core/machine-names";
+import { type ToolUpdateState, toolUpdateOf } from "@cawco/core/tool-updates";
 import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { z } from "zod";
@@ -30,6 +31,7 @@ import { failureWords } from "#lib/platform/hub-read.js";
 import { didntAnswer } from "./hub/control";
 import { boardStore, type Machine } from "./stores/board.svelte";
 import { sessionsStore } from "./stores/sessions.svelte";
+import { toolUpdatesStore } from "./stores/tool-updates.svelte";
 import { relaunchSession } from "./stores/turns.svelte";
 import { TabDraft } from "./tab-draft.svelte";
 import { installTool } from "./tools";
@@ -43,6 +45,13 @@ type HarnessFix =
   | { phase: "failed"; said: string };
 
 export interface HarnessBlock {
+  /**
+   * CawCo updates it with no press: a copy it put there that it doesn't
+   * run, while the fleet updates such copies (core tool-updates.ts `due`),
+   * or, from a machine too old to say whose its copy is, a CLI CawCo keeps
+   * at its newest release.
+   */
+  auto: boolean;
   /** What fixes it: an update, or an install. */
   fix: HarnessFix;
   harness: HarnessKind;
@@ -84,13 +93,15 @@ export function harnessBlockOf(
     return null;
   }
   const { kind, spec, why } = refusal;
+  const update = toolUpdateOf(tool, toolUpdatesStore.updates);
   return {
     harness,
     kind,
     machine: name,
     spec,
     why,
-    fix: fixOf(spec, tool),
+    fix: fixOf(spec, tool, update),
+    auto: tool?.wants ? update?.kind === "due" : keptCurrent(spec),
   };
 }
 
@@ -113,23 +124,36 @@ export const machineBlocksOf = (machine: Machine): HarnessBlock[] =>
 /**
  * Whether CawCo keeps the harness's CLI at its newest release by itself
  * (core `ToolSpec.release`: Claude Code): the hub sends each machine whose
- * copy is older its update, so its block offers no press until one failed.
+ * copy is older, and runs, its update. A machine too old to say whose its
+ * copy is ({@link HarnessBlock.auto}) has every such copy updated so.
  */
 const keptCurrent = (spec: ToolSpec): boolean => spec.release !== undefined;
 
 /**
- * Where the fix stands, off the hub's cell. An attempt's failure carries no
- * version (agent tools.ts `install`), except on a CLI CawCo keeps current,
- * whose every failure keeps its copy's version and stands as the update's
- * own: the hub updates such a copy as soon as its probe says it is older.
+ * Where the fix stands, off the hub's cell (core tool-updates.ts
+ * `toolUpdateOf`): an install running; one that ran and left the copy
+ * refused (`failed`, with the installer's words), or failed with no copy
+ * there; and, from a machine too old to say what an attempt left, any
+ * failure on a CLI CawCo keeps current, whose every failure was its update's.
  */
-const fixOf = (spec: ToolSpec, tool: ToolStatus | undefined): HarnessFix => {
+const fixOf = (
+  spec: ToolSpec,
+  tool: ToolStatus | undefined,
+  update: ToolUpdateState | undefined
+): HarnessFix => {
   if (tool?.state === "installing") {
     return { phase: "running" };
   }
+  if (update?.kind === "failed") {
+    return {
+      phase: "failed",
+      said: update.output || "The machine didn't say why.",
+    };
+  }
   if (
     tool?.state === "failed" &&
-    (tool.version === undefined || keptCurrent(spec))
+    (tool.version === undefined ||
+      (keptCurrent(spec) && tool.wants === undefined))
   ) {
     return {
       phase: "failed",
@@ -150,14 +174,12 @@ const installs = (block: Pick<HarnessBlock, "kind" | "spec">): boolean =>
   block.kind === "not-installed" || block.spec.exactVersion !== undefined;
 
 /**
- * Whether the block offers its press: always, but for a CLI CawCo keeps
- * current that is there, which CawCo updates by itself and which takes the
- * press (Retry) only once that update failed.
+ * Whether the block offers its press: always, but for a copy CawCo updates
+ * by itself ({@link HarnessBlock.auto}), which takes the press (Retry) only
+ * once that update failed.
  */
 export const offersPress = (block: HarnessBlock): boolean =>
-  block.kind === "not-installed" ||
-  !keptCurrent(block.spec) ||
-  block.fix.phase === "failed";
+  block.kind === "not-installed" || !block.auto || block.fix.phase === "failed";
 
 /** A block's words for the press, its progress and its outcome. */
 export const harnessWords = {
