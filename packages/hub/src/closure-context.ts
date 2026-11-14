@@ -37,6 +37,7 @@ import type {
   CommandQueue,
   CommandResult,
 } from "@cawco/core/commands/controls";
+import type { StartingSet } from "@cawco/core/delegate-types";
 import type {
   FleetPlugin,
   FleetSkillMeta,
@@ -1221,9 +1222,14 @@ export interface ClosureContext {
   startingSetOf: (
     payload: Pick<
       NamedSpawn,
-      "delegateType" | "projectId" | "resume" | "skills"
+      | "clean"
+      | "delegateType"
+      | "instanceId"
+      | "projectId"
+      | "resume"
+      | "skills"
     >
-  ) => Pick<Parameters<DbShape["openInstance"]>[0], "startingSet">;
+  ) => { startingSet: StartingSet | null } | { refusal: string };
   startMove: (
     machineId: string,
     store: HomeStore,

@@ -55,7 +55,7 @@ import {
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
-import { startsAny } from "@cawco/core/delegate-types";
+import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
@@ -7731,16 +7731,29 @@ export const createServer = (
    * every harness enforces one. A start that resumes a conversation
    * (a fork, a stored transcript) takes the set that conversation's row
    * began with, or none: its tools stay what its conversation began with.
-   * Asked once, as the row first opens: the row keeps it
-   * (`db.openInstance`) and every later spawn of it carries that
-   * ({@link bounded}), never the set as it stands then.
+   * Asked as the row first opens: the row keeps it (`db.openInstance`) and
+   * every later spawn of it carries that ({@link bounded}), never the set as
+   * it stands then, so a row that spawned before answers its own. A project
+   * file that does not read, where the session would start with it, is the
+   * start's refusal, in words naming the file: it never starts with
+   * everything because a file did not read, as a stages.md that does not
+   * read refuses a dispatch (dispatch.ts) and a gate.md one a landing.
    */
   function startingSetOf(
     payload: Pick<
       NamedSpawn,
-      "delegateType" | "projectId" | "resume" | "skills"
+      | "clean"
+      | "delegateType"
+      | "instanceId"
+      | "projectId"
+      | "resume"
+      | "skills"
     >
-  ): Pick<Parameters<DbShape["openInstance"]>[0], "startingSet"> {
+  ): { startingSet: StartingSet | null } | { refusal: string } {
+    const opened = db.ownedInstance(payload.instanceId);
+    if (opened?.spawnedAt) {
+      return { startingSet: opened.startingSet };
+    }
     if (payload.resume) {
       const began = db.instanceBySessionId(
         payload.resume.sessionKey
@@ -7753,15 +7766,22 @@ export const createServer = (
       ? db.project(payload.projectId)
       : undefined;
     const own = project ? projectStartingSet(project.id) : {};
-    if (own.problems) {
-      console.warn(
-        `[starting-set] ${project?.name}'s ${STARTING_SET_FILE} does not read, so its sessions start with everything: ${own.problems.join(" ")}`
-      );
+    const type = named
+      ? projectTypes.resolveTypeFor(named.projectId, named.name)?.startingSet
+      : undefined;
+    // The file is what it would start with: its type names no set, and a
+    // clean start loads none.
+    if (project && own.problems && !type && payload.clean !== true) {
+      return {
+        refusal: spawnWords.startingSetUnread(
+          project.name,
+          STARTING_SET_FILE,
+          own.problems
+        ),
+      };
     }
     const set = sessionStartingSet({
-      type: named
-        ? projectTypes.resolveTypeFor(named.projectId, named.name)?.startingSet
-        : undefined,
+      type,
       project: own.set,
       starters: project?.template ? TEMPLATE_SKILLS[project.template] : [],
       named: payload.skills,
@@ -11621,6 +11641,62 @@ export const createServer = (
   };
 
   /**
+   * What a dashboard's start that goes notes before its row opens. A
+   * relaunch replaces the process — questions the old one had open are
+   * settled by its teardown and must not replay. What no process was ever
+   * handed (owed) goes to the new one, and what the old one was handed and
+   * never read its machine hands back for it ({@link takeBack}). A session
+   * whose harness never began a conversation comes back fresh under its id
+   * (core `relaunchOf`), and its transcript says so.
+   */
+  const noteDashboardStart = (
+    message: Envelope,
+    instanceId: string,
+    asked: NamedSpawn,
+    before: ReturnType<typeof rowNamed>
+  ): void => {
+    forgetPending(instanceId, UNREAD.restarted, false, "all");
+    noteChosenMode(message.machineId, asked, before !== undefined);
+    if (
+      before &&
+      !peekResume(message.payload) &&
+      relaunchOf(before).kind === "fresh"
+    ) {
+      noteFreshStart(before);
+    }
+    noteRespawn(instanceId, message.requestId, message.payload);
+  };
+
+  /**
+   * Who a dashboard's start is and where it begins: its origin and parent,
+   * its project (a row keeps the one it opened in, and its machine is handed
+   * that one, as every revive hands it the row's, `revivePayloadOf`), and
+   * its starting set ({@link startingSetOf}); undefined once refused, its
+   * words sent.
+   */
+  const dashboardBegins = (
+    ws: HubSocket,
+    message: Envelope,
+    before: { projectId?: string | null } | undefined,
+    payload: NamedSpawn
+  ) => {
+    const start = dashboardStartOf(
+      ws,
+      message,
+      before !== undefined,
+      payload.cwd
+    );
+    const projectId = before?.projectId ?? start.projectId;
+    const begins = startingSetOf({ ...payload, projectId });
+    if ("refusal" in begins) {
+      console.warn(spawnWords.refusedLine(begins.refusal));
+      sendFrame(ws, failure(message, begins.refusal));
+      return;
+    }
+    return { ...start, projectId, startingSet: begins.startingSet };
+  };
+
+  /**
    * A dashboard's start, from its permission mode on: launch directory,
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
@@ -11674,32 +11750,12 @@ export const createServer = (
       );
       return;
     }
-    // A relaunch replaces the process — questions the old one had
-    // open are settled by its teardown and must not replay. What no process
-    // was ever handed (owed) goes to the new one, and what the old one was
-    // handed and never read its machine hands back for it ({@link takeBack}).
-    forgetPending(message.instanceId, UNREAD.restarted, false, "all");
-    noteChosenMode(message.machineId, asked, before !== undefined);
-    // A session whose harness never began a conversation comes back fresh
-    // under its id (core `relaunchOf`), and its transcript says so.
-    if (
-      before &&
-      !peekResume(message.payload) &&
-      relaunchOf(before).kind === "fresh"
-    ) {
-      noteFreshStart(before);
+    const begins = dashboardBegins(ws, message, before, payload);
+    if (!begins) {
+      return;
     }
-    noteRespawn(message.instanceId, message.requestId, message.payload);
-    const start = dashboardStartOf(
-      ws,
-      message,
-      before !== undefined,
-      payload.cwd
-    );
-    const { origin, parent } = start;
-    // A row keeps the project it opened in; its machine is handed that one,
-    // as every revive hands it the row's (`revivePayloadOf`).
-    const projectId = before?.projectId ?? start.projectId;
+    const { origin, parent, projectId } = begins;
+    noteDashboardStart(message, message.instanceId, asked, before);
     // Brought back by the operator: nothing of the stop is left to carry.
     openInstance({
       id: message.instanceId,
@@ -11721,7 +11777,7 @@ export const createServer = (
       // its first spawn alone, `db.openInstance`).
       clean: payload.clean === true,
       // A person's start in a project takes its project's starting set.
-      ...startingSetOf({ ...payload, projectId }),
+      startingSet: begins.startingSet,
       ...parent,
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),

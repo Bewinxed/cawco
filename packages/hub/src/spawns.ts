@@ -1084,7 +1084,21 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (placed instanceof ElysiaStatus) {
       return placed;
     }
-    return { payload, permissionMode: settled.permissionMode, placed };
+    // What it starts with is the start's to settle: a project file that
+    // does not read refuses it, in the file's words.
+    const begins = ctx.startingSetOf(payload);
+    if ("refusal" in begins) {
+      return problem(400, {
+        code: "spawn-not-settled",
+        detail: begins.refusal,
+      });
+    }
+    return {
+      payload,
+      permissionMode: settled.permissionMode,
+      placed,
+      startingSet: begins.startingSet,
+    };
   };
 
   /** Opens the row of a start {@link clearedToStart} and sends its spawn. */
@@ -1095,7 +1109,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     by: SessionOrigin,
     workItemId: string | undefined
   ) => {
-    const { payload, permissionMode, placed } = cleared;
+    const { payload, permissionMode, placed, startingSet } = cleared;
     const agent = ctx.registry.agent(machineId);
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
@@ -1118,7 +1132,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       clean: payload.clean === true,
-      ...ctx.startingSetOf(payload),
+      startingSet,
       ...openedAccount(payload, placed),
       // The account its start named, as placement honoured it.
       ...(payload.account && placed.accountId
@@ -1323,7 +1337,16 @@ export const createSpawns = (ctx: SpawnsContext) => {
     spawn: Pick<SpawnPayload, "delegateType" | "denyTools" | "mayStart">;
   } => {
     if (!source) {
-      return { row: ctx.startingSetOf, spawn: {} };
+      return {
+        row: (payload) => {
+          const begins = ctx.startingSetOf(payload);
+          if ("refusal" in begins) {
+            throw new Error(begins.refusal);
+          }
+          return begins;
+        },
+        spawn: {},
+      };
     }
     const { mayStart } = source;
     if (source.harness !== harness) {

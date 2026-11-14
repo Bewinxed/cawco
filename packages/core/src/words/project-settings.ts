@@ -161,7 +161,7 @@ export const projectSettingsWords = {
       return "Starting set: none, so its sessions start with everything installed";
     }
     if ("problems" in set) {
-      return `Starting set: starting-set.md does not read, so its sessions start with everything installed: ${set.problems.join(" ")}`;
+      return `Starting set: starting-set.md does not read, so no session starts in this project until it does, but one whose delegate type names a set: ${set.problems.join(" ")}`;
     }
     return `Starting set: its sessions start with ${setText(set)}, besides CawCo's own and its template's starter skills, unless their delegate type names a set`;
   },
