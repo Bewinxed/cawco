@@ -8750,13 +8750,8 @@ export const createServer = (
         }
       },
       // Its triage: the hub's own reader of a stuck session, never a person's.
-      spawn: async (machineId, payload, mode) => {
-        const spawned = await spawnSession(machineId, payload, "check", mode);
-        // fleet-watch.ts reads a start that does not go as a rejection.
-        if (spawned instanceof ElysiaStatus) {
-          throw new Error(spawned.response.detail);
-        }
-      },
+      spawn: (machineId, payload, mode) =>
+        spawnSession(machineId, payload, "check", mode),
       stop: (instanceId) =>
         endSession(instanceId, "stop", {
           kind: "hub",

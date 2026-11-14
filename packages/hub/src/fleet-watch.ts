@@ -61,6 +61,7 @@ import {
 import type { PermissionMode } from "@cawco/core/harness/kinds";
 import { fleetWatchNudge } from "@cawco/core/injected";
 import { isMachineSilence } from "@cawco/core/machine-names";
+import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type {
   Envelope,
@@ -73,6 +74,7 @@ import type { NeutralMessage } from "@cawco/core/session-messages";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { decisionWords, signalLine } from "@cawco/core/words/fleet-watch";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import { isProjectConversation, type ProjectEvent } from "./caw";
 import type { DbShape } from "./db";
@@ -81,6 +83,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import { defineTool, sentence } from "./mcp-tool";
 import { MEANING_THRESHOLD } from "./meaning";
 import { sessionWord } from "./session-word";
+import type { SpawnProblem } from "./spawn-problems";
 import { CAWCO_TOOL } from "./web-reads";
 import { isLive } from "./work-item-state";
 
@@ -272,12 +275,12 @@ export interface FleetWatchDeps {
   push: (notice: FleetWatchNotice) => void;
   /** Delivers one message to a session through the hub's one send path. */
   send: (envelope: Envelope<SendPayload>) => void;
-  /** Starts a session in `mode` where its harness has modes, resolved once its machine has it. */
+  /** Starts a session in `mode` where its harness has modes, resolved once its machine has it (spawns.ts `spawnSession`): the folder it runs in, or why it did not start. */
   spawn: (
     machineId: string,
     payload: SpawnPayload,
     mode: PermissionMode
-  ) => Promise<void>;
+  ) => Promise<MachinePath | SpawnProblem>;
   /** Stops a session's process. */
   stop: (instanceId: string) => void;
   /** One send to a project's conversation (caw.ts `tell`); false when it did not take it (its switch is off). */
@@ -700,6 +703,15 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const { harness, model } = harnessFor(row);
     const brief = briefOf(row, triage, seen);
     log(row, row.id, `triage started (${id}) on ${harness}`);
+    /** Its session did not start: said in the log and on the watched session's transcript, and the triage is gone. */
+    const unstarted = (words: string) => {
+      log(row, row.id, `triage could not start: ${words}`);
+      deps.line(
+        row.id,
+        `${triage.lines.join(" · ")} · triage couldn't start\n${words}`
+      );
+      triage.gone();
+    };
     deps
       .spawn(
         row.machineId,
@@ -717,7 +729,11 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
         // permission prompt, as summarisers never do.
         "bypassPermissions"
       )
-      .then(() => {
+      .then((spawned) => {
+        if (spawned instanceof ElysiaStatus) {
+          unstarted(spawned.response.detail);
+          return;
+        }
         deps.send({
           verb: "send",
           machineId: row.machineId,
@@ -734,15 +750,9 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
           },
         });
       })
-      .catch((error: unknown) => {
-        const words = error instanceof Error ? error.message : String(error);
-        log(row, row.id, `triage could not start: ${words}`);
-        deps.line(
-          row.id,
-          `${triage.lines.join(" · ")} · triage couldn't start\n${words}`
-        );
-        triage.gone();
-      });
+      .catch((error: unknown) =>
+        unstarted(error instanceof Error ? error.message : String(error))
+      );
   };
 
   const briefOf = (row: InstanceRow, triage: Triage, seen: string): string => {
