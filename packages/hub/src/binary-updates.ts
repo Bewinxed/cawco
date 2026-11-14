@@ -52,7 +52,6 @@ import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, problem, t } from "elysia";
-import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
@@ -415,7 +414,7 @@ export function createBinaryUpdates(options: Options) {
     )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
-      async ({ params }) => {
+      async ({ params, set }) => {
         const candidates = [await runningRelease().catch(() => undefined)];
         if (current) {
           candidates.push(current.release);
@@ -443,28 +442,25 @@ export function createBinaryUpdates(options: Options) {
         );
         switch (archive.kind) {
           case "held":
-            // Bun.serve answers a Range ask of a file body itself (206 and
+            // Elysia answers a Range ask of a file body itself (206 and
             // its Content-Range): a machine's download goes on from where
             // its last attempt stopped.
-            return new Response(Bun.file(archive.path));
+            // Bun's own answer says it on a 416 too; Elysia's does not.
+            set.headers["accept-ranges"] = "bytes";
+            return Bun.file(archive.path);
           case "fetching":
             // Not yet: the machine waits and asks again, its own attempt
             // standing, and says how far the hub is.
-            return problemResponse(
-              {
-                status: 503,
-                code: "refused",
-                detail: JSON.stringify({
-                  fetching: {
-                    received: archive.received,
-                    total: archive.total,
-                  },
-                } satisfies ArchiveFetching),
-              },
-              {
-                "retry-after": String(ARCHIVE_ASK_AGAIN_S),
-              }
-            );
+            set.headers["retry-after"] = String(ARCHIVE_ASK_AGAIN_S);
+            return problem(503, {
+              code: "refused",
+              detail: JSON.stringify({
+                fetching: {
+                  received: archive.received,
+                  total: archive.total,
+                },
+              } satisfies ArchiveFetching),
+            });
           case "failed":
             return problem(502, {
               code: "hub-could-not-fetch",
