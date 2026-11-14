@@ -6,22 +6,31 @@
  * and passkey-inject runs on the remote agent machine (which has a virtual
  * HCI adapter in its container).
  *
- * The approach: shell out to `bluetoothctl` with a line parser. bluetoothctl
- * is BlueZ's standard CLI and prints LE discovery results line by line.
- * The scanner sets a UUID filter for the FIDO caBLE service (0xFFF9) so
- * only caBLE adverts come through, parses the ServiceData hex dump and
- * RSSI from its output, and calls the `onAdvert` callback with the raw
- * 20-byte service data and signal strength.
+ * Scanning runs only while the hub asks for it (`passkey.scanStart`, see
+ * {@link PasskeyCapture}), never always on, and stops itself after
+ * {@link SCAN_TIMEOUT_MS}.
+ *
+ * On Linux the scanner shells out to `bluetoothctl` with a line parser.
+ * bluetoothctl is BlueZ's standard CLI and prints LE discovery results line
+ * by line. The scanner sets a UUID filter for the FIDO caBLE service
+ * (0xFFF9) so only caBLE adverts come through, parses the ServiceData hex
+ * dump and RSSI from its output, and calls the `onAdvert` callback with the
+ * raw 20-byte service data and signal strength. On macOS it runs a small
+ * CoreBluetooth program through `swift -e`, which prints the same two facts
+ * per advert.
  *
  * The phone advertises for only ~4 seconds, so every advert is forwarded
  * immediately with no batching or deduplication.
  */
 
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { platform } from "node:os";
 import {
   createInterface,
   type Interface as ReadlineInterface,
 } from "node:readline";
+import type { BrowserKey } from "@cawco/core/browser";
+import { detectPasskeyRelay } from "./passkey-detect";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -36,6 +45,47 @@ const UUID_PREFIX_BYTES = 2;
 
 /** Expected caBLE advert payload length (after the UUID prefix). */
 const CABLE_PAYLOAD_LENGTH = 20;
+
+/** How long a scan runs before it stops itself; the hub's own timeout is shorter. */
+export const SCAN_TIMEOUT_MS = 35_000;
+
+/** The macOS scanner prints `FIDO_ADVERT:<peripheral>:<base64 service data>:<rssi>` per advert. */
+const DARWIN_ADVERT_PREFIX = "FIDO_ADVERT:";
+
+/**
+ * The Swift program macOS scans with: CoreBluetooth, filtered to the FIDO
+ * caBLE service, one line per advert on stdout.
+ */
+const DARWIN_SCANNER_SOURCE = `
+import CoreBluetooth
+import Foundation
+
+class Scanner: NSObject, CBCentralManagerDelegate {
+  let service = CBUUID(string: "${FIDO_CABLE_UUID}")
+  var central: CBCentralManager!
+  override init() {
+    super.init()
+    central = CBCentralManager(delegate: self, queue: nil)
+  }
+  func centralManagerDidUpdateState(_ central: CBCentralManager) {
+    if central.state == .poweredOn {
+      central.scanForPeripherals(
+        withServices: [service],
+        options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+      )
+    }
+  }
+  func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+                      advertisementData: [String: Any], rssi: NSNumber) {
+    guard let data = (advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data])?[service]
+    else { return }
+    print("${DARWIN_ADVERT_PREFIX}\\(peripheral.identifier.uuidString):\\(data.base64EncodedString()):\\(rssi.intValue)")
+    fflush(stdout)
+  }
+}
+let scanner = Scanner()
+RunLoop.current.run()
+`;
 
 // ── Top-level regex patterns (biome lint/performance/useTopLevelRegex) ──
 
@@ -67,7 +117,6 @@ const RE_RSSI =
 
 // ── Types ──────────────────────────────────────────────────────────
 
-/** @public Consumed by the daemon's passkey relay (arrives on branch cawco/b8448dff). */
 export interface CapturedAdvert {
   /** The RSSI of the captured advertisement. */
   rssi: number;
@@ -77,7 +126,6 @@ export interface CapturedAdvert {
 
 // ── PasskeyScanner ─────────────────────────────────────────────────
 
-/** @public Consumed by the daemon's passkey relay (arrives on branch cawco/b8448dff). */
 export class PasskeyScanner {
   #proc: ChildProcess | null = null;
   #rl: ReadlineInterface | null = null;
@@ -88,8 +136,19 @@ export class PasskeyScanner {
   readonly #deviceServiceData = new Map<string, Buffer>();
   readonly #deviceRssi = new Map<string, number>();
 
-  /** Whether this machine has a BLE adapter (at least one controller). */
+  /** Whether this machine can scan: a BLE adapter and the tool that reads it (BlueZ's `bluetoothctl`, or macOS's `swift`). */
   static available(): Promise<boolean> {
+    if (platform() === "darwin") {
+      return detectPasskeyRelay().then(
+        ({ hasBle }) =>
+          hasBle &&
+          new Promise<boolean>((resolve) => {
+            execFile("swift", ["--version"], { timeout: 5000 }, (err) =>
+              resolve(!err)
+            );
+          })
+      );
+    }
     return new Promise<boolean>((resolve) => {
       execFile("bluetoothctl", ["list"], { timeout: 5000 }, (err, stdout) => {
         if (err) {
@@ -117,9 +176,15 @@ export class PasskeyScanner {
     const has = await PasskeyScanner.available();
     if (!has) {
       throw new Error(
-        "No BLE adapter found. Ensure a Bluetooth controller is present " +
-          "and BlueZ is installed (`apt install bluez`)."
+        "No BLE scanner available. Ensure a Bluetooth controller is present " +
+          "and BlueZ is installed (`apt install bluez`), or on macOS that " +
+          "the Swift toolchain is."
       );
+    }
+
+    if (platform() === "darwin") {
+      this.#startDarwin(onAdvert);
+      return;
     }
 
     // Try to power on the adapter (it may already be on; ignore errors).
@@ -204,8 +269,10 @@ export class PasskeyScanner {
     }
 
     try {
-      this.#proc.stdin?.write("scan off\n");
-      this.#proc.stdin?.write("quit\n");
+      if (platform() !== "darwin") {
+        this.#proc.stdin?.write("scan off\n");
+        this.#proc.stdin?.write("quit\n");
+      }
     } catch {
       // stdin may already be closed.
     }
@@ -234,6 +301,34 @@ export class PasskeyScanner {
   }
 
   // ── Private helpers ──────────────────────────────────────────────
+
+  /** macOS: run the CoreBluetooth program and read its advert lines. */
+  #startDarwin(onAdvert: (advert: CapturedAdvert) => void): void {
+    const proc = spawn("swift", ["-e", DARWIN_SCANNER_SOURCE], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    proc.on("error", (err) => {
+      this.#dead = true;
+      console.error(`[passkey-capture] swift error: ${err.message}`);
+    });
+    proc.on("close", () => {
+      this.#dead = true;
+    });
+    this.#proc = proc;
+    const rl = createInterface({ input: proc.stdout ?? undefined });
+    this.#rl = rl;
+    rl.on("line", (line: string) => {
+      if (!line.startsWith(DARWIN_ADVERT_PREFIX)) {
+        return;
+      }
+      const [, data, rssi] = line.slice(DARWIN_ADVERT_PREFIX.length).split(":");
+      const serviceData = Buffer.from(data ?? "", "base64");
+      if (serviceData.length !== CABLE_PAYLOAD_LENGTH) {
+        return;
+      }
+      onAdvert({ serviceData, rssi: Number.parseInt(rssi ?? "", 10) || 0 });
+    });
+  }
 
   /**
    * Try to collect hex bytes from a continuation line. Returns true if
@@ -326,5 +421,79 @@ export class PasskeyScanner {
         resolve();
       });
     });
+  }
+}
+
+// ── PasskeyCapture ─────────────────────────────────────────────────
+
+/**
+ * The scans the hub asked for, by browser key, on one shared scanner: it runs
+ * while any key is wanted, and each key stops itself after
+ * {@link SCAN_TIMEOUT_MS} if the hub never says stop.
+ */
+export class PasskeyCapture {
+  readonly #keys = new Map<BrowserKey, ReturnType<typeof setTimeout>>();
+  readonly #onAdvert: (advert: CapturedAdvert) => void;
+  #scanner: PasskeyScanner | undefined;
+  #starting: Promise<void> | undefined;
+
+  constructor(onAdvert: (advert: CapturedAdvert) => void) {
+    this.#onAdvert = onAdvert;
+  }
+
+  /** Whether this machine can scan at all. */
+  static available(): Promise<boolean> {
+    return PasskeyScanner.available();
+  }
+
+  /** Scans for `key`'s phone advert. Throws if the scanner cannot start. */
+  async start(key: BrowserKey): Promise<void> {
+    clearTimeout(this.#keys.get(key));
+    this.#keys.set(
+      key,
+      setTimeout(() => this.stop(key), SCAN_TIMEOUT_MS)
+    );
+    try {
+      await this.#ensureScanner();
+    } catch (error) {
+      this.stop(key);
+      throw error;
+    }
+  }
+
+  /** Stops scanning for `key`; the scanner stops with its last key. */
+  stop(key: BrowserKey): void {
+    clearTimeout(this.#keys.get(key));
+    this.#keys.delete(key);
+    if (this.#keys.size === 0) {
+      this.#scanner?.stop();
+      this.#scanner = undefined;
+    }
+  }
+
+  /** Stops every scan. */
+  stopAll(): void {
+    for (const key of [...this.#keys.keys()]) {
+      this.stop(key);
+    }
+  }
+
+  async #ensureScanner(): Promise<void> {
+    if (this.#scanner && !this.#scanner.dead) {
+      return;
+    }
+    this.#starting ??= (async () => {
+      const scanner = new PasskeyScanner();
+      await scanner.start(this.#onAdvert);
+      if (this.#keys.size === 0) {
+        // Every key stopped while the scanner was starting.
+        scanner.stop();
+        return;
+      }
+      this.#scanner = scanner;
+    })().finally(() => {
+      this.#starting = undefined;
+    });
+    await this.#starting;
   }
 }

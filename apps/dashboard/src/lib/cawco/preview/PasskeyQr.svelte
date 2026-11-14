@@ -5,7 +5,9 @@
    * Shows inside the browser well over the stream, auto-dismisses when
    * the take-over ends or the QR expires. When the CawCo Chrome extension
    * is detected, the QR is forwarded to it and a "sent to extension" line
-   * replaces the inline code.
+   * replaces the inline code. Under the QR, a line says how the hub's relay
+   * of the phone's Bluetooth advert is going (scanning where, timed out, no
+   * Bluetooth anywhere).
    */
   import type { BrowserKey, PasskeyQrFrame } from "@cawco/core/browser";
   import { PASSKEY_QR_TTL_MS } from "@cawco/core/browser";
@@ -14,6 +16,7 @@
   import { appear } from "#lib/platform/motion/curves.svelte.js";
   import { qrPath } from "../qr-path";
   import { dismissPasskeyQr } from "../stores/passkey-qr.svelte";
+  import { passkeyStatus } from "../stores/passkey-relay.svelte";
 
   let {
     frame,
@@ -71,6 +74,17 @@
     frame.rpOrigin ? frame.rpOrigin.replace(/^https?:\/\//u, "") : null
   );
 
+  /** How the hub's relay of the phone's Bluetooth advert is going, in words. */
+  const relayLine = $derived.by(() => {
+    const relay = passkeyStatus(browserKey);
+    if (!relay) {
+      return null;
+    }
+    return relay.status === "scanning"
+      ? passkeyWords.relay.scanning(relay.scanningMachines ?? [])
+      : passkeyWords.relay[relay.status];
+  });
+
   function dismiss() {
     dismissPasskeyQr(browserKey);
   }
@@ -125,6 +139,12 @@
         <p class="m-0 type-body text-center text-pretty text-ink-muted">
           {rpDisplay ? passkeyWords.scanTo(rpDisplay) : passkeyWords.scan}
         </p>
+
+        {#if relayLine}
+          <p class="m-0 type-meta text-center text-ink-muted" role="status">
+            {relayLine}
+          </p>
+        {/if}
 
         <!-- Extension install prompt. -->
         <p class="m-0 type-meta text-center text-ink-subtle">
