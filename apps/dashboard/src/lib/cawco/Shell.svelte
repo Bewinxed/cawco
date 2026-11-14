@@ -1364,7 +1364,8 @@
       // the dev benches in the shell.
       case "motion":
       case "dev":
-        return "Bench";
+        // Command-line tools' bench stands for Configure, whose bar names nothing.
+        return id === "tool-updates" ? "" : "Bench";
       default:
         // Every route under the app's layout has its name above, and a path
         // nothing answers is the route's error ("Not found"). A route added

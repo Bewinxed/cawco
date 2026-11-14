@@ -150,6 +150,7 @@
   import NeedsRow from "./NeedsRow.svelte";
   import { openPeek, peekable, peekTipOff } from "./peek.svelte";
   import StepRow from "./StepRow.svelte";
+  import ToolNeedsRow from "./ToolNeedsRow.svelte";
 
   let {
     item,
@@ -236,10 +237,12 @@
         return item.action.state === "failed"
           ? `It failed. ${item.action.error ?? `${item.action.service} did not take it.`}`
           : item.action.reason;
+      case "tool":
+        return item.want;
       case "cap":
-        break;
+        return capLine(item.cap);
     }
-    return capLine(item.cap);
+    return "";
   });
 
   /** What Deny and Approve answer, as their names say it: what it asks and whose it is. */
@@ -339,6 +342,7 @@
           .join(" · ");
       case "mcp":
       case "machine":
+      case "tool":
         return item.place;
       case "install":
         return item.install.route === "ssh"
@@ -683,7 +687,9 @@
   {/if}
 {/snippet}
 
-{#if item.kind === "relay"}
+{#if item.kind === "tool"}
+  <ToolNeedsRow {item} {onchoose} />
+{:else if item.kind === "relay"}
   <!-- The stream relay's journey: its own card, drawn as Needs you's row
        (its title, the steps, the onboarding meta line), the same card
        Settings › Browsers draws from the same journey. It stands in the

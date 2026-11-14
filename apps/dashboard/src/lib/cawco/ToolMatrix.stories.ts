@@ -6,7 +6,7 @@
  * column. A sign-in under way, refused or lapsed lives in the tab, not in
  * a status: the bench at `/motion/tool-signin` draws those, and runs one.
  */
-import { TOOL_CATALOG } from "@cawco/core/tools";
+import { TOOL_CATALOG, TOOL_UPDATES_DEFAULT } from "@cawco/core/tools";
 import ToolMatrix from "./ToolMatrix.svelte";
 import {
   AGY_UNREAD,
@@ -18,7 +18,13 @@ import {
 
 export default {
   component: ToolMatrix,
-  args: { catalog: TOOL_CATALOG, policies: [], machines: signinFleet() },
+  args: {
+    catalog: TOOL_CATALOG,
+    policies: [],
+    machines: signinFleet(),
+    releases: {},
+    updates: TOOL_UPDATES_DEFAULT,
+  },
 };
 
 /** Eight machines, each a different sign-in state: missing, out, in, unknown, offline. */

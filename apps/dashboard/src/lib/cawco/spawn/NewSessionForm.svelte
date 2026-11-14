@@ -2680,7 +2680,13 @@
     out:unfold
   >
     <Alert role="status" variant="warning">
-      <IconKey />
+      <!-- What puts it right, as its Configure page is marked: the CLI's
+           glyph for a harness's command-line tool, the key for a sign-in. -->
+      {#if placementFix?.slug === "cli-tools"}
+        <Terminal />
+      {:else}
+        <IconKey />
+      {/if}
       <AlertTitle>{placementRefusal}</AlertTitle>
       {#if placementFix}
         <AlertDescription>

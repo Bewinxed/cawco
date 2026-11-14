@@ -21,6 +21,12 @@ import type { HubSocket } from "./wire-socket";
  */
 const TOOL_INSTALL_MS = 300_000;
 
+/** A machine Update all left, and why (`updateAll`). */
+interface UpdateAllLeft {
+  machineId: string;
+  why: "away" | "own" | "paused";
+}
+
 export type ToolInstallsContext = Pick<
   HubContext,
   | "awaitReply"
@@ -256,38 +262,73 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   };
 
   /**
-   * UPDATE ALL: a person's Update of `toolId` on every machine whose copy is
-   * one its CawCo does not run (`wants`), the same install each machine's own
-   * Update sends (a press: a copy that is the person's own is updated too,
-   * and one whose last attempt failed is tried again), sent to each machine
-   * connected now with none of it in flight. Answers the machines it was
-   * sent to, and those behind that are not connected, which nothing reaches
-   * until they are.
+   * UPDATE ALL: the Update of `toolId` on every machine whose copy is one
+   * CawCo put there and its CawCo does not run (`wants`), the same install
+   * each machine's own Update sends (one whose last attempt failed is tried
+   * again), sent to each machine connected now, not paused, with none of it
+   * in flight. A copy the person installed is never in it (the owner,
+   * 2026-11-14: "Never touched; notice and button only"): only its own
+   * row's press updates it. Answers the machines it was sent to, and each
+   * behind that it left, with why: not connected, paused, or the person's
+   * own copy. The dashboard counts its press by the same rule
+   * (`updateAllTakes`).
    */
-  const updateAll = (toolId: string): { away: string[]; sent: string[] } => {
+  const updateAll = (
+    toolId: string
+  ): { left: UpdateAllLeft[]; sent: string[] } => {
     const sent: string[] = [];
-    const away: string[] = [];
+    const left: UpdateAllLeft[] = [];
     for (const { machineId } of ctx.db.namedMachines()) {
       const cell = ctx.db.agentTools(machineId)[toolId];
       if (!cell?.wants || cell.state === "installing") {
         continue;
       }
       const agent = ctx.registry.agent(machineId);
-      if (!agent) {
-        away.push(machineId);
-      } else if (!awaitingInstall(machineId, toolId)) {
+      const why = leftBy(machineId, cell, agent);
+      if (why) {
+        left.push({ machineId, why });
+      } else if (agent && !awaitingInstall(machineId, toolId)) {
         pressUpdate(machineId, agent, toolId, { ...cell, wants: cell.wants });
         sent.push(machineId);
       }
     }
-    if (sent.length > 0) {
-      const names = (ids: string[]) =>
-        ids.map((one) => ctx.machineName(one)).join(", ");
-      console.info(
-        `[hub] Update all ${toolSpec(toolId)?.name ?? toolId}: sent to ${names(sent)}${away.length > 0 ? `; ${names(away)} not connected` : ""}`
-      );
+    sayUpdateAll(toolId, sent, left);
+    return { sent, left };
+  };
+
+  /** Why {@link updateAll} leaves a machine's copy: the person's own, not connected, or paused; none when it goes. */
+  const leftBy = (
+    machineId: string,
+    cell: ToolStatus,
+    agent: HubSocket | undefined
+  ): UpdateAllLeft["why"] | undefined => {
+    if (cell.copy?.by !== "cawco") {
+      return "own";
     }
-    return { sent, away };
+    if (!agent) {
+      return "away";
+    }
+    return ctx.machinePause.until(machineId) === undefined
+      ? undefined
+      : "paused";
+  };
+
+  /** {@link updateAll}'s line in the hub's log: where it went, and what it left with why. */
+  const sayUpdateAll = (
+    toolId: string,
+    sent: string[],
+    left: UpdateAllLeft[]
+  ): void => {
+    if (sent.length === 0 && left.length === 0) {
+      return;
+    }
+    const names = sent.map((one) => ctx.machineName(one)).join(", ");
+    const leftWords = left
+      .map((one) => `${ctx.machineName(one.machineId)} (${one.why})`)
+      .join(", ");
+    console.info(
+      `[hub] Update all ${toolSpec(toolId)?.name ?? toolId}: sent to ${names || "none"}${leftWords ? `; left ${leftWords}` : ""}`
+    );
   };
 
   /** One machine's part of {@link updateAll}: its Update, as a press sends it, published. */
