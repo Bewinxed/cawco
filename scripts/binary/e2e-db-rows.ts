@@ -58,8 +58,11 @@ try {
       );
       break;
     case "migrate":
+      // The stamp a scalar subquery, never the outer select's own aggregate: an
+      // aggregate query returns its one row even where WHERE is false, so each
+      // repeat would add a row stamped NULL.
       db.run(
-        "INSERT INTO __drizzle_migrations (hash, created_at) SELECT 'e2e-newer', max(created_at) + 1 FROM __drizzle_migrations WHERE NOT EXISTS (SELECT 1 FROM __drizzle_migrations WHERE hash = 'e2e-newer')"
+        "INSERT INTO __drizzle_migrations (hash, created_at) SELECT 'e2e-newer', (SELECT max(created_at) + 1 FROM __drizzle_migrations) WHERE NOT EXISTS (SELECT 1 FROM __drizzle_migrations WHERE hash = 'e2e-newer')"
       );
       break;
     case "reshape":
