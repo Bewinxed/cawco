@@ -25,14 +25,9 @@ import type {
   RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { AccountHue } from "@cawco/core/accounts/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { hub } from "#lib/platform/hub.js";
-import {
-  hubAsk,
-  hubData,
-  hubJson,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { hubAsk, hubData, hubRefusal } from "#lib/platform/hub-read.js";
 import { load } from "../hub/load";
 import { equal } from "./same";
 
@@ -202,12 +197,13 @@ export const beginSignin = (
   machineId: string
 ): Promise<{ url: string }> =>
   accountsWrite(
-    hubJson(
-      hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
-        path: { id, machineId },
-      })
-    )
-  );
+    hubData(hub.api.accounts({ id }).machines({ machineId }).signin.post())
+  ).then((challenge) => {
+    if (!("url" in challenge)) {
+      throw new Error(accountsWords.signin.notALink);
+    }
+    return challenge;
+  });
 
 /** Types the pasted code into that login: signed in, or someone else's account. */
 export const completeSignin = (
@@ -216,12 +212,17 @@ export const completeSignin = (
   code: string
 ): Promise<AccountSigninResult> =>
   accountsWrite(
-    hubJson(
-      hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
-        path: { id, machineId },
-        body: { code },
-      })
+    hubData(
+      hub.api
+        .accounts({ id })
+        .machines({ machineId })
+        .signin.complete.post({ code })
     )
+  ).then((result) =>
+    // Claude's login never says `expired` or `pending`: a code that did not take is signed out.
+    result.state === "expired" || result.state === "pending"
+      ? { state: "signed-out" }
+      : result
   );
 
 /**
@@ -233,11 +234,7 @@ export const beginDeviceSignin = (
   machineId: string
 ): Promise<ProviderSigninChallenge> =>
   accountsWrite(
-    hubJson(
-      hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
-        path: { id, machineId },
-      })
-    )
+    hubData(hub.api.accounts({ id }).machines({ machineId }).signin.post())
   );
 
 /**
@@ -249,13 +246,22 @@ export const awaitDeviceSignin = (
   machineId: string
 ): Promise<ProviderSigninResult> =>
   accountsWrite(
-    hubJson(
-      hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
-        path: { id, machineId },
-        body: {},
-      })
+    hubData(
+      hub.api.accounts({ id }).machines({ machineId }).signin.complete.post({})
     )
-  );
+  ).then((result) => {
+    if ("identity" in result) {
+      return result;
+    }
+    if (result.state === "expired" || result.state === "pending") {
+      return result;
+    }
+    if (result.state === "mismatch" && "email" in result) {
+      return result;
+    }
+    // A signed-out answer is the Claude login's: the code did not take.
+    throw new Error(accountsWords.signin.refused);
+  });
 
 /**
  * Checks now whether Claude Code still refuses an account it refused

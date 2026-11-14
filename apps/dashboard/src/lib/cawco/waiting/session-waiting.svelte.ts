@@ -17,17 +17,9 @@
  * so the ask stands clear.
  */
 import { detach } from "@cawco/core/detach";
-import { hubRequest } from "@cawco/core/hub-request";
-import type {
-  SessionQuestion,
-  SessionQuestionsRead,
-} from "@cawco/core/session-questions";
-import {
-  failureClause,
-  hubFetch,
-  hubRefusal,
-  refusedOf,
-} from "#lib/platform/hub-read.js";
+import type { SessionQuestion } from "@cawco/core/session-questions";
+import { hub } from "#lib/platform/hub.js";
+import { failureClause, hubData } from "#lib/platform/hub-read.js";
 import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
 import { refusals } from "../refusals.svelte";
 import { needsStore } from "../stores/needs.svelte";
@@ -102,14 +94,12 @@ export class SessionWaiting {
     this.#reading?.abort();
     const reading = new AbortController();
     this.#reading = reading;
-    hubFetch(hubRequest("GET /api/instances/:id/questions", { path: { id } }), {
-      signal: reading.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw hubRefusal(await refusedOf(response));
-        }
-        const read = (await response.json()) as SessionQuestionsRead;
+    hubData(
+      hub.api.instances({ id }).questions.get({
+        fetch: { signal: reading.signal },
+      })
+    )
+      .then((read) => {
         this.questions = read.questions;
         this.failure = null;
       })

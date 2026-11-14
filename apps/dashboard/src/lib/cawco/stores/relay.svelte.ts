@@ -3,20 +3,14 @@
  * `stream_relay.journey` frame, and moved by the person's acts on it.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import type {
   RelayAct,
-  RelayAnswer,
   RelayJourneyView,
   RelayProofReport,
   RelayTry,
 } from "@cawco/core/stream-relay";
 import { hub } from "#lib/platform/hub.js";
-import {
-  hubData,
-  hubJson,
-  refusedOrUnreached,
-} from "#lib/platform/hub-read.js";
+import { hubData, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 const relayState = $state<{
   /**
@@ -58,9 +52,9 @@ export async function readRelayJourney(): Promise<void> {
 
 /** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
 export async function actOnRelay(act: RelayAct): Promise<void> {
-  const answered = await hubJson<RelayAnswer>(
-    hubRequest("POST /api/stream-relay/act", { body: act }),
-    { failure: refusedOrUnreached }
+  const answered = await hubData(
+    hub.api["stream-relay"].act.post(act),
+    refusedOrUnreached
   );
   relayState.relayDomain = answered.domain;
   keepRelayJourney(answered.journey);
@@ -70,18 +64,16 @@ export async function actOnRelay(act: RelayAct): Promise<void> {
 export async function reportRelayProof(
   report: RelayProofReport
 ): Promise<void> {
-  const answered = await hubJson<RelayAnswer>(
-    hubRequest("POST /api/stream-relay/proof", { body: report }),
-    { failure: refusedOrUnreached }
+  const answered = await hubData(
+    hub.api["stream-relay"].proof.post(report),
+    refusedOrUnreached
   );
   keepRelayJourney(answered.journey);
 }
 
 /** A 60 s credential for this screen's proof of the relay. */
 export function relayTry(): Promise<RelayTry> {
-  return hubJson<RelayTry>(hubRequest("GET /api/stream-relay/try"), {
-    failure: refusedOrUnreached,
-  });
+  return hubData(hub.api["stream-relay"].try.get(), refusedOrUnreached);
 }
 
 /** The stream relay's journey, the domain this page came through, and whether it just went live. */
