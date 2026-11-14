@@ -77,7 +77,8 @@ const dashboardClosure = async (root: string): Promise<string[]> => {
 
 /** The cache key, or undefined when the working tree differs from HEAD under the inputs. */
 const keyFor = async (root: string, closure: string[]) => {
-  const paths = [...closure, "bun.lock", "package.json"];
+  // What is installed: the lockfile and the patches bun install applies.
+  const paths = [...closure, "bun.lock", "patches", "package.json"];
   if ((await git(root, ["status", "--porcelain", "--", ...paths])) !== "") {
     return;
   }

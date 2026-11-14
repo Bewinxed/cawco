@@ -7,7 +7,8 @@
  * - every tracked or untracked-unignored file under {@link INPUT_DIRS}: the
  *   packages the hub's program reaches, and the outputs the check compares;
  * - {@link INPUT_FILES}: the lockfile (every node_modules type it reads), the
- *   shared tsconfig, the root manifest;
+ *   shared tsconfig, the root manifest, and with the lockfile the patches
+ *   `bun install` applies to those packages (`patches/` in {@link INPUT_DIRS});
  * - every commit the wire is compared against: `--base` or the merge-base
  *   with origin/main, and each shipped build (shipped.ts: the tags of every
  *   published nightly, whose agents the hub's routes are held to, and of
@@ -34,6 +35,7 @@ const INPUT_DIRS = [
   "packages/jsonl-parser/src",
   "packages/hub",
   "packages/agent/src",
+  "patches",
 ];
 const INPUT_FILES = ["bun.lock", "tsconfig.base.json", "package.json"];
 const STAMP = join(REPO, "node_modules/.cache/cawco/openapi-check.key");
