@@ -51,7 +51,8 @@ const detectVhci = (): boolean =>
   (existsSync("/dev/vhci") || existsSync("/sys/module/hci_vhci"));
 
 /** The machine's passkey relay capabilities. */
-export const detectPasskeyRelay = async (): Promise<PasskeyRelayCapability> => ({
-  hasBle: await detectBle(),
-  hasVhci: detectVhci(),
-});
+export const detectPasskeyRelay =
+  async (): Promise<PasskeyRelayCapability> => ({
+    hasBle: await detectBle(),
+    hasVhci: detectVhci(),
+  });
