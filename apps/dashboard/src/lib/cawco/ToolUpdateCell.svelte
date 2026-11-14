@@ -95,7 +95,10 @@
   />
 {/snippet}
 
-<!-- A state's layer: its head, what it says, the press at its foot. -->
+<!-- A state's layer: its head, what it says, the press at its foot. Never
+     taller than the room the viewport leaves it: the head and the foot stand,
+     and what it says scrolls between them, so the press is always in reach
+     whatever the installer's output holds. -->
 {#snippet layer(
   head: string,
   body: Snippet,
@@ -106,21 +109,27 @@
     align="start"
     frame="panel-high"
     gap="none"
+    height="available"
+    overflow="clip"
     pad="none"
     width="widest"
   >
     <header
-      class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+      class="flex flex-none items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
     >
       <span class="type-label text-ink-strong">{head}</span>
       {#if method}
         <code class="ml-auto shrink-0 type-code text-ink-muted">{method}</code>
       {/if}
     </header>
-    <div class="flex flex-col gap-space-2 px-space-3 py-space-2">
+    <div
+      class="flex min-h-0 flex-auto flex-col gap-space-2 overflow-y-auto overscroll-contain px-space-3 py-space-2"
+    >
       {@render body()}
     </div>
-    <footer class="border-t border-border-hairline px-space-3 py-space-2">
+    <footer
+      class="flex-none border-t border-border-hairline px-space-3 py-space-2"
+    >
       {@render act(label, pendingLabel)}
     </footer>
   </Popover.Content>
@@ -179,9 +188,8 @@
       </Popover.Root>
     {:else if update.kind === "runs"}
       {#if update.updatedAt !== undefined}
-        <span class="num"
-          >{words.updated(span(minute.now - update.updatedAt))}</span
-        >
+        {@const ago = span(minute.now - update.updatedAt)}
+        <span class="num">{words.updated(ago === "now" ? null : ago)}</span>
       {/if}
     {:else if update.kind === "updating"}
       <span class="text-ink-strong"
@@ -216,7 +224,7 @@
             {#if outputShown}
               <pre
                 id="tool-output-{machineId}-{spec.id}"
-                class="max-h-72 overflow-auto rounded-xs bg-surface-recess px-space-2 py-space-1 type-code whitespace-pre-wrap wrap-anywhere text-ink-muted"
+                class="flex-none rounded-xs bg-surface-recess px-space-2 py-space-1 type-code whitespace-pre-wrap wrap-anywhere text-ink-muted"
                 transition:unfold>{update.output}</pre>
             {/if}
           {/if}
