@@ -1168,7 +1168,7 @@ migration_rolled_back() {
     return 1
   fi
   echo "the hub said: $out"
-  [[ $out == *"/tmp/newer/cawco.db was migrated by a newer build of CawCo: it holds 1 migration this build lacks"* && $out == *"Install a build that has that migration."* ]] \
+  [[ $out == *"/tmp/newer/cawco.db was migrated by a newer build of CawCo: it holds 1 migration newer than this build's"* && $out == *"Install the build that migrated it, or a newer one."* ]] \
     || { echo "ASSERTION FAILED: the hub stopped without its words"; return 1; }
   [[ "$(as_user "$hubc" cat /tmp/newer/cawco.db.stopped)" == *"was migrated by a newer build of CawCo"* ]] \
     || { echo "ASSERTION FAILED: no /tmp/newer/cawco.db.stopped saying why"; return 1; }
@@ -1229,7 +1229,7 @@ no_room_to_put_back() {
   learn
   wait_until 360 '[[ "$(field $hid error)" == *"database was not put back"* ]]'
   echo "the update said: $(field $hid error)"
-  [[ "$(field $hid error)" == *"$DB is unchanged"* ]]
+  [[ "$(field $hid error)" == *"$DB is still the one the trial left"* ]]
   as_user "$hubc" test -s "$DB" || { echo "ASSERTION FAILED: nothing is at $DB"; return 1; }
   [[ "$(db_rows check "$DB")" == ok ]] || { echo "ASSERTION FAILED: the live database does not open sound"; return 1; }
   ! as_user "$hubc" test -e "$DB.restoring" || { echo "ASSERTION FAILED: the copy that did not fit is left beside the database"; return 1; }
