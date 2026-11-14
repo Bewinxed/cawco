@@ -81,10 +81,7 @@ import {
   READ_SKILL_FILES,
   READ_SKILL_FOLDER,
 } from "@cawco/core/fleet";
-import {
-  type FleetMcpConfigView,
-  maskMcpConfig,
-} from "@cawco/core/fleet-secrets";
+import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
@@ -570,13 +567,21 @@ const toNeutral = (
  */
 /**
  * A server's status as a screen is told it: its config's secrets said as
- * set (core fleet-secrets.ts); a config of no shape the fleet knows, whose
- * secrets could not be told apart, is left out.
+ * set (core fleet-secrets.ts). Claude Code's own kinds besides the fleet's
+ * (`McpServerStatusConfig`, sdk.d.ts) are told too: an in-process `sdk`
+ * server's config is its name, and a claude.ai connector's
+ * (`claudeai-proxy`) is Anthropic's proxy URL, said without any secret part.
+ * A config of no shape known here, whose secrets could not be told apart, is
+ * left out.
  */
-const withConfigMasked = (
-  server: McpServerStatus
-): Omit<McpServerStatus, "config"> & { config?: FleetMcpConfigView } => {
+const withConfigMasked = (server: McpServerStatus) => {
   const { config, ...rest } = server;
+  if (config?.type === "sdk") {
+    return { ...rest, config };
+  }
+  if (config?.type === "claudeai-proxy") {
+    return { ...rest, config: { ...config, url: openUrl(config.url) } };
+  }
   const held: Record<string, unknown> | undefined = config && { ...config };
   return held && isFleetMcpConfig(held)
     ? { ...rest, config: maskMcpConfig(held) }
