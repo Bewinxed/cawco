@@ -53,8 +53,8 @@ import {
   BROWSER_STOP,
   type BrowserFrame,
   type BrowserHandback,
-  type BrowserInjectAdvertArgs,
   type BrowserHandedBackFrame,
+  type BrowserInjectAdvertArgs,
   type BrowserKey,
   type BrowserListFrame,
   type BrowserPasskeyAdvertArgs,
@@ -721,7 +721,10 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     async relayPasskeyAdvert(
       sourceMachineId: string,
       args: BrowserPasskeyAdvertArgs,
-      heard: { captured: (key: BrowserKey) => void; injected: (key: BrowserKey) => void }
+      heard: {
+        captured: (key: BrowserKey) => void;
+        injected: (key: BrowserKey) => void;
+      }
     ): Promise<void> {
       const from = deps.machineName(sourceMachineId);
       // The base64 of the service data must decode to exactly 20 bytes.

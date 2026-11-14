@@ -2470,8 +2470,7 @@ const attach = (
         frame.kind === "passkey_advert" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone" ||
-        frame.kind === "catalog_moved" ||
-        frame.kind === "passkey_relay"
+        frame.kind === "catalog_moved"
       ) {
         return false;
       }
@@ -3846,11 +3845,11 @@ const startDaemon = (rediscover = false) =>
       console.info(`[passkey] BLE scan started for ${key}`);
       return true;
     });
-    supervisor.declareControl(PASSKEY_SCAN_STOP, async (args) => {
+    supervisor.declareControl(PASSKEY_SCAN_STOP, (args) => {
       const key = browserKeyOf(args);
       passkeyCapture.stop(key);
       console.info(`[passkey] BLE scan stopped for ${key}`);
-      return true;
+      return Promise.resolve(true);
     });
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
@@ -3861,18 +3860,12 @@ const startDaemon = (rediscover = false) =>
     );
     // The records' watch and tick end with the daemon's scope, and one that
     // is still starting as it ends is stopped the moment it is ready.
-    // Also stop any BLE passkey scans.
     let unwatchBrowsers: (() => void) | undefined;
     let browsersEnded = false;
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         browsersEnded = true;
         unwatchBrowsers?.();
-        import("./passkey-scanner")
-          .then(({ stopAllScans }) => stopAllScans())
-          .catch((error: unknown) =>
-            console.warn(`[passkey] cleanup: ${String(error)}`)
-          );
       })
     );
     yield* Effect.forkScoped(

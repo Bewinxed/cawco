@@ -40,6 +40,7 @@ import {
   type HubFolder,
   instances,
   type OpenSubagent,
+  passkeySettings,
   projectAccounts,
   projectLinks,
   projectNotes,
@@ -54,7 +55,6 @@ import {
   sessionLimits,
   sessionSubagents,
   sessionTaints,
-  passkeySettings,
   spendSettings,
   taskCommentIds,
   usageBuckets,
@@ -294,6 +294,8 @@ export interface ProjectsDb {
   }) => boolean;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
+  /** Whether passkey relay is enabled fleet-wide; false before any is set. */
+  readonly passkeyRelayEnabled: () => boolean;
   /** A project with its places, or undefined for an id the hub does not hold. */
   readonly project: (id: string) => ProjectRow | undefined;
   /** The oldest project that links `remote` (normalised). */
@@ -397,6 +399,8 @@ export interface ProjectsDb {
   readonly sessionLimits: () => SessionLimits;
   /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
   readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
+  /** Whether passkey relay is enabled fleet-wide. */
+  readonly setPasskeyRelay: (enabled: boolean) => void;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
@@ -455,10 +459,6 @@ export interface ProjectsDb {
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
-  /** Whether passkey relay is enabled fleet-wide; false before any is set. */
-  readonly passkeyRelayEnabled: () => boolean;
-  /** Whether passkey relay is enabled fleet-wide. */
-  readonly setPasskeyRelay: (enabled: boolean) => void;
   /** What reaching a cap does where a project sets nothing. */
   readonly setSpendOnCap: (onCap: OnCap) => void;
   /** What reaching a cap does where a project sets nothing; its default before any is set. */

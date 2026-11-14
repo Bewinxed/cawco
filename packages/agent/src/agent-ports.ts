@@ -32,12 +32,12 @@ export interface AgentPorts {
   readonly emit: (envelope: Envelope) => void;
   /** The machine this agent is: the browsers' and the relay's frames name it. */
   readonly machineId: string;
-  /** A FIDO URI read off a take-over's passkey QR (browser/shield.ts). */
-  readonly passkeyQr: (frame: PasskeyQrFrame) => void;
   /** A project move's progress (move.ts). */
   readonly moveProgress: (frame: MoveProgressFrame) => void;
   /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
   readonly opencodeAccounts: OpencodeAccountsHost;
+  /** A FIDO URI read off a take-over's passkey QR (browser/shield.ts). */
+  readonly passkeyQr: (frame: PasskeyQrFrame) => void;
   /** The stream relay's state (browser/relay.ts). */
   readonly relay: (frame: RelayFrame) => void;
   /** A take-over the agent ended itself (browser/shield.ts). */

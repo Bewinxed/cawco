@@ -47,7 +47,7 @@ const UUID_PREFIX_BYTES = 2;
 const CABLE_PAYLOAD_LENGTH = 20;
 
 /** How long a scan runs before it stops itself; the hub's own timeout is shorter. */
-export const SCAN_TIMEOUT_MS = 35_000;
+const SCAN_TIMEOUT_MS = 35_000;
 
 /** The macOS scanner prints `FIDO_ADVERT:<peripheral>:<base64 service data>:<rssi>` per advert. */
 const DARWIN_ADVERT_PREFIX = "FIDO_ADVERT:";
@@ -273,8 +273,10 @@ export class PasskeyScanner {
         this.#proc.stdin?.write("scan off\n");
         this.#proc.stdin?.write("quit\n");
       }
-    } catch {
-      // stdin may already be closed.
+    } catch (error) {
+      console.info(
+        `[passkey-capture] stdin already closed, so no scan off: ${String(error)}`
+      );
     }
 
     // Give it a moment to exit cleanly, then force-kill.
@@ -282,8 +284,10 @@ export class PasskeyScanner {
     setTimeout(() => {
       try {
         proc.kill("SIGTERM");
-      } catch {
-        // Already dead.
+      } catch (error) {
+        console.info(
+          `[passkey-capture] scanner already gone: ${String(error)}`
+        );
       }
     }, 1000);
 

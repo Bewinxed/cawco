@@ -121,6 +121,9 @@ export type ShieldPorts = Pick<
 /** The last FIDO URI emitted per browser key: emit only once per unique URI. */
 const lastQr = new Map<BrowserKey, string>();
 
+/** The browsers whose page could not be read for a passkey QR on the last tick, so a streak is said once. */
+const qrUnreadable = new Set<BrowserKey>();
+
 const shieldFile = (key: BrowserKey): string =>
   join(browserDir(key), "shield.json");
 
@@ -713,6 +716,7 @@ const release = async (
   }
   await restorePages(key);
   lastQr.delete(key);
+  qrUnreadable.delete(key);
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(ports, key, undefined).catch((error: unknown) =>
@@ -873,8 +877,14 @@ const pollPasskeyQr = async (
       });
       console.info(`[browser] ${key}: passkey QR extracted`);
     }
-  } catch {
-    // The browser may not be reachable; silently skip this tick.
+    qrUnreadable.delete(key);
+  } catch (error) {
+    // The browser may not be reachable: this tick reads nothing, and the
+    // first of a streak says why.
+    if (!qrUnreadable.has(key)) {
+      qrUnreadable.add(key);
+      console.info(`[browser] ${key}: passkey QR not read: ${why(error)}`);
+    }
   } finally {
     link?.close();
   }
