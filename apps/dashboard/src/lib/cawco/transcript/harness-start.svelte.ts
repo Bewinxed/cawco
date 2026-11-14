@@ -26,7 +26,7 @@ export class HarnessStart {
   /**
    * This session's start was refused for its machine's harness CLI
    * (harness-block.svelte.ts): the refusal stands over the field with its
-   * fix (Update pi, Install OpenCode 2.0.29; Claude Code's own update, which
+   * fix (Update pi, Install OpenCode 2.3.0; Claude Code's own update, which
    * CawCo runs by itself), and once that lands the session starts again with
    * nothing more to press (`relaunchUnblocked`).
    */

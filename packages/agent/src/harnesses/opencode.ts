@@ -20,7 +20,7 @@
  * (`opencode-session.ts` turns them into frames).
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   lstat,
@@ -75,7 +75,6 @@ import {
   workspaceSpillDir,
 } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
-import { runCaptured } from "@cawco/core/run-captured";
 import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
@@ -216,10 +215,7 @@ import {
 } from "./opencode-server";
 import {
   askOpencode,
-  catalogRows,
   forgetBackground,
-  type ModelDefault,
-  type ModelListed,
   NO_WORKFLOW_SKILLS,
   OpencodeSession,
   opencodeCatalog,
@@ -1676,12 +1672,12 @@ const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
 
 /**
  * What the machine's OpenCode says of itself: its models (`GET /api/model`
- * and `/api/model/default`, as {@link catalogRows} reads them) and the
+ * and `/api/model/default`, as {@link opencodeCatalog} reads them) and the
  * providers it can sign in to (`GET /api/integration`). The machine's report
  * and its provider list say these. Read from the machine's server while one
- * runs; with none, from a one-shot private server
- * ({@link standaloneRead}) that exits as it answers, and only when what they
- * were read on moved ({@link ServerFacts.inputs}). The daemon looks at the
+ * runs; with none, from a private server ({@link privateServerRead}) ended
+ * as it answers, and only when what they were read on moved
+ * ({@link ServerFacts.inputs}). The daemon looks at the
  * file and reports OpenCode again when it moves.
  */
 const OPENCODE_SERVER_FACTS = join(OPENCODE_DIR, "cawco-server-facts.json");
@@ -1694,74 +1690,100 @@ interface ServerFacts {
 }
 
 /**
- * How long one {@link standaloneRead} may take. Ours: `opencode api
- * --standalone GET /api/model` answered in 0.9 s on obelisk (2.0.29, a fresh
+ * How long one {@link privateServerRead} may take, its server's boot
+ * included. Ours: `opencode api --standalone GET /api/model`, a private
+ * server's boot and one read, answered in 0.9 s on obelisk (2.0.29, a fresh
  * data dir); a cold or loaded machine gets many times that.
  */
-const STANDALONE_READ_MS = 30_000;
+const PRIVATE_READ_MS = 30_000;
 
 /**
- * One request to OpenCode's API with no server left running: `opencode api
- * --standalone GET <path>` boots a private server in its own process for
- * the one request, prints the answer as JSON, and exits ("Use `--standalone`
- * to run with a private server", https://opencode.ai/v2/docs/cli). Never
- * without `--standalone`: the CLI otherwise "discovers or starts one shared
- * background server for your user account" (same page), which outlives the
- * command. Run on `launch`'s environment, as a server on that launch is
- * (`serverEnvironment`, no `CAWCO_*`), so it reads the same config, catalog
- * and data dir; in `directory`, its location.
+ * What the machine's OpenCode says of itself ({@link ServerFacts}) as one
+ * server answers at `directory`: its catalog, and the integrations it can
+ * sign in to. Every integration comes from a plugin, and since OpenCode 2.2.7
+ * `integration.list` answers with what the location has loaded so far (a
+ * location just booted lists none: "Clients make sure what they need is
+ * loaded before they call", anomalyco/opencode#62796), so it is read once
+ * the location's plugins are loaded ({@link assertPluginLoaded}).
  */
-/**
- * The server's model answers as the client types them (`@opencode/client`,
- * which ships no zod schema of them): their `data` checked to be the list or
- * the record the rows are read from, each model's fields read as the client
- * types them.
- */
-const MODEL_LISTED = z.custom<ModelListed>(
-  (value) =>
-    typeof value === "object" &&
-    value !== null &&
-    "data" in value &&
-    Array.isArray(value.data),
-  "a model listing"
-);
-const MODEL_DEFAULT = z.custom<ModelDefault>(
-  (value) => typeof value === "object" && value !== null && "data" in value,
-  "a default model"
-);
+const serverFacts = async (
+  client: OpencodeClient,
+  directory: string
+): Promise<Omit<ServerFacts, "inputs">> => {
+  const [models, listed] = await Promise.all([
+    opencodeCatalog(client, directory),
+    askOpencode(async (options) => {
+      await assertPluginLoaded(client, directory, options.signal);
+      return await client.integration.list(at(directory), options);
+    }).then((answer) => answerOf(answer, "its integrations")),
+  ]);
+  return { models, providers: listed.data };
+};
 
-const standaloneRead = async <S extends z.ZodType>(
+/**
+ * `read` against a private server, with no server left running: `launch`'s
+ * `opencode serve` started here on a password of its own, in `directory`,
+ * read once it says where it listens, and ended when the read settles or
+ * {@link PRIVATE_READ_MS} passes. Run on `launch`'s environment, as a server
+ * on that launch is (`serverEnvironment`, no `CAWCO_*`), so it reads the same
+ * config, catalog and data dir. One server for every read, where `opencode
+ * api --standalone` boots one per request and answers before its location's
+ * plugins load.
+ */
+const privateServerRead = async <T>(
   launch: ServerLaunch,
-  path: string,
   directory: string,
-  schema: S
-): Promise<z.output<S>> => {
-  const command = `opencode api --standalone GET ${path}`;
-  const read = await readWithin(STANDALONE_READ_MS, async (signal) => {
-    const { code, stdout, stderr } = await runCaptured(
-      [launch.spec.command, "api", "--standalone", "GET", path],
-      {
-        cwd: directory,
-        env: { ...serverEnvironment(process.env), ...launch.spec.env },
-        signal,
+  read: (client: OpencodeClient) => Promise<T>
+): Promise<T> => {
+  const command = `opencode ${launch.spec.args.join(" ")}`;
+  const answered = await readWithin(PRIVATE_READ_MS, async (signal) => {
+    const password = randomBytes(24).toString("base64url");
+    const server = Bun.spawn([launch.spec.command, ...launch.spec.args], {
+      cwd: directory,
+      env: {
+        ...serverEnvironment(process.env),
+        ...launch.spec.env,
+        OPENCODE_SERVER_PASSWORD: password,
+      },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+      signal,
+    });
+    try {
+      let url: string | undefined;
+      let buffered = "";
+      for await (const chunk of server.stdout.pipeThrough(
+        new TextDecoderStream()
+      )) {
+        buffered += chunk;
+        const lines = buffered.split("\n");
+        buffered = lines.pop() ?? "";
+        url = lines.map(parseServerAnnouncement).find(Boolean);
+        if (url) {
+          break;
+        }
       }
-    );
-    if (code !== 0) {
-      throw new Error(
-        `\`${command}\` exited ${code}: ${stderr.trim().slice(-400) || "it said nothing"}`
-      );
+      if (!url) {
+        throw new Error(
+          `\`${command}\` exited ${await server.exited} without saying where it listens`
+        );
+      }
+      return await read(opencodeClient({ url, password }));
+    } finally {
+      server.kill();
+      await server.exited;
     }
-    return schema.parse(JSON.parse(stdout));
   });
-  switch (read.kind) {
+  switch (answered.kind) {
     case "answered":
-      return read.value;
+      return answered.value;
     case "unanswered":
       throw new Error(
-        `\`${command}\` did not answer within ${secondsOf(read.after)} s`
+        `\`${command}\` did not answer within ${secondsOf(answered.after)} s`
       );
     default:
-      unhandled("read", read);
+      unhandled("read", answered);
   }
 };
 
@@ -3699,12 +3721,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     // read there once; none is started for them.
     const client = this.#client;
     if (!this.#oauthIntegrations && client) {
-      const quiet = at(await quietDir());
+      const quiet = await quietDir();
+      // Its integrations are its plugins': read once they are loaded there
+      // (`serverFacts`).
       this.#oauthIntegrations = oauthIntegrationsOf(
         answerOf(
-          await askOpencode((options) =>
-            client.integration.list(quiet, options)
-          ),
+          await askOpencode(async (options) => {
+            await assertPluginLoaded(client, quiet, options.signal);
+            return await client.integration.list(at(quiet), options);
+          }),
           "its integrations"
         )
       );
@@ -3795,15 +3820,18 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (!client) {
       return;
     }
-    const quiet = at(await quietDir());
+    const quiet = await quietDir();
     const [own, [integrations, models]] = await Promise.all([
       ownCredentials(),
-      askOpencode((options) =>
-        Promise.all([
-          client.integration.list(quiet, options),
-          client.model.list(quiet, options),
-        ])
-      ).then((read) => answerOf(read, "its integrations and models")),
+      // Its integrations are its plugins': read once they are loaded there
+      // (`serverFacts`).
+      askOpencode(async (options) => {
+        await assertPluginLoaded(client, quiet, options.signal);
+        return await Promise.all([
+          client.integration.list(at(quiet), options),
+          client.model.list(at(quiet), options),
+        ]);
+      }).then((read) => answerOf(read, "its integrations and models")),
     ]);
     const refreshable = new Set(
       integrationsOf(integrations).flatMap((integration) =>
@@ -4418,9 +4446,9 @@ class OpencodeHarness implements Harness<"opencode"> {
   /**
    * What the machine's OpenCode says of itself ({@link OPENCODE_SERVER_FACTS}):
    * read from its server while one runs; with none, the kept facts while
-   * what they were read on stands, else read by one-shot private servers
-   * ({@link standaloneRead}), one request each, in turn. Never starts a
-   * server that stays. A read that fails throws, saying why.
+   * what they were read on stands, else read from a private server
+   * ({@link privateServerRead}) ended as it answers. Never starts a server
+   * that stays. A read that fails throws, saying why.
    */
   #currentFacts(): Promise<ServerFacts> {
     this.#factsRead ??= this.#readFacts().finally(() => {
@@ -4446,43 +4474,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     const quiet = await quietDir();
     let read: Omit<ServerFacts, "inputs">;
     if (client) {
-      const [models, listed] = await Promise.all([
-        opencodeCatalog(client, quiet),
-        askOpencode((options) =>
-          client.integration.list(at(quiet), options)
-        ).then((answer) => answerOf(answer, "its integrations")),
-      ]);
-      read = { models, providers: listed.data };
+      read = await serverFacts(client, quiet);
     } else {
       const kept = await this.#keptFacts();
       if (kept && kept.inputs === (await startInputs(launch))) {
         return kept;
       }
-      // One at a time: each boots a private server on the same database.
-      const listed = await standaloneRead(
-        launch,
-        "/api/model",
-        quiet,
-        MODEL_LISTED
+      read = await privateServerRead(launch, quiet, (one) =>
+        serverFacts(one, quiet)
       );
-      const fallback = await standaloneRead(
-        launch,
-        "/api/model/default",
-        quiet,
-        MODEL_DEFAULT
-      );
-      const integrations = await standaloneRead(
-        launch,
-        "/api/integration",
-        quiet,
-        z.object({
-          data: z.array(z.object({ id: z.string(), name: z.string() })),
-        })
-      );
-      read = {
-        models: catalogRows(listed, fallback),
-        providers: integrations.data,
-      };
     }
     const facts: ServerFacts = {
       inputs: await startInputs(launch),
@@ -4535,7 +4535,10 @@ class OpencodeHarness implements Harness<"opencode"> {
         try {
           answerOf(
             await askOpencode((options) =>
-              client.mcp.connect({ server: "cawco", ...at(directory) }, options)
+              client.experimental.mcp.connect(
+                { server: "cawco", ...at(directory) },
+                options
+              )
             ),
             "the cawco MCP reconnect"
           );
@@ -6891,7 +6894,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       // The call holds the client: leased, as e1ce75227 leased the sync's.
       this.#mutatingMcp += 1;
       const started = await readWithin(MCP_START_AGAIN_MS, (signal) =>
-        client.mcp.connect({ server: name, ...where }, { signal })
+        client.experimental.mcp.connect({ server: name, ...where }, { signal })
       )
         .then(
           (read) =>

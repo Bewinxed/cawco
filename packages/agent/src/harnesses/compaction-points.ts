@@ -98,40 +98,54 @@ export const piCompactsAt = (
     ? contextWindow - settings.reserveTokens
     : undefined;
 
-/** OpenCode's own floor under its default buffer (`y5=16000` beside its compaction service). */
+/** OpenCode's own floor under its default buffer (`mm=16000` beside its compaction service). */
 const OPENCODE_BUFFER_FLOOR = 16_000;
 
+/** The share of the window OpenCode keeps free by default (`AR=0.15` beside it). */
+const OPENCODE_BUFFER_SHARE = 0.15;
+
 /**
- * OpenCode 2.0.29 compacts once a session's context reaches its model's
- * input limit (else its context limit) less its config's
- * `compaction.buffer` (1.x's `reserved` read as it), or by default less a
- * tenth of it, at least 16,000 on a window of 32,000 or more, when
- * `compaction.auto` is not false. Read from its binary
- * (`@opencode/cli-linux-x64` 2.0.29): `W0=(e,i)=>{let r=e.input||e.context;
- * if(r<=0)return Number.POSITIVE_INFINITY;if(i!==void 0)return r-i;return
- * r-Math.max(Math.floor(r*0.1),r>=2*y5?y5:0)}`, tested as
- * `if(te.reason==="auto"&&!k(le,W0(le.model.limit,oe.buffer)))return
- * {status:"skipped"}`, its buffer and `auto` each config document's in turn
- * (`l.configure({…auto…,…buffer…})` of `opencode.config.compaction`).
+ * OpenCode 2.3.0 compacts once a session's context reaches its model's
+ * usable window (the smaller of its input and context limits when it has
+ * both, else whichever it has) less its config's `compaction.buffer`: a
+ * token count, or a share of the window such as "20%" (2.3.0's schema,
+ * `Config.Compaction.Percent`). A buffer of the whole window or more, or
+ * none, leaves the default: less 15% of it, at least 16,000 on a window of
+ * 32,000 or more. Nothing when `compaction.auto` is false. Read from its
+ * binary (`@opencode/cli-linux-x64` 2.3.0): `lm=(e,a)=>{let s=Gw(e);
+ * if(s<=0)return Number.POSITIVE_INFINITY;let r=typeof a==="string"?
+ * Math.round(s*Number.parseFloat(a)/100):a;if(r!==void 0&&r<s)return s-r;
+ * return s-Math.max(Math.floor(s*AR),s>=2*mm?mm:0)}` with `Gw=(e)=>e.input&&
+ * e.context?Math.min(e.input,e.context):e.input||e.context`, tested as
+ * `if(Ge.reason==="auto"&&!L(Te,lm(Te.model.limit,Se.buffer),Ge.estimate))
+ * return{status:"skipped"}`, its buffer and `auto` each config document's in
+ * turn (`m.configure({…auto…,…buffer…})` of `y.info.compaction`).
  */
 export const opencodeCompactsAt = (
   limit: { context: number; input?: number },
-  config: { auto?: boolean; buffer?: number }
+  config: { auto?: boolean; buffer?: string | number }
 ): number | undefined => {
   if (config.auto === false) {
     return;
   }
-  const usable = limit.input || limit.context;
+  const usable =
+    limit.input && limit.context
+      ? Math.min(limit.input, limit.context)
+      : limit.input || limit.context;
   if (usable <= 0) {
     return;
   }
-  if (config.buffer !== undefined) {
-    return usable - config.buffer;
+  const buffer =
+    typeof config.buffer === "string"
+      ? Math.round((usable * Number.parseFloat(config.buffer)) / 100)
+      : config.buffer;
+  if (buffer !== undefined && buffer < usable) {
+    return usable - buffer;
   }
   return (
     usable -
     Math.max(
-      Math.floor(usable * 0.1),
+      Math.floor(usable * OPENCODE_BUFFER_SHARE),
       usable >= 2 * OPENCODE_BUFFER_FLOOR ? OPENCODE_BUFFER_FLOOR : 0
     )
   );

@@ -115,6 +115,10 @@ export const opencodeSlashCommands = async (
   client: OpencodeClient,
   directory: string
 ): Promise<SlashCommand[]> => {
+  // Commands and skills come from plugins, which a location just booted has
+  // not loaded yet: their lists answer with what is loaded so far
+  // (OpenCode 2.2.7, anomalyco/opencode#62796).
+  await assertPluginLoaded(client, directory);
   const [commands, skills] = await Promise.all([
     client.command.list(at(directory)),
     client.skill.list(at(directory)),
@@ -230,7 +234,7 @@ const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
 export const assertPluginLoaded = async (
   client: OpencodeClient,
   directory: string,
-  signal: AbortSignal,
+  signal?: AbortSignal,
   timeoutMs = PLUGIN_LOAD_TIMEOUT_MS
 ): Promise<void> => {
   const loaded = await readWithin(
@@ -256,7 +260,7 @@ export const assertPluginLoaded = async (
         await Bun.sleep(250);
       }
     },
-    { signal }
+    signal ? { signal } : {}
   );
   switch (loaded.kind) {
     case "answered":
@@ -398,7 +402,7 @@ export const waitForMcp = async (
         // server is dialled again until the deadline, as Claude's launch gate
         // dials its slot (claude.ts `#readCawcoSlot`).
         if (cawco?.status === "failed") {
-          await client.mcp
+          await client.experimental.mcp
             .connect(
               { server: CAWCO_MCP_SERVER, ...at(directory) },
               { signal: within }

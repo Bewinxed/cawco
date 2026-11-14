@@ -295,21 +295,6 @@ export async function opencodeCatalog(
     client.model.list(scope),
     client.model.default(scope),
   ]);
-  return catalogRows(listed, fallback, provider);
-}
-
-/** The server's answers to `GET /api/model` and `GET /api/model/default`. */
-export type ModelListed = Awaited<ReturnType<OpencodeClient["model"]["list"]>>;
-export type ModelDefault = Awaited<
-  ReturnType<OpencodeClient["model"]["default"]>
->;
-
-/** {@link opencodeCatalog}'s rows from the server's two answers, however they were asked. */
-export function catalogRows(
-  listed: ModelListed,
-  fallback: ModelDefault,
-  provider?: string
-): ModelInfo[] {
   const models = listed.data
     .filter(
       (model) =>
@@ -331,6 +316,93 @@ export function catalogRows(
       ]
     : models;
 }
+
+/**
+ * The server's events no session acts on, its own ({@link
+ * OpencodeSession.handle}) or a subagent's under it
+ * ({@link OpencodeSession.handleChild}): each is passed over before either
+ * reads it, so a type OpenCode adds is one line here.
+ */
+const PASSED_OVER = [
+  "agent.updated",
+  "artifact.updated",
+  "command.updated",
+  "config.updated",
+  "credential.switched",
+  "credential.updated",
+  "experimental.mcp.event",
+  "filesystem.changed",
+  "installation.update-available",
+  "installation.updated",
+  "integration.updated",
+  "location.shutdown",
+  "mcp.resources.changed",
+  "mcp.status.changed",
+  "model.updated",
+  "models-dev.refreshed",
+  "persistent-pty.added",
+  "persistent-pty.removed",
+  "persistent-pty.updated",
+  "plugin.updated",
+  "project.updated",
+  "provider.updated",
+  "pty.created",
+  "pty.deleted",
+  "pty.exited",
+  "pty.updated",
+  "reference.updated",
+  "server.connected",
+  "session.agent.selected",
+  "session.archived",
+  "session.compaction.delta",
+  "session.created",
+  "session.deleted",
+  "session.forked",
+  "session.idle",
+  "session.inbox.cancelled",
+  "session.inbox.delivery.changed",
+  "session.instructions.updated",
+  "session.metadata.updated",
+  "session.model.selected",
+  "session.moved",
+  "session.permissions",
+  "session.renamed",
+  "session.revert.cleared",
+  "session.revert.committed",
+  "session.revert.staged",
+  "session.shell.ended",
+  "session.shell.started",
+  "session.skill.activated",
+  "session.status",
+  "session.step.first-token",
+  "session.step.streamed",
+  "session.synthetic",
+  "session.tool.input.delta",
+  "session.tool.input.ended",
+  "session.unarchived",
+  "session.usage.updated",
+  "session.viewed",
+  "shell.created",
+  "shell.deleted",
+  "shell.exited",
+  "skill.updated",
+  "tui.command.execute",
+  "tui.prompt.append",
+  "tui.session.select",
+  "tui.toast.show",
+  "vcs.branch.updated",
+  "websearch.updated",
+  "worktree.resolved",
+  "worktree.updated",
+] as const satisfies readonly V2Event["type"][];
+
+const PASSED_OVER_TYPES: ReadonlySet<string> = new Set(PASSED_OVER);
+
+/** Whether `event` is one no session acts on ({@link PASSED_OVER}). */
+const passedOver = (
+  event: V2Event
+): event is Extract<V2Event, { type: (typeof PASSED_OVER)[number] }> =>
+  PASSED_OVER_TYPES.has(event.type);
 
 /** One permission rule of the session's whole set. */
 const deny = (action: string): OpencodeRule => ({
@@ -1201,7 +1273,7 @@ export class OpencodeSession implements HarnessSession {
     const synced = await askOpencode(async (options) => {
       this.#placedEntries ??= new Set(
         (
-          await this.#client.session.instructions.entry.list(
+          await this.#client.experimental.session.instructions.entry.list(
             { sessionID },
             options
           )
@@ -1212,7 +1284,7 @@ export class OpencodeSession implements HarnessSession {
       const placed = this.#placedEntries;
       for (const key of [...placed]) {
         if (!(key in entries)) {
-          await this.#client.session.instructions.entry.remove(
+          await this.#client.experimental.session.instructions.entry.remove(
             { sessionID, key },
             options
           );
@@ -1231,7 +1303,7 @@ export class OpencodeSession implements HarnessSession {
             `${key} is ${bytes} bytes as an OpenCode instruction entry; OpenCode takes at most ${INSTRUCTION_ENTRY_MAX}.`
           );
         }
-        await this.#client.session.instructions.entry.put(
+        await this.#client.experimental.session.instructions.entry.put(
           { sessionID, key, value },
           options
         );
@@ -1268,6 +1340,9 @@ export class OpencodeSession implements HarnessSession {
     }
     // Any event off the wire is a sign of life: only a truly silent turn trips the stall notice.
     this.#noteServerActivity();
+    if (passedOver(event)) {
+      return;
+    }
     switch (event.type) {
       case "session.inbox.enqueued":
         this.#inbox.set(event.data.inboxID, event.data.item.type);
@@ -1609,71 +1684,6 @@ export class OpencodeSession implements HarnessSession {
           event.data.id,
           event.type === "form.cancelled" ? "cancelled" : "answered"
         );
-        break;
-      case "agent.updated":
-      case "command.updated":
-      case "config.updated":
-      case "credential.switched":
-      case "credential.updated":
-      case "filesystem.changed":
-      case "installation.update-available":
-      case "installation.updated":
-      case "integration.updated":
-      case "location.shutdown":
-      case "mcp.resources.changed":
-      case "mcp.status.changed":
-      case "model.updated":
-      case "models-dev.refreshed":
-      case "persistent-pty.added":
-      case "persistent-pty.removed":
-      case "plugin.updated":
-      case "project.updated":
-      case "provider.updated":
-      case "pty.created":
-      case "pty.deleted":
-      case "pty.exited":
-      case "pty.updated":
-      case "reference.updated":
-      case "server.connected":
-      case "session.agent.selected":
-      case "session.compaction.delta":
-      case "session.created":
-      case "session.deleted":
-      case "session.forked":
-      case "session.idle":
-      case "session.inbox.cancelled":
-      case "session.inbox.delivery.changed":
-      case "session.instructions.updated":
-      case "session.metadata.updated":
-      case "session.model.selected":
-      case "session.moved":
-      case "session.permissions":
-      case "session.renamed":
-      case "session.revert.cleared":
-      case "session.revert.committed":
-      case "session.revert.staged":
-      case "session.shell.ended":
-      case "session.shell.started":
-      case "session.skill.activated":
-      case "session.status":
-      case "session.step.streamed":
-      case "session.synthetic":
-      case "session.tool.input.delta":
-      case "session.tool.input.ended":
-      case "session.usage.updated":
-      case "session.viewed":
-      case "shell.created":
-      case "shell.deleted":
-      case "shell.exited":
-      case "skill.updated":
-      case "tui.command.execute":
-      case "tui.prompt.append":
-      case "tui.session.select":
-      case "tui.toast.show":
-      case "vcs.branch.updated":
-      case "websearch.updated":
-      case "worktree.resolved":
-      case "worktree.updated":
         break;
     }
   }
@@ -2457,6 +2467,9 @@ export class OpencodeSession implements HarnessSession {
         message: { content: [block] },
       });
     };
+    if (passedOver(event)) {
+      return;
+    }
     switch (event.type) {
       case "session.text.started":
         blockIndex(
@@ -2548,91 +2561,27 @@ export class OpencodeSession implements HarnessSession {
       }
       // The child's turn ending needs no frame: the parent's `subagent`
       // result closes its branch.
-      case "agent.updated":
-      case "command.updated":
-      case "config.updated":
-      case "credential.switched":
-      case "credential.updated":
-      case "filesystem.changed":
       case "form.cancelled":
       case "form.created":
       case "form.replied":
-      case "installation.update-available":
-      case "installation.updated":
-      case "integration.updated":
-      case "location.shutdown":
-      case "mcp.resources.changed":
-      case "mcp.status.changed":
-      case "model.updated":
-      case "models-dev.refreshed":
       case "permission.asked":
       case "permission.replied":
-      case "persistent-pty.added":
-      case "persistent-pty.removed":
-      case "plugin.updated":
-      case "project.updated":
-      case "provider.updated":
-      case "pty.created":
-      case "pty.deleted":
-      case "pty.exited":
-      case "pty.updated":
-      case "reference.updated":
-      case "server.connected":
-      case "session.agent.selected":
-      case "session.compaction.delta":
       case "session.compaction.ended":
       case "session.compaction.failed":
       case "session.compaction.started":
-      case "session.created":
-      case "session.deleted":
       case "session.execution.failed":
       case "session.execution.interrupted":
       case "session.execution.started":
       case "session.execution.succeeded":
-      case "session.forked":
-      case "session.idle":
-      case "session.inbox.cancelled":
       case "session.inbox.delivered":
-      case "session.inbox.delivery.changed":
       case "session.inbox.enqueued":
-      case "session.instructions.updated":
-      case "session.metadata.updated":
-      case "session.model.selected":
-      case "session.moved":
-      case "session.permissions":
       case "session.reasoning.delta":
       case "session.reasoning.started":
-      case "session.renamed":
       case "session.retry.scheduled":
-      case "session.revert.cleared":
-      case "session.revert.committed":
-      case "session.revert.staged":
-      case "session.shell.ended":
-      case "session.shell.started":
-      case "session.skill.activated":
-      case "session.status":
       case "session.step.ended":
       case "session.step.failed":
       case "session.step.started":
-      case "session.step.streamed":
-      case "session.synthetic":
-      case "session.tool.input.delta":
-      case "session.tool.input.ended":
       case "session.tool.progress":
-      case "session.usage.updated":
-      case "session.viewed":
-      case "shell.created":
-      case "shell.deleted":
-      case "shell.exited":
-      case "skill.updated":
-      case "tui.command.execute":
-      case "tui.prompt.append":
-      case "tui.session.select":
-      case "tui.toast.show":
-      case "vcs.branch.updated":
-      case "websearch.updated":
-      case "worktree.resolved":
-      case "worktree.updated":
         break;
     }
   }
@@ -3176,7 +3125,7 @@ export class OpencodeSession implements HarnessSession {
       if (skill) {
         // A skill is activated as a message of its own; words after it are
         // the prompt it answers, else the activation itself resumes the turn.
-        await this.#client.session.skill({
+        await this.#client.experimental.session.skill({
           sessionID,
           id: skill,
           resume: command.args.trim() === "",
@@ -3236,9 +3185,9 @@ export class OpencodeSession implements HarnessSession {
       }
       const target = { server, ...at(this.#directory) };
       if (verb === "connect" || verb === "reconnect") {
-        await this.#client.mcp.connect(target);
+        await this.#client.experimental.mcp.connect(target);
       } else if (verb === "disconnect") {
-        await this.#client.mcp.disconnect(target);
+        await this.#client.experimental.mcp.disconnect(target);
       } else if (verb === "auth" || verb === "login" || verb === "logout") {
         throw new Error(
           `OpenCode 2.0 signs an MCP server in or out only on its own machine (opencode mcp ${verb === "logout" ? "logout" : "auth"} ${server}). A fleet server signs in from the dashboard: ${configurePage("mcp")}.`
@@ -3296,7 +3245,10 @@ export class OpencodeSession implements HarnessSession {
         );
       }
       const loaded = await askOpencode((options) =>
-        this.#client.session.skill({ sessionID, id, resume: false }, options)
+        this.#client.experimental.session.skill(
+          { sessionID, id, resume: false },
+          options
+        )
       );
       switch (loaded.kind) {
         case "answered":
@@ -3332,7 +3284,7 @@ export class OpencodeSession implements HarnessSession {
       const model = listed.data.find(
         (one) => one.providerID === ref.providerID && one.id === ref.id
       );
-      let compaction: { auto?: boolean; buffer?: number } = {};
+      let compaction: { auto?: boolean; buffer?: string | number } = {};
       for (const entry of entries) {
         const set =
           entry.type === "document" ? entry.info.compaction : undefined;
@@ -3454,7 +3406,7 @@ export class OpencodeSession implements HarnessSession {
       }
       case CONTROL_MCP_RECONNECT: {
         const name = args[0] as string;
-        await this.#client.mcp.connect({
+        await this.#client.experimental.mcp.connect({
           server: name,
           ...at(this.#directory),
         });
@@ -3472,8 +3424,8 @@ export class OpencodeSession implements HarnessSession {
         const name = args[0] as string;
         const target = { server: name, ...at(this.#directory) };
         await (args[1]
-          ? this.#client.mcp.connect(target)
-          : this.#client.mcp.disconnect(target));
+          ? this.#client.experimental.mcp.connect(target)
+          : this.#client.experimental.mcp.disconnect(target));
         return;
       }
       case CONTROL_MCP_FLEET_CHANGED: {
@@ -3534,7 +3486,7 @@ export class OpencodeSession implements HarnessSession {
     const before = await this.#fleetMcpHeld(asked);
     for (const { name, status } of before.servers) {
       if (status === "failed") {
-        await this.#client.mcp
+        await this.#client.experimental.mcp
           .connect({ server: name, ...at(this.#directory) })
           .catch((error: unknown) =>
             console.warn(

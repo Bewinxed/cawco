@@ -292,12 +292,13 @@ export interface ToolPolicy {
 /**
  * The one OpenCode release CawCo runs: its adapter speaks this release's
  * server API, loads a plugin written for its plugin API, and pins
- * `@opencode/client` to it (packages/agent/package.json). 2.0.29 gives
- * plugins `ctx.permission.assert` ("Plugins had no in-process way to ask for
- * permission", anomalyco/opencode#54930), which the plugin's `shell` asks
- * through.
+ * `@opencode/client` and `@opencode/plugin` to it
+ * (packages/agent/package.json), so the three move together. Plugins have
+ * had `ctx.permission.assert` since 2.0.29 ("Plugins had no in-process way
+ * to ask for permission", anomalyco/opencode#54930), which the plugin's
+ * `shell` asks through.
  */
-const OPENCODE_VERSION = "2.0.29";
+const OPENCODE_VERSION = "2.3.0";
 
 /**
  * The oldest Claude Code CawCo runs at all (agent claude-version.ts
