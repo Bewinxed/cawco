@@ -177,7 +177,7 @@ export const browserRows = async (): Promise<BrowserRow[]> =>
 export const browserFrame = async (
   ports: BrowserPorts
 ): Promise<BrowserFrame> => {
-  const relay = detectPasskeyRelay();
+  const relay = await detectPasskeyRelay();
   const hasRelay = relay.hasBle || relay.hasVhci;
   return {
     kind: "browsers",

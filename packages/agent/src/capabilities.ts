@@ -244,6 +244,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   const claude = await claudeExecutable();
   const node = resolveBin("node");
   const browser = browserExecutable();
+  const passkeyRelay = await detectPasskeyRelay();
   let service: string | undefined;
   if (mac) {
     service = resolveBin("launchctl");
@@ -330,18 +331,14 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     reach,
     {
       id: "passkey-relay",
-      available: (() => {
-        const relay = detectPasskeyRelay();
-        return relay.hasBle || relay.hasVhci;
-      })(),
+      available: passkeyRelay.hasBle || passkeyRelay.hasVhci,
       installCommand: "",
       reason: (() => {
-        const relay = detectPasskeyRelay();
         const parts: string[] = [];
-        if (!relay.hasBle) {
+        if (!passkeyRelay.hasBle) {
           parts.push("No Bluetooth adapter found");
         }
-        if (!relay.hasVhci) {
+        if (!passkeyRelay.hasVhci) {
           parts.push("No vhci device; load it with `sudo modprobe hci_vhci`");
         }
         return parts.length > 0 ? parts.join(". ") : undefined;

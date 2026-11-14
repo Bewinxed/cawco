@@ -17,6 +17,7 @@ export type MachineReportsContext = Pick<
   | "fleetSyncs"
   | "keepFleetReport"
   | "moves"
+  | "passkeyRelay"
   | "pendingInstalls"
   | "registry"
   | "ridingReported"
@@ -160,43 +161,40 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
         ...body,
         machineId: message.machineId,
       });
+      ctx.passkeyRelay.stop(body.key);
       return "stop";
     }
     return "continue";
   };
 
-  const passkeyRelayHeard = (run: FrameRun): FrameAnswer => {
+  const passkeyHeard = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
     const { kind, body } = agentFrame;
-    // A machine's BLE capability changed: every dashboard shows which
-    // machines capture. A captured FIDO caBLE advert goes to every other
-    // machine with a live take-over (browsers.ts).
-    if (kind === "passkey_relay") {
-      ctx.registry.broadcast({
-        verb: "frames",
-        machineId: message.machineId,
-        payload: body,
-      });
-      return "stop";
-    }
+    // A FIDO URI read off a take-over's page: kept for dashboards that
+    // connect later, shown to every dashboard now, and the relay picks the
+    // machines that scan for the phone's advert (passkey-relay.ts).
     if (kind === "passkey_qr") {
-      // A FIDO URI read off a take-over's page: every dashboard renders it.
       const qr = { ...body, machineId: message.machineId };
       ctx.browsers.heardPasskeyQr(qr);
-      ctx.registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: qr,
-      });
+      ctx.registry.broadcast({ verb: "frames", machineId: "hub", payload: qr });
+      ctx.passkeyRelay.start(qr.key, qr.machineId);
       return "stop";
     }
+    // The advert a scanning machine caught goes to the take-over browsers
+    // of the other machines (browsers.ts); the scan that caught it stops.
     if (kind === "passkey_advert") {
       const { serviceData, rssi, capturedAt } = body;
-      ctx.browsers.relayPasskeyAdvert(message.machineId, {
-        serviceData,
-        rssi,
-        capturedAt,
-      });
+      detach(
+        ctx.browsers.relayPasskeyAdvert(
+          message.machineId,
+          { serviceData, rssi, capturedAt },
+          {
+            captured: (key) => ctx.passkeyRelay.captured(key),
+            injected: (key) => ctx.passkeyRelay.injected(key),
+          }
+        ),
+        "relay the passkey advert"
+      );
       return "stop";
     }
     return "continue";
@@ -259,7 +257,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     catalogMoved,
     fleetConverging,
     browserHandedBack,
-    passkeyRelayHeard,
+    passkeyHeard,
     streamRelayHeard,
     moveProgressed,
     accountBorrowed,

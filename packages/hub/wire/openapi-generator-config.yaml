@@ -148,6 +148,7 @@ typeOverrides:
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
+    PasskeyRelayStatus: OpenEnums.PasskeyRelayStatus
     PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
