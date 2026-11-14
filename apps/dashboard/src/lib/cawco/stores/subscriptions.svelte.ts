@@ -7,7 +7,12 @@
 import { detach } from "@cawco/core/detach";
 import { untrack } from "svelte";
 import { connectionCount, connectionState, hubRun } from "../hub/socket.svelte";
-import { following, forgetUnwatched, resumeHeld } from "../stream";
+import {
+  following,
+  followUnread,
+  forgetUnwatched,
+  resumeHeld,
+} from "../stream";
 import {
   peek,
   subscriptionIds,
@@ -94,8 +99,14 @@ function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
     const held = sessionsState.sessions[id];
     // A read that failed before the first board already waits on what can
     // answer it (`readFailed`: the backoff, the machine's deadline, or the
-    // board listing its machine online), and a 404 is the hub's answer.
+    // board listing its machine online), and a 404 is the hub's answer. Its
+    // stream is followed now, as `readFailed` follows one on an open socket
+    // (stream.ts `followUnread`): a send the hub refuses meanwhile reaches
+    // its row. A 404's cursor still reads, and is left.
     if (first && !pageReads.has(id) && (held?.readFault || held?.behind)) {
+      if (streamState.cursors[id] && !following(streamState, id)) {
+        followUnread(streamState, streamHost, id, true);
+      }
       continue;
     }
     const holds = Boolean(
