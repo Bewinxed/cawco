@@ -8,7 +8,7 @@ import {
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
 import { everyOf } from "@cawco/core/every-of";
-import { Elysia, problem, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
 import { awayProblem } from "../machine-answers";
@@ -139,11 +139,8 @@ export const accountHomeLoginRoutes = (
         async ({ body, status }) => {
           const { machineId, store } = body;
           const found = await homeCredentialOf(machineId, store, body.provider);
-          if ("error" in found) {
-            return problem(found.status, {
-              code: "home-login-refused",
-              detail: found.error,
-            });
+          if (found instanceof ElysiaStatus) {
+            return found;
           }
           const started = await startMove(machineId, store, found);
           return "error" in started

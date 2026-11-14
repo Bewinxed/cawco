@@ -25,6 +25,7 @@ import type { DecisionLinks } from "../decision-problems";
 import type { ArtifactNamed } from "../decision-program";
 
 import type { HubLifetimeShape } from "../lifetime";
+import type { AwayProblem } from "../machine-answers";
 import type { PageBuilt, PageFolderProblem } from "../page-problems";
 import type { PreviewListeners } from "../preview";
 import type { ProblemsOf } from "../refusal";
@@ -49,10 +50,9 @@ type PerStatus<Status extends number> = Status extends number
   ? ReturnType<typeof problem<Status, { code: string; detail: string }>>
   : never;
 
-/** A machine call of the hub's own wiring that no machine answered: away (503), or not in time (504). */
-type Unanswered<Away extends string, Late extends string> =
-  | ReturnType<typeof problem<503, { code: Away; detail: string }>>
-  | ReturnType<typeof problem<504, { code: Late; detail: string }>>;
+/** A machine call of the hub's own wiring that no machine answered: away (`awayProblem`), or not in time (504). */
+type Unanswered<Late extends string> =
+  AwayProblem | ReturnType<typeof problem<504, { code: Late; detail: string }>>;
 
 /** A stage's refusal (artifact-events.ts `onStage`): its workspace gone or on no machine, its machine away or late, or the stage's own no. */
 type StageRefused =
@@ -62,7 +62,7 @@ type StageRefused =
   | ReturnType<
       typeof problem<409, { code: "stage-workspace-unplaced"; detail: string }>
     >
-  | Unanswered<"stage-machine-away", "stage-machine-late">
+  | Unanswered<"stage-machine-late">
   | ReturnType<typeof problem<422, { code: "stage-said-no"; detail: string }>>;
 
 /** Why an artifact has no origin a browser of the session's own opens (preview-browse.ts `browsedOrigin`): no session holds it, no machine serves it, or its listener does not open. */
@@ -200,7 +200,7 @@ export interface ArtifactServiceDeps {
     path: string | undefined
   ) => Promise<
     | FolderWeight
-    | Unanswered<"artifact-folder-machine-away", "artifact-folder-machine-late">
+    | Unanswered<"artifact-folder-machine-late">
     | ReturnType<
         typeof problem<422, { code: "artifact-folder-unread"; detail: string }>
       >
@@ -266,6 +266,7 @@ export interface ArtifactServiceDeps {
           { code: "picture-save-no-workspace"; detail: string }
         >
       >
+    | AwayProblem
     | ReturnType<
         typeof problem<503, { code: "picture-save-unanswered"; detail: string }>
       >
@@ -344,9 +345,7 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     | { png: string; cut?: PictureCut }
     | OriginRefused
-    | ReturnType<
-        typeof problem<503, { code: "picture-no-daemon"; detail: string }>
-      >
+    | AwayProblem
     | ReturnType<
         typeof problem<503, { code: "picture-undrawn"; detail: string }>
       >
@@ -407,12 +406,7 @@ export interface ArtifactServiceDeps {
     sync: string
   ) => Promise<
     | CanvasScreen
-    | ReturnType<
-        typeof problem<
-          503,
-          { code: "artifact-screen-no-daemon"; detail: string }
-        >
-      >
+    | AwayProblem
     | ReturnType<
         typeof problem<
           503,
@@ -449,7 +443,7 @@ export interface ArtifactServiceDeps {
     serve: ServeSpec
   ) => Promise<
     | StageState
-    | Unanswered<"artifact-serve-machine-away", "artifact-serve-machine-late">
+    | Unanswered<"artifact-serve-machine-late">
     | ReturnType<
         typeof problem<
           422,

@@ -32,16 +32,18 @@ import {
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { problem } from "elysia";
 import {
   accountOfIdentity,
   keepProbe,
   uncompared,
   withOrgIdFrom,
 } from "./accounts";
-import type { ClosureContext } from "./closure-context";
+import type { ClosureContext, HomeCredentialFound } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import type { Unanswered } from "./machine-answers";
+import { awayProblem } from "./machine-answers";
 import { unreachable } from "./unreachable";
 
 export type AccountSigninContext = Pick<
@@ -127,15 +129,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     machineId: string,
     store: HomeStore,
     storeProvider: string | undefined
-  ): Promise<
-    | {
-        identity: AccountIdentity;
-        kind: AccountKind;
-        provider: AccountProvider;
-        storeProvider: string;
-      }
-    | { error: string; status: 409 | 422 | 503 }
-  > => {
+  ) => {
     const machine = ctx.machineName(machineId);
     const asked =
       traitsOf(store).homeLogin === "dir"
@@ -154,7 +148,12 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
           );
     switch (asked.kind) {
       case "unanswered":
-        return { status: 503, error: awayWords(machineId, asked) };
+        return asked.reason === "dead"
+          ? awayProblem(machineId, awayWords(machineId, asked))
+          : problem(503, {
+              code: "home-login-refused",
+              detail: awayWords(machineId, asked),
+            });
       case "answered":
         break;
       default:
@@ -162,40 +161,40 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     }
     const read = asked.value;
     if (!read.ok) {
-      return {
-        status: 422,
-        error: read.error ?? `${machine} could not say what its stores hold.`,
-      };
+      return problem(422, {
+        code: "home-login-refused",
+        detail: read.error ?? `${machine} could not say what its stores hold.`,
+      });
     }
     const traits = traitsOf(store);
     if (traits.homeLogin === "dir") {
       const home = read.result as HomeLogin;
       return home.loggedIn && home.identity
-        ? {
+        ? ({
             identity: home.identity,
             kind: home.kind ?? "subscription",
             provider: traits.soleProvider,
             storeProvider: traits.soleProvider,
-          }
-        : {
-            status: 409,
-            error: `${accountsWords.harnesses[store]} on ${machine} isn't signed in, so there is no login to move.`,
-          };
+          } satisfies HomeCredentialFound)
+        : problem(409, {
+            code: "home-login-refused",
+            detail: `${accountsWords.harnesses[store]} on ${machine} isn't signed in, so there is no login to move.`,
+          });
     }
     const found = (read.result as HomeCredential[]).find(
       (one) => one.store === store && one.storeProvider === storeProvider
     );
     return found
-      ? {
+      ? ({
           identity: found.identity,
           kind: found.kind,
           provider: found.provider,
           storeProvider: found.storeProvider,
-        }
-      : {
-          status: 409,
-          error: `${store}'s own store on ${machine} holds no ${storeProvider ?? "(name a provider)"} credential CawCo can move.`,
-        };
+        } satisfies HomeCredentialFound)
+      : problem(409, {
+          code: "home-login-refused",
+          detail: `${store}'s own store on ${machine} holds no ${storeProvider ?? "(name a provider)"} credential CawCo can move.`,
+        });
   };
 
   /** A machine that did not answer a sign-in step, in a sentence. */

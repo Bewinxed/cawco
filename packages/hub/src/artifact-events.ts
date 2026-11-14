@@ -39,10 +39,10 @@ import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
+import { awayProblem } from "./machine-answers";
 import { externalizeImages } from "./media";
 import { peek } from "./payload-peeks";
 import { handle as idHandle } from "./presenters/words";
-
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
 import { isLive } from "./work-item-state";
@@ -694,11 +694,10 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     switch (asked.kind) {
       case "unanswered":
         return asked.reason === "dead"
-          ? problem(503, {
-              code: "stage-machine-away",
-              detail:
-                "The workspace's machine isn't connected to the hub, so its stage can't be reached.",
-            })
+          ? awayProblem(
+              machineId,
+              "The workspace's machine isn't connected to the hub, so its stage can't be reached."
+            )
           : problem(504, {
               code: "stage-machine-late",
               detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`,

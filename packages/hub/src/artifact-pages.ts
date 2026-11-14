@@ -30,6 +30,7 @@ import {
   pageSourcePaths,
 } from "./kept-blocks";
 import { sessionLabel } from "./labels";
+import { awayProblem } from "./machine-answers";
 import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PageBuilt, PageFolderProblem } from "./page-problems";
 import type { PreviewTarget } from "./preview";
@@ -451,10 +452,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const agent = ctx.registry.agent(origin.machineId);
     if (!agent) {
-      return problem(503, {
-        code: "page-machine-away",
-        detail: "Machine is not connected",
-      });
+      return awayProblem(origin.machineId, "Machine is not connected");
     }
     const readText = async (path: string) => {
       const read = await ctx.callFs(origin.machineId, agent, {
@@ -666,10 +664,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     if ("dir" in from) {
       const agent = ctx.registry.agent(row.machineId);
       if (!agent) {
-        return problem(503, {
-          code: "page-machine-away",
-          detail: "Machine is not connected",
-        });
+        return awayProblem(row.machineId, "Machine is not connected");
       }
       const read = await ctx.callFs(row.machineId, agent, {
         op: "read",

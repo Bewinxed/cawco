@@ -56,7 +56,7 @@ import { answered } from "./browsers";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
-
+import type { AwayProblem } from "./machine-answers";
 import type { RelayCall } from "./stream-relay";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
@@ -93,19 +93,11 @@ export interface BrowserStreamDeps {
   machineName: (machineId: string) => string;
   /** A credential of the fleet's stream relay, or null while it has none (stream-relay.ts). */
   mint: (userId: string, ttlMs: number) => BrowserRelay | null;
-  /** Where the hub reaches a port of the machine's: its address, or the hub's end of its SSH connection (ssh-tunnels.ts); refused (browser-machine-unreached) when it is not connected. */
+  /** Where the hub reaches a port of the machine's: its address, or the hub's end of its SSH connection (ssh-tunnels.ts); refused (`awayProblem`) when it is not connected. */
   reach: (
     machineId: string,
     port: number
-  ) => Promise<
-    | { address: string; port: number }
-    | ReturnType<
-        typeof problem<
-          503,
-          { code: "browser-machine-unreached"; detail: string }
-        >
-      >
-  >;
+  ) => Promise<{ address: string; port: number } | AwayProblem>;
 }
 
 /** The browser an artifact shows, and the machine it runs on. */
@@ -268,6 +260,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     const token = randomUUID();
     const listened = answered<{ port: number }>(
       await deps.call(machineId, BROWSER_LISTEN, [{ token }], LISTEN_MS),
+      machineId,
       deps.machineName(machineId),
       "be reached"
     );
@@ -329,6 +322,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
         [{ key: place.key }],
         VIEWER_MS
       ),
+      place.machineId,
       deps.machineName(place.machineId),
       "be viewed"
     );

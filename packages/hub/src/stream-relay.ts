@@ -61,7 +61,7 @@ import { ElysiaStatus, problem } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
-
+import { type AwayProblem, awayProblem } from "./machine-answers";
 import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
@@ -151,9 +151,7 @@ export interface StreamRelayDeps {
 
 /** The relay's machine's refusal: away or late (503), or refusing in its own words (409). */
 export type RelayMachineRefusal =
-  | ReturnType<
-      typeof problem<503, { code: "stream-relay-machine-away"; detail: string }>
-    >
+  | AwayProblem
   | ReturnType<
       typeof problem<503, { code: "stream-relay-machine-late"; detail: string }>
     >
@@ -271,18 +269,16 @@ const ACT: Record<string, string> = {
   issued: "certificate's issue",
 };
 
-/** The relay's machine's answer, or its refusal in its own words. */
+/** The relay's machine's answer (machine `machineId`, `machine` by name), or its refusal in its own words. */
 const answered = <T>(
   read: Bounded<{ ok: boolean; result?: unknown; error?: string }>,
+  machineId: string,
   machine: string,
   what: string
 ): T | RelayMachineRefusal => {
   if (read.kind === "unanswered") {
     return read.reason === "dead"
-      ? problem(503, {
-          code: "stream-relay-machine-away",
-          detail: STREAM_RELAY_WORDS.machineAway(machine),
-        })
+      ? awayProblem(machineId, STREAM_RELAY_WORDS.machineAway(machine))
       : problem(503, {
           code: "stream-relay-machine-late",
           detail: `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`,
@@ -395,6 +391,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     const read = await call(relay.machineId, RELAY_START, [args], START_MS);
     const frame = answered<RelayFrame>(
       read,
+      relay.machineId,
       machineName(relay.machineId),
       "started"
     );
@@ -468,6 +465,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     );
     const done = answered<RelayRenewed>(
       read,
+      relay.machineId,
       machineName(relay.machineId),
       "renewed"
     );
@@ -510,6 +508,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       const read = await call(machineId, RELAY_CERTIFY, [args], CERTIFY_MS);
       const certified = answered<RelayCertified>(
         read,
+        machineId,
         machineName(machineId),
         "issued"
       );
@@ -560,6 +559,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
       const frame = answered<RelayFrame>(
         read,
+        relay.machineId,
         machineName(relay.machineId),
         "stopped"
       );

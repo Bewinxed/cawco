@@ -2804,10 +2804,10 @@ export const createServer = (
     reach: async (machineId, port) => {
       const address = registry.address(machineId);
       if (!address) {
-        return problem(503, {
-          code: "browser-machine-unreached",
-          detail: `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`,
-        });
+        return awayProblem(
+          machineId,
+          `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`
+        );
       }
       return sshTunnels.holds(machineId)
         ? {
@@ -2831,6 +2831,7 @@ export const createServer = (
       };
       const asked = browserAnswered<BrowserAskedPage>(
         await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_CALL_MS),
+        machineId,
         machineName(machineId),
         `say which page of yours is open on ${origin}`
       );
@@ -4141,14 +4142,11 @@ export const createServer = (
   /** How long the machine may take to finish a tool's sign-in once its code is typed. */
   const TOOL_SIGNIN_COMPLETE_MS = 180_000;
 
-  /** A PATCH changes the live harness first; its receipt files the stored mode. */
-  const applyPermissionMode = async (
-    row: InstanceRow,
-    mode: string
-  ): Promise<{ code: 400 | 500 | 503 | 504; error: string } | undefined> => {
+  /** A PATCH changes the live harness first; its receipt files the stored mode. Why it did not, as the PATCH answers it. */
+  const applyPermissionMode = async (row: InstanceRow, mode: string) => {
     const unfit = sessionModeRefusal(row.id, mode);
     if (unfit) {
-      return { code: 400, error: unfit };
+      return problem(400, { code: "mode-refused", detail: unfit });
     }
     const asked = await callAgent(
       row.machineId,
@@ -4161,11 +4159,11 @@ export const createServer = (
     switch (asked.kind) {
       case "unanswered":
         return asked.reason === "dead"
-          ? { code: 503, error: "Machine is not connected" }
-          : {
-              code: 504,
-              error: `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`,
-            };
+          ? awayProblem(row.machineId, "Machine is not connected")
+          : problem(504, {
+              code: "mode-refused",
+              detail: `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`,
+            });
       case "answered":
         break;
       default:
@@ -4173,18 +4171,17 @@ export const createServer = (
     }
     const answer = asked.value;
     if (!answer.ok) {
-      return {
-        code: 500,
-        error: answer.error ?? "Permission mode was refused",
-      };
+      return problem(500, {
+        code: "mode-refused",
+        detail: answer.error ?? "Permission mode was refused",
+      });
     }
     if (peek(answer.result, "permissionMode") !== mode) {
-      return {
-        code: 500,
-        error: "Harness did not acknowledge the permission mode",
-      };
+      return problem(500, {
+        code: "mode-refused",
+        detail: "Harness did not acknowledge the permission mode",
+      });
     }
-    return undefined;
   };
 
   /**
@@ -4870,10 +4867,10 @@ export const createServer = (
     screen: async (artifact, sync) => {
       const machineId = await ownMachineId;
       if (!registry.agent(machineId)) {
-        return problem(503, {
-          code: "artifact-screen-no-daemon",
-          detail: `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`,
-        });
+        return awayProblem(
+          machineId,
+          `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+        );
       }
       // A canvas is always its session's: only a project's page outlives one.
       const owner = artifact.instanceId as string;
@@ -4911,10 +4908,15 @@ export const createServer = (
               "late canvas screen close"
             );
           }
-          return problem(503, {
-            code: "artifact-screen-unopened",
-            detail: `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`,
-          });
+          return asked.reason === "dead"
+            ? awayProblem(
+                machineId,
+                `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it (its daemon isn't connected).`
+              )
+            : problem(503, {
+                code: "artifact-screen-unopened",
+                detail: `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it within ${secondsOf(asked.after)} s.`,
+              });
         case "answered":
           break;
         default:
@@ -4957,11 +4959,10 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           return asked.reason === "dead"
-            ? problem(503, {
-                code: "artifact-serve-machine-away",
-                detail:
-                  "The workspace's machine isn't connected to the hub, so its server can't start.",
-              })
+            ? awayProblem(
+                machineId,
+                "The workspace's machine isn't connected to the hub, so its server can't start."
+              )
             : problem(504, {
                 code: "artifact-serve-machine-late",
                 detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`,
@@ -4991,11 +4992,10 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           return asked.reason === "dead"
-            ? problem(503, {
-                code: "artifact-folder-machine-away",
-                detail:
-                  "The folder's machine isn't connected to the hub, so its folder can't be read.",
-              })
+            ? awayProblem(
+                machineId,
+                "The folder's machine isn't connected to the hub, so its folder can't be read."
+              )
             : problem(504, {
                 code: "artifact-folder-machine-late",
                 detail: `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`,

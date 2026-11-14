@@ -170,7 +170,7 @@ import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
-import type { ControlResult, Unanswered } from "./machine-answers";
+import type { AwayProblem, ControlResult, Unanswered } from "./machine-answers";
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
@@ -231,6 +231,24 @@ import type { HubSocket } from "./wire-socket";
 import type { WorkItemCallsDeps } from "./work-item-calls";
 import type { createWorkItems } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
+
+/** The credential a move takes, as its machine's store holds it (account-signin.ts `homeCredentialOf`). */
+export interface HomeCredentialFound {
+  identity: AccountIdentity;
+  kind: AccountKind;
+  provider: AccountProvider;
+  storeProvider: string;
+}
+
+/** A credential's move refused at `Status`, in the words of why (account-signin.ts `homeCredentialOf`). */
+type HomeLoginRefused<Status extends 409 | 422> = ReturnType<
+  typeof problem<Status, { code: "home-login-refused"; detail: string }>
+>;
+
+/** A session's permission mode not applied, at `Status`, in the words of what refused it (server.ts `applyPermissionMode`). */
+type ModeRefused<Status extends 400 | 500 | 504> = ReturnType<
+  typeof problem<Status, { code: "mode-refused"; detail: string }>
+>;
 
 export interface ClosureContext {
   accountKindRefusal: (
@@ -302,7 +320,13 @@ export interface ClosureContext {
   applyPermissionMode: (
     row: InstanceRow,
     mode: string
-  ) => Promise<{ code: 400 | 500 | 503 | 504; error: string } | undefined>;
+  ) => Promise<
+    | ModeRefused<400>
+    | AwayProblem
+    | ModeRefused<504>
+    | ModeRefused<500>
+    | undefined
+  >;
   archiveView: () => ArchiveView;
   artifactLane: ReturnType<typeof createArtifactLane>;
   artifactSessions: ReturnType<typeof createArtifactSessions>;
@@ -561,13 +585,11 @@ export interface ClosureContext {
     store: HomeStore,
     storeProvider: string | undefined
   ) => Promise<
-    | {
-        identity: AccountIdentity;
-        kind: AccountKind;
-        provider: AccountProvider;
-        storeProvider: string;
-      }
-    | { error: string; status: 409 | 422 | 503 }
+    | HomeCredentialFound
+    | AwayProblem
+    | SilentProblem
+    | HomeLoginRefused<409>
+    | HomeLoginRefused<422>
   >;
   homeLoginMoveOf: (
     machineId: string,

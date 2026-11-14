@@ -231,10 +231,7 @@ export const instanceEditRoutes = (
           if (permissionMode !== undefined) {
             const refused = await applyPermissionMode(current, permissionMode);
             if (refused) {
-              return problem(refused.code, {
-                code: "mode-refused",
-                detail: refused.error,
-              });
+              return refused;
             }
           }
           const named = title

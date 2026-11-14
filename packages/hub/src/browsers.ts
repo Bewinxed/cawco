@@ -69,7 +69,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-
+import { awayProblem } from "./machine-answers";
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -126,18 +126,19 @@ const browserKeyOf = (instance: InstanceRow): BrowserKey =>
     ? `project:${instance.projectId}`
     : `machine:${instance.machineId}`;
 
-/** A machine's answer to a browser call, or its refusal in the person's words. */
+/** Machine `machineId`'s answer to a browser call, or its refusal in the person's words (`machine`, its name). */
 export const answered = <T>(
   read: Awaited<ReturnType<RelayCall>>,
+  machineId: string,
   machine: string,
   what: string
 ) => {
   if (read.kind === "unanswered") {
     return read.reason === "dead"
-      ? problem(503, {
-          code: "browser-machine-away",
-          detail: `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`,
-        })
+      ? awayProblem(
+          machineId,
+          `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`
+        )
       : problem(503, {
           code: "browser-machine-late",
           detail: `${machine}'s browser did not ${what} in time; it may still be at it there.`,
@@ -255,6 +256,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
   const shield = async (machineId: string, args: BrowserShieldArgs) => {
     const row = answered<BrowserRow>(
       await deps.call(machineId, BROWSER_SHIELD, [args], BROWSER_CALL_MS),
+      machineId,
       deps.machineName(machineId),
       "be taken over"
     );
@@ -457,6 +459,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     async connected(machineId: string) {
       const frame = answered<BrowserFrame>(
         await deps.call(machineId, BROWSER_ROWS, [], BROWSER_CALL_MS),
+        machineId,
         deps.machineName(machineId),
         "say what it runs"
       );
@@ -527,6 +530,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           [{ key }],
           BROWSER_CALL_MS
         ),
+        machineId,
         deps.machineName(machineId),
         "be handed back"
       );
@@ -550,6 +554,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           [{ key, ...(relay ? { relay } : {}) }],
           BROWSER_CALL_MS
         ),
+        machineId,
         deps.machineName(machineId),
         "start"
       );
@@ -574,6 +579,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       const row = answered<BrowserRow | null>(
         await deps.call(machineId, BROWSER_STOP, [{ key }], BROWSER_CALL_MS),
+        machineId,
         deps.machineName(machineId),
         "stop"
       );
@@ -604,6 +610,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       const removed = answered<null>(
         await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
+        machineId,
         deps.machineName(machineId),
         "be removed"
       );

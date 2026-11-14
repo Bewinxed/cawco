@@ -20,6 +20,7 @@ import { dashboardUrl } from "./dashboard-url";
 import type { ArtifactRow } from "./db/artifacts";
 import { artifactOrigin } from "./db/previews";
 import type { HubContext } from "./hub-context";
+import { awayProblem } from "./machine-answers";
 import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import type { AnyProblem } from "./refusal";
@@ -224,7 +225,8 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * overlay and the real origin are in it; a sleeping server is woken by
    * the page's load; at its state's `link` (a query merged into its own, or
    * a hash) when one is named. Its picture, base64 PNG, with how much of it was drawn when the page ran past the limit; refused in words
-   * when no daemon runs on the hub's machine or it didn't draw in time.
+   * when no daemon runs on the hub's machine (that machine away: the
+   * daemon is what connects it) or it didn't draw in time.
    */
   const pictureOf = async (
     instance: InstanceRow,
@@ -233,10 +235,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
   ) => {
     const machineId = await ctx.ownMachineId;
     if (!ctx.registry.agent(machineId)) {
-      return problem(503, {
-        code: "picture-no-daemon",
-        detail: `${row.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`,
-      });
+      return awayProblem(
+        machineId,
+        `${row.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+      );
     }
     const entered = enteredAt(instance, row);
     if (entered instanceof ElysiaStatus) {
@@ -262,10 +264,15 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        return problem(503, {
-          code: "picture-undrawn",
-          detail: `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`,
-        });
+        return asked.reason === "dead"
+          ? awayProblem(
+              machineId,
+              `${row.name} wasn't drawn: the hub's machine didn't draw it (its daemon isn't connected).`
+            )
+          : problem(503, {
+              code: "picture-undrawn",
+              detail: `${row.name} wasn't drawn: the hub's machine didn't draw it within ${secondsOf(asked.after)} s.`,
+            });
       case "answered":
         break;
       default:
@@ -313,10 +320,15 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        return problem(503, {
-          code: "picture-save-unanswered",
-          detail: `The picture wasn't saved: ${ctx.machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${secondsOf(asked.after)} s`}.`,
-        });
+        return asked.reason === "dead"
+          ? awayProblem(
+              instance.machineId,
+              `The picture wasn't saved: ${ctx.machineName(instance.machineId)} isn't connected.`
+            )
+          : problem(503, {
+              code: "picture-save-unanswered",
+              detail: `The picture wasn't saved: ${ctx.machineName(instance.machineId)} didn't answer within ${secondsOf(asked.after)} s.`,
+            });
       case "answered":
         break;
       default:

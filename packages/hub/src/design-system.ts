@@ -73,6 +73,7 @@ import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
 import { boardTitle } from "./labels";
+import { awayProblem } from "./machine-answers";
 import { machineName } from "./machine-name";
 import {
   FOLDER_FILE_LIMIT,
@@ -1718,10 +1719,10 @@ export const createDesignSystem = (deps: {
       return { repo: null } satisfies ProposalPlace;
     }
     if (!deps.online(row.machineId)) {
-      return problem(503, {
-        code: "design-proposal-machine-away",
-        detail: `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`,
-      });
+      return awayProblem(
+        row.machineId,
+        `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`
+      );
     }
     const own = workspaceOfSession(row.instanceId);
     const boundary =
