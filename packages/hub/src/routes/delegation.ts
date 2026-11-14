@@ -6,8 +6,6 @@ import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 
-import { toolResultRefused } from "../tool-call-keys";
-
 export const delegationRoutes = ({
   delegationMcp,
   identities,
@@ -87,22 +85,17 @@ export const delegationRoutes = ({
         ) {
           server?.timeout(request, 0);
         }
-        return toolCallKeys.once(
-          request,
-          async () =>
-            Response.json(
-              await delegationMcp.call(
-                params.instanceId,
-                input.name,
-                input.arguments ?? {},
-                authorization ?? undefined,
-                undefined,
-                typeof input.callKey === "string" && input.callKey
-                  ? input.callKey
-                  : undefined
-              )
-            ),
-          toolResultRefused
+        return toolCallKeys.onceResult(request, () =>
+          delegationMcp.call(
+            params.instanceId,
+            input.name,
+            input.arguments ?? {},
+            authorization ?? undefined,
+            undefined,
+            typeof input.callKey === "string" && input.callKey
+              ? input.callKey
+              : undefined
+          )
         );
       }
     );

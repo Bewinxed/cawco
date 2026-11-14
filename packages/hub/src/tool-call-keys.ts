@@ -24,6 +24,10 @@
  */
 import { createHash } from "node:crypto";
 import { TOOL_CALL_KEY_HEADER } from "@cawco/core/binary-updates";
+import {
+  type CallToolResult,
+  CallToolResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { problemResponse } from "elysia/error";
 import type { ToolCallKeysDb } from "./db/tool-call-keys";
 import type { HubLifetimeShape } from "./lifetime";
@@ -43,7 +47,7 @@ export const INTERRUPTED_CALL =
   "The hub restarted while it was running this tool call, so it was not run again and whether it finished is not known; look at what it did before calling it again.";
 
 /** A tool's result that says `words`, as the REST door answers a call. */
-export const toolResultRefused = (words: string): Response =>
+const toolResultRefused = (words: string): Response =>
   Response.json({ isError: true, content: [{ type: "text", text: words }] });
 
 /** The same result as MCP answers it: under the id of the `tools/call` in `body`. */
@@ -251,5 +255,30 @@ export const createToolCallKeys = ({
     return await follow(running);
   };
 
-  return { once };
+  /**
+   * {@link once} for the REST door's tool call: `run`'s result, or the one
+   * kept with its key, read back through the SDK's own `CallToolResult`
+   * shape. A keyed call that failed (the hub's own fault, kept as the
+   * problem it was answered with) fails here the same way.
+   */
+  const onceResult = async (
+    request: Request,
+    run: () => Promise<CallToolResult>
+  ): Promise<CallToolResult> => {
+    const response = await once(
+      request,
+      async () => Response.json(await run()),
+      toolResultRefused
+    );
+    const text = await response.text();
+    const parsed = response.ok
+      ? CallToolResultSchema.safeParse(JSON.parse(text))
+      : undefined;
+    if (!parsed?.success) {
+      throw new Error(`The tool call failed (${response.status}): ${text}`);
+    }
+    return parsed.data;
+  };
+
+  return { once, onceResult };
 };
