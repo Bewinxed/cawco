@@ -14,7 +14,7 @@ import type { SentMessage } from "@cawco/core/session-messages";
 import { configurePage } from "@cawco/core/words/configure";
 import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
-import { clientCopy } from "./ask-presentation";
+import { clientAsk } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
 import { peek } from "./cut-turns";
 import type { DbShape } from "./db";
@@ -352,7 +352,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       console.log(
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
-      ctx.registry.broadcast(clientCopy(parked));
+      ctx.registry.broadcast(clientAsk(parked));
       ctx.push.onAsk(parked);
       // Its parent, if it can still be woken, hears it is the person's now.
       ctx.delegateWaits.asked(parked, true);

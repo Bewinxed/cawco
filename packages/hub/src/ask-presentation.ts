@@ -21,6 +21,7 @@ import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { ParkedAskShape } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
@@ -78,14 +79,19 @@ export const clientAsk = (ask: ParkedAsk): ParkedAsk => {
   };
 };
 
+/** An envelope whose payload says it is a permission request, by its kind alone. */
+const PERMISSION_KIND = z.object({ kind: z.literal("permission_request") });
+
 /**
- * {@link clientAsk} for an envelope read as it arrives: one that is not a
- * parked ask (it does not read as a permission request) is left whole.
+ * {@link clientAsk} for an envelope read as it arrives. The payload's kind
+ * decides: a permission request is read as a `ParkedAsk` (one that is not
+ * throws, a fault in the hub's own handling) and redacted; any other
+ * envelope passes whole.
  */
-export const clientCopy = (envelope: Envelope): Envelope => {
-  const read = ParkedAskShape.safeParse(envelope);
-  return read.success ? clientAsk(read.data) : envelope;
-};
+export const clientCopy = (envelope: Envelope): Envelope =>
+  PERMISSION_KIND.safeParse(envelope.payload).success
+    ? clientAsk(ParkedAskShape.parse(envelope))
+    : envelope;
 
 /**
  * An answer to a parked permission, carrying the call's own input: clients

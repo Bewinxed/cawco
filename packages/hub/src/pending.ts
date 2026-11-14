@@ -8,7 +8,6 @@ import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
 import { parkedToolAsk } from "./parked-ask";
 import type { AnyProblem } from "./refusal";
-import { received } from "./stored-json";
 
 /**
  * Permission and dialog requests the agent is blocked on, keyed by SDK
@@ -201,9 +200,12 @@ const ownedAsks = (db: DbShape): Envelope[] => {
   });
 };
 
-/** An envelope that says what it asks, taken into `ParkedAsk`: what a machine stamped beside its declared keys is left out (hub stored-json.ts `received`). */
-const taken = (envelope: Envelope): ParkedAsk =>
-  received(ParkedAskShape, envelope, "a machine's permission ask");
+/**
+ * An envelope that says what it asks, taken into `ParkedAsk`: what a machine
+ * stamped beside its declared keys is left out, and one that is not a
+ * permission request throws, so it is never parked or broadcast.
+ */
+const taken = (envelope: Envelope): ParkedAsk => ParkedAskShape.parse(envelope);
 
 const make = (db: DbShape): PendingShape => {
   const parked = db.parkedAsks;

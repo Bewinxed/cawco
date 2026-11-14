@@ -1,6 +1,6 @@
 /** A control's answer finding who waits on it, and the fan-out to dashboards. */
 
-import { clientCopy } from "../ask-presentation";
+import { clientAsk } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import { peekToolStatus } from "../machine-answers";
 import { externalizeImages } from "../media";
@@ -14,6 +14,7 @@ export type ControlRepliesContext = Pick<
   | "lateAnswer"
   | "lifecycle"
   | "logUnroutedReply"
+  | "pending"
   | "pendingInstalls"
   | "publishInstances"
   | "registry"
@@ -162,10 +163,21 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
         message.instanceId,
         message.payload as TranscriptPayload
       );
+    } else if (kind === "permission_request") {
+      // A parked ask goes out as the ledger's copy with its secrets hidden;
+      // the ledger keeps the call as it was asked. One that is not parked is
+      // a fault in the stages before this one.
+      const ask = message.requestId
+        ? ctx.pending.get(message.requestId)
+        : undefined;
+      if (!ask) {
+        throw new Error(
+          `Permission request ${message.requestId ?? "(no id)"} reached the fan-out without being parked.`
+        );
+      }
+      ctx.registry.broadcast(clientAsk(ask));
     } else {
-      // A parked ask goes out with its secrets hidden; the ledger
-      // keeps the call as it was asked.
-      ctx.registry.broadcast(clientCopy(message));
+      ctx.registry.broadcast(message);
     }
     return "continue";
   };
