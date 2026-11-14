@@ -66,7 +66,7 @@ import {
   type BuiltTokens,
   buildTokens,
 } from "@cawco/design-tokens/design-tokens";
-import { tokensIn } from "@cawco/design-tokens/dtcg-resolver";
+import { resolverFiles, tokensIn } from "@cawco/design-tokens/dtcg-resolver";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
@@ -438,32 +438,69 @@ type Unread = Exclude<
   Map<string, Uint8Array | null>
 >;
 
+/** The files the resolver's bytes name (dtcg-resolver.ts `resolverFiles`); none when they are no JSON, which the build then says. */
+const namedBy = (resolver: Uint8Array): string[] => {
+  try {
+    return resolverFiles(RESOLVER, JSON.parse(decoder.decode(resolver)));
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * The resolver and every file it names, as the files will hold them, each
+ * that is there: what the token builder reads. A file the store could not
+ * read is that problem.
+ */
+const tokenFilesOf = async (
+  file: (path: string) => Promise<Uint8Array | null | Unread>
+): Promise<Map<string, Uint8Array> | Unread> => {
+  const held = new Map<string, Uint8Array>();
+  const resolver = await file(RESOLVER);
+  if (resolver instanceof ElysiaStatus) {
+    return resolver;
+  }
+  if (!resolver) {
+    return held;
+  }
+  held.set(RESOLVER, resolver);
+  for (const path of namedBy(resolver)) {
+    const bytes = await file(path);
+    if (bytes instanceof ElysiaStatus) {
+      return bytes;
+    }
+    if (bytes) {
+      held.set(path, bytes);
+    }
+  }
+  return held;
+};
+
 /**
  * The token system built from what the files will hold (the call's writes
  * over what is there), once every token has its source; the problems said
- * otherwise. A file the store could not read is that problem, answered as it
- * is: the token builder reads through a callback that can only reject, so
- * the rejection carries the store's problem out and this answers it.
+ * otherwise. Its files are read before it builds ({@link tokenFilesOf}),
+ * so a file the store could not read is that problem, answered as it is.
  */
 const systemOf = async (
   file: (path: string) => Promise<Uint8Array | null | Unread>,
   manifest: DesignManifest,
   problems: string[]
 ) => {
-  const unread: Unread[] = [];
+  const held = await tokenFilesOf(file);
+  if (held instanceof ElysiaStatus) {
+    return held;
+  }
   try {
-    const built = await buildDesignTokens(async (path) => {
-      const bytes = await file(path);
-      if (bytes instanceof ElysiaStatus) {
-        unread.push(bytes);
-        throw new Error(bytes.response.detail);
-      }
+    // The builder reads what is held: a file it names that is not there stops it, in those words.
+    const built = await buildDesignTokens((path) => {
+      const bytes = held.get(path);
       if (!bytes) {
         throw new Error(
           `${path} is named by ${RESOLVER} but is not in design/`
         );
       }
-      return JSON.parse(decoder.decode(bytes));
+      return Promise.resolve(JSON.parse(decoder.decode(bytes)));
     });
     const unsourced = [...built.system.files]
       .filter(([path]) => path !== RESOLVER)
@@ -477,10 +514,6 @@ const systemOf = async (
     }
     return built;
   } catch (error) {
-    const [first] = unread;
-    if (first) {
-      return first;
-    }
     problems.push(
       `The tokens do not build: ${error instanceof Error ? error.message : String(error)}`
     );

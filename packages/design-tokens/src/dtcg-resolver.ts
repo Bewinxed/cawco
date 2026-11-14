@@ -258,6 +258,40 @@ interface Source {
   tree: Json;
 }
 
+/** The path `read` is asked for a file `ref` names, from the resolver's folder. */
+const fileOf = (folder: string, ref: string): string =>
+  posix.normalize(posix.join(folder, ref));
+
+/**
+ * Every file the resolver document `doc` names by `$ref`, each as
+ * {@link loadTokenSystem} asks `read` for it. A reader that cannot fail
+ * inside `read` (one whose failure is a value it answers) reads these first
+ * and answers `read` from what it holds.
+ */
+export function resolverFiles(resolverPath: string, doc: unknown): string[] {
+  const folder = posix.dirname(resolverPath);
+  const named = new Set<string>();
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item);
+      }
+      return;
+    }
+    if (!isObject(node)) {
+      return;
+    }
+    if (typeof node.$ref === "string" && !node.$ref.startsWith("#")) {
+      named.add(fileOf(folder, node.$ref));
+    }
+    for (const value of Object.values(node)) {
+      walk(value);
+    }
+  };
+  walk(doc);
+  return [...named];
+}
+
 /**
  * Reads a resolver document and every file it names. `read` takes a path
  * relative to the resolver's folder and answers the parsed JSON. Throws,
@@ -429,7 +463,7 @@ class Loader {
       return await this.sources(pointer(this.doc, ref, where).sources, ref);
     }
     if (typeof ref === "string") {
-      const path = posix.normalize(posix.join(this.folder, ref));
+      const path = fileOf(this.folder, ref);
       const json = this.files.get(path) ?? (await this.read(path));
       this.files.set(path, json);
       return [{ file: path, tree: json as Json }];
