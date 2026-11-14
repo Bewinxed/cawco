@@ -15,6 +15,20 @@
  * the panel map's live card (`by=embed`, `by=map`) each story it names, a
  * drawing in a column.
  *
+ * Every drawing is live DOM that the browser itself draws, in this one
+ * page: that is what a person judges and what every measure reads. At the
+ * tens of drawings a states file holds, drawing them costs nothing;
+ * measured on 2026-11-14, a page's cost is loading and compiling its
+ * modules. If a page ever holds hundreds of live drawings and scrolling or
+ * zooming it drops frames, look first at the browser's HTML-in-Canvas
+ * (`chrome://flags/#canvas-draw-element`, on by default from Chrome 157;
+ * Firefox, Safari and every iOS browser had none then): the GPU draws the
+ * same live elements as textures while clicks and typing still reach them,
+ * as github.com/berkantay/gpucanvas does for 5,000 React screens. A
+ * renderer of our own (Dessn's WebGPU canvas,
+ * x.com/eminimnim/status/2121249063576228036) is no answer here: its
+ * drawing would no longer be the browser's.
+ *
  * The stage's entry module hands {@link boot} the framework's adapter
  * (`mountStory`, answering `unmount` and `update`) and how to load each
  * section; everything else is read from the page's URL: `file` per
