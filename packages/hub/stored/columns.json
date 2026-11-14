@@ -1578,6 +1578,10 @@
                 },
                 {
                   "type": "string",
+                  "const": "passkey-relay"
+                },
+                {
+                  "type": "string",
                   "const": "public-address"
                 },
                 {

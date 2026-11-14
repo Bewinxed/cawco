@@ -5404,6 +5404,7 @@ public enum OpenEnums {
         case git
         case node
         case opencode
+        case passkeyRelay
         case pi
         case publicAddress
         case serviceManager
@@ -5419,6 +5420,7 @@ public enum OpenEnums {
             case "git": self = .git
             case "node": self = .node
             case "opencode": self = .opencode
+            case "passkey-relay": self = .passkeyRelay
             case "pi": self = .pi
             case "public-address": self = .publicAddress
             case "service-manager": self = .serviceManager
@@ -5435,6 +5437,7 @@ public enum OpenEnums {
             case .git: "git"
             case .node: "node"
             case .opencode: "opencode"
+            case .passkeyRelay: "passkey-relay"
             case .pi: "pi"
             case .publicAddress: "public-address"
             case .serviceManager: "service-manager"
@@ -5447,7 +5450,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .pi, .publicAddress, .serviceManager, .workspace]
+        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .passkeyRelay, .pi, .publicAddress, .serviceManager, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
