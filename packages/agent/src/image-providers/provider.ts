@@ -55,6 +55,8 @@ export interface ImageProvider {
   id: ImageProviderId;
   /** Spends nothing: whether this machine can make an image here now, and if not, why. */
   readiness: (ports: Pick<AgentPorts, "borrowAsk">) => Promise<Readiness>;
+  /** The most bytes of one reference, and of all of a call's together, it takes. */
+  referenceBytes: { each: number; total: number };
   /** The most reference images it takes; 0 takes none. */
   references: number;
 }

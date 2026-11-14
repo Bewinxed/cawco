@@ -30,6 +30,14 @@ const GOOGLE_PROVIDER = "google";
  */
 const MAX_REFERENCES = 14;
 
+/**
+ * The Gemini API's inline request: "total request size ... 20 MB or less"
+ * (https://ai.google.dev/gemini-api/docs/image-understanding, inline image
+ * data). The references travel inline, so one reference and all of them
+ * together are held to it.
+ */
+const INLINE_REQUEST_BYTES = 20 * 1000 * 1000;
+
 /** An `image_size` value, by its nominal longest edge in pixels. */
 interface ImageSize {
   edge: number;
@@ -293,5 +301,6 @@ const readiness: ImageProvider["readiness"] = () => {
 export const geminiApi: ImageProvider = {
   id: "gemini-api",
   references: MAX_REFERENCES,
+  referenceBytes: { each: INLINE_REQUEST_BYTES, total: INLINE_REQUEST_BYTES },
   readiness,
 };

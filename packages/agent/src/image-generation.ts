@@ -178,7 +178,8 @@ async function referenceImages(
   cwd: string,
   references: string[],
   bound: unknown,
-  project: unknown
+  project: unknown,
+  provider: ImageProvider
 ): Promise<ReferenceImage[]> {
   const named = references.map((reference) => resolve(cwd, reference));
   const paths = isWorkspaceRef(bound)
@@ -198,10 +199,17 @@ async function referenceImages(
     total += info.size;
     if (
       !info.isFile() ||
-      info.size > 50 * 1024 * 1024 ||
-      total > 100 * 1024 * 1024
+      info.size > provider.referenceBytes.each ||
+      total > provider.referenceBytes.total
     ) {
-      throw new Error(imageGenerationWords.referenceTooBig());
+      throw refusal(
+        provider,
+        imageGenerationWords.referenceTooBig(
+          provider.id,
+          provider.referenceBytes.each,
+          provider.referenceBytes.total
+        )
+      );
     }
     const bytes = await readFile(referencePath);
     images.push({ bytes, mime: imageMime(bytes) });
@@ -316,7 +324,13 @@ export async function generateImage(
   if (!readiness.ready) {
     throw refusal(provider, readiness.reason);
   }
-  const references = await referenceImages(cwd, asked, bound, project);
+  const references = await referenceImages(
+    cwd,
+    asked,
+    bound,
+    project,
+    provider
+  );
   if (!isWorkspaceRef(bound)) {
     // A workspace's clone and scratch dir are there; its folders under them are made one at a time as it is written.
     await makeFolder(kept.root);

@@ -410,6 +410,13 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
 const AGY_MAX_REFERENCES = 3;
 
 /**
+ * agy's model is Gemini's; no limit of agy's own on a reference file is
+ * documented, so the Gemini API's inline request of 20 MB stands for one
+ * reference and for all of them together.
+ */
+const AGY_REFERENCE_BYTES = 20 * 1000 * 1000;
+
+/**
  * Gemini through this machine's Antigravity CLI: one model, Nano Banana 2
  * (core `IMAGE_PROVIDER_MODELS`), at most {@link AGY_MAX_REFERENCES}
  * references; JPEG as it makes it.
@@ -417,5 +424,6 @@ const AGY_MAX_REFERENCES = 3;
 export const antigravity: ImageProvider = {
   id: "antigravity",
   references: AGY_MAX_REFERENCES,
+  referenceBytes: { each: AGY_REFERENCE_BYTES, total: AGY_REFERENCE_BYTES },
   readiness,
 };

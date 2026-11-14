@@ -15,6 +15,13 @@ import type { ImageJob, ImageProvider, MadeImage } from "./provider";
 /** Native Codex's edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
 const MAX_EDIT_IMAGES = 5;
 
+/**
+ * OpenAI's images edit bound: each image "less than 50MB". OpenAI names no
+ * combined bound, so the total is that per image for each of the
+ * {@link MAX_EDIT_IMAGES} the call may hold.
+ */
+const OPENAI_IMAGE_BYTES = 50 * 1000 * 1000;
+
 /** The ChatGPT sign-in a request goes out on: its access token and ChatGPT account. */
 interface ChatgptAuth {
   access: string;
@@ -268,5 +275,9 @@ async function readiness(
 export const chatgpt: ImageProvider = {
   id: "chatgpt",
   references: MAX_EDIT_IMAGES,
+  referenceBytes: {
+    each: OPENAI_IMAGE_BYTES,
+    total: OPENAI_IMAGE_BYTES * MAX_EDIT_IMAGES,
+  },
   readiness,
 };

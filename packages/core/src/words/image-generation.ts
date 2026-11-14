@@ -101,8 +101,8 @@ export const imageGenerationWords = {
   /** A reference the inputs' gate refused. */
   referenceRefused: (cause: string) =>
     `reference_images: ${cause}. Nothing was uploaded and no image was generated.`,
-  referenceTooBig: () =>
-    "References must be image files of at most 50 MiB each and 100 MiB combined. Nothing was uploaded and no image was generated.",
+  referenceTooBig: (id: ImageProviderId, each: number, total: number) =>
+    `${SHORT_NAMES[id]} takes reference images that are files of at most ${each / 1_000_000} MB each and ${total / 1_000_000} MB combined. Nothing was uploaded and no image was generated.`,
   referenceNotImage: () =>
     "Unsupported reference image. Use a PNG, JPEG, WebP, or GIF file. Nothing was uploaded and no image was generated.",
   invalidSize: () =>
