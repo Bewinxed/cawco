@@ -129,11 +129,13 @@ export type ReadFault =
   | { message: string; reason: "failed" }
   /**
    * The session's machine refuses the harness CLI its conversation is read
-   * through (the hub's `harness-refused`): read again once the machine
-   * runs it (SessionPane), or on Try again, never on a backoff, which
-   * would be refused the same. `message` is the hub's sentence.
+   * through (the hub's `harness-refused`), or an install of that CLI runs
+   * there now and no server answers (`harness-updating`, `updating`): read
+   * again once the machine runs it (SessionPane), or on Try again, never on
+   * a backoff, which would be refused the same. `message` is the hub's
+   * sentence.
    */
-  | { message: string; reason: "refused" };
+  | { message: string; reason: "refused"; updating?: true };
 
 /** Everything one session view needs — live or browsed from storage. */
 export interface SessionState {
