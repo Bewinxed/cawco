@@ -9,7 +9,8 @@ type Problem<Status extends number, Code extends string> = ReturnType<
  * Why a session the hub starts did not start (spawns.ts `spawnSession`): a
  * payload that names no session, a session key another row holds, a machine
  * that is away, a default it cannot name, a start not settled or placed, a
- * project deleted, an account that cannot take it, or the machine's own
+ * project deleted, a project starting-set file that does not read, an
+ * account that cannot take it, or the machine's own
  * answer (none in time, or its failure). `spawnSession` is declared to
  * answer these, so the compiler holds this list to it; moves.ts, caw.ts and
  * fleet-watch.ts read it from here, as spawns.ts reaches each of them.
@@ -22,6 +23,7 @@ export type SpawnProblem =
   | Problem<400, "spawn-not-settled">
   | Problem<404, "spawn-project-deleted">
   | Problem<400, "spawn-not-placed">
+  | Problem<409, "starting-set-unread">
   | Problem<409, "launch-account-unavailable">
   | Problem<504, "spawn-start-unanswered">
   | Problem<422, "spawn-start-failed">;
