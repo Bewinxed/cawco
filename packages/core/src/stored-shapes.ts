@@ -3395,7 +3395,11 @@ export type ModeAskOutput = z.output<typeof ModeAskShape>;
 
 const ToolCopyShape = declared(
   z.union([
-    z.object({ at: z.number().optional(), by: z.literal("cawco") }),
+    z.object({
+      at: z.number().optional(),
+      by: z.literal("cawco"),
+      takenOver: z.boolean().optional(),
+    }),
     z.object({ by: z.literal("person") }),
   ]),
   "ToolCopy",

@@ -189,8 +189,13 @@ export type ServerTail =
       viewId: string;
     };
 
-/** The hub's code for a read its machine's harness CLI refuses (hub routes/instance-edits.ts). */
-const HARNESS_REFUSED = "harness-refused";
+/**
+ * The hub's codes for a read its machine's harness CLI stands in the way of
+ * (hub routes/instance-edits.ts): the machine refuses that CLI, or an
+ * install of it runs there now. Either is read again once the machine runs
+ * it, and the pane shows the machine's block, the install under way with it.
+ */
+const HARNESS_WAITS = new Set(["harness-refused", "harness-updating"]);
 
 /**
  * Why a transcript read failed, said the way the pane says it: one sentence
@@ -211,7 +216,7 @@ export function readFaultOf(
     return awayFault(away, reconnectingUntil);
   }
   return {
-    reason: failure.code === HARNESS_REFUSED ? "refused" : "failed",
+    reason: HARNESS_WAITS.has(failure.code ?? "") ? "refused" : "failed",
     message: refusalClause(failure),
   };
 }

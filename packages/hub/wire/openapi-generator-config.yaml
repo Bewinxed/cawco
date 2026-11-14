@@ -218,6 +218,7 @@ typeOverrides:
     TaskCommentAuthorMover: OpenEnums.TaskCommentAuthorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
+    ToolBehindMachineStartedBy: OpenEnums.ToolBehindMachineStartedBy
     ToolPlatform: OpenEnums.ToolPlatform
     ToolSigninState: OpenEnums.ToolSigninState
     ToolState: OpenEnums.ToolState

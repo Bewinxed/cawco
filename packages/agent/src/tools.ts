@@ -38,12 +38,11 @@ import {
 import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
-import { z } from "zod";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
-import { ToolInstallRecordSchema } from "./stored-shapes";
+import { ToolInstallsSchema } from "./stored-shapes";
 
 /** Where the curl-script installers put their binaries (Claude Code's, Antigravity's). */
 const LOCAL_BIN = expandHome("~/.local/bin");
@@ -139,6 +138,54 @@ const TAIL_LINES = 4;
 
 const tail = (output: string): string =>
   lastLines(output.trim().split("\n"), TAIL_LINES, "\n");
+
+/**
+ * How much of a failed installer's output is kept, which a person opens to
+ * see why (its row's popover): whole up to {@link OUTPUT_LINES} lines and
+ * {@link OUTPUT_CHARS} characters, which every failure measured fits in:
+ * npm's ECONNREFUSED is six to twelve lines, the cause (`npm error code
+ * ECONNREFUSED`, `FetchError: … reason: connect ECONNREFUSED`) at the head
+ * and its log's path at the end, which the last four lines alone kept and
+ * the cause dropped (host run 41f12701); bun says one or two lines; the
+ * curl installers a few lines of progress and curl's own `curl: (7)`.
+ * Longer output keeps its head ({@link OUTPUT_HEAD} lines: where most
+ * installers say the cause) and its tail (the rest of the lines: where they
+ * end), with how many were left out between; a line longer than
+ * {@link OUTPUT_LINE_CHARS} is cut.
+ */
+const OUTPUT_LINES = 60;
+const OUTPUT_HEAD = 20;
+const OUTPUT_CHARS = 8000;
+const OUTPUT_LINE_CHARS = 400;
+
+/** A failed installer's output, kept as {@link OUTPUT_LINES} says. */
+const failedOutput = (output: string): string => {
+  const lines = output
+    .trim()
+    .split("\n")
+    .map((line) =>
+      line.length > OUTPUT_LINE_CHARS
+        ? `${line.slice(0, OUTPUT_LINE_CHARS)}…`
+        : line
+    );
+  const whole = lines.join("\n");
+  if (lines.length <= OUTPUT_LINES && whole.length <= OUTPUT_CHARS) {
+    return whole;
+  }
+  const tailLines = Math.min(
+    OUTPUT_LINES - OUTPUT_HEAD,
+    lines.length - OUTPUT_HEAD
+  );
+  const left = lines.length - OUTPUT_HEAD - tailLines;
+  const kept = [
+    ...lines.slice(0, OUTPUT_HEAD),
+    ...(left > 0 ? [`… ${left} lines left out …`] : []),
+    ...lines.slice(-tailLines),
+  ].join("\n");
+  return kept.length > OUTPUT_CHARS
+    ? `${kept.slice(0, OUTPUT_CHARS / 2)}\n…\n${kept.slice(-OUTPUT_CHARS / 2)}`
+    : kept;
+};
 
 /** An installer's tail, as one line for a sentence. */
 const oneLine = (said: string | undefined): string =>
@@ -622,69 +669,188 @@ const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
  * One tool CawCo put on this machine, as its daemon recorded it when the
  * install answered a copy it runs ({@link recordInstall}): the path the copy
  * is found at (`toolBinary`'s), the method's label, the version it said, and
- * when, ms epoch.
+ * when, ms epoch. `takenOver`: no install of this daemon's put it there; it
+ * is a copy CawCo was keeping current before it kept this record, taken into
+ * its care then ({@link takeOverKept}), `at` being that moment.
  */
 export interface ToolInstallRecord {
   at: number;
   method?: string;
   path: string;
+  takenOver?: boolean;
   version?: string;
 }
 
-/** The record file: each tool's last install by CawCo, by tool id. */
-const InstallRecords = z.record(z.string(), ToolInstallRecordSchema);
+/**
+ * `tool-installs.json`: each tool's last install by CawCo, by tool id, and
+ * when the one-time pass that took the copies CawCo was already keeping
+ * current into its care ran ({@link takeOverKept}); absent until it has.
+ */
+export interface ToolInstalls {
+  installs: Record<string, ToolInstallRecord>;
+  tookOverAt?: number;
+}
 
 /**
- * What CawCo installed here, by tool id; none when it never recorded one.
- * Read whole each time: `cawco binary-pins` (another process) writes it too.
- * One that does not read is said, and reads as none: every copy is then the
+ * What CawCo installed here; nothing when it never recorded one. Read whole
+ * each time: `cawco binary-pins` (another process) writes it too. One that
+ * does not read is said, and reads as none: every copy is then the
  * person's until CawCo installs it again, which updates nothing unasked.
  */
-const readInstalls = async (): Promise<Record<string, ToolInstallRecord>> => {
+const readInstallFile = async (): Promise<ToolInstalls> => {
   try {
-    return (await readRecord(toolInstallsPath(), InstallRecords)) ?? {};
+    return (
+      (await readRecord(toolInstallsPath(), ToolInstallsSchema)) ?? {
+        installs: {},
+      }
+    );
   } catch (error) {
     console.warn(
       `[tools] ${toolInstallsPath()} was not read, so no copy here is taken for CawCo's own: ${error instanceof Error ? error.message : String(error)}`
     );
-    return {};
+    return { installs: {} };
   }
 };
+
+/** What CawCo installed here, by tool id ({@link readInstallFile}). */
+const readInstalls = async (): Promise<Record<string, ToolInstallRecord>> =>
+  (await readInstallFile()).installs;
 
 let installWrites: Promise<void> = Promise.resolve();
 
 /**
- * CawCo's install of `id` left a copy it runs at `record.path`: kept, over
- * any record of an earlier one, so the fleet updates that copy unasked from
- * now on ({@link copyOf}). One write at a time; a write that fails is said.
+ * `change` made to the record file, one write at a time, so none is lost; a
+ * write that fails is said, never thrown (`what`: what it would have kept).
  */
-const recordInstall = (
-  id: string,
-  record: ToolInstallRecord
+const writeInstalls = (
+  what: string,
+  change: (file: ToolInstalls) => ToolInstalls
 ): Promise<void> => {
   installWrites = installWrites
     .then(async () => {
-      const records = { ...(await readInstalls()), [id]: record };
+      const file = change(await readInstallFile());
       await writeStateFile(
         toolInstallsPath(),
-        `${JSON.stringify(records, null, 2)}\n`
+        `${JSON.stringify(file, null, 2)}\n`
       );
     })
     .catch((error: unknown) => {
       console.warn(
-        `[tools] ${toolInstallsPath()} could not be written, so ${id}'s install is not recorded as CawCo's: ${error instanceof Error ? error.message : String(error)}`
+        `[tools] ${toolInstallsPath()} could not be written, so ${what} is not recorded: ${error instanceof Error ? error.message : String(error)}`
       );
     });
   return installWrites;
 };
 
 /**
+ * CawCo's install of `id` left a copy it runs at `record.path`: kept, over
+ * any record of an earlier one, so the fleet updates that copy unasked from
+ * now on ({@link copyOf}), at the version it says now: a keep-current update
+ * of CawCo's own copy moves the record with it.
+ */
+const recordInstall = (id: string, record: ToolInstallRecord): Promise<void> =>
+  writeInstalls(`${id}'s install as CawCo's`, (file) => ({
+    ...file,
+    installs: { ...file.installs, [id]: record },
+  }));
+
+/**
+ * THE COPIES CAWCO WAS ALREADY KEEPING CURRENT ARE CAWCO'S, ONCE. Before
+ * this daemon kept a record of its own installs, the hub sent every copy
+ * of a CLI CawCo keeps current (core `ToolSpec.release`: Claude Code) that
+ * said a version older than its newest release that CawCo's own updater
+ * runs on (hub tool-releases.ts `updatesOwed` before 2026-11-14; agent
+ * `install`), whoever had put it there: the owner's standing decision of
+ * 2026-11-04 put those copies in CawCo's care. So the first time a daemon
+ * of this build reads its tools, each such copy no record names is recorded
+ * as CawCo's (`takenOver`, said in its log, and on the hub's when its
+ * report lands), and the pass is marked done in the same file, never run
+ * again: a copy the person puts on after it is theirs (the record names a
+ * copy only while it says the version recorded, {@link copyOf}).
+ *
+ * What the earlier pass acted on, and so what is taken: a copy that says
+ * its version (one saying none was never sent an update), older than the
+ * floor or not (the earlier pass sent those too), unless the owner turned
+ * the tool's automatic updates off where the tool reads its settings, or
+ * those settings could not be read (either declined every automatic update,
+ * `install`'s `switchedOff`). A fleet pin held it at its version but left
+ * it CawCo's to install (the pin is CawCo's policy, not a hand install), so
+ * it is taken too, and stays held by the pin (`updatesOwed` sends no
+ * update to a pinned tool). A read that fails leaves the pass unmarked, for
+ * the next start to run.
+ */
+const takeOverKept = async (): Promise<void> => {
+  const file = await readInstallFile();
+  if (file.tookOverAt !== undefined) {
+    return;
+  }
+  const at = Date.now();
+  const taken: Record<string, ToolInstallRecord> = {};
+  for (const spec of TOOL_CATALOG.filter((one) => one.release)) {
+    if (file.installs[spec.id]) {
+      continue;
+    }
+    const copy = await findCopy(spec);
+    const version = copy ? await probeVersion(spec, copy.path) : undefined;
+    if (!(copy && version)) {
+      continue;
+    }
+    const off = spec.updatesOff
+      ? await switchedOff(spec.updatesOff, true)
+      : undefined;
+    if (off) {
+      console.info(
+        `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} stays the person's: its automatic updates were off, so CawCo was not keeping it current`
+      );
+      continue;
+    }
+    taken[spec.id] = {
+      path: copy.path,
+      version,
+      ...(copy.method ? { method: copy.method.label } : {}),
+      takenOver: true,
+      at,
+    };
+    console.info(
+      `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} is CawCo's from now on: CawCo was keeping it current before it kept a record of its own installs`
+    );
+  }
+  await writeInstalls("the copies CawCo was keeping current", (now) => ({
+    installs: { ...taken, ...now.installs },
+    tookOverAt: at,
+  }));
+};
+
+/** {@link takeOverKept}, once a process: every read of the tools waits on it. */
+let tookOver: Promise<void> | undefined;
+
+/**
+ * Whether a copy at a record's path that says `version` is still the one the
+ * record names (recorded at `recorded`): the version recorded, or, for a CLI
+ * CawCo keeps current (core `ToolSpec.release`), a newer one, which the
+ * tool's own updater put on over it (Claude Code updates itself in a
+ * terminal the person runs it in, the same updater CawCo runs); never an
+ * older one, which another hand put on over it.
+ */
+const stillRecorded = (
+  spec: ToolSpec,
+  recorded: string | undefined,
+  version: string | undefined
+): boolean =>
+  recorded === undefined ||
+  recorded === version ||
+  (spec.release !== undefined &&
+    version !== undefined &&
+    olderThan(recorded, version));
+
+/**
  * WHOSE THE COPY AT `at` IS (core `ToolCopy`). CawCo's, when its record of
  * its own install names this copy's path (the link the PATH finds, or the
  * file it resolves to: a package manager's update rewrites the file under
- * the same link) and the copy still says the version that install put on: a
- * copy that says another was put on over CawCo's by another hand, and the
- * person's own is never updated unasked (the owner, 2026-11-14). For a copy
+ * the same link) and the copy still says the version that install put on
+ * ({@link stillRecorded}): a copy that says another was put on over CawCo's
+ * by another hand, and the person's own is never updated unasked (the
+ * owner, 2026-11-14). For a copy
  * no record names, which every copy CawCo put on before it kept the record
  * is: CawCo's when it says a version a CawCo build ran as its one version
  * (core `ToolSpec.formerVersions`, and this build's own) and one of the
@@ -700,9 +866,13 @@ const copyOf = async (
   if (
     record &&
     (record.path === at.path || realOf(record.path) === at.file) &&
-    (record.version === undefined || record.version === version)
+    stillRecorded(spec, record.version, version)
   ) {
-    return { by: "cawco", at: record.at };
+    return {
+      by: "cawco",
+      at: record.at,
+      ...(record.takenOver ? { takenOver: true } : {}),
+    };
   }
   const pinned = [...(spec.formerVersions ?? []), spec.exactVersion];
   if (version && at.method && pinned.includes(version)) {
@@ -740,16 +910,16 @@ const refusal = async (
       return undefined;
     }
     const ways = spec.install.map((method) => method.label).join(", ");
-    return `${at.path} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
+    return `${shownPath(at.path)} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
   }
   if (!at.method.platforms.some((one) => one === platform())) {
-    return `${at.path} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
+    return `${shownPath(at.path)} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
   }
   const unmet = at.method.needs
     ? await needUnmet(at.method.needs, fresh)
     : undefined;
   return unmet
-    ? `${at.path} was installed with ${at.method.label}, and ${unmet}`
+    ? `${shownPath(at.path)} was installed with ${at.method.label}, and ${unmet}`
     : undefined;
 };
 
@@ -1302,6 +1472,13 @@ const probeTool = async (
  */
 export const probeTools = async (): Promise<ToolStatus[]> => {
   probeStarted();
+  tookOver ??= takeOverKept().catch((error: unknown) => {
+    tookOver = undefined;
+    console.warn(
+      `[tools] the copies CawCo was keeping current were not taken into its care, so the next read tries again: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  await tookOver;
   return await Promise.all(TOOL_CATALOG.map((spec) => probeToolStatus(spec)));
 };
 
@@ -1510,8 +1687,11 @@ export const signinMoved = (id: string): void => {
  */
 const installing = new Map<string, Promise<ToolStatus>>();
 const installEnded = new Map<string, number>();
-/** The version each running install is putting on, by tool id, when it names one. */
-const installingTo = new Map<string, string>();
+/** Each running install, by tool id: the version it puts on, when it names one, and who started it. */
+const installingAs = new Map<
+  string,
+  { startedBy?: "cawco" | "person"; to?: string }
+>();
 
 /**
  * One catalog tool, as {@link probeTools} reports it. An attempt's failure
@@ -1526,12 +1706,11 @@ const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
   let status = await probeTool(spec);
   if (installing.has(spec.id)) {
     // The copy an update replaces keeps its version on the row while it runs.
-    const to = installingTo.get(spec.id);
     return {
       id: spec.id,
       state: "installing",
       ...(status.version ? { version: status.version } : {}),
-      ...(to ? { to } : {}),
+      ...installingAs.get(spec.id),
       ...(status.copy ? { copy: status.copy } : {}),
       at: Date.now(),
     };
@@ -1598,12 +1777,19 @@ const runMethod = async (
     .nothrow()
     .env(toolEnv())
     .finally(() => rm(dir, { recursive: true, force: true }));
-  const out = tail(Bun.stripANSI(ran.stdout.toString()));
-  const err = tail(Bun.stripANSI(ran.stderr.toString()));
+  const out = Bun.stripANSI(ran.stdout.toString()).trim();
+  const err = Bun.stripANSI(ran.stderr.toString()).trim();
   if (ran.exitCode === 0) {
-    return { ok: true, said: out || err };
+    return { ok: true, said: tail(out || err) };
   }
-  return { ok: false, said: err || out || `exited ${ran.exitCode}` };
+  // A failure keeps what the installer said, its errors first, whole up to
+  // a bound: the line that says why is often not among the last.
+  return {
+    ok: false,
+    said:
+      failedOutput([err, out].filter(Boolean).join("\n")) ||
+      `exited ${ran.exitCode}`,
+  };
 };
 
 /**
@@ -1791,6 +1977,8 @@ const settle = async (
 export interface InstallAsk {
   automatic?: boolean;
   newest?: string;
+  /** Who started it (core `ToolStatus.startedBy`), said on the tool's row while it runs. */
+  startedBy?: "cawco" | "person";
 }
 
 /**
@@ -1827,15 +2015,16 @@ export const installTool = async (
   const target = spec.exactVersion ?? version;
   const work = install(spec, target, ask).finally(() => {
     installing.delete(spec.id);
-    installingTo.delete(spec.id);
+    installingAs.delete(spec.id);
     installEnded.set(spec.id, Date.now());
     toolsMoved();
   });
   installing.set(spec.id, work);
   const to = target ?? ask.newest;
-  if (to) {
-    installingTo.set(spec.id, to);
-  }
+  installingAs.set(spec.id, {
+    ...(to ? { to } : {}),
+    ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
+  });
   return await work;
 };
 
