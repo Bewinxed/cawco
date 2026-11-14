@@ -37,9 +37,11 @@ export interface ToolUpdatesState {
  * - `runs`: at a version CawCo runs, and for a CLI CawCo keeps current
  *   either its newest release or a copy the person installed (which CawCo
  *   leaves where it is); `updatedAt` when CawCo's own install put it there
- *   (its daemon's record), absent for a copy it did not or whose install
- *   it kept no record of;
- * - `updating`: an install runs there now, from `from` to `to` when known;
+ *   (its daemon's record), absent for a copy it did not, whose install it
+ *   kept no record of, or that it took into its care unmoved;
+ * - `updating`: an install runs there now, from `from` to `to` when known,
+ *   started by CawCo itself or by a person's press (`startedBy`, absent from
+ *   a machine too old to say);
  * - `failed`: the last install there left the copy at `found`, short of
  *   `wants`; `output` is what the installer said, `at` when it ran. Update
  *   tries again. `own`: the copy is the person's own;
@@ -57,7 +59,12 @@ export interface ToolUpdatesState {
  */
 export type ToolUpdateState =
   | { kind: "runs"; updatedAt?: number; version?: string }
-  | { from?: string; kind: "updating"; to?: string }
+  | {
+      from?: string;
+      kind: "updating";
+      startedBy?: "cawco" | "person";
+      to?: string;
+    }
   | {
       at: number;
       found?: string;
@@ -94,6 +101,7 @@ export const toolUpdateOf = (
       kind: "updating",
       ...(cell.version ? { from: cell.version } : {}),
       ...(cell.to ? { to: cell.to } : {}),
+      ...(cell.startedBy ? { startedBy: cell.startedBy } : {}),
     };
   }
   if (cell.wants) {
@@ -106,7 +114,9 @@ export const toolUpdateOf = (
     behindRelease(cell, updates, releases[cell.id]) ?? {
       kind: "runs",
       ...(cell.version ? { version: cell.version } : {}),
-      ...(cell.copy?.by === "cawco" && cell.copy.at !== undefined
+      ...(cell.copy?.by === "cawco" &&
+      cell.copy.at !== undefined &&
+      !cell.copy.takenOver
         ? { updatedAt: cell.copy.at }
         : {}),
     }
