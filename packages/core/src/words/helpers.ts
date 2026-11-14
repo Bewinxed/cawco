@@ -20,3 +20,7 @@ export const needs = (n: number, who: string, what = ""): string =>
 
 /** A whole number in two figures: 5 → "05". */
 export const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/** A sentence a person reads, kept to `max` characters and ending in "…" where it was cut. */
+export const cutShort = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max)}…` : text;

@@ -52,6 +52,7 @@
  * after eight hours, and the refresh token expires after six months without
  * use", docs.github.com, authorizing OAuth apps).
  */
+
 import { createHash, createPrivateKey } from "node:crypto";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -77,6 +78,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { connectionsWords } from "@cawco/core/words/connections";
+import { cutShort } from "@cawco/core/words/helpers";
 import { LinearClient } from "@linear/sdk";
 import {
   auth,
@@ -867,10 +869,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
         drop(r.id);
         return fresh.access_token;
       } catch (error) {
-        const said = scrub(
-          r,
-          error instanceof Error ? error.message : String(error)
-        ).slice(0, 300);
+        const said = cutShort(
+          scrub(r, error instanceof Error ? error.message : String(error)),
+          300
+        );
         setState(
           r,
           "needs-sign-in",
@@ -943,10 +945,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
       })) as { expiresAt: string; token: string };
       return { token: minted.token, expiresAt: Date.parse(minted.expiresAt) };
     } catch (error) {
-      const said = scrub(
-        r,
-        error instanceof Error ? error.message : String(error)
-      ).slice(0, 300);
+      const said = cutShort(
+        scrub(r, error instanceof Error ? error.message : String(error)),
+        300
+      );
       setState(
         r,
         "needs-sign-in",
@@ -1379,10 +1381,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (error instanceof ConnectionProblem) {
       return error;
     }
-    const said = scrub(
-      r,
-      error instanceof Error ? error.message : String(error)
-    ).slice(0, 300);
+    const said = cutShort(
+      scrub(r, error instanceof Error ? error.message : String(error)),
+      300
+    );
     if (error instanceof McpError) {
       return new ConnectionProblem(`${r.name} answered: ${said}`);
     }
@@ -2102,7 +2104,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     } catch (error) {
       setState(r, "needs-sign-in", connectionsWords.saidSignIn);
       return misfit(
-        `GitHub did not hand over the app (${error instanceof Error ? error.message.slice(0, 200) : String(error)}). Sign in again from Connections.`
+        `GitHub did not hand over the app (${error instanceof Error ? cutShort(error.message, 200) : String(error)}). Sign in again from Connections.`
       );
     }
     const privateKey = pemOf(made.pem);
@@ -2501,7 +2503,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       setState(r, "error", "The hub could not discover its sign-in.");
       // biome-ignore lint/style/useErrorCause: upstream OAuth errors may carry token responses; only scrubbed words go on
       throw new ConnectionProblem(
-        `${name}'s sign-in could not start: ${scrub(r, error instanceof Error ? error.message : String(error)).slice(0, 300)}`
+        `${name}'s sign-in could not start: ${cutShort(scrub(r, error instanceof Error ? error.message : String(error)), 300)}`
       );
     }
     if (!authorizationUrl) {
@@ -2568,10 +2570,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
         })
       );
     } catch (error) {
-      const said = scrub(
-        r,
-        error instanceof Error ? error.message : String(error)
-      ).slice(0, 300);
+      const said = cutShort(
+        scrub(r, error instanceof Error ? error.message : String(error)),
+        300
+      );
       setState(r, "needs-sign-in", `Linear refused the sign-in (${said}).`);
       // biome-ignore lint/style/useErrorCause: the token response may carry tokens; only scrubbed words go on
       throw new ConnectionProblem(
@@ -3170,7 +3172,7 @@ export const connectionRoutes = (connections: Connections) => {
         async ({ query }) => {
           if (!(query.code && query.state)) {
             return plainText(
-              `The sign-in did not finish${query.error ? ` (${query.error.slice(0, 100)})` : ""}. Start it again.`,
+              `The sign-in did not finish${query.error ? ` (${cutShort(query.error, 100)})` : ""}. Start it again.`,
               400
             );
           }

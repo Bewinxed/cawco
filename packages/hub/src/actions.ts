@@ -33,12 +33,14 @@
  * field (SEP-3182 proposed one and was closed), so a server dedupes on it
  * only if it reads that key; the hub's own at-most-once does not depend on it.
  */
+
 import { createHash } from "node:crypto";
 import { ACTION_STATES, type ApprovedActionView } from "@cawco/core/actions";
 import type { SessionRole } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
+import { cutShort } from "@cawco/core/words/helpers";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -720,7 +722,7 @@ export const createActions = ({
         ? file(row, {
             state: "failed",
             result,
-            error: `${row.service} answered that it failed: ${resultText(outcome.result.content).slice(0, 500) || "no words"}`,
+            error: `${row.service} answered that it failed: ${cutShort(resultText(outcome.result.content), 500) || "no words"}`,
           })
         : file(row, { state: "done", result });
       if (ended) {

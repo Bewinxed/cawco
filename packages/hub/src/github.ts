@@ -53,6 +53,7 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { unhandled } from "@cawco/core/unhandled";
 import type { WaitTarget } from "@cawco/core/wait-targets";
+import { cutShort } from "@cawco/core/words/helpers";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";
@@ -723,7 +724,7 @@ const refusal = (
   }
   const words = (refused.response.data as { message?: unknown } | null)
     ?.message;
-  const said = typeof words === "string" ? words.slice(0, 200) : "";
+  const said = typeof words === "string" ? cutShort(words, 200) : "";
   return new Stop(
     `GitHub answered ${refused.status} for ${path}${said ? `: ${said}` : ""}.`
   );
@@ -928,7 +929,7 @@ export const pollRepo = async (input: {
           const { errors } = error as { errors?: { message?: string }[] };
           throw errors?.[0]?.message
             ? new Stop(
-                `GitHub refused the discussions: ${errors[0].message.slice(0, 200)}`
+                `GitHub refused the discussions: ${cutShort(errors[0].message, 200)}`
               )
             : error;
         }

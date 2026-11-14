@@ -28,6 +28,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import type { ExternalActor } from "@cawco/core/external-items";
 import type { TrackerTarget } from "@cawco/core/trackers";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   LinearError,
   LinearErrorType,
@@ -254,7 +255,7 @@ const linearProblem = (
     error instanceof LinearError
       ? error
       : parseLinearError(error as Parameters<typeof parseLinearError>[0]);
-  const said = (parsed.errors?.[0]?.message ?? parsed.message).slice(0, 300);
+  const said = cutShort(parsed.errors?.[0]?.message ?? parsed.message, 300);
   switch (parsed.type) {
     case LinearErrorType.AuthenticationError:
       return problem(400, {
