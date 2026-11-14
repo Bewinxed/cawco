@@ -902,7 +902,17 @@ export interface ClosureContext {
   pending: PendingShape;
   pendingInstalls: Map<
     string,
-    { machineId: string; newest?: string | undefined; toolId: string }
+    {
+      /** Presses that came while it ran, by their own request ids: each answered with its answer (relay-control.ts). */
+      joined?: {
+        dashboard: HubSocket;
+        requestId: string;
+        replyAsFrame: boolean;
+      }[];
+      machineId: string;
+      newest?: string | undefined;
+      toolId: string;
+    }
   >;
   pendingKey: (accountId: string, machineId: string) => string;
   pendingSignins: Map<string, PendingAccountSignin>;

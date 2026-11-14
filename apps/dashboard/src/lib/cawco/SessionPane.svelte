@@ -713,9 +713,23 @@
     }
     const now = session?.readFault ?? servedFault;
     // A refusal whose fix landed is a read under way, not a refusal: the
-    // re-read it set off replaces it (`readAfterFix`).
-    return now !== null && now === readAfterFix ? null : now;
+    // re-read it set off replaces it (`readAfterFix`). Landed is read here,
+    // in the same evaluation as the block going (`unreadFix`), never from an
+    // effect a frame later: the refusal its block stood under, with the
+    // block gone, is the read under way. A host run's landings drew one
+    // frame of the refusal's line under Try again, the block gone and the
+    // fault not yet, and faded that out for 100–250 ms.
+    if (
+      now !== null &&
+      (now === readAfterFix ||
+        (now.reason === "refused" && now === blockedFault && !unreadFix))
+    ) {
+      return null;
+    }
+    return now;
   });
+  /** The refusal a block of its machine's last stood under ({@link fault}). */
+  let blockedFault = $state.raw<ReadFault | null>(null);
   /**
    * The refusal standing when its machine's fix landed and the read went
    * again: until that read answers, the pane shows the read under way, never
@@ -821,39 +835,6 @@
     return crossOutWith(node, () => ({ height: `${node.offsetHeight}px` }));
   }
 
-  /**
-   * What a read failure is called: its machine away (on its way back, or
-   * offline), its machine refusing the harness CLI the conversation is read
-   * through, or the read failed.
-   */
-  const faultTitle = $derived.by(() => {
-    if (fault?.reason === "refused" && awaitsUpdate) {
-      return toolUpdateWords.readWaits(harnessName);
-    }
-    if (fault?.reason === "refused") {
-      return "This conversation can't be shown yet";
-    }
-    if (fault?.reason !== "offline") {
-      return "This transcript couldn't be read";
-    }
-    return reconnectingNow(fault)
-      ? "This machine is reconnecting"
-      : "This machine is offline";
-  });
-
-  /** What a read failure says: what went wrong, then what to do about it. */
-  const faultLine = $derived.by(() => {
-    if (fault?.reason === "refused") {
-      return `${fault.message}.`;
-    }
-    if (fault?.reason !== "offline") {
-      return `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`;
-    }
-    return reconnectingNow(fault)
-      ? `${faultMessage(fault)}.`
-      : `${fault.message}. Try again once it is back online.`;
-  });
-
   /** Try again: forget what was said about the last read, then read. */
   function retry(): void {
     clearReadFault(viewId);
@@ -920,61 +901,103 @@
       machine && row?.harness ? harnessBlockOf(machine, row.harness) : null;
     return machine && block ? { machine, block } : null;
   });
-  /**
-   * The read waits on an install of the harness CLI, which nothing more of
-   * the person's moves: the hub said one runs (`harness-updating`), the
-   * machine's block has one running whoever started it (the block's own
-   * Update or Retry pressed here: frames s6-A6c-390d-004 to 006 of the host
-   * run said "can't be shown yet" under a warning while it ran), or the
-   * block is CawCo's (`auto`) and has not failed. Said as a wait, never as
-   * a refusal.
-   */
-  const awaitsUpdate = $derived(
-    fault?.reason === "refused" &&
-      (fault.updating === true ||
-        unreadFix?.block.fix.phase === "running" ||
-        (unreadFix?.block.auto === true &&
-          unreadFix.block.fix.phase !== "failed"))
-  );
   /** The harness CLI the conversation is read through, by its name. */
   const harnessName = $derived.by(() => {
     if (unreadFix) {
       return unreadFix.block.spec.name;
     }
-    const harness = boardStore.rowOf(viewId)?.harness;
+    // A stored conversation the board lists no row for names its harness
+    // on the session the store keeps (a page's `where`): without it the
+    // heading read "shows once  is updated".
+    const harness = boardStore.rowOf(viewId)?.harness ?? session?.harness;
     return harness ? harnessSpec(harness).name : "";
   });
 
-  /** The fault state's mark: the machine, a wait on an update, or a fault. */
-  const faultIcon = $derived.by(() => {
-    if (fault?.reason === "offline") {
-      return IconLaptop;
+  /**
+   * What the fault state shows, as one value: its mark, its title, its line
+   * and its one action, each read off the same fault and the same block, so
+   * no frame shows one state's title over another's line or press. It
+   * changes once as the fix lands (the effect below takes the fault away in
+   * the same update the block goes in), and a state leaving keeps what it
+   * showed (Svelte pauses a branch's effects while it goes): the host run's
+   * landings faded out the refusal's line under Try again for 100–250 ms.
+   *
+   * A refused read waits on an install of the harness CLI, which nothing
+   * more of the person's moves, by the machine's block when the board has
+   * one: an install running there whoever started it, or CawCo's own
+   * (`auto`) not failed. Without a block, the read's own word that one runs
+   * (`harness-updating`). A failed install is no wait, whatever the read
+   * before it said: the heading follows the machine as it is now (host run
+   * 49045442 frame A1-retry-1440l-003 kept "shows once OpenCode is updated"
+   * over a failed block). Said as a wait, never as a refusal.
+   */
+  const faultView = $derived.by(() => {
+    if (!fault) {
+      return null;
     }
-    return awaitsUpdate ? IconRefresh : IconAlert;
+    if (fault.reason === "offline") {
+      const back = reconnectingNow(fault);
+      return {
+        icon: IconLaptop,
+        title: back
+          ? "This machine is reconnecting"
+          : "This machine is offline",
+        line: back
+          ? `${faultMessage(fault)}.`
+          : `${fault.message}. Try again once it is back online.`,
+        fix: null,
+      };
+    }
+    if (fault.reason !== "refused") {
+      return {
+        icon: IconAlert,
+        title: "This transcript couldn't be read",
+        line: `Reading it failed: ${fault.message}. Try again; if it fails the same way, the hub's log has the cause.`,
+        fix: null,
+      };
+    }
+    const block = unreadFix?.block;
+    const waits = block
+      ? block.fix.phase === "running" ||
+        (block.auto && block.fix.phase !== "failed")
+      : fault.updating === true;
+    return {
+      icon: waits ? IconRefresh : IconAlert,
+      title: waits
+        ? toolUpdateWords.readWaits(harnessName)
+        : "This conversation can't be shown yet",
+      // The block says why, so the state's own line stands down: one fact,
+      // said once.
+      line: unreadFix ? undefined : `${fault.message}.`,
+      fix: unreadFix
+        ? {
+            block: unreadFix.block,
+            machineId: unreadFix.machine.machineId,
+            online: unreadFix.machine.status === "online",
+          }
+        : null,
+    };
   });
 
-  /**
-   * Whether the read stood refused with its fix in hand when last looked
-   * at: the fix landing (the block gone, its machine running the harness
-   * now) is when the conversation can be read, and it is read then.
-   */
-  let unreadFixed: boolean | null = null;
-  $effect(() => {
+  // The refusal a block stands under (the newest read's, or a read behind
+  // the transcript shown) is noted while it stands; once the block goes
+  // (its fix landed, the machine runs the harness now), the conversation
+  // can be read and is read again, and until that read answers the pane
+  // shows the read under way (`readAfterFix`).
+  $effect.pre(() => {
     const held = sessionsStore.session(viewId);
-    const refused =
-      held?.readFault?.reason === "refused" ||
-      held?.behind?.reason === "refused";
+    const now = held?.readFault ?? held?.behind ?? servedFault;
     const blocked = unreadFix !== null;
     untrack(() => {
-      if (!refused) {
-        unreadFixed = null;
+      if (now?.reason !== "refused") {
         return;
       }
-      if (!blocked && unreadFixed === false) {
-        readAfterFix = held?.readFault ?? servedFault;
+      if (blocked) {
+        blockedFault = now;
+      } else if (now === blockedFault && readAfterFix !== now) {
+        readAfterFix = now;
         reread("harnessRuns");
       }
-      unreadFixed = !blocked;
     });
   });
 
@@ -1649,24 +1672,22 @@
      transcript's first row would, from the area's top on the transcript's
      start edge (`pad="transcript"`). The owner: "I didn't say center the
      whole block! No sane ui developer does this". -->
-{#snippet faultState(fault: ReadFault)}
+{#snippet faultState(view: NonNullable<typeof faultView>)}
   <EmptyState
     pad="transcript"
-    icon={faultIcon}
-    line={fault.reason === "refused" && unreadFix ? undefined : faultLine}
+    icon={view.icon}
+    line={view.line}
     role="alert"
-    title={faultTitle}
+    title={view.title}
   >
     {#snippet action()}
       <!-- A read its machine's harness CLI refuses: its fix, as a start
-           it blocks shows it, and the read comes once that lands. The
-           block says why, so the state's own line stands down: one fact,
-           said once. -->
-      {#if fault.reason === "refused" && unreadFix}
+           it blocks shows it, and the read comes once that lands. -->
+      {#if view.fix}
         <HarnessBlock
-          block={unreadFix.block}
-          machineId={unreadFix.machine.machineId}
-          online={unreadFix.machine.status === "online"}
+          block={view.fix.block}
+          machineId={view.fix.machineId}
+          online={view.fix.online}
         />
       {:else}
         <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button
@@ -1765,9 +1786,9 @@
     >
       <!-- A named state, not an empty pane: what happened, in one line,
                and the one thing that can be done about it. -->
-      {#if fault}
+      {#if faultView}
         <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
-          {@render faultState(fault)}
+          {@render faultState(faultView)}
         </div>
       {:else if unaddressable}
         <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
@@ -1901,11 +1922,11 @@
         {@render body(session)}
       </SideSplit>
     {/if}
-  {:else if fault}
+  {:else if faultView}
     <!-- No session in the store yet, and the server's read was refused: the
          same named state the pane's own read would show. -->
     <div class="flex min-h-0 flex-auto flex-col">
-      {@render faultState(fault)}
+      {@render faultState(faultView)}
     </div>
   {:else if unaddressable}
     <div class="flex min-h-0 flex-auto flex-col">{@render missingState()}</div>
