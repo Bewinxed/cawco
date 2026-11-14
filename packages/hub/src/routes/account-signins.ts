@@ -12,7 +12,7 @@ import {
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
-import { awayProblem } from "../machine-answers";
+import { unansweredIn } from "../machine-answers";
 import { unreachable } from "../unreachable";
 
 export const accountSigninRoutes = ({
@@ -147,15 +147,11 @@ export const accountSigninRoutes = ({
           }
           switch (answer.kind) {
             case "unanswered":
-              return answer.reason === "dead"
-                ? awayProblem(
-                    params.machineId,
-                    awayWords(params.machineId, answer)
-                  )
-                : problem(503, {
-                    code: "machine-away",
-                    detail: awayWords(params.machineId, answer),
-                  });
+              return unansweredIn(
+                params.machineId,
+                answer,
+                awayWords(params.machineId, answer)
+              );
             case "answered": {
               if (!answer.value.ok) {
                 pendingSignins.delete(pendingKey(params.id, params.machineId));
@@ -202,15 +198,11 @@ export const accountSigninRoutes = ({
           );
           switch (asked.kind) {
             case "unanswered":
-              return asked.reason === "dead"
-                ? awayProblem(
-                    params.machineId,
-                    awayWords(params.machineId, asked)
-                  )
-                : problem(503, {
-                    code: "machine-away",
-                    detail: awayWords(params.machineId, asked),
-                  });
+              return unansweredIn(
+                params.machineId,
+                asked,
+                awayWords(params.machineId, asked)
+              );
             case "answered":
               break;
             default:

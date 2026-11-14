@@ -20,7 +20,7 @@ import { dashboardUrl } from "./dashboard-url";
 import type { ArtifactRow } from "./db/artifacts";
 import { artifactOrigin } from "./db/previews";
 import type { HubContext } from "./hub-context";
-import { awayProblem } from "./machine-answers";
+import { awayProblem, silentProblem } from "./machine-answers";
 import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import type { AnyProblem } from "./refusal";
@@ -269,10 +269,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
               machineId,
               `${row.name} wasn't drawn: the hub's machine didn't draw it (its daemon isn't connected).`
             )
-          : problem(503, {
-              code: "picture-undrawn",
-              detail: `${row.name} wasn't drawn: the hub's machine didn't draw it within ${secondsOf(asked.after)} s.`,
-            });
+          : silentProblem(
+              `${row.name} wasn't drawn: the hub's machine didn't draw it within ${secondsOf(asked.after)} s.`
+            );
       case "answered":
         break;
       default:
@@ -325,10 +324,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
               instance.machineId,
               `The picture wasn't saved: ${ctx.machineName(instance.machineId)} isn't connected.`
             )
-          : problem(503, {
-              code: "picture-save-unanswered",
-              detail: `The picture wasn't saved: ${ctx.machineName(instance.machineId)} didn't answer within ${secondsOf(asked.after)} s.`,
-            });
+          : silentProblem(
+              `The picture wasn't saved: ${ctx.machineName(instance.machineId)} didn't answer within ${secondsOf(asked.after)} s.`
+            );
       case "answered":
         break;
       default:

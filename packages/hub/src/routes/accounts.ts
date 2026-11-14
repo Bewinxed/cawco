@@ -11,7 +11,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import type { HubContext } from "../hub-context";
-import { awayProblem } from "../machine-answers";
+import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { unreachable } from "../unreachable";
 
@@ -319,10 +319,9 @@ export const accountRoutes = ({
                 params.machineId,
                 `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
               )
-            : problem(409, {
-                code: "did-not-answer-within",
-                detail: `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`,
-              });
+            : silentProblem(
+                `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
+              );
         case "answered":
           if (!answer.value.ok) {
             return problem(409, {

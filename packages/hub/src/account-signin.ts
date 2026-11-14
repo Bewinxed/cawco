@@ -43,7 +43,7 @@ import type { ClosureContext, HomeCredentialFound } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import type { Unanswered } from "./machine-answers";
-import { awayProblem } from "./machine-answers";
+import { awayProblem, silentProblem } from "./machine-answers";
 import { unreachable } from "./unreachable";
 
 export type AccountSigninContext = Pick<
@@ -150,10 +150,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       case "unanswered":
         return asked.reason === "dead"
           ? awayProblem(machineId, awayWords(machineId, asked))
-          : problem(503, {
-              code: "home-login-refused",
-              detail: awayWords(machineId, asked),
-            });
+          : silentProblem(awayWords(machineId, asked));
       case "answered":
         break;
       default:

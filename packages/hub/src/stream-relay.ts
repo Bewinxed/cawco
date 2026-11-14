@@ -61,7 +61,12 @@ import { ElysiaStatus, problem } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
-import { type AwayProblem, awayProblem } from "./machine-answers";
+import {
+  type AwayProblem,
+  awayProblem,
+  type SilentProblem,
+  silentProblem,
+} from "./machine-answers";
 import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
@@ -152,9 +157,7 @@ export interface StreamRelayDeps {
 /** The relay's machine's refusal: away or late (503), or refusing in its own words (409). */
 export type RelayMachineRefusal =
   | AwayProblem
-  | ReturnType<
-      typeof problem<503, { code: "stream-relay-machine-late"; detail: string }>
-    >
+  | SilentProblem
   | ReturnType<
       typeof problem<
         409,
@@ -279,10 +282,9 @@ const answered = <T>(
   if (read.kind === "unanswered") {
     return read.reason === "dead"
       ? awayProblem(machineId, STREAM_RELAY_WORDS.machineAway(machine))
-      : problem(503, {
-          code: "stream-relay-machine-late",
-          detail: `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`,
-        });
+      : silentProblem(
+          `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
+        );
   }
   if (!read.value.ok) {
     return problem(409, {

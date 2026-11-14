@@ -48,7 +48,7 @@ import type { createForgePosts } from "./forge-posts";
 import { type ContinueOutcome, MachineAway } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import type { ControlResult, Unanswered } from "./machine-answers";
-import { awayProblem } from "./machine-answers";
+import { awayProblem, silentProblem } from "./machine-answers";
 import { machineOut } from "./machine-out";
 import type { MachinePause, PauseCaller } from "./machine-pause";
 import type { createOpenItems } from "./open-items";
@@ -445,10 +445,9 @@ export const mediaCalls = ({
               row.machineId,
               "The session's machine is offline; image generation was not started."
             )
-          : problem(504, {
-              code: "image-generation-did-not",
-              detail: `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`,
-            });
+          : silentProblem(
+              `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`
+            );
       case "answered":
         return answer.value.ok
           ? (answer.value.result as GeneratedImage)

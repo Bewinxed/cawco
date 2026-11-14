@@ -30,7 +30,7 @@ import {
   pageSourcePaths,
 } from "./kept-blocks";
 import { sessionLabel } from "./labels";
-import { awayProblem } from "./machine-answers";
+import { awayProblem, unansweredIn } from "./machine-answers";
 import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PageBuilt, PageFolderProblem } from "./page-problems";
 import type { PreviewTarget } from "./preview";
@@ -74,6 +74,12 @@ interface ImageAt {
   readOn?: ((file: string) => string | undefined) | undefined;
   shown?: ReadonlyMap<string, Uint8Array> | undefined;
 }
+
+/** A page's machine that did not answer its read, in words: not connected, or silent. */
+const MACHINE_UNANSWERED = {
+  away: "Machine is not connected",
+  silent: "Machine did not answer",
+};
 
 export type ArtifactPagesContext = Pick<
   ClosureContext,
@@ -452,7 +458,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const agent = ctx.registry.agent(origin.machineId);
     if (!agent) {
-      return awayProblem(origin.machineId, "Machine is not connected");
+      return awayProblem(origin.machineId, MACHINE_UNANSWERED.away);
     }
     const readText = async (path: string) => {
       const read = await ctx.callFs(origin.machineId, agent, {
@@ -469,13 +475,14 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       }
     };
     const file = posix.join(origin.dir, "page.html");
-    const source = await readText(file).catch(() => null);
-    if (source === null) {
-      return problem(504, {
-        code: "page-machine-late",
-        detail: "Machine did not answer",
-      });
+    const page = await ctx.callFs(origin.machineId, agent, {
+      op: "read",
+      path: file,
+    });
+    if (page.kind === "unanswered") {
+      return unansweredIn(origin.machineId, page, MACHINE_UNANSWERED);
     }
+    const source = page.value.ok ? (page.value.result as string) : undefined;
     if (source === undefined) {
       return problem(404, {
         code: "page-source-missing",
@@ -664,17 +671,14 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     if ("dir" in from) {
       const agent = ctx.registry.agent(row.machineId);
       if (!agent) {
-        return awayProblem(row.machineId, "Machine is not connected");
+        return awayProblem(row.machineId, MACHINE_UNANSWERED.away);
       }
       const read = await ctx.callFs(row.machineId, agent, {
         op: "read",
         path: posix.join(from.dir, PROGRAM_FILE),
       });
       if (read.kind === "unanswered") {
-        return problem(504, {
-          code: "page-machine-late",
-          detail: "Machine did not answer",
-        });
+        return unansweredIn(row.machineId, read, MACHINE_UNANSWERED);
       }
       const inDir: (ImageAt & { text: string }) | undefined = read.value.ok
         ? { text: read.value.result as string, dir: from.dir }

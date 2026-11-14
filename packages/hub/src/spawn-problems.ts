@@ -1,4 +1,5 @@
 import type { problem } from "elysia";
+import type { AwayProblem, SilentProblem } from "./machine-answers";
 
 /** A problem of this status and code, its words a string. */
 type Problem<Status extends number, Code extends string> = ReturnType<
@@ -17,11 +18,11 @@ type Problem<Status extends number, Code extends string> = ReturnType<
 export type SpawnProblem =
   | Problem<400, "spawn-payload-unnamed">
   | Problem<409, "spawn-session-key-held">
-  | Problem<503, "machine-away">
+  | AwayProblem
   | Problem<503, "spawn-default-unnamed">
   | Problem<400, "spawn-not-settled">
   | Problem<404, "spawn-project-deleted">
   | Problem<400, "spawn-not-placed">
   | Problem<409, "launch-account-unavailable">
-  | Problem<504, "spawn-start-unanswered">
+  | SilentProblem
   | Problem<422, "spawn-start-failed">;

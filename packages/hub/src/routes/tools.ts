@@ -10,7 +10,7 @@ import {
 } from "@cawco/core/tools";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { awayProblem, peekToolStatus } from "../machine-answers";
+import { peekToolStatus, unansweredIn } from "../machine-answers";
 
 import { unreachable } from "../unreachable";
 
@@ -72,15 +72,11 @@ export const toolRoutes = ({
         );
         switch (answer.kind) {
           case "unanswered":
-            return answer.reason === "dead"
-              ? awayProblem(
-                  params.machineId,
-                  awayWords(params.machineId, answer)
-                )
-              : problem(503, {
-                  code: "machine-away",
-                  detail: awayWords(params.machineId, answer),
-                });
+            return unansweredIn(
+              params.machineId,
+              answer,
+              awayWords(params.machineId, answer)
+            );
           case "answered": {
             if (!answer.value.ok) {
               return problem(422, {
@@ -119,15 +115,11 @@ export const toolRoutes = ({
         );
         switch (answer.kind) {
           case "unanswered":
-            return answer.reason === "dead"
-              ? awayProblem(
-                  params.machineId,
-                  awayWords(params.machineId, answer)
-                )
-              : problem(503, {
-                  code: "machine-away",
-                  detail: awayWords(params.machineId, answer),
-                });
+            return unansweredIn(
+              params.machineId,
+              answer,
+              awayWords(params.machineId, answer)
+            );
           case "answered": {
             // Used or refused, the machine's sign-in is spent.
             pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);

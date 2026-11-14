@@ -18,10 +18,9 @@ import type { MachineMemory, Unanswered } from "./machine-answers";
 import {
   awayProblem,
   machineSkillFiles,
-  silentProblem,
+  unansweredIn,
 } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-
 import { unreachable } from "./unreachable";
 
 /** What a machine read reads of the hub. */
@@ -144,9 +143,10 @@ export const unansweredProblem = (
   machineId: string,
   answer: Unanswered
 ) =>
-  answer.reason === "dead"
-    ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
-    : silentProblem(ctx.machineFault(machineId, "silent"));
+  unansweredIn(machineId, answer, {
+    away: ctx.machineFault(machineId, "offline"),
+    silent: ctx.machineFault(machineId, "silent"),
+  });
 
 /** A skill's files read off `machineId`, or what the route answers when it could not read them. */
 export const skillFilesOff = async (

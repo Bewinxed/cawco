@@ -485,6 +485,7 @@ import { createLoginMoves } from "./login-moves";
 import {
   awayProblem,
   type ControlResult,
+  silentProblem,
   type Unanswered,
 } from "./machine-answers";
 import { createMachineCalls } from "./machine-calls";
@@ -4160,10 +4161,9 @@ export const createServer = (
       case "unanswered":
         return asked.reason === "dead"
           ? awayProblem(row.machineId, "Machine is not connected")
-          : problem(504, {
-              code: "mode-refused",
-              detail: `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`,
-            });
+          : silentProblem(
+              `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`
+            );
       case "answered":
         break;
       default:
@@ -4913,10 +4913,9 @@ export const createServer = (
                 machineId,
                 `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it (its daemon isn't connected).`
               )
-            : problem(503, {
-                code: "artifact-screen-unopened",
-                detail: `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it within ${secondsOf(asked.after)} s.`,
-              });
+            : silentProblem(
+                `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it within ${secondsOf(asked.after)} s.`
+              );
         case "answered":
           break;
         default:
@@ -4963,10 +4962,9 @@ export const createServer = (
                 machineId,
                 "The workspace's machine isn't connected to the hub, so its server can't start."
               )
-            : problem(504, {
-                code: "artifact-serve-machine-late",
-                detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`,
-              });
+            : silentProblem(
+                `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`
+              );
         case "answered":
           break;
         default:
@@ -4996,10 +4994,9 @@ export const createServer = (
                 machineId,
                 "The folder's machine isn't connected to the hub, so its folder can't be read."
               )
-            : problem(504, {
-                code: "artifact-folder-machine-late",
-                detail: `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`,
-              });
+            : silentProblem(
+                `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`
+              );
         case "answered":
           break;
         default:

@@ -11,7 +11,7 @@ import { everyOf } from "@cawco/core/every-of";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
-import { awayProblem } from "../machine-answers";
+import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { unreachable } from "../unreachable";
 
@@ -75,10 +75,7 @@ export const accountHomeLoginRoutes = (
                   ctx.machineFault(query.machineId, "offline")
                 );
               }
-              return problem(503, {
-                code: "machine-away",
-                detail: awayWords(query.machineId, others),
-              });
+              return silentProblem(awayWords(query.machineId, others));
             case "answered":
               if (!others.value.ok) {
                 return problem(422, {
@@ -101,10 +98,7 @@ export const accountHomeLoginRoutes = (
                   ctx.machineFault(query.machineId, "offline")
                 );
               }
-              return problem(503, {
-                code: "machine-away",
-                detail: awayWords(query.machineId, claude),
-              });
+              return silentProblem(awayWords(query.machineId, claude));
             case "answered":
               home = claude.value.ok
                 ? (claude.value.result as HomeLogin)

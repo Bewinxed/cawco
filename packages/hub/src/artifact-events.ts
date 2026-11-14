@@ -39,7 +39,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
-import { awayProblem } from "./machine-answers";
+import { awayProblem, silentProblem } from "./machine-answers";
 import { externalizeImages } from "./media";
 import { peek } from "./payload-peeks";
 import { handle as idHandle } from "./presenters/words";
@@ -698,10 +698,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
               machineId,
               "The workspace's machine isn't connected to the hub, so its stage can't be reached."
             )
-          : problem(504, {
-              code: "stage-machine-late",
-              detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`,
-            });
+          : silentProblem(
+              `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`
+            );
       case "answered":
         break;
       default:

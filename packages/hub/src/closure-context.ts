@@ -170,7 +170,12 @@ import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
-import type { AwayProblem, ControlResult, Unanswered } from "./machine-answers";
+import type {
+  AwayProblem,
+  ControlResult,
+  SilentProblem,
+  Unanswered,
+} from "./machine-answers";
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
@@ -246,7 +251,7 @@ type HomeLoginRefused<Status extends 409 | 422> = ReturnType<
 >;
 
 /** A session's permission mode not applied, at `Status`, in the words of what refused it (server.ts `applyPermissionMode`). */
-type ModeRefused<Status extends 400 | 500 | 504> = ReturnType<
+type ModeRefused<Status extends 400 | 500> = ReturnType<
   typeof problem<Status, { code: "mode-refused"; detail: string }>
 >;
 
@@ -323,7 +328,7 @@ export interface ClosureContext {
   ) => Promise<
     | ModeRefused<400>
     | AwayProblem
-    | ModeRefused<504>
+    | SilentProblem
     | ModeRefused<500>
     | undefined
   >;

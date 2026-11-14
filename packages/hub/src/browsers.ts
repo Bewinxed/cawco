@@ -69,7 +69,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-import { awayProblem } from "./machine-answers";
+import { awayProblem, silentProblem } from "./machine-answers";
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -139,10 +139,9 @@ export const answered = <T>(
           machineId,
           `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`
         )
-      : problem(503, {
-          code: "browser-machine-late",
-          detail: `${machine}'s browser did not ${what} in time; it may still be at it there.`,
-        });
+      : silentProblem(
+          `${machine}'s browser did not ${what} in time; it may still be at it there.`
+        );
   }
   if (!read.value.ok) {
     return problem(409, {

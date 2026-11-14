@@ -24,6 +24,23 @@ export const awayProblem = (machineId: string, detail: string) =>
 export const silentProblem = (detail: string) =>
   problem(504, { code: "machine-silent", detail });
 
+/**
+ * A machine call left unanswered, answered by its cause: not connected
+ * (`dead`) {@link awayProblem}, silent past its deadline
+ * {@link silentProblem}, in `words`, or each its own.
+ */
+export const unansweredIn = (
+  machineId: string,
+  answer: Unanswered,
+  words: string | { away: string; silent: string }
+) => {
+  const { away, silent } =
+    typeof words === "string" ? { away: words, silent: words } : words;
+  return answer.reason === "dead"
+    ? awayProblem(machineId, away)
+    : silentProblem(silent);
+};
+
 /** {@link awayProblem}'s answer. */
 export type AwayProblem = ReturnType<typeof awayProblem>;
 

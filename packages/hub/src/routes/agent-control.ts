@@ -17,7 +17,7 @@ import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
-import { awayProblem } from "../machine-answers";
+import { awayProblem, silentProblem } from "../machine-answers";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
 import { unansweredProblem } from "../machine-reads";
@@ -66,10 +66,9 @@ export const agentUpdate =
         // nothing happened — only that the hub stopped hearing about it.
         return answer.reason === "dead"
           ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
-          : problem(504, {
-              code: "didnt-finish-update-within",
-              detail: `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
-            });
+          : silentProblem(
+              `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`
+            );
       case "answered":
         return answer.value.ok
           ? (answer.value.result as UpdateReport)
