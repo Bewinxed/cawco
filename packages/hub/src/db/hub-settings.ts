@@ -1,4 +1,4 @@
-/** The hub's own settings rows: the supervisor's mode, images, the fleet watch, connections, what Jev may spend. */
+/** The hub's own settings rows: the supervisor's mode, images, the fleet watch, connections, what Jev may spend, out-of-date tools. */
 
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { OfferedMode } from "@cawco/core/harness/kinds";
@@ -6,6 +6,7 @@ import {
   DEFAULT_IMAGE_SETTINGS,
   type ImageSettings,
 } from "@cawco/core/image-generation";
+import { TOOL_UPDATES_DEFAULT, type ToolUpdates } from "@cawco/core/tools";
 import { eq } from "drizzle-orm";
 import type { DbCore } from "./core";
 import {
@@ -20,6 +21,8 @@ import {
   openrouterConnection,
   SUPERVISOR_CONFIG_ID,
   supervisorConfig,
+  TOOL_UPDATES_ID,
+  toolUpdateSettings,
 } from "./schema";
 
 export interface HubSettingsDb {
@@ -61,8 +64,12 @@ export interface HubSettingsDb {
   readonly setOpenRouterConnection: (apiKey: string) => void;
   /** Turn composer suggestions on or off. Only meaningful while Jev is on. */
   readonly setSuggestWhileTyping: (enabled: boolean) => void;
+  /** Sets {@link HubSettingsDb.toolUpdates}. */
+  readonly setToolUpdates: (updates: ToolUpdates) => void;
   /** Hold (or replace) the TypeSafe key; null forgets it. */
   readonly setTypesafeKey: (key: string | null) => void;
+  /** What the fleet does with a copy of a tool at a version CawCo does not run; core's `TOOL_UPDATES_DEFAULT` while no row says otherwise. */
+  readonly toolUpdates: () => ToolUpdates;
   /** Fleet watch's open needs-you notices, oldest first. */
   readonly watchNotices: () => FleetWatchNotice[];
 }
@@ -112,6 +119,18 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
       db.insert(fleetWatchSettings)
         .values({ id: FLEET_WATCH_ID, on })
         .onConflictDoUpdate({ target: fleetWatchSettings.id, set: { on } })
+        .run();
+    },
+    toolUpdates: () =>
+      db
+        .select({ value: toolUpdateSettings.updates })
+        .from(toolUpdateSettings)
+        .where(eq(toolUpdateSettings.id, TOOL_UPDATES_ID))
+        .get()?.value ?? TOOL_UPDATES_DEFAULT,
+    setToolUpdates: (updates) => {
+      db.insert(toolUpdateSettings)
+        .values({ id: TOOL_UPDATES_ID, updates })
+        .onConflictDoUpdate({ target: toolUpdateSettings.id, set: { updates } })
         .run();
     },
     watchNotices: () =>

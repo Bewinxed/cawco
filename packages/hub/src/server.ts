@@ -223,7 +223,9 @@ import {
   HarnessReportSchema,
   MachineCapabilitiesSchema,
   OpenCodeGoLimitsSchema,
+  ToolCopySchema,
   ToolSigninSchema,
+  ToolWantsSchema,
 } from "@cawco/core/stored-shapes";
 import type { CommandAck } from "@cawco/core/stream";
 import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
@@ -1090,18 +1092,37 @@ const AUTH_STATES: readonly AgentAuth[] = [
   "unreadable-credentials",
 ];
 
-/** What is kept of a tool's status a machine reported. */
-const keptToolStatus = (tool: ToolStatus): ToolStatus =>
-  tool.signin
+/** What is kept of a tool's status a machine reported: each stored shape it carries, as its type. */
+const keptToolStatus = (tool: ToolStatus): ToolStatus => ({
+  ...tool,
+  ...(tool.signin
     ? {
-        ...tool,
         signin: received(
           ToolSigninSchema,
           tool.signin,
           "a machine's report beat (a tool's sign-in)"
         ),
       }
-    : tool;
+    : {}),
+  ...(tool.copy
+    ? {
+        copy: received(
+          ToolCopySchema,
+          tool.copy,
+          "a machine's report beat (whose a tool's copy is)"
+        ),
+      }
+    : {}),
+  ...(tool.wants
+    ? {
+        wants: received(
+          ToolWantsSchema,
+          tool.wants,
+          "a machine's report beat (the version a tool runs at)"
+        ),
+      }
+    : {}),
+});
 
 /** What is kept of what a machine reported it can do. */
 const keptCapabilities = (
@@ -1289,6 +1310,7 @@ export const createServer = (
     turnUnderWay: () => turnUnderWay,
     turnsWritten: () => turnsWritten,
     unknownAccountsOf: () => unknownAccountsOf,
+    updateAll: () => updateAll,
     waiting: () => waiting,
     welcomeConverge: () => welcomeConverge,
     withdrawUnshown: () => withdrawUnshown,
@@ -2157,7 +2179,7 @@ export const createServer = (
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
     createMachineCommands(ctx);
-  const { autoInstall, installArgs, installAsk, readyHarnesses } =
+  const { autoInstall, installArgs, installAsk, readyHarnesses, updateAll } =
     createToolInstalls(ctx);
 
   // Honest ground, before anything is served. A fresh process holds no agent
