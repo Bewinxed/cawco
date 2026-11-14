@@ -1626,9 +1626,6 @@ export const SKILL_SKIPPED_DIRS: readonly string[] = [
  */
 export const SKILL_FOLDER_LIMIT_BYTES = 16 * 1024 * 1024;
 
-/** The most files a skill folder read off a machine carries. Our call. */
-export const SKILL_FOLDER_LIMIT_FILES = 500;
-
 /** A YAML block-scalar marker (`>`, `|`, with an optional `-`/`+` chomp indicator). */
 const YAML_BLOCK_SCALAR = /^[|>][-+]?$/u;
 

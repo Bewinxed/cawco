@@ -47,7 +47,6 @@ import type {
 import {
   memoryDocProblem,
   SKILL_FOLDER_LIMIT_BYTES,
-  SKILL_FOLDER_LIMIT_FILES,
   SKILL_SKIPPED_DIRS,
   skillDescription,
 } from "@cawco/core/fleet";
@@ -4249,8 +4248,8 @@ interface SkillFileOnDisk {
  * but CawCo's own list of what the fleet carried ({@link CARRIED}) and the
  * directories no skill keeps files in (core `SKILL_SKIPPED_DIRS`). A symlink
  * is never followed, so nothing outside the directory is read. A read past
- * core's `SKILL_FOLDER_LIMIT_FILES` or `SKILL_FOLDER_LIMIT_BYTES` is refused,
- * said in megabytes and files, before any file is read.
+ * core's `SKILL_FOLDER_LIMIT_BYTES` is refused,
+ * said in megabytes, before any file is read.
  */
 const skillFilesAt = async (dir: string): Promise<SkillFile[]> => {
   const found: SkillFileOnDisk[] = [];
@@ -4270,11 +4269,6 @@ const skillFilesAt = async (dir: string): Promise<SkillFile[]> => {
       const { size } = await stat(join(at, entry.name));
       bytes += size;
       found.push({ path: relative, size });
-      if (found.length > SKILL_FOLDER_LIMIT_FILES) {
-        throw new Error(
-          `${dir} holds more than ${SKILL_FOLDER_LIMIT_FILES} files; a skill folder carries at most that many`
-        );
-      }
       if (bytes > SKILL_FOLDER_LIMIT_BYTES) {
         throw new Error(
           `${dir} holds more than ${SKILL_FOLDER_LIMIT_BYTES / (1024 * 1024)} MB; a skill folder carries at most that`
