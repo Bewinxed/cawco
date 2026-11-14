@@ -16,6 +16,7 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { crossIn, rise } from "#lib/platform/motion/curves.svelte.js";
   import { stopWords } from "../accounts/switch.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
@@ -320,6 +321,26 @@
    */
   const FOOT_ROOM =
     "var(--composer-clearance, calc(var(--spacing-space-8) * 3))";
+  /**
+   * The drawn height of the lines that stand in the dock until something
+   * lands (the not-caught-up line, the open-at line), px: added to the foot,
+   * so at the tail the last row ends over them, never under them. The dock
+   * floats at no height in the flow, and its column hangs up from the foot's
+   * top (a long list) or from the end of the content (a list shorter than
+   * its view, where the sticky box rests in its own place): with no room
+   * of its own, a line there covered the newest rows and their presses (a
+   * failed send's Retry under the not-caught-up line, host run 41f12701).
+   * The foot growing is the composer's room growing (`ListWhole`'s foot
+   * observer): a view at the tail follows it, a view elsewhere keeps its
+   * place.
+   */
+  let dockRoom = $state(0);
+  const measureDockRoom = frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      dockRoom = value;
+    }
+  );
   const rowDraw = new RowPresentation(host);
 
   const rails = new RowRails(host);
@@ -697,7 +718,8 @@
   <div
     data-slot="foot"
     aria-hidden="true"
-    class="isolate invisible h-(--foot-room) pointer-events-none"
+    class="isolate invisible h-(--foot-height) pointer-events-none"
+    style:--foot-height="calc(var(--foot-room) + {dockRoom}px)"
     bind:this={whole.foot}
   >
     <!-- The pin's mark (`pinNext`): a pixel, deeper than any row of the
@@ -729,35 +751,49 @@
        at the bottom and the not-caught-up line over them. -->
   <div
     data-slot="dock"
-    class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
+    class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight}px"
     style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--spacing-space-4) + var(--spacing-space-2) + var(--parked-room, 0px)))"}
   >
-    <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
-    {#if region.behind}
-      <Behind
-        fault={region.behind}
-        floating
-        onretry={() => readTranscript(session.instanceId, "retry")}
-      />
-    {/if}
-    <!-- The record this was opened at is not here: shown where the reader
-         landed instead, until they move on. Heard once through the polite
-         region above (`arrived`), so this line is no live region itself. -->
-    {#if seek.unfound}
-      <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
-      <p
-        class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
-        data-open-at={seek.unfound}
-        in:rise={"--duration-panel"}
-        out:rise={"--duration-exit"}
-      >
-        {seek.unfoundWords}
-      </p>
-    {/if}
+    <!-- The lines that stand until something lands, measured for the room
+         the foot keeps them (`dockRoom`). The pills under them reserve none:
+         the way back stands only off the tail, and the catch-up passes as
+         the rows it brings arrive; given room, each one's going moved the
+         rows it had just made room for. The pills stand a step under the
+         lines when there are any (`peer-has`), as the dock's gap set them. -->
+    <div
+      data-slot="dock-lines"
+      class="peer self-stretch flex flex-col items-center gap-space-2"
+      {@attach measureDockRoom}
+    >
+      <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
+      {#if region.behind}
+        <Behind
+          fault={region.behind}
+          floating
+          onretry={() => readTranscript(session.instanceId, "retry")}
+        />
+      {/if}
+      <!-- The record this was opened at is not here: shown where the reader
+           landed instead, until they move on. Heard once through the polite
+           region above (`arrived`), so this line is no live region itself. -->
+      {#if seek.unfound}
+        <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
+        <p
+          class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
+          data-open-at={seek.unfound}
+          in:rise={"--duration-panel"}
+          out:rise={"--duration-exit"}
+        >
+          {seek.unfoundWords}
+        </p>
+      {/if}
+    </div>
     {#if rowBuild.catching || finder.showLatest || finder.showBack}
-      <div class="flex justify-center items-box-end gap-space-2">
+      <div
+        class="flex justify-center items-box-end gap-space-2 peer-has-[>*]:mt-space-2"
+      >
         {#if rowBuild.catching}
           <CatchUp />
         {/if}

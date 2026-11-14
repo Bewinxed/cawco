@@ -16,9 +16,11 @@
   is three clauses), so the line wraps inside the dock at any width.
 
   `floating`: it stands in the dock over the foot of a pane's list (see
-  `Transcript`), on the surface "Catching up…" and "Jump to latest" share, at
-  no height in the flow, so it is seen wherever the reader stands and its
-  coming and going moves no row. Otherwise it is a line at the foot of a
+  `Transcript`), on the surface "Catching up…" and "Jump to latest" share,
+  sticky, so it is seen wherever the reader stands. The foot keeps its drawn
+  height as room (`dockRoom`), so at the tail the newest row ends over it and
+  its presses stay reachable: its coming and going moves the tail by its
+  height, as the composer's room does. Otherwise it is a line at the foot of a
   delegate's well (`InlineTranscript`), in its flow. Its words are set as the
   strip before the first row sets why an older page could not be read.
 
