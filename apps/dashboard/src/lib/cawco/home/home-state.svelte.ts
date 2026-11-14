@@ -78,6 +78,9 @@ import type { BlockedRequest } from "../stores/sessions.svelte";
 import { storedStore } from "../stores/stored.svelte";
 import { tailnetStore } from "../stores/tailnet.svelte";
 import { tickersStore } from "../stores/tickers.svelte";
+import { toolUpdatesStore } from "../stores/tool-updates.svelte";
+import type { ToolItem } from "./ToolNeedsRow.svelte";
+import { toolNeedsOf } from "./tool-needs";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
    What "ended since you last looked" means is the owner's looking on
@@ -621,6 +624,7 @@ interface McpItem {
 }
 
 export type NeedsItem =
+  | ToolItem
   | ArtifactItem
   | McpItem
   | AskItem
@@ -1370,11 +1374,18 @@ class Home {
           : [];
       }
     );
+    // A tool whose copy on some machine waits on the person, while it does.
+    const tools: NeedsItem[] = toolNeedsOf(
+      boardStore.machines,
+      toolUpdatesStore.updates,
+      toolUpdatesStore.releases
+    );
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
       ...artifacts,
       ...signIns,
+      ...tools,
       ...caps,
       ...actions,
       ...watched,
