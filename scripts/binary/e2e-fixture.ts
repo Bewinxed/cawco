@@ -133,9 +133,16 @@ if (verb === "keys") {
   // what it was built from as a build of this tree does (`build-info`, which
   // its release's manifest is written from), and its `binary-pins` (run from
   // it before the swap) finds nothing pinned to put on, as a build of this
-  // tree does on the test's machines, which have no harness. With `migrates`
-  // it first damages the hub database, as a migration that then fails would
-  // leave it.
+  // tree does on the test's machines, which have no harness. Run as the hub,
+  // a mode first leaves the database or its disk as a build that then fails
+  // would, through the test's own runner and e2e-db-rows.ts (the machines have
+  // no sqlite3), each step one a restarted hub may repeat:
+  // - `migrates`: one applied migration newer than the build before it knows,
+  //   and a row of the trial's (`e2e-trial-row`);
+  // - `reshapes`: no migration, and every agents.build a value the build
+  //   before it does not read;
+  // - `fills`: the disk the database is on filled to half the room the copy
+  //   taken before the update needs, so a rollback cannot put it back.
   const [outFile, mode] = args;
   const buildInfo = `if [ "$1" = build-info ]; then
   echo '${JSON.stringify({ version: "broken", protocol: protocolRange })}'
@@ -145,13 +152,31 @@ if [ "$1" = binary-pins ]; then
   exit 0
 fi
 `;
+  const rows = (rest: string) =>
+    `BUN_BE_BUN=1 /home/cawco/.cawco-test/run /shared/e2e-db-rows.ts ${rest}`;
+  const asHub: Record<string, string> = {
+    migrates: `${rows('migrate "$db"')}
+  ${rows('write "$db" e2e-trial-row')}`,
+    reshapes: `${rows('reshape "$db"')}
+  ${rows('write "$db" e2e-trial-row')}`,
+    fills: `dir=$(dirname "$db")
+  if [ ! -e "$dir/e2e-filler" ]; then
+    copy=$(stat -c %s "$db".pre-*.bak | head -n 1)
+    free=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -dc 0-9)
+    fallocate -l $((free - copy / 2)) "$dir/e2e-filler"
+  fi`,
+  };
+  const step = mode ? asHub[mode] : undefined;
+  if (mode && !step) {
+    throw new Error(`unknown broken-binary mode ${mode}`);
+  }
   await writeFile(
     outFile,
-    mode === "migrates"
+    step
       ? `#!${systemProgram("sh")}
 ${buildInfo}if [ "$1" = hub ]; then
   db="\${CAWCO_DB_PATH:-$HOME/.local/share/cawco/cawco.db}"
-  printf 'migrated-and-broken' >> "$db"
+  ${step}
 fi
 exit 1
 `
