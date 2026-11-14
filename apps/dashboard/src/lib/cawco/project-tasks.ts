@@ -12,7 +12,6 @@
 
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ExternalComment, ExternalRef } from "@cawco/core/external-items";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type {
   ProjectStarter,
@@ -20,13 +19,11 @@ import type {
   StarterPlace,
 } from "@cawco/core/starters";
 import type {
-  AttemptStart,
   Stage,
   StagesView,
   TaskAttempt,
   TaskFlags,
   TaskHistoryActor,
-  TaskList,
   TaskReviewRead,
   TaskSummary,
   TaskTimes,
@@ -39,7 +36,6 @@ import { hub, hubPath } from "#lib/platform/hub.js";
 import {
   hubData,
   hubDone,
-  hubJson,
   refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
@@ -51,7 +47,6 @@ export type {
 } from "@cawco/core/starters";
 /** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); StarterCards draws its glyph. */
 export type {
-  AttemptStart,
   Stage,
   StagesView,
   TaskAttempt,
@@ -240,10 +235,10 @@ export interface TaskLinks {
   waitsOn?: string[];
 }
 
-export const listTasks = (projectId: string): Promise<TaskList> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/tasks", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
+export const listTasks = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks.get({ query: {} }),
+    refusedOrUnreached
   );
 
 /** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
@@ -309,33 +304,22 @@ export const githubProjects = (connection: string, repo: string) =>
   );
 
 /** The project's archived tasks, instead of the board's. */
-export const listArchived = (projectId: string): Promise<TaskList> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/tasks", {
-      path: { id: projectId },
-      query: { archived: "1" },
-    }),
-    { failure: refusedOrUnreached }
+export const listArchived = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks.get({ query: { archived: "1" } }),
+    refusedOrUnreached
   );
 
 /**
  * The tasks whose id, title or description hold `words`, as the hub's list
  * finds them (tasks.ts `q`): the board's, or with `archived` the archive's.
  */
-export const findTasks = (
-  projectId: string,
-  words: string,
-  archived = false
-): Promise<TaskList> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/tasks", {
-      path: { id: projectId },
-      query: {
-        q: words,
-        ...(archived ? { archived: "1" } : {}),
-      },
+export const findTasks = (projectId: string, words: string, archived = false) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks.get({
+      query: { q: words, ...(archived ? { archived: "1" } : {}) },
     }),
-    { failure: refusedOrUnreached }
+    refusedOrUnreached
   );
 
 /** The project's tasks the hub says wait on you (`needsYou`): Caw's Needs you lists them. */
@@ -343,12 +327,11 @@ export const listTasksWaiting = async (
   projectId: string
 ): Promise<TaskSummary[]> =>
   (
-    await hubJson<TaskList>(
-      hubRequest("GET /api/projects/:id/tasks", {
-        path: { id: projectId },
+    await hubData(
+      hub.api.projects({ id: projectId }).tasks.get({
         query: { needsYou: "1" },
       }),
-      { failure: refusedOrUnreached }
+      refusedOrUnreached
     )
   ).tasks;
 
@@ -369,40 +352,29 @@ export const tellStarterOutcome = (
     refusedOrUnreached
   );
 
-export const readTask = (
-  projectId: string,
-  taskId: string
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/tasks/:taskId", {
-      path: { id: projectId, taskId },
-    }),
-    { failure: refusedOrUnreached }
+export const readTask = (projectId: string, taskId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks({ taskId }).get(),
+    refusedOrUnreached
   );
 
 export const createTask = (
   projectId: string,
   draft: { title: string; stage?: string }
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks", {
-      path: { id: projectId },
-      body: draft,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks.post(draft),
+    refusedOrUnreached
   );
 
 export const updateTask = (
   projectId: string,
   taskId: string,
   patch: TaskPatch
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("PATCH /api/projects/:id/tasks/:taskId", {
-      path: { id: projectId, taskId },
-      body: patch,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks({ taskId }).patch(patch),
+    refusedOrUnreached
   );
 
 /** Moves a task; `reason`, a close reason, is kept in the move's commit and its history. */
@@ -411,39 +383,26 @@ export const moveTask = (
   taskId: string,
   stage: string,
   reason?: string
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/stage", {
-      path: { id: projectId, taskId },
-      body: reason ? { stage, reason } : { stage },
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api
+      .projects({ id: projectId })
+      .tasks({ taskId })
+      .stage.post(reason ? { stage, reason } : { stage }),
+    refusedOrUnreached
   );
 
 /** Moves a task's file into tasks/archive/ in one commit; the hub refuses while an attempt at it is live. */
-export const archiveTask = (
-  projectId: string,
-  taskId: string
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/archive", {
-      path: { id: projectId, taskId },
-      body: {},
-    }),
-    { failure: refusedOrUnreached }
+export const archiveTask = (projectId: string, taskId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks({ taskId }).archive.post({}),
+    refusedOrUnreached
   );
 
-export const linkTask = (
-  projectId: string,
-  taskId: string,
-  link: TaskLinks
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/links", {
-      path: { id: projectId, taskId },
-      body: link,
-    }),
-    { failure: refusedOrUnreached }
+export const linkTask = (projectId: string, taskId: string, link: TaskLinks) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks({ taskId }).links.post(link),
+    refusedOrUnreached
   );
 
 /** Every commit to the task's file, oldest first. */
@@ -463,26 +422,23 @@ export const addComment = (
   taskId: string,
   text: string,
   id: string
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/comments", {
-      path: { id: projectId, taskId },
-      body: { text, id },
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api
+      .projects({ id: projectId })
+      .tasks({ taskId })
+      .comments.post({ text, id }),
+    refusedOrUnreached
   );
 
 export const addTodo = (
   projectId: string,
   taskId: string,
   todo: { text: string; under?: string }
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/todos", {
-      path: { id: projectId, taskId },
-      body: todo,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).tasks({ taskId }).todos.post(todo),
+    refusedOrUnreached
   );
 
 /** Ticks, unticks or rewords one to-do, named by id (`td-3`) or position (`2.1`). */
@@ -491,13 +447,14 @@ export const changeTodo = (
   taskId: string,
   todo: string,
   change: { done?: boolean; text?: string }
-): Promise<TaskView> =>
-  hubJson(
-    hubRequest("PATCH /api/projects/:id/tasks/:taskId/todos/:todo", {
-      path: { id: projectId, taskId, todo },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api
+      .projects({ id: projectId })
+      .tasks({ taskId })
+      .todos({ todo })
+      .patch(change),
+    refusedOrUnreached
   );
 
 /**
@@ -509,13 +466,13 @@ export const retryTask = (
   projectId: string,
   taskId: string,
   parentInstanceId?: string
-): Promise<AttemptStart> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/retry", {
-      path: { id: projectId, taskId },
-      body: parentInstanceId ? { parentInstanceId } : {},
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api
+      .projects({ id: projectId })
+      .tasks({ taskId })
+      .retry.post(parentInstanceId ? { parentInstanceId } : {}),
+    refusedOrUnreached
   );
 
 /** A file of the project's folder as its bytes, for an image, video or audio output. */

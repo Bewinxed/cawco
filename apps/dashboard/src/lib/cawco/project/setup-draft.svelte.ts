@@ -30,8 +30,8 @@ import {
   stageOf,
   storedStages,
 } from "#lib/cawco/project/setup-stage.js";
-import { folderRawHref } from "#lib/cawco/project-tasks.js";
-import { failureWords } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { failureWords, hubAsk } from "#lib/platform/hub-read.js";
 import { newestRead } from "#lib/platform/newest-read.js";
 
 /** The setup page, as the project's decisions list names it. */
@@ -180,15 +180,24 @@ export class SetupDraftSource {
     }
     const newest = this.#read.next();
     try {
-      const response = await fetch(folderRawHref(projectId, PROGRAM));
+      const asked = await hubAsk(
+        hub.api.projects({ id: projectId }).folder.raw.get({
+          query: { path: PROGRAM },
+        })
+      );
       // No program: a page from before the Setup, built as HTML alone.
-      const missing = response.status === 404;
-      if (!(response.ok || missing)) {
+      const missing = !asked.ok && asked.refused.response.status === 404;
+      if (!(asked.ok || missing)) {
         throw new Error(
-          `The setup page's program did not read (${response.status}).`
+          `The setup page's program did not read (${asked.refused.response.status}).`
         );
       }
-      const read = missing ? null : setupIn(await response.text());
+      // The route is typed as the file it serves; Eden hands back its bytes
+      // (an ArrayBuffer for a type it does not know) or its text, and a Blob
+      // reads either as text.
+      const read = asked.ok
+        ? setupIn(await new Blob([asked.value]).text())
+        : null;
       if (newest()) {
         this.drafted = read?.drafted ?? null;
         this.cards = read?.cards ?? [];

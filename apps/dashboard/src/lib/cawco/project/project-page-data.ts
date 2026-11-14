@@ -1,4 +1,3 @@
-import { hubRequest } from "@cawco/core/hub-request";
 import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
 import type { ProjectRow } from "#lib/cawco/projects.js";
 import { checkoutOf } from "#lib/cawco/projects.js";
@@ -11,7 +10,6 @@ import {
   type HubFailure,
   type HubRead,
   hubRead,
-  readHub,
 } from "#lib/platform/hub-read.js";
 
 /**
@@ -79,21 +77,18 @@ export async function readProjectPage(
   // that carries them opens on what the hub found, live and archived.
   const words = wordsOf(search.get("q") ?? "");
   const finding = (archived: boolean) =>
-    readHub<TaskList>(
-      fetch,
-      hubRequest("GET /api/projects/:id/tasks", {
-        path,
-        query: { q: words, ...(archived ? { archived: "1" } : {}) },
-      })
+    hubRead(
+      hubThrough(fetch)
+        .api.projects(path)
+        .tasks.get({
+          query: { q: words, ...(archived ? { archived: "1" } : {}) },
+        })
     );
   const [projects, machines, tasks, stages, found, foundArchived] =
     await Promise.all([
-      readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
+      hubRead(hubThrough(fetch).api.projects.get()),
       hubRead(hubThrough(fetch).api.agents.get()),
-      readHub<TaskList>(
-        fetch,
-        hubRequest("GET /api/projects/:id/tasks", { path })
-      ),
+      hubRead(hubThrough(fetch).api.projects(path).tasks.get()),
       hubRead(hubThrough(fetch).api.projects(path).stages.get()),
       words ? finding(false) : null,
       words ? finding(true) : null,
