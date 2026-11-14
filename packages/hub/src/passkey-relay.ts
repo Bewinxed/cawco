@@ -152,10 +152,7 @@ export const createPasskeyRelay = (deps: PasskeyRelayDeps) => {
         key,
         scanning,
         status: "scanning",
-        timer: setTimeout(
-          () => end(key, "timeout"),
-          PASSKEY_RELAY_TIMEOUT_MS
-        ),
+        timer: setTimeout(() => end(key, "timeout"), PASSKEY_RELAY_TIMEOUT_MS),
       };
       attempts.set(key, attempt);
       for (const machine of scanning) {
