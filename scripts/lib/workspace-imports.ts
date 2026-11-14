@@ -9,7 +9,11 @@ import { readFileSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 import { ROOT } from "./repo-files";
 
-// The manifests `packages` reads: the root's and each workspace's.
+/**
+ * @public The manifests `packages` reads: the root's and each workspace's.
+ * No module imports it: scripts/check.ts reads it off the syntax (lib/
+ * check-inputs.ts).
+ */
 export const checkReads = [
   "package.json",
   "apps/*/package.json",

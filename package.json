@@ -28,6 +28,7 @@
     "faces:check": "bun scripts/house-faces.ts --check",
     "fmt": "bun scripts/fmt.ts",
     "hub": "bun run --filter '@cawco/hub' dev",
+    "postinstall": "bun scripts/record-install.ts",
     "knip": "knip",
     "lint:fix": "bun scripts/real-modules.ts ultracite fix && bun scripts/fmt.ts",
     "machine-paths:check": "bun scripts/machine-paths-check.ts",

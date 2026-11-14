@@ -104,12 +104,6 @@ export default {
   treatConfigHintsAsErrors: true,
   // The `.svelte` compiler above, in place of Knip's own.
   compilers: { svelte },
-  // `export const checkReads`, the files a check reads that no import
-  // reaches: scripts/check.ts reads it off the syntax (scripts/lib/
-  // check-inputs.ts), no module imports it. A check script is an entry
-  // and its exports are not checked here; this library is the one module
-  // that declares it without being one.
-  ignoreIssues: { "scripts/lib/workspace-imports.ts": ["exports"] },
   // includeEntryExports stays off for ".", apps/dashboard (*.stories.ts export what packages/agent/src/stage-host/host.ts loads by path) and packages/jsonl-parser (a published library); every other packages/* workspace turns it on.
   workspaces: {
     ".": {

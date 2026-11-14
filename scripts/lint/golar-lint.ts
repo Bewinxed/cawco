@@ -18,11 +18,12 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 
 // What the golar CLI reads that no import reaches: its config, the rules and
-// their fixtures, its patches, and the stylesheets the design rules resolve.
+// their fixtures, Golar itself as installed (its patches with it), and the
+// stylesheets the design rules resolve.
 export const checkReads = [
   "golar.config.ts",
   "scripts/lint/",
-  "patches/",
+  "node_modules/",
   "apps/dashboard/src/**/*.css",
 ];
 

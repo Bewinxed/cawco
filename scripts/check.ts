@@ -29,8 +29,8 @@
  *    refused over such references (TS6310), so the leaves write nothing and
  *    the libraries only `.d.ts`. Each project's `.tsbuildinfo` skips it
  *    while its inputs are unchanged. What Golar's codegen makes of a
- *    `.svelte` file is none of its inputs, so a change to Golar's packages,
- *    their patches or golar.config.ts rebuilds everything once (`--force`).
+ *    `.svelte` file is none of its inputs, so a change to golar.config.ts,
+ *    the lockfile or a patch rebuilds everything once (`--force`).
  * 4. Lint: Golar's rules (switch exhaustiveness, the design rules) and
  *    Biome, over the affected files, each skipped when the files it would
  *    read are byte for byte those of its last pass.
@@ -39,7 +39,12 @@
  * 6. Formatting: `bun fmt --check`.
  *
  * Every pass a step skips by is written by that step's own pass, under
- * node_modules/.cache/cawco/, keyed by the content it read.
+ * node_modules/.cache/cawco/, keyed by the content it read. A step that
+ * loads or runs an installed package is keyed by what the install read too
+ * (the lockfile and the patches, lib/check-inputs.ts), which says what is
+ * installed only while `node_modules` came from them: so before anything
+ * else the run stops, naming `bun install`, when the install's own record
+ * says it came from other ones (lib/installed.ts).
  *
  * A run holds one of the machine's heavy-work slots (core heavy-slots.ts)
  * from before it reads the tree until it ends, taken in line behind every
@@ -72,10 +77,12 @@ import {
 import { filesOf, inputsOf } from "./lib/check-inputs";
 import { type Check, runChecks } from "./lib/checks";
 import { diskRoomOrExit } from "./lib/disk-room";
+import { INSTALL_READS, installedOrExit } from "./lib/installed";
 import { repoFiles } from "./lib/repo-files";
 import { depth, holds, targetOf } from "./lib/workspace-imports";
 
 diskRoomOrExit("bun run check");
+installedOrExit("bun run check");
 
 const ROOT = join(import.meta.dir, "..");
 const BUN = process.execPath;
@@ -319,9 +326,10 @@ const under = (...prefixes: string[]): string[] =>
 
 /**
  * What the scripts `entries` read: their import closure, the files their
- * `checkReads` exports name, and the lockfile when they load an installed
- * package (lib/check-inputs.ts). `more` names files beside them, for a check
- * with no script of its own.
+ * `checkReads` exports name, and what the install read when they load or
+ * run an installed package (lib/check-inputs.ts). `more` names reads beside
+ * them, for a check with no script of its own (`node_modules/` for one that
+ * is an installed tool).
  */
 const inputsFor = (
   entries: readonly string[],
@@ -329,13 +337,7 @@ const inputsFor = (
 ): { declared: string[]; files: string[] } => {
   const inputs = inputsOf(entries, present);
   inputs.declared.push(...more);
-  return {
-    declared: inputs.declared,
-    files: [
-      ...filesOf(inputs, files),
-      ...(inputs.packages && present.has("bun.lock") ? ["bun.lock"] : []),
-    ],
-  };
+  return { declared: inputs.declared, files: filesOf(inputs, files) };
 };
 
 /* ---------------------------------------------------------- the plan */
@@ -357,13 +359,16 @@ const checks: Check[] = [
 ];
 const skipped: string[] = [];
 
-/* Type errors. */
-const codegen = await keyOf([
-  "bun.lock",
-  "golar.config.ts",
-  ...under("patches/").filter((p) => p.includes("golar")),
-]);
-const fresh = !(await passed("golar-tsc-codegen", codegen));
+/*
+ * Type errors. A project's `.tsbuildinfo` judges it by its own files and its
+ * references' declarations: what Golar's codegen makes of a `.svelte` file
+ * (its config, its packages as installed) is none of them, and the run does
+ * not rest a pass on whether it reads the installed packages' declarations.
+ * So a change to golar.config.ts or to what the install read rebuilds every
+ * project once.
+ */
+const unseen = await keyOf(["golar.config.ts", ...under(...INSTALL_READS)]);
+const fresh = !(await passed("golar-tsc-unseen", unseen));
 const tscProjects = (fresh ? projects : affected).map((p) => p.config);
 /**
  * The type check, when this run has one: it writes every project's
@@ -372,7 +377,7 @@ const tscProjects = (fresh ? projects : affected).map((p) => p.config);
  */
 const TSC =
   tscProjects.length > 0
-    ? `golar tsc -b (${tscProjects.length} projects${fresh ? ", every one rebuilt: Golar's codegen changed" : ""})`
+    ? `golar tsc -b (${tscProjects.length} projects${fresh ? ", every one rebuilt: the installed packages or Golar's config changed" : ""})`
     : undefined;
 if (TSC) {
   checks.push({
@@ -387,7 +392,7 @@ if (TSC) {
       ...tscProjects,
     ],
     after: SYNC,
-    stamp: { file: stampFile("golar-tsc-codegen"), key: codegen },
+    stamp: { file: stampFile("golar-tsc-unseen"), key: unseen },
   });
 }
 
@@ -488,7 +493,7 @@ interface Gated {
   entries: string[];
   /** A state beside its files that its verdict depends on, as text. */
   extra?: (declared: string[]) => Promise<string[]>;
-  /** Files beside its scripts', for a check that is a tool with no script of its own (or that reads the tree's shape). */
+  /** Reads beside its scripts', for a check that is a tool with no script of its own (`node_modules/` for an installed one) or that reads the tree's shape. */
   files?: () => string[];
   name: string;
 }
@@ -612,9 +617,9 @@ const gated: Gated[] = [
     // declarations the type check writes under `.tsbuild/` (the only two
     // checks of a run that open anything there, read under strace).
     after: TSC,
-    // What resolves: the lockfile, every tsconfig and manifest, and every
-    // file's import specifiers.
-    files: () => ["bun.lock", ...tsconfigs, ...manifests],
+    // What resolves: the installed packages, every tsconfig and manifest,
+    // and every file's import specifiers.
+    files: () => ["node_modules/", ...tsconfigs, ...manifests],
     extra: async () => [
       [...specifiers]
         .map(([file, named]) => `${file}:${named.join(",")}`)
@@ -628,13 +633,14 @@ const gated: Gated[] = [
     name: "knip",
     argv: [join(ROOT, "node_modules/.bin/knip")],
     entries: [],
-    // What it reads: the code, every manifest and tsconfig, the lockfile and its config.
+    // What it reads: the code, every manifest and tsconfig, its config, and
+    // the installed packages (itself among them).
     files: () => [
       ...files.filter((p) => CODE.test(p) || p.endsWith(".css")),
       ...tsconfigs,
       ...manifests,
-      "bun.lock",
       "knip.ts",
+      "node_modules/",
     ],
   },
   {
@@ -642,17 +648,20 @@ const gated: Gated[] = [
     name: "jscpd",
     argv: [join(ROOT, "node_modules/.bin/jscpd")],
     entries: [],
-    files: () => under("packages/", "apps/dashboard/", ".jscpd.json"),
+    files: () => [
+      ...under("packages/", "apps/dashboard/", ".jscpd.json"),
+      "node_modules/",
+    ],
   },
   // Its own oxlint: Biome leaves the package out (biome.jsonc).
   {
     ...run("packages/jsonl-parser", "lint"),
-    files: () => under("packages/jsonl-parser/"),
+    files: () => [...under("packages/jsonl-parser/"), "node_modules/"],
   },
   // And its own oxfmt, check-only (`bun run format` there writes).
   {
     ...run("packages/jsonl-parser", "format:check"),
-    files: () => under("packages/jsonl-parser/"),
+    files: () => [...under("packages/jsonl-parser/"), "node_modules/"],
   },
 ];
 for (const check of gated) {

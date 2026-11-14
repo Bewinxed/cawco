@@ -7,6 +7,12 @@
 import { join } from "node:path";
 import { ROOT } from "./repo-files";
 
+/**
+ * @public The installed Biome it runs, which no import reaches. No module
+ * imports it: scripts/check.ts reads it off the syntax (lib/check-inputs.ts).
+ */
+export const checkReads = ["node_modules/"];
+
 const BIOME = join(ROOT, "node_modules/.bin/biome");
 /** Biome's words when a plugin did not load, whichever reporter prints them. */
 const NOT_LOADED =
