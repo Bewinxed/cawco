@@ -33,7 +33,6 @@ import {
   link as addName,
   appendFile,
   copyFile,
-  readdir,
   readFile,
   rename,
   rm,
@@ -97,7 +96,6 @@ import {
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
-import { hubDbPath } from "@cawco/core/paths/hub";
 import {
   markerIsLive,
   ownIdentity,
@@ -117,12 +115,13 @@ import {
 } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { SIDECARS, updaterFiles } from "@cawco/core/update-copies";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { type HealthProblem, probeHealth } from "./binary-health";
 import { binaryLayout } from "./binary-install";
-import { service } from "./service";
+import { installedHubDbPath, service } from "./service";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
@@ -731,41 +730,7 @@ async function requireRoom(db: string, version: string): Promise<void> {
 }
 
 /**
- * A build's version as the release step writes it (semver: `0.1.12-nightly.
- * 7813+7237c78f0f23`, the test's `0.0.1-test.8`): the part of a file's name
- * the update helper writes ({@link updaterFiles}).
- */
-const VERSION = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
-
-/**
- * The files the update helper wrote beside the database `db`, of one kind,
- * each with the database file it belongs to (its own name, less a sidecar's
- * suffix): `pre`, the copies taken before an update (`<db>.pre-<version>.bak`,
- * {@link backUpDatabase}); `migrated`, the databases a rollback moved aside
- * (`<db>.migrated-<version>`, {@link putBackup}). Matched by those names
- * exactly: every other file in the folder (a person's own copies among them)
- * is never one of these.
- */
-async function updaterFiles(
-  db: string,
-  kind: "pre" | "migrated"
-): Promise<{ file: string; name: string }[]> {
-  const base = basename(db).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const own = new RegExp(
-    kind === "pre"
-      ? `^${base}\\.pre-${VERSION}\\.bak$`
-      : `^${base}\\.migrated-${VERSION}$`,
-    "u"
-  );
-  return (await readdir(dirname(db))).flatMap((name) => {
-    const suffix = SIDECARS.find((one) => name.endsWith(one));
-    const file = suffix ? name.slice(0, -suffix.length) : name;
-    return own.test(file) ? [{ file, name }] : [];
-  });
-}
-
-/**
- * Every file of `kind` ({@link updaterFiles}) but `kept`'s and its sidecars',
+ * Every file of `kind` (core update-copies.ts `updaterFiles`) but `kept`'s and its sidecars',
  * removed, each said with its size. Called only once `kept` is written whole
  * and SQLite checks it `ok`: one of each is kept, and there is never a moment
  * with none.
@@ -776,7 +741,7 @@ async function dropOlder(
   kept: string
 ): Promise<void> {
   const folder = dirname(db);
-  for (const { file, name } of await updaterFiles(db, kind)) {
+  for (const { file, name } of updaterFiles(db, kind)) {
     if (file === basename(kept)) {
       continue;
     }
@@ -851,7 +816,10 @@ async function applyBuild(version: string): Promise<void> {
   // Every update of the hub copies its database, and a rollback puts the
   // copy back: a build can leave rows its predecessor cannot read with or
   // without a migration of its own.
-  const db = installed.role === "hub" ? hubDbPath() : undefined;
+  // The database the hub's unit opens, never one resolved from this helper's
+  // own environment (the agent's, which names none): a machine whose hub
+  // runs on a CAWCO_DB_PATH copies that file.
+  const db = installed.role === "hub" ? await installedHubDbPath() : undefined;
   if (db) {
     await requireRoom(db, version);
   }
@@ -1508,15 +1476,6 @@ async function dropOlderAsides(db: string, aside: string): Promise<void> {
     );
   }
 }
-
-/**
- * Every file SQLite keeps beside a database: the WAL and its shared-memory
- * index (the hub's own mode, hub db/wal.ts), and the rollback journal a build
- * before WAL left, or a hub of one killed mid-write. Each belongs to the one
- * file beside it; left beside another, SQLite plays it into that one
- * ("database disk image is malformed").
- */
-const SIDECARS = ["-journal", "-wal", "-shm"] as const;
 
 /** Whether two paths name one file (a hard link's two names). */
 const sameFile = (a: string, b: string): boolean => {

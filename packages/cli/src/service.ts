@@ -1646,6 +1646,25 @@ const renderInstalled = (
     }
   );
 
+/**
+ * The database the hub's installed unit (or plist) opens: `hubDbPath` as the
+ * unit's own recorded environment resolves it (its `CAWCO_DB_PATH`, written
+ * into it at install and carried by every refresh, else the published default
+ * under the data dir it records). THE ONE SOURCE of the hub's database for
+ * any process that did not start in that unit (the update helper, which the
+ * agent launches): the hub opens the database its unit names, and nothing
+ * else records it. `undefined` where no hub's unit is installed.
+ */
+export const installedHubDbPath = async (): Promise<string | undefined> => {
+  const mac = platform() === "darwin";
+  const text = await Bun.file(mac ? launchAgentPath("hub") : systemdPath("hub"))
+    .text()
+    .catch(() => undefined);
+  return text === undefined
+    ? undefined
+    : asInstalled(recordedEnvironment(text, mac), hubDbPath);
+};
+
 /** The browser address of the socket-activated service among `specs` (the dashboard), by its network socket. */
 const dashboardUrlOf = (
   specs: readonly ServiceSpec[]
