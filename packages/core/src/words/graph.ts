@@ -14,6 +14,18 @@ import { andList } from "./helpers";
 export type Figure = string & { readonly figure: true };
 
 export const graphWords = {
+  /** What the pane left out of what the page said, for being past a bound: the move or states shown are missing these. */
+  leftOut: (left: { values: number; lines: number; names: number }) =>
+    `The page said more than the graph reads, so some of it is missing: ${[
+      left.values > 0 &&
+        `${left.values} CSS ${left.values === 1 ? "value" : "values"} past 400 characters`,
+      left.lines > 0 &&
+        `${left.lines} ${left.lines === 1 ? "difference" : "differences"} whose line is past 400 characters`,
+      left.names > 0 &&
+        `${left.names} ${left.names === 1 ? "name" : "names"} past 1,000 characters`,
+    ]
+      .filter((part) => part !== false)
+      .join(", ")}.`,
   /** The room's faces, its switch's segments. */
   statesFace: "States",
   wholeSet: "Map",

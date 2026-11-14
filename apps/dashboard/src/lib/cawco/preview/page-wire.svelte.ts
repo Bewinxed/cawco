@@ -20,10 +20,12 @@ import {
   stageDifferencesOf,
   stageFaultOf,
   stageLaidOf,
+  stageLeftOut,
   stageReachedOf,
   stageScrolledOf,
   stageTimeOf,
 } from "@cawco/core/stage-graph";
+import { graphWords } from "@cawco/core/words/graph";
 import { sheetWords } from "@cawco/core/words/sheet";
 import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
 import { heardInput } from "../reload.svelte";
@@ -99,6 +101,17 @@ export class PageWire {
       return artifact?.kind === "page" ? artifact.id : null;
     });
   }
+
+  /** What the stage's readers drop from `message` for being past their bounds (core `stageLeftOut`), said on the pane's line. */
+  readonly #sayLeftOut = (message: { type: string }) => {
+    const left = stageLeftOut(message.type, message);
+    if (left) {
+      this.#deps.paneNotice.say({
+        again: null,
+        message: graphWords.leftOut(left),
+      });
+    }
+  };
 
   /**
    * The page's word on the comment being written: a press (or a radial's
@@ -360,6 +373,7 @@ export class PageWire {
       }
       case STAGE_REACHED: {
         // The stage reached the state the design graph asked for.
+        this.#sayLeftOut(message);
         const said = stageReachedOf(message);
         if (said && paneSheet.link) {
           paneSheet.link.reached = said;
@@ -392,6 +406,7 @@ export class PageWire {
       }
       case STAGE_DIFFERENCES: {
         // What differs from the state the design graph compares with: its lines at the stage's head.
+        this.#sayLeftOut(message);
         const said = stageDifferencesOf(message);
         if (said && paneSheet.link) {
           paneSheet.link.heardDifferences(said);
@@ -408,6 +423,7 @@ export class PageWire {
       }
       case STAGE_DIALS_WRITTEN: {
         // The agent's dials as written, read off the drawing: the Dials face stands on them.
+        this.#sayLeftOut(message);
         const said = stageDialsWrittenOf(message);
         if (said && paneSheet.link) {
           paneSheet.link.dialsWritten = said.values;

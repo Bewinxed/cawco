@@ -718,6 +718,71 @@ export function stageRevealOf(value: unknown): StageReveal | null {
   return what?.move === true ? { what: { move: true } } : null;
 }
 
+/** What the readers above leave out of what crossed the frame, said by what {@link stageLeftOut} finds. */
+export interface LeftOut {
+  /** A difference's line past {@link LINE_MAX}: that difference is not read. */
+  lines: number;
+  /** A state's file or story name, a clip's property, or a dial's name past {@link NAME_MAX}: the state or the dial is not read. */
+  names: number;
+  /** A CSS value or a dial's string past {@link VALUE_MAX}: its clip's frame or its dial is not read. */
+  values: number;
+}
+
+const longer = (value: unknown, most: number): boolean =>
+  typeof value === "string" && value.length > most;
+const recordsOf = (of: unknown): Record<string, unknown>[] =>
+  Array.isArray(of) ? of.filter(isRecord) : [];
+
+/** What a reach's message leaves out: its state's names, and its clips' properties and CSS values. */
+function reachLeftOut(said: Record<string, unknown> | null): LeftOut {
+  const left: LeftOut = { lines: 0, names: 0, values: 0 };
+  const on = isRecord(said?.on) ? said.on : null;
+  left.names += [on?.file, on?.story].filter((n) => longer(n, NAME_MAX)).length;
+  const move = isRecord(said?.move) ? said.move : null;
+  for (const clip of recordsOf(move?.clips)) {
+    for (const one of recordsOf(clip.values)) {
+      left.names += longer(one.property, NAME_MAX) ? 1 : 0;
+      left.values += [one.from, one.to].filter((v) =>
+        longer(v, VALUE_MAX)
+      ).length;
+    }
+  }
+  return left;
+}
+
+/** What a dials message leaves out: the dials' names and string values. */
+function dialsLeftOut(said: Record<string, unknown> | null): LeftOut {
+  const left: LeftOut = { lines: 0, names: 0, values: 0 };
+  const values = isRecord(said?.values) ? said.values : {};
+  for (const [name, one] of Object.entries(values)) {
+    left.names += longer(name, NAME_MAX) ? 1 : 0;
+    left.values += longer(one, VALUE_MAX) ? 1 : 0;
+  }
+  return left;
+}
+
+/**
+ * What {@link stageReachedOf}, {@link stageDifferencesOf} and
+ * {@link stageDialsWrittenOf} drop from `value` for being past their bounds,
+ * counted, so the pane can say it: a long gradient or a data URL would else
+ * lose its frame, and a long state name its state, without a word. Null
+ * when none is dropped.
+ */
+export function stageLeftOut(type: string, value: unknown): LeftOut | null {
+  const said = isRecord(value) ? value : null;
+  let left: LeftOut = { lines: 0, names: 0, values: 0 };
+  if (type === STAGE_REACHED) {
+    left = reachLeftOut(said);
+  } else if (type === STAGE_DIALS_WRITTEN) {
+    left = dialsLeftOut(said);
+  } else if (type === STAGE_DIFFERENCES) {
+    left.lines = recordsOf(said?.found).filter((one) =>
+      longer(one.line, LINE_MAX)
+    ).length;
+  }
+  return left.values + left.lines + left.names > 0 ? left : null;
+}
+
 /** The most differences one read says: far past what the panel names (its `LINES_SHOWN`), so its count stays true. Ours. */
 const DIFFERENCES_MAX = 500;
 /** The longest line a difference is said in. Ours: core words/graph.ts quotes 40 characters of each value. */
