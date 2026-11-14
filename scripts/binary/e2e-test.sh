@@ -236,6 +236,9 @@ orchestrate() {
     feed next ok stable "$NEXT" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 30 "$schema" & pids+=($!)
     feed broken ok stable 0.0.1-test.10 1010101010101010101010101010101010101010 "$out/shared/broken-cawco" "$key" 31 "$schema" & pids+=($!)
     feed migrating ok stable 0.0.1-test.8 8888888888888888888888888888888888888888 "$out/shared/migrating-cawco" "$key" 32 "$((schema + 1))" & pids+=($!)
+    feed reshaped ok stable 0.0.1-test.9 9999999999999999999999999999999999999999 "$out/shared/reshaping-cawco" "$key" 33 "$schema" & pids+=($!)
+    feed filling ok stable 0.0.1-test.11 1111111111111111111111111111111111111111 "$out/shared/filling-cawco" "$key" 34 "$schema" & pids+=($!)
+    feed roomless ok stable 0.0.1-test.12 1212121212121212121212121212121212121212 "$out/shared/broken-cawco" "$key" 35 "$schema" & pids+=($!)
     for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
     return $rc
   }
@@ -243,6 +246,8 @@ orchestrate() {
     fixture installer "$bins/keys/test-release-public.pem" "$out/shared/installer.sh" &&
       fixture broken-binary "$out/shared/broken-cawco" &&
       fixture broken-binary "$out/shared/migrating-cawco" migrates &&
+      fixture broken-binary "$out/shared/reshaping-cawco" reshapes &&
+      fixture broken-binary "$out/shared/filling-cawco" fills &&
       bun -e "await Bun.write('$out/shared/rule.json', JSON.stringify({name: 'kept-through-rollback', enabled: false, pattern: 'kept', matchKind: 'phrase', caseSensitive: false, wholeWord: false, watch: 'text', reply: 'kept', timing: 'turn', repeat: false, scope: {}}))" &&
       machine_helpers "$out/shared" &&
       write_machine_scripts "$out/shared"
@@ -252,7 +257,7 @@ orchestrate() {
   # cca90e213: "Cannot find module '../../packages/core/src/bounded' from '/shared/e2e-during-install.ts'").
   machine_helpers() {
     local dir=$1 helper
-    for helper in start-session stop-session during-install; do
+    for helper in start-session stop-session during-install db-rows; do
       bun build "$here/e2e-$helper.ts" --target=bun --outfile "$dir/e2e-$helper.ts" || return 1
     done
   }
@@ -401,6 +406,8 @@ P=$(podman_instance "$RIG-$$" "$rigdir/storage" "$TEST_STORE")
 export P
 export prefix="cawco-proof-$RIG-$$"
 export net="$prefix-net" hubc="$prefix-hub" joinerc="$prefix-joiner" releasec="$prefix-release"
+# The hub's data dir on every machine, and its database there.
+export DATA=/home/cawco/.local/share/cawco DB=/home/cawco/.local/share/cawco/cawco.db
 subnet="10.231.$((10 + RIG_NUMBER))"
 export release_ip=$subnet.2 hub_ip=$subnet.3 joiner_ip=$subnet.4
 export feed="http://$release_ip:8000/ok"
@@ -567,7 +574,9 @@ user_exec() {
 # d0ca43009, handover: the sender started on 0.0.1-test.2 kept it after the hub's machine had moved on, and the wait
 # for its removal timed out.
 TEST_RUNNER=/home/cawco/.cawco-test/run
-test_runner() { as_user "$1" sh -c 'mkdir -p "${1%/*}" && ln -f "$(readlink -f "$HOME/.local/bin/cawco")" "$1"' sh "$TEST_RUNNER"; }
+# Where the binary root is a mount of its own (the migration rig's hub, SMALL_DATA) the link would cross it, so the
+# runner is a copy there: it runs from its own path all the same.
+test_runner() { as_user "$1" sh -c 'mkdir -p "${1%/*}" && b=$(readlink -f "$HOME/.local/bin/cawco") && { ln -f "$b" "$1" 2> /dev/null || cp -f "$b" "$1"; }' sh "$TEST_RUNNER"; }
 run_script() { local c=$1; shift; as_user "$c" env BUN_BE_BUN=1 "$TEST_RUNNER" "$@"; }
 need_hub() {
   as_user "$hubc" curl -fsS --max-time 10 http://127.0.0.1:3456/health > /dev/null 2>&1 || { echo "the hub is not answering"; return 1; }
@@ -797,8 +806,12 @@ export -f boot inotify_on
 # --security-opt unmask=ALL"). Unmasking only stops hiding those /proc and /sys paths: the container is rootless, so
 # its root is the host user and reads nothing that user cannot; it gains no capability, and it sits on the internal
 # network with no route out.
+# SMALL_DATA (a tmpfs size, the migration rig's): the hub's data dir, where its database and the update's copies of it
+# lie, is a filesystem of that size, so a check can fill it (no loop device in a rootless container), and the binary
+# root inside it a volume of the rig's own storage, which holds the builds.
 machines() {
-  local role pids=() rc=0 pid
+  local role pids=() rc=0 pid hub_opts=()
+  [[ -z ${SMALL_DATA:-} ]] || hub_opts=(--tmpfs "$DATA:rw,exec,nosuid,nodev,size=$SMALL_DATA,mode=0700" --mount "type=volume,src=$prefix-binary,dst=$DATA/binary")
   # The orchestrator started this rig for the machines RIG_MACHINES names: what it holds of the inotify room.
   (( $# == RIG_MACHINE_COUNT )) || { echo "rig $RIG boots $# machine(s), and RIG_MACHINES names $RIG_MACHINE_COUNT: correct RIG_MACHINES"; return 1; }
   $P network create --internal --subnet "$subnet.0/24" "$net" > /dev/null || return 1
@@ -807,12 +820,14 @@ machines() {
     python3 -m http.server 8000 --directory /srv/release --bind "$release_ip" > /dev/null || return 1
   for role in "$@"; do
     case $role in
-      hub) boot "$hubc" "$hub_ip" hub & ;;
+      hub) boot "$hubc" "$hub_ip" hub "${hub_opts[@]}" & ;;
       joiner) boot "$joinerc" "$joiner_ip" joiner --security-opt unmask=ALL & ;;
     esac
     pids+=($!)
   done
   for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
+  # Both mounts are root's as podman makes them; the user CawCo runs as owns them, as it owns the dirs they stand for.
+  [[ -z ${SMALL_DATA:-} ]] || $P exec "$hubc" chown cawco:cawco "$DATA" "$DATA/binary" || rc=1
   return $rc
 }
 export subnet
@@ -1047,10 +1062,34 @@ rig_hubself() {
   setup_done
   check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
   check "a child held by the session keeper survives the update on that keeper, untouched, while the new build's keeper becomes the machine's" held_survives
+  check "the update copied the hub's database before it swapped" 'copy_made "$BASE"'
   check "the update moves the hub's machine from 3000 to 3455 from the build it installs, no service install run: the dashboard's socket on 0.0.0.0:3455, its loopback socket on [::1]:3455 alone (none without ::1), 3455 the dashboard and nothing on 3000, the hub's unit loses its 3000 alone, the agent's unit untouched, the install's record names localhost:3455" units_carried
 }
 
 # ---------------------------------------------------------------- rollbacks, each on a hub of its own
+# Rows of a database on the hub's machine (e2e-db-rows.ts), read or written through the test's runner.
+db_rows() { run_script "$hubc" /shared/e2e-db-rows.ts "$@"; }
+# The files in the hub's data dir whose names match the extended regex $1, one a line.
+data_files() { as_user "$hubc" ls -1 "$DATA" | grep -E "$1" || true; }
+# The update's copy of the hub's database was made: its file is there, and apply.log says it made it.
+copy_made() {
+  as_user "$hubc" test -s "$DB.pre-$1.bak" || { echo "ASSERTION FAILED: no $DB.pre-$1.bak: $(data_files '^cawco\.db\.' | paste -sd ' ')"; return 1; }
+  as_user "$hubc" grep -qF "database copy $DB.pre-$1.bak" "$DATA/binary/apply.log" \
+    || { echo "ASSERTION FAILED: apply.log says no copy $DB.pre-$1.bak"; return 1; }
+}
+# Exactly one copy taken before an update is in the hub's data dir, $1's.
+one_copy() {
+  local copies
+  copies=$(data_files '^cawco\.db\.pre-.*\.bak$' | grep -vx 'cawco.db.pre-handmade.bak' | paste -sd ' ')
+  [[ $copies == "cawco.db.pre-$1.bak" ]] || { echo "ASSERTION FAILED: the copies before an update are \"$copies\", not cawco.db.pre-$1.bak alone"; return 1; }
+}
+# The files the update helper never wrote (planted by the migration rig's setup) are where they were.
+others_kept() {
+  local name
+  for name in cawco.db.bak-mine cawco.db.pre-handmade.bak; do
+    [[ "$(as_user "$hubc" cat "$DATA/$name")" == "$name" ]] || { echo "ASSERTION FAILED: $DATA/$name, which no update wrote, is gone or changed"; return 1; }
+  done
+}
 rolled_back() {
   need_hub
   use_feed broken
@@ -1060,34 +1099,180 @@ rolled_back() {
   [[ "$(build_version $hid)" == $BASE ]]
   [[ -n "$(field $hid error)" ]]
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
+  # Every update of the hub copies its database, and every rollback puts it back: the database the trial left is
+  # moved aside, and the rollback's words name it.
+  copy_made "$BASE"
+  as_user "$hubc" test -e "$DB.migrated-0.0.1-test.10" || { echo "ASSERTION FAILED: the rollback moved no database aside"; return 1; }
+  [[ "$(field $hid error)" == *"what it stored during the trial is in $DB.migrated-0.0.1-test.10"* ]] \
+    || { echo "ASSERTION FAILED: the rollback's words do not name $DB.migrated-0.0.1-test.10: $(field $hid error)"; return 1; }
+}
+# The hub of the build installed, on its own: starts with $1 as its database, on a port no unit uses. Prints what it
+# said; its exit status is the hub's.
+hub_on() { as_user "$hubc" env CAWCO_DB_PATH="$1" CAWCO_HUB_PORT=43999 CAWCO_NO_MDNS=1 timeout 60 "$DATA/binary/versions/$NEXT/cawco" hub 2>&1; }
+# The migration rig's setup: files in the hub's data dir that no update writes (one named like the update's copies
+# but for a version no build has), which every check after keeps.
+plant_others() {
+  as_user "$hubc" sh -c 'for name in cawco.db.bak-mine cawco.db.pre-handmade.bak; do printf %s "$name" > "$1/$name"; done' sh "$DATA"
+}
+# The hub's own machine updates to NEXT, which confirms: the database was copied first.
+confirmed_update_copies() {
+  need_hub
+  use_feed next
+  learn
+  install_now_request "$hid"
+  wait_until 300 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]] && ! has_file "$hubc" trial.json'
+  copy_made "$BASE"
+  others_kept
+  # Every later check's build is taken up by auto-update.
+  put_policy stable true
 }
 migration_rolled_back() {
   need_hub
-  # Data the hub holds before the update. Without -f, so a refusal shows the hub's own words instead of a bare 400.
+  # Data the hub holds before the update: a rule through its API (without -f, so a refusal shows the hub's own words
+  # instead of a bare 400), and a row written to its database.
   saved=$(as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' http://127.0.0.1:3456/api/rules -X POST -H 'content-type: application/json' -d @/shared/rule.json)
   echo "saving the rule: $saved"
   [[ "$saved" == *"HTTP 200" ]]
   hub_api /api/rules | grep -q kept-through-rollback
+  db_rows write "$DB" e2e-before-row
+  # The migrating build adds an applied migration and writes e2e-trial-row as its hub, then fails.
   use_feed migrating
   learn
-  put_policy stable true
   wait_until 360 '[[ "$(field $hid failedVersion)" == 0.0.1-test.8 && "$(phase $hid)" == failed-rolled-back ]]'
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
-  [[ "$(build_version $hid)" == $BASE ]]
+  [[ "$(build_version $hid)" == $NEXT ]]
+  # The restore, by content: the row from before is in the live database and the trial's is not.
   hub_api /api/rules | grep -q kept-through-rollback
-  # The migrated file is moved aside, not deleted, and the copy it was restored from is still there.
-  as_user "$hubc" sh -c 'ls ~/.local/share/cawco/cawco.db.migrated-0.0.1-test.8 ~/.local/share/cawco/cawco.db.pre-'"$BASE"'.bak'
+  [[ "$(db_rows has "$DB" e2e-before-row)" == yes ]] || { echo "ASSERTION FAILED: the row written before the update is not in the live database"; return 1; }
+  [[ "$(db_rows has "$DB" e2e-trial-row)" == no ]] || { echo "ASSERTION FAILED: the trial's row is in the live database: it was not put back"; return 1; }
+  # The trial's row is in the file the rollback's words name.
+  local said aside
+  said=$(field $hid error)
+  echo "the rollback said: $said"
+  aside=$(grep -oE "/home/cawco/[^ ;]*\.migrated-0\.0\.1-test\.8" <<< "$said" | head -n 1)
+  [[ $aside == "$DB.migrated-0.0.1-test.8" ]] || { echo "ASSERTION FAILED: the rollback's words name no moved-aside database: $said"; return 1; }
+  [[ "$(db_rows has "$aside" e2e-trial-row)" == yes ]] || { echo "ASSERTION FAILED: the trial's row is not in $aside"; return 1; }
+  # A hub started in the rollback's window, before the copy was back, stopped on the migrated file and wrote why;
+  # the start on the copy removed that.
+  echo "starts that stopped on the migrated database: $(as_user "$hubc" journalctl --user --no-pager -u cawco-hub.service | grep -c 'was migrated by a newer build of CawCo' || true)"
+  ! as_user "$hubc" test -e "$DB.stopped" || { echo "ASSERTION FAILED: $DB.stopped is there though the hub opened its database"; return 1; }
+  # Two updates (to NEXT, then this one), one copy: NEXT's. The files no update wrote stay.
+  one_copy "$NEXT"
+  others_kept
+  # The build rolled back to does not open the moved-aside database, which holds a migration it lacks: its hub stops,
+  # says why, and leaves why beside the database for `cawco status`.
+  as_user "$hubc" sh -c 'rm -rf /tmp/newer && mkdir /tmp/newer && cp "$1" /tmp/newer/cawco.db && for s in -wal -shm; do if [ -e "$1$s" ]; then cp "$1$s" "/tmp/newer/cawco.db$s"; fi; done' sh "$aside"
+  local out
+  if out=$(hub_on /tmp/newer/cawco.db); then
+    echo "ASSERTION FAILED: the hub started on a database a newer build migrated: $out"
+    return 1
+  fi
+  echo "the hub said: $out"
+  [[ $out == *"/tmp/newer/cawco.db was migrated by a newer build of CawCo: it holds 1 migration this build lacks"* && $out == *"Install a build that has that migration."* ]] \
+    || { echo "ASSERTION FAILED: the hub stopped without its words"; return 1; }
+  [[ "$(as_user "$hubc" cat /tmp/newer/cawco.db.stopped)" == *"was migrated by a newer build of CawCo"* ]] \
+    || { echo "ASSERTION FAILED: no /tmp/newer/cawco.db.stopped saying why"; return 1; }
+  if out=$(as_user "$hubc" env CAWCO_DB_PATH=/tmp/newer/cawco.db "$DATA/binary/versions/$NEXT/cawco" status --hub http://127.0.0.1:43999 2>&1); then
+    echo "ASSERTION FAILED: cawco status answered for a hub that is down: $out"
+    return 1
+  fi
+  [[ $out == *"the hub is down: /tmp/newer/cawco.db was migrated by a newer build of CawCo"* ]] \
+    || { echo "ASSERTION FAILED: cawco status does not say the hub is down and why: $out"; return 1; }
 }
-export -f rolled_back migration_rolled_back
+# `cawco service install` and a first install, pointed at a database a newer build migrated (the one the migration
+# check left in /tmp/newer), stop before they change anything: the units and the install's record are as they were,
+# and the hub runs on.
+installs_stop_on_newer() {
+  need_hub
+  local units=/home/cawco/.config/systemd/user out
+  as_user "$hubc" sh -c 'mkdir -p /tmp/before && cp "$1"/cawco-*.service "$2/installation.json" /tmp/before/' sh "$units" "$DATA/binary"
+  if out=$(as_user "$hubc" env CAWCO_DB_PATH=/tmp/newer/cawco.db "$DATA/binary/versions/$NEXT/cawco" service install 2>&1); then
+    echo "ASSERTION FAILED: service install went on over a newer database: $out"
+    return 1
+  fi
+  [[ $out == *"was migrated by a newer build of CawCo"* ]] || { echo "ASSERTION FAILED: service install stopped without the words: $out"; return 1; }
+  if out=$(as_user "$hubc" env CAWCO_DB_PATH=/tmp/newer/cawco.db "$DATA/binary/versions/$NEXT/cawco" binary-install hub 2>&1); then
+    echo "ASSERTION FAILED: a first install went on over a newer database: $out"
+    return 1
+  fi
+  [[ $out == *"was migrated by a newer build of CawCo"* ]] || { echo "ASSERTION FAILED: the install stopped without the words: $out"; return 1; }
+  as_user "$hubc" sh -c 'for f in /tmp/before/cawco-*.service; do cmp "$f" "$1/${f##*/}" || exit 1; done; cmp /tmp/before/installation.json "$2/installation.json"' sh "$units" "$DATA/binary" \
+    || { echo "ASSERTION FAILED: a unit or the install's record changed"; return 1; }
+  need_hub
+  [[ "$(build_version $hid)" == $NEXT ]]
+}
+# A build with no migration of its own leaves a row the build before it does not read (agents.build), and fails:
+# rolled back, and the hub reads its own rows, from the copy.
+reshaped_rolled_back() {
+  need_hub
+  use_feed reshaped
+  learn
+  wait_until 360 '[[ "$(field $hid failedVersion)" == 0.0.1-test.9 && "$(phase $hid)" == failed-rolled-back ]]'
+  as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
+  # GET /api/agents reads every agents.build: the trial's value would be refused here.
+  [[ "$(build_version $hid)" == $NEXT ]]
+  [[ "$(db_rows has "$DB" e2e-trial-row)" == no ]]
+  [[ "$(db_rows has "$DB.migrated-0.0.1-test.9" e2e-trial-row)" == yes ]]
+  # One moved-aside database: this rollback's took the place of the one before.
+  local asides
+  asides=$(data_files '^cawco\.db\.migrated-' | paste -sd ' ')
+  [[ $asides == *"cawco.db.migrated-0.0.1-test.9"* && $asides != *"test.8"* ]] \
+    || { echo "ASSERTION FAILED: the moved-aside files are \"$asides\", not 0.0.1-test.9's alone"; return 1; }
+  one_copy "$NEXT"
+  others_kept
+}
+# A rollback with no room to put the copy beside the database (the filling build fills the data dir as its hub):
+# the live database stays at its path and opens, and the rollback says why. Room again, and it is put back.
+no_room_to_put_back() {
+  need_hub
+  use_feed filling
+  learn
+  wait_until 360 '[[ "$(field $hid error)" == *"database was not put back"* ]]'
+  echo "the update said: $(field $hid error)"
+  [[ "$(field $hid error)" == *"$DB is unchanged"* ]]
+  as_user "$hubc" test -s "$DB" || { echo "ASSERTION FAILED: nothing is at $DB"; return 1; }
+  [[ "$(db_rows check "$DB")" == ok ]] || { echo "ASSERTION FAILED: the live database does not open sound"; return 1; }
+  ! as_user "$hubc" test -e "$DB.restoring" || { echo "ASSERTION FAILED: the copy that did not fit is left beside the database"; return 1; }
+  one_copy "$NEXT"
+  others_kept
+  as_user "$hubc" rm -f "$DATA/e2e-filler"
+  wait_until 360 '! has_file "$hubc" trial.json && [[ "$(phase $hid)" == failed* ]]'
+  echo "the update said, once it had room: $(field $hid error)"
+  wait_until 120 need_hub
+  [[ "$(build_version $hid)" == $NEXT ]]
+}
+# An update with less room than its copies need is not started: nothing is copied or swapped, and the copy before
+# stays.
+no_room_to_copy() {
+  need_hub
+  as_user "$hubc" sh -c 'db=$(stat -c %s "$1"); free=$(df -B1 --output=avail "$2" | tail -n 1 | tr -dc 0-9); fallocate -l $((free - db)) "$2/e2e-filler"' sh "$DB" "$DATA"
+  use_feed roomless
+  learn
+  wait_until 300 '[[ "$(field $hid error)" == *"0.0.1-test.12 was not installed: copying the hub'"'"'s database needs"* ]]'
+  echo "the update said: $(field $hid error)"
+  [[ "$(build_version $hid)" == $NEXT && "$(current_link "$hubc")" == "versions/$NEXT" ]]
+  ! has_file "$hubc" trial.json
+  one_copy "$NEXT"
+  others_kept
+  as_user "$hubc" rm -f "$DATA/e2e-filler"
+}
+export -f db_rows data_files copy_made one_copy others_kept rolled_back hub_on plant_others confirmed_update_copies migration_rolled_back installs_stop_on_newer reshaped_rolled_back no_room_to_put_back no_room_to_copy
 rig_rollback() {
   fleet base "$BASE" hub
   setup_done
-  check "a build that cannot start is rolled back and the failure is recorded" rolled_back
+  check "a build that cannot start is rolled back and the failure is recorded; the update copied the hub's database and the rollback put it back" rolled_back
 }
 rig_migration() {
+  export SMALL_DATA=256m
   fleet base "$BASE" hub
+  setup "files no update writes, in the hub's data dir" plant_others
   setup_done
-  check "a build with a new migration that fails to start is rolled back and the hub opens its restored database" migration_rolled_back
+  check "an update of the hub that confirms copies its database first" confirmed_update_copies
+  check "a build with a new migration that fails to start is rolled back: the row from before is in the live database, the trial's is in the file the rollback names, one copy is kept, and the build rolled back to does not open the moved-aside database" migration_rolled_back 900 "an update of the hub that confirms copies its database first"
+  check "service install and a first install stop on a database a newer build migrated, changing nothing" installs_stop_on_newer 300 "a build with a new migration that fails to start is rolled back: the row from before is in the live database, the trial's is in the file the rollback names, one copy is kept, and the build rolled back to does not open the moved-aside database"
+  check "a build with no new migration that leaves a row its predecessor cannot read is rolled back, and the hub reads its rows from the copy" reshaped_rolled_back 600 "an update of the hub that confirms copies its database first"
+  check "a rollback with no room for the copy beside the database leaves the live database at its path, sound, and says why" no_room_to_put_back 900 "an update of the hub that confirms copies its database first"
+  check "an update with too little room for its copies is not started, and the copy before stays" no_room_to_copy 600 "an update of the hub that confirms copies its database first"
 }
 
 # ---------------------------------------------------------------- handover: a joined machine with sessions on its
