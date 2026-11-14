@@ -1455,3 +1455,11 @@ export interface SheetOnPage extends SheetRead {
 
 /** A states file's sheet as its section's module carries it: its stories and meta, no props (those are read at {@link SHEET_PATH}). */
 export type SectionSheet = Omit<SheetOnPage, "components">;
+
+/** The most characters a story's name has. */
+export const STORY_NAME_LENGTH = 100;
+/** A story's export name in a CSF file: `Roomy`. */
+export const STORY_NAME = new RegExp(
+  `^[A-Z][A-Za-z0-9_]{0,${STORY_NAME_LENGTH - 1}}$`,
+  "u"
+);

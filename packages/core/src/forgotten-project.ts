@@ -6,6 +6,9 @@
 
 import type { PlaceProject } from "./place-nesting";
 
+/** The most characters a project's name has: create, restore and edit all bound it so. */
+export const PROJECT_NAME_LENGTH = 200;
+
 /** What bringing a forgotten project back brings, counted. */
 export interface ForgottenBrings {
   /** The account its sessions start on, by id; null: the fleet's routing, or none kept. */

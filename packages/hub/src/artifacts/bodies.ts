@@ -20,12 +20,13 @@ import {
   DESIGN_MAP_LIMITS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
+  STORY_NAME,
 } from "@cawco/core/stage";
 import { t } from "elysia";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 import { CREATE_SHAPE } from "./component";
-import { ARGS_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
+import { ARGS_LIMIT, WORKSPACE_ID } from "./tools";
 
 /** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
 const skeletons = t.Array(

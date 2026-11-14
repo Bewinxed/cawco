@@ -75,7 +75,7 @@
       .replace(NOT_NAME, "-")
       .replace(EDGE_HYPHENS, "");
     return (words ? `${service}-${words}` : service)
-      .slice(0, 24)
+      .slice(0, CONNECTION_NAME_LENGTH)
       .replace(TRAILING_HYPHENS, "");
   };
 </script>
@@ -97,6 +97,7 @@
    * with Undo in its toast (JOURNEY.md Flow 5).
    */
   import type { ConnectionView } from "@cawco/core/connections";
+  import { CONNECTION_NAME_LENGTH } from "@cawco/core/delegate-types";
   import { detach } from "@cawco/core/detach";
   import { configureWords } from "@cawco/core/words/configure";
   import { connectionsWords as words } from "@cawco/core/words/connections";

@@ -2,6 +2,7 @@
  * Projects: making, editing, stopping, deleting them, and their places.
  */
 
+import { PROJECT_NAME_LENGTH } from "@cawco/core/forgotten-project";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -80,7 +81,9 @@ export const projectRoutes = ({
       "/api/projects",
       {
         body: t.Object({
-          name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+          name: t.Optional(
+            t.String({ minLength: 1, maxLength: PROJECT_NAME_LENGTH })
+          ),
           machineId: t.Optional(t.String({ minLength: 1 })),
           cwd: t.Optional(t.String({ minLength: 1 })),
           // Made with Caw: its Caw starts on. A folder that joins a project
@@ -190,7 +193,7 @@ export const projectRoutes = ({
       {
         body: t.Object(
           {
-            name: t.Optional(t.String({ maxLength: 2000 })),
+            name: t.Optional(t.String({ maxLength: PROJECT_NAME_LENGTH })),
             review: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
             // The account its sessions start on, by id, nickname or email;
@@ -336,7 +339,9 @@ export const projectRoutes = ({
       {
         body: t.Optional(
           t.Object({
-            name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+            name: t.Optional(
+              t.String({ minLength: 1, maxLength: PROJECT_NAME_LENGTH })
+            ),
             forgottenAt: t.Optional(t.Number()),
           })
         ),

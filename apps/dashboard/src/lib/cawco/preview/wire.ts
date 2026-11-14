@@ -17,13 +17,14 @@ import {
   type ShellShortcut,
   shellShortcutNamed,
 } from "@cawco/core/shell-shortcuts";
-import type {
-  ComponentDoc,
-  Form,
-  PropKind,
-  PropMeta,
-  SheetOnPage,
-  Story,
+import {
+  type ComponentDoc,
+  type Form,
+  type PropKind,
+  type PropMeta,
+  type SheetOnPage,
+  STORY_NAME,
+  type Story,
 } from "@cawco/core/stage";
 import {
   STAGE_DIALS_WRITTEN,
@@ -285,7 +286,6 @@ export function previewCompose(
  * the overlay's window, so each field is checked and bounded; every write
  * is checked again by the stage against the props it reads itself.
  */
-const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
 const KINDS: readonly PropKind[] = [
   "string",
   "number",

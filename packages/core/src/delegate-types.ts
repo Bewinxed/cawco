@@ -177,7 +177,11 @@ export const mayStartProblem = (
  * characters, so its tools' names keep room under a harness's tool-name
  * limit (connections.ts `sessionToolName`).
  */
-export const CONNECTION_NAME = /^(?=.{1,24}$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+export const CONNECTION_NAME_LENGTH = 24;
+export const CONNECTION_NAME = new RegExp(
+  `^(?=.{1,${CONNECTION_NAME_LENGTH}}$)[a-z0-9]+(?:-[a-z0-9]+)*$`,
+  "u"
+);
 
 /** The tool name a session calls a connection's `tool` by. */
 export const connectionToolName = (connection: string, tool: string): string =>

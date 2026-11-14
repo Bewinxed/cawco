@@ -24,6 +24,7 @@ import {
   type FormName,
   formNamed,
   formNameOf,
+  STORY_NAME,
   type Story,
   type StoryOp,
 } from "@cawco/core/stage";
@@ -1365,7 +1366,6 @@ function styleOf(text: string): Style {
 }
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/u;
-const STORY_NAME = /^[A-Z][A-Za-z0-9_]*$/u;
 
 /** A string in the file's quote. */
 const quoted = (value: string, quote: Style["quote"]): string => {

@@ -23,7 +23,10 @@
    * delete question.
    */
   import { detach } from "@cawco/core/detach";
-  import type { ForgottenProject } from "@cawco/core/forgotten-project";
+  import {
+    type ForgottenProject,
+    PROJECT_NAME_LENGTH,
+  } from "@cawco/core/forgotten-project";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -324,7 +327,7 @@
                   aria-label={projectEndWords.nameLabel(one.id)}
                   class="max-w-c-page-column-w"
                   disabled={busy}
-                  maxlength={200}
+                  maxlength={PROJECT_NAME_LENGTH}
                   oninput={(event) => {
                     typed[one.id] = event.currentTarget.value;
                   }}

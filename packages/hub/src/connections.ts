@@ -69,6 +69,7 @@ import {
 } from "@cawco/core/connections";
 import {
   CONNECTION_NAME,
+  CONNECTION_NAME_LENGTH,
   connectionToolName,
   parseConnectionTool,
 } from "@cawco/core/delegate-types";
@@ -2403,7 +2404,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     projects?: string[];
   }): Promise<ConnectionView> => {
     const name = `github-${input.login.toLowerCase().replace(NOT_NAME, "-")}`
-      .slice(0, 24)
+      .slice(0, CONNECTION_NAME_LENGTH)
       .replace(TRAILING_HYPHENS, "");
     if (db.byName(name)) {
       return misfit(`There is a connection ${name} already.`);

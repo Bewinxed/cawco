@@ -23,6 +23,7 @@ import {
   INTERACTIONS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
+  STORY_NAME,
   storyRefOf,
 } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -53,8 +54,6 @@ export const ARTIFACT_TOOLS = [
   "question_close",
 ] as const;
 
-/** A story's export name in a CSF file: `Roomy`. */
-export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
 /** Whether `name` is a story a state read takes: `Story`, or `file:Story` naming the states file that exports it. */
 export const isStateStory = (name: string): boolean => {
   const { file, story } = storyRefOf(name);
