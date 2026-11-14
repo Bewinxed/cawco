@@ -487,13 +487,13 @@ const BROWSER_KEY = /^(?:project|machine):[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 export const browserSlug = (key: BrowserKey): string => key.replace(":", "-");
 
 /**
- * Daemon → hub: a FIDO caBLE BLE advertisement captured on this machine.
- * The hub forwards it to every other machine with a live browser whose
- * take-over is active or whose passkey relay is enabled. The service data
- * is the raw 20-byte payload from the BLE advertisement under UUID
- * 0000fff9-0000-1000-8000-00805f9b34fb, base64-encoded.
+ * A FIDO caBLE BLE advertisement captured on a machine the hub asked to scan
+ * (`passkey.scanStart`), sent hub-ward as a {@link PasskeyAdvertFrame}. The
+ * hub forwards it to every other machine with a live browser whose take-over
+ * is active. The service data is the raw 20-byte payload from the BLE
+ * advertisement under UUID 0000fff9-0000-1000-8000-00805f9b34fb,
+ * base64-encoded.
  */
-export const BROWSER_PASSKEY_ADVERT = "browser.passkeyAdvert";
 export interface BrowserPasskeyAdvertArgs {
   /** ms epoch when the advert was captured. */
   capturedAt: number;
@@ -522,23 +522,6 @@ export interface BrowserInjectAdvertArgs {
   sourceMachineId: string;
 }
 
-/** Whether passkey relay is enabled on a machine: capture, inject, or both. */
-export type PasskeyRelayRole = "capture" | "inject" | "both" | "none";
-
-/**
- * Daemon-originated: this machine's passkey relay capability changed.
- * Sent with the browser frame when the machine's BLE adapter is present
- * (capture) or when its browsers can accept injected adverts (inject).
- */
-export interface PasskeyRelayFrame {
-  instanceId?: undefined;
-  kind: "passkey_relay";
-  machineId: string;
-  role: PasskeyRelayRole;
-  /** Whether BLE scanning is active right now. */
-  scanning: boolean;
-}
-
 /** Daemon-originated: a FIDO BLE advertisement this machine captured, for the hub to relay. */
 export interface PasskeyAdvertFrame extends BrowserPasskeyAdvertArgs {
   instanceId?: undefined;
@@ -547,3 +530,32 @@ export interface PasskeyAdvertFrame extends BrowserPasskeyAdvertArgs {
 
 /** How old a relayed advert may be before the inject end drops it. */
 export const PASSKEY_ADVERT_MAX_AGE_MS = 5000;
+
+// ---------------------------------------------------------------------------
+// Passkey relay: the hub tells machines to scan for BLE passkey adverts, and
+// tells dashboards how it is going.
+// ---------------------------------------------------------------------------
+
+/** Hub → daemon: start BLE scanning for the passkey advert of `key`'s take-over. */
+export const PASSKEY_SCAN_START = "passkey.scanStart";
+
+/** Hub → daemon: stop BLE scanning for `key`. */
+export const PASSKEY_SCAN_STOP = "passkey.scanStop";
+export interface PasskeyScanArgs {
+  key: BrowserKey;
+}
+
+/** The current phase of a passkey relay attempt. */
+export type PasskeyRelayStatus =
+  "scanning" | "captured" | "injected" | "authenticated" | "timeout" | "no_ble";
+
+/** Hub → dashboards: passkey relay status update. */
+export interface PasskeyStatusFrame {
+  /** The browser key that needs the passkey. */
+  key: BrowserKey;
+  kind: "passkey_status";
+  /** Which machines are scanning (machine names). */
+  scanningMachines?: string[];
+  /** Current state of the relay attempt. */
+  status: PasskeyRelayStatus;
+}

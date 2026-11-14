@@ -715,73 +715,46 @@ export const createBrowsers = (deps: BrowsersDeps) => {
 
     /**
      * A FIDO caBLE BLE advertisement captured on `sourceMachineId`: relayed
-     * to every other machine with a live browser whose take-over is active.
-     * Validates the service data and age, then sends
-     * `browser.injectAdvert` to each target machine's daemon in parallel.
+     * to every other machine's browser whose take-over is active, as
+     * `browser.injectAdvert`. Validates the service data and its age first.
+     * `heard` is told of each take-over's browser as it is found (the scan
+     * that caught the advert can stop) and again once the advert reached it.
      */
-    relayPasskeyAdvert(
+    async relayPasskeyAdvert(
       sourceMachineId: string,
-      args: BrowserPasskeyAdvertArgs
-    ): void {
-      // Validate: base64-decoded service data must be exactly 20 bytes.
-      let decoded: Buffer;
-      try {
-        decoded = Buffer.from(args.serviceData, "base64");
-      } catch {
+      args: BrowserPasskeyAdvertArgs,
+      heard: { captured: (key: BrowserKey) => void; injected: (key: BrowserKey) => void }
+    ): Promise<void> {
+      const from = deps.machineName(sourceMachineId);
+      // The base64 of the service data must decode to exactly 20 bytes.
+      const size = Buffer.from(args.serviceData, "base64").length;
+      if (size !== 20) {
         console.warn(
-          `[browser] passkey advert from ${deps.machineName(sourceMachineId)}: service data is not valid base64`
+          `[browser] passkey advert from ${from}: service data is ${size} bytes, expected 20`
         );
         return;
       }
-      if (decoded.length !== 20) {
-        console.warn(
-          `[browser] passkey advert from ${deps.machineName(sourceMachineId)}: service data is ${decoded.length} bytes, expected 20`
-        );
-        return;
-      }
-
-      // Drop adverts that are too old.
       const age = Date.now() - args.capturedAt;
       if (age > PASSKEY_ADVERT_MAX_AGE_MS) {
         console.warn(
-          `[browser] passkey advert from ${deps.machineName(sourceMachineId)}: ${age} ms old, dropped (max ${PASSKEY_ADVERT_MAX_AGE_MS} ms)`
+          `[browser] passkey advert from ${from}: ${age} ms old, dropped (max ${PASSKEY_ADVERT_MAX_AGE_MS} ms)`
         );
         return;
       }
-
-      // TODO: check a fleet-level `passkeyRelay` setting once it exists.
-
-      // Find every other machine with a live browser whose take-over is active.
-      const targets = new Set<string>();
-      for (const row of db.browsers.list()) {
-        if (row.machineId !== sourceMachineId && row.takeover) {
-          targets.add(row.machineId);
-        }
-      }
-
-      if (targets.size === 0) {
+      const targets = db.browsers
+        .list()
+        .filter((row) => row.machineId !== sourceMachineId && row.takeover);
+      if (targets.length === 0) {
         return;
       }
-
       console.info(
-        `[browser] relaying passkey advert from ${deps.machineName(sourceMachineId)} to ${targets.size} machine(s)`
+        `[browser] relaying passkey advert from ${from} to ${targets.length} browser(s)`
       );
-
-      for (const machineId of targets) {
-        // Find the keys with active take-overs on this machine.
-        const keys = db.browsers
-          .list()
-          .filter(
-            (row) =>
-              row.machineId === machineId &&
-              row.machineId !== sourceMachineId &&
-              row.takeover
-          )
-          .map((row) => row.key);
-
-        for (const key of keys) {
-          deps
-            .call(
+      await Promise.all(
+        targets.map(async ({ machineId, key }) => {
+          heard.captured(key);
+          try {
+            await deps.call(
               machineId,
               BROWSER_INJECT_ADVERT,
               [
@@ -791,17 +764,23 @@ export const createBrowsers = (deps: BrowsersDeps) => {
                   rssi: args.rssi,
                   capturedAt: args.capturedAt,
                   sourceMachineId,
-                },
+                } satisfies BrowserInjectAdvertArgs,
               ],
               PASSKEY_ADVERT_MAX_AGE_MS
-            )
-            .catch((error) => {
-              console.warn(
-                `[browser] passkey inject to ${deps.machineName(machineId)} (${key}) failed: ${error instanceof Error ? error.message : String(error)}`
-              );
-            });
-        }
-      }
+            );
+            heard.injected(key);
+          } catch (error) {
+            console.warn(
+              `[browser] passkey inject to ${deps.machineName(machineId)} (${key}) failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        })
+      );
+    },
+
+    /** What `machineId` reported it can do for passkey relay; absent when neither is available. */
+    relayCapability(machineId: string): PasskeyRelayCapability | undefined {
+      return passkeyRelayOf.get(machineId);
     },
   };
   return browsers;
