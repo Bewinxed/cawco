@@ -8,9 +8,8 @@ import type { WorkBudget } from "./db/stored-types";
 
 // --- file ownership ------------------------------------------------------------
 
-/** Globs one work item may own, and how long one may run. */
-const OWNS_LIMIT = 50;
-const GLOB_LIMIT = 200;
+/** The longest path a glob is matched against (PATH_MAX). */
+const GLOB_LIMIT = 4096;
 const LEADING_DOT_SLASH = /^(\.\/)+/u;
 const TRAILING_SLASH = /\/+$/u;
 
@@ -20,9 +19,6 @@ export const globOf = (raw: string): string =>
 
 /** Why owned globs cannot stand, or nothing when they can. */
 export const ownsProblem = (owns: string[]): string | undefined => {
-  if (owns.length > OWNS_LIMIT) {
-    return `owns names ${owns.length} globs; it stops at ${OWNS_LIMIT}.`;
-  }
   for (const raw of owns) {
     const glob = globOf(raw);
     if (!glob || glob.length > GLOB_LIMIT) {
