@@ -6,7 +6,9 @@
   toast, until the hub's deadline for it passes on the clock
   (`reconnectingNow`); or it is
   offline; either way the rest comes in once the hub says it is back
-  (`readBehind`). Or the read failed: the line says so in the error formula,
+  (`readBehind`). Or its machine refuses the harness CLI the conversation is
+  read through: the hub's sentence and Try again, the fix over the composer,
+  and a pane's rest in once it lands. Or the read failed: the line says so in the error formula,
   the hub's own sentence for why, beside Try again, which reads it now, as
   the backoff does by itself (`readAgainLater`). Never a toast (DESIGN.md,
   The Work Outlives Its Surface Rule): the failure stands here, over the rows
@@ -76,6 +78,16 @@
         >{machine}</span
       > is offline. The rest comes in once it's back.
     </p>
+  {:else if fault.reason === "refused"}
+    <!-- The machine refuses the harness CLI the conversation is read
+         through: its fix stands over the composer (HarnessStart), and a
+         pane reads the rest once it lands (SessionPane). -->
+    <p class="min-w-0 text-pretty wrap-anywhere">
+      Not caught up: {fault.message}.
+    </p>
+    <Button onclick={onretry} pad="none" size="xs" variant="link"
+      >{commonWords.tryAgain}</Button
+    >
   {:else}
     <p class="min-w-0 text-pretty wrap-anywhere">
       Not caught up: {fault.message}. It's read again by itself.

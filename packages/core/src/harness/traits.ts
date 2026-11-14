@@ -90,6 +90,14 @@ interface HarnessTraitsBase {
   readonly queuesSends: boolean;
   /** Whether its machine can read a stored conversation's context back. */
   readonly readsStoredContext: boolean;
+  /**
+   * Whether its machine reads a stored conversation through the harness's
+   * own CLI (OpenCode: its server, which only a version CawCo runs is
+   * started as): a machine that refuses the CLI (core harness-refusal.ts)
+   * cannot read one until it runs it. Without: the conversation is read
+   * from the files the harness stored, CLI or none.
+   */
+  readonly readsThroughCli: boolean;
   /** Whether a machine with this harness missing fails the fleet's check: the one every machine runs, and that accounts sign in on. */
   readonly requiredOnEveryMachine: boolean;
   /**
@@ -151,6 +159,7 @@ const CLAUDE_TRAITS = {
   listsAllConversations: true,
   catalogProvesGone: true,
   readsStoredContext: true,
+  readsThroughCli: false,
   rewindAnchor: "assistant-before",
   queuesSends: true,
   promptCacheMaxMs: HOUR_MS,
@@ -176,6 +185,7 @@ const OPENCODE_TRAITS = {
   listsAllConversations: false,
   catalogProvesGone: false,
   readsStoredContext: false,
+  readsThroughCli: true,
   rewindAnchor: "user-turn",
   queuesSends: false,
   promptCacheMaxMs: null,
@@ -206,6 +216,7 @@ const PI_TRAITS = {
   promptCacheMaxMs: null,
   boundaryBeforeCompactionFailure: false,
   liveSkillReload: false,
+  readsThroughCli: false,
 } as const satisfies HarnessTraits;
 
 /** Each harness's traits: the one table. */
@@ -240,6 +251,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   listsAllConversations: true, // as a compare with a name it isn't
   catalogProvesGone: false, // nothing claimed
   readsStoredContext: false, // nothing claimed
+  readsThroughCli: false, // nothing claimed
   rewindAnchor: "assistant-before", // as a compare with a name it isn't
   queuesSends: false, // nothing claimed
   promptCacheMaxMs: null, // nothing claimed

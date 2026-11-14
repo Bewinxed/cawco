@@ -186,6 +186,9 @@ export const createRelayControl = (ctx: RelayControlContext) => {
   /**
    * A dashboard's `send` command, taken: the one send path, and a log line.
    * Its record — pending, or failed with why — is the answer every tab hears.
+   * One the hub refuses outright, keeping no record (a conversation gone),
+   * throws its reason: the command is answered `failed` with it (stream.ts),
+   * else the tab that sent it waits on a record that never comes.
    */
   const relaySend = (message: Envelope<SendPayload>): void => {
     // Provenance (NEW.md, cross-session delivery incident): which tab it
@@ -216,6 +219,9 @@ export const createRelayControl = (ctx: RelayControlContext) => {
           : ""
       }`
     );
+    if (record instanceof ElysiaStatus) {
+      throw new Error(record.response.detail);
+    }
   };
 
   /**

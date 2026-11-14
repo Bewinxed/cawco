@@ -73,9 +73,13 @@ export type OlderRead =
     }
   | HistoryFault;
 
-/** Why a stored transcript could not be read. */
+/**
+ * Why a stored transcript could not be read. `refused`: its machine refuses
+ * the harness CLI it reads the conversation through (history.ts
+ * `refusedRead`), until it runs one CawCo runs.
+ */
 export interface HistoryFault {
-  fault: "missing" | "offline" | "timeout" | "failed";
+  fault: "missing" | "offline" | "timeout" | "failed" | "refused";
   machineId?: string;
   message: string;
 }
@@ -343,9 +347,13 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   /**
    * Reads the stored transcript and merges it in, then whatever arrived
-   * while it was read ({@link replayHeld}). A first read that fails leaves no
-   * transcript: the next frame or page reads again; a later one leaves what
-   * is built as it was, and folds in what arrived meanwhile.
+   * while it was read ({@link replayHeld}). A read that fails leaves what is
+   * built as it was and folds in what arrived meanwhile, a first read's too:
+   * a send's record the hub made while it read (a send its machine refused,
+   * {@link ingest}) reaches every screen that follows the session, whatever
+   * became of its history. A transcript no read has reached yet is never
+   * served as a page ({@link page} reads it again first), so what it holds
+   * is never shown as the conversation.
    */
   const load = (
     instanceId: string,
@@ -361,11 +369,10 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         }
         entry.loading = null;
         if ("fault" in read) {
-          if (entry.where === null) {
-            entries.delete(instanceId);
-          } else {
-            emit(instanceId, replayHeld(instanceId, entry));
-          }
+          emit(
+            instanceId,
+            ports.laws.hold(() => replayHeld(instanceId, entry)) ?? []
+          );
           return read;
         }
         entry.where = read.where;
@@ -564,8 +571,12 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {
     const entry = entryFor(instanceId);
-    if (entry.loading !== null) {
-      const read = await entry.loading;
+    // A transcript whose history no read has reached (its first read
+    // failed) is read again: what arrived without it is no page.
+    const loading =
+      entry.loading ?? (entry.where === null ? load(instanceId, entry) : null);
+    if (loading !== null) {
+      const read = await loading;
       // A read again that failed leaves what is built as it was: that is
       // the page.
       if ("fault" in read && entry.where === null) {

@@ -22,7 +22,7 @@ import {
   refusalClause,
 } from "#lib/platform/hub-read.js";
 import { connectionState, hubRun } from "../hub/socket.svelte";
-import { adoptPage, beginRead } from "../stream";
+import { adoptPage, beginRead, followUnread } from "../stream";
 import {
   boardState,
   instanceIndex,
@@ -189,21 +189,31 @@ export type ServerTail =
       viewId: string;
     };
 
+/** The hub's code for a read its machine's harness CLI refuses (hub routes/instance-edits.ts). */
+const HARNESS_REFUSED = "harness-refused";
+
 /**
  * Why a transcript read failed, said the way the pane says it: one sentence
  * of why ({@link hubFailure}), never the hub's body as it came. `away` is
  * the machine a 503 named: that is the hub saying the machine is not
  * connected, a state of the fleet, not a fault in the read, and a different
  * sentence. `reconnectingUntil`: the machine on its way back, until when.
+ * The hub's `harness-refused` is the machine refusing the harness CLI the
+ * conversation is read through: a state of the machine too, read again once
+ * it runs one CawCo runs, never a read that failed.
  */
 export function readFaultOf(
   failure: HubFailure,
   away: string | null,
   reconnectingUntil: number | null = null
 ): ReadFault {
-  return away
-    ? awayFault(away, reconnectingUntil)
-    : { reason: "failed", message: refusalClause(failure) };
+  if (away) {
+    return awayFault(away, reconnectingUntil);
+  }
+  return {
+    reason: failure.code === HARNESS_REFUSED ? "refused" : "failed",
+    message: refusalClause(failure),
+  };
 }
 
 /** A read's machine away, as its fault says it ({@link readFaultOf}). */
@@ -278,6 +288,8 @@ export type ReadCause =
   | "follow"
   /** The machine the last read found offline is online again. */
   | "machineOnline"
+  /** The machine whose harness CLI refused the last read runs it now. */
+  | "harnessRuns"
   /**
    * The hub's reconnecting deadline for the last read's machine passed: its
    * data read afresh. The view already says offline, on the clock.
@@ -526,7 +538,9 @@ async function readBackToMeet(
  * it as well; the view says offline once the hub's deadline for it passes,
  * on the clock ({@link reconnectingNow}), and the data is read again then
  * ({@link readAtDeadline}). One the hub answered with nothing by its id
- * (`again` false, a 404) is not read again by itself.
+ * (`again` false, a 404) is not read again by itself, and neither is one
+ * its machine's harness CLI refuses: the view reads it again once the
+ * machine runs one CawCo runs (SessionPane).
  */
 function readFailed(
   target: SessionState,
@@ -541,6 +555,15 @@ function readFailed(
   if (!again) {
     return;
   }
+  // A session there is, its stream followed whatever became of its read: a
+  // send's record the hub made meanwhile is said on its row (stream.ts
+  // `followUnread`).
+  followUnread(
+    streamState,
+    streamHost,
+    target.instanceId,
+    connectionState.status === "connected"
+  );
   const listedOnline =
     fault.reason === "offline" &&
     boardState.machines.some(

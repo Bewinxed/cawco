@@ -112,6 +112,15 @@ export const instanceEditRoutes = (
                 code: "machine-silent",
                 detail: page.message,
               });
+            // Its machine refuses the CLI the conversation is read
+            // through: the read depends on a CLI the machine does not run
+            // yet (424 Failed Dependency, RFC 4918 §11.4), never the hub
+            // failing (500), and no machine away (503 with its header).
+            case "refused":
+              return problem(424, {
+                code: "harness-refused",
+                detail: page.message,
+              });
             case "failed":
               break;
           }
@@ -145,6 +154,11 @@ export const instanceEditRoutes = (
             case "timeout":
               return problem(504, {
                 code: "machine-silent",
+                detail: read.message,
+              });
+            case "refused":
+              return problem(424, {
+                code: "harness-refused",
                 detail: read.message,
               });
             case "failed":

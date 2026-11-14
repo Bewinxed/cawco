@@ -15157,6 +15157,16 @@
               }
             }
           },
+          "424": {
+            "description": "getApiInstancesByIdAttachments 424",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdAttachments424"
+                }
+              }
+            }
+          },
           "500": {
             "description": "getApiInstancesByIdAttachments 500",
             "content": {
@@ -16299,6 +16309,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiInstancesByIdTranscript422"
+                }
+              }
+            }
+          },
+          "424": {
+            "description": "getApiInstancesByIdTranscript 424",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdTranscript424"
                 }
               }
             }
@@ -87264,6 +87284,42 @@
           "type"
         ]
       },
+      "getApiInstancesByIdAttachments424": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "harness-refused"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              424
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiInstancesByIdAttachments500": {
         "type": "object",
         "properties": {
@@ -88781,6 +88837,42 @@
               "type"
             ]
           }
+        ]
+      },
+      "getApiInstancesByIdTranscript424": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "harness-refused"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              424
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "getApiInstancesByIdTranscript500": {

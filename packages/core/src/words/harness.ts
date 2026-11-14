@@ -71,6 +71,14 @@ export const harnessRefusedWords = {
   ) =>
     `${name}${version ? ` ${version}` : ""} on ${machine} isn't one CawCo runs. ${fix}`,
   /**
+   * A stored conversation its machine reads only through the harness's CLI
+   * (core traits `readsThroughCli`: OpenCode's server), asked while the
+   * machine refuses that CLI; the refusal's own sentence follows it (hub
+   * history.ts `refusedRead`).
+   */
+  unread: (name: string, machine: string) =>
+    `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a ${name} it runs, so it shows here once CawCo runs ${name} there.`,
+  /**
    * The machine's Claude Code still answering `claude --version` after the
    * wait (`seconds`): no start until it answers, and the agent reads Claude
    * again as it does (agent claude-version.ts `onVersionAnswered`), which

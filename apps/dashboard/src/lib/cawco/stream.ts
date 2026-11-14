@@ -389,6 +389,32 @@ export function adoptPage(
 }
 
 /**
+ * A session's newest page could not be read: the stream is followed anyway,
+ * from the next event on, while the tab shows it. What the hub says of the
+ * session meanwhile (a send's record: a message it refused at once) reaches
+ * this tab whatever became of the history read; the read that lands later
+ * resumes the stream from its page's `seq` ({@link adoptPage}), and events
+ * that arrive while it is out wait for it ({@link SessionCursor.reading}).
+ * A session the tab no longer shows keeps no cursor.
+ */
+export function followUnread(
+  state: StreamState,
+  host: StreamHost,
+  sessionId: string,
+  connected: boolean
+): void {
+  if (!host.follows(sessionId)) {
+    letGo(state, host, sessionId);
+    return;
+  }
+  const cursor = cursorFor(state, sessionId);
+  cursor.reading = false;
+  if (connected && !cursor.subscribed) {
+    subscribeSession(state, host, sessionId);
+  }
+}
+
+/**
  * A session this socket does not follow yet, resumed from the place its
  * cursor holds when that place counts in the socket's hub run (`socketRun`,
  * the board's): the `seq` of a page that landed before the socket's board,

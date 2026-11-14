@@ -392,8 +392,10 @@ export class TranscriptBuilder {
    * row once served stays where it stands under its id, however the
    * transcript is read again.
    *
-   * - The first read is the transcript: nothing was served before it, and it
-   *   says nothing (no client can hold a row of a transcript not built).
+   * - The first read is the transcript, and it says nothing: no page was
+   *   served before it (hub transcripts.ts `page` reads first). What a
+   *   follower heard before it (a send's record while the history could
+   *   not be read) is in its records, and that follower reads its page.
    * - A later read changes the rows its blocks name in place (a tool call
    *   that took its result), and puts each row it holds that is not held yet
    *   after the row before it in the read, a run of them in read order. A

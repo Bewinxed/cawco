@@ -1050,7 +1050,7 @@
           block={start.harnessStart.block}
           machineId={start.harnessStart.machine.machineId}
           online={start.harnessStart.machine.status === "online"}
-          relaunch={recallOf}
+          relaunch={start.harnessStart.relaunch}
         />
       </div>
     {:else if start.relaunchRefused}

@@ -127,7 +127,11 @@
     rememberSpawn,
     spawnPrefs,
   } from "../spawnPrefs.svelte";
-  import { accountsStore, placementFor } from "../stores/accounts.svelte";
+  import {
+    accountsStore,
+    PlacementRefused,
+    placementFor,
+  } from "../stores/accounts.svelte";
   import { boardStore } from "../stores/board.svelte";
   import { machineFs } from "../stores/machines";
   import { projectAtFolder, projectsStore } from "../stores/projects.svelte";
@@ -472,6 +476,8 @@
    * waits on it.
    */
   let placementRefusal = $state<string | null>(null);
+  /** The Configure page that puts the refusal right; null when none does. */
+  let placementFix = $state<"accounts" | "cli-tools" | null>(null);
   $effect(() => {
     const view = accountsStore.accounts;
     const query = {
@@ -484,6 +490,7 @@
     if (!(machineId && view)) {
       placement = null;
       placementRefusal = null;
+      placementFix = null;
       return;
     }
     let stale = false;
@@ -503,12 +510,14 @@
                 )?.provider ?? providerOf(query.harness, preview.model),
             };
             placementRefusal = null;
+            placementFix = null;
           }
         })
         .catch((cause: unknown) => {
           if (!stale) {
             placement = null;
             placementRefusal = failureWords(cause);
+            placementFix = cause instanceof PlacementRefused ? cause.fix : null;
           }
         });
     }, PLACEMENT_SETTLE_MS);
@@ -2645,8 +2654,9 @@
     </div>
   </NsPopoverGroup>
 </div>
-<!-- No Claude account can take it on this machine: why, beside Start,
-       and where to sign one in. -->
+<!-- Placement refuses the start here: why, beside Start, and the page
+       that puts it right (an account to sign in, the harness's CLI to
+       install or update), when one does. -->
 {#if placementRefusal}
   <div
     class="flex-none pt-space-2"
@@ -2658,12 +2668,14 @@
     <Alert role="status" variant="warning">
       <IconKey />
       <AlertTitle>{placementRefusal}</AlertTitle>
-      <AlertDescription>
-        <a
-          class="rounded-xs text-link-ink no-underline hover:text-link-hover"
-          href="/config/accounts">Open {configurePage("accounts")}</a
-        >
-      </AlertDescription>
+      {#if placementFix}
+        <AlertDescription>
+          <a
+            class="rounded-xs text-link-ink no-underline hover:text-link-hover"
+            href="/config/{placementFix}">Open {configurePage(placementFix)}</a
+          >
+        </AlertDescription>
+      {/if}
     </Alert>
   </div>
 {/if}

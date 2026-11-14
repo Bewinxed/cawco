@@ -6,7 +6,9 @@ import {
   MOVED_HERE,
   PROJECT_NOTE,
 } from "@cawco/core/harness";
+import { harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { harnessSpec } from "@cawco/core/harness-refusal";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
@@ -16,6 +18,7 @@ import type {
   TranscriptWindow,
   WindowAsk,
 } from "@cawco/core/transcript-types";
+import { harnessRefusedWords } from "@cawco/core/words/harness";
 import type { ClosureContext } from "./closure-context";
 import type { HubLineMessage } from "./compaction";
 import { contextLine } from "./compaction";
@@ -154,9 +157,11 @@ export type HistoryContext = Pick<
   | "heldSessions"
   | "locateSession"
   | "machineFault"
+  | "machineName"
   | "machinePresence"
   | "nameFromFirstTurn"
   | "readAgent"
+  | "refusedHarness"
   | "registry"
   | "sendLines"
   | "unlocatedWords"
@@ -232,6 +237,31 @@ export const createHistory = (ctx: HistoryContext) => {
   };
 
   /**
+   * Why `where`'s machine cannot read its stored conversation now: its
+   * harness reads one only through its own CLI (core traits
+   * `readsThroughCli`: OpenCode's server), and the machine refuses that CLI
+   * (core harness-refusal.ts), so asked, it could only refuse the read too.
+   * Said as the conversation kept and where it shows again, then the
+   * refusal in the machine's own sentence, which carries its fix. A
+   * harness read from the files it stored (Claude Code, pi) reads them
+   * whatever its CLI is: never refused here.
+   */
+  const refusedRead = (where: TranscriptWhere): HistoryFault | undefined => {
+    const harness = harnessNamed(where.harness);
+    if (!(harness && traitsOf(harness).readsThroughCli)) {
+      return;
+    }
+    const why = ctx.refusedHarness(where.machineId, harness);
+    return why
+      ? {
+          fault: "refused",
+          machineId: where.machineId,
+          message: `${harnessRefusedWords.unread(harnessSpec(harness).name, ctx.machineName(where.machineId))} ${why}`,
+        }
+      : undefined;
+  };
+
+  /**
    * A window of the stored conversation under `where`, as its machine
    * answers, or why it could not: the conversation as it was said, every
    * turn across its compactions. A compaction changes what the model reads
@@ -245,6 +275,10 @@ export const createHistory = (ctx: HistoryContext) => {
     window: WindowAsk
   ): Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
+    const refused = refusedRead(where);
+    if (refused) {
+      return refused;
+    }
     const answer = await ctx.readAgent(
       machineId,
       CONTROL_READ_TRANSCRIPT_WINDOW,

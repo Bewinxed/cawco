@@ -131,15 +131,18 @@ export class LiveRegion {
   });
 
   /**
-   * Why a read again over these rows failed; null while the transcript is
-   * caught up. Only over rows drawn: with none, the pane says why in their
-   * place.
+   * Why a read again over these rows failed, or why the read before them
+   * did (rows that came after it: the person's own send, its record); null
+   * while the transcript is caught up. Only over rows drawn: with none, the
+   * pane says why in their place.
    */
-  readonly behind = $derived.by(() =>
-    this.#host.rowDraw.renderedRows.length > 0
-      ? (sessionsStore.session(this.#host.session.instanceId)?.behind ?? null)
-      : null
-  );
+  readonly behind = $derived.by(() => {
+    if (this.#host.rowDraw.renderedRows.length === 0) {
+      return null;
+    }
+    const held = sessionsStore.session(this.#host.session.instanceId);
+    return held?.behind ?? held?.readFault ?? null;
+  });
 
   constructor(host: LiveRegionHost) {
     this.#host = host;

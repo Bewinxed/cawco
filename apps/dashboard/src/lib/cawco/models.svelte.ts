@@ -7,12 +7,15 @@
  * why ({@link models}`.unread`).
  */
 
+import { HARNESS_TOOL } from "@cawco/core/harness";
 import {
   type HarnessKind,
+  harnessNamed,
   isEffortLevel,
   type ModelInfo,
 } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
+import { harnessRefusal } from "@cawco/core/harness-refusal";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
   LONG_CONTEXT,
@@ -149,9 +152,12 @@ function catalog(): HarnessModel[] {
 /**
  * Why `harness` offers nothing to pick on `machineIds` (every machine when
  * none are named), or null when it offers something or nothing says why: each
- * machine that could not read its catalog, in its own words; for Claude, the
- * hub's last probe of each account signed in there whose models it could not
- * read, or that it has not read them yet (it tries again until it can).
+ * machine that could not read its catalog, in its own words, or, where it
+ * refuses the harness's CLI (core harness-refusal.ts), that refusal, which
+ * names its fix: a catalog that CLI could not list says no more than it;
+ * for Claude, the hub's last probe of each account signed in there whose
+ * models it could not read, or that it has not read them yet (it tries
+ * again until it can).
  */
 function unread(harness: string, machineIds?: string[]): string | null {
   if (modelsForHarness(catalog(), harness, machineIds).length > 0) {
@@ -164,9 +170,22 @@ function unread(harness: string, machineIds?: string[]): string | null {
     traitsOf(harness).modelCatalog === "account"
       ? claudeUnread(machines.map((machine) => machine.machineId))
       : machines.flatMap((machine) => {
-          const why = machine.harnesses?.find(
-            (report) => report.harness === harness
-          )?.modelsUnread;
+          const report = machine.harnesses?.find(
+            (one) => one.harness === harness
+          );
+          const kind = harnessNamed(harness);
+          const refused =
+            report && kind
+              ? harnessRefusal(
+                  report,
+                  machineLabel(machine.hostname),
+                  machine.tools?.[HARNESS_TOOL[kind]]
+                )
+              : undefined;
+          if (refused) {
+            return [refused.why];
+          }
+          const why = report?.modelsUnread;
           return why ? [`${machineLabel(machine.hostname)}: ${why}`] : [];
         });
   if (said === null) {

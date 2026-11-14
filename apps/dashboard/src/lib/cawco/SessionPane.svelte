@@ -55,6 +55,8 @@
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
   import { findIn } from "./find/conversation-find.svelte";
+  import HarnessBlock from "./HarnessBlock.svelte";
+  import { harnessBlockOf } from "./harness-block.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
   import { connectionStore } from "./hub/socket.svelte";
@@ -807,8 +809,15 @@
     return crossOutWith(node, () => ({ height: `${node.offsetHeight}px` }));
   }
 
-  /** What a read failure is called: its machine away (on its way back, or offline), or the read failed. */
+  /**
+   * What a read failure is called: its machine away (on its way back, or
+   * offline), its machine refusing the harness CLI the conversation is read
+   * through, or the read failed.
+   */
   const faultTitle = $derived.by(() => {
+    if (fault?.reason === "refused") {
+      return "This conversation can't be shown yet";
+    }
     if (fault?.reason !== "offline") {
       return "This transcript couldn't be read";
     }
@@ -819,6 +828,9 @@
 
   /** What a read failure says: what went wrong, then what to do about it. */
   const faultLine = $derived.by(() => {
+    if (fault?.reason === "refused") {
+      return `${fault.message}.`;
+    }
     if (fault?.reason !== "offline") {
       return `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`;
     }
@@ -871,6 +883,49 @@
         reread("machineOnline");
       }
       wasOnline = online;
+    });
+  });
+
+  /**
+   * The fix for a read its machine's harness CLI refuses: that machine's
+   * block for the session's harness (harness-block.svelte.ts), with its
+   * press, as the start it blocks shows it; null when the read is not so
+   * refused, or the machine runs the harness now.
+   */
+  const unreadFix = $derived.by(() => {
+    const held = sessionsStore.session(viewId);
+    const refused =
+      held?.readFault?.reason === "refused" ||
+      held?.behind?.reason === "refused";
+    const row = refused ? boardStore.rowOf(viewId) : undefined;
+    const machine = row
+      ? boardStore.machines.find((one) => one.machineId === row.machineId)
+      : undefined;
+    const block =
+      machine && row?.harness ? harnessBlockOf(machine, row.harness) : null;
+    return machine && block ? { machine, block } : null;
+  });
+  /**
+   * Whether the read stood refused with its fix in hand when last looked
+   * at: the fix landing (the block gone, its machine running the harness
+   * now) is when the conversation can be read, and it is read then.
+   */
+  let unreadFixed: boolean | null = null;
+  $effect(() => {
+    const held = sessionsStore.session(viewId);
+    const refused =
+      held?.readFault?.reason === "refused" ||
+      held?.behind?.reason === "refused";
+    const blocked = unreadFix !== null;
+    untrack(() => {
+      if (!refused) {
+        unreadFixed = null;
+        return;
+      }
+      if (!blocked && unreadFixed === false) {
+        reread("harnessRuns");
+      }
+      unreadFixed = !blocked;
     });
   });
 
@@ -1554,7 +1609,18 @@
     title={faultTitle}
   >
     {#snippet action()}
-      <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button>
+      <!-- A read its machine's harness CLI refuses: its fix, as a start
+           it blocks shows it, and the read comes once that lands. -->
+      {#if fault.reason === "refused" && unreadFix}
+        <HarnessBlock
+          block={unreadFix.block}
+          machineId={unreadFix.machine.machineId}
+          online={unreadFix.machine.status === "online"}
+        />
+      {:else}
+        <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button
+        >
+      {/if}
     {/snippet}
   </EmptyState>
 {/snippet}

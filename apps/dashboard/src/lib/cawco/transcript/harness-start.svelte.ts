@@ -1,7 +1,9 @@
 /**
  * A session whose start failed, said over the composer: its machine's
  * harness CLI refused it (harness-block.svelte.ts), or a start again after
- * the harness was brought up was refused.
+ * the harness was brought up was refused. And a session whose conversation
+ * its machine can't read for that same refusal (the hub's
+ * `harness-refused`), once rows stand where the pane would say so.
  */
 import type { ComposerFleet } from "./composer-fleet";
 
@@ -24,6 +26,26 @@ export class HarnessStart {
     return row?.status === "error" && row.harness !== null ? row : undefined;
   });
   /**
+   * This session's row, while its machine refuses the harness CLI its
+   * conversation is read through and rows stand in the transcript area
+   * (the person's own send, its record): the pane's empty state, which
+   * carries this block, stands no more, and the fix stays in reach here.
+   */
+  readonly unreadRow = $derived.by(() => {
+    const fleet = this.#parts.fleet();
+    const recallOf = this.#parts.recallOf();
+    const held =
+      fleet && recallOf ? fleet.sessionsStore.session(recallOf) : undefined;
+    const refused =
+      held?.behind?.reason === "refused" ||
+      (held?.readFault?.reason === "refused" && held.messages.length > 0);
+    const row =
+      fleet && recallOf && refused
+        ? fleet.boardStore.instanceIndex.byId.get(recallOf)
+        : undefined;
+    return row?.harness ? row : undefined;
+  });
+  /**
    * This session's start was refused for its machine's harness CLI
    * (harness-block.svelte.ts): the refusal stands over the field with its
    * fix (Update pi, Install OpenCode 2.3.0; Claude Code's own update, which
@@ -32,7 +54,8 @@ export class HarnessStart {
    */
   readonly harnessStart = $derived.by(() => {
     const fleet = this.#parts.fleet();
-    const row = this.failedRow;
+    const failed = this.failedRow;
+    const row = failed ?? this.unreadRow;
     if (!(fleet && row?.harness)) {
       return null;
     }
@@ -40,7 +63,15 @@ export class HarnessStart {
       (one) => one.machineId === row.machineId
     );
     const block = machine ? fleet.harnessBlockOf(machine, row.harness) : null;
-    return machine && block ? { machine, block } : null;
+    // Only a refused start goes again once the fix lands: a conversation
+    // that could not be read is read again (SessionPane), never started.
+    return machine && block
+      ? {
+          machine,
+          block,
+          relaunch: failed ? this.#parts.recallOf() : undefined,
+        }
+      : null;
   });
   /** A start again after its harness was brought up that was refused: said here, with Retry. */
   readonly relaunchRefused = $derived.by(() => {

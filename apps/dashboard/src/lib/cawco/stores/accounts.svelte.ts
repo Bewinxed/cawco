@@ -27,7 +27,12 @@ import type {
 import type { AccountHue } from "@cawco/core/accounts/kinds";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { hub } from "#lib/platform/hub.js";
-import { hubAsk, hubData, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  hubAsk,
+  hubData,
+  hubFailure,
+  hubRefusal,
+} from "#lib/platform/hub-read.js";
 import { load } from "../hub/load";
 import { equal } from "./same";
 
@@ -295,12 +300,42 @@ export const sendAccountKey = (
     hubData(hub.api.accounts({ id }).key.post({ key, machineIds }))
   );
 
+/** The Configure page a refused start is put right on, by the hub's code for why. */
+type PlacementFix = "accounts" | "cli-tools";
+
+/**
+ * A start placement refuses, in the hub's words, and the Configure page its
+ * fix is on: no account can take it (`not-placed`), sign one in on
+ * Accounts; the machine refuses the harness's CLI (`harness-refused`),
+ * install or update it on Command-line tools. Null for a refusal no page
+ * puts right (a harness CawCo does not run, a machine that could not say
+ * which model pi starts on).
+ */
+export class PlacementRefused extends Error {
+  readonly fix: PlacementFix | null;
+  constructor(words: string, fix: PlacementFix | null) {
+    super(words);
+    this.name = "PlacementRefused";
+    this.fix = fix;
+  }
+}
+
+/** Where the fix is for the hub's placement refusal `code` ({@link PlacementRefused}). */
+const placementFix = (code: string | undefined): PlacementFix | null => {
+  if (code === "not-placed") {
+    return "accounts";
+  }
+  return code === "harness-refused" ? "cli-tools" : null;
+};
+
 /**
  * Which account a session would start on, why, and the model it was read for
  * as the session would start on it in `cwd` (`/api/accounts/placement`).
- * Undefined when it cannot be read; a refusal is thrown in the hub's words:
- * no account can take it (400), or the machine could not say which model pi
- * starts on in that folder (503), either of which refuses the start too.
+ * Undefined when it cannot be read; a refusal is thrown in the hub's words
+ * with where its fix is ({@link PlacementRefused}): no account can take it
+ * or the machine refuses the harness's CLI (400), or the machine could not
+ * say which model pi starts on in that folder (503), any of which refuses
+ * the start too.
  */
 export async function placementFor(query: {
   cwd?: string;
@@ -313,7 +348,10 @@ export async function placementFor(query: {
   if (!answer.ok) {
     const { status } = answer.refused.error;
     if (status === 400 || status === 503) {
-      throw hubRefusal(answer.refused);
+      throw new PlacementRefused(
+        hubRefusal(answer.refused).message,
+        placementFix(hubFailure(answer.refused).code)
+      );
     }
     return undefined;
   }
