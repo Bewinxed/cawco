@@ -285,7 +285,7 @@ export class GrownAsk {
       bottom: 0,
       height: (this.askBox?.base ?? 0) + (this.askBox?.ext ?? 0),
     }));
-    shape.morphTo(1, ext, dur("--duration-grow"));
+    shape.morphTo(1, ext, dur("--duration-panel"));
     // Partway up, once there is room for it.
     setTimeout(
       () => {
@@ -338,7 +338,7 @@ export class GrownAsk {
         shape.ext += shape.base - base;
         shape.base = base;
       }
-      await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
+      await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
     }
     if (turn !== this.#askTurn) {
       return;
