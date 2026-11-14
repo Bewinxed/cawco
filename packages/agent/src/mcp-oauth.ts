@@ -337,6 +337,9 @@ function notStarted(body: ArrayBuffer | undefined): Response {
   );
 }
 
+/** The most a restart fence may stand without being raised again; a longer ask is refused, not shortened. */
+const RESTART_FENCE_MAX_MS = 5 * 60_000;
+
 /**
  * `cawco service restart agent` asks here, on this machine, what a restart
  * would cut, and raises its own fence for the moment between its last look
@@ -351,8 +354,16 @@ async function restartRoute(
   }
   if (request.method === "POST") {
     const ms = fieldOf(await request.json().catch(() => undefined), "ms");
+    if (typeof ms === "number" && ms > RESTART_FENCE_MAX_MS) {
+      return Response.json(
+        {
+          error: `A restart fence stands at most ${RESTART_FENCE_MAX_MS / 60_000} minutes; ask for no more.`,
+        },
+        { status: 400 }
+      );
+    }
     if (typeof ms === "number" && ms > 0) {
-      raiseFence("service-restart", Math.min(ms, 5 * 60_000));
+      raiseFence("service-restart", ms);
     } else {
       lowerFence("service-restart");
     }

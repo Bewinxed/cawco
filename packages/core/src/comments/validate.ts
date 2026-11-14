@@ -19,6 +19,9 @@ import {
 /** A revision's key in the `seen` map: its number. */
 const REVISION_KEY = /^\d{1,9}$/u;
 
+/** Characters one anchor of a look holds. */
+const SEEN_ANCHOR_MAX = 500;
+
 /** Why a person's `seen` map may not be kept; null when it may. */
 export function seenProblem(seen: Map<string, unknown>): string | null {
   if (seen.size > 2) {
@@ -28,12 +31,15 @@ export function seenProblem(seen: Map<string, unknown>): string | null {
     if (!(
       REVISION_KEY.test(revision) &&
       Array.isArray(anchors) &&
-      anchors.length <= CHANGES_LIMIT &&
-      anchors.every(
-        (anchor) => typeof anchor === "string" && anchor.length <= 500
-      )
+      anchors.every((anchor) => typeof anchor === "string")
     )) {
       return "A look is a revision's list of the anchors seen.";
+    }
+    if (anchors.length > CHANGES_LIMIT) {
+      return `A look names at most ${CHANGES_LIMIT} anchors.`;
+    }
+    if (anchors.some((anchor) => anchor.length > SEEN_ANCHOR_MAX)) {
+      return `An anchor holds at most ${SEEN_ANCHOR_MAX} characters.`;
     }
   }
   return null;

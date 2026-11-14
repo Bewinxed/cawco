@@ -707,7 +707,7 @@ export const artifactPictures =
       return problemResponse({
         status: 413,
         code: "post-carries-most-pictures",
-        detail: `A post carries at most ${COMMENT_LIMITS.pictures} pictures.`,
+        detail: `A pictures post is at most ${PICTURES_BODY_MAX} characters.`,
       });
     }
     let body: unknown;

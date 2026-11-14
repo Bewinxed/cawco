@@ -54,7 +54,7 @@ import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { hidden } from "./hidden";
-import { fenceHub, hubRestartReadiness } from "./restart-holds";
+import { FENCE_CAP_MS, fenceHub, hubRestartReadiness } from "./restart-holds";
 
 /** How long a discovered release is served before the host is asked again. */
 const RELEASE_TTL_MS = 15 * 60_000;
@@ -393,7 +393,10 @@ export function createBinaryUpdates(options: Options) {
     )
     .post(
       "/api/binary-updates/hub-fence",
-      { ...hidden, body: t.Object({ ms: t.Number({ minimum: 0 }) }) },
+      {
+        ...hidden,
+        body: t.Object({ ms: t.Number({ minimum: 0, maximum: FENCE_CAP_MS }) }),
+      },
       ({ body }) => fenceHub(body.ms)
     )
     // What every machine considers: the channel's newest, and the database's

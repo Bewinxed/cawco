@@ -126,18 +126,16 @@ export const instanceTitleRoutes = ({
             t.Object({
               id: t.String(),
               machine: t.Optional(t.Nullable(t.String())),
-            })
+            }),
+            { maxItems: TAB_NAMES_PER_ASK }
           ),
         }),
       },
       async ({ body }) => {
         const asked = new Map<string, string | null>();
         for (const ask of body.ids) {
-          // Bounded: a reader's tabs, never a sweep. A strip of more is
-          // asked in requests of this many (core `TAB_NAMES_PER_ASK`).
-          if (asked.size >= TAB_NAMES_PER_ASK) {
-            break;
-          }
+          // Bounded by the schema: a reader's tabs, never a sweep. A strip
+          // of more is asked in requests of this many (core `TAB_NAMES_PER_ASK`).
           if (ask.id) {
             asked.set(ask.id, ask.machine ?? null);
           }

@@ -19,8 +19,8 @@ const calls = new Map<symbol, string>();
 /** Until when new calls a restart would cut are refused; past it, none are. */
 let fenceUntil = 0;
 
-/** The most a fence may stand without being raised again. */
-const FENCE_CAP_MS = 15 * 60_000;
+/** The most a fence may stand without being raised again; a longer ask is refused, not shortened. */
+export const FENCE_CAP_MS = 15 * 60_000;
 
 /**
  * Admits one call to `tool` for `actor`: the release to call when it has
@@ -56,6 +56,6 @@ export function hubRestartReadiness(): RestartReadiness & { fenced: boolean } {
 
 /** Raises the fence for `ms` from now (0 lowers it), then says what still holds. */
 export function fenceHub(ms: number): RestartReadiness & { fenced: boolean } {
-  fenceUntil = ms > 0 ? Date.now() + Math.min(ms, FENCE_CAP_MS) : 0;
+  fenceUntil = ms > 0 ? Date.now() + ms : 0;
   return hubRestartReadiness();
 }
