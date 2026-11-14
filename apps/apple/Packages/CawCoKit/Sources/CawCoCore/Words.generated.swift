@@ -2245,6 +2245,24 @@ public enum Words {
 
     public enum Sheet {
         // packages/core/src/words/sheet.ts `sheetWords`
+        /// The notice when a page's sheet was longer than the pane takes: `what` lists each cut, like "100 of 150 stories".
+        public static func sheetCut(what: String) -> String {
+            "This page's sheet was longer than the pane takes, so it shows \(what)."
+        }
+
+        /// The notice's second sentence when names were over the bound: how many, and the bound.
+        public static func namesCut(count: Int, max: Int) -> String {
+            "\(count) \(count == 1 ? "name" : "names") over \(max) characters \(count == 1 ? "was" : "were") cut."
+        }
+
+        /// One cut in that list.
+        public static func sheetCutOf(kept: Int, of: Int, what: String) -> String {
+            "\(kept) of \(of) \(what)"
+        }
+
+        /// The notice when a page's thumbnail was too large for the pane to take.
+        public static let pictureTooLarge = "The page's picture was too large to take, so it was not kept."
+
         /// The loading cover's line while the stage first starts.
         public static func starting(dir: String) -> String {
             "Starting the dev server in \(dir)…"

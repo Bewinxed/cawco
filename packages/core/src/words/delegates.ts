@@ -24,8 +24,8 @@ export const delegatePeekWords = {
   /** A step whose result has not landed. */
   running: "running",
   /** More steps than the answer names. */
-  stepsMore:
-    "Older steps: delegate_list with this target, response_format detailed and page 1, 2, … (50 a page, each with its time).",
+  stepsMore: (total: number) =>
+    `${total} steps; detailed for all. Older steps: delegate_list with this target, response_format detailed and page 1, 2, … (50 a page, each with its time).`,
   /** The walk back through its transcript stopped before the page's steps. */
   stepsCut: (pages: number) =>
     `Only its newest ${pages} transcript pages were read; steps older than these are not counted.`,

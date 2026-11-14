@@ -141,6 +141,8 @@ export interface DelegatePeek {
         /** Steps older than this page exist: the next page holds them. */
         more: boolean;
         page: number;
+        /** How many steps the read counted: all of them unless `cut`. */
+        total: number;
         /** The read stopped at {@link PAGES_READ_MOST} pages: older steps went unread. */
         cut: boolean;
       }
@@ -624,6 +626,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
         more: reached || !said.whole,
         cut: !(said.whole || reached),
         page: target.page,
+        total: said.steps.length,
       },
     };
   };

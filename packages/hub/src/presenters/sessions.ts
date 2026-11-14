@@ -236,7 +236,7 @@ const peekWords = (look: DelegatePeek): string => {
       peek.stepsHeading(steps.list.length),
       ...steps.list.map((step) => stepLine(step, now)),
       steps.cut && peek.stepsCut(PAGES_READ_MOST),
-      steps.more && peek.stepsMore,
+      steps.more && peek.stepsMore(steps.total),
     ];
   }
   return lines(
