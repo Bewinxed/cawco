@@ -66,6 +66,11 @@ export const agentUpdate =
         // A machine that restarts the hub as part of its update answers
         // into a socket that no longer exists, so this is not proof that
         // nothing happened — only that the hub stopped hearing about it.
+        // Not connected stays 404 machine-offline, the one away answer not
+        // yet awayStatus's 503: the frozen iOS app's `installUpdate`
+        // handles only 404 here and would show a running install. Held
+        // until the owner decides the app hold; the move is ready on the
+        // branch cawco/agent-update-away.
         return answer.reason === "dead"
           ? problem(404, {
               code: "machine-offline",

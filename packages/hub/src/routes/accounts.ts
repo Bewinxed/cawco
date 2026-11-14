@@ -11,6 +11,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import type { HubContext } from "../hub-context";
+import { awayStatus, type MachineReadsContext } from "../machine-reads";
 
 import { unreachable } from "../unreachable";
 
@@ -85,9 +86,13 @@ export const accountRoutes = ({
   forgetOn,
   knownProviders,
   livePendingSignins,
+  machineFault,
   machineName,
+  machinePresence,
   processMayRun,
+  readAgent,
   rebalanceNotices,
+  registry,
   removalOf,
   removeWithSessions,
   signOutEverywhere,
@@ -108,7 +113,8 @@ export const accountRoutes = ({
   | "removeWithSessions"
   | "signOutEverywhere"
   | "signOutMachine"
->) =>
+> &
+  MachineReadsContext) =>
   new Elysia()
     // ── Accounts ─────────────────────────────────────────────────────────────
     // Several sign-ins per provider, where each is signed in for which
@@ -272,68 +278,73 @@ export const accountRoutes = ({
     // one, the account and its other machines left as they are. Every
     // session on it there moves off it as a removal's do ({@link
     // signOutMachine}).
-    .delete("/api/accounts/:id/machines/:machineId", async ({ params }) => {
-      const account = accountOf(params.id);
-      if (!account) {
-        return problem(404, {
-          code: "no-account",
-          detail: `There is no account ${params.id}.`,
-        });
-      }
-      const machine = machineName(params.machineId);
-      const named = accountNameAmong(account, db.accounts.list());
-      const signin = db.accounts
-        .signins()
-        .find(
-          (one) =>
-            one.accountId === account.id && one.machineId === params.machineId
-        );
-      if (!signin) {
-        return problem(404, {
-          code: "not-signed-in",
-          detail: `${named} is not signed in on ${machine}.`,
-        });
-      }
-      // A process there still running in its store keeps the store
-      // until none does (`leaveAccounts`), as an account's
-      // removal does: signed out under a turn, the turn would lose its
-      // credential and its transcript.
-      const leaves = db
-        .instancesOnAccount(account.id)
-        .some(
-          (row) => row.machineId === params.machineId && processMayRun(row)
-        );
-      if (leaves) {
+    .delete(
+      "/api/accounts/:id/machines/:machineId",
+      async ({ params, set }) => {
+        const account = accountOf(params.id);
+        if (!account) {
+          return problem(404, {
+            code: "no-account",
+            detail: `There is no account ${params.id}.`,
+          });
+        }
+        const machine = machineName(params.machineId);
+        const named = accountNameAmong(account, db.accounts.list());
+        const signin = db.accounts
+          .signins()
+          .find(
+            (one) =>
+              one.accountId === account.id && one.machineId === params.machineId
+          );
+        if (!signin) {
+          return problem(404, {
+            code: "not-signed-in",
+            detail: `${named} is not signed in on ${machine}.`,
+          });
+        }
+        // A process there still running in its store keeps the store
+        // until none does (`leaveAccounts`), as an account's
+        // removal does: signed out under a turn, the turn would lose its
+        // credential and its transcript.
+        const leaves = db
+          .instancesOnAccount(account.id)
+          .some(
+            (row) => row.machineId === params.machineId && processMayRun(row)
+          );
+        if (leaves) {
+          return {
+            ok: true,
+            ...signOutMachine(account, named, params.machineId, true),
+          };
+        }
+        const answer = await forgetOn(account, params.machineId);
+        switch (answer.kind) {
+          case "unanswered":
+            return answer.reason === "dead"
+              ? awayStatus(
+                  { db, machineFault, machinePresence, readAgent, registry },
+                  set,
+                  params.machineId,
+                  `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
+                )
+              : problem(409, {
+                  code: "did-not-answer-within",
+                  detail: `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`,
+                });
+          case "answered":
+            if (!answer.value.ok) {
+              return problem(409, {
+                code: "did-not-sign-out",
+                detail: `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`,
+              });
+            }
+            break;
+          default:
+            throw unreachable(answer);
+        }
         return {
           ok: true,
-          ...signOutMachine(account, named, params.machineId, true),
+          ...signOutMachine(account, named, params.machineId, false),
         };
       }
-      const answer = await forgetOn(account, params.machineId);
-      switch (answer.kind) {
-        case "unanswered":
-          return answer.reason === "dead"
-            ? problem(409, {
-                code: "offline-so-was-not",
-                detail: `${machine} is offline, so ${named} was not signed out there; try again when it is online.`,
-              })
-            : problem(409, {
-                code: "did-not-answer-within",
-                detail: `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`,
-              });
-        case "answered":
-          if (!answer.value.ok) {
-            return problem(409, {
-              code: "did-not-sign-out",
-              detail: `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`,
-            });
-          }
-          break;
-        default:
-          throw unreachable(answer);
-      }
-      return {
-        ok: true,
-        ...signOutMachine(account, named, params.machineId, false),
-      };
-    });
+    );

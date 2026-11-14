@@ -280,7 +280,7 @@ export const fleetHookRoutes = (
           body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }),
         },
         async ({ body, set }) => {
-          const target = pushTarget(ctx, body);
+          const target = pushTarget(ctx, body, set);
           if (target instanceof ElysiaStatus) {
             return target;
           }

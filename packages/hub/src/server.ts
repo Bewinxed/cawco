@@ -482,7 +482,11 @@ import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import type { Stall, TakenUpBy } from "./limit-decision";
 import { createLimitMoves } from "./limit-moves";
 import { createLoginMoves } from "./login-moves";
-import type { ControlResult, Unanswered } from "./machine-answers";
+import {
+  awayProblem,
+  type ControlResult,
+  type Unanswered,
+} from "./machine-answers";
 import { createMachineCalls } from "./machine-calls";
 import { createMachineCommands } from "./machine-commands";
 import { createMachineContact } from "./machine-contact";
@@ -10686,10 +10690,7 @@ export const createServer = (
   ) => {
     const agent = registry.agent(row.machineId);
     if (!agent) {
-      return problem(404, {
-        code: "delegation-machine-offline",
-        detail: machineFault(row.machineId, "offline"),
-      });
+      return awayProblem(machineFault(row.machineId, "offline"));
     }
     sendFrame(agent, {
       ...envelope,

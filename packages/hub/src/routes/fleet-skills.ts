@@ -347,7 +347,7 @@ export const fleetSkillRoutes = (
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
         async ({ params, body, set }) => {
-          const target = pushTarget(ctx, body);
+          const target = pushTarget(ctx, body, set);
           if (target instanceof ElysiaStatus) {
             return target;
           }

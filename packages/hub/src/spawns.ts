@@ -28,6 +28,7 @@ import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
 import { sessionLabel } from "./labels";
 import type { createLaunches } from "./launches";
+import { awayProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek, peekResume } from "./payload-peeks";
 import type { PlacementInput } from "./placement";
@@ -1264,10 +1265,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       !ctx.registry.agent(machineId) &&
       ctx.startHold(machineId)?.kind !== "away"
     ) {
-      return problem(404, {
-        code: "spawn-machine-offline",
-        detail: ctx.machineFault(machineId, "offline"),
-      });
+      return awayProblem(ctx.machineFault(machineId, "offline"));
     }
     const { parentInstanceId } = peekParent(named);
     const relayed = await relaySpawn(

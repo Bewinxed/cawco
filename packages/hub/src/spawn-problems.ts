@@ -17,7 +17,7 @@ type Problem<Status extends number, Code extends string> = ReturnType<
 export type SpawnProblem =
   | Problem<400, "spawn-payload-unnamed">
   | Problem<409, "spawn-session-key-held">
-  | Problem<404, "spawn-machine-offline">
+  | Problem<503, "machine-away">
   | Problem<503, "spawn-default-unnamed">
   | Problem<400, "spawn-not-settled">
   | Problem<404, "spawn-project-deleted">
