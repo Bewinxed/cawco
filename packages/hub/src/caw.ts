@@ -58,6 +58,7 @@ import {
   type OfferedMode,
   type PLAN_ORIGIN,
 } from "@cawco/core/harness/kinds";
+import type { MachinePath } from "@cawco/core/machine-path";
 import {
   CAW_NO_MACHINE,
   type CawInitiated,
@@ -128,6 +129,7 @@ import {
   setupFactsWords,
   shippedTemplates,
 } from "./setup";
+import type { SpawnProblem } from "./spawn-problems";
 import { readStages } from "./stages";
 import { MODE, stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
 import type { Views } from "./views";
@@ -595,9 +597,13 @@ export interface CawDeps {
   /**
    * Starts the project's conversation as any session starts (server.ts
    * `spawnSession`): in the mode its payload names ({@link modeFor}), else
-   * the one you last chose for its harness on that machine.
+   * the one you last chose for its harness on that machine. Answers the
+   * folder it runs in, or why it did not start.
    */
-  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  readonly spawn: (
+    machineId: string,
+    payload: SpawnPayload
+  ) => Promise<MachinePath | SpawnProblem>;
   /**
    * A project's forget stop path (project-stops.ts): its running sessions as
    * a tree, and their stop, each end reported as `project.stop` once its
@@ -847,23 +853,21 @@ export const createCaw = ({
     }
     const instanceId = crypto.randomUUID();
     startingIds.set(project.id, instanceId);
-    try {
-      await spawn(how.machineId, {
-        instanceId,
-        cwd: how.cwd,
-        harness: how.harness,
-        ...(how.model ? { model: how.model } : {}),
-        ...(how.permissionMode ? { permissionMode: how.permissionMode } : {}),
-        ...(start.skills?.length ? { skills: [...start.skills] } : {}),
-        projectId: project.id,
-        title: "Caw",
-        requestId: crypto.randomUUID(),
-      });
-    } catch (error) {
-      const why = errorWords(error);
-      startProblems.set(project.id, why);
+    const spawned = await spawn(how.machineId, {
+      instanceId,
+      cwd: how.cwd,
+      harness: how.harness,
+      ...(how.model ? { model: how.model } : {}),
+      ...(how.permissionMode ? { permissionMode: how.permissionMode } : {}),
+      ...(start.skills?.length ? { skills: [...start.skills] } : {}),
+      projectId: project.id,
+      title: "Caw",
+      requestId: crypto.randomUUID(),
+    });
+    if (spawned instanceof ElysiaStatus) {
+      startProblems.set(project.id, spawned.response.detail);
       projectsChanged();
-      return problem(502, { code: "caw-failed", detail: why });
+      return spawned;
     }
     const conversation = row(instanceId);
     const sent = conversation

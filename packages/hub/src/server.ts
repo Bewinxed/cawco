@@ -8676,13 +8676,7 @@ export const createServer = (
     // its payload names (caw.ts `startOf`: the project's, else the one you
     // last chose for its harness on that machine), or refused, saying so,
     // when it names none.
-    spawn: async (machineId, payload) => {
-      const spawned = await spawnSession(machineId, payload, "project");
-      // caw.ts reads a start that does not go as a rejection.
-      if (spawned instanceof ElysiaStatus) {
-        throw new Error(spawned.response.detail);
-      }
-    },
+    spawn: (machineId, payload) => spawnSession(machineId, payload, "project"),
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.
     stops: {
