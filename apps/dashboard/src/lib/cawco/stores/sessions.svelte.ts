@@ -135,7 +135,14 @@ export type ReadFault =
    * a backoff, which would be refused the same. `message` is the hub's
    * sentence.
    */
-  | { message: string; reason: "refused"; updating?: true };
+  | {
+      /** The harness whose CLI the read waits on, on {@link machineId}: what a page with no row for the conversation watches. */
+      harness?: HarnessKind;
+      machineId?: string;
+      message: string;
+      reason: "refused";
+      updating?: true;
+    };
 
 /** Everything one session view needs — live or browsed from storage. */
 export interface SessionState {

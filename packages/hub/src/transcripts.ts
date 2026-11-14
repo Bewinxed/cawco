@@ -81,6 +81,8 @@ export type OlderRead =
  */
 export interface HistoryFault {
   fault: "missing" | "offline" | "timeout" | "failed" | "refused" | "updating";
+  /** On `refused` and `updating`: the harness whose CLI the read waits on, on `machineId`. */
+  harness?: HarnessKind;
   machineId?: string;
   message: string;
 }

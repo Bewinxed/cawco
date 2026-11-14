@@ -292,6 +292,7 @@ export const createHistory = (ctx: HistoryContext) => {
     if (cell?.state === "installing") {
       return {
         fault: "updating",
+        harness,
         machineId,
         message: harnessRefusedWords.updatingUnread(
           name,
@@ -306,6 +307,7 @@ export const createHistory = (ctx: HistoryContext) => {
     return why
       ? {
           fault: "refused",
+          harness,
           machineId,
           message: `${harnessRefusedWords.unread(name, ctx.machineName(machineId))} ${why}`,
         }
