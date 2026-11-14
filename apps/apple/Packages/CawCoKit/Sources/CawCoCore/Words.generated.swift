@@ -2488,7 +2488,7 @@ public enum Words {
 
         /// An install stopped before anything changed: the disk the hub's database is on has less free than its copy and a rollback's copy need (cli binary-apply.ts `requireRoom`).
         public static func noRoomForDatabaseCopy(version: String, needed: String, free: String) -> String {
-            "\(version) was not installed: copying the hub's database needs \(needed) free on its disk, and \(free) is free. Nothing was changed."
+            "\(version) was not installed: copying the hub's database needs \(needed) free on its disk, and \(free) is free. Nothing was changed. Free space there, then install again."
         }
 
         /// A rollback put the hub's database back: said after the reason, naming the file that holds what the trial wrote.
@@ -2498,17 +2498,17 @@ public enum Words {
 
         /// A rollback's restore that did not happen (no room for the copy beside the database, the hub still holding it): the live database stays where it is.
         public static func databaseNotPutBack(database: String, why: String) -> String {
-            "the hub's database was not put back (\(why)), so \(database) is unchanged"
+            "the hub's database was not put back (\(why)), so \(database) is still the one the trial left; putting it back is tried again"
         }
 
         /// A rollback whose restore failed every try (cli binary-apply.ts `endUndecided`): after the trial's own words.
         public static func databaseLeftAsTrialLeft(database: String, copy: String, previous: String) -> String {
-            "The hub's database could not be put back, so \(database) is the one the trial left, and the copy from before the update is \(copy). \(previous)'s hub doesn't open a database a newer build migrated: if the trial migrated it, the hub stays stopped until that copy is put in its place."
+            "The hub's database could not be put back, so \(database) is the one the trial left, and the copy from before the update is \(copy). If the trial migrated it, \(previous)'s hub doesn't open it and stays stopped until that copy is put in its place. That copy holds nothing the hub stored during the trial."
         }
 
         /// The update helper's log line for an older copy or moved-aside database it removed, once a newer one was written whole and checked.
         public static func olderCopyRemoved(file: String, size: String) -> String {
-            "removed \(file) (\(size)): a newer one replaces it"
+            "\(file) (\(size)) was removed: a newer copy replaces it"
         }
 
         /// A machine's row once such a trial ended (`unconfirmedVersion`), `version` the build that runs.
