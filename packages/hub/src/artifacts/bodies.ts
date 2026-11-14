@@ -25,7 +25,7 @@ import { t } from "elysia";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 import { CREATE_SHAPE } from "./component";
-import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
+import { ARGS_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
 
 /** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
 const skeletons = t.Array(
@@ -220,7 +220,7 @@ export const createBody = t.Object({
 /** A page's or a canvas's change: one of html, patch, elements, delete or mermaid. */
 export const updateBody = t.Object({
   html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
-  patch: t.Optional(t.Array(operation, { minItems: 1, maxItems: PATCH_LIMIT })),
+  patch: t.Optional(t.Array(operation, { minItems: 1 })),
   elements: t.Optional(skeletons),
   delete: t.Optional(
     t.Array(t.String({ minLength: 1, maxLength: 100 }), {

@@ -36,9 +36,6 @@ const ARTIFACT_REF_MAX = 100;
 /** A workspace id, or the 8-character prefix delegate reports. */
 export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/u;
 
-/** Patch operations one update may hold. Our bound. */
-export const PATCH_LIMIT = 200;
-
 export const ARTIFACT_TOOLS = [
   "artifact_list",
   "artifact_create",
@@ -311,7 +308,6 @@ export const artifactUpdate = {
         })
       )
       .min(1)
-      .max(PATCH_LIMIT)
       .optional(),
   },
 };
