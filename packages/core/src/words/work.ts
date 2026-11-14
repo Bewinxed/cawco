@@ -84,6 +84,13 @@ export const workWords = {
    * Inputs that failed partway across (hub work-items.ts `handInto`): what
    * had landed was taken out again, so none is presented as delivered.
    */
+  /**
+   * A delegate's start was held (hub start-holds.ts `startHold`) with its
+   * inputs waiting at the hub for its launch, and the hub restarted before
+   * it went (hub work-items.ts `startSent`): they were held in its memory.
+   */
+  inputsLostToRestart:
+    "the hub restarted while its start was held, and the inputs it was to hand in went with it. Delegate it again.",
   inputsCleared: (why: string) =>
     `${why} What of them had landed was removed, so none of them was delivered.`,
   /** Heads a gate step's stream cut to its tail (hub gate.ts `gateTails`): the cut part may hold the failure, so the reader runs the step itself. */

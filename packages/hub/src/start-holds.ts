@@ -34,6 +34,7 @@ export type StartHoldsContext = Pick<
   | "sendFrame"
   | "sessionName"
   | "speaksContract"
+  | "startSent"
   | "startsFreed"
   | "tellEndedByMove"
   | "wakesForSend"
@@ -262,8 +263,10 @@ export const createStartHolds = (
     // To the id the machine has now: it may have re-joined under a new one
     // since the start was owed (`takeFormerId`).
     ctx.sendFrame(agent, { ...asked, machineId, payload: launch });
-    // What it was sent while its start was held goes right behind it.
+    // What it was sent while its start was held goes right behind it, and
+    // the inputs its item held for it, then its brief.
     ctx.releaseOwed({ instanceId: owed.id });
+    ctx.startSent(owed.id);
   };
 
   /**

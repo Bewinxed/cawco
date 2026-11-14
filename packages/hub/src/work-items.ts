@@ -80,7 +80,11 @@ import type {
 import { sessionLink, todoLink } from "@cawco/core/references";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { NeutralOrigin, SendRefusal } from "@cawco/core/session-messages";
-import { type TurnWakes, waitsOnItself } from "@cawco/core/session-messages";
+import {
+  SEND_STATES,
+  type TurnWakes,
+  waitsOnItself,
+} from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import type { WaitWitness } from "@cawco/core/task-views";
@@ -1502,6 +1506,15 @@ export const createWorkItems = ({
    * counts from none.
    */
   const woken = new Map<string, { count: number; turns: number }>();
+
+  /**
+   * The hand-in, then brief, of each new item whose session's start is
+   * kept on its row ({@link spawnIn}), by its session: run once its launch
+   * has gone ({@link startSent}), dropped when its item ends first
+   * ({@link update}). Held in memory only: one this hub lost to a restart
+   * is found at its release by the brief that never went.
+   */
+  const handInsHeld = new Map<string, { go: () => void; itemId: string }>();
   const waitTimers = new Map<string, HubTimer>();
   /**
    * Waits whose declaring turn ended. From then on a tool call of the
@@ -1621,6 +1634,11 @@ export const createWorkItems = ({
       disarmWait(id);
       woken.delete(id);
       const before = db.workItem(id);
+      // Ended while its start was held: the inputs it was to be handed go
+      // with it, never sent ({@link handInsHeld}).
+      if (before && handInsHeld.get(before.instanceId)?.itemId === id) {
+        handInsHeld.delete(before.instanceId);
+      }
       const after = published(
         db.updateWorkItem(id, {
           ...change,
@@ -3609,7 +3627,7 @@ export const createWorkItems = ({
    * first byte is written. A set that fails partway is taken out again
    * (core `CONTROL_INPUTS_CLEAR`) and the failure said, so nothing of it is
    * taken for delivered ({@link sendInputs}). Answers the folder as the
-   * machine named it, none from an agent that names none.
+   * machine named it, none when there was nothing to hand.
    */
   const handInto = async (
     machineId: string,
@@ -3645,11 +3663,9 @@ export const createWorkItems = ({
       (sum, file) => sum + file.size,
       0
     );
-    const room = (await call(machineId, CONTROL_INPUTS_ROOM, [place])) as
-      InputsRoom | undefined;
-    if (!room) {
-      return;
-    }
+    const room = (await call(machineId, CONTROL_INPUTS_ROOM, [
+      place,
+    ])) as InputsRoom;
     if (needed > room.free) {
       return problem(400, {
         code: "work-item-inputs-no-room",
@@ -4325,6 +4341,62 @@ export const createWorkItems = ({
     }
   };
 
+  /** `item`'s inputs did not go, for `why`: it fails in their words, its parent is told, and its session ends. */
+  const inputsNotIn = (item: WorkItemRow, why: string): Promise<void> => {
+    const reason = `Its inputs did not reach its $TMPDIR/inputs/, so its brief was not sent: ${why}`;
+    const ended = finish(item, { state: "failed", error: reason });
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    if (row) {
+      report(row, `${reason}${reportLine(ended)}`, true);
+    }
+    return end(item.instanceId);
+  };
+
+  /**
+   * `inputs` put into `item`'s workspace for its new session, then `brief`
+   * sent; inputs that cannot go fail the item in their words
+   * ({@link inputsNotIn}). A start its machine takes not now (start-holds.ts
+   * `startHold`: a pause, an install, an older build, a link coming back,
+   * or its turn among the hub's paced launches) is kept on its row: its
+   * inputs go once its launch has gone ({@link startSent}), whatever held
+   * it, as its brief would have; the item waits, it does not fail on the
+   * hold.
+   */
+  const handInWhenStarted = (
+    item: WorkItemRow,
+    workspace: WorkspaceRow,
+    inputs: Inputs,
+    brief: () => void
+  ): void => {
+    const { instanceId } = item;
+    const notIn = (error: unknown): Promise<void> =>
+      inputsNotIn(
+        item,
+        (error instanceof Error && error.message) || String(error)
+      );
+    const handAndBrief = (): void => {
+      const [receiver] = db.getInstancesByIds([instanceId]);
+      (receiver
+        ? handIn(workspace, inputs, receiver)
+        : Promise.reject(new Error(`its session ${instanceId} has no row`))
+      )
+        .then(
+          (unhanded) => (unhanded ? notIn(unhanded.response.detail) : brief()),
+          notIn
+        )
+        .catch((stopped: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+          )
+        );
+    };
+    if (db.owesSpawn(instanceId)) {
+      handInsHeld.set(instanceId, { itemId: item.id, go: handAndBrief });
+    } else {
+      handAndBrief();
+    }
+  };
+
   /**
    * A new session in `workspace`, running a new item from the request's
    * brief; `inputs` are put in for it once it stands, after the item is
@@ -4430,30 +4502,7 @@ export const createWorkItems = ({
       // being written ("ENOENT … rename …/inputs/…", 2026-10-20). Inputs that
       // cannot go fail the item in their words, its report says so, and its
       // session ends.
-      /** Its inputs did not go: the item fails in their words, and its session ends. */
-      const notIn = (error: unknown): Promise<void> => {
-        const reason = `Its inputs did not reach its $TMPDIR/inputs/, so its brief was not sent: ${(error instanceof Error && error.message) || String(error)}`;
-        const ended = finish(item, { state: "failed", error: reason });
-        const [row] = db.getInstancesByIds([instanceId]);
-        if (row) {
-          report(row, `${reason}${reportLine(ended)}`, true);
-        }
-        return end(instanceId);
-      };
-      const [receiver] = db.getInstancesByIds([instanceId]);
-      (receiver
-        ? handIn(workspace, inputs, receiver)
-        : Promise.reject(new Error(`its session ${instanceId} has no row`))
-      )
-        .then(
-          (unhanded) => (unhanded ? notIn(unhanded.response.detail) : brief()),
-          notIn
-        )
-        .catch((stopped: unknown) =>
-          console.warn(
-            `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
-          )
-        );
+      handInWhenStarted(item, workspace, inputs, brief);
     } else {
       brief();
     }
@@ -6030,6 +6079,39 @@ export const createWorkItems = ({
     },
 
     /**
+     * `instanceId`'s kept start has gone to its machine (start-holds.ts
+     * `sendNextStart`, the one path a kept start takes): the inputs its
+     * item held for it go in now, then its brief ({@link handInsHeld}). A
+     * live item's session with no send at all never had its brief, which
+     * waited on inputs this hub lost to a restart: the item fails in their
+     * words, as inputs that cannot go fail it.
+     */
+    startSent(instanceId: string): void {
+      const held = handInsHeld.get(instanceId);
+      if (held) {
+        handInsHeld.delete(instanceId);
+        held.go();
+        return;
+      }
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (
+        !item ||
+        item.instanceId !== instanceId ||
+        !LIVE.has(item.state) ||
+        db.sendsIn(instanceId, [...SEND_STATES]).length > 0
+      ) {
+        return;
+      }
+      inputsNotIn(item, workWords.inputsLostToRestart).catch(
+        (stopped: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: its session, whose inputs were lost, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+          )
+      );
+    },
+
+    /**
      * A handoff with inputs (hub handed-input.ts), sent where handoff's own
      * relations reach ({@link inputsGo}): the inputs written, then
      * `sendLanded` called with what landed, which hands the message that names them to
@@ -6094,13 +6176,8 @@ export const createWorkItems = ({
         if (folder instanceof ElysiaStatus) {
           return folder;
         }
-        if (!folder) {
-          return problem(409, {
-            code: "work-item-handoff-no-inputs-folder",
-            detail: `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(db, row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`,
-          });
-        }
-        return sendLanded({ folder, inputs: named, cut: false });
+        // No folder: the inputs named no file, so the message names none.
+        return sendLanded({ folder: folder ?? "", inputs: named, cut: false });
       }
       return await workspaces.goOnIn(
         item.workspaceId,

@@ -1243,6 +1243,8 @@ export interface ClosureContext {
         waitingFor: number;
       }
   >;
+  /** A kept start has gone to its machine (start-holds.ts `sendNextStart`): its item's held inputs go (work-items.ts `startSent`). */
+  startSent: (instanceId: string) => void;
   startsFreed: (_machineId: string) => void;
   startsOnHomeLogin: (machineId: string, payload: SpawnPayload) => boolean;
   startsTurnIn: (

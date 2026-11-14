@@ -1607,6 +1607,7 @@ export const createServer = (
     processFailed: () => processFailed,
     speaksContract: () => speaksContract,
     startsFreed: () => startsFreedPort.now(),
+    startSent: () => startSentPort.now(),
     homeMovedAccountOn: () => homeMovedAccountOn,
     placementInput: () => placementInput,
     accountsMoved: () => accountsMovedPort.now(),
@@ -3201,6 +3202,15 @@ export const createServer = (
   const startsFreedPort = portOf<(_machineId: string) => void>(
     "startsFreed",
     (_machineId: string): void => undefined
+  );
+  /**
+   * A kept start has gone (start-holds.ts `sendNextStart`): its item's
+   * held inputs, then its brief, go (work-items.ts `startSent`). Bound once
+   * the work items exist below.
+   */
+  const startSentPort = portOf<(instanceId: string) => void>(
+    "startSent",
+    (_instanceId: string): void => undefined
   );
 
   /**
@@ -8129,6 +8139,7 @@ export const createServer = (
     reclaimUnread,
     finishOver: (instanceId) => releaseOwed({ instanceId }),
   });
+  startSentPort.fill((instanceId) => workItems.startSent(instanceId));
   // A stop walks a session's tree (tree-stops.ts): each session's end asked
   // once nothing under it is left, its item's final state once its machine
   // confirms it.
