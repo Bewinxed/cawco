@@ -60,9 +60,12 @@
   });
 
   const fired = (row: RuleRow) =>
-    row.stats.totalFires === 0
+    (row.stats.totalFires === 0
       ? "Has not caught anything yet"
-      : `Fired ${times(row.stats.totalFires)}, last ${since(row.stats.lastFiredAt)}`;
+      : `Fired ${times(row.stats.totalFires)}, last ${since(row.stats.lastFiredAt)}`) +
+    (row.stats.unjudged > 0
+      ? ` · ${rulesWords.unjudged(row.stats.unjudged, row.stats.lastUnjudgedWhy ?? "no reason kept")}`
+      : "");
 </script>
 
 <SectionFrame

@@ -379,6 +379,8 @@ export interface SectionUndrawn {
  * draw before its limit; and the state's picture when one was asked.
  */
 export interface StageRendered {
+  /** True when the page's plan (each states file's first story) could not be read: no section's `first` is known, which is not the same as none having one. */
+  plansUnread?: true;
   png?: string;
   report: RenderReport;
   undrawn: SectionUndrawn[];
@@ -528,6 +530,8 @@ export interface MoveRender {
   animations: AnimationRead[];
   error?: PageError;
   from: string;
+  /** How many of its animations were still running when the wait for them ended; absent when none were. */
+  stillRunning?: number;
   to: string;
 }
 

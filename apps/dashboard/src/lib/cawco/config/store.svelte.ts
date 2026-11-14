@@ -241,6 +241,8 @@ export const withStats = (
     pending: 0,
     totalFires: 0,
     lastFiredAt: null,
+    unjudged: 0,
+    lastUnjudgedWhy: null,
   },
 });
 

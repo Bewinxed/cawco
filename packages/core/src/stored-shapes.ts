@@ -2813,6 +2813,7 @@ const MoveRenderShape = declared(
     animations: z.array(AnimationReadShape),
     error: PageErrorShape.optional(),
     from: z.string(),
+    stillRunning: z.number().optional(),
     to: z.string(),
   }),
   "MoveRender",

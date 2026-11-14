@@ -111,3 +111,11 @@ export const SHIELD_WORDS =
  * next connection is refused with SHIELD_WORDS.
  */
 export const SHIELD_CLOSE_WORDS = "The person took over this browser.";
+
+/**
+ * What an agent is told when its page did not carry its owner's mark in time
+ * (agent gate.ts `marked`): the page was not loaded, and stays on its blank
+ * address. A page loaded unmarked would be nobody's on the dashboard's socket.
+ */
+export const MARK_WAIT_WORDS =
+  "This page was not marked as yours in time, so it was not loaded. It is still blank. Open it again.";

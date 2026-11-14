@@ -3100,6 +3100,10 @@ export const rules = sqliteTable("rules", {
   scopeRole: text("scope_role").$type<NonNullable<RuleScope["role"]>>(),
   /** The delegate type the sessions it fires on were started as, by name. */
   scopeDelegateType: text("scope_delegate_type"),
+  /** Turns of sessions this meaning rule was not judged on, because Jev did not answer in time. */
+  unjudgedTurns: integer("unjudged_turns").notNull().default(0),
+  /** Why the last of them went unjudged, in words. */
+  lastUnjudgedWhy: text("last_unjudged_why"),
   createdAt: stampedNow("created_at"),
   updatedAt: stampedNow("updated_at"),
 });

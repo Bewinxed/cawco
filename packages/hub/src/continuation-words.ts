@@ -20,8 +20,15 @@ const GIT_LINES_SHOWN = 200;
  */
 export function gitSection(changes: GitChanges, since: string): string {
   const title = "### Git changes since this session started";
-  if (!changes.repo) {
+  if (changes.repo === false) {
     return `${title}\nnot a git repository`;
+  }
+  if (changes.repo === "unread") {
+    return `${title}\n${
+      changes.limitMs === undefined
+        ? `git ${changes.command} failed (exit ${changes.exitCode}) in this folder`
+        : `git ${changes.command} did not answer within ${changes.limitMs / 1000} s in this folder`
+    }`;
   }
   const lines = [
     "$ git status --porcelain",

@@ -201,18 +201,21 @@ async function sweepOf(
   return said?.kind === "answered" ? said.value : "stopped";
 }
 
-/** Each states file's first story, by the plans the stage wrote into the page (core `CANVAS_PLAN_ID`). */
+/** Each states file's first story, by the plans the stage wrote into the page (core `CANVAS_PLAN_ID`); null when the plans could not be read. */
 async function firstStories(
   page: Page
-): Promise<Record<string, string | null>> {
+): Promise<Record<string, string | null> | null> {
   const said = await page
     .textContent(`#${CANVAS_PLAN_ID}`, { timeout: SAID_WAIT_MS })
     .catch(() => null);
-  let plans: Record<string, SectionPlan> = {};
+  if (said === null) {
+    return null;
+  }
+  let plans: Record<string, SectionPlan>;
   try {
     plans = sectionPlansOf(JSON.parse(said || "{}"));
   } catch {
-    // A plan that doesn't parse names no first story: each undrawn section says it has none.
+    return null;
   }
   return Object.fromEntries(
     Object.entries(plans).map(([file, plan]) => [
@@ -298,13 +301,14 @@ export async function renderCanvas(
     }
     const drawn = new Set(swept?.drawn ?? []);
     const firsts = await firstStories(page);
+    const unread = firsts ? {} : ({ plansUnread: true } as const);
     const undrawn: SectionUndrawn[] = ask.files
       .filter((file) => !drawn.has(file))
       .map((file) => ({
         file,
         at: swept?.sweepAt?.file === file ? swept.sweepAt : null,
         asked: swept?.sweeps.includes(file) ?? true,
-        first: firsts[file] ?? null,
+        first: firsts?.[file] ?? null,
       }));
     // The stage's report: every section as its last draw left it, the ones this render drew and the ones it did not.
     const query = new URLSearchParams(
@@ -320,12 +324,13 @@ export async function renderCanvas(
     const { errors: _errors, ...report } =
       (await answer.json()) as ReportAnswer;
     if (!ask.png) {
-      return { report, undrawn };
+      return { report, undrawn, ...unread };
     }
     if (!state) {
       return {
         report,
         undrawn,
+        ...unread,
         png: (await page.screenshot()).toString("base64"),
       };
     }
@@ -334,6 +339,7 @@ export async function renderCanvas(
     return {
       report,
       undrawn,
+      ...unread,
       png: (await statePicture(page, key)).png.toString("base64"),
     };
   } finally {

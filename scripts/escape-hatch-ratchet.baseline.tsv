@@ -169,7 +169,6 @@ empty-catch		packages/agent/src/session-containers.ts	1
 empty-catch		packages/agent/src/stage-host/canvas/replays.ts	1
 empty-catch		packages/agent/src/stage-host/canvas/runtime.ts	2
 empty-catch		packages/agent/src/stage-host/canvas/stage.ts	1
-empty-catch		packages/agent/src/stage-render.ts	1
 empty-catch		packages/agent/src/tools.ts	1
 empty-catch		packages/core/src/heavy-slots.ts	6
 empty-catch		packages/core/src/paths/workspace.ts	1

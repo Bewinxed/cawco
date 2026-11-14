@@ -327,7 +327,16 @@ export const CONTROL_GIT_CHANGES = "gitChanges";
 
 /** A directory's git state as {@link CONTROL_GIT_CHANGES} answers it. */
 export type GitChanges =
-  { repo: false } | { repo: true; status: string; log: string };
+  | { repo: false }
+  | { repo: true; status: string; log: string }
+  | {
+      /** A git call that ran out or failed any way but "not a git repository" (exit 128): what it was told. */
+      repo: "unread";
+      command: "status" | "log";
+      exitCode: number;
+      /** The limit it ran out at, when it did (exit 124). */
+      limitMs?: number;
+    };
 
 /**
  * What an agent answers a machine control it has no function for (agent

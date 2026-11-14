@@ -67,6 +67,8 @@ export interface RulesDb {
     instanceId: string,
     repeat: boolean
   ) => RuleState;
+  /** A turn a meaning rule was not judged on, and why: counted on the rule. */
+  readonly noteRuleUnjudged: (ruleId: string, why: string) => void;
   /** Upsert by id. The caller mints the id; this never invents one. */
   readonly putRule: (rule: Rule) => Rule;
   /**
@@ -168,12 +170,38 @@ export const rulesDb = (core: DbCore): RulesDb => {
         .from(ruleState)
         .groupBy(ruleState.ruleId)
         .all();
-      return rows.map((row) => ({
-        ruleId: row.ruleId,
-        pending: Number(row.pending ?? 0),
-        totalFires: Number(row.totalFires ?? 0),
-        lastFiredAt: row.lastFiredAt === null ? null : Number(row.lastFiredAt),
-      }));
+      const fires = new Map(rows.map((row) => [row.ruleId, row]));
+      return db
+        .select({
+          id: rules.id,
+          unjudged: rules.unjudgedTurns,
+          why: rules.lastUnjudgedWhy,
+        })
+        .from(rules)
+        .all()
+        .map((rule) => {
+          const row = fires.get(rule.id);
+          return {
+            ruleId: rule.id,
+            pending: Number(row?.pending ?? 0),
+            totalFires: Number(row?.totalFires ?? 0),
+            lastFiredAt:
+              row?.lastFiredAt === undefined || row.lastFiredAt === null
+                ? null
+                : Number(row.lastFiredAt),
+            unjudged: rule.unjudged,
+            lastUnjudgedWhy: rule.why,
+          };
+        });
+    },
+    noteRuleUnjudged: (ruleId, why) => {
+      db.update(rules)
+        .set({
+          unjudgedTurns: sql`${rules.unjudgedTurns} + 1`,
+          lastUnjudgedWhy: why,
+        })
+        .where(eq(rules.id, ruleId))
+        .run();
     },
     noteRuleFire: (ruleId, instanceId, repeat) => {
       const id = `${ruleId}:${instanceId}`;

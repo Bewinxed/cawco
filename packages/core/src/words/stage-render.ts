@@ -36,8 +36,11 @@ export const stageRenderWords = {
   undrawnHead: (seconds: number) =>
     `Sections this read ran out of its ${seconds} s before drawing (the report above has each as its last draw left it):`,
   /** One section the sweep took and did not draw, and the read that draws it. */
-  undrawn: (one: SectionUndrawn) =>
-    `- ${one.file}: ${one.at ? `it was still ${stageRenderWords.step(one.at)}` : "not begun"}; ${readAlone(one.first)}.`,
+  undrawn: (one: SectionUndrawn, plansRead: boolean) =>
+    `- ${one.file}: ${one.at ? `it was still ${stageRenderWords.step(one.at)}` : "not begun"}${plansRead ? `; ${readAlone(one.first)}` : ""}.`,
+  /** Said once with the undrawn sections when the page's plan could not be read: their first stories are not known, which is not that they have none. */
+  plansUnread:
+    "The page's plan of each section's first story could not be read, so the first story of each section below is not named: read its states file for it, then draw it alone with a state read.",
   /** The sections a state read left to their last draw: it draws its own section alone. */
   notAsked: (others: readonly SectionUndrawn[]) =>
     `This state read drew its own section alone; the others stand as their last draw left them, each drawn alone by a state read of its first story: ${others.map((one) => `${one.file}${one.first ? ` (${one.first})` : ""}`).join(", ")}.`,
@@ -57,6 +60,9 @@ export const stageRenderWords = {
   /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
   drawing: (files: readonly string[]) =>
     `A browser is drawing ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
+  /** A move whose animations were still running when its wait for them ended (core `MoveRender.stillRunning`): what its report holds was read mid-motion. */
+  moveUnsettled: (running: number) =>
+    `${running} ${running === 1 ? "animation was" : "animations were"} still running when this move's wait for them ended: its read and its picture were taken mid-motion.`,
   /** Stories that differ in nothing but their width (core `RenderReport.widthOnly`): one state, drawn at each width by the canvas's own presets. */
   widthOnly: (stories: readonly string[]) =>
     `${stories.join(", ")} differ in nothing but their width: they are one state. Keep one story and let the canvas draw it at each width the person picks; a piece with one production width names it once, on the meta's parameters.viewport.`,

@@ -30,6 +30,7 @@ import {
   memoryListWords,
   memoryReadHead,
 } from "@cawco/core/tool-presentation";
+import { rulesWords } from "@cawco/core/words/rules";
 import type { Presented } from "../mcp-tool";
 import { delegateTypesWords } from "./sessions";
 import { ago, count, lasted, lines, listed, quote, valueWords } from "./words";
@@ -239,7 +240,7 @@ const ruleLine = (rule: RuleRow): string => {
     rule.stats.lastFiredAt === null
       ? "never fired"
       : `fired ${count(rule.stats.totalFires, "time")}, last ${ago(rule.stats.lastFiredAt, now)}`;
-  return `- ${rule.name} (${rule.id.slice(0, 8)}) · ${rule.enabled ? "on" : "off"} · watches ${rule.watch} for ${rule.matchKind} ${quote(rule.pattern, 120)} · replies ${quote(rule.reply, 160)} at ${rule.timing}${rule.repeat ? ", every match" : ", once a session"} · ${fired}${rule.stats.pending > 0 ? ` · ${rule.stats.pending} pending` : ""}`;
+  return `- ${rule.name} (${rule.id.slice(0, 8)}) · ${rule.enabled ? "on" : "off"} · watches ${rule.watch} for ${rule.matchKind} ${quote(rule.pattern, 120)} · replies ${quote(rule.reply, 160)} at ${rule.timing}${rule.repeat ? ", every match" : ", once a session"} · ${fired}${rule.stats.pending > 0 ? ` · ${rule.stats.pending} pending` : ""}${rule.stats.unjudged > 0 ? ` · ${rulesWords.unjudged(rule.stats.unjudged, rule.stats.lastUnjudgedWhy ?? "no reason kept")}` : ""}`;
 };
 
 const templateLine = (template: RuleTemplate): string =>

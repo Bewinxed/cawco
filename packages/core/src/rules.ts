@@ -143,11 +143,15 @@ export interface RuleState {
 /** What the list needs to show about a rule without loading every session's state. */
 export interface RuleStats {
   lastFiredAt: number | null;
+  /** Why the last turn this rule went unjudged on did (a meaning rule Jev did not answer in time); null when none has. */
+  lastUnjudgedWhy: string | null;
   /** Sessions that fired this rule and have not yet finished a turn without it. */
   pending: number;
   ruleId: string;
   /** Every fire, ever. */
   totalFires: number;
+  /** Turns this rule was not judged on, ever. */
+  unjudged: number;
 }
 
 /** A rule plus what it has been doing. */

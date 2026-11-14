@@ -279,7 +279,10 @@ const undrawnLines = (render: ReturnType<typeof renderSaid>): string[] => {
     ...(asked.length > 0
       ? [
           stageRenderWords.undrawnHead(STAGE_RENDER_MS / 1000),
-          ...asked.map(stageRenderWords.undrawn),
+          ...(render.plansUnread ? [stageRenderWords.plansUnread] : []),
+          ...asked.map((one) =>
+            stageRenderWords.undrawn(one, !render.plansUnread)
+          ),
         ]
       : []),
     ...(others.length > 0 ? [stageRenderWords.notAsked(others)] : []),

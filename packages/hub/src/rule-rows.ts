@@ -40,6 +40,8 @@ export const createRuleRows = (db: DbShape) => (list: Rule[]) => {
         pending: 0,
         totalFires: 0,
         lastFiredAt: null,
+        unjudged: 0,
+        lastUnjudgedWhy: null,
       },
       ...(orphaned ? { orphaned } : {}),
     };

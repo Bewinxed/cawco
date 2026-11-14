@@ -64,7 +64,11 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { SHIELD_CLOSE_WORDS, SHIELD_WORDS } from "@cawco/core/words/browser";
+import {
+  MARK_WAIT_WORDS,
+  SHIELD_CLOSE_WORDS,
+  SHIELD_WORDS,
+} from "@cawco/core/words/browser";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
@@ -926,11 +930,12 @@ export class Gate {
   }
 
   /**
-   * Resolves once page `page` carries its owner's mark ({@link #mark}), or
-   * after `ms` without it: a load waits for it, never past that.
+   * Whether page `page` carries its owner's mark ({@link #mark}) within `ms`:
+   * a load waits for it, never past that, and does not go without it.
    */
-  async marked(page: string, ms = MARK_WAIT_MS): Promise<void> {
-    await readWithin(ms, (signal) => this.#markOf(page, signal));
+  async marked(page: string, ms = MARK_WAIT_MS): Promise<boolean> {
+    const read = await readWithin(ms, (signal) => this.#markOf(page, signal));
+    return read.kind === "answered";
   }
 
   /** Page `page`'s mark landing: the one under way, else the next one. */
@@ -958,10 +963,13 @@ export class Gate {
    * Takes a page an agent opened on {@link BLANK} to the address it asked
    * for, once the page carries its owner's mark: its first document is
    * marked, so the dashboard it may load names its owner on its socket.
+   * Without the mark in time it throws and the page stays blank.
    */
   async load(page: string, url: string): Promise<void> {
     this.#seenOn(page, url);
-    await this.marked(page);
+    if (!(await this.marked(page))) {
+      throw new Error(MARK_WAIT_WORDS);
+    }
     const session = this.#pageSessions.get(page);
     const wire = this.#watch?.wire;
     if (session && wire) {
@@ -1378,8 +1386,9 @@ class Link {
       message.method === "Page.navigate" && message.sessionId
         ? this.#sessionTargets.get(message.sessionId)
         : undefined;
-    if (target) {
-      await this.#gate.marked(target);
+    if (target && !(await this.#gate.marked(target))) {
+      this.#refuse(message, MARK_WAIT_WORDS);
+      return;
     }
     this.#up?.send(JSON.stringify(message));
     const driven = this.#drives(message);

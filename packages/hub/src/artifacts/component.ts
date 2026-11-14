@@ -163,7 +163,8 @@ export const drawingUnseen = (report: RenderReport): string[] =>
 export function renderSaid(
   report: RenderReport,
   undrawn: readonly SectionUndrawn[] = [],
-  state?: string
+  state?: string,
+  plansUnread?: true
 ) {
   const { listed, cut } = framesListed(report, state);
   const drawing = drawingUnseen(report);
@@ -190,6 +191,7 @@ export function renderSaid(
       ? { drawing: stageRenderWords.drawing(drawing) }
       : {}),
     ...(undrawn.length > 0 ? { undrawn } : {}),
+    ...(plansUnread && undrawn.length > 0 ? { plansUnread } : {}),
   };
 }
 
@@ -206,6 +208,9 @@ export const movesSaid = (report: RenderReport) =>
         delay: one.delay,
         easing: one.easing,
       })),
+      ...(move.stillRunning
+        ? { unsettled: stageRenderWords.moveUnsettled(move.stillRunning) }
+        : {}),
       ...(move.error ? { error: move.error } : {}),
     }))
   );

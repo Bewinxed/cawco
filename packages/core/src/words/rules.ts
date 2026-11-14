@@ -14,6 +14,9 @@ export const rulesWords = {
   /** Said once in a session when a rule has fired its ceiling in a row and goes quiet. */
   wentQuiet: (name: string, ceiling: number) =>
     `The rule “${name}” has fired ${ceiling} times in a row in this session, so it stays quiet here until a turn ends without matching it.`,
+  /** A rule's line when its turns went unjudged: how many, and why the last did. */
+  unjudged: (count: number, why: string) =>
+    `${count === 1 ? "1 turn" : `${count} turns`} went unjudged: ${why}`,
   /** The editor's name field. */
   ruleName: "Rule name",
 };

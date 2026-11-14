@@ -400,7 +400,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       }
       ({ report } = staged.opened);
     }
-    const drawn: Pick<StageRendered, "report" | "undrawn"> = {
+    const drawn: Pick<StageRendered, "report" | "undrawn" | "plansUnread"> = {
       report,
       undrawn: [],
     };
@@ -528,7 +528,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (drawn instanceof ElysiaStatus) {
       return drawn;
     }
-    const { undrawn } = drawn;
+    const { undrawn, plansUnread } = drawn;
     const report = drawnHeld(row, drawn.report);
     const made: Created = {
       id: row.id,
@@ -539,7 +539,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ...ctx.openedOf(shown),
       stage: { ...sheetState(row, opened.state), errors: [] },
       render: {
-        ...renderSaid(report, undrawn),
+        ...renderSaid(report, undrawn, undefined, plansUnread),
         weight: weightSaid(opened.weight),
       },
       moves: movesSaid(report),
@@ -596,6 +596,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const opened = sheet ? await stageRead(row, sheet) : undefined;
     let report = opened?.report;
     let undrawn: SectionUndrawn[] = [];
+    let plansUnread: true | undefined;
     let png: string | undefined;
     if (sheet) {
       const at: StageAt = { workspace: sheet.workspace };
@@ -619,7 +620,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         if (rendered instanceof ElysiaStatus) {
           return rendered;
         }
-        ({ report, png, undrawn } = rendered);
+        ({ report, png, undrawn, plansUnread } = rendered);
       }
       if (report) {
         report = drawnHeld(row, report);
@@ -660,7 +661,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
         ? {
-            render: renderSaid(report, undrawn, ask.state?.story),
+            render: renderSaid(report, undrawn, ask.state?.story, plansUnread),
             moves: movesSaid(report),
             stories: storiesSaid(sheetNow, report),
             ...(ask.state ? { frame: stateSaid(report, ask.state) } : {}),

@@ -37193,6 +37193,9 @@
                 },
                 "to": {
                   "type": "string"
+                },
+                "unsettled": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -37381,6 +37384,10 @@
                     "items": {
                       "$ref": "#/components/schemas/PageError"
                     }
+                  },
+                  "plansUnread": {
+                    "const": true,
+                    "type": "boolean"
                   },
                   "sections": {
                     "type": "array",
@@ -54280,6 +54287,10 @@
           "lastFiredAt": {
             "type": "number"
           },
+          "lastUnjudgedWhy": {
+            "description": "Why the last turn this rule went unjudged on did (a meaning rule Jev did not answer in time); null when none has.",
+            "type": "string"
+          },
           "pending": {
             "description": "Sessions that fired this rule and have not yet finished a turn without it.",
             "type": "number"
@@ -54290,12 +54301,17 @@
           "totalFires": {
             "description": "Every fire, ever.",
             "type": "number"
+          },
+          "unjudged": {
+            "description": "Turns this rule was not judged on, ever.",
+            "type": "number"
           }
         },
         "required": [
           "pending",
           "ruleId",
-          "totalFires"
+          "totalFires",
+          "unjudged"
         ]
       },
       "RuleTiming": {

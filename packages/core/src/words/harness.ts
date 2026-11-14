@@ -18,6 +18,9 @@ export const harnessWords = {
   /** A mode named that CawCo offers no harness ({@link PERMISSION_MODES}). */
   modeNotOffered: (mode: string, offered: readonly string[]) =>
     `CawCo offers no "${mode}" permission mode; it offers ${offered.join(", ")}.`,
+  /** The context a compacted session gets in place of its open items when they could not be listed in time (agent claude.ts `#openItemsAfterCompaction`). */
+  openItemsUnlisted:
+    "Your open items could not be listed after the compaction. Call open_items to list them.",
   /** A Claude Code process that ended on its own and said nothing on stderr. */
   claudeCrashed:
     "Claude Code stopped on its own and said nothing about why. A message to it starts it again.",

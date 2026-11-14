@@ -400,11 +400,16 @@ export class RuleEngine {
             }
             return replied;
           }
-          case "unanswered":
+          case "unanswered": {
+            const why = jevUnanswered(judged.after);
             console.warn(
-              `[rules] ${instanceId}: meaning rules ${rules.map((rule) => rule.id).join(", ")} not judged: ${jevUnanswered(judged.after)}`
+              `[rules] ${instanceId}: meaning rules ${rules.map((rule) => rule.id).join(", ")} not judged: ${why}`
             );
+            for (const rule of rules) {
+              this.#db.noteRuleUnjudged(rule.id, why);
+            }
             return false;
+          }
           default:
             unhandled("read", judged);
         }

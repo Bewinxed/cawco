@@ -1251,16 +1251,17 @@ export function boot(options: BootOptions): void {
       // seen on the frame after.
       look();
       const end = performance.now() + SETTLE_LIMIT_MS;
-      for (
-        let running = [...seen].filter((one) => one.playState === "running");
-        running.length > 0 && performance.now() < end;
-        running = [...seen].filter((one) => one.playState === "running")
-      ) {
+      let running = [...seen].filter((one) => one.playState === "running");
+      while (running.length > 0 && performance.now() < end) {
         await readWithin(Math.max(0, end - performance.now()), () =>
           Promise.all(running.map((one) => one.finished.catch(() => null)))
         );
         await frameTick();
         look();
+        running = [...seen].filter((one) => one.playState === "running");
+      }
+      if (running.length > 0) {
+        move.stillRunning = running.length;
       }
     } catch (error) {
       move.error = pageError(error, root, base);

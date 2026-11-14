@@ -1264,6 +1264,9 @@ const STOP_HOOK_TIMEOUT_S = 5;
  */
 const OPEN_ITEMS_HOOK_TIMEOUT_S = 15;
 
+/** How long the hook waits on the hub's read: the CLI's limit less 3 s, so its answer is in before the CLI stops waiting ({@link OPEN_ITEMS_HOOK_TIMEOUT_S}). */
+const OPEN_ITEMS_READ_MS = (OPEN_ITEMS_HOOK_TIMEOUT_S - 3) * 1000;
+
 /** How long the CLI waits on the `PreToolUse` hook on CronCreate ({@link refuseDurableSchedule}), in seconds: it answers from the call alone. */
 const SCHEDULE_HOOK_TIMEOUT_S = 5;
 
@@ -3645,26 +3648,38 @@ class ClaudeSession implements HarnessSession {
   /**
    * The SessionStart hook on `compact`: the session's open items, word for
    * word (the `open_items` tool, hub open-items.ts), added to its compacted
-   * context, as pi's and OpenCode's are listed after theirs. None when the
-   * hub's records can't be read: the compaction goes on without them, and
-   * the log says why.
+   * context, as pi's and OpenCode's are listed after theirs. When the hub's
+   * records can't be read in time, one sentence says so and names
+   * `open_items`, and the log says why.
    */
   async #openItemsAfterCompaction(): Promise<SyncHookJSONOutput> {
+    const unlisted = (): SyncHookJSONOutput => ({
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        additionalContext: harnessWords.openItemsUnlisted,
+      },
+    });
     try {
+      const read = await readWithin(OPEN_ITEMS_READ_MS, () =>
+        openItemsText(this.instanceId, this.#launchCredential)
+      );
+      if (read.kind === "unanswered") {
+        console.warn(
+          `[claude] ${this.instanceId}: its open items were not listed within ${read.after} ms after its compaction`
+        );
+        return unlisted();
+      }
       return {
         hookSpecificOutput: {
           hookEventName: "SessionStart",
-          additionalContext: await openItemsText(
-            this.instanceId,
-            this.#launchCredential
-          ),
+          additionalContext: read.value,
         },
       };
     } catch (error) {
       console.warn(
         `[claude] ${this.instanceId}: its open items could not be listed after its compaction: ${error instanceof Error ? error.message : String(error)}`
       );
-      return {};
+      return unlisted();
     }
   }
 

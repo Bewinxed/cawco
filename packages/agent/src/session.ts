@@ -456,7 +456,8 @@ const IDLE_SWEEP_MS = 60_000;
 
 /**
  * {@link CONTROL_GIT_CHANGES}: exactly two read-only git commands in `cwd`.
- * `git status` refusing (exit 128: no work tree here) answers `{ repo: false }`.
+ * `git status` refusing (exit 128: no work tree here) answers `{ repo: false }`;
+ * a call that ran out or failed any other way answers `{ repo: "unread" }`.
  * In a workspace's clone they run inside its boundary, as every git call
  * there does (`safe-git.ts`): its config and hooks are the workspace's to
  * write, and `git status` runs what they name (an fsmonitor, a filter). A
@@ -475,12 +476,18 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
         )
       : await runHubCommand(dir, `${SAFE_GIT} ${args}`, GIT_CHANGES_TIMEOUT_MS);
   const status = await git("status --porcelain");
-  if (status.exitCode !== 0) {
+  if (status.exitCode === GIT_NOT_A_REPO) {
     return { repo: false };
+  }
+  if (status.exitCode !== 0) {
+    return unreadGit("status", status.exitCode);
   }
   const log = await git(
     `log --since=${shellQuote(since)} --name-status ${shellQuote("--format=%h %s")}`
   );
+  if (log.exitCode !== 0) {
+    return unreadGit("log", log.exitCode);
+  }
   return {
     repo: true,
     status: status.stdout,
@@ -490,6 +497,25 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
 
 /** How long each of {@link gitChanges}' two git commands may take. */
 const GIT_CHANGES_TIMEOUT_MS = 30_000;
+
+/** git's own exit code for "not a git repository". */
+const GIT_NOT_A_REPO = 128;
+
+/** The exit code a command that ran out of its time ends with (hub-command.ts). */
+const COMMAND_TIMED_OUT = 124;
+
+/** {@link gitChanges}' answer for a git call that ran out or failed in a way that does not say there is no repository. */
+const unreadGit = (
+  command: "status" | "log",
+  exitCode: number
+): GitChanges => ({
+  repo: "unread",
+  command,
+  exitCode,
+  ...(exitCode === COMMAND_TIMED_OUT
+    ? { limitMs: GIT_CHANGES_TIMEOUT_MS }
+    : {}),
+});
 
 /** A `<scheme>://` git URL's host and path, past any login and port. */
 const SCHEME_URL_PARTS =
