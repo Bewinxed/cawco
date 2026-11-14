@@ -48,6 +48,7 @@ import {
   type GhAccount,
   pushOnlyProvider,
 } from "@cawco/core/connections";
+import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { sessionMayStart, startsAny } from "@cawco/core/delegate-types";
@@ -289,6 +290,7 @@ import {
   sessionLimitsReader,
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
+import { adminCalls } from "./admin-calls";
 import { adminTools } from "./admin-tools";
 import { createAdmission } from "./admission";
 import { runFrameStages } from "./agent-socket/frame-run";
@@ -366,7 +368,7 @@ import {
 import { createConnectAsks, type FleetMcpTook } from "./connect-asks";
 import { connectionRoutes, createConnections } from "./connections";
 import { createContextReads } from "./context-reads";
-import { CONTINUATION_CANCELLED, createContinuations } from "./continuations";
+import { createContinuations } from "./continuations";
 import { createCutTurns } from "./cut-turns";
 import { damagedRecordsOf } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
@@ -593,7 +595,7 @@ import { accountHomeLoginRoutes } from "./routes/account-home-logins";
 import { accountPlacementRoutes } from "./routes/account-placement";
 import { accountSigninRoutes } from "./routes/account-signins";
 import { accountRoutes } from "./routes/accounts";
-import { agentControlRoutes } from "./routes/agent-control";
+import { agentControlRoutes, agentUpdate } from "./routes/agent-control";
 import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
 import { continuationRoutes } from "./routes/continuations";
 import { delegateEventRoutes } from "./routes/delegate-events";
@@ -644,6 +646,7 @@ import {
   ATTACHMENT_PAGE_LIMIT,
   attachmentsOfPages,
 } from "./session-attachments";
+import { sessionCalls } from "./session-calls";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
@@ -1275,7 +1278,6 @@ export const createServer = (
     delegateTypeFor: () => delegateTypeFor,
     delegateTypes: () => delegateTypes,
     delegatedAttempt: () => delegatedAttempt,
-    delegationMcp: () => delegationMcp,
     deliverSend: () => deliverSend,
     discardAsked: () => discardAsked,
     discarded: () => discarded,
@@ -2522,7 +2524,10 @@ export const createServer = (
       const machines = Array.isArray(input.machines)
         ? input.machines.filter((one): one is string => typeof one === "string")
         : [];
-      return machinesUpdatedWords(await installBuild(machines));
+      const built = await installBuild(buildCalls, machines);
+      return built instanceof ElysiaStatus
+        ? built.response.detail
+        : machinesUpdatedWords(built);
     },
   };
   const hubAsks = createAsks({
@@ -2590,7 +2595,7 @@ export const createServer = (
       if (!entry) {
         throw new Error(`No admin tool ${name} in this build.`);
       }
-      const result = await entry.call(input);
+      const result = await entry.call(input, adminCallsMade);
       return (result.content ?? [])
         .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
         .join("\n")
@@ -10431,7 +10436,13 @@ export const createServer = (
       return read.stdout;
     },
   });
+  /** What `update_machines` and its approved run do: look for the build, and update a machine. */
+  const buildCalls = {
+    checkBuild: () => binaryUpdates.check(),
+    updateAgent: agentUpdate(ctx),
+  };
   const hubTools = createHubTools({
+    ...buildCalls,
     askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
     find: (actor, input, format) => findTool.call(actor, input, format),
     designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
@@ -10460,8 +10471,104 @@ export const createServer = (
     }
     return requester;
   };
+  const ruleRowsOf = createRuleRows(db);
+
+  /** A kind's rows, as its read route answers them. */
+  const harnessConfigList = (
+    kind: HarnessConfigKind
+  ): { rows: FleetHarnessConfig[] } => ({ rows: db.listHarnessConfig(kind) });
+
+  /**
+   * A partial put of one row: a given field replaces what is stored, `null`
+   * clears it, an absent one keeps it; `projectId` binds the row to that
+   * project, `null` makes it every machine's. The merged row is what
+   * `harnessConfigProblem` judges, the same check each machine runs again.
+   */
+  const harnessConfigPut = (
+    kind: HarnessConfigKind,
+    name: string,
+    body: HarnessConfigBody
+  ) => {
+    const merged: Record<string, unknown> = {
+      enabled: true,
+      ...db.getHarnessConfig(kind, name),
+      kind,
+      name,
+    };
+    for (const [key, value] of Object.entries(body)) {
+      if (value === null) {
+        delete merged[key];
+      } else if (value !== undefined) {
+        merged[key] = value;
+      }
+    }
+    const placed = boundAsAsked(merged, body);
+    placed.scope = placed.projectId || placed.areaId ? "project" : undefined;
+    const unplaced = boundProblem(
+      placed as { areaId?: string; projectId?: string }
+    );
+    if (unplaced) {
+      return problem(400, {
+        code: "harness-config-unplaced",
+        detail: unplaced,
+      });
+    }
+    const row = placed as unknown as FleetHarnessConfig;
+    const misfit = harnessConfigProblem(row);
+    if (misfit) {
+      return problem(400, { code: "harness-config-invalid", detail: misfit });
+    }
+    const kept = db.putHarnessConfig(row);
+    fleetChanged();
+    return kept;
+  };
+
+  /** A row's delete, kept in the trash for its undo. */
+  const harnessConfigDelete = (kind: HarnessConfigKind, name: string) => {
+    const trashed = db.getHarnessConfig(kind, name)
+      ? db.trash.put(
+          { kind: "harnessConfig", key: `${kind}:${name}` },
+          Date.now()
+        )
+      : undefined;
+    if (trashed === undefined) {
+      return problem(404, {
+        code: "no-harness-config",
+        detail: `the fleet keeps no ${kind} row ${name}`,
+      });
+    }
+    fleetChanged();
+    return undoable(trashed);
+  };
+
+  /** Every shown preview again, at its address now: how previews are reached changed. */
+  const republishPreviews = () => {
+    for (const [instanceId, target] of previewTargets) {
+      const moved = { ...target, revision: crypto.randomUUID() };
+      previewTargets.set(instanceId, moved);
+      db.artifacts.show(
+        instanceId,
+        target.artifact.id,
+        moved.revision,
+        moved.show
+      );
+      publishPreview(instanceId, "open", moved);
+    }
+    // The board's publish carries the mode (`previewSettings`, which
+    // a dashboard's Decisions page follows) and refreshes every
+    // artifact's tab, whose revision names the mode (`tabTarget`):
+    // each frame of a page or a machine's preview loads again at its
+    // new origin, its listener opened there.
+    publishInstances("");
+  };
+  const adminCallsMade = adminCalls(ctx, {
+    areas: projectAreas,
+    republishPreviews,
+  });
   const delegationMcp = createDelegationMcp({
     workItemCalls: workItemCalls(ctx),
+    adminCalls: adminCallsMade,
+    sessionCalls: sessionCalls(ctx),
     lifetime,
     decidesKinds: () => db.decides.kinds(),
     // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
@@ -11390,8 +11497,6 @@ export const createServer = (
     }
   };
 
-  const ruleRowsOf = createRuleRows(db);
-
   /**
    * Files a dashboard start's mode as the person's choice for its harness on
    * `machineId` when it is one: a new session's form (`known` false), or a
@@ -11576,74 +11681,6 @@ export const createServer = (
       awaitingFirstTurn.add(message.instanceId);
     }
     publishInstances(message.machineId);
-  };
-
-  /** A kind's rows, as its read route answers them. */
-  const harnessConfigList = (
-    kind: HarnessConfigKind
-  ): { rows: FleetHarnessConfig[] } => ({ rows: db.listHarnessConfig(kind) });
-
-  /**
-   * A partial put of one row: a given field replaces what is stored, `null`
-   * clears it, an absent one keeps it; `projectId` binds the row to that
-   * project, `null` makes it every machine's. The merged row is what
-   * `harnessConfigProblem` judges, the same check each machine runs again.
-   */
-  const harnessConfigPut = (
-    kind: HarnessConfigKind,
-    name: string,
-    body: HarnessConfigBody
-  ) => {
-    const merged: Record<string, unknown> = {
-      enabled: true,
-      ...db.getHarnessConfig(kind, name),
-      kind,
-      name,
-    };
-    for (const [key, value] of Object.entries(body)) {
-      if (value === null) {
-        delete merged[key];
-      } else if (value !== undefined) {
-        merged[key] = value;
-      }
-    }
-    const placed = boundAsAsked(merged, body);
-    placed.scope = placed.projectId || placed.areaId ? "project" : undefined;
-    const unplaced = boundProblem(
-      placed as { areaId?: string; projectId?: string }
-    );
-    if (unplaced) {
-      return problem(400, {
-        code: "harness-config-unplaced",
-        detail: unplaced,
-      });
-    }
-    const row = placed as unknown as FleetHarnessConfig;
-    const misfit = harnessConfigProblem(row);
-    if (misfit) {
-      return problem(400, { code: "harness-config-invalid", detail: misfit });
-    }
-    const kept = db.putHarnessConfig(row);
-    fleetChanged();
-    return kept;
-  };
-
-  /** A row's delete, kept in the trash for its undo. */
-  const harnessConfigDelete = (kind: HarnessConfigKind, name: string) => {
-    const trashed = db.getHarnessConfig(kind, name)
-      ? db.trash.put(
-          { kind: "harnessConfig", key: `${kind}:${name}` },
-          Date.now()
-        )
-      : undefined;
-    if (trashed === undefined) {
-      return problem(404, {
-        code: "no-harness-config",
-        detail: `the fleet keeps no ${kind} row ${name}`,
-      });
-    }
-    fleetChanged();
-    return undoable(trashed);
   };
 
   /** The fleet's update policy and the builds it is offered; its channel is what an SSH add installs (join.ts). */
@@ -11878,8 +11915,8 @@ export const createServer = (
   // as `.ws` does after them, so the sockets are registered first.
 
   const hubRoutesPart1 = new Elysia().use([
-    mcpRoutes(ctx),
-    delegationRoutes(ctx),
+    mcpRoutes(ctx, delegationMcp),
+    delegationRoutes(ctx, delegationMcp),
     sessionIdentityRoutes(ctx),
     lfsRoutes(ctx),
     hubInfoRoutes(ctx),
@@ -12029,25 +12066,7 @@ export const createServer = (
               ? null
               : { patterns: [host], sample: host };
           },
-          republish: () => {
-            for (const [instanceId, target] of previewTargets) {
-              const moved = { ...target, revision: crypto.randomUUID() };
-              previewTargets.set(instanceId, moved);
-              db.artifacts.show(
-                instanceId,
-                target.artifact.id,
-                moved.revision,
-                moved.show
-              );
-              publishPreview(instanceId, "open", moved);
-            }
-            // The board's publish carries the mode (`previewSettings`, which
-            // a dashboard's Decisions page follows) and refreshes every
-            // artifact's tab, whose revision names the mode (`tabTarget`):
-            // each frame of a page or a machine's preview loads again at its
-            // new origin, its listener opened there.
-            publishInstances("");
-          },
+          republish: republishPreviews,
         })
       )
       // Every route's large JSON answer is written as it is sent.
@@ -12062,12 +12081,7 @@ export const createServer = (
         websocket(),
         hubAuth.routes(),
         dashboardErrorsRoutes(),
-        delegateTypesRoutes(
-          delegateTypes,
-          (name) =>
-            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
-          (id) => db.accounts.get(id) !== undefined
-        ),
+        delegateTypesRoutes(ctx),
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)
         ),

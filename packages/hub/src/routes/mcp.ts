@@ -3,20 +3,20 @@
  */
 
 import { Elysia, problem } from "elysia";
+import type { createDelegationMcp } from "../delegation-mcp";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 
 import { mcpRefused } from "../tool-call-keys";
 
-export const mcpRoutes = ({
-  delegationMcp,
-  fleetMcp,
-  hubAuth,
-  toolCallKeys,
-}: Pick<
-  HubContext,
-  "delegationMcp" | "fleetMcp" | "hubAuth" | "toolCallKeys"
->) =>
+export const mcpRoutes = (
+  {
+    fleetMcp,
+    hubAuth,
+    toolCallKeys,
+  }: Pick<HubContext, "fleetMcp" | "hubAuth" | "toolCallKeys">,
+  delegationMcp: ReturnType<typeof createDelegationMcp>
+) =>
   new Elysia()
     .all("/mcp/cawco", hidden, ({ request, body, server }) => {
       // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.

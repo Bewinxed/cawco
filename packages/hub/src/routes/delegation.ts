@@ -3,14 +3,14 @@
  */
 
 import { Elysia, problem, t } from "elysia";
+import type { createDelegationMcp } from "../delegation-mcp";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 
-export const delegationRoutes = ({
-  delegationMcp,
-  identities,
-  toolCallKeys,
-}: Pick<HubContext, "delegationMcp" | "identities" | "toolCallKeys">) =>
+export const delegationRoutes = (
+  { identities, toolCallKeys }: Pick<HubContext, "identities" | "toolCallKeys">,
+  delegationMcp: ReturnType<typeof createDelegationMcp>
+) =>
   new Elysia()
     .get(
       "/api/delegation/tools",

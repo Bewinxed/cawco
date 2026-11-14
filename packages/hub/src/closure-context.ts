@@ -138,7 +138,6 @@ import type { SentMessageRow } from "./db/sends";
 import type { ContinuationSource, StoredSendRefusal } from "./db/stored-types";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
-import type { DelegationGateway } from "./delegation-gateway";
 import type { createDesignSystem } from "./design-system";
 import type { createDispatcher } from "./dispatch";
 import type { createFind } from "./find";
@@ -451,7 +450,6 @@ export interface ClosureContext {
   delegateTypeFor: WorkItemCallsDeps["delegateTypeFor"];
   delegateTypes: DelegateTypesShape;
   delegateWaits: ReturnType<typeof createDelegateWaits>;
-  delegationMcp: DelegationGateway;
   deletedProjects: ReturnType<typeof projectDelete>;
   designSystem: ReturnType<typeof createDesignSystem>;
   discardAsked: WorkItemCallsDeps["discardAsked"];
