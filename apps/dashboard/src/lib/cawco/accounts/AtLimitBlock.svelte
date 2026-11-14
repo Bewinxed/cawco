@@ -24,8 +24,8 @@
   import { accountsWords } from "@cawco/core/words/accounts";
 
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
-  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
