@@ -41,25 +41,15 @@ export const docOf = (client: Database, id: string): Doc => {
   return doc;
 };
 
-/** Whether the database holds a migration as new as 0275, or no artifacts at all: nothing to fold. */
-const settled = (client: Database, when: number): boolean => {
-  const tables = new Set(
-    (
-      client
-        .query(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', '__drizzle_migrations')"
-        )
-        .all() as { name: string }[]
-    ).map((row) => row.name)
-  );
-  if (!(tables.has("artifacts") && tables.has("__drizzle_migrations"))) {
-    return true;
-  }
-  const newest = client
-    .query("SELECT max(created_at) AS at FROM __drizzle_migrations")
-    .get() as { at: number | null };
-  return (newest.at ?? 0) >= when;
-};
+/** Whether the database has no artifacts at all: nothing to fold. Called only in a start that applies 0275 (db/migrate.ts). */
+const settled = (client: Database): boolean =>
+  (
+    client
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts')"
+      )
+      .all() as { name: string }[]
+  ).length < 1;
 
 /** An artifact's rows by its id, and its held next version's: its log, its keys' changes, the panel that shows it. */
 const dropRow = (client: Database, id: string): void => {
@@ -129,8 +119,8 @@ const foldInto = (
  * Folds each project page name's rows into its newest, in one transaction;
  * how many older rows went. Nothing once 0275 is applied.
  */
-export const mergeProjectPages = (client: Database, when: number): number => {
-  if (settled(client, when)) {
+export const mergeProjectPages = (client: Database): number => {
+  if (settled(client)) {
     return 0;
   }
   const rows = client

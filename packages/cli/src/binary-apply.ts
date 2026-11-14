@@ -96,7 +96,7 @@ import {
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
-import { newerDatabase } from "@cawco/core/migrations-ahead";
+import { unknownMigrations } from "@cawco/core/migration-state";
 import {
   markerIsLive,
   ownIdentity,
@@ -1273,7 +1273,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
   // The copy goes back, or the rollback goes on without it: either way the
   // units restart below, so the build rolled back to runs, on the copy or on
   // the database the trial left (its hub stops on that only when the trial
-  // migrated it, core migrations-ahead.ts), and the state says which.
+  // migrated it, core migration-state.ts), and the state says which.
   const { dbBackup, dbPath } = trial;
   let notPutBack: string | undefined;
   if (dbBackup && dbPath && !trial.dbRestored) {
@@ -1288,7 +1288,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
         message(error),
         dbBackup,
         trial.previous,
-        newerDatabase(dbPath) !== undefined
+        unknownMigrations(dbPath) !== undefined
       );
       await say(`roll back ${trial.version}: ${notPutBack}`);
     }

@@ -600,7 +600,8 @@ const gated: Gated[] = [
   bun("scripts/surface-briefs-check.ts"),
   bun("scripts/setup-draft-check.ts"),
   { ...run("packages/hub", "openapi:check"), extra: shippedBases },
-  run("packages/hub", "migrations:check"),
+  // Its freeze holds every migration to the base and the newest nightly.
+  { ...run("packages/hub", "migrations:check"), extra: shippedBases },
   // The types it reads come through packages/hub/tsconfig.json, which
   // extends tsconfig.base.json, which extends tsconfig.paths.json, and from
   // the installed packages (TypeScript, @types/node, the MCP SDK, zod),
