@@ -10,6 +10,7 @@
  */
 
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   type HubAnswer,
   type HubClient,
@@ -47,7 +48,7 @@ const callHub = async <A extends HubAnswer>(
     ),
     (refusal) =>
       new ConnectionKeyError(
-        `${hub} ${refused} (${refusal.status}): ${refusalText(refusal).slice(0, 300)}`
+        `${hub} ${refused} (${refusal.status}): ${cutShort(refusalText(refusal), 300)}`
       )
   );
 

@@ -64,6 +64,7 @@ import {
 } from "@cawco/core/relays";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { cutShort } from "@cawco/core/words/helpers";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
@@ -553,7 +554,7 @@ export const createRelay = ({
   /** What GitHub said with a refusal, ": <message>", or nothing. */
   const saidBy = (data: unknown): string => {
     const said = (data as { message?: unknown } | null)?.message;
-    return typeof said === "string" ? `: ${said.slice(0, 200)}` : "";
+    return typeof said === "string" ? `: ${cutShort(said, 200)}` : "";
   };
 
   /** `owner/repo` as Octokit's two parameters. */

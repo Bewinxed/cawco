@@ -22,6 +22,7 @@ import {
   type RelayView,
 } from "@cawco/core/relays";
 import { RelayViewSchema } from "@cawco/core/stored-shapes";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   type HubAnswer,
   type HubClient,
@@ -84,7 +85,9 @@ const call = async <A extends HubAnswer>(
       request
     ),
     (refusal) =>
-      new RelayError(`${refusal.status}: ${refusalText(refusal).slice(0, 500)}`)
+      new RelayError(
+        `${refusal.status}: ${cutShort(refusalText(refusal), 500)}`
+      )
   );
 };
 

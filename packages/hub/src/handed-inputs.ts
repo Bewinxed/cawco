@@ -419,12 +419,16 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       all.find((each) => each.name.toLowerCase() === wanted);
     if (!one) {
       const names = all.slice(0, 12).map((each) => `"${each.name}"`);
+      const newest =
+        all.length > names.length
+          ? `its newest ${names.length} of ${all.length} are`
+          : "its newest are";
       const where = own ? "your session" : `session ${short(holder.id)}`;
       return unhanded(
         404,
         "handed-attachment-unknown",
         entry,
-        `no attachment of that id or name in ${where}; ${names.length > 0 ? `its newest are ${names.join(", ")}` : "it has none"}`
+        `no attachment of that id or name in ${where}; ${names.length > 0 ? `${newest} ${names.join(", ")}` : "it has none"}`
       );
     }
     return one;

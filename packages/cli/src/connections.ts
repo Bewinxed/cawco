@@ -14,6 +14,7 @@
 
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONNECTION_NAME } from "@cawco/core/delegate-types";
+import { cutShort } from "@cawco/core/words/helpers";
 import { refusalText, unwrap } from "@cawco/hub/client";
 import { ownerCall } from "./owner";
 
@@ -129,7 +130,7 @@ export const setConnectionKey = async (
     ),
     (refusal) =>
       new ConnectionKeyError(
-        `${hub} refused the key for ${name} (${refusal.status}): ${refusalText(refusal).slice(0, 300)}`
+        `${hub} refused the key for ${name} (${refusal.status}): ${cutShort(refusalText(refusal), 300)}`
       )
   );
   return {

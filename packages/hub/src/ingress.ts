@@ -68,6 +68,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
 import { configurePage } from "@cawco/core/words/configure";
+import { cutShort } from "@cawco/core/words/helpers";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -1061,8 +1062,8 @@ export const createIngress = ({
     if (!poll) {
       return;
     }
-    const reason = `${poll.connection}/${poll.tool}: ${wordsOf(error)}`.slice(
-      0,
+    const reason = cutShort(
+      `${poll.connection}/${poll.tool}: ${wordsOf(error)}`,
       500
     );
     store.updateConnectorPoll(poll.id, { reason, polledAt });

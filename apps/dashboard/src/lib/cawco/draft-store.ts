@@ -13,6 +13,7 @@
  * written.
  */
 
+import { cutShort } from "@cawco/core/words/helpers";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import { DraftRecordSchema } from "#lib/cawco/stored-shapes.js";
 import { newId } from "#lib/platform/id.js";
@@ -202,7 +203,7 @@ export async function saveDraft(
   }
   await finished;
   for (const old of dropped) {
-    const first = old.text.trim().slice(0, 60);
+    const first = cutShort(old.text.trim(), 60);
     toast.info(
       transcriptWords.draftDropped(
         first ? `"${first}"` : "a draft with attachments and no words"

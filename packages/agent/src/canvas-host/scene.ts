@@ -9,6 +9,7 @@ import {
 import { docMeta } from "@cawco/core/doc-meta";
 import type { CanvasPress } from "@cawco/core/page-wire";
 import { toSegment } from "@cawco/core/shapes";
+import { cutShort } from "@cawco/core/words/helpers";
 /**
  * The canvas's scene on its doc (Projects spec §5.10, D23–D25): Excalidraw
  * bound to the artifact's doc by y-excalidraw, the agent's writes converted
@@ -1545,8 +1546,8 @@ const serveRequests = (live: Doc, ink: CanvasInk): (() => void) => {
       };
     } catch (error) {
       return {
-        error: (error instanceof Error ? error.message : String(error)).slice(
-          0,
+        error: cutShort(
+          error instanceof Error ? error.message : String(error),
           300
         ),
       };

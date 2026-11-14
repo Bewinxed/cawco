@@ -31,6 +31,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import type { ExternalActor } from "@cawco/core/external-items";
 import type { TrackerTarget } from "@cawco/core/trackers";
+import { cutShort } from "@cawco/core/words/helpers";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus, problem } from "elysia";
 import {
@@ -238,8 +239,8 @@ export const answerOf = (
   return {
     status: failed.status,
     headers: failed.response?.headers ?? {},
-    said: (typeof data === "string" ? data : (failed.message ?? "")).slice(
-      0,
+    said: cutShort(
+      typeof data === "string" ? data : (failed.message ?? ""),
       300
     ),
   };
