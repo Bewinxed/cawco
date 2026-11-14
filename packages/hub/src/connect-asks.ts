@@ -346,7 +346,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
     /** `connect_ask`, bound to the calling session (none for a listing). */
     tools(actor: InstanceRow | undefined, toolUseId?: string) {
       return [
-        CONNECT_ASK_DEFINITION().run((input) =>
+        CONNECT_ASK_DEFINITION.run((input) =>
           actor
             ? asks.ask(actor, input, toolUseId)
             : Promise.reject(new Error("Discovery cannot execute tools"))
@@ -359,33 +359,32 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
 
 export type ConnectAsks = ReturnType<typeof createConnectAsks>;
 
-const CONNECT_ASK_DEFINITION = () =>
-  defineTool(
-    "connect_ask",
-    DESCRIPTION,
-    {
-      server: z
-        .string()
-        .trim()
-        .min(1)
-        .describe("The server's name as the MCP page lists it."),
-      reason: z
-        .string()
-        .trim()
-        .min(1)
-        .max(REASON_MAX)
-        .describe(
-          'One sentence they read: what you need it for, e.g. "Import the Settings page design from Figma."'
-        ),
-      access: z
-        .enum(["read", "write"])
-        .optional()
-        .describe(
-          "What you need to do there: read (look only) or write (change things too). Ask for read unless the work changes something there."
-        ),
-    },
-    connectAnsweredWords
-  );
+const CONNECT_ASK_DEFINITION = defineTool(
+  "connect_ask",
+  DESCRIPTION,
+  {
+    server: z
+      .string()
+      .trim()
+      .min(1)
+      .describe("The server's name as the MCP page lists it."),
+    reason: z
+      .string()
+      .trim()
+      .min(1)
+      .max(REASON_MAX)
+      .describe(
+        'One sentence they read: what you need it for, e.g. "Import the Settings page design from Figma."'
+      ),
+    access: z
+      .enum(["read", "write"])
+      .optional()
+      .describe(
+        "What you need to do there: read (look only) or write (change things too). Ask for read unless the work changes something there."
+      ),
+  },
+  connectAnsweredWords
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const CONNECT_DEFINITIONS = () => [CONNECT_ASK_DEFINITION().listed()];
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const CONNECT_DEFINITIONS = [CONNECT_ASK_DEFINITION.listed()];

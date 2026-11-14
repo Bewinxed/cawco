@@ -4306,18 +4306,18 @@ export const createMemory = ({
         return actor;
       };
       return [
-        MEMORY_NOTE_DEFINITION().run(({ text, since }) =>
+        MEMORY_NOTE_DEFINITION.run(({ text, since }) =>
           note(me(), text, since)
         ),
-        MEMORY_PROPOSE_DEFINITION().run(({ files, notes, why, ask }) =>
+        MEMORY_PROPOSE_DEFINITION.run(({ files, notes, why, ask }) =>
           propose(
             me(),
             { files, notes: notes ?? [], why, ask: ask ?? false },
             toolUseId
           )
         ),
-        MEMORY_CLASSIFY_DEFINITION().run(({ notes }) => classify(me(), notes)),
-        MEMORY_READ_DEFINITION().run(({ path }) => read(me(), path)),
+        MEMORY_CLASSIFY_DEFINITION.run(({ notes }) => classify(me(), notes)),
+        MEMORY_READ_DEFINITION.run(({ path }) => read(me(), path)),
       ];
     },
   };
@@ -4354,61 +4354,57 @@ export const memoryRoutes = (memory: Memory) =>
       ({ params }) => memory.withdraw(params.id, params.note)
     );
 
-const MEMORY_NOTE_DEFINITION = () =>
-  defineTool(
-    "memory_note",
-    "A lasting fact for this project's later sessions (a convention, command, decision, place), not a step of your task, into its inbox; the person decides what is kept.",
-    {
-      text: z.string().max(NOTE_LIMIT),
-      since: z
-        .string()
-        .optional()
-        .describe("YYYY-MM-DD it became true, if before today."),
-    },
-    memoryNotedWords
-  );
+const MEMORY_NOTE_DEFINITION = defineTool(
+  "memory_note",
+  "A lasting fact for this project's later sessions (a convention, command, decision, place), not a step of your task, into its inbox; the person decides what is kept.",
+  {
+    text: z.string().max(NOTE_LIMIT),
+    since: z
+      .string()
+      .optional()
+      .describe("YYYY-MM-DD it became true, if before today."),
+  },
+  memoryNotedWords
+);
 
-const MEMORY_PROPOSE_DEFINITION = () =>
-  defineTool(
-    "memory_propose",
-    "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes, as one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. Caw's commits now (ask: true asks first); the curator's waits for the person.",
-    {
-      files: z
-        .array(z.object({ path: z.string(), content: z.string() }))
-        .min(1)
-        .describe("Each path and whole text."),
-      notes: z.array(z.string()).optional(),
-      why: z.string().describe("One line."),
-      ask: z.boolean().optional(),
-    },
-    memoryProposedWords
-  );
+const MEMORY_PROPOSE_DEFINITION = defineTool(
+  "memory_propose",
+  "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes, as one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. Caw's commits now (ask: true asks first); the curator's waits for the person.",
+  {
+    files: z
+      .array(z.object({ path: z.string(), content: z.string() }))
+      .min(1)
+      .describe("Each path and whole text."),
+    notes: z.array(z.string()).optional(),
+    why: z.string().describe("One line."),
+    ask: z.boolean().optional(),
+  },
+  memoryProposedWords
+);
 
-const MEMORY_CLASSIFY_DEFINITION = () =>
-  defineTool(
-    "memory_classify",
-    "Archive inbox notes that are not lasting facts, each with what it is.",
-    {
-      notes: z
-        .array(z.object({ id: z.string(), kind: z.enum(NOT_LASTING) }))
-        .min(1)
-        .max(RUN_NOTES),
-    },
-    memoryClassifiedWords
-  );
+const MEMORY_CLASSIFY_DEFINITION = defineTool(
+  "memory_classify",
+  "Archive inbox notes that are not lasting facts, each with what it is.",
+  {
+    notes: z
+      .array(z.object({ id: z.string(), kind: z.enum(NOT_LASTING) }))
+      .min(1)
+      .max(RUN_NOTES),
+  },
+  memoryClassifiedWords
+);
 
-const MEMORY_READ_DEFINITION = () =>
-  defineTool(
-    "memory_read",
-    "Read AGENTS.md, a knowledge/ file or an inbox note; no path: the inbox's waiting notes and knowledge/'s files.",
-    { path: z.string().optional() },
-    memoryReadWords
-  );
+const MEMORY_READ_DEFINITION = defineTool(
+  "memory_read",
+  "Read AGENTS.md, a knowledge/ file or an inbox note; no path: the inbox's waiting notes and knowledge/'s files.",
+  { path: z.string().optional() },
+  memoryReadWords
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const MEMORY_DEFINITIONS = () => [
-  MEMORY_NOTE_DEFINITION().listed(),
-  MEMORY_PROPOSE_DEFINITION().listed(),
-  MEMORY_CLASSIFY_DEFINITION().listed(),
-  MEMORY_READ_DEFINITION().listed(),
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const MEMORY_DEFINITIONS = [
+  MEMORY_NOTE_DEFINITION.listed(),
+  MEMORY_PROPOSE_DEFINITION.listed(),
+  MEMORY_CLASSIFY_DEFINITION.listed(),
+  MEMORY_READ_DEFINITION.listed(),
 ];

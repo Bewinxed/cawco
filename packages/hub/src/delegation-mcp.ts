@@ -251,26 +251,29 @@ export const toolViewOf = (
   workItem: !actor || !!actor.workItemId,
 });
 
+/** The names of the fleet watch's tools, which a session is listed while the watch runs. */
+const TRIAGE_NAMES: ReadonlySet<string> = new Set(TRIAGE_TOOLS);
+
 /**
  * Each group of tools a module defines, by the names the hub routes to it: a
  * call goes to the group whose names hold it, so a tool a group lists and its
  * names leave out is listed to a session and refused at its call
  * ({@link unroutedTools}, `roles:check`).
  */
-const groupsDefined = (): readonly [
+const GROUPS_DEFINED: readonly (readonly [
   ReadonlySet<string>,
   readonly { name: string }[],
-][] => [
-  [new Set(CAW_TOOLS), CAW_DEFINITIONS()],
-  [new Set(TRIAGE_TOOLS), TRIAGE_DEFINITIONS()],
-  [BROWSER_TOOLS, BROWSER_DEFINITIONS()],
-  [CONNECT_TOOLS, CONNECT_DEFINITIONS()],
-  [HUB_TOOLS, HUB_DEFINITIONS()],
-  [MEMORY_TOOLS, MEMORY_DEFINITIONS()],
-  [RELAY_TOOLS, RELAY_DEFINITIONS()],
-  [ROUTINE_TOOLS, ROUTINE_DEFINITIONS()],
-  [INGRESS_TOOLS, INGRESS_DEFINITIONS()],
-  [ACTION_TOOLS, ACTION_DEFINITIONS()],
+])[] = [
+  [new Set(CAW_TOOLS), CAW_DEFINITIONS],
+  [TRIAGE_NAMES, TRIAGE_DEFINITIONS],
+  [BROWSER_TOOLS, BROWSER_DEFINITIONS],
+  [CONNECT_TOOLS, CONNECT_DEFINITIONS],
+  [HUB_TOOLS, HUB_DEFINITIONS],
+  [MEMORY_TOOLS, MEMORY_DEFINITIONS],
+  [RELAY_TOOLS, RELAY_DEFINITIONS],
+  [ROUTINE_TOOLS, ROUTINE_DEFINITIONS],
+  [INGRESS_TOOLS, INGRESS_DEFINITIONS],
+  [ACTION_TOOLS, ACTION_DEFINITIONS],
 ];
 
 /**
@@ -280,7 +283,7 @@ const groupsDefined = (): readonly [
  * tools reach it; `roles:check` fails otherwise.
  */
 export const unroutedTools = (): string[] => [
-  ...groupsDefined().flatMap(([names, listed]) =>
+  ...GROUPS_DEFINED.flatMap(([names, listed]) =>
     listed.map((tool) => tool.name).filter((name) => !names.has(name))
   ),
   ...taskTools(undefined)
@@ -304,17 +307,17 @@ export const definedTools = (
   ...admin,
   ...taskTools(undefined),
   projectFromSessionTool(),
-  projectSettingsListed(),
-  ...CAW_DEFINITIONS(),
-  ...ROUTINE_DEFINITIONS(),
-  ...INGRESS_DEFINITIONS(),
-  ...ACTION_DEFINITIONS(),
-  ...RELAY_DEFINITIONS(),
-  ...MEMORY_DEFINITIONS(),
-  ...TRIAGE_DEFINITIONS(),
-  ...HUB_DEFINITIONS(),
-  ...BROWSER_DEFINITIONS(),
-  ...CONNECT_DEFINITIONS(),
+  projectSettingsListed,
+  ...CAW_DEFINITIONS,
+  ...ROUTINE_DEFINITIONS,
+  ...INGRESS_DEFINITIONS,
+  ...ACTION_DEFINITIONS,
+  ...RELAY_DEFINITIONS,
+  ...MEMORY_DEFINITIONS,
+  ...TRIAGE_DEFINITIONS,
+  ...HUB_DEFINITIONS,
+  ...BROWSER_DEFINITIONS,
+  ...CONNECT_DEFINITIONS,
 ];
 
 /**
@@ -425,7 +428,7 @@ export function createDelegationMcp(options: {
   /** The other calls a session's tools make directly, each the function its route calls (session-calls.ts). */
   sessionCalls: SessionCalls;
   /** The calls the admin tools make on the fleet's settings, each the function its route calls (admin-calls.ts). */
-  adminCalls: () => AdminCalls;
+  adminCalls: AdminCalls;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
@@ -609,6 +612,9 @@ export function createDelegationMcp(options: {
   const viewOf = (actor: InstanceRow | undefined): ToolView =>
     toolViewOf(actor, landsOf(actor));
 
+  /** Whether `triage_decide` can be called: the fleet watch that answers it is running. */
+  const triageCallable = () => !!options.triageTools?.(undefined).length;
+
   /**
    * The tools a session is listed: its role's and its scope's (roles.ts),
    * narrowed by its own context (a leaf gets no spawning tools, only a work
@@ -622,7 +628,9 @@ export function createDelegationMcp(options: {
     listedTools<ToolDefinition>(
       actor,
       [
-        ...definedTools(viewOf(actor), tools, admin),
+        ...definedTools(viewOf(actor), tools, admin).filter(
+          (tool) => triageCallable() || !TRIAGE_NAMES.has(tool.name)
+        ),
         ...(options.askTools?.(undefined) ?? []),
       ],
       // Granted by a delegate type or a project, not a role's list: the
@@ -779,7 +787,7 @@ export function createDelegationMcp(options: {
     if (recorded !== undefined) {
       return { content: [{ type: "text", text: recorded }] };
     }
-    return await entry.call(bound, options.adminCalls());
+    return await entry.call(bound, options.adminCalls);
   };
 
   /**

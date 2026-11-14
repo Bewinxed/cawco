@@ -2701,7 +2701,7 @@ export const createRoutines = ({
         detail: "Discovery cannot execute tools",
       });
     return [
-      ROUTINE_CREATE_DEFINITION().run((input) => {
+      ROUTINE_CREATE_DEFINITION.run((input) => {
         const caller = me();
         return Promise.resolve(
           caller instanceof ElysiaStatus
@@ -2726,13 +2726,13 @@ export const createRoutines = ({
               )
         );
       }),
-      ROUTINE_LIST_DEFINITION().run(() => {
+      ROUTINE_LIST_DEFINITION.run(() => {
         const caller = me();
         return Promise.resolve(
           caller instanceof ElysiaStatus ? caller : listedFor(caller)
         );
       }),
-      ROUTINE_UPDATE_DEFINITION().run(
+      ROUTINE_UPDATE_DEFINITION.run(
         ({ id, time_zone, delegate_type, ...fields }) => {
           const caller = me();
           return Promise.resolve(
@@ -2742,7 +2742,7 @@ export const createRoutines = ({
           );
         }
       ),
-      ROUTINE_DELETE_DEFINITION().run(({ id }) => {
+      ROUTINE_DELETE_DEFINITION.run(({ id }) => {
         const caller = me();
         return Promise.resolve(
           caller instanceof ElysiaStatus
@@ -2750,7 +2750,7 @@ export const createRoutines = ({
             : remove(routineNamed(id, caller), caller)
         );
       }),
-      ROUTINE_RUN_NOW_DEFINITION().run(({ id }) => {
+      ROUTINE_RUN_NOW_DEFINITION.run(({ id }) => {
         const caller = me();
         return Promise.resolve(
           caller instanceof ElysiaStatus
@@ -2758,7 +2758,7 @@ export const createRoutines = ({
             : runNow(routineNamed(id, caller), caller)
         );
       }),
-      ROUTINE_RESULT_DEFINITION().run(({ run, result }) => {
+      ROUTINE_RESULT_DEFINITION.run(({ run, result }) => {
         const caller = me();
         return Promise.resolve(
           caller instanceof ElysiaStatus
@@ -2912,108 +2912,100 @@ export const routineRoutes = (routines: Routines) =>
       }
     );
 
-const ROUTINE_CREATE_DEFINITION = () =>
-  defineTool(
-    "routine_create",
-    `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'conversation' messages the project's conversation, Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first. To unlist unused skills and servers, turn on the hub's routine with routine_update.`,
-    {
-      name: z.string().describe("3–6 plain words."),
-      prompt: z.string().describe("What each run does."),
-      target: z.enum(MADE_ROUTINE_TARGETS),
-      ...scheduleParameters,
-      delegate_type: z.string().optional(),
-      lands: z
-        .enum(LANDS_MODES)
-        .optional()
-        .describe("Where a run's commits go; none when left out."),
-      budget: budgetParameter("What each run may spend.").optional(),
-      daily_cap_usd: z
-        .number()
-        .positive()
-        .optional()
-        .describe(
-          "Dollars its runs may spend a day; past it a run is skipped."
-        ),
-      keep: z
-        .boolean()
-        .optional()
-        .describe("Keep past 7 days: only on the owner's word."),
-      mode: z
-        .enum(SESSION_CHOSEN_MODES)
-        .optional()
-        .describe(
-          "A conversation run's start mode; the project's when left out."
-        ),
-    },
-    routineWords
-  );
+const ROUTINE_CREATE_DEFINITION = defineTool(
+  "routine_create",
+  `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'conversation' messages the project's conversation, Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first. To unlist unused skills and servers, turn on the hub's routine with routine_update.`,
+  {
+    name: z.string().describe("3–6 plain words."),
+    prompt: z.string().describe("What each run does."),
+    target: z.enum(MADE_ROUTINE_TARGETS),
+    ...scheduleParameters,
+    delegate_type: z.string().optional(),
+    lands: z
+      .enum(LANDS_MODES)
+      .optional()
+      .describe("Where a run's commits go; none when left out."),
+    budget: budgetParameter("What each run may spend.").optional(),
+    daily_cap_usd: z
+      .number()
+      .positive()
+      .optional()
+      .describe("Dollars its runs may spend a day; past it a run is skipped."),
+    keep: z
+      .boolean()
+      .optional()
+      .describe("Keep past 7 days: only on the owner's word."),
+    mode: z
+      .enum(SESSION_CHOSEN_MODES)
+      .optional()
+      .describe(
+        "A conversation run's start mode; the project's when left out."
+      ),
+  },
+  routineWords
+);
 
-const ROUTINE_LIST_DEFINITION = () =>
-  defineTool(
-    "routine_list",
-    `List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed), and the hub's ${TRIM_NAME} while off.`,
-    {},
-    routineListWords
-  );
+const ROUTINE_LIST_DEFINITION = defineTool(
+  "routine_list",
+  `List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed), and the hub's ${TRIM_NAME} while off.`,
+  {},
+  routineListWords
+);
 
-const ROUTINE_UPDATE_DEFINITION = () =>
-  defineTool(
-    "routine_update",
-    `Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or any field it was made with; enabled: true alone turns on the hub's ${TRIM_NAME} while off.`,
-    {
-      id: routineRef(),
-      enabled: z.boolean().optional(),
-      keep: z.boolean().optional(),
-      cron: scheduleParameters.cron.optional(),
-      time_zone: scheduleParameters.time_zone.optional(),
-      prompt: z.string().optional(),
-      target: z.enum(MADE_ROUTINE_TARGETS).optional(),
-      delegate_type: z.string().nullable().optional(),
-      lands: z.enum(LANDS_MODES).optional(),
-      budget: budgetParameter("Per run; null: none.").nullable().optional(),
-      mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
-    },
-    routineWords
-  );
+const ROUTINE_UPDATE_DEFINITION = defineTool(
+  "routine_update",
+  `Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or any field it was made with; enabled: true alone turns on the hub's ${TRIM_NAME} while off.`,
+  {
+    id: routineRef(),
+    enabled: z.boolean().optional(),
+    keep: z.boolean().optional(),
+    cron: scheduleParameters.cron.optional(),
+    time_zone: scheduleParameters.time_zone.optional(),
+    prompt: z.string().optional(),
+    target: z.enum(MADE_ROUTINE_TARGETS).optional(),
+    delegate_type: z.string().nullable().optional(),
+    lands: z.enum(LANDS_MODES).optional(),
+    budget: budgetParameter("Per run; null: none.").nullable().optional(),
+    mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
+  },
+  routineWords
+);
 
-const ROUTINE_DELETE_DEFINITION = () =>
-  defineTool(
-    "routine_delete",
-    "Delete a routine, its runs and the event routes that feed it.",
-    { id: routineRef() },
-    ({ deleted, routes }: { deleted: boolean; routes: string[] }) =>
-      deleted ? routineToolWords.deleted(routes) : routineToolWords.notThere
-  );
+const ROUTINE_DELETE_DEFINITION = defineTool(
+  "routine_delete",
+  "Delete a routine, its runs and the event routes that feed it.",
+  { id: routineRef() },
+  ({ deleted, routes }: { deleted: boolean; routes: string[] }) =>
+    deleted ? routineToolWords.deleted(routes) : routineToolWords.notThere
+);
 
-const ROUTINE_RUN_NOW_DEFINITION = () =>
-  defineTool(
-    "routine_run_now",
-    "Run a routine once now; skipped while its last run still goes.",
-    { id: routineRef() },
-    routineRunWords
-  );
+const ROUTINE_RUN_NOW_DEFINITION = defineTool(
+  "routine_run_now",
+  "Run a routine once now; skipped while its last run still goes.",
+  { id: routineRef() },
+  routineRunWords
+);
 
-const ROUTINE_RESULT_DEFINITION = () =>
-  defineTool(
-    "routine_result",
-    `Say how the routine's run that woke you went, once, before your turn ends: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation.`,
-    {
-      run: z
-        .string()
-        .trim()
-        .min(1)
-        .describe("The run's id, from the message that woke you."),
-      result: z.string().describe("The run's output."),
-    },
-    routineRunWords
-  );
+const ROUTINE_RESULT_DEFINITION = defineTool(
+  "routine_result",
+  `Say how the routine's run that woke you went, once, before your turn ends: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <why> fails it, anything else is noted in the project's conversation.`,
+  {
+    run: z
+      .string()
+      .trim()
+      .min(1)
+      .describe("The run's id, from the message that woke you."),
+    result: z.string().describe("The run's output."),
+  },
+  routineRunWords
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const ROUTINE_DEFINITIONS = () => [
-  ROUTINE_CREATE_DEFINITION().listed(),
-  ROUTINE_LIST_DEFINITION().listed(),
-  ROUTINE_UPDATE_DEFINITION().listed(),
-  ROUTINE_DELETE_DEFINITION().listed(),
-  ROUTINE_RUN_NOW_DEFINITION().listed(),
-  ROUTINE_RESULT_DEFINITION().listed(),
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const ROUTINE_DEFINITIONS = [
+  ROUTINE_CREATE_DEFINITION.listed(),
+  ROUTINE_LIST_DEFINITION.listed(),
+  ROUTINE_UPDATE_DEFINITION.listed(),
+  ROUTINE_DELETE_DEFINITION.listed(),
+  ROUTINE_RUN_NOW_DEFINITION.listed(),
+  ROUTINE_RESULT_DEFINITION.listed(),
 ];

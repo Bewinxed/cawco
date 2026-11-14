@@ -211,14 +211,18 @@ const DESCRIPTION =
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;
 
-const PROJECT_SETTINGS_DEFINITION = () =>
-  defineTool(PROJECT_SETTINGS, DESCRIPTION, definition.shape, sentence, {
+const PROJECT_SETTINGS_DEFINITION = defineTool(
+  PROJECT_SETTINGS,
+  DESCRIPTION,
+  definition.shape,
+  sentence,
+  {
     inputHelp: INPUT_HELP,
-  });
+  }
+);
 
 /** The tool as a listing reads it, before any session's call is bound. */
-export const projectSettingsListed = () =>
-  PROJECT_SETTINGS_DEFINITION().listed();
+export const projectSettingsListed = PROJECT_SETTINGS_DEFINITION.listed();
 
 /** A stored change as the tool takes it: an ask approved after a restart is checked again from it. */
 const askedOf = (change: ProjectSettingChange): AskedChange => {
@@ -1197,7 +1201,7 @@ export const createProjectSettings = ({
 
   /** `project_settings`, bound to the calling session and its call; with none, its listing. */
   const definitionFor = (actor: InstanceRow | undefined, toolUseId?: string) =>
-    PROJECT_SETTINGS_DEFINITION().run((input) => {
+    PROJECT_SETTINGS_DEFINITION.run((input) => {
       if (!actor) {
         return Promise.reject(new Error("Discovery cannot execute tools"));
       }
@@ -1255,7 +1259,7 @@ export const createProjectSettings = ({
     tool: definitionFor,
     runApproved,
     runDeclined,
-    definition: projectSettingsListed(),
+    definition: projectSettingsListed,
   };
 };
 

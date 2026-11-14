@@ -1133,7 +1133,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     /** `triage_decide`, which only a triage run may call. */
     tools(actor: InstanceRow | undefined) {
       return [
-        TRIAGE_DECIDE_DEFINITION().run(({ decision, words, reason }) => {
+        TRIAGE_DECIDE_DEFINITION.run(({ decision, words, reason }) => {
           const triage = actor ? running.get(actor.id) : undefined;
           if (!triage) {
             throw new Error(
@@ -1160,20 +1160,19 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
 
 export type FleetWatch = ReturnType<typeof createFleetWatch>;
 
-const TRIAGE_DECIDE_DEFINITION = () =>
-  defineTool(
-    "triage_decide",
-    "Decide once what happens to the session you were briefed on. nudge: its steward reads `words`. interrupt: cut its turn. stop: stop its process. tell: the person reads `words`. leave: nothing. Then end your turn.",
-    {
-      decision: z.enum(TRIAGE_DECISIONS),
-      words: z
-        .string()
-        .optional()
-        .describe("For nudge and tell: what the steward or the person reads."),
-      reason: z.string().trim().min(1).describe("One line: why."),
-    },
-    sentence
-  );
+const TRIAGE_DECIDE_DEFINITION = defineTool(
+  "triage_decide",
+  "Decide once what happens to the session you were briefed on. nudge: its steward reads `words`. interrupt: cut its turn. stop: stop its process. tell: the person reads `words`. leave: nothing. Then end your turn.",
+  {
+    decision: z.enum(TRIAGE_DECISIONS),
+    words: z
+      .string()
+      .optional()
+      .describe("For nudge and tell: what the steward or the person reads."),
+    reason: z.string().trim().min(1).describe("One line: why."),
+  },
+  sentence
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const TRIAGE_DEFINITIONS = () => [TRIAGE_DECIDE_DEFINITION().listed()];
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const TRIAGE_DEFINITIONS = [TRIAGE_DECIDE_DEFINITION.listed()];

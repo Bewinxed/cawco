@@ -1898,7 +1898,7 @@ export const createCaw = ({
             });
       };
       return [
-        FOLDER_READ_DEFINITION().run(async ({ path }) => {
+        FOLDER_READ_DEFINITION.run(async ({ path }) => {
           const calling = ours();
           if (calling instanceof ElysiaStatus) {
             return calling;
@@ -1911,7 +1911,7 @@ export const createCaw = ({
             ? await listFolder(projectId, path ?? "")
             : file;
         }),
-        FOLDER_WRITE_DEFINITION().run(async ({ path, content, encoding }) => {
+        FOLDER_WRITE_DEFINITION.run(async ({ path, content, encoding }) => {
           const calling = ours();
           if (calling instanceof ElysiaStatus) {
             return calling;
@@ -1937,7 +1937,7 @@ export const createCaw = ({
           }
           return await fileWritten(calling, rel, body, approved, toolUseId);
         }),
-        VIEW_DRAFT_DEFINITION().run(async (input) => {
+        VIEW_DRAFT_DEFINITION.run(async (input) => {
           const calling = ours();
           if (calling instanceof ElysiaStatus) {
             return calling;
@@ -1958,19 +1958,19 @@ export const createCaw = ({
           });
           return drafted;
         }),
-        VIEW_QUERY_DEFINITION().run(async ({ tool: name, args }) => {
+        VIEW_QUERY_DEFINITION.run(async ({ tool: name, args }) => {
           const calling = ours();
           return calling instanceof ElysiaStatus
             ? calling
             : await views.query(calling.project.id, name, args ?? {});
         }),
-        PROJECT_SETUP_DEFINITION().run(async ({ change }) => {
+        PROJECT_SETUP_DEFINITION.run(async ({ change }) => {
           const calling = ours();
           return calling instanceof ElysiaStatus
             ? calling
             : await setupFacts(calling.project.id, change ?? []);
         }),
-        PROJECT_NAME_DEFINITION().run(async ({ name }) => {
+        PROJECT_NAME_DEFINITION.run(async ({ name }) => {
           const calling = ours();
           if (calling instanceof ElysiaStatus) {
             return calling;
@@ -1985,7 +1985,7 @@ export const createCaw = ({
           const renamed = await rename(calling.project.id, name);
           return typeof renamed === "string" ? { name: renamed } : renamed;
         }),
-        VIEW_GUIDE_DEFINITION().run(async () => VIEW_PROMPT),
+        VIEW_GUIDE_DEFINITION.run(async () => VIEW_PROMPT),
         // Only names roles.ts lists: the hub routes those to this list and
         // scopes them to a project; any other is listed and never reached.
       ] satisfies (McpTool & { name: CawToolName })[];
@@ -2078,84 +2078,82 @@ export const cawRoutes = (caw: Caw) =>
       }
     );
 
-const FOLDER_READ_DEFINITION = () =>
-  defineTool(
-    "folder_read",
-    "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
-    { path: z.string().optional() },
-    folderReadWords
-  );
+const FOLDER_READ_DEFINITION = defineTool(
+  "folder_read",
+  "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
+  { path: z.string().optional() },
+  folderReadWords
+);
 
-const FOLDER_WRITE_DEFINITION = () =>
-  defineTool(
-    "folder_write",
-    "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it.",
-    {
-      path: z.string().min(1),
-      content: z.string().max(FOLDER_CONTENT_LIMIT),
-      encoding: z.enum(FOLDER_ENCODINGS).optional(),
-    },
-    folderWrittenWords
-  );
+const FOLDER_WRITE_DEFINITION = defineTool(
+  "folder_write",
+  "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it.",
+  {
+    path: z.string().min(1),
+    content: z.string().max(FOLDER_CONTENT_LIMIT),
+    encoding: z.enum(FOLDER_ENCODINGS).optional(),
+  },
+  folderWrittenWords
+);
 
-const VIEW_DRAFT_DEFINITION = () =>
-  defineTool(
-    "view_draft",
-    "Draft a view for the person to keep or discard, as they asked. Components outside CawCo's library are dropped and named in the answer.",
-    {
-      name: z.string().describe("Like weekly-review."),
-      source: z.string().min(1).describe("openui-lang, no fences."),
-      page: z
-        .enum(BLOCK_PAGES)
-        .optional()
-        .describe("Stands there as a block; else a tab."),
-      position: z.number().int().min(0).optional(),
-    },
-    viewDraftedWords
-  );
+const VIEW_DRAFT_DEFINITION = defineTool(
+  "view_draft",
+  "Draft a view for the person to keep or discard, as they asked. Components outside CawCo's library are dropped and named in the answer.",
+  {
+    name: z.string().describe("Like weekly-review."),
+    source: z.string().min(1).describe("openui-lang, no fences."),
+    page: z
+      .enum(BLOCK_PAGES)
+      .optional()
+      .describe("Stands there as a block; else a tab."),
+    position: z.number().int().min(0).optional(),
+  },
+  viewDraftedWords
+);
 
-const VIEW_QUERY_DEFINITION = () =>
-  defineTool(
-    "view_query",
-    "What a view's Query(tool, args) reads, for your project.",
-    {
-      tool: z.enum(VIEW_TOOLS),
-      args: z.record(z.string(), z.unknown()).optional(),
-    },
-    viewQueryWords
-  );
+const VIEW_QUERY_DEFINITION = defineTool(
+  "view_query",
+  "What a view's Query(tool, args) reads, for your project.",
+  {
+    tool: z.enum(VIEW_TOOLS),
+    args: z.record(z.string(), z.unknown()).optional(),
+  },
+  viewQueryWords
+);
 
-const PROJECT_SETUP_DEFINITION = () =>
-  defineTool(
-    "project_setup",
-    "Facts for the project's setup page (project-setup skill).",
-    {
-      change: z
-        .array(z.enum(SETUP_PARTS))
-        .optional()
-        .describe("Parts to ask again."),
-    },
-    setupFactsWords
-  );
+const PROJECT_SETUP_DEFINITION = defineTool(
+  "project_setup",
+  "Facts for the project's setup page (project-setup skill).",
+  {
+    change: z
+      .array(z.enum(SETUP_PARTS))
+      .optional()
+      .describe("Parts to ask again."),
+  },
+  setupFactsWords
+);
 
-const PROJECT_NAME_DEFINITION = () =>
-  defineTool(
-    "project_name",
-    "Name your project while it has its placeholder name.",
-    { name: z.string().min(1).max(200) },
-    (named: { name: string }) => `Named the project “${named.name}”.`
-  );
+const PROJECT_NAME_DEFINITION = defineTool(
+  "project_name",
+  "Name your project while it has its placeholder name.",
+  { name: z.string().min(1).max(200) },
+  (named: { name: string }) => `Named the project “${named.name}”.`
+);
 
-const VIEW_GUIDE_DEFINITION = () =>
-  defineTool("view_guide", "How a view's program is written.", {}, sentence);
+const VIEW_GUIDE_DEFINITION = defineTool(
+  "view_guide",
+  "How a view's program is written.",
+  {},
+  sentence
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const CAW_DEFINITIONS = () => [
-  FOLDER_READ_DEFINITION().listed(),
-  FOLDER_WRITE_DEFINITION().listed(),
-  VIEW_DRAFT_DEFINITION().listed(),
-  VIEW_QUERY_DEFINITION().listed(),
-  PROJECT_SETUP_DEFINITION().listed(),
-  PROJECT_NAME_DEFINITION().listed(),
-  VIEW_GUIDE_DEFINITION().listed(),
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const CAW_DEFINITIONS = [
+  FOLDER_READ_DEFINITION.listed(),
+  FOLDER_WRITE_DEFINITION.listed(),
+  VIEW_DRAFT_DEFINITION.listed(),
+  VIEW_QUERY_DEFINITION.listed(),
+  PROJECT_SETUP_DEFINITION.listed(),
+  PROJECT_NAME_DEFINITION.listed(),
+  VIEW_GUIDE_DEFINITION.listed(),
 ];

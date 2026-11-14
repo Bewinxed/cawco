@@ -271,7 +271,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
     /** `browser_ask`, bound to the calling session (none for a listing). */
     tools(actor: InstanceRow | undefined, toolUseId?: string) {
       return [
-        BROWSER_ASK_DEFINITION().run(async (input) => {
+        BROWSER_ASK_DEFINITION.run(async (input) => {
           if (!actor) {
             throw new Error("Discovery cannot execute tools");
           }
@@ -285,30 +285,29 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
 
 export type BrowserAsks = ReturnType<typeof createBrowserAsks>;
 
-const BROWSER_ASK_DEFINITION = () =>
-  defineTool(
-    "browser_ask",
-    DESCRIPTION,
-    {
-      reason: z
-        .string()
-        .trim()
-        .min(1)
-        .max(REASON_MAX)
-        .describe(
-          'One sentence they read: what to do and why, e.g. "Sign in to GitHub to open the release page."'
-        ),
-      origin: z
-        .string()
-        .trim()
-        .refine(isOrigin, {
-          message:
-            "origin is the page's origin alone, scheme and host (and port): https://github.com, never a path or query.",
-        })
-        .describe("The page's origin, e.g. https://github.com."),
-    },
-    browserAnsweredWords
-  );
+const BROWSER_ASK_DEFINITION = defineTool(
+  "browser_ask",
+  DESCRIPTION,
+  {
+    reason: z
+      .string()
+      .trim()
+      .min(1)
+      .max(REASON_MAX)
+      .describe(
+        'One sentence they read: what to do and why, e.g. "Sign in to GitHub to open the release page."'
+      ),
+    origin: z
+      .string()
+      .trim()
+      .refine(isOrigin, {
+        message:
+          "origin is the page's origin alone, scheme and host (and port): https://github.com, never a path or query.",
+      })
+      .describe("The page's origin, e.g. https://github.com."),
+  },
+  browserAnsweredWords
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const BROWSER_DEFINITIONS = () => [BROWSER_ASK_DEFINITION().listed()];
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const BROWSER_DEFINITIONS = [BROWSER_ASK_DEFINITION.listed()];

@@ -1261,16 +1261,15 @@ export type FindTool = ReturnType<typeof createFindTool>;
 /** What a malformed `find` is told, after what it got wrong. */
 const INPUT_HELP = `Kinds: ${FIND_KINDS.join(", ")}. Example: ${EXAMPLE}`;
 
-const FIND_DEFINITION = () =>
-  defineTool(FIND_TOOL, DESCRIPTION, INPUT, findWords, {
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-    inputHelp: INPUT_HELP,
-  });
+const FIND_DEFINITION = defineTool(FIND_TOOL, DESCRIPTION, INPUT, findWords, {
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  inputHelp: INPUT_HELP,
+});
 
 /** `find`'s definition, as a session is listed it; `call` runs it for the calling session. */
 export const findToolDefinition = (
@@ -1278,7 +1277,7 @@ export const findToolDefinition = (
     input: z.infer<typeof SCHEMA>,
     format: "concise" | "detailed"
   ) => Promise<Parameters<typeof findWords>[0] | AnyProblem>
-) => FIND_DEFINITION().run(call);
+) => FIND_DEFINITION.run(call);
 
 /** `find` as a listing reads it, before any session's call is bound. */
-export const findListed = () => FIND_DEFINITION().listed();
+export const findListed = FIND_DEFINITION.listed();

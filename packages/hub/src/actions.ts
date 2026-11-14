@@ -887,7 +887,7 @@ export const createActions = ({
       return actor;
     };
     return [
-      ACTION_PROPOSE_DEFINITION().run(async (input) => {
+      ACTION_PROPOSE_DEFINITION.run(async (input) => {
         const filed = await propose(me(), {
           connection: input.connection,
           tool: input.tool,
@@ -908,7 +908,7 @@ export const createActions = ({
           said: "Waiting for the owner's approval.",
         };
       }),
-      ACTION_LIST_DEFINITION().run(async ({ state }) => {
+      ACTION_LIST_DEFINITION.run(async ({ state }) => {
         const projectId = projectOf(me());
         if (projectId instanceof ElysiaStatus) {
           return projectId;
@@ -916,7 +916,7 @@ export const createActions = ({
         await titlesOf(store.list(projectId, LISTED));
         return list(projectId, state);
       }),
-      ACTION_CANCEL_DEFINITION().run(({ id }) => {
+      ACTION_CANCEL_DEFINITION.run(({ id }) => {
         const projectId = projectOf(me());
         return Promise.resolve(
           projectId instanceof ElysiaStatus
@@ -1014,66 +1014,63 @@ export const actionRoutes = (actions: Actions) =>
     )
     .post("/api/actions/:id/checked", ({ params }) => actions.check(params.id));
 
-const ACTION_PROPOSE_DEFINITION = () =>
-  defineTool(
-    "action_propose",
-    "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
-    {
-      connection: z
-        .string()
-        .describe("A connection your delegate type or project lists."),
-      tool: z
-        .string()
-        .describe("The tool's own name on the connection's server."),
-      args: z
-        .record(z.string(), z.unknown())
-        .describe("The call's arguments, exactly as the owner approves them."),
-      run_at: z
-        .string()
-        .optional()
-        .describe(
-          "ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00. Left out: as soon as it is approved."
-        ),
-      reason: z
-        .string()
-        .describe("One sentence for the owner deciding: why this call."),
-      task: z
-        .string()
-        .optional()
-        .describe(
-          "The task it is for, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
-        ),
-      then_stage: z
-        .string()
-        .optional()
-        .describe(
-          "The stage the task moves to once the call is done; stages.md must let an action make that move."
-        ),
-    },
-    actionProposedWords
-  );
+const ACTION_PROPOSE_DEFINITION = defineTool(
+  "action_propose",
+  "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
+  {
+    connection: z
+      .string()
+      .describe("A connection your delegate type or project lists."),
+    tool: z
+      .string()
+      .describe("The tool's own name on the connection's server."),
+    args: z
+      .record(z.string(), z.unknown())
+      .describe("The call's arguments, exactly as the owner approves them."),
+    run_at: z
+      .string()
+      .optional()
+      .describe(
+        "ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00. Left out: as soon as it is approved."
+      ),
+    reason: z
+      .string()
+      .describe("One sentence for the owner deciding: why this call."),
+    task: z
+      .string()
+      .optional()
+      .describe(
+        "The task it is for, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
+      ),
+    then_stage: z
+      .string()
+      .optional()
+      .describe(
+        "The stage the task moves to once the call is done; stages.md must let an action make that move."
+      ),
+  },
+  actionProposedWords
+);
 
-const ACTION_LIST_DEFINITION = () =>
-  defineTool(
-    "action_list",
-    "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
-    {
-      state: z.enum(ACTION_STATES).optional(),
-    },
-    actionListWords
-  );
+const ACTION_LIST_DEFINITION = defineTool(
+  "action_list",
+  "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
+  {
+    state: z.enum(ACTION_STATES).optional(),
+  },
+  actionListWords
+);
 
-const ACTION_CANCEL_DEFINITION = () =>
-  defineTool(
-    "action_cancel",
-    "Cancel an approved action of your project before it runs.",
-    { id: z.string().trim().min(1).describe("Its id.") },
-    actionWords
-  );
+const ACTION_CANCEL_DEFINITION = defineTool(
+  "action_cancel",
+  "Cancel an approved action of your project before it runs.",
+  { id: z.string().trim().min(1).describe("Its id.") },
+  actionWords
+);
 
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const ACTION_DEFINITIONS = () => [
-  ACTION_PROPOSE_DEFINITION().listed(),
-  ACTION_LIST_DEFINITION().listed(),
-  ACTION_CANCEL_DEFINITION().listed(),
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const ACTION_DEFINITIONS = [
+  ACTION_PROPOSE_DEFINITION.listed(),
+  ACTION_LIST_DEFINITION.listed(),
+  ACTION_CANCEL_DEFINITION.listed(),
 ];
