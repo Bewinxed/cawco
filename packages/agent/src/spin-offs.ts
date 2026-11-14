@@ -24,7 +24,7 @@ import { fetchDefaultBranch, hostGit } from "./git/run";
 import type { Harness } from "./harness";
 import { harness as harnessOf } from "./harnesses";
 import { isDirectory } from "./is-directory";
-import { readJson, writeJson } from "./json-file";
+import { readOwnJson, writeJson } from "./json-file";
 import { gaugeTables } from "./memory";
 import { repoTop } from "./repo-top";
 import { warn } from "./session-log";
@@ -168,6 +168,11 @@ export class SpinOffs {
     if (!spinOff?.sessionId || spinOff.tagged) {
       return;
     }
+    // A harness that keeps no tag (pi) refuses one: nothing to try again.
+    if (!adapter.capabilities.tagSession) {
+      spinOff.tagged = true;
+      return;
+    }
     const { sessionId, dir } = spinOff;
     spinOff.tagged = true;
     detach(
@@ -204,7 +209,7 @@ export class SpinOffs {
     baseCwd: string,
     processGeneration: string | undefined
   ): Promise<string> {
-    const recorded = await readJson<Worktree>(worktreeRecord(instanceId));
+    const recorded = await readOwnJson<Worktree>(worktreeRecord(instanceId));
     if (recorded) {
       this.#worktrees.set(instanceId, recorded);
       this.#recordWorktree(instanceId, processGeneration, recorded);
@@ -293,7 +298,7 @@ export class SpinOffs {
   async #worktreeOf(instanceId: string): Promise<Worktree | undefined> {
     return (
       this.#worktrees.get(instanceId) ??
-      (await readJson<Worktree>(worktreeRecord(instanceId))) ??
+      (await readOwnJson<Worktree>(worktreeRecord(instanceId))) ??
       undefined
     );
   }
