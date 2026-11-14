@@ -137,6 +137,7 @@ import type {
 } from "@cawco/core/task-views";
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
+import { workWords } from "@cawco/core/words/work";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
@@ -184,7 +185,7 @@ import {
   type WorkItemStart,
   type WorkItems,
 } from "./work-items";
-import { budgetProblem } from "./work-limits";
+import { budgetColumns, budgetOf, budgetProblem } from "./work-limits";
 import { capitalized, type WorkAsk, type WorkPlace } from "./work-place";
 
 /** What the dispatcher needs of the hub. */
@@ -767,6 +768,12 @@ const pauseOf = (
     stagesProblems: string[];
   }
 ): string | null => {
+  if (project.budgetUnread !== null) {
+    return workWords.projectBudgetUnread(
+      project.name,
+      workWords.budgetUnread(project.budgetUnread)
+    );
+  }
   if (!project.dispatch) {
     return "Dispatch is off: attempts start only when a session or you start them.";
   }
@@ -794,9 +801,8 @@ const columnsOf = ({
   reviewLimit,
   runsOn,
 }: DispatchChange) => ({
-  ...(budget === undefined
-    ? {}
-    : { budget: budget && Object.keys(budget).length > 0 ? budget : null }),
+  // A budget written clears one that did not read; empty is none.
+  ...(budget === undefined ? {} : budgetColumns(budget)),
   ...(dispatch === undefined ? {} : { dispatch }),
   ...(lands === undefined ? {} : { lands }),
   ...(maxAttempts === undefined ? {} : { maxAttempts }),
@@ -1656,7 +1662,7 @@ export const createDispatcher = ({
       live,
     });
     const view: DispatchView = {
-      budget: project.budget,
+      budget: budgetOf(project),
       dispatch: project.dispatch,
       lands: project.lands,
       conversationInstanceId: project.conversationInstanceId,

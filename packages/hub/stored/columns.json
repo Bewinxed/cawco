@@ -11526,36 +11526,8 @@
       "type": "string"
     }
   },
-  "projects.budget": {
-    "type": "object",
-    "properties": {
-      "minutes": {
-        "type": "number"
-      },
-      "turns": {
-        "type": "number"
-      },
-      "usd": {
-        "type": "number"
-      }
-    }
-  },
   "queued_task_starts.asked": {},
   "queued_work_items.request": {},
-  "routines.budget": {
-    "type": "object",
-    "properties": {
-      "minutes": {
-        "type": "number"
-      },
-      "turns": {
-        "type": "number"
-      },
-      "usd": {
-        "type": "number"
-      }
-    }
-  },
   "sent_messages.body": {
     "type": "object",
     "properties": {
@@ -14069,20 +14041,6 @@
       "name",
       "since"
     ]
-  },
-  "work_items.budget": {
-    "type": "object",
-    "properties": {
-      "minutes": {
-        "type": "number"
-      },
-      "turns": {
-        "type": "number"
-      },
-      "usd": {
-        "type": "number"
-      }
-    }
   },
   "work_items.gate_passes": {
     "type": "object",

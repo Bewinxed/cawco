@@ -136,6 +136,7 @@ import type { SpawnProblem } from "./spawn-problems";
 import { readStages } from "./stages";
 import { MODE, stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
 import type { Views } from "./views";
+import { budgetOf } from "./work-limits";
 import type { WorkPlace } from "./work-place";
 
 /**
@@ -1583,7 +1584,7 @@ export const createCaw = ({
         monthUsd: spent.monthUsd,
         caw: spent.caw,
         others: spent.others,
-        budget: project.budget ?? null,
+        budget: budgetOf(project),
         cap: caps.capOf(project),
         fleetOnCap: db.spendOnCap(),
         // This month's ledger: what moved this month, and nothing else.

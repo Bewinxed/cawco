@@ -23,6 +23,7 @@ import { eq, is, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { logBudgetUnread } from "./budget-unread";
 import type { DbCore } from "./core";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
@@ -95,6 +96,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
       // session and type 0397 places narrow, read before it runs.
       delegateTypesHandShape(client);
       logMayStartNarrowed(client);
+    },
+  },
+  {
+    name: "budget-unread",
+    before: "0398_budget_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every budget 0398 keeps as not read, read before it runs.
+      logBudgetUnread(client);
     },
   },
   {

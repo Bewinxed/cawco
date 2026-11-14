@@ -117,6 +117,7 @@ import { projectStartingSet } from "./project-starting-set";
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
+import { budgetOf } from "./work-limits";
 
 const GITHUB_REPO =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/u;
@@ -559,10 +560,18 @@ export const createProjectSettings = ({
       return change;
     }
     const columns = dispatchColumns(change);
+    // A budget that does not read is never one a change names again.
+    const now = new Map<string, unknown>([
+      ["budget", project.budgetUnread ?? budgetOf(project)],
+      ["dispatch", project.dispatch],
+      ["lands", project.lands],
+      ["maxAttempts", project.maxAttempts],
+      ["reviewLimit", project.reviewLimit],
+      ["runsOn", project.runsOn],
+    ]);
     const same = Object.entries(columns).every(
       ([key, value]) =>
-        JSON.stringify(project[key as keyof DispatchChange] ?? null) ===
-        JSON.stringify(value ?? null)
+        JSON.stringify(now.get(key) ?? null) === JSON.stringify(value ?? null)
     );
     const misfit = same ? alreadyWords(change) : dispatchProblem(columns);
     return misfit

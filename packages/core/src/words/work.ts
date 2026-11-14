@@ -174,6 +174,22 @@ export const workWords = {
   /** Why an item is blocked: the account its session runs on is gone. */
   missingAccount: (name: string) =>
     `The account it runs on (${name}) is gone, so its session isn't started again on another one. Add the account back, or stop the item.`,
+  /**
+   * A budget that did not read whole when budgets became columns (hub
+   * migration 0398, its column `budget_unread`), as it was stored, cut
+   * short: why the work it governs stops.
+   */
+  budgetUnread: (stored: string) =>
+    `its budget was stored as “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, which does not read as dollars above 0 (usd) and whole numbers from 1 (turns, minutes), so the hub cannot tell what it may spend`,
+  /** A live item stopped because its own budget does not read (`budgetUnread`). */
+  budgetUnreadStopped: (why: string) =>
+    `The hub stopped this item: ${why}. Start the work again with a budget that reads.`,
+  /** A work item refused, or a project's dispatch paused, because its project's budget does not read (`budgetUnread`). */
+  projectBudgetUnread: (name: string, why: string) =>
+    `${name} starts no work item: ${why}. Set the project's budget again, or clear it, and its work starts.`,
+  /** A routine's run skipped because its budget does not read (`budgetUnread`). */
+  routineBudgetUnread: (why: string) =>
+    `The run is skipped: ${why}. Set the routine's budget again, or clear it, and its runs start.`,
   /** How long a session with no minutes budget may sleep and be woken. */
   aDay: "a day",
   /** The limit of an item with a minutes budget. */

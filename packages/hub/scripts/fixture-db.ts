@@ -16,9 +16,9 @@
  * With `--at`, this file and hub-in-process.ts run inside a worktree of that
  * commit, against its hub; the seed below must fit that commit's Db.
  *
- * With `--lists`, the same fleet and the lists fixture's sessions and types
- * besides ({@link seedLists}), written to fixtures/lists-db.sqlite.gz: the
- * migration check runs over both.
+ * With `--lists`, the same fleet and the lists fixture's sessions, types and
+ * budgets besides ({@link seedLists}, {@link seedBudgets}), written to
+ * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -38,7 +38,8 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
 /**
  * `--lists`: the same fleet with every shape a session's or delegate type's
  * lists took before migration 0397 (what it may start, its starting set, a
- * trashed type, a continued work item), written here.
+ * trashed type, a continued work item), and every shape a budget took before
+ * migration 0398, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -373,6 +374,94 @@ function seedByHand(dbPath: string, continued: [string, string][]): void {
   sqlite.close();
 }
 
+/** Far past any run: a seeded routine never fires in the hub the migration check starts. */
+const NEVER = Date.UTC(2100, 0, 1);
+
+/**
+ * Every shape migration 0398 reads a budget in, as the hub's writers stored
+ * it (JSON text, `null` for none) and as a hand edit could: each limit set
+ * alone and together, a budget unset at each level (null, JSON `null`,
+ * `{}`), a work item that took its project's limit beside its own and one
+ * in the same project made before the project had one, and at each level
+ * a budget that does not read, one of them partly.
+ */
+function seedBudgets(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const items = sqlite
+    .query<{ id: string; project: string }, []>(
+      "SELECT id, project_id AS project FROM work_items ORDER BY rowid"
+    )
+    .all();
+  const [first] = items;
+  if (!first) {
+    throw new Error("The fixture has no work item to give a budget.");
+  }
+  const projects = sqlite
+    .query<{ id: string }, [string]>(
+      "SELECT id FROM projects WHERE id <> ? ORDER BY rowid"
+    )
+    .all(first.project)
+    .map((row) => row.id);
+  const budget = (table: string, key: string, value: string): void => {
+    sqlite.run(`UPDATE ${table} SET budget = ? WHERE id = ?`, [value, key]);
+  };
+  // The first item's project: its items take its dollars.
+  budget("projects", first.project, '{"usd":5}');
+  budget("work_items", first.id, '{"usd":5,"turns":40}');
+  const projectBudgets = [
+    '{"turns":40}',
+    '{"minutes":30}',
+    '{"usd":2.5,"turns":20,"minutes":45}',
+    "{}",
+    "null",
+    '{"usd":"5"}',
+  ];
+  for (const [n, value] of projectBudgets.entries()) {
+    const project = projects[n];
+    if (project) {
+      budget("projects", project, value);
+    }
+  }
+  const others = items.filter((item) => item.project !== first.project);
+  const itemBudgets = [
+    '{"usd":1.25}',
+    '{"turns":12}',
+    '{"minutes":90}',
+    '{"usd":3,"turns":30,"minutes":60}',
+    "null",
+    "{}",
+    '{"dollars":3}',
+    '{"usd":2,"turns":-1}',
+    "usd 5",
+  ];
+  for (const [n, value] of itemBudgets.entries()) {
+    const item = others[n];
+    if (item) {
+      budget("work_items", item.id, value);
+    }
+  }
+  const routine = (name: string, value: string | null): void => {
+    sqlite.run(
+      "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, budget, enabled, created_by, keep, next_slot, created_at) VALUES (?, ?, ?, '0 9 * * 1', 'UTC', 'delegate', ?, 'none', ?, 1, 'owner', 1, ?, ?)",
+      [
+        crypto.randomUUID(),
+        first.project,
+        name,
+        `Weekly: ${name.toLowerCase()}.`,
+        value,
+        NEVER,
+        Date.UTC(2026, 9, 3),
+      ]
+    );
+  };
+  routine("Check the release proof", '{"usd":3,"turns":30,"minutes":60}');
+  routine("Tidy the preview pane", null);
+  routine("Answer the queued asks", "{}");
+  routine("Move tasks to the new stage", "not json");
+  routine("Check the migration", '{"usd":1,"minutes":0}');
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -390,6 +479,7 @@ async function seed(
   lifetime.close();
   if (withLists) {
     seedByHand(dbPath, continued);
+    seedBudgets(dbPath);
   }
 }
 
