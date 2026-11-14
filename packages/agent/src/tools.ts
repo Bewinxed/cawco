@@ -682,11 +682,14 @@ const recordInstall = (
  * WHOSE THE COPY AT `at` IS (core `ToolCopy`). CawCo's, when its record of
  * its own install names this copy's path (the link the PATH finds, or the
  * file it resolves to: a package manager's update rewrites the file under
- * the same link). For a copy no record names, which every copy CawCo put on
- * before it kept the record is: CawCo's when it says a version a CawCo
- * build ran as its one version (core `ToolSpec.formerVersions`, and this
- * build's own) and one of the catalog's methods holds it, the method an
- * install would run again. Any other is the person's.
+ * the same link) and the copy still says the version that install put on: a
+ * copy that says another was put on over CawCo's by another hand, and the
+ * person's own is never updated unasked (the owner, 2026-11-14). For a copy
+ * no record names, which every copy CawCo put on before it kept the record
+ * is: CawCo's when it says a version a CawCo build ran as its one version
+ * (core `ToolSpec.formerVersions`, and this build's own) and one of the
+ * catalog's methods holds it, the method an install would run again. Any
+ * other is the person's.
  */
 const copyOf = async (
   spec: ToolSpec,
@@ -694,7 +697,11 @@ const copyOf = async (
   version: string | undefined
 ): Promise<ToolCopy> => {
   const record = (await readInstalls())[spec.id];
-  if (record && (record.path === at.path || realOf(record.path) === at.file)) {
+  if (
+    record &&
+    (record.path === at.path || realOf(record.path) === at.file) &&
+    (record.version === undefined || record.version === version)
+  ) {
     return { by: "cawco", at: record.at };
   }
   const pinned = [...(spec.formerVersions ?? []), spec.exactVersion];
