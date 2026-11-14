@@ -26,10 +26,6 @@ import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
-import { z } from "zod";
-import { toHttpBase } from "./discovery";
-import { holdDeclaredSecret } from "./git/hub-credential";
-import { type DeclaredLfs, sameEndpoint } from "./git/lfs";
 import {
   type HubAnswer,
   type HubClient,
@@ -37,7 +33,11 @@ import {
   hubClient,
   refusalText,
   unwrap,
-} from "./hub-client";
+} from "@cawco/hub/client";
+import { z } from "zod";
+import { toHttpBase } from "./discovery";
+import { holdDeclaredSecret } from "./git/hub-credential";
+import { type DeclaredLfs, sameEndpoint } from "./git/lfs";
 import { provenFetch } from "./hub-proof";
 
 /** How long the hub may take to say where a project's large files live. Our choice. */

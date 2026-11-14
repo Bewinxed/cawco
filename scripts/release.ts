@@ -47,7 +47,6 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
-import { hubClient, unwrap } from "../packages/agent/src/hub-client";
 import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
@@ -56,6 +55,7 @@ import {
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
+import { hubClient, unwrap } from "../packages/hub/src/client";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";

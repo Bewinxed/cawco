@@ -31,7 +31,6 @@ import {
   delegationHubUrl,
   harnessMcpUrl,
   OPEN_ITEMS_TOOL,
-  TOOL_DOOR,
 } from "../delegation";
 import { readJson, writeJson } from "../json-file";
 import { GATE_PREFIX } from "../mcp-gate";
@@ -96,7 +95,6 @@ const pluginSettings = (): PluginSettings => ({
   quietDir: OPENCODE_QUIET_DIR,
   sendNowMetadata: SEND_NOW_METADATA,
   spillsDirName: SPILLS_DIR_NAME,
-  toolDoor: TOOL_DOOR,
   workspacePolicyName: WORKSPACE_POLICY_NAME,
   workspaces: workspacesDir(),
 });

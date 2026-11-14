@@ -6,7 +6,8 @@
  */
 
 import type { ViewToolName } from "@cawco/core/views";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hubPath } from "@cawco/hub/client";
+import { hub } from "#lib/platform/hub.js";
 import {
   answerOf,
   hubData,

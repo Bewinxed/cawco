@@ -3,15 +3,11 @@
  * republish.ts: the hub on this host told the release is up.
  */
 
-import {
-  hubClient,
-  refusalText,
-  unwrap,
-} from "../packages/agent/src/hub-client";
 import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
+import { hubClient, refusalText, unwrap } from "../packages/hub/src/client";
 
 /** How long the hub has to look at its release host and answer, each ask. */
 export const ANNOUNCE_MS = 30_000;

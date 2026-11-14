@@ -14,16 +14,12 @@
  */
 
 import {
-  hubClient,
-  refusalText,
-  unwrap,
-} from "../../packages/agent/src/hub-client";
-import {
   type Bounded,
   Gone,
   readWithin,
 } from "../../packages/core/src/bounded";
 import { unhandled } from "../../packages/core/src/unhandled";
+import { hubClient, refusalText, unwrap } from "../../packages/hub/src/client";
 
 const [, , hub, machineId, prefix] = Bun.argv;
 const POLL_MS = 20;

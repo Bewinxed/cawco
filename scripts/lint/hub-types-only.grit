@@ -1,14 +1,22 @@
 language js
 
-// The dashboard, the agent and the scripts take the hub's types alone (its
-// routes, for their Eden clients: packages/hub/src/app.ts), never its code by
-// package name: a value taken from the hub would put the server in a
-// browser's bundle or the agent's binary. `import type` and `export type …
-// from` are erased in the build. `import { type X }` is not: under
-// verbatimModuleSyntax (tsconfig.paths.json) it is kept as `import {} from
-// …`, which loads the module and runs it, so it is refused with the rest. So
-// are an import for its effect, a re-export, a dynamic `import()` and a
-// `require`.
+// The dashboard, the agent, the CLI and the scripts take the hub's types
+// alone (its routes, for their Eden clients: packages/hub/src/app.ts), and
+// of its code only its client, `@cawco/hub/client` (packages/hub/src/client.ts),
+// never anything else by package name: a value taken from the hub would put
+// the server in a browser's bundle or the agent's binary. `import type` and
+// `export type … from` are erased in the build. `import { type X }` is not:
+// under verbatimModuleSyntax (tsconfig.paths.json) it is kept as
+// `import {} from …`, which loads the module and runs it, so it is refused
+// with the rest. So are an import for its effect, a re-export, a dynamic
+// `import()` and a `require`.
+//
+// One value of the hub's is the CLI's: its `hub` verb runs the hub, by its
+// entry loaded on demand (packages/cli/src/cli.ts `import("@cawco/hub")`),
+// so no other verb loads it.
+//
+// The client itself takes nothing of the hub but types, by the same rule:
+// any import of a hub module, by a relative path or by package name.
 or {
   `import $clause from $source` as $hit where {
     not $hit <: `import type $_ from $_`
@@ -22,7 +30,22 @@ or {
   `import($source)` as $hit,
   `require($source)` as $hit
 } where {
-  $source <: r"[\"']@cawco/hub(?:/.*)?[\"']",
-  $filename <: or { includes "apps/dashboard/", includes "packages/agent/", r"(^|/)scripts/(binary|lib)/.*", r"(^|/)scripts/[^/]+\.ts$" },
-  register_diagnostic(span=$hit, message="Import the hub's types alone here (`import type`): its code never goes in the dashboard's bundle, the agent or a script.")
+  or {
+    and {
+      $filename <: or { includes "apps/dashboard/", includes "packages/agent/", includes "packages/cli/", r"(^|/)scripts/(binary|lib)/.*", r"(^|/)scripts/[^/]+\.ts$" },
+      $source <: r"[\"']@cawco/hub(?:/.*)?[\"']",
+      not $source <: r"[\"']@cawco/hub/client[\"']",
+      not and {
+        $filename <: includes "packages/cli/src/cli.ts",
+        $hit <: `import($_)`,
+        $source <: r"[\"']@cawco/hub[\"']"
+      },
+      register_diagnostic(span=$hit, message="Import the hub's types alone here (`import type`), and its client from `@cawco/hub/client`: its other code never goes in the dashboard's bundle, the agent, the CLI or a script.")
+    },
+    and {
+      $filename <: includes "packages/hub/src/client.ts",
+      $source <: r"[\"'](?:\.\.?/.*|@cawco/hub(?:/.*)?)[\"']",
+      register_diagnostic(span=$hit, message="The hub's client takes the hub's types alone (`import type`): it goes in every bundle that asks the hub, and the hub's code never does.")
+    }
+  }
 }

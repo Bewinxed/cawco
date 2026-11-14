@@ -9,7 +9,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
-import { hubClient, refusalText, unwrap } from "@cawco/agent/hub-client";
 import {
   requireLinger,
   systemdActive,
@@ -41,6 +40,7 @@ import { runtimeVersion } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { hubClient, refusalText, unwrap } from "@cawco/hub/client";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
 import { keepJoinedHub } from "./joined-hub";

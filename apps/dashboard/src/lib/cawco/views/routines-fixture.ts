@@ -6,9 +6,10 @@
  */
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { routinesWords } from "@cawco/core/words/routines";
+import { hubPath } from "@cawco/hub/client";
 import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
 import type { Routine, RoutineRun } from "#lib/cawco/routines/routines-api.js";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
 
 export const PROJECT = { id: "70ac3d41", name: "Cawco-Dev" };
 

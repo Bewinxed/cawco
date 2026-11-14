@@ -11,8 +11,9 @@ import type { ApprovedActionView } from "@cawco/core/actions";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
+import type { HubClient } from "@cawco/hub/client";
 import type { Treaty } from "@elysia/eden";
-import { type HubClient, hub } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
 import { hubData, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */

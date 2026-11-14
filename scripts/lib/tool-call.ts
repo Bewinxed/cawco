@@ -8,12 +8,7 @@
  * every caller on this client, so a tool whose words change fails the
  * program that read its old shape, by name, never silently.
  */
-import {
-  dataOf,
-  hubClient,
-  reached,
-  succeeded,
-} from "../../packages/agent/src/hub-client";
+
 import { readWithin } from "../../packages/core/src/bounded";
 import type { Sending } from "../../packages/core/src/sending";
 import {
@@ -23,6 +18,12 @@ import {
   type ToolForm,
   toolArguments,
 } from "../../packages/core/src/tool-answer";
+import {
+  dataOf,
+  hubClient,
+  reached,
+  succeeded,
+} from "../../packages/hub/src/client";
 import type {
   BareTool,
   ToolArgs,

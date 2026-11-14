@@ -16,12 +16,6 @@
  * call on a session's name alone.
  */
 
-import {
-  type HubConfig,
-  hubClient,
-  refusalText,
-  unwrap,
-} from "@cawco/agent/hub-client";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import {
   envelopeText,
@@ -30,6 +24,12 @@ import {
   type ToolForm,
   toolArguments,
 } from "@cawco/core/tool-answer";
+import {
+  type HubConfig,
+  hubClient,
+  refusalText,
+  unwrap,
+} from "@cawco/hub/client";
 
 /** Where the CLI reads the session it acts as, and that session's credential: every session's shell has both. */
 const TOOL_ENV = {

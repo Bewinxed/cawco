@@ -1,35 +1,42 @@
 /**
- * The hub as Eden's typed client (elysiajs.com/eden/treaty/overview) for every
- * caller that is not a browser: the agent, the CLI and the scripts. Every
- * route by its path, what it takes and what it answers come from the hub's
- * own routes (`HubApp`, a type-only import: none of the server's code comes
- * with it), never written here.
+ * The hub as Eden's typed client (elysiajs.com/eden/treaty/overview), for
+ * every TypeScript caller of the hub: the dashboard (its platform/hub.ts),
+ * the agent, the CLI, the OpenCode plugin and the scripts. Every route by
+ * its path, what it takes and what it answers come from the hub's own
+ * routes (`HubApp`, a type-only import: none of the server's code comes with
+ * it), never written here. Its value imports are Eden and core's refusal
+ * words; of the hub, none (scripts/lint/hub-types-only.grit holds it), so a
+ * browser's bundle and the agent's binary carry no hub code.
  *
- * Each caller keeps its own transport (`send`): the agent's `provenFetch`, a
- * machine's `machineFetch`, a probe's deadline and credential. It is named at
- * every client, never defaulted: it is what carries the caller's credential,
- * and a default would send without one in silence, as the agent's update loop
- * did when this seam took `fetch` by default (the nightly from 886030601,
- * refused as anonymous). Dates stay the strings the hub sent
- * (`parseDate: false`): Eden would otherwise make every ISO string a `Date`
- * its route doesn't type.
+ * Each caller keeps its own transport (`send`): the dashboard's page `fetch`,
+ * the agent's `provenFetch`, a machine's `machineFetch`, a probe's deadline
+ * and credential. It is named at every client, never defaulted: it is what
+ * carries the caller's credential, and a default would send without one in
+ * silence, as the agent's update loop did when this seam took `fetch` by
+ * default (the nightly from 886030601, refused as anonymous). Dates stay the
+ * strings the hub sent (`parseDate: false`): Eden would otherwise make every
+ * ISO string a `Date` its route doesn't type.
  */
 
 import { problemWords } from "@cawco/core/hub-refusal";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
-import type { HubApp } from "@cawco/hub/app";
 import { type Treaty, treaty } from "@elysia/eden";
+import type { HubApp } from "./app";
 
 /** What sends a hub request: `fetch` itself, or one that carries the caller's credential or deadline. */
 export type HubSender = (url: string, init: RequestInit) => Promise<Response>;
 
-/** `fetch`'s type around a sender: Eden always hands it the URL as a string, and it only needs `preconnect` to be `typeof fetch`. */
+/**
+ * `fetch`'s type around a sender: a proxy of `fetch`, so it keeps whatever
+ * else the runtime's `fetch` carries (Bun's `preconnect`) without naming it,
+ * and a browser's build needs no Bun type. Eden always hands it the URL as a
+ * string.
+ */
 const fetcherOf = (send: HubSender): typeof fetch =>
-  Object.assign(
-    (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+  new Proxy(fetch, {
+    apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) =>
       send(String(input), init ?? {}),
-    { preconnect: fetch.preconnect }
-  );
+  });
 
 /** Eden's client of the hub. */
 export type HubClient = Treaty.Create<HubApp>;
@@ -38,9 +45,14 @@ export type HubClient = Treaty.Create<HubApp>;
  * What a caller adds to every request of its client: fixed `headers`, or an
  * `onRequest` that sets a request's headers from its path and method
  * (next.elysiajs.com/eden/treaty/config: "shallow merge it into the current
- * RequestInit, merging its headers").
+ * RequestInit, merging its headers"), and an `onResponse` that reads an
+ * answer before Eden does (the dashboard's file answers, hub-read.ts
+ * `fileOf`).
  */
-export type HubConfig = Pick<Treaty.Config, "headers" | "onRequest">;
+export type HubConfig = Pick<
+  Treaty.Config,
+  "headers" | "onRequest" | "onResponse"
+>;
 
 /** The hub at `base` (its origin), asked through `send`. */
 export const hubClient = (
@@ -80,8 +92,29 @@ export type HubData<A> = A extends { data: infer D; error: null }
   ? Exclude<D, Response>
   : never;
 
-/** Paths alone (`hubPath.health["~path"]`), for a caller that hands a hub path on rather than asking it. */
-export const hubPath: HubClient = hubClient("", fetch);
+/**
+ * The routes alone, for a caller that has no client to take one from and
+ * hands its address on rather than asking it ({@link hubPath}). It sends
+ * nothing: its `send` is `fetch` only for the type.
+ */
+export const hubRoutes: HubClient = hubClient("", fetch);
+
+/**
+ * A route's address, for a request Eden's client cannot send itself (a
+ * beacon, an upload that says how far it has gone, a download read as it
+ * comes, an element's `src`) or one handed on: each segment of Eden's path
+ * (`~path`) encoded, as Eden encodes a path parameter's value when it sends,
+ * and `query` after it. Relative to the client's base; a caller with an
+ * origin puts it before.
+ */
+export function hubPath(
+  route: { "~path": string },
+  query: Record<string, string> = {}
+): string {
+  const path = route["~path"].split("/").map(encodeURIComponent).join("/");
+  const search = new URLSearchParams(query).toString();
+  return search ? `${path}?${search}` : path;
+}
 
 /** `answer`, unless the request got no answer: that fails as itself, what Eden hands back as a 503 with no response. */
 export const reached = <A extends HubAnswer>(answer: A): A => {

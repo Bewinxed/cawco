@@ -7,12 +7,6 @@
  * this very code.
  */
 import { hostname } from "node:os";
-import {
-  dataOf,
-  HubNotAnswering,
-  hubClient,
-  reached,
-} from "@cawco/agent/hub-client";
 import { machineFetch } from "@cawco/agent/machine-fetch";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -29,6 +23,7 @@ import {
 } from "@cawco/core/machine-key";
 import type { AgentRow } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
+import { dataOf, HubNotAnswering, hubClient, reached } from "@cawco/hub/client";
 
 const JOIN_TIMEOUT_MS = INSTALL_LIST_LIMIT_MS;
 const LOCAL_NETWORK_URL =

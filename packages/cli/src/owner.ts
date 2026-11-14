@@ -11,6 +11,12 @@
  * could read it. The hub keeps it for a quarter of an hour, in memory.
  */
 
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { PairingPoll, PairingStart } from "@cawco/core/hub-auth";
+import { OWNER_SCHEME } from "@cawco/core/hub-auth";
+import { secondsOf } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   dataOf,
   type HubAnswer,
@@ -19,13 +25,7 @@ import {
   reached,
   refusalText,
   unwrap,
-} from "@cawco/agent/hub-client";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { PairingPoll, PairingStart } from "@cawco/core/hub-auth";
-import { OWNER_SCHEME } from "@cawco/core/hub-auth";
-import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
-import { cutShort } from "@cawco/core/words/helpers";
+} from "@cawco/hub/client";
 
 /** This run's approval, once the person gave it. */
 let token: string | undefined;

@@ -4,7 +4,7 @@
  * hub-read's readers (`hubData`, `hubAsk`): an output's words, a captions
  * file's text, the hub's refusal when a picture or a clip doesn't load.
  */
-import { hubPath } from "./hub";
+import { hubPath } from "@cawco/hub/client";
 import type { HubAnswer } from "./hub-read";
 
 export interface ServedFile<T = unknown> {

@@ -1,6 +1,6 @@
+import { hubClient, refusalText, unwrap } from "@cawco/hub/client";
 import { delegationHubUrl } from "./delegation";
 import { hubAnswer } from "./hub-away";
-import { hubClient, refusalText, unwrap } from "./hub-client";
 
 /**
  * The hub refused the credential an ACK carried (HTTP 401): it does not know

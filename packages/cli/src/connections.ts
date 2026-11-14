@@ -12,9 +12,9 @@
  * length and the connection's state; never the key.
  */
 
-import { refusalText, unwrap } from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONNECTION_NAME } from "@cawco/core/delegate-types";
+import { refusalText, unwrap } from "@cawco/hub/client";
 import { ownerCall } from "./owner";
 
 export class ConnectionKeyError extends Error {}

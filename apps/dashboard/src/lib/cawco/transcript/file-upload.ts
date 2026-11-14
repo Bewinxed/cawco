@@ -5,8 +5,9 @@
  * because only it says how far an upload has gone.
  */
 import type { FileAttachment } from "@cawco/core/attachments";
+import { hubPath } from "@cawco/hub/client";
 import { z } from "zod";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
 import {
   answerOf,
   HUB_UNREACHABLE,

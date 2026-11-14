@@ -1,8 +1,8 @@
 /**
  * A hub path is the clients' to write: every TypeScript caller of the hub
- * reaches it through Eden's typed client (the dashboard's `platform/hub.ts`,
- * everything else's `packages/agent/src/hub-client.ts`, or their `~path` for
- * a link), so a hub path (`/api/…`, `/health`) built by hand in a string or
+ * reaches it through Eden's typed client (`@cawco/hub/client`, which the
+ * dashboard's `platform/hub.ts` builds from too), or a route's address from
+ * it (`hubPath`) for a link, so a hub path (`/api/…`, `/health`) built by hand in a string or
  * a template anywhere else is refused, whether it is fetched there or handed
  * on. The client's own transport hands it on as a whole URL, which this rule
  * reads from no literal.
@@ -15,9 +15,9 @@
  * GitHub Enterprise host). The files below are the clients' seams and what
  * serves or proxies the hub's paths rather than asking them.
  *
- * The dashboard's `hubPath` (a route's address from Eden's path, for a send
- * Eden's client cannot make) only in the files {@link HUB_PATH_USERS} lists,
- * each with why.
+ * `hubPath` (`@cawco/hub/client`: a route's address from Eden's path, for a
+ * send Eden's client cannot make) only in the files {@link HUB_PATH_USERS}
+ * lists, each with why.
  *
  * golar.config.ts runs it over the dashboard's source, every script, and
  * the agent's, the CLI's and core's source; scripts/lint/fixtures/
@@ -73,10 +73,11 @@ const OWN: Record<string, string> = {
 };
 
 /**
- * The dashboard's files that take a route's address from Eden's path
- * (platform/hub.ts `hubPath`) for what Eden's client cannot send or the
- * browser reads itself, each with why. Every other request goes through
- * Eden, read by hub-read's readers (house/eden-answers-read).
+ * The files that take a route's address from Eden's path
+ * (`@cawco/hub/client` `hubPath`) for what Eden's client cannot send, the
+ * browser reads itself, or a caller names, each with why. Every other request
+ * goes through Eden, read by hub-read's readers in the dashboard
+ * (house/eden-answers-read) and the client's own elsewhere.
  */
 const HUB_PATH_USERS: Record<string, string> = {
   "apps/dashboard/src/lib/cawco/transcript/file-upload.ts":
@@ -91,6 +92,14 @@ const HUB_PATH_USERS: Record<string, string> = {
     "the stand-in recognises the requests it answers by their path",
   "apps/dashboard/src/lib/cawco/views/routines-fixture.ts":
     "the stand-in recognises the requests it answers by their path",
+  "packages/agent/src/binary-update.ts":
+    "a build's download, written to disk as it comes and said how far it has gone",
+  "packages/cli/src/binary-health.ts":
+    "the address a probe names in what it says, beside its read through Eden",
+  "packages/cli/src/service.ts":
+    "the address a probe names in what it says, beside its read through Eden",
+  "scripts/binary/smoke-stack.ts":
+    "the address a wait names in what it says, beside its read through Eden, and a form's POST from another site that Eden would send as JSON",
 };
 
 /** The calls that only read a string they are given. */
@@ -177,7 +186,7 @@ export const hubPathByHand = defineRule({
       ) {
         report(
           node.expression,
-          "hubPath is for what Eden's client cannot send or the browser reads itself, listed in scripts/lint/hub-path-by-hand.ts HUB_PATH_USERS with why. Ask the hub through Eden (platform/hub.ts `hub`), read by hub-read's readers."
+          "hubPath is for what Eden's client cannot send, the browser reads itself or a caller names, listed in scripts/lint/hub-path-by-hand.ts HUB_PATH_USERS with why. Ask the hub through Eden (`@cawco/hub/client` `hubClient`; the dashboard's platform/hub.ts `hub`, read by hub-read's readers)."
         );
       }
       const text =
@@ -199,7 +208,7 @@ export const hubPathByHand = defineRule({
       ) {
         report(
           node,
-          "A hub path built by hand: reach the hub through its Eden client (packages/agent/src/hub-client.ts, the dashboard's platform/hub.ts), which holds what it sends to what the route takes; its `~path` is the path for a link."
+          "A hub path built by hand: reach the hub through its Eden client (`@cawco/hub/client`, the dashboard's platform/hub.ts), which holds what it sends to what the route takes; its `~path` is the path for a link."
         );
       }
       node.forEachChild(visit);

@@ -50,8 +50,9 @@
     "./scripts/lint/no-harness-compare.grit",
     // An artifact doc's meta map is reached through core doc-meta.ts.
     "./scripts/lint/doc-meta-door.grit",
-    // The dashboard and the agent import the hub's types alone, for their
-    // Eden clients (packages/hub/src/app.ts).
+    // The dashboard, the agent, the CLI and the scripts import the hub's
+    // types alone and its client (@cawco/hub/client), which itself takes the
+    // hub's types alone (packages/hub/src/app.ts, client.ts).
     "./scripts/lint/hub-types-only.grit",
     // A problem's status is never a plain `number`: Eden reads it as a
     // possible success (ProblemStatus, packages/hub/src/refusal.ts).

@@ -5,10 +5,10 @@ import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
+import { hubClient } from "@cawco/hub/client";
 import { Bonjour, type Service } from "bonjour-service";
 import { z } from "zod";
 import { readConfig, writeConfig } from "./config";
-import { hubClient } from "./hub-client";
 
 /**
  * The network rungs of hub discovery, shared between `cawco up`

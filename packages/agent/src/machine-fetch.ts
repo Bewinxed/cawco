@@ -1,6 +1,6 @@
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { machineProofHeaders, readMachineKey } from "@cawco/core/machine-key";
-import { hubClient, reached } from "./hub-client";
+import { hubClient, reached } from "@cawco/hub/client";
 
 /**
  * `fetch` to a hub as this machine: its proof rides the request once the

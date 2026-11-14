@@ -9,14 +9,14 @@
  * never the key.
  */
 
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import {
   type HubAnswer,
   type HubClient,
   type HubData,
   refusalText,
   unwrap,
-} from "@cawco/agent/hub-client";
-import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+} from "@cawco/hub/client";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerCall } from "./owner";
 

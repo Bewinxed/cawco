@@ -8,7 +8,6 @@
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
-import { dataOf, reached } from "@cawco/agent/hub-client";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
@@ -20,6 +19,7 @@ import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
+import { dataOf, reached } from "@cawco/hub/client";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { ownerRead } from "./owner";
 import { pairingOff } from "./pairing";

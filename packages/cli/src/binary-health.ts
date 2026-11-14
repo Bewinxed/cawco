@@ -11,6 +11,10 @@
  * ({@link HealthProblem}).
  */
 
+import { machineFetch } from "@cawco/agent/machine-fetch";
+import type { BinaryInstallation } from "@cawco/core/binary-installation";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   dataOf,
   type HubAnswer,
@@ -19,13 +23,10 @@ import {
   HubNotAnswering,
   hubClient,
   hubPath,
+  hubRoutes,
   reached,
   succeeded,
-} from "@cawco/agent/hub-client";
-import { machineFetch } from "@cawco/agent/machine-fetch";
-import type { BinaryInstallation } from "@cawco/core/binary-installation";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { unhandled } from "@cawco/core/unhandled";
+} from "@cawco/hub/client";
 
 /**
  * How long one request of a probe is waited on: 30 s, and never past the
@@ -222,7 +223,7 @@ async function probeHubMachine(
   // verification asks again until its deadline (cli binary-apply.ts `verify`).
   const hub = installation.hubUrl;
   const health = await askHub(
-    `${hub}${hubPath.health["~path"]}`,
+    `${hub}${hubPath(hubRoutes.health)}`,
     hub,
     (client) => client.health.get(),
     byMs
@@ -280,7 +281,7 @@ async function probeAgentRow(options: {
   // This machine's own row: the fleet's list is the person's (hub hub-auth.ts).
   const hub = installation.hubUrl;
   const asked = await askHub(
-    `${hub}${hubPath.api.agents({ machineId })["~path"]}`,
+    `${hub}${hubPath(hubRoutes.api.agents({ machineId }))}`,
     hub,
     (client) => client.api.agents({ machineId }).get(),
     options.byMs

@@ -17,8 +17,8 @@
  */
 import { readWithin } from "@cawco/core/bounded";
 import type { PreviewNames } from "@cawco/core/browser";
+import { hubClient, unwrap } from "@cawco/hub/client";
 import { delegationHubUrl } from "../delegation";
-import { hubClient, unwrap } from "../hub-client";
 import { provenFetch } from "../hub-proof";
 import type { Runtime } from "./runtime";
 

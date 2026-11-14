@@ -15,13 +15,6 @@
  *   whose transcript a secret must never reach. Nothing prints it back.
  */
 
-import {
-  type HubAnswer,
-  type HubClient,
-  type HubData,
-  refusalText,
-  unwrap,
-} from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import {
   RELAY_PROVIDERS,
@@ -29,6 +22,13 @@ import {
   type RelayView,
 } from "@cawco/core/relays";
 import { RelayViewSchema } from "@cawco/core/stored-shapes";
+import {
+  type HubAnswer,
+  type HubClient,
+  type HubData,
+  refusalText,
+  unwrap,
+} from "@cawco/hub/client";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerCall } from "./owner";

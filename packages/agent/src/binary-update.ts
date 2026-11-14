@@ -85,16 +85,17 @@ import { readRecord } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
-import { z } from "zod";
-import { leaveRetiringKeepers } from "./boundary/control";
 import {
   dataOf,
   type HubAnswer,
   type HubClient,
   hubClient,
   hubPath,
+  hubRoutes,
   reached,
-} from "./hub-client";
+} from "@cawco/hub/client";
+import { z } from "zod";
+import { leaveRetiringKeepers } from "./boundary/control";
 import { provenFetch } from "./hub-proof";
 import {
   type KeeperConnection,
@@ -1716,7 +1717,7 @@ export class BinaryUpdater {
       download: { received: Bun.file(partial).size, total: artifact.size },
       hubFetch: undefined,
     });
-    const url = `${hub}${hubPath.api["binary-updates"].artifacts({ version })({ archive: artifact.archive })["~path"]}`;
+    const url = `${hub}${hubPath(hubRoutes.api["binary-updates"].artifacts({ version })({ archive: artifact.archive }))}`;
     const what = downloadWords.fromHub(artifact.archive);
     let saidAt = 0;
     const say = (

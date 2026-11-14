@@ -105,6 +105,7 @@ import {
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import type * as Judge from "@cawco/core/workspace-judge";
+import { hubClient, refusalText, unwrap } from "@cawco/hub/client";
 import type { Plugin } from "@opencode/plugin";
 import type { FleetHarnessSet } from "../fleet-harness-set";
 import { dueHooks, runFleetHooks } from "../fleet-hook-run";
@@ -154,8 +155,6 @@ export interface PluginSettings {
   sendNowMetadata: string;
   /** The folder of a workspace's state dir that holds a session's saved outputs. */
   spillsDirName: string;
-  /** The path under the gateway a session's call of a hub tool goes to. */
-  toolDoor: string;
   /** The workspace policy's file name in a workspace's state dir. */
   workspacePolicyName: string;
   /** The records of the workspaces the agent has cut. */
@@ -1194,35 +1193,20 @@ const listOpenItems = async (
   if (realOf(session.location?.directory ?? "") !== realOf(directory)) {
     return;
   }
-  const response = await fetch(
-    settings.hubBase + settings.toolDoor + encodeURIComponent(held.instanceId),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${held.credential}`,
-      },
-      body: JSON.stringify({ name: settings.openItemsTool, arguments: {} }),
-    }
-  );
-  if (!response.ok) {
+  const answer = unwrap(
+    await hubClient(settings.hubBase, fetch, {
+      headers: { Authorization: `Bearer ${held.credential}` },
+    })
+      .api.delegation.call({ instanceId: held.instanceId })
+      .post({ name: settings.openItemsTool, arguments: {} }),
     // A refusal is the hub's problem: its sentence is its `detail`.
-    const problem: unknown = await response.json().catch(() => null);
-    throw new Error(
-      `the hub answered ${response.status}${isRecord(problem) && typeof problem.detail === "string" ? `: ${problem.detail}` : ""}`
-    );
-  }
-  const answer: unknown = await response.json();
-  const parts =
-    isRecord(answer) && Array.isArray(answer.content) ? answer.content : [];
-  const text = parts
-    .flatMap((part: unknown) =>
-      isRecord(part) && part.type === "text" && typeof part.text === "string"
-        ? [part.text]
-        : []
-    )
+    (refusal) =>
+      new Error(`the hub answered ${refusal.status}: ${refusalText(refusal)}`)
+  );
+  const text = answer.content
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n");
-  if (isRecord(answer) && answer.isError) {
+  if (answer.isError) {
     throw new Error(text);
   }
   await ctx.session.synthetic({

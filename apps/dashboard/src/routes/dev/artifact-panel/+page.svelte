@@ -1,6 +1,7 @@
 <script lang="ts">
   import { type Pin, pinHeld } from "@cawco/core/comments/model";
   import { commentWords } from "@cawco/core/words/comments";
+  import { hubPath } from "@cawco/hub/client";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { pressOutside } from "#lib/cawco/press-outside.js";
@@ -82,7 +83,7 @@
     IconRefreshLinear,
   } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
-  import { hub, hubPath } from "#lib/platform/hub.js";
+  import { hub } from "#lib/platform/hub.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
   import { ARTIFACTS, HELD, LONG, PINS } from "./records";

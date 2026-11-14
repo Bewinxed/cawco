@@ -2,17 +2,6 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import {
-  dataOf,
-  type HubAnswer,
-  type HubClient,
-  type HubData,
-  HubNotAnswering,
-  hubClient,
-  hubPath,
-  refusalText,
-  succeeded,
-} from "@cawco/agent/hub-client";
-import {
   bindSockets,
   failed,
   installLaunchAgents,
@@ -67,6 +56,18 @@ import {
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
+import {
+  dataOf,
+  type HubAnswer,
+  type HubClient,
+  type HubData,
+  HubNotAnswering,
+  hubClient,
+  hubPath,
+  hubRoutes,
+  refusalText,
+  succeeded,
+} from "@cawco/hub/client";
 import { z } from "zod";
 
 /**
@@ -500,7 +501,7 @@ const probeStatus = (url: string): Promise<Bounded<number>> =>
 
 /** The hub at `hub`'s `/health`, and its URL for what is said about it. */
 const hubHealth = async (hub: string) => {
-  const url = `${hub}${hubPath.health["~path"]}`;
+  const url = `${hub}${hubPath(hubRoutes.health)}`;
   return {
     url,
     health: await askedHub(hub, url, (client) => client.health.get()),
@@ -1106,7 +1107,7 @@ const sessionsMidTurn = async (): Promise<Cut> => {
   // Imported here rather than at the top so no other verb pays for the agent SDK.
   const { machineId } = await import("@cawco/core/machine-id");
   const id = await machineId();
-  const url = `${hub}${hubPath.api.agents({ machineId: id }).busy["~path"]}`;
+  const url = `${hub}${hubPath(hubRoutes.api.agents({ machineId: id }).busy)}`;
   const answer = await askedHub(hub, url, (client) =>
     client.api.agents({ machineId: id }).busy.get()
   );

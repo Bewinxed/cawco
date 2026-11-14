@@ -254,7 +254,7 @@ export async function readable(response: Response): Promise<Response> {
 
 /**
  * A response the dashboard fetched itself (a send Eden can't make,
- * hub.ts `hubPath`) as Eden's client would hand it back ({@link HubAnswer}),
+ * `@cawco/hub/client` `hubPath`) as Eden's client would hand it back ({@link HubAnswer}),
  * so the readers read it by the same rule: made readable ({@link
  * readable}), its body read as treaty2 reads one ({@link bodyIn}), and a
  * status outside 2xx a refusal (treaty2: `status >= 300 || status < 200`).

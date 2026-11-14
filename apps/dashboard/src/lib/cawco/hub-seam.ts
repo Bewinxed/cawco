@@ -9,8 +9,8 @@
  * module imports no store, so a stand-in loads none.
  */
 
+import type { HubClient } from "@cawco/hub/client";
 import { getContext, setContext } from "svelte";
-import type { HubClient } from "#lib/platform/hub.js";
 import type { HubState } from "./hub/socket.svelte";
 
 export interface HubSeam {

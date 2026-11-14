@@ -1,17 +1,6 @@
 /** Live integration exercise run by the compiled test binary, never a release. */
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-  dataOf,
-  type HubAnswer,
-  type HubClient,
-  type HubData,
-  hubClient,
-  hubPath,
-  refusalText,
-  succeeded,
-  unwrap,
-} from "../../packages/agent/src/hub-client";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { readWithin } from "../../packages/core/src/bounded";
 import { detach } from "../../packages/core/src/detach";
@@ -23,6 +12,18 @@ import {
 import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { loopWords } from "../../packages/core/src/words/loop";
+import {
+  dataOf,
+  type HubAnswer,
+  type HubClient,
+  type HubData,
+  hubClient,
+  hubPath,
+  hubRoutes,
+  refusalText,
+  succeeded,
+  unwrap,
+} from "../../packages/hub/src/client";
 import { SECTION, SHORT_HOLD_MS } from "./smoke-loop-held";
 
 const home = process.env.HOME ?? "";
@@ -409,7 +410,7 @@ try {
   spawn("sessiond");
   const hub = watchChild("the hub", "hub", spawn("hub"));
   console.log(
-    `health ${JSON.stringify(await wait(hubPath.health["~path"], hub, (client) => client.health.get()))}`
+    `health ${JSON.stringify(await wait(hubPath(hubRoutes.health), hub, (client) => client.health.get()))}`
   );
   // The machine joined this hub as an install joins it (cli joined-hub.ts,
   // binary-install's own step): `up --hub` names a hub for its run and saves
@@ -421,7 +422,7 @@ try {
   const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const registered = await wait(
-    hubPath.api.agents["~path"],
+    hubPath(hubRoutes.api.agents),
     watchChild("the agent", "up", agent),
     (client) => client.api.agents.get(),
     (rows) => rows.some((row) => row.status === "online")
@@ -452,7 +453,7 @@ try {
   // A form's POST from another site to the hub's agents path through the
   // dashboard: refused by the origin check before any route is read.
   const crossOrigin = await fetch(
-    `http://127.0.0.1:43458${hubPath.api.agents["~path"]}`,
+    `http://127.0.0.1:43458${hubPath(hubRoutes.api.agents)}`,
     {
       method: "POST",
       headers: {
@@ -507,14 +508,14 @@ try {
   agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const restarted = watchChild("the agent", "up", agent);
   await wait(
-    hubPath.api.agents["~path"],
+    hubPath(hubRoutes.api.agents),
     restarted,
     (client) => client.api.agents.get(),
     (rows) => rows.some((row) => row.status === "online")
   );
   await exec("smoke-custody-check");
   await wait(
-    hubPath.api.accounts["~path"],
+    hubPath(hubRoutes.api.accounts),
     restarted,
     (client) => client.api.accounts.get({ query: {} }),
     (listed) =>
@@ -557,7 +558,7 @@ try {
     );
   // A first start materializes the harness's runtime: as long as end-to-end test gives one.
   await wait(
-    hubPath.api.instances["~path"],
+    hubPath(hubRoutes.api.instances),
     restarted,
     (client) => client.api.instances.get(),
     (rows) =>

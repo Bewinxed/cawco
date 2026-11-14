@@ -5,8 +5,8 @@ import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { END_TURN_META } from "@cawco/core/no-reply";
 import { CAWCO_HUB_PORT, mcpGatewayPort } from "@cawco/core/ports";
 import { unhandled } from "@cawco/core/unhandled";
+import { hubClient, refusalText, unwrap } from "@cawco/hub/client";
 import { hubAnswer } from "./hub-away";
-import { hubClient, hubPath, refusalText, unwrap } from "./hub-client";
 
 /** CawCo's own MCP server, by the one name every harness and the hub give it. */
 export const MCP_SERVER_NAME = CAWCO_SERVER;
@@ -91,15 +91,6 @@ export const openItemsText = async (
 
 /** The CawCo tool that answers a session's open items (hub delegation-tools.ts). */
 export const OPEN_ITEMS_TOOL = "open_items";
-
-/**
- * The hub's tool door through this agent's gateway, a session's instance id
- * after it: {@link callDelegationTool}'s, and CawCo's OpenCode plugin's,
- * which hands the open items' words to the model as they are.
- */
-export const TOOL_DOOR = hubPath.api.delegation.call({ instanceId: "" })[
-  "~path"
-];
 
 /** A part of a result pi takes: words or a picture. */
 type PiContent =
