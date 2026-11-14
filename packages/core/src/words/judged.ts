@@ -10,6 +10,9 @@ const ENDED = /[.!?]$/u;
 const NOT_SHOWN_MET = "Not shown met:";
 
 export const judgedWords = {
+  /** A brief's comments, cut to the newest: how many older ones it leaves out. */
+  olderComments: (count: number): string =>
+    `${count} older ${count === 1 ? "comment is" : "comments are"} in the task file.`,
   /** Jev's comment on the task: the lines it did not show met, one `- ` line each. */
   notShownMet: (attempt: string, lines: string): string =>
     `Jev judged the acceptance criteria against the report of ${attempt}. ${NOT_SHOWN_MET}\n\n${lines}`,

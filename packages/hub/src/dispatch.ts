@@ -688,14 +688,16 @@ const RESULT_LINE =
 const BRIEF_COMMENTS_MAX = 20;
 
 /** The comments left on the task since its last attempt started, batched into the brief (§5.3). */
-const commentsSection = (comments: TaskComment[]): string =>
-  `## Comments since the last attempt\n\n${comments
+const commentsSection = (comments: TaskComment[]): string => {
+  const older = Math.max(0, comments.length - BRIEF_COMMENTS_MAX);
+  return `## Comments since the last attempt\n\n${older > 0 ? `${judgedWords.olderComments(older)}\n\n` : ""}${comments
     .slice(-BRIEF_COMMENTS_MAX)
     .map(
       (comment) =>
         `**${comment.author.name}**, ${new Date(comment.at).toISOString()}:\n\n${comment.text}`
     )
     .join("\n\n")}`;
+};
 
 /** A retry's section of the brief: how the last attempt ended, and what of the task is done. */
 const retrySection = (
