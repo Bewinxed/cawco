@@ -143,6 +143,9 @@ export function unrestoredOn(
       return [];
     }
     const asked = read.data;
+    const readAgain = () => {
+      reread();
+    };
     return [
       {
         key,
@@ -154,12 +157,8 @@ export function unrestoredOn(
             key.slice(key.indexOf("\u0000") + 1),
             asked.deleted,
             asked,
-            () => {
-              reread();
-            },
-            () => {
-              reread();
-            }
+            readAgain,
+            readAgain
           ),
       },
     ];
