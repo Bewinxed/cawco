@@ -2669,7 +2669,8 @@
 </div>
 <!-- Placement refuses the start here: why, beside Start, and the page
        that puts it right (an account to sign in, the harness's CLI to
-       install or update), when one does. -->
+       install or update), when one does. Followed, the form closes as ×
+       closes it, dropping nothing, so that page is what shows. -->
 {#if placementRefusal}
   <div
     class="flex-none pt-space-2"
@@ -2685,7 +2686,8 @@
         <AlertDescription>
           <a
             class="rounded-xs text-link-ink no-underline hover:text-link-hover"
-            href={placementFix.href}>Open {configurePage(placementFix.slug)}</a
+            href={placementFix.href}
+            onclick={() => close()}>Open {configurePage(placementFix.slug)}</a
           >
         </AlertDescription>
       {/if}
