@@ -21,38 +21,35 @@ import { unreachable } from "../unreachable";
 export const toolRoutes = ({
   TOOL_SIGNIN_BEGIN_MS,
   TOOL_SIGNIN_COMPLETE_MS,
-  autoInstall,
   awayWords,
   callAgent,
   db,
+  keepCopiesOn,
+  keptReleases,
   pendingToolSignins,
   publishInstances,
   registry,
-  toolReleases,
   updateAll,
 }: Pick<
   HubContext,
   | "TOOL_SIGNIN_BEGIN_MS"
   | "TOOL_SIGNIN_COMPLETE_MS"
-  | "autoInstall"
   | "awayWords"
   | "callAgent"
   | "db"
+  | "keepCopiesOn"
+  | "keptReleases"
   | "pendingToolSignins"
   | "publishInstances"
   | "registry"
-  | "toolReleases"
   | "updateAll"
 >) => {
   /** The fleet's choice and each tool some machine is behind on, as the cells stand now. */
   const fleetUpdates = (): ToolUpdatesState => {
     const updates = db.toolUpdates();
-    const releases = Object.fromEntries(
-      TOOL_CATALOG.flatMap((spec) => {
-        const newest = toolReleases.newest(spec.id);
-        return newest ? [[spec.id, newest]] : [];
-      })
-    );
+    // The releases the hub's pass acts on, a pinned tool's left out, so a
+    // copy the screens call due is one the pass sends.
+    const releases = keptReleases();
     const machines = db.namedMachines().map(({ machineId }) => ({
       machineId,
       status: registry.agent(machineId) ? "online" : "offline",
@@ -86,16 +83,9 @@ export const toolRoutes = ({
               `[hub] a copy of a tool at a version CawCo doesn't run: ${body.updates === "update" ? "CawCo updates its own copies" : "nothing installs until a person presses Update"}`
             );
           }
-          // Turned to update: every machine connected now is sent what it is
-          // owed, rather than whenever it next reports.
-          if (body.updates === "update") {
-            for (const machineId of registry.machineIds()) {
-              const agent = registry.agent(machineId);
-              if (agent) {
-                autoInstall(machineId, agent);
-              }
-            }
-          }
+          // Every machine connected now is sent what is due under the new
+          // choice, rather than whenever it next reports.
+          keepCopiesOn();
           return fleetUpdates();
         }
       )
@@ -207,6 +197,7 @@ export const toolRoutes = ({
               }
               db.setAgentToolCell(params.machineId, tool);
               publishInstances(params.machineId);
+              keepCopiesOn(params.machineId);
               return tool;
             }
             default:
@@ -231,16 +222,11 @@ export const toolRoutes = ({
           }
 
           const policy = db.putToolPolicy(params.id, body);
-          // The click: every machine that is online and missing it starts now,
-          // rather than whenever it next happens to reconnect.
-          if (policy.required) {
-            for (const machineId of registry.machineIds()) {
-              const agent = registry.agent(machineId);
-              if (agent) {
-                autoInstall(machineId, agent);
-              }
-            }
-          }
+          // The click: every machine that is online and missing a required
+          // tool starts now, rather than whenever it next happens to
+          // reconnect, and a pin set or cleared moves which release a copy
+          // is due (tool-releases.ts `keptReleases`).
+          keepCopiesOn();
           return policy;
         }
       )

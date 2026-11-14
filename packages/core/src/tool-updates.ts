@@ -25,8 +25,11 @@ export interface ToolUpdatesState {
   /**
    * The newest release of each CLI CawCo keeps current (core
    * `ToolSpec.release`: Claude Code), by tool id, as the hub last read it;
-   * none for one not read yet. What a copy CawCo put there is updated to
-   * ({@link toolUpdateOf}'s `releases`).
+   * none for one not read yet, or one the fleet pins a version of (held at
+   * its pin). What a copy CawCo put there is updated to
+   * ({@link toolUpdateOf}'s `releases`): the same releases the hub's pass
+   * acts on (hub tool-releases.ts `keptReleases`), so a copy this calls
+   * `due` is one the hub sends.
    */
   releases: Record<string, string>;
   updates: ToolUpdates;
@@ -51,7 +54,9 @@ export interface ToolUpdatesState {
  *   set to ask: it updates when the person presses Update;
  * - `due`: CawCo's copy at `found`, short of `wants`, while the fleet is
  *   set to update: the hub sends the install as soon as the machine is
- *   connected and not paused.
+ *   connected and not paused. The hub's pass sends exactly the copies this
+ *   calls due, and runs on every event that can make one due (hub
+ *   tool-installs.ts `keepCopiesOn`).
  *
  * `wants` is the version CawCo runs (the copy cannot run: its one version,
  * or its floor or newer), or, for a copy CawCo put there of a CLI it keeps
@@ -217,17 +222,27 @@ const causeField = (output: string | undefined): { cause?: string } => {
   return cause ? { cause } : {};
 };
 
-/** Whether a machine's copy in this state waits on the person: Needs you lists it. */
-const waitsOnPerson = (state: ToolUpdateState): boolean =>
-  state.kind === "failed" || state.kind === "own" || state.kind === "asked";
+/**
+ * Whether a machine's copy in this state waits on the person, so Needs you
+ * lists it: one CawCo can't run (its machine says what it wants of it,
+ * `cell.wants`) that failed, is the person's own, or waits on the fleet's
+ * "ask". A copy that runs and is only behind the newest release of a CLI
+ * CawCo keeps current waits on nobody: the session starts, and its ledger
+ * row says the release (the screen leaves it out of Needs you and Out of
+ * date on purpose).
+ */
+const waitsOnPerson = (cell: ToolStatus, state: ToolUpdateState): boolean =>
+  cell.wants !== undefined &&
+  (state.kind === "failed" || state.kind === "own" || state.kind === "asked");
 
 /** One machine whose copy of a tool is short of what CawCo wants of it, or is updating. */
 interface ToolBehindMachine {
   machineId: string;
   /**
-   * The copy waits on the person (`failed`, `own`, `asked`): Needs you
-   * lists it, with Update. The rest CawCo is updating, or will once the
-   * machine is connected (`due`).
+   * The copy can't run and waits on the person (`failed`, `own`, `asked`):
+   * Needs you lists it, with Update. A copy that runs is never waiting on
+   * the person, whatever its state. The rest CawCo is updating, or will
+   * once the machine is connected and not paused (`due`).
    */
   needsYou: boolean;
   /** Its agent is connected: an Update can be sent to it now. */
@@ -282,7 +297,7 @@ export const toolsBehind = (
       }
       entry.machines.push({
         machineId: machine.machineId,
-        needsYou: waitsOnPerson(state),
+        needsYou: waitsOnPerson(cell, state),
         online: machine.status === "online",
         state,
       });

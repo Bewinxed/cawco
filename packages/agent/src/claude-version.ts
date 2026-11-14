@@ -227,7 +227,7 @@ export const claudeHostVersion = async (): Promise<
  * the machine (core TOOL_CATALOG's `claude`), wherever the refusal stands
  * in the dashboard (`HarnessBlock`). Whether the hub sends that update with
  * no press is the fleet's choice and whose the copy is (hub
- * tool-installs.ts `keepRunnable`): the machine's tool status says it, not
+ * tool-installs.ts `keepCopies`): the machine's tool status says it, not
  * this sentence.
  */
 const UPDATE_FIX =
