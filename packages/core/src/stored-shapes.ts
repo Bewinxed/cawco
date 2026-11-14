@@ -2309,47 +2309,6 @@ const SourceFactsShape = declared(
 );
 export type SourceFactsOutput = z.output<typeof SourceFactsShape>;
 
-const PermissionUpdateDestinationShape = declared(
-  z.enum([
-    "userSettings",
-    "projectSettings",
-    "localSettings",
-    "session",
-    "cliArg",
-  ]),
-  "PermissionUpdateDestination",
-  "packages/core/src/session-messages.ts"
-);
-export type PermissionUpdateDestinationOutput = z.output<
-  typeof PermissionUpdateDestinationShape
->;
-
-const PermissionUpdateShape = declared(
-  z.union([
-    z.object({
-      type: z.enum(["addRules", "replaceRules", "removeRules"]),
-      rules: z.array(
-        z.object({ toolName: z.string(), ruleContent: z.string().optional() })
-      ),
-      behavior: z.enum(["allow", "deny", "ask"]),
-      destination: PermissionUpdateDestinationShape,
-    }),
-    z.object({
-      type: z.literal("setMode"),
-      mode: PermissionModeShape,
-      destination: PermissionUpdateDestinationShape,
-    }),
-    z.object({
-      type: z.enum(["addDirectories", "removeDirectories"]),
-      directories: z.array(z.string()),
-      destination: PermissionUpdateDestinationShape,
-    }),
-  ]),
-  "PermissionUpdate",
-  "packages/core/src/session-messages.ts"
-);
-export type PermissionUpdateOutput = z.output<typeof PermissionUpdateShape>;
-
 const PermissionRequestFrameShape = declared(
   z.object({
     askId: z.string().optional(),
@@ -2367,7 +2326,7 @@ const PermissionRequestFrameShape = declared(
     requestKind: z.enum(["tool", "question"]).optional(),
     routedTo: z.literal("parent").optional(),
     sourceFacts: SourceFactsShape.optional(),
-    suggestions: z.array(PermissionUpdateShape).optional(),
+    suggestions: z.array(z.unknown()).optional(),
     toolName: z.string(),
     toolUseId: z.string().optional(),
   }),

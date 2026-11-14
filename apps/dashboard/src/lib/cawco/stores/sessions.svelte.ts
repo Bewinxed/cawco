@@ -17,7 +17,6 @@ import type { SessionTooling } from "@cawco/core/protocol";
 import type {
   McpServerStatus,
   NeutralStatus,
-  PermissionUpdate,
   SendRecord,
 } from "@cawco/core/session-messages";
 import type { ToolGlance } from "@cawco/core/transcript-types";
@@ -66,7 +65,8 @@ export interface PendingPermission {
   requestId: string;
   /** Set when the hub routed the ask to its parent rather than to the user. */
   routedTo?: "parent";
-  suggestions?: PermissionUpdate[];
+  /** The harness's own suggested updates, held whole: "Always allow" hands them back as they came. */
+  suggestions?: unknown[];
   toolName: string;
   /**
    * The call the ask gates, as its message's `toolCallId`: while the ask is

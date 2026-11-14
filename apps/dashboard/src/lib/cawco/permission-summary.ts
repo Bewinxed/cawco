@@ -1,7 +1,8 @@
-import type {
-  PermissionUpdate,
-  PermissionUpdateDestination,
-} from "@cawco/core/session-messages";
+import { isObject } from "@cawco/core/comments/model";
+import {
+  grantScopes,
+  unnamedGrantScope,
+} from "@cawco/core/words/permission-lines";
 
 /*
  * What an ask says (its summary, the change, its fields) is the hub's reading,
@@ -12,35 +13,33 @@ import type {
 /** How much of a rule the card's "always allow" label carries before it is cut. */
 const RULE_LABEL_MAX = 30;
 
-/** One suggestion as a rule, written the way the SDK writes them: `Bash(git status:*)`. */
-function ruleText(update: PermissionUpdate): string | null {
-  if ("rules" in update) {
+/**
+ * One suggestion as a rule, written the way the SDK writes them:
+ * `Bash(git status:*)`. A suggestion is the provider's own value, so this
+ * reads only what it finds: a first rule naming its tool, or a directory an
+ * `addDirectories` adds. Anything else has no rule to show.
+ */
+function ruleText(update: Record<string, unknown>): string | null {
+  if (Array.isArray(update.rules)) {
     const [rule] = update.rules;
-    if (!rule) {
+    if (!(isObject(rule) && typeof rule.toolName === "string")) {
       return null;
     }
-    return rule.ruleContent
+    return typeof rule.ruleContent === "string" && rule.ruleContent
       ? `${rule.toolName}(${rule.ruleContent})`
       : rule.toolName;
   }
-  if (update.type === "addDirectories") {
-    return update.directories[0] ?? null;
+  if (update.type === "addDirectories" && Array.isArray(update.directories)) {
+    const [directory] = update.directories;
+    return typeof directory === "string" ? directory : null;
   }
   return null;
 }
 
-/**
- * How long a grant lasts, in the card's words. The SDK picks the destination
- * and the card only reports it: `localSettings` writes the rule into the
- * checkout's `.claude/settings.local.json`, which is not a session's promise.
- */
-const SCOPE: Record<PermissionUpdateDestination, string> = {
-  session: "session",
-  cliArg: "session",
-  localSettings: "this project",
-  projectSettings: "this project",
-  userSettings: "everywhere",
-};
+/** How long a grant lasts, in the card's words; a destination the card doesn't know still reads as a scope. */
+const scopeOf = (destination: unknown): string =>
+  (typeof destination === "string" && grantScopes.get(destination)) ||
+  unnamedGrantScope;
 
 /**
  * What granting the SDK's suggestions would allow from now on, for the card's
@@ -48,9 +47,12 @@ const SCOPE: Record<PermissionUpdateDestination, string> = {
  * itself with — a rule you cannot read is a rule you cannot decide on.
  */
 export function suggestedRule(
-  suggestions: PermissionUpdate[]
+  suggestions: unknown[]
 ): { short: string; full: string; scope: string } | null {
   for (const update of suggestions) {
+    if (!isObject(update)) {
+      continue;
+    }
     const full = ruleText(update);
     if (!full) {
       continue;
@@ -59,7 +61,7 @@ export function suggestedRule(
       full.length > RULE_LABEL_MAX
         ? `${full.slice(0, RULE_LABEL_MAX - 1)}…`
         : full;
-    return { short, full, scope: SCOPE[update.destination] };
+    return { short, full, scope: scopeOf(update.destination) };
   }
   return null;
 }

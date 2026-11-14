@@ -44,12 +44,7 @@ import type {
   WorkItemSummary,
 } from "./protocol";
 import type { LastErrorKind } from "./relaunch";
-import type {
-  ModeAsk,
-  NeutralMessage,
-  PermissionUpdate,
-  SendRecord,
-} from "./session-messages";
+import type { ModeAsk, NeutralMessage, SendRecord } from "./session-messages";
 import type { StageCloneFrame, StageFrame, StageState } from "./stage";
 import type { StartersChangedFrame } from "./starters";
 import type { RelayFrame, RelayJourneyFrame } from "./stream-relay";
@@ -407,7 +402,13 @@ export interface PermissionRequestFrame {
   routedTo?: "parent";
   /** Where an install the ask proposes fetches from (hub source-facts.ts). */
   sourceFacts?: SourceFacts;
-  suggestions?: PermissionUpdate[];
+  /**
+   * The harness's own suggested permission updates (Claude's
+   * `PermissionUpdate[]`), held as the provider's: passed through whole and
+   * never enumerated here, so a destination, type or mode a later release adds
+   * cannot make the hub refuse the ask. A reader narrows where it reads.
+   */
+  suggestions?: unknown[];
   toolName: string;
   /** The tool call the ask gates, as its transcript message names it. */
   toolUseId?: string;

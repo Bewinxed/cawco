@@ -40,7 +40,6 @@ import type {
   NeutralMessage,
   NeutralSessionInfo,
   PermissionResult,
-  PermissionUpdate,
   SentMessage,
   SessionMessage,
   StoredRun,
@@ -161,7 +160,8 @@ export interface HarnessContext {
     requestId: string;
     toolName: string;
     input: Record<string, unknown>;
-    suggestions?: PermissionUpdate[];
+    /** The harness's own suggested updates, passed through whole (core `PermissionRequestFrame.suggestions`). */
+    suggestions?: unknown[];
     requestKind?: "tool" | "question";
     /** The tool call the ask gates: its `tool_use` id, which names its transcript row. */
     toolUseId?: string;

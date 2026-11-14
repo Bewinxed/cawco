@@ -32,6 +32,7 @@ import {
   type McpServerStatus,
   type ModelUsage,
   type PermissionResult,
+  type PermissionUpdate,
   type Query,
   query,
   renameSession,
@@ -65,6 +66,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import type { CutCommand } from "@cawco/core/commands/controls";
+import { isObject } from "@cawco/core/comments/model";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import {
   HARNESS_TOOLS,
@@ -1515,20 +1517,50 @@ const sdkMode = (
 ): import("@anthropic-ai/claude-agent-sdk").PermissionMode =>
   mode === "fullSend" ? "bypassPermissions" : mode;
 
-/** A permission answer in the SDK's words: any `setMode` it carries names the CLI's mode. */
+/**
+ * A `setMode` update naming CawCo's own Full Send: the one part of an
+ * answer's permission updates that is CawCo's, and the one this adapter
+ * rewrites. Every other update is the CLI's and goes back as it came.
+ */
+const setsFullSend = (
+  update: unknown
+): update is Record<string, unknown> & { mode: "fullSend" } =>
+  isObject(update) && update.type === "setMode" && update.mode === "fullSend";
+
+/**
+ * One of the CLI's own permission updates, as an "Always allow" hands its
+ * suggestion back: an object naming its `type` and `destination`. Which
+ * values those take is the CLI's, so they are not enumerated here: a kind a
+ * later release adds goes back to the release that raised it.
+ */
+const isCliPermissionUpdate = (value: unknown): value is PermissionUpdate =>
+  isObject(value) &&
+  typeof value.type === "string" &&
+  typeof value.destination === "string";
+
+/** A permission answer in the SDK's words: a Full Send `setMode` it carries names the CLI's bypass. */
 const sdkPermissionResult = (
   result: import("@cawco/core/session-messages").PermissionResult
-): PermissionResult =>
-  (result.behavior === "allow" && result.updatedPermissions
-    ? {
-        ...result,
-        updatedPermissions: result.updatedPermissions.map((update) =>
-          update.type === "setMode"
+): PermissionResult => {
+  if (result.behavior === "deny") {
+    return result;
+  }
+  const { updatedInput, updatedPermissions, toolUseID } = result;
+  return {
+    behavior: "allow",
+    ...(isObject(updatedInput) && { updatedInput }),
+    ...(updatedPermissions && {
+      updatedPermissions: updatedPermissions
+        .map((update) =>
+          setsFullSend(update)
             ? { ...update, mode: sdkMode(update.mode) }
             : update
-        ),
-      }
-    : result) as PermissionResult;
+        )
+        .filter(isCliPermissionUpdate),
+    }),
+    ...(toolUseID !== undefined && { toolUseID }),
+  };
+};
 
 /**
  * A session's permission mode, in CawCo's words and the CLI's. Bypass is the
@@ -4642,9 +4674,7 @@ class ClaudeSession implements HarnessSession {
     // the asks it still holds open.
     if (
       result.behavior === "allow" &&
-      result.updatedPermissions?.some(
-        (update) => update.type === "setMode" && update.mode === "fullSend"
-      )
+      result.updatedPermissions?.some(setsFullSend)
     ) {
       this.#mode.choose("fullSend");
       this.#answerOpen();
