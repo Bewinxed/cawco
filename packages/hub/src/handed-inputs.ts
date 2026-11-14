@@ -20,8 +20,9 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
+import { readRange } from "@cawco/core/file-range";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
-import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
+import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus, problem } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { HandedReceiver } from "./artifacts/shapes";
@@ -29,21 +30,60 @@ import type { WorkItemRow } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
-import { listFolder, readFolderBytes } from "./project-folder";
+import { folderFileRaw, listFolder } from "./project-folder";
 import type { AnyProblem } from "./refusal";
+
+/** A file on the hub's disk a handed input is read from, range by range, as it is sent: an item's asset. */
+export interface HandedOnDisk {
+  /** Its real path. */
+  real: string;
+  /** Its bytes as it was resolved. */
+  size: number;
+}
 
 /**
  * One file the hub writes into `inputs/`: its name there, what it was handed
- * as, and its bytes, or, for what is made for its reader alone (a preview's
- * pass), the bytes made for the session it is handed to as it is written.
+ * as, and its bytes; for what is made for its reader alone (a preview's
+ * pass), the bytes made for the session it is handed to as it is written;
+ * or the file on the hub's disk they are read from as they are sent.
  */
 export interface HandedFile {
-  bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
+  bytes:
+    Buffer | ((receiver: HandedReceiver) => Promise<Buffer>) | HandedOnDisk;
   /** What it is, for the receiver's opening line: "report of Fix the tray (1a2b3c4d)". */
   from: string;
   /** Where it lands under `inputs/`: a file name, or an item's asset's path in its project's folder. */
   name: string;
 }
+
+/** A handed file's bytes once made for its reader: in hand, or on the hub's disk. */
+export type HandedBytes = Buffer | HandedOnDisk;
+
+/** How many bytes `bytes` holds. */
+export const handedSize = (bytes: HandedBytes): number =>
+  Buffer.isBuffer(bytes) ? bytes.length : bytes.size;
+
+/**
+ * `length` bytes of `bytes` from `at`, read off the disk only now, as they
+ * are sent (core `readRange`); a throw in words when the file ends short of
+ * them, having shrunk since it was resolved.
+ */
+export const handedRange = async (
+  bytes: HandedBytes,
+  at: number,
+  length: number
+): Promise<Buffer> => {
+  if (Buffer.isBuffer(bytes)) {
+    return bytes.subarray(at, at + length);
+  }
+  const range = await readRange(bytes.real, at, length);
+  if (range.length < length) {
+    throw new Error(
+      workWords.inputChanged(bytes.real, bytes.size, at + range.length)
+    );
+  }
+  return range;
+};
 
 /** What the resolver reads through, each the hub's own. */
 export interface HandedInputDeps {
@@ -81,9 +121,6 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/gif": ".gif",
   "image/webp": ".webp",
 };
-
-/** The largest one asset file handed (the inputs' own limit holds the whole). */
-const ASSET_LIMIT = INPUTS_LIMIT_BYTES;
 
 const FILES_PREFIX = /^\/api\/files\//u;
 const MEDIA_PREFIX = /^\/api\/media\//u;
@@ -529,15 +566,20 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
   };
 
   /**
-   * An item's assets, each read only when its reader asks for the next: a
-   * reader past its budget reads no more. A file the folder refuses is
-   * yielded as its refusal, in the input's words, and ends them.
+   * An item's assets, each found where it is in the project's folder, of
+   * any size: none of their bytes is read here, but as each is sent
+   * ({@link HandedOnDisk}). A file the folder refuses is yielded as its
+   * refusal, in the input's words, and ends them.
    */
   async function* assets(projectId: string, id: string, paths: string[]) {
     // Each lands at its path in the project's folder, its folders kept:
     // `inputs/assets/<item>/design-briefs/brief.md`.
     for (const path of paths) {
-      const read = await readFolderBytes(projectId, path, ASSET_LIMIT);
+      const read = await folderFileRaw(
+        projectId,
+        path,
+        Number.POSITIVE_INFINITY
+      );
       if (read instanceof ElysiaStatus) {
         yield unhanded(
           read.status,
@@ -549,7 +591,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       }
       const file: HandedFile = {
         name: path,
-        bytes: Buffer.from(read.bytes),
+        bytes: { real: read.real, size: read.size },
         from: `${path} in the project's folder`,
       };
       yield file;

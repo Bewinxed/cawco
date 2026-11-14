@@ -65,20 +65,30 @@ export const workWords = {
   inputsNotTheirs: (receiver: string) =>
     `Inputs go only to your parent, a session you delegated or started, or your project's conversation; ${receiver} is none of them. Hand off without inputs.`,
   /**
-   * The inputs' limits, as every refusal of them says them (hub
-   * work-items.ts `readInputs`, agent inputs.ts `admitAll`): `mib` is core
-   * `INPUTS_LIMIT_BYTES` in MiB. The machine's refusals reach the caller
-   * under the hub's own `inputs: ` (work-items.ts `inputsRefused`), so
-   * `bytes` does not say it again.
+   * The one refusal of inputs for their size (hub work-items.ts
+   * `handInto`): together they need more than the disk their inputs folder
+   * is on has free, asked before the first is written. `needed` and `free`
+   * as core `humanSize` says them; `machine` as the fleet names it. It
+   * reaches the caller under the hub's own `inputs: ` (work-items.ts
+   * `inputsLine`).
    */
-  inputsLimits: {
-    bytes: (mib: number) =>
-      `more than ${mib} MiB together, the most one handoff or delegation carries; commit larger data, or name its path and machine in the message`,
-    held: (mib: number) =>
-      `inputs: what the hub holds of them comes to more than ${mib} MiB, the most one handoff or delegation carries; name the largest in the message by id, for the receiver to read itself.`,
-    outputs: (named: number, limit: number) =>
-      `outputs names ${named} files; one item declares ${limit} at most.`,
-  },
+  inputsNoRoom: (needed: string, free: string, machine: string) =>
+    `they come to ${needed}, and the disk they land on in ${machine} has ${free} free; free space there, or hand fewer files`,
+  /**
+   * An input that changed size between being named and being read (agent
+   * inputs.ts `readInputs`): what was read of it would not be the file.
+   */
+  inputChanged: (named: string, was: number, now: number) =>
+    `${named} was ${was} bytes when it was named and is ${now} now; hand it again once it stops changing`,
+  /**
+   * Inputs that failed partway across (hub work-items.ts `handInto`): what
+   * had landed was taken out again, so none is presented as delivered.
+   */
+  inputsCleared: (why: string) =>
+    `${why} What of them had landed was removed, so none of them was delivered.`,
+  /** An item's outputs past the most one item declares (hub work-items.ts `outputsOf`). */
+  outputsTooMany: (named: number, limit: number) =>
+    `outputs names ${named} files; one item declares ${limit} at most.`,
   /**
    * A machine's ask of where a project's large files live, refused: it holds
    * no place of the project, a checkout or a delegate workspace (hub

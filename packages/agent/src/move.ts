@@ -346,14 +346,19 @@ const gb = (bytes: number): string => {
   return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
 };
 
+/** The bytes free to this user on the disk `folder` is on: THE ONE reading of free space, a move's and a delegate's inputs'. */
+export const freeBytes = async (folder: string): Promise<number> => {
+  const disk = await statfs(folder);
+  return disk.bavail * disk.bsize;
+};
+
 /** Fails the step when `folder`'s disk holds less than `needed` bytes and the margin. */
 const enoughSpace = async (
   folder: string,
   needed: number,
   machine: string
 ): Promise<void> => {
-  const disk = await statfs(folder);
-  const free = disk.bavail * disk.bsize;
+  const free = await freeBytes(folder);
   const want = Math.ceil(needed * (1 + FREE_SPACE_MARGIN));
   if (free < want) {
     throw new StepFailed(

@@ -298,12 +298,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    404 and 422 answers name the codes the service always sent beside
  *    `no-such-artifact`, `unknown-fields` and `validation`. A page built for
  *    60 reads the same bytes, and reloads first.
+ * 62: a delegation's inputs are refused for their size only when the disk
+ *    they land on has no room (`work-item-inputs-no-room`), and the 64 MiB
+ *    refusal (`work-item-inputs-held-limit`) is gone. A page built for 61
+ *    does not know the new code, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 61;
+export const WIRE_PROTOCOL = 62;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -260,8 +260,10 @@ import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_HOST_OUTPUTS,
   CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_CLEAR,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_ROOM,
   CONTROL_INPUTS_WRITE,
   CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
@@ -7698,7 +7700,9 @@ export const createServer = (
       method === CONTROL_INPUTS_ADMIT ||
       method === CONTROL_INPUTS_COPY ||
       method === CONTROL_INPUTS_READ ||
+      method === CONTROL_INPUTS_ROOM ||
       method === CONTROL_INPUTS_WRITE ||
+      method === CONTROL_INPUTS_CLEAR ||
       method === CONTROL_PLACE_REPO ||
       method === CONTROL_PLACE_LFS ||
       method === CONTROL_PLACE_PUSH

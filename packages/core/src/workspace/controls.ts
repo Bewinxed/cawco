@@ -2,6 +2,7 @@
 
 import type { HarnessKind } from "../harness/kinds";
 import type { HubRepoKey } from "../hub-repo";
+import { WIRE_MESSAGE_LIMIT_BYTES } from "../wire";
 
 /**
  * Makes a delegation workspace of any folder `cwd` (agent layer.ts): its
@@ -590,44 +591,114 @@ export const CONTROL_WORKSPACE_AT = "workspaceAt";
  * cut for it: each an absolute path to a file, refused in words when one may
  * not leave it (workspace-policy.ts `inputDenial`), lies outside the parent's
  * own clone, scratch dir and project folder when the parent runs in a
- * workspace (`bound`), or the whole passes {@link INPUTS_LIMIT_BYTES}. A file
+ * workspace (`bound`), or two would land under one name. A file
  * in the folder of the parent's project (`project`), which its delegates'
- * boundaries read, may go. Args `[paths, bound: WorkspaceRef | null,
- * project: string | null]`; answers {@link InputsAdmitted}, no bytes.
- * Machine-scoped.
+ * boundaries read, may go. Any size, any count. Args `[paths, bound:
+ * WorkspaceRef | null, project: string | null]`; answers {@link
+ * InputsAdmitted}, no bytes. Machine-scoped.
  */
 export const CONTROL_INPUTS_ADMIT = "inputsAdmit";
 
 /**
- * A delegate's inputs read on its parent's machine for a workspace on
- * another, admitted again as {@link CONTROL_INPUTS_ADMIT} admits them. Args
- * `[paths, bound: WorkspaceRef | null, project: string | null]`; answers
- * {@link InputsRead}. Machine-scoped.
+ * Ranges of a delegate's inputs read on its parent's machine for a workspace
+ * on another ({@link InputWant}), at most {@link INPUTS_PIECE_BYTES} of them
+ * together: each file admitted again alone as {@link CONTROL_INPUTS_ADMIT}
+ * admits a file, and refused when its size is no longer the size it was
+ * admitted at. Args `[bound: WorkspaceRef | null, project: string | null,
+ * InputWant[]]`; answers {@link InputsRead}. Machine-scoped.
  */
 export const CONTROL_INPUTS_READ = "inputsRead";
 
 /**
- * A session's inputs written into its inputs folder ({@link InputsPlace}),
- * under {@link INPUTS_DIR}, each replacing one of its name: the bytes
- * {@link CONTROL_INPUTS_READ} read on another machine. Args
- * `[InputsPlace, InputFile[]]`; answers {@link InputsLanded}.
+ * A session's inputs folder ({@link InputsPlace}) made, and the free space on
+ * its disk: asked before the first of a set is written, which the hub
+ * refuses when they need more. Args `[InputsPlace]`; answers {@link
+ * InputsRoom}. Machine-scoped.
+ */
+export const CONTROL_INPUTS_ROOM = "inputsRoom";
+
+/**
+ * Pieces of a session's inputs written into its inputs folder ({@link
+ * InputsPlace}), under {@link INPUTS_DIR}: each appended to its file's part
+ * in turn, and the part renamed over one of its name once its last piece is
+ * in, so no file stands at its name half written. The bytes {@link
+ * CONTROL_INPUTS_READ} read on another machine, or the hub holds. Args
+ * `[InputsPlace, InputPiece[]]`; answers {@link InputsLanded}.
  * Machine-scoped.
  */
 export const CONTROL_INPUTS_WRITE = "inputsWrite";
 
 /**
+ * A set of inputs that did not land whole taken out of a session's inputs
+ * folder ({@link InputsPlace}): each name, and its part, removed, so nothing
+ * of it is taken for delivered. Args `[InputsPlace, names: string[]]`.
+ * Machine-scoped.
+ */
+export const CONTROL_INPUTS_CLEAR = "inputsClear";
+
+/**
  * A session's inputs copied on the machine that holds both its sender and
- * its inputs folder ({@link InputsPlace}), from where they are, as
- * {@link CONTROL_INPUTS_WRITE} writes them, admitted again first as
- * {@link CONTROL_INPUTS_ADMIT} admits them. No byte of them crosses the link
- * to the hub: read and written back down to the same machine, each input
- * crossed it twice, up to 86 MiB of base64 a delegation each way, and a
- * conductor's lanes queued it ahead of every heartbeat (2026-10-19). Args
- * `[paths, bound: WorkspaceRef | null, InputsPlace, project: string |
- * null]`; answers
+ * its inputs folder ({@link InputsPlace}), from where they are, one file at
+ * a time in pieces as {@link CONTROL_INPUTS_WRITE} writes them, admitted
+ * again first as {@link CONTROL_INPUTS_ADMIT} admits them. No byte of them
+ * crosses the link to the hub: read and written back down to the same
+ * machine, each input crossed it twice, and a conductor's lanes queued it
+ * ahead of every heartbeat (2026-10-19). Args `[paths, bound: WorkspaceRef |
+ * null, InputsPlace, project: string | null]`; answers
  * {@link InputsAdmitted}, with the folder they landed in. Machine-scoped.
  */
 export const CONTROL_INPUTS_COPY = "inputsCopy";
+
+/**
+ * The most bytes of inputs one {@link CONTROL_INPUTS_READ} answers and one
+ * {@link CONTROL_INPUTS_WRITE} carries: a set crosses in batches of this
+ * many, a larger file in pieces of it appended in turn. The wire assembles
+ * every message whole in memory on both ends, up to {@link
+ * WIRE_MESSAGE_LIMIT_BYTES}; base64 costs 4/3, so this is a sixteenth of
+ * that ceiling once encoded (24 MiB of bytes, 32 MiB on the wire): no
+ * message nears it, and no process holds more than a batch of the set.
+ */
+export const INPUTS_PIECE_BYTES = (WIRE_MESSAGE_LIMIT_BYTES * 3) / 4 / 16;
+
+/** One range of a file in a batch ({@link inputBatches}): where it starts, how long it is, and whether it ends the file. */
+export interface InputRange<File> {
+  at: number;
+  file: File;
+  last: boolean;
+  length: number;
+}
+
+/**
+ * THE ONE PLAN of how a set of inputs crosses: `files` in turn, in batches
+ * of at most {@link INPUTS_PIECE_BYTES} together, a file that does not fit
+ * what is left of a batch split across the next ones, an empty file one
+ * empty range. Read, carried and written one batch at a time.
+ */
+export const inputBatches = <File extends { size: number }>(
+  files: readonly File[]
+): InputRange<File>[][] => {
+  const batches: InputRange<File>[][] = [];
+  let batch: InputRange<File>[] = [];
+  let room = INPUTS_PIECE_BYTES;
+  for (const file of files) {
+    let at = 0;
+    do {
+      if (room === 0) {
+        batches.push(batch);
+        batch = [];
+        room = INPUTS_PIECE_BYTES;
+      }
+      const length = Math.min(file.size - at, room);
+      batch.push({ file, at, length, last: at + length === file.size });
+      at += length;
+      room -= length;
+    } while (at < file.size);
+  }
+  if (batch.length > 0) {
+    batches.push(batch);
+  }
+  return batches;
+};
 
 /**
  * Where a session's inputs land on its machine: a work item's workspace,
@@ -642,6 +713,11 @@ export type InputsPlace = WorkspaceRef | { cwd: string; session: string };
 /** What {@link CONTROL_INPUTS_WRITE} answers: the folder the inputs landed in, as the session names it (`$TMPDIR/inputs/`, or an absolute path). */
 export interface InputsLanded {
   folder: string;
+}
+
+/** What {@link CONTROL_INPUTS_ROOM} answers: the folder inputs land in, as {@link InputsLanded} names it, and the bytes free on its disk. */
+export interface InputsRoom extends InputsLanded {
+  free: number;
 }
 
 /**
@@ -668,17 +744,6 @@ export const INPUTS_DIR = "inputs";
  */
 export const OUTPUTS_DIR = "outputs";
 
-/**
- * The most one delegation's inputs come to, together. A long session's
- * transcript, the largest input the fleet hands on, runs to tens of MB
- * (wire.ts); this holds one with room. To a workspace on another machine
- * each input crosses the wire twice as base64 (4/3 its size, ~86 MiB here;
- * on the parent's own machine, never: {@link CONTROL_INPUTS_COPY}), far inside the wire's 512 MiB and the
- * 256 MiB a workspace's commits may bundle. Past it, data goes in git, not
- * a brief. Our call.
- */
-export const INPUTS_LIMIT_BYTES = 64 * 1024 * 1024;
-
 /** One input, admitted: its name in `inputs/`, where it is read, its permission bits. */
 export interface InputNamed {
   /** The absolute path it is read from on the parent's machine. */
@@ -687,17 +752,39 @@ export interface InputNamed {
   mode: number;
   /** Where it lands under `$TMPDIR/inputs/`: its file name, or a relative path when it keeps its folders (an item's assets). */
   name: string;
+  /** Its bytes as it was admitted. */
+  size: number;
 }
 
-/** One input as it crosses the wire to another machine: admitted, with its bytes. */
-export interface InputFile extends InputNamed {
+/** A range of one admitted input, as {@link CONTROL_INPUTS_READ} is asked for it. */
+export interface InputWant {
+  /** Where the range starts. */
+  at: number;
+  /** The absolute path it is read from on the parent's machine. */
+  from: string;
+  /** How many bytes from `at`. */
+  length: number;
+  /** Its size as it was admitted: one of another size now is refused. */
+  size: number;
+}
+
+/** One piece of an input as it crosses the wire to another machine ({@link CONTROL_INPUTS_WRITE}). */
+export interface InputPiece {
+  /** Where the piece goes in its file: the length of what was written of it before. */
+  at: number;
   /** Base64 of its bytes. */
   content: string;
+  /** Whether it ends its file: its part is then put at its name. */
+  last: boolean;
+  /** Its permission bits. */
+  mode: number;
+  /** Where it lands under `$TMPDIR/inputs/`, as {@link InputNamed} names it. */
+  name: string;
 }
 
 /** What {@link CONTROL_INPUTS_ADMIT} and {@link CONTROL_INPUTS_COPY} answer: the inputs (a copy's with the folder they landed in), or why they may not go. */
 export type InputsAdmitted =
   { files: InputNamed[]; folder?: string } | { refused: string };
 
-/** What {@link CONTROL_INPUTS_READ} answers: the files, or why they may not go. */
-export type InputsRead = { files: InputFile[] } | { refused: string };
+/** What {@link CONTROL_INPUTS_READ} answers: base64 of each range asked for, in turn, or why one may not go. */
+export type InputsRead = { contents: string[] } | { refused: string };

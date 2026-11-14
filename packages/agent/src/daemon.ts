@@ -168,8 +168,10 @@ import {
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_CLEAR,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_ROOM,
   CONTROL_INPUTS_WRITE,
   CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
@@ -274,8 +276,10 @@ import { keepHubPreviews } from "./hub-previews";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import {
   admitInputs,
+  clearInputs,
   copyInputs,
   readInputs,
+  roomInputs,
   savePicture,
   writeInputs,
 } from "./inputs";
@@ -3960,7 +3964,9 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(CONTROL_INPUTS_ADMIT, admitInputs);
     supervisor.declareControl(CONTROL_INPUTS_COPY, copyInputs);
     supervisor.declareControl(CONTROL_INPUTS_READ, readInputs);
+    supervisor.declareControl(CONTROL_INPUTS_ROOM, roomInputs);
     supervisor.declareControl(CONTROL_INPUTS_WRITE, writeInputs);
+    supervisor.declareControl(CONTROL_INPUTS_CLEAR, clearInputs);
     // A picture artifact_read drew, kept in a workspace here by the same writer.
     supervisor.declareControl(CONTROL_WORKSPACE_SAVE, savePicture);
     // A project move's steps (move.ts). Each runs as this process's child, so

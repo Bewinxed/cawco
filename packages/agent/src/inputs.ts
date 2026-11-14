@@ -1,6 +1,7 @@
 /**
  * A delegate's inputs (core `CONTROL_INPUTS_ADMIT`, `CONTROL_INPUTS_COPY`,
- * `CONTROL_INPUTS_READ`, `CONTROL_INPUTS_WRITE`): files and folders its
+ * `CONTROL_INPUTS_READ`, `CONTROL_INPUTS_ROOM`, `CONTROL_INPUTS_WRITE`,
+ * `CONTROL_INPUTS_CLEAR`): files and folders its
  * parent names by path on its own machine (a folder lands as its tree),
  * which no boundary lets the delegate read where they are (a journal
  * excerpt, a log, a transcript). Admitted on the
@@ -15,11 +16,13 @@ import { constants, type Stats } from "node:fs";
 import {
   access,
   lstat,
+  open,
   readdir,
-  readFile,
   readlink,
   realpath,
+  rename,
   rm,
+  rmdir,
   stat,
 } from "node:fs/promises";
 import {
@@ -31,6 +34,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { readRange } from "@cawco/core/file-range";
 import { makeFolder } from "@cawco/core/folders";
 import {
   sessionScratchDir,
@@ -42,12 +46,13 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { workWords } from "@cawco/core/words/work";
 import {
   INPUTS_DIR,
-  INPUTS_LIMIT_BYTES,
-  type InputFile,
+  INPUTS_PIECE_BYTES,
   type InputNamed,
   type InputsAdmitted,
   type InputsLanded,
   type InputsRead,
+  type InputsRoom,
+  inputBatches,
   type WorkspaceRef,
   type WorkspaceSaved,
 } from "@cawco/core/workspace/controls";
@@ -58,9 +63,8 @@ import {
 } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { isWorkspaceRef } from "./hub-command";
+import { freeBytes } from "./move";
 import { cloneHolding } from "./workspace-records";
-
-const MIB = 1024 * 1024;
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
@@ -235,9 +239,9 @@ const readableFile = async (
  * as it is found, landing at `<folder's name>/<its path in it>`: each judged
  * as a file named alone is ({@link resolved}, so a link in it to what the
  * boundary hides is refused as that file would be), a folder in it walked, a
- * link in it to a folder refused. The walk stops at the first file
- * {@link counted} refuses, so naming a whole home folder ends once its bytes
- * pass the limit; refused when it holds no file. Answers why it may not go.
+ * link in it to a folder refused. The walk stops at the first file refused,
+ * {@link landsOnce} too; refused when it holds no file. Answers why it may
+ * not go.
  */
 const admitFolder = async (
   named: string,
@@ -272,7 +276,7 @@ const admitFolder = async (
       return `${file} is ${one.info.isDirectory() ? "a link to a folder; name the folder it leads to" : "not a file"}`;
     }
     const admitted = await readableFile(file, one.real, one.info, name);
-    return typeof admitted === "string" ? admitted : counted(tally, admitted);
+    return typeof admitted === "string" ? admitted : landsOnce(tally, admitted);
   };
   const why = await walk("");
   if (why) {
@@ -311,7 +315,28 @@ const admit = async (
     return `${named} is not a file or a folder`;
   }
   const file = await readableFile(named, one.real, one.info, basename(named));
-  return typeof file === "string" ? file : counted(tally, file);
+  return typeof file === "string" ? file : landsOnce(tally, file);
+};
+
+/**
+ * `named` admitted alone as {@link admit} admits a file, or why it may not
+ * go: how each range of an input is judged again where it is read.
+ */
+const admitFile = async (
+  named: string,
+  reach: Reach
+): Promise<Admitted | string> => {
+  if (!isAbsolute(named)) {
+    return `${named} is not an absolute path; name each input by its absolute path on your machine`;
+  }
+  const one = await resolved(named, reach);
+  if (typeof one === "string") {
+    return one;
+  }
+  if (!one.info.isFile()) {
+    return `${named} is not a file`;
+  }
+  return readableFile(named, one.real, one.info, basename(named));
 };
 
 /**
@@ -378,18 +403,34 @@ export const admitFiles = async (
 /** The list of paths a control hands over. */
 const PATHS = z.array(z.string());
 
-/** The files {@link CONTROL_INPUTS_WRITE} hands over: the fields a write reads. */
-const WRITTEN_FILES = z.array(
-  z.object({ content: z.string(), mode: z.number(), name: z.string() })
+const OFFSET = z.number().int().nonnegative();
+
+/** The ranges {@link CONTROL_INPUTS_READ} is asked for. */
+const WANTS = z.array(
+  z.object({ at: OFFSET, from: z.string(), length: OFFSET, size: OFFSET })
 );
+
+/** The pieces {@link CONTROL_INPUTS_WRITE} hands over: the fields a write reads. */
+const PIECES = z.array(
+  z.object({
+    at: OFFSET,
+    content: z.string(),
+    last: z.boolean(),
+    mode: z.number(),
+    name: z.string(),
+  })
+);
+
+/** The names {@link CONTROL_INPUTS_CLEAR} takes out. */
+const NAMES = z.array(z.string());
 
 /** A session's place: the session and the folder it works in. */
 const SESSION_PLACE = z.object({ cwd: z.string(), session: z.string() });
 
 /**
  * Each of `paths` admitted, or the first reason one may not go ({@link
- * admit}), two that would land under one name, or more than {@link
- * INPUTS_LIMIT_BYTES} together. `bound` is the workspace the parent runs in,
+ * admit}), or two that would land under one name, of any size and count
+ * together. `bound` is the workspace the parent runs in,
  * when it runs in one; `project` the project the parent belongs to, when it
  * belongs to one. The one place every input is judged: at delegate time, and
  * again where it is read or copied.
@@ -404,7 +445,7 @@ const admitAll = async (
     throw new Error("inputs must be a list of absolute paths");
   }
   const reach = await reachOf(bound, project);
-  const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
+  const tally: Tally = { admitted: [], named: new Map() };
   for (const path of listed.data) {
     const why = await admit(path, reach, tally);
     if (why) {
@@ -414,36 +455,50 @@ const admitAll = async (
   return tally.admitted;
 };
 
-/** What the inputs admitted so far come to, across every path named: the files, each by where it lands, and their bytes. */
+/** The inputs admitted so far, across every path named: the files, each by where it lands. */
 interface Tally {
   admitted: Admitted[];
-  bytes: number;
   named: Map<string, string>;
 }
 
 /**
  * `one` added to `tally`, or why it may not go: two that would land under
- * one name, or more than {@link INPUTS_LIMIT_BYTES} together. THE ONE byte
- * check of paths, run on each file as it is found.
+ * one name. Run on each file as it is found.
  */
-const counted = (tally: Tally, one: Admitted): string | undefined => {
+const landsOnce = (tally: Tally, one: Admitted): string | undefined => {
   const twin = tally.named.get(one.name);
   if (twin) {
     return `${twin} and ${one.named} would both land as ${one.name} in the inputs folder; copy one to another name`;
   }
   tally.named.set(one.name, one.named);
-  tally.bytes += one.size;
-  if (tally.bytes > INPUTS_LIMIT_BYTES) {
-    return workWords.inputsLimits.bytes(INPUTS_LIMIT_BYTES / MIB);
-  }
   tally.admitted.push(one);
 };
 
-const namedOf = ({ name, named, mode }: Admitted): InputNamed => ({
+const namedOf = ({ name, named, mode, size }: Admitted): InputNamed => ({
   name,
   from: named,
   mode,
+  size,
 });
+
+/**
+ * `length` bytes from `at` of input `one`, admitted at `size` (core
+ * `readRange`), or a throw in words when it ends short of them, having
+ * shrunk since.
+ */
+const inputRange = async (
+  one: { named: string; real: string; size: number },
+  at: number,
+  length: number
+): Promise<Buffer> => {
+  const range = await readRange(one.real, at, length);
+  if (range.length < length) {
+    throw new Error(
+      workWords.inputChanged(one.named, one.size, at + range.length)
+    );
+  }
+  return range;
+};
 
 /**
  * {@link CONTROL_INPUTS_ADMIT}: the inputs `paths` names, admitted
@@ -460,73 +515,155 @@ export const admitInputs = async (
     : { files: admitted.map(namedOf) };
 };
 
-/** {@link CONTROL_INPUTS_READ}: each of `paths` admitted ({@link admitAll}), then read whole, one at a time. */
+/**
+ * {@link CONTROL_INPUTS_READ}: each range `wants` asks for, read from its
+ * file once that file is admitted again alone ({@link admitFile}) at the
+ * size it was admitted at; or the first reason one may not go. At most
+ * {@link INPUTS_PIECE_BYTES} together, as core `inputBatches` plans them.
+ */
 export const readInputs = async (
-  paths: unknown,
   bound: unknown,
-  project: unknown
+  project: unknown,
+  wants: unknown
 ): Promise<InputsRead> => {
-  const admitted = await admitAll(paths, bound, project);
-  if (typeof admitted === "string") {
-    return { refused: admitted };
+  const listed = WANTS.safeParse(wants);
+  if (!listed.success) {
+    throw new Error("inputs are read as a list of { from, at, length, size }");
   }
-  const files: InputFile[] = [];
-  for (const one of admitted) {
-    files.push({
-      ...namedOf(one),
-      content: (await readFile(one.real)).toString("base64"),
-    });
+  const asked = listed.data.reduce((sum, want) => sum + want.length, 0);
+  if (asked > INPUTS_PIECE_BYTES) {
+    throw new Error(
+      `one read of inputs asks ${INPUTS_PIECE_BYTES} bytes at most, and this asks ${asked}`
+    );
   }
-  return { files };
+  const reach = await reachOf(bound, project);
+  const contents: string[] = [];
+  for (const want of listed.data) {
+    const file = await admitFile(want.from, reach);
+    if (typeof file === "string") {
+      return { refused: file };
+    }
+    if (file.size !== want.size) {
+      return {
+        refused: workWords.inputChanged(want.from, want.size, file.size),
+      };
+    }
+    contents.push(
+      (await inputRange(file, want.at, want.length)).toString("base64")
+    );
+  }
+  return { contents };
 };
 
 /**
  * {@link CONTROL_INPUTS_COPY}: each of `paths` admitted ({@link admitAll})
- * and copied into the workspace `ref`'s inputs, as {@link writeInputs}
- * writes them, one file read at a time.
+ * and copied into the inputs folder of `place`, one file at a time, range by
+ * range as core `inputBatches` plans them, as {@link writeInputs} writes
+ * them. A copy that fails partway throws; the hub takes out what had landed
+ * (core `CONTROL_INPUTS_CLEAR`).
  */
 export const copyInputs = async (
   paths: unknown,
   bound: unknown,
-  ref: unknown,
+  place: unknown,
   project: unknown
 ): Promise<InputsAdmitted> => {
   const admitted = await admitAll(paths, bound, project);
   if (typeof admitted === "string") {
     return { refused: admitted };
   }
-  const folder = await writeInto(
-    ref,
-    admitted.map((one) => ({
-      name: one.name,
-      mode: one.mode,
-      bytes: () => readFile(one.real),
-    }))
+  const { named, under } = await inputsUnder(place);
+  for (const batch of inputBatches(admitted)) {
+    for (const { file, at, length, last } of batch) {
+      await writePiece(under, {
+        name: file.name,
+        mode: file.mode,
+        at,
+        last,
+        bytes: await inputRange(file, at, length),
+      });
+    }
+  }
+  console.info(
+    `[inputs] ${under.what}: ${admitted.length} input(s) copied to ${under.dir}`
   );
-  return { files: admitted.map(namedOf), folder };
+  return { files: admitted.map(namedOf), folder: named };
 };
 
 /**
- * {@link CONTROL_INPUTS_WRITE}: each input's bytes, read on another machine,
- * written into the session's inputs folder ({@link writeInto}).
+ * {@link CONTROL_INPUTS_ROOM}: the inputs folder of `place` made
+ * ({@link inputsUnder}), and the bytes free on its disk (move.ts
+ * `freeBytes`).
+ */
+export const roomInputs = async (place: unknown): Promise<InputsRoom> => {
+  const { named, under } = await inputsUnder(place);
+  return { folder: named, free: await freeBytes(under.own) };
+};
+
+/**
+ * {@link CONTROL_INPUTS_WRITE}: each piece of inputs read on another
+ * machine, or held by the hub, written into the inputs folder of `place`
+ * ({@link writePiece}).
  */
 export const writeInputs = async (
-  ref: unknown,
-  files: unknown
+  place: unknown,
+  pieces: unknown
 ): Promise<InputsLanded> => {
-  const listed = WRITTEN_FILES.safeParse(files);
+  const listed = PIECES.safeParse(pieces);
   if (!listed.success) {
-    throw new Error("inputs must be a list of files");
+    throw new Error("inputs are written as a list of pieces");
   }
-  const folder = await writeInto(
-    ref,
-    listed.data.map((file) => ({
-      name: file.name,
-      mode: file.mode,
-      bytes: () => Promise.resolve(Buffer.from(file.content, "base64")),
-    }))
+  const { named, under } = await inputsUnder(place);
+  for (const piece of listed.data) {
+    await writePiece(under, {
+      name: piece.name,
+      mode: piece.mode,
+      at: piece.at,
+      last: piece.last,
+      bytes: Buffer.from(piece.content, "base64"),
+    });
+  }
+  return { folder: named };
+};
+
+/**
+ * {@link CONTROL_INPUTS_CLEAR}: each of `names`, and its part, taken out of
+ * the inputs folder of `place`, then each folder they leave empty; a folder
+ * on the way that is no longer the inputs' own is left as it is.
+ */
+export const clearInputs = async (
+  place: unknown,
+  names: unknown
+): Promise<void> => {
+  const listed = NAMES.safeParse(names);
+  if (!listed.success) {
+    throw new Error("inputs are cleared by a list of names");
+  }
+  const { under } = await inputsUnder(place);
+  for (const name of listed.data) {
+    if (nameProblem(name)) {
+      continue;
+    }
+    let folder = join(under.own, dirname(name));
+    if ((await realpath(folder).catch(() => undefined)) !== folder) {
+      continue;
+    }
+    await rm(join(folder, basename(name)), { force: true });
+    await rm(partOf(folder, name), { force: true });
+    while (folder !== under.own) {
+      const emptied = await rmdir(folder).then(
+        () => true,
+        () => false
+      );
+      if (!emptied) {
+        break;
+      }
+      folder = dirname(folder);
+    }
+  }
+  console.info(
+    `[inputs] ${under.what}: ${listed.data.length} input(s) cleared from ${under.dir}`
   );
-  return { folder };
 };
 
 /**
@@ -579,15 +716,15 @@ interface Under {
  * Each file written under `dir`, at its name (a path when it keeps its
  * folders), replacing one there, and readable by its owner at least. The
  * workspace writes `dir`, so nothing there is followed: `dir`'s real path
- * and each file's folder's are checked before it is written, a folder is
- * made one at a time ({@link ownFolder}), and each file is written to a new
- * name and renamed over the old one (state-file.ts). THE ONE WRITER of a
- * file CawCo puts where a session asks: its inputs, a picture
- * `artifact_read` keeps ({@link savePicture}) and an image `generate_image`
- * makes ({@link writeKept}).
+ * and each file's folder's are checked before it is written ({@link
+ * folderUnder}), and each file is written to a new name and renamed over the
+ * old one (state-file.ts). THE ONE WRITER of a whole file CawCo puts where a
+ * session asks: a picture `artifact_read` keeps ({@link savePicture}) and an
+ * image `generate_image` makes ({@link writeKept}); its inputs go in pieces
+ * ({@link writePiece}).
  */
 const writeUnder = async (
-  { dir, own, strays, what }: Under,
+  under: Under,
   files: {
     bytes: () => Promise<Buffer>;
     /** Placed only where nothing is (state-file.ts `exclusive`). */
@@ -597,30 +734,105 @@ const writeUnder = async (
   }[]
 ): Promise<void> => {
   for (const file of files) {
-    if (nameProblem(file.name)) {
-      throw new Error(`"${file.name}" is not a file name`);
-    }
-    if ((await realpath(dir)) !== own) {
-      throw new Error(
-        `${dir} is no longer ${what}, so nothing more was written there`
-      );
-    }
-    const folder = await ownFolder(own, dirname(file.name), strays);
-    if ((await realpath(folder)) !== folder) {
-      throw new Error(
-        `${folder} is no longer inside ${what}, so nothing more was written there`
-      );
-    }
+    const folder = await folderUnder(under, file.name);
     await writeStateFile(
       join(folder, basename(file.name)),
       await file.bytes(),
       {
         inPlace: true,
-        // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
-        mode: (file.mode & 0o777) | 0o600,
+        mode: ownMode(file.mode),
         ...(file.exclusive ? { exclusive: true } : {}),
       }
     );
+  }
+};
+
+/**
+ * The folder file `name` goes in under `under`, made one folder at a time
+ * ({@link ownFolder}), once `under`'s real path and the folder's are what
+ * they were: the checks {@link writeUnder} and {@link writePiece} make
+ * before each file, as the workspace writes `dir` too.
+ */
+const folderUnder = async (
+  { dir, own, strays, what }: Under,
+  name: string
+): Promise<string> => {
+  if (nameProblem(name)) {
+    throw new Error(`"${name}" is not a file name`);
+  }
+  if ((await realpath(dir)) !== own) {
+    throw new Error(
+      `${dir} is no longer ${what}, so nothing more was written there`
+    );
+  }
+  const folder = await ownFolder(own, dirname(name), strays);
+  if ((await realpath(folder)) !== folder) {
+    throw new Error(
+      `${folder} is no longer inside ${what}, so nothing more was written there`
+    );
+  }
+  return folder;
+};
+
+/** A written file's mode: its own permission bits, and its owner's read and write. */
+const ownMode = (mode: number): number =>
+  // biome-ignore lint/suspicious/noBitwiseOperators: its own bits, and its owner's read and write
+  (mode & 0o777) | 0o600;
+
+/** Where file `name` in `folder` is written before its last piece is in. */
+const partOf = (folder: string, name: string): string =>
+  join(folder, `.${basename(name)}.cawco-part`);
+
+/**
+ * One piece of an input appended to its file's part in its folder under
+ * `under` ({@link folderUnder}): the first makes the part where nothing is,
+ * each later one must start where the part ends, and the last flushes it
+ * and renames it over the file of its name. A link put at the part's name
+ * is refused, never written through. THE ONE WRITER of inputs, copied here
+ * or carried from another machine.
+ */
+const writePiece = async (
+  under: Under,
+  piece: {
+    at: number;
+    bytes: Buffer;
+    last: boolean;
+    mode: number;
+    name: string;
+  }
+): Promise<void> => {
+  const folder = await folderUnder(under, piece.name);
+  const part = partOf(folder, piece.name);
+  if (piece.at === 0) {
+    await rm(part, { force: true });
+  }
+  // open(2)'s flags as one bit set: each its own bit, so their sum is it.
+  const handle = await open(
+    part,
+    constants.O_WRONLY +
+      constants.O_NOFOLLOW +
+      (piece.at === 0
+        ? constants.O_CREAT + constants.O_EXCL
+        : constants.O_APPEND),
+    0o600
+  );
+  try {
+    const { size } = await handle.stat();
+    if (size !== piece.at) {
+      throw new Error(
+        `${piece.name}'s part holds ${size} bytes where a piece at ${piece.at} goes, so it was not written whole`
+      );
+    }
+    await handle.writeFile(piece.bytes);
+    if (piece.last) {
+      await handle.chmod(ownMode(piece.mode));
+      await handle.sync();
+    }
+  } finally {
+    await handle.close();
+  }
+  if (piece.last) {
+    await rename(part, join(folder, basename(piece.name)));
   }
 };
 
@@ -672,14 +884,14 @@ const inputsHome = async (
 };
 
 /**
- * Each input written into the inputs folder of `place` ({@link inputsHome})
- * under {@link INPUTS_DIR} ({@link writeUnder}); a link or a file at
- * `inputs` is taken away first. Answers the folder as its session names it.
+ * The inputs folder of `place` ({@link inputsHome}), {@link INPUTS_DIR}
+ * under its scratch dir, made, a link or a file at `inputs` taken away
+ * first: where its pieces are written ({@link writePiece}), and the folder
+ * as its session names it.
  */
-const writeInto = async (
-  place: unknown,
-  files: { bytes: () => Promise<Buffer>; mode: number; name: string }[]
-): Promise<string> => {
+const inputsUnder = async (
+  place: unknown
+): Promise<{ named: string; under: Under }> => {
   const { named, scratch, what } = await inputsHome(place);
   const dir = join(scratch, INPUTS_DIR);
   const found = await lstat(dir).catch(() => undefined);
@@ -687,17 +899,15 @@ const writeInto = async (
     await rm(dir, { force: true });
   }
   await makeFolder(dir, { mode: 0o700 });
-  await writeUnder(
-    {
+  return {
+    named,
+    under: {
       dir,
       own: join(await realpath(scratch), INPUTS_DIR),
       strays: "clear",
       what,
     },
-    files
-  );
-  console.info(`[inputs] ${what}: ${files.length} input(s) written to ${dir}`);
-  return named;
+  };
 };
 
 /** How a session names its scratch dir in a path it hands a tool, which no shell expands. */

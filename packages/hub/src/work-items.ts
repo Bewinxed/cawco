@@ -37,6 +37,7 @@
 
 import type { EndedBy } from "@cawco/core/accounts";
 import { CODE_MODE_TOOL } from "@cawco/core/ask-tools";
+import { humanSize } from "@cawco/core/attachments";
 import {
   AGENT_RESTARTED_MID_REQUEST,
   AGENT_RESTARTING,
@@ -88,25 +89,28 @@ import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
 import { workWords } from "@cawco/core/words/work";
 import type {
-  InputFile,
   InputNamed,
+  InputPiece,
   InputsAdmitted,
-  InputsLanded,
   InputsPlace,
   InputsRead,
+  InputsRoom,
+  InputWant,
   WorkspaceChanges,
   WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import {
   CONTROL_CLONE_HOLDING,
   CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_CLEAR,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_ROOM,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CHANGES,
   INPUTS_DIR,
-  INPUTS_LIMIT_BYTES,
+  inputBatches,
 } from "@cawco/core/workspace/controls";
 import {
   excludedPaths,
@@ -137,7 +141,13 @@ import {
   capableWaitReason,
 } from "./gate-file";
 import { type HeldInput, handedInputs } from "./handed-input";
-import type { HandedFile, HandedInputs } from "./handed-inputs";
+import {
+  type HandedBytes,
+  type HandedFile,
+  type HandedInputs,
+  handedRange,
+  handedSize,
+} from "./handed-inputs";
 import { byId } from "./handles";
 import { holdsBut, type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -148,7 +158,6 @@ import {
   findingsBlock,
   LANDING_ENDED,
   type LandingsHub,
-  MIB,
   reportLine,
 } from "./landing-run";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
@@ -409,13 +418,15 @@ export const resolveSpawnType = (
 };
 
 /**
- * A delegation's inputs: the paths named, admitted on its parent's machine,
- * with the parent's own workspace when it runs in one (what they were
- * admitted against) and the machine they are on, whose bytes the
- * workspace's machine copies or writes (`handIn`); `held`, what the hub
- * resolved itself (handed-inputs.ts), bytes and all; and every one by name.
+ * A delegation's inputs: the paths named, admitted on its parent's machine
+ * (`admitted`, the files they came to), with the parent's own workspace
+ * when it runs in one (what they were admitted against) and the machine
+ * they are on, whose bytes the workspace's machine copies or writes
+ * (`handIn`); `held`, what the hub resolved itself (handed-inputs.ts), its
+ * bytes or where they are read; and every one by name.
  */
 interface Inputs {
+  admitted: InputNamed[];
   bound: WorkspaceRef | null;
   files: InputNamed[];
   held: HandedFile[];
@@ -427,6 +438,7 @@ interface Inputs {
 
 /** A delegation that names no inputs. */
 const NO_INPUTS: Inputs = {
+  admitted: [],
   paths: [],
   bound: null,
   project: null,
@@ -1347,7 +1359,7 @@ const outputsOf = (outputs: string[] | undefined) => {
   if (outputs.length > OUTPUTS_LIMIT) {
     return problem(400, {
       code: "work-item-outputs-too-many",
-      detail: workWords.inputsLimits.outputs(outputs.length, OUTPUTS_LIMIT),
+      detail: workWords.outputsTooMany(outputs.length, OUTPUTS_LIMIT),
     });
   }
   const paths = new Set<string>();
@@ -3393,13 +3405,13 @@ export const createWorkItems = ({
   };
 
   /**
-   * What `held` names, resolved now and read for `reader` (handed-inputs.ts):
-   * a problem in words naming it when it names nothing `reader` may read, or
-   * as soon as what has been read passes {@link INPUTS_LIMIT_BYTES}.
+   * What `held` names, resolved now for `reader` (handed-inputs.ts), of any
+   * size: a problem in words naming it when it names nothing `reader` may
+   * read. A file on the hub's disk (an item's asset) is read only as it is
+   * sent ({@link handInto}).
    */
   const resolveHeld = async (held: HeldInput[], reader: InstanceRow) => {
     const resolved: HandedFile[] = [];
-    let bytes = 0;
     for (const input of held) {
       // A handed input's problem is the delegate's, said in the words that name the input.
       const files = await resolveHanded(reader, input);
@@ -3414,15 +3426,6 @@ export const createWorkItems = ({
           return problem(400, {
             code: "work-item-inputs-unresolved",
             detail: inputsLine(file.response.detail),
-          });
-        }
-        // What is made for its reader as it is written (a preview's pass)
-        // is a few hundred bytes: what is in hand now is what counts.
-        bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
-        if (bytes > INPUTS_LIMIT_BYTES) {
-          return problem(400, {
-            code: "work-item-inputs-held-limit",
-            detail: workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB),
           });
         }
         resolved.push(file);
@@ -3500,6 +3503,7 @@ export const createWorkItems = ({
       return twice;
     }
     const hubInputs: Inputs = {
+      admitted: files,
       paths,
       bound: null,
       project: reader.projectId ?? null,
@@ -3539,13 +3543,21 @@ export const createWorkItems = ({
     }
     const files: InputNamed[] = [
       ...pathFiles,
-      ...hubFiles.map(({ name, from }) => ({ name, from, mode: HELD_MODE })),
+      ...hubFiles.map(({ name, from, bytes }) => ({
+        name,
+        from,
+        mode: HELD_MODE,
+        // What is made for its reader as it is written (a preview's pass)
+        // is known only then: a few hundred bytes.
+        size: typeof bytes === "function" ? 0 : handedSize(bytes),
+      })),
     ];
     const twice = oneNameEach(files);
     if (twice) {
       return twice;
     }
     const sessionInputs: Inputs = {
+      admitted: pathFiles,
       paths,
       bound,
       project: row.projectId ?? null,
@@ -3579,14 +3591,12 @@ export const createWorkItems = ({
    * `inputs` put into the inputs folder `place` names on `machineId` (core
    * `InputsPlace`: a workspace's scratch dir, or a session with no work
    * item's own) for `receiver`, the session that reads them, before the
-   * message that names them goes. What the hub resolved it writes there
-   * itself, what is made for its reader (a preview's pass) made for
-   * `receiver` now. Paths are admitted again where they are read. THE ONE
-   * DECISION for paths: on the machine that holds them, that machine copies
-   * them itself, and none of their bytes crosses its link; from another
-   * machine, they are read there and written here, through the hub.
-   * Answers the folder as the machine named it, none from an agent that
-   * names none.
+   * message that names them goes; of any size and count. Refused only when
+   * together they need more than the disk there has free, asked before the
+   * first byte is written. A set that fails partway is taken out again
+   * (core `CONTROL_INPUTS_CLEAR`) and the failure said, so nothing of it is
+   * taken for delivered ({@link sendInputs}). Answers the folder as the
+   * machine named it, none from an agent that names none.
    */
   const handInto = async (
     machineId: string,
@@ -3594,27 +3604,99 @@ export const createWorkItems = ({
     inputs: Inputs,
     receiver: InstanceRow
   ) => {
-    let folder: string | undefined;
-    if (inputs.held.length > 0) {
-      const files = await Promise.all(
-        inputs.held.map(async (file): Promise<InputFile> => ({
-          name: file.name,
-          from: file.from,
-          mode: HELD_MODE,
-          content: (typeof file.bytes === "function"
+    if (inputs.held.length === 0 && inputs.paths.length === 0) {
+      return;
+    }
+    const held = await Promise.all(
+      inputs.held.map(async (file) => {
+        const bytes =
+          typeof file.bytes === "function"
             ? await file.bytes({ session: receiver, machineId })
-            : file.bytes
-          ).toString("base64"),
-        }))
+            : file.bytes;
+        return { name: file.name, bytes, size: handedSize(bytes) };
+      })
+    );
+    const needed = [...held, ...inputs.admitted].reduce(
+      (sum, file) => sum + file.size,
+      0
+    );
+    const room = (await call(machineId, CONTROL_INPUTS_ROOM, [place])) as
+      InputsRoom | undefined;
+    if (!room) {
+      return;
+    }
+    if (needed > room.free) {
+      return problem(400, {
+        code: "work-item-inputs-no-room",
+        detail: inputsLine(
+          workWords.inputsNoRoom(
+            humanSize(needed),
+            humanSize(room.free),
+            machineName(db, machineId)
+          )
+        ),
+      });
+    }
+    const names = inputs.files.map(({ name }) => name);
+    const clear = () =>
+      call(machineId, CONTROL_INPUTS_CLEAR, [place, names]).catch(
+        (error: unknown) =>
+          console.warn(
+            `[work-items] inputs that failed partway on ${machineName(db, machineId)} were not cleared: ${error instanceof Error ? error.message : String(error)}`
+          )
       );
-      const landed = (await call(machineId, CONTROL_INPUTS_WRITE, [
-        place,
-        files,
-      ])) as InputsLanded | undefined;
-      folder = landed?.folder;
+    try {
+      const refused = await sendInputs(machineId, place, inputs, held, clear);
+      if (refused) {
+        return refused;
+      }
+    } catch (error) {
+      await clear();
+      throw new Error(
+        workWords.inputsCleared(
+          inputsLine(error instanceof Error ? error.message : String(error))
+        ),
+        { cause: error }
+      );
+    }
+    return room.folder;
+  };
+
+  /**
+   * The bytes of `inputs` written into `place` on `machineId`, batch by
+   * batch as core `inputBatches` plans them, so no message nears the wire's
+   * ceiling and no process holds the whole set: `held`, made for their
+   * reader, read here; paths on the machine that holds them copied there
+   * by that machine, none of their bytes crossing its link; paths from
+   * another machine read there and written here, through the hub, each file
+   * admitted again where it is read. THE ONE DECISION for paths. Answers
+   * why a path may not go, in its machine's words, once what had landed is
+   * taken out again (`clear`).
+   */
+  const sendInputs = async (
+    machineId: string,
+    place: InputsPlace,
+    inputs: Inputs,
+    held: { bytes: HandedBytes; name: string; size: number }[],
+    clear: () => Promise<unknown>
+  ) => {
+    for (const batch of inputBatches(held)) {
+      const pieces: InputPiece[] = [];
+      for (const { file, at, length, last } of batch) {
+        pieces.push({
+          name: file.name,
+          mode: HELD_MODE,
+          at,
+          last,
+          content: (await handedRange(file.bytes, at, length)).toString(
+            "base64"
+          ),
+        });
+      }
+      await call(machineId, CONTROL_INPUTS_WRITE, [place, pieces]);
     }
     if (inputs.paths.length === 0) {
-      return folder;
+      return;
     }
     if (machineId === inputs.machineId) {
       const copied = (await call(machineId, CONTROL_INPUTS_COPY, [
@@ -3623,30 +3705,44 @@ export const createWorkItems = ({
         place,
         inputs.project,
       ])) as InputsAdmitted;
-      if ("refused" in copied) {
-        return problem(400, {
-          code: "work-item-inputs-uncopied",
-          detail: inputsLine(copied.refused),
-        });
+      if (!("refused" in copied)) {
+        return;
       }
-      return copied.folder ?? folder;
-    }
-    const read = (await call(inputs.machineId, CONTROL_INPUTS_READ, [
-      inputs.paths,
-      inputs.bound,
-      inputs.project,
-    ])) as InputsRead;
-    if ("refused" in read) {
+      await clear();
       return problem(400, {
-        code: "work-item-inputs-unread",
-        detail: inputsLine(read.refused),
+        code: "work-item-inputs-uncopied",
+        detail: workWords.inputsCleared(inputsLine(copied.refused)),
       });
     }
-    const landed = (await call(machineId, CONTROL_INPUTS_WRITE, [
-      place,
-      read.files satisfies InputFile[],
-    ])) as InputsLanded | undefined;
-    return landed?.folder ?? folder;
+    for (const batch of inputBatches(inputs.admitted)) {
+      const read = (await call(inputs.machineId, CONTROL_INPUTS_READ, [
+        inputs.bound,
+        inputs.project,
+        batch.map(({ file, at, length }): InputWant => ({
+          from: file.from,
+          at,
+          length,
+          size: file.size,
+        })),
+      ])) as InputsRead;
+      if ("refused" in read) {
+        await clear();
+        return problem(400, {
+          code: "work-item-inputs-unread",
+          detail: workWords.inputsCleared(inputsLine(read.refused)),
+        });
+      }
+      await call(machineId, CONTROL_INPUTS_WRITE, [
+        place,
+        batch.map(({ file, at, last }, index): InputPiece => ({
+          name: file.name,
+          mode: file.mode,
+          at,
+          last,
+          content: read.contents[index] ?? "",
+        })),
+      ]);
+    }
   };
 
   /**

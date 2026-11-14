@@ -85,7 +85,7 @@ const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 /** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
 const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
-export const MIB = 1024 * 1024;
+const MIB = 1024 * 1024;
 /**
  * The shell that says of each output whether it is missing, a link, or a
  * file of some size. A folder is said file by file, so a link inside it is
