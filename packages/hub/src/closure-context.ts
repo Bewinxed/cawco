@@ -136,6 +136,7 @@ import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
 import type { ContinuationSource, StoredSendRefusal } from "./db/stored-types";
+import type { Undoable } from "./db/trash";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
 import type { createDesignSystem } from "./design-system";
@@ -523,7 +524,14 @@ export interface ClosureContext {
   gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
   handMoveRefusal: (row: StoredRow, account: Account) => string | undefined;
   handoffs: Map<string, { from: string; at: number }>;
-  harnessConfigDelete: (kind: HarnessConfigKind, name: string) => unknown;
+  harnessConfigDelete: (
+    kind: HarnessConfigKind,
+    name: string
+  ) =>
+    | Undoable
+    | ReturnType<
+        typeof problem<404, { code: "no-harness-config"; detail: string }>
+      >;
   harnessConfigList: (kind: HarnessConfigKind) => {
     rows: FleetHarnessConfig[];
   };
@@ -531,7 +539,14 @@ export interface ClosureContext {
     kind: HarnessConfigKind,
     name: string,
     body: HarnessConfigBody
-  ) => unknown;
+  ) =>
+    | FleetHarnessConfig
+    | ReturnType<
+        typeof problem<400, { code: "harness-config-unplaced"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "harness-config-invalid"; detail: string }>
+      >;
   harnessReportOf: (
     machineId: string,
     harness: string
