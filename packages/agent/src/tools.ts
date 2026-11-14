@@ -1930,24 +1930,32 @@ export const putOnPins = async (
 };
 
 /**
+ * What the hub said the fleet does with a copy of a tool CawCo doesn't run
+ * (core `ToolUpdates`), or why it said nothing, in words: what a build's
+ * pins go on by before its swap (pin-record.ts `fleetToolUpdates`).
+ */
+export type FleetUpdates = { updates: ToolUpdates } | { unsaid: string };
+
+/**
  * Why a copy at a version a build does not run is left as it is before
  * that build's swap ({@link putOnFleetPins}): a person's own copy, or the
- * fleet asking first or not saying; nothing when it goes on.
+ * fleet asking first, or the hub not saying and why; nothing when it goes
+ * on.
  */
 const leftBeforeSwap = (
   spec: ToolSpec,
   before: ToolStatus,
-  updates: ToolUpdates | undefined
+  fleet: FleetUpdates
 ): string | undefined => {
   const at = `${spec.name} ${before.version ?? "(no version said)"} here`;
   if (before.copy?.by !== "cawco") {
     return `${at} is the person's own copy, left as it is`;
   }
-  if (updates === "ask") {
-    return `${at} is left as it is: the fleet asks before it updates one`;
+  if ("unsaid" in fleet) {
+    return `${at} is left as it is: ${fleet.unsaid}`;
   }
-  return updates === undefined
-    ? `${at} is left as it is: the hub didn't say whether the fleet updates one`
+  return fleet.updates === "ask"
+    ? `${at} is left as it is: the fleet asks before it updates one`
     : undefined;
 };
 
@@ -1958,7 +1966,7 @@ const leftBeforeSwap = (
  * another version is put on now, with the method its copy came from, so the
  * build never starts beside a harness of its own it refuses. A person's own
  * copy, and every copy while the fleet asks first or its choice could not
- * be read (`updates` undefined), is left as it is: `build`'s agent reports
+ * be read (`fleet.unsaid`, said with it), is left as it is: `build`'s agent reports
  * it, and the hub sends its update or the person is told (hub
  * tool-installs.ts `keepRunnable`). A tool this machine does not have is
  * left alone: nothing here runs it. `moved` hears each move as it lands,
@@ -1976,14 +1984,14 @@ const leftBeforeSwap = (
 export const putOnFleetPins = async (
   pins: Record<string, string>,
   build: string,
-  updates: ToolUpdates | undefined,
+  fleet: FleetUpdates,
   moved: (move: PinMove) => Promise<void>
 ): Promise<string[]> => {
   const said: string[] = [];
   for (const [id, version] of Object.entries(pins)) {
     const spec = pinSpec(id, build);
     const put = await pinOn(spec, version, build, (before) =>
-      leftBeforeSwap(spec, before, updates)
+      leftBeforeSwap(spec, before, fleet)
     );
     if (!put) {
       continue;
