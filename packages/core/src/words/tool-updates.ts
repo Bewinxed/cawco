@@ -8,7 +8,9 @@
  * updates its CLI with no press (HarnessBlock.svelte). The app draws none of
  * it, so it is not written into it (scripts/words-swift.ts).
  */
-import type { ToolWants } from "../tools";
+import { firstCopy } from "../tool-updates";
+import type { ToolStatus, ToolWants } from "../tools";
+import { toolWords } from "./tools";
 
 /** "2.3.0", or "2.1.321 or newer" for a floor. */
 const wanted = (wants: ToolWants): string =>
@@ -112,9 +114,16 @@ export const toolUpdateWords = {
     asked: null,
   },
 
-  /** A session page's conversation while CawCo's own install of its CLI runs: the wait, said as one. */
-  readWaits: (name: string) =>
-    `This conversation shows once ${name} is updated`,
+  /**
+   * A session page's conversation while an install of its CLI runs: the
+   * wait, said as one, by what the install puts on (core tool-updates.ts
+   * `firstCopy` of the machine's cell).
+   */
+  readWaits: (
+    name: string,
+    cell: Pick<ToolStatus, "state" | "version"> | undefined
+  ) =>
+    `This conversation shows once ${name} is ${firstCopy(cell) ? "installed" : "updated"}`,
   /**
    * A refused harness whose CLI an install the person pressed puts on now
    * (core `ToolStatus.startedBy` "person"), beside CawCo's own (core words
@@ -133,6 +142,25 @@ export const toolUpdateWords = {
    * press is no work CawCo starts), so the row says the pause beside it.
    */
   machinePaused: "Machine paused",
+  /**
+   * The session page's line under its wait when no block stands there (a
+   * conversation the hub holds no row for): who puts the CLI on, by the
+   * machine's cell (core `ToolStatus.startedBy`), installed or updated by
+   * the same choice as the heading ({@link toolUpdateWords.readWaits}).
+   */
+  putting: (
+    name: string,
+    machine: string,
+    cell: Pick<ToolStatus, "startedBy" | "state" | "to" | "version">
+  ): string => {
+    const first = firstCopy(cell);
+    if (cell.startedBy === "cawco") {
+      return toolWords.cawcoPutting(first, name, machine, cell.to);
+    }
+    return cell.startedBy === "person"
+      ? toolUpdateWords.youPutting(first, name, machine, cell.to)
+      : `${first ? "Installing" : "Updating"} ${name} on ${machine}${cell.to ? ` to ${cell.to}` : ""}.`;
+  },
   /** A refused harness whose CLI CawCo updates with no press, on a machine its owner paused. */
   autoPaused: (name: string, machine: string) =>
     `CawCo updates ${name} on ${machine} once its pause ends.`,

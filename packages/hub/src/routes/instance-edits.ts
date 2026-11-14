@@ -9,11 +9,23 @@ import { instanceTimes } from "../instance-out";
 import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { attachmentsOfPages } from "../session-attachments";
+import type { HistoryFault } from "../transcripts";
 
 /** Why keep-alive is refused a session: its harness's prompt cache is one nothing times. */
 const keepAliveRefused = harnessWords.keepAliveIsFor(
   harnessesWith((traits) => traits.promptCacheMaxMs !== null)
 );
+
+/**
+ * The machine and harness a refused or waiting read names (history.ts
+ * `refusedRead`), as its problem's extension members: a reader with no row
+ * for the conversation watches that machine's cell for that harness to know
+ * when to read again (SessionPane).
+ */
+const faultWhere = (fault: HistoryFault) => ({
+  ...(fault.machineId ? { machineId: fault.machineId } : {}),
+  ...(fault.harness ? { harness: fault.harness } : {}),
+});
 
 export const instanceEditRoutes = (
   ctx: Pick<
@@ -116,6 +128,7 @@ export const instanceEditRoutes = (
               return problem(424, {
                 code: "harness-refused",
                 detail: page.message,
+                ...faultWhere(page),
               });
             // An install of that CLI runs there now: the CLI is held by
             // the install for its seconds (423 Locked, RFC 4918 §11.3), its
@@ -125,6 +138,7 @@ export const instanceEditRoutes = (
               return problem(423, {
                 code: "harness-updating",
                 detail: page.message,
+                ...faultWhere(page),
               });
             case "failed":
               break;
@@ -162,11 +176,13 @@ export const instanceEditRoutes = (
               return problem(424, {
                 code: "harness-refused",
                 detail: read.message,
+                ...faultWhere(read),
               });
             case "updating":
               return problem(423, {
                 code: "harness-updating",
                 detail: read.message,
+                ...faultWhere(read),
               });
             case "failed":
               return problem(502, {

@@ -130,7 +130,7 @@
           )}{:else if running}{words.running(
             block
           )}{:else}{toolWords.cawcoPutting(
-            block.kind === "not-installed",
+            block.firstCopy,
             block.spec.name,
             block.machine,
             block.spec.exactVersion

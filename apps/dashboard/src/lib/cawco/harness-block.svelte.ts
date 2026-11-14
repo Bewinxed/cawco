@@ -22,7 +22,11 @@ import {
   harnessSpec,
 } from "@cawco/core/harness-refusal";
 import { machineLabel } from "@cawco/core/machine-names";
-import { type ToolUpdateState, toolUpdateOf } from "@cawco/core/tool-updates";
+import {
+  firstCopy,
+  type ToolUpdateState,
+  toolUpdateOf,
+} from "@cawco/core/tool-updates";
 import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolUpdateWords } from "@cawco/core/words/tool-updates";
@@ -60,6 +64,12 @@ export interface HarnessBlock {
    * it is, takes the press.
    */
   auto: boolean;
+  /**
+   * What CawCo puts on is a first copy, not another version of one there
+   * (core tool-updates.ts `firstCopy` of the machine's cell): the block's
+   * line and the session page's wait say installing or updating by it.
+   */
+  firstCopy: boolean;
   /** What fixes it: an update, or an install. */
   fix: HarnessFix;
   harness: HarnessKind;
@@ -113,6 +123,7 @@ export function harnessBlockOf(
     spec,
     why,
     fix: fixOf(spec, tool, update),
+    firstCopy: firstCopy(tool),
     auto:
       update?.kind === "due" ||
       (update?.kind === "updating" && update.startedBy === "cawco"),
@@ -208,25 +219,15 @@ export const harnessWords = {
    * machine too old to say); the version it puts on when known.
    */
   running: (block: HarnessBlock): string => {
-    const { fix, kind, machine, spec } = block;
+    const { fix, machine, spec } = block;
     const to =
       (fix.phase === "running" ? fix.to : undefined) ?? spec.exactVersion;
     if (fix.phase === "running" && fix.byCawco) {
-      return toolWords.cawcoPutting(
-        kind === "not-installed",
-        spec.name,
-        machine,
-        to
-      );
+      return toolWords.cawcoPutting(block.firstCopy, spec.name, machine, to);
     }
     return fix.phase === "running" && fix.byPerson
-      ? toolUpdateWords.youPutting(
-          kind === "not-installed",
-          spec.name,
-          machine,
-          to
-        )
-      : `${installs(block) ? "Installing" : "Updating"} ${spec.name} on ${machine}. It goes on if you close this.`;
+      ? toolUpdateWords.youPutting(block.firstCopy, spec.name, machine, to)
+      : `${block.firstCopy ? "Installing" : "Updating"} ${spec.name} on ${machine}. It goes on if you close this.`;
   },
   failed: (block: HarnessBlock, said: string): string =>
     `${block.spec.name} didn't ${installs(block) ? "install" : "update"} on ${block.machine}. ${said}`,

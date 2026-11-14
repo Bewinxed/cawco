@@ -10,6 +10,7 @@ import type {
   TranscriptPage,
   TranscriptPageBranch,
 } from "@cawco/core/transcript-types";
+import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import { TRANSCRIPT_OLDER_PAGE } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import {
@@ -219,9 +220,14 @@ export function readFaultOf(
   if (!HARNESS_WAITS.has(failure.code ?? "")) {
     return { reason: "failed", message };
   }
+  const harness = HarnessKindSchema.safeParse(failure.harness).data;
+  const where = {
+    ...(failure.machine ? { machineId: failure.machine } : {}),
+    ...(harness ? { harness } : {}),
+  };
   return failure.code === "harness-updating"
-    ? { reason: "refused", updating: true, message }
-    : { reason: "refused", message };
+    ? { reason: "refused", updating: true, message, ...where }
+    : { reason: "refused", message, ...where };
 }
 
 /** A read's machine away, as its fault says it ({@link readFaultOf}). */

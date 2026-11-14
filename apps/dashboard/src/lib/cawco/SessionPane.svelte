@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { HARNESS_TOOL } from "@cawco/core/harness";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { harnessSpec } from "@cawco/core/harness-refusal";
   import { questionsOf } from "@cawco/core/question";
@@ -85,7 +86,11 @@
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { asksStore } from "./stores/asks.svelte";
-  import { boardStore, machineConnected } from "./stores/board.svelte";
+  import {
+    boardStore,
+    machineConnected,
+    machineName,
+  } from "./stores/board.svelte";
   import { commandFault, submitCommand } from "./stores/commands.svelte";
   import { sendFailureNotice } from "./stores/ledger.svelte";
   import { offersStore } from "./stores/offers.svelte";
@@ -901,16 +906,71 @@
       machine && row?.harness ? harnessBlockOf(machine, row.harness) : null;
     return machine && block ? { machine, block } : null;
   });
+  /**
+   * How long a read that said an install runs is waited on with no cell on
+   * the board to watch: past it the page says the read's own answer, with
+   * Try again. The slowest install the host runs saw took about a minute
+   * (npm moving a package, `claude update`); our call.
+   */
+  const WAIT_BOUND_MS = 90_000;
+  /** The waiting read whose bound passed ({@link WAIT_BOUND_MS}). */
+  let waitLapsed = $state.raw<ReadFault | null>(null);
+  /**
+   * Where a refused read waits: the machine and the harness its CLI is read
+   * through, the row's when the board lists one, else the ones the read
+   * named (the hub's `harness-refused` and `harness-updating` carry them),
+   * else the session's harness. A conversation the hub never ran has no
+   * row, and no block, and its wait is the same wait.
+   */
+  const waitsOn = $derived.by(() => {
+    if (fault?.reason !== "refused") {
+      return null;
+    }
+    const row = boardStore.rowOf(viewId);
+    const on = row?.machineId ?? fault.machineId;
+    const harness = row?.harness ?? fault.harness ?? session?.harness;
+    return on && harness ? { machineId: on, harness } : null;
+  });
+  /**
+   * That machine's cell for that harness's CLI, as the board holds it: what
+   * the wait watches, row or no row. Undefined when the board holds none.
+   */
+  const waitedCell = $derived.by(() => {
+    if (!waitsOn) {
+      return;
+    }
+    return boardStore.machines.find(
+      (one) => one.machineId === waitsOn.machineId
+    )?.tools?.[HARNESS_TOOL[waitsOn.harness]];
+  });
   /** The harness CLI the conversation is read through, by its name. */
   const harnessName = $derived.by(() => {
     if (unreadFix) {
       return unreadFix.block.spec.name;
     }
-    // A stored conversation the board lists no row for names its harness
-    // on the session the store keeps (a page's `where`): without it the
-    // heading read "shows once  is updated".
-    const harness = boardStore.rowOf(viewId)?.harness ?? session?.harness;
-    return harness ? harnessSpec(harness).name : "";
+    return waitsOn ? harnessSpec(waitsOn.harness).name : "";
+  });
+
+  /**
+   * Whether a refused read waits on an install ({@link faultView} says how
+   * it is decided): by the block, else the cell, else the read's own word
+   * within its bound.
+   */
+  const waitsOnInstall = $derived.by(() => {
+    if (fault?.reason !== "refused") {
+      return false;
+    }
+    const block = unreadFix?.block;
+    if (block) {
+      return (
+        block.fix.phase === "running" ||
+        (block.auto && block.fix.phase !== "failed")
+      );
+    }
+    if (waitedCell) {
+      return waitedCell.state === "installing";
+    }
+    return fault.updating === true && waitLapsed !== fault;
   });
 
   /**
@@ -925,11 +985,15 @@
    * A refused read waits on an install of the harness CLI, which nothing
    * more of the person's moves, by the machine's block when the board has
    * one: an install running there whoever started it, or CawCo's own
-   * (`auto`) not failed. Without a block, the read's own word that one runs
-   * (`harness-updating`). A failed install is no wait, whatever the read
-   * before it said: the heading follows the machine as it is now (host run
-   * 49045442 frame A1-retry-1440l-003 kept "shows once OpenCode is updated"
-   * over a failed block). Said as a wait, never as a refusal.
+   * (`auto`) not failed. Without a block, by the machine's cell for that
+   * CLI ({@link waitedCell}): installing. With no cell on the board either,
+   * by the read's own word that one runs (`harness-updating`), for
+   * {@link WAIT_BOUND_MS} at most, then the read's own answer with Try
+   * again. A failed install is no wait, whatever the read before it said:
+   * the heading follows the machine as it is now (host run 49045442 frame
+   * A1-retry-1440l-003 kept "shows once OpenCode is updated" over a failed
+   * block). Said as a wait, never as a refusal, in the words the cell
+   * chooses (installed for a first copy, updated for another version).
    */
   const faultView = $derived.by(() => {
     if (!fault) {
@@ -946,6 +1010,7 @@
           ? `${faultMessage(fault)}.`
           : `${fault.message}. Try again once it is back online.`,
         fix: null,
+        retry: true,
       };
     }
     if (fault.reason !== "refused") {
@@ -954,21 +1019,31 @@
         title: "This transcript couldn't be read",
         line: `Reading it failed: ${fault.message}. Try again; if it fails the same way, the hub's log has the cause.`,
         fix: null,
+        retry: true,
       };
     }
-    const block = unreadFix?.block;
-    const waits = block
-      ? block.fix.phase === "running" ||
-        (block.auto && block.fix.phase !== "failed")
-      : fault.updating === true;
+    const waits = waitsOnInstall;
+    // The block says why, so the state's own line stands down: one fact,
+    // said once. With no block, a wait on the cell says who puts the CLI
+    // on, and the read's own sentence stands otherwise. A wait offers no
+    // press: Try again is the read's answer once nothing is waited on.
+    let line: string | undefined;
+    if (!unreadFix) {
+      line =
+        waits && waitedCell?.state === "installing" && waitsOn
+          ? toolUpdateWords.putting(
+              harnessName,
+              machineName(waitsOn.machineId),
+              waitedCell
+            )
+          : `${fault.message}.`;
+    }
     return {
       icon: waits ? IconRefresh : IconAlert,
       title: waits
-        ? toolUpdateWords.readWaits(harnessName)
+        ? toolUpdateWords.readWaits(harnessName, waitedCell)
         : "This conversation can't be shown yet",
-      // The block says why, so the state's own line stands down: one fact,
-      // said once.
-      line: unreadFix ? undefined : `${fault.message}.`,
+      line,
       fix: unreadFix
         ? {
             block: unreadFix.block,
@@ -976,7 +1051,43 @@
             online: unreadFix.machine.status === "online",
           }
         : null,
+      retry: !(unreadFix || waits),
     };
+  });
+
+  $effect(() => {
+    const now = fault;
+    if (!(now?.reason === "refused" && now.updating) || waitedCell) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      waitLapsed = now;
+    }, WAIT_BOUND_MS);
+    return () => clearTimeout(timer);
+  });
+
+  /**
+   * The read that said an install runs and whose cell the board was seen
+   * holding as installing: once that cell leaves installing (the install
+   * landed or failed), whatever the read waits on has moved, and it is
+   * read again, row or no row, block or none; the page shows what that
+   * read says.
+   */
+  let installingFault: ReadFault | null = null;
+  $effect.pre(() => {
+    const now = fault;
+    const state = waitedCell?.state;
+    untrack(() => {
+      if (now?.reason !== "refused") {
+        return;
+      }
+      if (state === "installing") {
+        installingFault = now;
+      } else if (now === installingFault && readAfterFix !== now) {
+        readAfterFix = now;
+        reread("harnessRuns");
+      }
+    });
   });
 
   // The refusal a block stands under (the newest read's, or a read behind
@@ -1689,7 +1800,7 @@
           machineId={view.fix.machineId}
           online={view.fix.online}
         />
-      {:else}
+      {:else if view.retry}
         <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button
         >
       {/if}
