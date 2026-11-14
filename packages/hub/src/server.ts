@@ -5575,6 +5575,30 @@ export const createServer = (
       });
     };
   const recoveringRemoved = new Set<string>();
+  /**
+   * What a machine answered of its removed sessions' custody, each complete
+   * result settled while its row is still removed: present, it is kept as an
+   * unattached session; gone, it is forgotten. An unknown one stays removed.
+   */
+  const settleRemovedCustody = (
+    machineId: string,
+    results: { id: string; present: boolean | null }[]
+  ): void => {
+    for (const { id, present } of results) {
+      if (
+        present === null ||
+        !db.ownedInstance(id, machineId)?.machineRemoved
+      ) {
+        continue;
+      }
+      db.settleRemovedSession(id, present);
+      if (present) {
+        lifecycle.preserveUnattached(id);
+      } else {
+        forgetInstances([id]);
+      }
+    }
+  };
   const stopDispatches = new Map<
     string,
     {
@@ -5671,47 +5695,32 @@ export const createServer = (
         ],
         READ_TIMEOUT_MS
       )
-        .then(
-          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each complete removed-row result must be checked against the same connection before drop or restore
-          (answer) => {
-            if (registry.agent(machineId) !== connection) {
-              return;
-            }
-            // Unanswered or refused: custody stays unknown, asked again later.
-            switch (answer.kind) {
-              case "unanswered":
-                console.warn(
-                  `[hub] removed-machine custody remains unknown: ${silentWords(machineId, answer)}`
-                );
-                return;
-              case "answered":
-                if (!answer.value.ok) {
-                  return;
-                }
-                break;
-              default:
-                throw unreachable(answer);
-            }
-            for (const result of answer.value.result as {
-              id: string;
-              present: boolean | null;
-            }[]) {
-              if (
-                result.present !== null &&
-                db.ownedInstance(result.id, machineId)?.machineRemoved
-              ) {
-                db.settleRemovedSession(result.id, result.present);
-                if (result.present) {
-                  lifecycle.preserveUnattached(result.id);
-                }
-                if (!result.present) {
-                  forgetInstances([result.id]);
-                }
-              }
-            }
-            publishInstances(machineId);
+        .then((answer) => {
+          // Each result is read against the connection that was asked.
+          if (registry.agent(machineId) !== connection) {
+            return;
           }
-        )
+          // Unanswered or refused: custody stays unknown, asked again later.
+          switch (answer.kind) {
+            case "unanswered":
+              console.warn(
+                `[hub] removed-machine custody remains unknown: ${silentWords(machineId, answer)}`
+              );
+              return;
+            case "answered":
+              if (!answer.value.ok) {
+                return;
+              }
+              break;
+            default:
+              throw unreachable(answer);
+          }
+          settleRemovedCustody(
+            machineId,
+            answer.value.result as { id: string; present: boolean | null }[]
+          );
+          publishInstances(machineId);
+        })
         .catch((error: unknown) =>
           console.warn(
             `[hub] removed-machine custody remains unknown: ${String(error)}`
