@@ -413,7 +413,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         // the file served is the latest either way.
         query: t.Object({ at: t.Optional(t.String()) }),
       },
-      ({ params }) => {
+      ({ params, set }) => {
         const png = artifacts.thumbnailFile(params.artifact, params.scheme);
         if (png instanceof ElysiaStatus) {
           return png;
@@ -424,12 +424,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             detail: "No picture yet.",
           });
         }
-        return new Response(new Uint8Array(png), {
-          headers: {
-            "content-type": "image/png",
-            "cache-control": "private, max-age=31536000, immutable",
-          },
-        });
+        set.headers["content-type"] = "image/png";
+        set.headers["cache-control"] = "private, max-age=31536000, immutable";
+        return new Blob([new Uint8Array(png)]);
       }
     )
     // A canvas as a send carries it: the .excalidraw file, the outline, the picture.
