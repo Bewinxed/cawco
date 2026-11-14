@@ -1519,26 +1519,99 @@ const copyStamp = async (at: Found | undefined): Promise<string> => {
 };
 
 /**
- * Looks at each tool's copy ({@link toolBinary}, a stat; nothing is run)
- * against what its last probe found, and when any moved, tells
- * {@link onToolsMoved}: the tools are probed again and the hub hears whose
- * each copy is now, within {@link COPY_LOOK_MS} of a hand install. A tool
- * an install of this agent's is putting on is passed over: its end tells.
+ * How far apart two looks at a copy that moved are ({@link lookAtCopies}),
+ * and how long they go on at most. A copy found moved can be mid-install:
+ * `npm install -g` moves the old package aside before it puts the new one
+ * on (32 s for OpenCode in the host run of 2026-11-14), so one look then
+ * finds the copy gone, and the next minute's look was the first to find it
+ * back: the hub said "missing" for 55 s after a hand install landed. So a
+ * change is told only once two looks {@link COPY_SETTLE_MS} apart agree on
+ * it, and the looks go on at that pace while a copy that was there is gone
+ * or a copy is still moving, for {@link COPY_SETTLE_MOST_MS} at most: a copy
+ * that comes back is told within two looks (2–4 s) of its last write, plus
+ * the second the report waits and its probe. Our call: a stat of each copy
+ * every 2 s costs nothing, and the bound covers the slowest npm install seen.
  */
-export const lookAtCopies = async (): Promise<void> => {
+const COPY_SETTLE_MS = 2000;
+const COPY_SETTLE_MOST_MS = 3 * 60_000;
+
+/** Each probed tool's copy as it stands now ({@link copyStamp}), by tool id; a tool an install of this agent's is putting on is passed over: its end tells. */
+const copiesNow = async (): Promise<Map<string, string>> => {
+  const now = new Map<string, string>();
   for (const spec of TOOL_CATALOG) {
-    const before = probedCopies.get(spec.id);
-    if (before === undefined || installing.has(spec.id)) {
+    if (!probedCopies.has(spec.id) || installing.has(spec.id)) {
       continue;
     }
     const path = await toolBinary(spec);
-    const now = await copyStamp(
-      path ? { path, file: await realpath(path).catch(() => path) } : undefined
+    now.set(
+      spec.id,
+      await copyStamp(
+        path
+          ? { path, file: await realpath(path).catch(() => path) }
+          : undefined
+      )
     );
-    if (now !== before) {
+  }
+  return now;
+};
+
+/** Whether two looks ({@link copiesNow}) found every copy the same. */
+const sameCopies = (
+  a: ReadonlyMap<string, string>,
+  b: ReadonlyMap<string, string>
+): boolean =>
+  a.size === b.size && [...a].every(([id, stamp]) => b.get(id) === stamp);
+
+/**
+ * Looks at each tool's copy ({@link toolBinary}, a stat; nothing is run)
+ * against what its last probe found. When any moved, it is looked at again
+ * every {@link COPY_SETTLE_MS} and {@link onToolsMoved} is told each time
+ * two looks in a row agree on copies other than those last told (the tools
+ * are probed again and the hub hears whose each copy is now), until two
+ * agree with every copy that was there before still there, or
+ * {@link COPY_SETTLE_MOST_MS} has gone by, when what the last look found is
+ * told. So a hand install is told within a minute and two looks of its end,
+ * and a copy gone for the half minute of an install is never held gone for
+ * the minute after it is back.
+ */
+export const lookAtCopies = async (): Promise<void> => {
+  let told = new Map([...probedCopies].filter(([id]) => !installing.has(id)));
+  let last = await copiesNow();
+  if (sameCopies(last, told)) {
+    return;
+  }
+  const wasThere = [...told]
+    .filter(([, stamp]) => stamp !== "missing")
+    .map(([id]) => id);
+  const until = Date.now() + COPY_SETTLE_MOST_MS;
+  while (Date.now() < until) {
+    await Bun.sleep(COPY_SETTLE_MS);
+    const look = await copiesNow();
+    const agreed = sameCopies(look, last);
+    last = look;
+    if (!agreed) {
+      continue;
+    }
+    if (!sameCopies(look, told)) {
+      console.info(
+        `[tools] a copy moved: ${[...look]
+          .filter(([id, stamp]) => told.get(id) !== stamp)
+          .map(
+            ([id, stamp]) => `${id} ${stamp === "missing" ? "gone" : "changed"}`
+          )
+          .join(
+            ", "
+          )}, two looks ${COPY_SETTLE_MS / 1000} s apart agree; probed again`
+      );
       toolsMoved();
+      told = look;
+    }
+    if (wasThere.every((id) => look.get(id) !== "missing")) {
       return;
     }
+  }
+  if (!sameCopies(last, told)) {
+    toolsMoved();
   }
 };
 

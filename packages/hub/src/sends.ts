@@ -45,7 +45,10 @@ import type {
 } from "@cawco/core/session-messages";
 import { SEND_STATES } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
-import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
+import {
+  transcriptWindowOf,
+  type WindowAsk,
+} from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus, problem } from "elysia";
 import type { PersonsSend } from "./caw";
@@ -843,11 +846,22 @@ export const createSends = (ctx: SendsContext) => {
       if (answer.kind !== "answered" || !answer.value.ok) {
         return answer;
       }
-      const read = answer.value.result as Partial<TranscriptWindow> | null;
-      const entries = Array.isArray(read?.entries) ? read.entries : [];
+      // An answer that is no window is no read of the store: never taken as
+      // a transcript that holds none of the sends (core `transcriptWindowOf`).
+      const read = transcriptWindowOf(answer.value.result);
+      if (!read) {
+        return {
+          ...answer,
+          value: {
+            ...answer.value,
+            ok: false,
+            error: `${ctx.machineName(row.machineId)} answered the read of this conversation with no window of it`,
+          },
+        };
+      }
+      const { entries, older } = read;
       windows.unshift(entries);
       const first = entries.find((entry) => entry.timestamp)?.timestamp;
-      const older = read?.older ?? null;
       if (older === null || !first || Date.parse(first) < since) {
         return {
           ...answer,

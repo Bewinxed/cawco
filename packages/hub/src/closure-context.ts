@@ -222,6 +222,7 @@ import type { createStreamRelay } from "./stream-relay";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
+import type { ToolFactsShape } from "./tool-facts";
 import type { ToolReleases } from "./tool-releases";
 import type {
   createTranscripts,
@@ -1374,6 +1375,8 @@ export interface ClosureContext {
   tickLeaves: () => void;
   tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
+  /** Whether each machine's tool cells are its connection's now (tool-facts.ts). */
+  toolFacts: ToolFactsShape;
   toolReleases: ToolReleases;
   toolsMayHaveChanged: () => void;
   touched: Map<string, number>;

@@ -89,7 +89,12 @@
           machine: "obelisk-of-light",
           spec: harnessSpec("opencode"),
           why: "OpenCode 2.0.29 on obelisk-of-light isn't one CawCo runs: it runs 2.3.0.",
-          fix: { phase: "running", byCawco: true, to: "2.3.0" },
+          fix: {
+            phase: "running",
+            byCawco: true,
+            byPerson: false,
+            to: "2.3.0",
+          },
           auto: true,
         }}
         machineId="m-obelisk"
