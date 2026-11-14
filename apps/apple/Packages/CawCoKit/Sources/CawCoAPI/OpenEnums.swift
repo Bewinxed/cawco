@@ -6082,31 +6082,37 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/PasskeyRelayRole`.
-    public enum PasskeyRelayRole: OpenEnum {
-        case both
-        case capture
-        case inject
-        case none
+    /// `#/components/schemas/PasskeyRelayStatus`.
+    public enum PasskeyRelayStatus: OpenEnum {
+        case authenticated
+        case captured
+        case injected
+        case noBle
+        case scanning
+        case timeout
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
-            case "both": self = .both
-            case "capture": self = .capture
-            case "inject": self = .inject
-            case "none": self = .none
+            case "authenticated": self = .authenticated
+            case "captured": self = .captured
+            case "injected": self = .injected
+            case "no_ble": self = .noBle
+            case "scanning": self = .scanning
+            case "timeout": self = .timeout
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
-            case .both: "both"
-            case .capture: "capture"
-            case .inject: "inject"
-            case .none: "none"
+            case .authenticated: "authenticated"
+            case .captured: "captured"
+            case .injected: "injected"
+            case .noBle: "no_ble"
+            case .scanning: "scanning"
+            case .timeout: "timeout"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -6115,7 +6121,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.both, .capture, .inject, .none]
+        public static let allCases: [Self] = [.authenticated, .captured, .injected, .noBle, .scanning, .timeout]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
