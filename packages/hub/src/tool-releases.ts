@@ -127,7 +127,10 @@ export interface UpdateOwed {
  * `inFlight`), and no update for that release answered on this connection
  * (`tried`). A copy that says no version, and a tool not there, are left to
  * a press: there is no version to compare, and CawCo installs nothing it
- * wasn't asked to.
+ * wasn't asked to. A copy its machine says CawCo doesn't run at all (its
+ * cell's `wants`: older than the floor) is not a release's to update but
+ * the fleet's choice's (tool-installs.ts `keepRunnable`): an agent too old
+ * to say so leaves it to this, as before.
  */
 export const updatesOwed = (
   machine: {
@@ -149,6 +152,9 @@ export const updatesOwed = (
     );
     if (
       !(newest && cell?.version) ||
+      // A copy its machine says CawCo doesn't run is the fleet's choice and
+      // its owner's (tool-installs.ts `keepRunnable`), not a release's.
+      cell.wants !== undefined ||
       pinned ||
       (cell.state !== "installed" && cell.state !== "failed") ||
       !olderThan(cell.version, newest) ||

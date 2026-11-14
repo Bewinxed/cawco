@@ -156,6 +156,14 @@ export interface ToolSpec {
    * policy pins, and a probe that finds another reports it failed.
    */
   exactVersion?: string;
+  /**
+   * The versions earlier CawCo builds ran as {@link exactVersion}, oldest
+   * first: a copy at one of them, held by one of the catalog's methods, is
+   * taken for one CawCo put there when no record of the daemon's names it
+   * ({@link ToolCopy}), as every copy CawCo installed before its daemon
+   * kept that record is. Each move of `exactVersion` adds the one it leaves.
+   */
+  formerVersions?: string[];
   homepage: string;
   id: string;
   /** Ordered by preference. Empty for a platform = unsupported there. */
@@ -250,10 +258,55 @@ export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 type ToolState =
   "installed" | "missing" | "installing" | "failed" | "unsupported";
 
+/**
+ * Whose a machine's copy of a tool is, as its daemon judges it (agent
+ * tools.ts `copyOf`). `cawco`: CawCo put it there: the daemon's record of
+ * its own install names the copy's path (`at`: when that install ran), or,
+ * for a copy no record names, it is at a version a CawCo build ran as its
+ * one version ({@link ToolSpec.exactVersion}, {@link ToolSpec.formerVersions})
+ * and one of the catalog's install methods holds it. `person`: any other
+ * copy, which CawCo updates only when a person presses Update (the owner,
+ * 2026-11-14: a copy he installed himself is "Never touched; notice and
+ * button only").
+ */
+export type ToolCopy = { at?: number; by: "cawco" } | { by: "person" };
+
+/** The version a machine's CawCo runs of a tool: `version` exactly, or `version` or newer (`orNewer`). */
+export interface ToolWants {
+  orNewer: boolean;
+  version: string;
+}
+
+/**
+ * What the fleet does when a machine's copy of a tool CawCo manages is at a
+ * version CawCo does not run, one choice for the whole fleet (the owner,
+ * 2026-11-14, default "Update it"). `update`: the hub sends that machine the
+ * install its Update button sends, once, for a copy CawCo put there (hub
+ * tool-installs.ts `keepRunnable`); `ask`: nothing installs, and the
+ * machine's copy stands behind until a person presses Update. A person's own
+ * copy ({@link ToolCopy}) is never updated unasked under either.
+ */
+export type ToolUpdates = "update" | "ask";
+
+/** Every {@link ToolUpdates}, in the order they are offered. */
+export const TOOL_UPDATES = [
+  "update",
+  "ask",
+] as const satisfies readonly ToolUpdates[];
+
+/** {@link ToolUpdates} while the fleet has chosen none. */
+export const TOOL_UPDATES_DEFAULT: ToolUpdates = "update";
+
 /** @socketFrame fromHub */
 export interface ToolStatus {
   /** When this was learnt, ms epoch. */
   at: number;
+  /**
+   * Whose the copy on the machine is ({@link ToolCopy}), on every status of
+   * a tool that is there, from a daemon that judges it (this field's build
+   * on): absent from an older daemon, and where no copy is.
+   */
+  copy?: ToolCopy;
   /**
    * `failed`: the tail of the installer's stderr. `unsupported`: what is
    * missing, named exactly — 'needs npm (Node 20+)' beats a grey chip.
@@ -270,14 +323,29 @@ export interface ToolStatus {
   /** For a tool with its own sign-in ({@link ToolSpec.signin}), installed here: whether it is signed in. */
   signin?: ToolSignin;
   state: ToolState;
+  /** On `installing`: the version being put on, when the one asking knows it. */
+  to?: string;
+  /**
+   * When an install attempt ran that left the copy where `detail` says, in
+   * the installer's words: set on what an install answered short of a copy
+   * CawCo runs, and on every report of the copy after it while it stays
+   * where the attempt left it (agent tools.ts `failures`, per boot). The hub
+   * sends no update unasked while it stands.
+   */
+  triedAt?: number;
   /**
    * The version the copy here says: on `installed`; on `failed`, a copy
-   * CawCo does not run (older than its floor, or not its one version), or,
-   * for a tool CawCo keeps at its newest release, the copy an update that
-   * failed left there; on `installing`, the copy being updated. An attempt
-   * that failed on any other tool carries none.
+   * CawCo does not run (older than its floor, or not its one version), or
+   * the copy an attempt that failed left there; on `installing`, the copy
+   * being updated. An attempt that failed with no copy there carries none.
    */
   version?: string;
+  /**
+   * Set while the copy here is one this machine's CawCo does not run: the
+   * version it runs (its build's catalog, which may not be the hub's while a
+   * release rolls out). Absent from an older daemon.
+   */
+  wants?: ToolWants;
 }
 
 /** The hub's per-tool policy row: what the fleet is supposed to have. */
@@ -525,6 +593,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
     bin: "opencode2",
     versionCommand: "opencode2 --version",
     exactVersion: OPENCODE_VERSION,
+    // 2.0.28 (57b82b81fa), then 2.0.29 (052a10f2bb).
+    formerVersions: ["2.0.28", "2.0.29"],
     // The curl script's dir, for a daemon whose PATH lacks it (bun's global
     // bin is on every probe's PATH: agent tools.ts `toolPath`); then
     // Homebrew's: anomalyco/tap's opencode-v2 formula runs `bin.install

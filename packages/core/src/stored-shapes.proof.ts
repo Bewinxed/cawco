@@ -470,7 +470,9 @@ import type {
   StyleDeltaOutput,
   TextAttachmentOutput,
   TokenKindOutput,
+  ToolCopyOutput,
   ToolSigninOutput,
+  ToolWantsOutput,
   UserAnswersOutput,
   UserQuestionAnsweredOutput,
   UserQuestionDismissedOutput,
@@ -495,7 +497,11 @@ import type {
   RelayReach as RelayReachType,
 } from "./stream-relay";
 import type { WaitWitness as WaitWitnessType } from "./task-views";
-import type { ToolSignin as ToolSigninType } from "./tools";
+import type {
+  ToolCopy as ToolCopyType,
+  ToolSignin as ToolSigninType,
+  ToolWants as ToolWantsType,
+} from "./tools";
 import type {
   GithubProject as GithubProjectType,
   StatusOption as StatusOptionType,
@@ -760,7 +766,9 @@ prove<
     Same<StoppedCommandsOutput, StoppedCommandsType>,
     Same<SendRefusalOutput, SendRefusalType>,
     Same<ModeAskOutput, ModeAskType>,
+    Same<ToolCopyOutput, ToolCopyType>,
     Same<ToolSigninOutput, ToolSigninType>,
+    Same<ToolWantsOutput, ToolWantsType>,
     Same<WaitWitnessOutput, WaitWitnessType>,
     Same<WorkspaceCutOutput, WorkspaceCutType>,
     Same<WorkspaceHoldingOutput, WorkspaceHoldingType>,
