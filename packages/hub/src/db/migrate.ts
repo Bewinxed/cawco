@@ -197,15 +197,23 @@ const MIGRATIONS_TABLE = sql`
  * are off for the migrations and on from then on. Each way it does not open
  * the database is kept beside it for `cawco status`, and thrown, for every
  * hub that opens one (a start, migrations:check's hub).
+ *
+ * `journal` is the build's whole journal for every hub. Only the binary smoke
+ * test's fixture (scripts/binary/smoke-runtime.ts `smoke-fixture`) passes a
+ * journal short of its end, to leave a database as the build before left
+ * it; the schema declares the build's last entry, so the check that every
+ * declared table and column is there runs only on a journal that reaches it,
+ * and no hub skips it.
  */
 export const applyMigrations = async (
   db: BunSQLiteDatabase,
   client: Database,
-  path: string
+  path: string,
+  journal: readonly JournalEntry[] = journalEntries()
 ): Promise<void> => {
   db.run(MIGRATIONS_TABLE);
-  const entries = journalEntries();
-  const { pending, unknown } = migrationState(appliedRows(client), entries);
+  const whole = journal.at(-1)?.tag === journalEntries().at(-1)?.tag;
+  const { pending, unknown } = migrationState(appliedRows(client), journal);
   if (unknown.length > 0) {
     stopOn(path, unknownWords(path, unknown));
   }
@@ -224,8 +232,14 @@ export const applyMigrations = async (
   try {
     if (pending.length > 0) {
       applyPending(
-        { db, client, path, schema: await import("./schema") },
-        entries,
+        {
+          db,
+          client,
+          path,
+          // No tables declared: nothing to check on a partial journal.
+          schema: whole ? await import("./schema") : {},
+        },
+        journal,
         pending
       );
     }

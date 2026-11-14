@@ -88,6 +88,7 @@
     "bits-ui": "^2.20.6",
     "buffer": "^6.0.3",
     "colorjs.io": "^0.7.1",
+    "drizzle-orm": "^0.45.3",
     "events": "^3.3.0",
     "fontkit": "2.0.4",
     "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",

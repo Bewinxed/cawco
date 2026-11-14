@@ -2,7 +2,6 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
-import { runtimeTree } from "../../packages/core/src/runtime";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
 import { welcomed } from "../lib/keeper-dial";
 
@@ -21,25 +20,20 @@ function required(name: string): string {
 if (verb === "smoke-stack") {
   await import("./smoke-stack");
 } else if (verb === "smoke-fixture") {
-  const dir = runtimeTree("drizzle");
-  const journal = JSON.parse(
-    readFileSync(join(dir, "meta/_journal.json"), "utf8")
-  );
-  const db = new Database(required("CAWCO_DB_PATH"), { create: true });
-  db.exec(
-    'CREATE TABLE "__drizzle_migrations" (id INTEGER PRIMARY KEY AUTOINCREMENT, hash text NOT NULL, created_at numeric)'
-  );
-  for (const entry of journal.entries.slice(0, -1)) {
-    const sql = readFileSync(join(dir, `${entry.tag}.sql`), "utf8");
-    db.exec(sql.split("--> statement-breakpoint").join("\n"));
-    db.query(
-      'INSERT INTO "__drizzle_migrations" (hash,created_at) VALUES (?,?)'
-    ).run(new Bun.CryptoHasher("sha256").update(sql).digest("hex"), entry.when);
-  }
-  db.exec(
+  // An existing database exactly as a hub of the build before leaves it: the
+  // hub's own migrator (hub db/migrate.ts), its steps and their order, over
+  // every journal entry but the last, which the hub under test then applies.
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { journalEntries } =
+    await import("../../packages/core/src/migration-state");
+  const { applyMigrations } = await import("../../packages/hub/src/db/migrate");
+  const path = required("CAWCO_DB_PATH");
+  const db = drizzle(path);
+  await applyMigrations(db, db.$client, path, journalEntries().slice(0, -1));
+  db.$client.exec(
     "CREATE TABLE binary_history (value text); INSERT INTO binary_history VALUES ('preserved')"
   );
-  db.close();
+  db.$client.close();
   console.log("existing database fixture created before final migration");
 } else if (verb === "smoke-worker") {
   const dir = join(home, "transcripts");
