@@ -2562,16 +2562,21 @@ export const createWorkItems = ({
         (entry) => entry.status !== "completed" && !PLAN_TODO.test(entry.id)
       )
       .map((entry) => entry.content.replace(RUNS_OF_SPACE, " ").trim())
-      .filter((text) => text && !known.has(planWords(text)))
-      .slice(0, PROPOSALS_LIMIT);
-    if (left.length === 0) {
+      .filter((text) => text && !known.has(planWords(text)));
+    const proposed = [...new Set(left)];
+    if (proposed.length === 0) {
       return undefined;
     }
+    const cut = proposed.length - PROPOSALS_LIMIT;
     return await ledger.write(
       task.projectId,
       task.taskId,
-      { add: [...new Set(left)].map((text) => ({ text, proposed: true })) },
-      `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan`
+      {
+        add: proposed
+          .slice(0, PROPOSALS_LIMIT)
+          .map((text) => ({ text, proposed: true })),
+      },
+      `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan${cut > 0 ? ` and ${cut} more left in the plan` : ""}`
     );
   };
 
