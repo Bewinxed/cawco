@@ -249,9 +249,11 @@ const openListed = (
 /**
  * Every shape the lists of migration 0397 take, on sessions under `sessions`:
  * each list a delegate is given, a work item's session that named none,
- * summarisers, starting sets, and continued work items whose later sessions
+ * summarisers, starting sets, continued work items whose later sessions
  * named none (each continuation's `continued_into`, written after the hub
- * closes, {@link seedByHand}). Answers each continuation's pair of ids.
+ * closes, {@link seedByHand}), and work items whose later session names
+ * neither a list nor the session it went on from. Answers each
+ * continuation's pair of ids.
  */
 function seedLists(db: HubDb, sessions: Seeded[]): [string, string][] {
   const continued: [string, string][] = [];
@@ -267,6 +269,12 @@ function seedLists(db: HubDb, sessions: Seeded[]): [string, string][] {
     const parent = pick(sessions);
     // A work item's session that named no list, nothing before it.
     openListed(db, parent, { workItemId: id("wi-alone", s) });
+    // A work item's later session that named no list and no link to the
+    // one before it (an old harness-switch continuation): its work item's
+    // first session has one.
+    const unlinked = id("wi-unlinked", s);
+    openListed(db, parent, { mayStart: ["browser"], workItemId: unlinked });
+    openListed(db, parent, { workItemId: unlinked });
     // A continuation's summariser: no parent, no list.
     openListed(db, parent, { kind: "summariser", origin: "check" });
     // A work item continued twice; its later sessions named no list. Every

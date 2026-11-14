@@ -19,8 +19,10 @@
 --   `sessionMayStart`). A row with no work item is that: it may start any.
 --   A work item's session with none was continued from one that had a list
 --   (a continuation on another harness carried none): it takes the list of
---   the session it went on from, and none when no session it went on from
---   has one. A continuation's summariser never chose any, and starts none.
+--   the session it went on from; where no link to one was recorded, the
+--   list of its work item's first session that has one; and none only when
+--   no session of its work item has one. A continuation's summariser never
+--   chose any, and starts none.
 -- - `starting_set` null (a session's or a type's): no set, everything
 --   installed, which only a start or a type with no set wrote. Stored as
 --   `starts_with_all`.
@@ -106,6 +108,9 @@ ALTER TABLE `instances` ADD `starts_with_all` integer DEFAULT false NOT NULL;-->
 CREATE TABLE `__may_start_back` AS WITH RECURSIVE `back`(`session`, `at`, `depth`) AS (SELECT `id`, `id`, 0 FROM `instances` WHERE (`may_start` IS NULL OR CASE WHEN json_valid(`may_start`) THEN json_type(`may_start`) = 'null' ELSE 0 END) AND `work_item_id` IS NOT NULL AND `kind` <> 'summariser' UNION SELECT b.`session`, p.`id`, b.`depth` + 1 FROM `back` b JOIN `instances` p ON p.`continued_into` = b.`at` OR p.`id` IN (SELECT `source_instance_id` FROM `continuations` WHERE `target_instance_id` = b.`at`) WHERE b.`depth` < 100) SELECT b.`session`, b.`depth`, p.`may_start` FROM `back` b JOIN `instances` p ON p.`id` = b.`at` WHERE b.`depth` > 0 AND (CASE WHEN json_valid(p.`may_start`) THEN json_type(p.`may_start`) = 'array' AND NOT EXISTS (SELECT 1 FROM json_each(p.`may_start`) WHERE `type` <> 'text') ELSE 0 END);--> statement-breakpoint
 UPDATE `instances` SET `may_start` = (SELECT c.`may_start` FROM `__may_start_back` c WHERE c.`session` = `instances`.`id` ORDER BY c.`depth` DESC LIMIT 1) WHERE `id` IN (SELECT `session` FROM `__may_start_back`);--> statement-breakpoint
 DROP TABLE `__may_start_back`;--> statement-breakpoint
+-- One its chain gives none (a continuation that recorded no link) takes the
+-- list of its work item's first session that has one, oldest by `created_at`.
+UPDATE `instances` SET `may_start` = (SELECT p.`may_start` FROM `instances` p WHERE p.`work_item_id` = `instances`.`work_item_id` AND p.`id` <> `instances`.`id` AND (CASE WHEN json_valid(p.`may_start`) THEN json_type(p.`may_start`) = 'array' AND NOT EXISTS (SELECT 1 FROM json_each(p.`may_start`) WHERE `type` <> 'text') ELSE 0 END) ORDER BY p.`created_at`, p.rowid LIMIT 1) WHERE (`may_start` IS NULL OR CASE WHEN json_valid(`may_start`) THEN json_type(`may_start`) = 'null' ELSE 0 END) AND `work_item_id` IS NOT NULL AND `kind` <> 'summariser' AND EXISTS (SELECT p.`may_start` FROM `instances` p WHERE p.`work_item_id` = `instances`.`work_item_id` AND p.`id` <> `instances`.`id` AND (CASE WHEN json_valid(p.`may_start`) THEN json_type(p.`may_start`) = 'array' AND NOT EXISTS (SELECT 1 FROM json_each(p.`may_start`) WHERE `type` <> 'text') ELSE 0 END) ORDER BY p.`created_at`, p.rowid LIMIT 1);--> statement-breakpoint
 -- A session's list: null placed by its work item and kind; a readable list by whether it names `any`; anything else none.
 UPDATE `instances` SET `may_start_any` = CASE WHEN (`may_start` IS NULL OR CASE WHEN json_valid(`may_start`) THEN json_type(`may_start`) = 'null' ELSE 0 END) THEN `work_item_id` IS NULL AND `kind` <> 'summariser' WHEN CASE WHEN json_valid(`may_start`) THEN json_type(`may_start`) = 'array' AND NOT EXISTS (SELECT 1 FROM json_each(`may_start`) WHERE `type` <> 'text') ELSE 0 END THEN EXISTS (SELECT 1 FROM json_each(`may_start`) WHERE `value` = 'any') ELSE 0 END;--> statement-breakpoint
 INSERT OR IGNORE INTO `instance_may_start` (`instance_id`, `delegate_type`) SELECT i.`id`, j.`value` FROM `instances` i, json_each(CASE WHEN i.`may_start_any` = 0 AND (CASE WHEN json_valid(i.`may_start`) THEN json_type(i.`may_start`) = 'array' AND NOT EXISTS (SELECT 1 FROM json_each(i.`may_start`) WHERE `type` <> 'text') ELSE 0 END) THEN i.`may_start` ELSE '[]' END) j;--> statement-breakpoint
