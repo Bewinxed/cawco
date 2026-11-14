@@ -40,7 +40,20 @@ const RULES = {
 type Rule = keyof typeof RULES;
 
 /** The packages whose import cycles were all cut: a new one there fails outright, never counted against the baseline. */
-const ACYCLIC: ReadonlySet<string> = new Set(["@cawco/hub"]);
+const ACYCLIC: ReadonlySet<string> = new Set([
+  "@cawco/agent",
+  "@cawco/auth",
+  "@cawco/cawrier",
+  "@cawco/cli",
+  "@cawco/core",
+  "@cawco/design-tokens",
+  "@cawco/hub",
+  "@cawco/icons",
+  "@cawco/jsonl-parser",
+  "@cawco/sessiond",
+  "cawco",
+  "cawco-site",
+]);
 
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 const SCOPE = /^(?:apps|packages|scripts|site)\//u;
