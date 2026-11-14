@@ -1,6 +1,6 @@
 /**
- * Where the hub answers (`hubHttpUrl`), and the secret this process made at
- * start and keeps in memory, which hub-auth.ts reads as the hub itself.
+ * Where the hub answers (`hubHttpUrl`), and the secret this process makes at
+ * start and keeps in memory (`processSecret`).
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -16,9 +16,6 @@ export const hubHttpUrl = (): string => {
     `ws://localhost:${process.env[CAWCO_ENV.hubPort] ?? CAWCO_HUB_PORT}/ws`;
   return ws.replace(WS_SCHEME, "http").replace(WS_PATH_SUFFIX, "");
 };
-
-/** The header a self-call carries. */
-export const HUB_SELF_HEADER = "x-cawco-hub-self";
 
 /**
  * A secret this process makes as it starts and keeps in memory: `value` to
@@ -38,8 +35,3 @@ export const processSecret = () => {
     },
   };
 };
-
-const secret = processSecret();
-
-/** Whether `value` is this process's own secret. */
-export const isHubSelf = secret.is;

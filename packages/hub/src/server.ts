@@ -7520,7 +7520,6 @@ export const createServer = (
         return `session:${caller.instanceId ?? "unknown"}`;
       case "machine":
         return `machine:${caller.machineId}`;
-      case "hub":
       case "anonymous":
         return caller.kind;
       default:
