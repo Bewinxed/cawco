@@ -50,21 +50,9 @@ import {
 import type { AnyProblem, ProblemStatus } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
+import { TASK_TOOL_NAMES } from "./task-tool-names";
 import { sessionActor, type Tasks, type TaskView } from "./tasks";
 
-/** Every task tool, by name. */
-const TASK_TOOL_NAMES = [
-  "task_create",
-  "task_read",
-  "task_update",
-  "task_link",
-  "task_start",
-  "task_retry",
-  "todo_write",
-  "task_comment",
-  "task_archive",
-  "task_result",
-] as const;
 export type TaskTool = (typeof TASK_TOOL_NAMES)[number];
 export const TASK_TOOLS: ReadonlySet<string> = new Set(TASK_TOOL_NAMES);
 

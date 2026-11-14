@@ -63,7 +63,7 @@ import type { MemoryRole } from "@cawco/core/fleet";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
-import type { TaskTool } from "./task-tools";
+import type { TASK_TOOL_NAMES } from "./task-tool-names";
 
 /**
  * The role a session's row runs in: the one its spawn named, else derived
@@ -109,7 +109,7 @@ const TASK_READ = [
   "task_read",
   "todo_write",
   "task_comment",
-] as const satisfies readonly TaskTool[];
+] as const satisfies readonly (typeof TASK_TOOL_NAMES)[number][];
 
 /**
  * The project's own tools caw.ts answers: its views and how one is
@@ -165,7 +165,7 @@ const ORCHESTRATOR_TASKS = [
   "task_update",
   "task_start",
   "task_retry",
-] as const satisfies readonly TaskTool[];
+] as const satisfies readonly (typeof TASK_TOOL_NAMES)[number][];
 const ORCHESTRATORS_ONLY: ReadonlySet<string> = new Set(ORCHESTRATOR_TASKS);
 
 /** The session tools a delegate keeps from the worker's set. */
