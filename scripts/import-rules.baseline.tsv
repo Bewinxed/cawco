@@ -39,7 +39,6 @@ cycle	@cawco/hub	packages/hub/src/design-verify.ts	4
 cycle	@cawco/hub	packages/hub/src/dispatch.ts	4
 cycle	@cawco/hub	packages/hub/src/external-items.ts	2
 cycle	@cawco/hub	packages/hub/src/find-tool.ts	1
-cycle	@cawco/hub	packages/hub/src/forecast.ts	1
 cycle	@cawco/hub	packages/hub/src/github.ts	1
 cycle	@cawco/hub	packages/hub/src/handed-inputs.ts	1
 cycle	@cawco/hub	packages/hub/src/history.ts	5
@@ -55,7 +54,6 @@ cycle	@cawco/hub	packages/hub/src/login-moves.ts	1
 cycle	@cawco/hub	packages/hub/src/machine-calls.ts	3
 cycle	@cawco/hub	packages/hub/src/machine-commands.ts	1
 cycle	@cawco/hub	packages/hub/src/memory.ts	2
-cycle	@cawco/hub	packages/hub/src/placement.ts	1
 cycle	@cawco/hub	packages/hub/src/plans.ts	1
 cycle	@cawco/hub	packages/hub/src/presenters/project.ts	3
 cycle	@cawco/hub	packages/hub/src/presenters/tasks.ts	2

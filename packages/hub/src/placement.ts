@@ -34,7 +34,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { DbShape } from "./db";
-import type { AccountPaces } from "./forecast";
+import type { AccountPaces } from "./window-paces";
 
 /**
  * Which account a session runs on (core `PlacementExplain`): decided when it

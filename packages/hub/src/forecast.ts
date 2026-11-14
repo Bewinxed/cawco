@@ -20,6 +20,7 @@ import {
 } from "@cawco/core/usage/windows";
 import type { DbShape } from "./db";
 import { place } from "./placement";
+import type { WindowPace } from "./window-paces";
 
 /**
  * Where a provider's accounts are heading: each window's pace and when it
@@ -195,19 +196,6 @@ export const reReadWeight = (
   tokens: number,
   ttl: string | null | undefined
 ): number => tokens * (ttl === "1h" ? 2 : 1.25);
-
-/** One window's pace for placement and rebalancing, and what one percent of it costs. */
-export interface WindowPace {
-  kind: string;
-  /** Percent per hour since the window opened; null when not measured or nothing runs there. */
-  pace: number | null;
-  scopeLabel: string | null;
-  /** Weighted tokens ({@link weightedTokens}) one percent of the window took; null when unmeasured. */
-  tokensPerPct: number | null;
-}
-
-/** Each account's window paces, by account id. */
-export type AccountPaces = ReadonlyMap<string, WindowPace[]>;
 
 /**
  * The fewest percent a window must have moved, summed over its readings,

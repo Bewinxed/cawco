@@ -38,7 +38,6 @@ import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
 import type { TurnUsageRow } from "./db/turn-usage";
 import {
-  type AccountPaces,
   accountForecasts,
   accountPaces,
   type HistoryPoint,
@@ -48,6 +47,7 @@ import {
 } from "./forecast";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Arrival } from "./placement";
+import type { AccountPaces } from "./window-paces";
 
 /**
  * How far back a session's burn is read from its turns: five hours, a time
