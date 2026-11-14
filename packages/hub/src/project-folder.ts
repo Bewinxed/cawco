@@ -42,6 +42,7 @@ import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
+import { freeBytes } from "@cawco/core/free-bytes";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -335,6 +336,23 @@ const guarded = (rel: string, bytes: Uint8Array) => {
 /** The folder on disk of a project the hub keeps, whether or not it has been made: its id was checked when the project was made, so no id is refused here ({@link projectRoot}). */
 export const storedProjectRoot = (project: { id: string }) =>
   join(PROJECTS_DIR, project.id);
+
+/**
+ * The bytes free on the disk a project's folder is on (core free-bytes.ts,
+ * the one reading of free space), read at the nearest folder that exists
+ * since the project's own may not be made yet.
+ */
+export const folderFreeBytes = async (projectId: string): Promise<number> => {
+  const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    throw new Error(root.response.detail);
+  }
+  let at = root;
+  while (!(await stat(at).catch(() => undefined)) && dirname(at) !== at) {
+    at = dirname(at);
+  }
+  return await freeBytes(at);
+};
 
 /** The project's folder on disk, whether or not it has been made; refuses anything that is not a project id. */
 export const projectRoot = (projectId: string) => {

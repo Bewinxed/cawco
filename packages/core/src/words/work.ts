@@ -92,9 +92,13 @@ export const workWords = {
   /** A task's acceptance criteria past the most one judgement reads (hub tasks.ts `acceptanceOf`). */
   criteriaTooMany: (named: number, limit: number) =>
     `The acceptance criteria hold ${named} criteria; a task states ${limit} at most, so every one is judged. Merge some or split the task.`,
-  /** An item's outputs that add up past the bytes the copy takes (hub landing-run.ts `outputsProblem`). */
-  outputsTooLarge: (mib: string, limitMib: number) =>
-    `The outputs add up to ${mib} MiB; the copy stops at ${limitMib} MiB in all. Hand in fewer or smaller files.`,
+  /**
+   * An item's outputs refused for their size (hub landing-run.ts
+   * `outputsProblem`): together they need more than the disk the project's
+   * folder is on has free. `needed` and `free` as core `humanSize` says them.
+   */
+  outputsNoRoom: (needed: string, free: string) =>
+    `The outputs come to ${needed}, and the disk the project's folder is on has ${free} free; free space there, or hand in fewer files.`,
   /**
    * A machine's ask of where a project's large files live, refused: it holds
    * no place of the project, a checkout or a delegate workspace (hub

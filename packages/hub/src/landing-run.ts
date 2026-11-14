@@ -1,3 +1,4 @@
+import { humanSize } from "@cawco/core/attachments";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import {
   CONTROL_FORGE_POST,
@@ -54,6 +55,7 @@ import { CommandStopped, WouldWait } from "./machine-pause";
 import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
+  folderFreeBytes,
   projectRoot,
   writeFolderFiles,
 } from "./project-folder";
@@ -120,12 +122,6 @@ const outputsProbes = (outputs: string[]): string[] => {
   }
   return commands;
 };
-/**
- * The most bytes one item's outputs, declared and in `$TMPDIR/outputs/`,
- * add up to: each file is already bound by {@link FOLDER_FILE_LIMIT}, and
- * the folder keeps every version of what it takes.
- */
-const OUTPUTS_BYTES_LIMIT = 64 * FOLDER_FILE_LIMIT;
 /**
  * The shell that lists the files to collect for one output, a path from the
  * workspace's root a line: the file itself, or every file under a folder.
@@ -1335,16 +1331,12 @@ export const createLandingRun = ({
     }
     const scratch = item.projectId ? await scratchOutputs(workspace, item) : [];
     const total = outputsBytes(result.stdout, scratch);
+    const free = item.projectId ? await folderFreeBytes(item.projectId) : total;
     const problems = [
       ...outputsSaid(result.stdout),
       ...scratchOutputsSaid(scratch, declaredFilesOf(result.stdout)),
-      ...(total > OUTPUTS_BYTES_LIMIT
-        ? [
-            workWords.outputsTooLarge(
-              (total / MIB).toFixed(2),
-              OUTPUTS_BYTES_LIMIT / MIB
-            ),
-          ]
+      ...(total > free
+        ? [workWords.outputsNoRoom(humanSize(total), humanSize(free))]
         : []),
     ];
     return problems.length > 0

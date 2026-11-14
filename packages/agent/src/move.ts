@@ -18,11 +18,11 @@ import {
   rename,
   rm,
   stat,
-  statfs,
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
+import { freeBytes } from "@cawco/core/free-bytes";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
   FREE_SPACE_MARGIN,
@@ -344,12 +344,6 @@ const gb = (bytes: number): string => {
     return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   }
   return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
-};
-
-/** The bytes free to this user on the disk `folder` is on: THE ONE reading of free space, a move's and a delegate's inputs'. */
-export const freeBytes = async (folder: string): Promise<number> => {
-  const disk = await statfs(folder);
-  return disk.bavail * disk.bsize;
 };
 
 /** Fails the step when `folder`'s disk holds less than `needed` bytes and the margin. */

@@ -36,6 +36,7 @@ import {
 } from "node:path";
 import { readRange } from "@cawco/core/file-range";
 import { makeFolder } from "@cawco/core/folders";
+import { freeBytes } from "@cawco/core/free-bytes";
 import {
   sessionScratchDir,
   workspaceClaudeTmpDir,
@@ -63,7 +64,6 @@ import {
 } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { isWorkspaceRef } from "./hub-command";
-import { freeBytes } from "./move";
 import { cloneHolding } from "./workspace-records";
 
 const within = (path: string, root: string): boolean =>
