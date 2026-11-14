@@ -390,7 +390,7 @@ const master = (
     { env: hostEnvironment(), stdout: "ignore", stderr: "pipe" }
   );
 
-/** One command on the machine over the master at `path`: `sh -c` and one single-quoted word, as join.ts runs its own. */
+/** One command on the machine over the master at `path`: `sh -c` and one single-quoted word, as ssh-add.ts runs its own. */
 const onMachine = (
   path: string,
   target: string,

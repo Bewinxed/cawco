@@ -43,9 +43,7 @@ cycle	@cawco/hub	packages/hub/src/history.ts	5
 cycle	@cawco/hub	packages/hub/src/hub-context.ts	17
 cycle	@cawco/hub	packages/hub/src/hub-tools.ts	1
 cycle	@cawco/hub	packages/hub/src/ingress.ts	8
-cycle	@cawco/hub	packages/hub/src/installs.ts	1
 cycle	@cawco/hub	packages/hub/src/jev-tasks.ts	3
-cycle	@cawco/hub	packages/hub/src/join.ts	1
 cycle	@cawco/hub	packages/hub/src/launches.ts	3
 cycle	@cawco/hub	packages/hub/src/limit-moves.ts	1
 cycle	@cawco/hub	packages/hub/src/login-moves.ts	1

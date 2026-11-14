@@ -5,7 +5,7 @@
  * and the `installs` frame on every change), the dashboard's band shows each
  * one as a row, and its window opens on it wherever it stands.
  *
- * - **Over SSH** the hub runs the add itself (join.ts holds its commands):
+ * - **Over SSH** the hub runs the add itself (ssh-add.ts holds its commands):
  *   the hub checks the machine's port and host key, a password add plants
  *   the hub's key with one sign-in, the hub's own connection carries a port
  *   on the machine to the hub (ssh-tunnels.ts), gives the machine its key,
@@ -69,6 +69,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
 import { InstallsRecordSchema } from "./db/stored-shapes";
 import type { InstallsRecord } from "./db/stored-types";
+import type { HubLifetimeShape } from "./lifetime";
 import {
   ASKPASS_ENV,
   beforeSsh,
@@ -87,8 +88,7 @@ import {
   TRUST_STEP,
   trustCommand,
   UNREACHED,
-} from "./join";
-import type { HubLifetimeShape } from "./lifetime";
+} from "./ssh-add";
 import {
   type SshTunnels,
   sshOptions,
