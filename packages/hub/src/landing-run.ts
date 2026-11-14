@@ -92,13 +92,40 @@ const MIB = 1024 * 1024;
  * refused and each file meets the size limit; a folder with no files in it
  * is missing.
  */
-const outputsProbe = (outputs: string[]): string =>
-  outputs
-    .map(
-      (path) =>
-        `p=${shellQuote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ -d "$p" ]; then find "$p" -type l | while IFS= read -r f; do echo "link $f"; done; find "$p" -type f | while IFS= read -r f; do echo "size $(wc -c < "$f" | tr -d ' ') $f"; done; [ -n "$(find "$p" -type f | head -n 1)" ] || echo "missing $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`
-    )
-    .join("; ");
+const outputProbe = (path: string): string =>
+  `p=${shellQuote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ -d "$p" ]; then find "$p" -type l | while IFS= read -r f; do echo "link $f"; done; find "$p" -type f | while IFS= read -r f; do echo "size $(wc -c < "$f" | tr -d ' ') $f"; done; [ -n "$(find "$p" -type f | head -n 1)" ] || echo "missing $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`;
+/** The longest one probe command runs: well under the OS's limit on one argument (128 KiB on Linux). */
+const PROBE_COMMAND_LIMIT = 64_000;
+/**
+ * The probe of {@link outputProbe} for every output, in as few commands as
+ * stay under {@link PROBE_COMMAND_LIMIT}, so any number of outputs works
+ * under the OS's argument limit.
+ */
+const outputsProbes = (outputs: string[]): string[] => {
+  const commands: string[] = [];
+  let batch: string[] = [];
+  let length = 0;
+  for (const path of outputs) {
+    const probe = outputProbe(path);
+    if (batch.length > 0 && length + probe.length > PROBE_COMMAND_LIMIT) {
+      commands.push(batch.join("; "));
+      batch = [];
+      length = 0;
+    }
+    batch.push(probe);
+    length += probe.length + 2;
+  }
+  if (batch.length > 0) {
+    commands.push(batch.join("; "));
+  }
+  return commands;
+};
+/**
+ * The most bytes one item's outputs, declared and in `$TMPDIR/outputs/`,
+ * add up to: each file is already bound by {@link FOLDER_FILE_LIMIT}, and
+ * the folder keeps every version of what it takes.
+ */
+const OUTPUTS_BYTES_LIMIT = 64 * FOLDER_FILE_LIMIT;
 /**
  * The shell that lists the files to collect for one output, a path from the
  * workspace's root a line: the file itself, or every file under a folder.
@@ -140,7 +167,7 @@ const scratchOutputsSaid = (
       : []),
   ];
 };
-/** The workspace-root paths of the files a declared outputs probe ({@link outputsProbe}) found. */
+/** The workspace-root paths of the files a declared outputs probe ({@link outputsProbes}) found. */
 const declaredFilesOf = (stdout: string): Set<string> =>
   new Set(
     stdout
@@ -148,6 +175,16 @@ const declaredFilesOf = (stdout: string): Set<string> =>
       .filter((line) => line.startsWith("size "))
       .map((line) => line.split(" ").slice(2).join(" ").replaceAll("//", "/"))
   );
+/** The bytes of every file a probe's answer sizes, and of the scratch files, added up. */
+const outputsBytes = (
+  stdout: string,
+  scratch: readonly ScratchOutput[]
+): number =>
+  stdout
+    .split("\n")
+    .filter((line) => line.startsWith("size "))
+    .reduce((sum, line) => sum + Number(line.split(" ")[1]), 0) +
+  scratch.reduce((sum, one) => sum + (one.link ? 0 : one.size), 0);
 /** What a probe's answer says is wrong with the outputs, a sentence each. */
 const outputsSaid = (stdout: string): string[] => {
   const by = { missing: [] as string[], link: [] as string[] };
@@ -1286,19 +1323,29 @@ export const createLandingRun = ({
     item: WorkItemRow
   ): Promise<string | undefined> => {
     const outputs = item.outputs ?? [];
-    const result =
-      outputs.length > 0
-        ? await runIn(workspace, item)(outputsProbe(outputs), GIT_TIMEOUT_MS)
-        : { exitCode: 0, stdout: "", stderr: "" };
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `the hub could not look for the item's outputs: ${failedWith(result)}`
-      );
+    const result = { stdout: "" };
+    for (const probe of outputsProbes(outputs)) {
+      const probed = await runIn(workspace, item)(probe, GIT_TIMEOUT_MS);
+      if (probed.exitCode !== 0) {
+        throw new Error(
+          `the hub could not look for the item's outputs: ${failedWith(probed)}`
+        );
+      }
+      result.stdout += `${probed.stdout}\n`;
     }
     const scratch = item.projectId ? await scratchOutputs(workspace, item) : [];
+    const total = outputsBytes(result.stdout, scratch);
     const problems = [
       ...outputsSaid(result.stdout),
       ...scratchOutputsSaid(scratch, declaredFilesOf(result.stdout)),
+      ...(total > OUTPUTS_BYTES_LIMIT
+        ? [
+            workWords.outputsTooLarge(
+              (total / MIB).toFixed(2),
+              OUTPUTS_BYTES_LIMIT / MIB
+            ),
+          ]
+        : []),
     ];
     return problems.length > 0
       ? `Not landed: the item's outputs are not ready. ${problems.join(" ")} Then call finish_item again.`

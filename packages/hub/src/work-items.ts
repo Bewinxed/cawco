@@ -1345,8 +1345,6 @@ const folderPathOf = (raw: string): string | undefined => {
   return rel instanceof ElysiaStatus ? undefined : rel;
 };
 
-const OUTPUTS_LIMIT = 50;
-
 /**
  * A request's outputs as paths from the clone's root, each once; null for
  * none. Refused when one could reach outside the clone or into its history,
@@ -1355,12 +1353,6 @@ const OUTPUTS_LIMIT = 50;
 const outputsOf = (outputs: string[] | undefined) => {
   if (!outputs?.length) {
     return null;
-  }
-  if (outputs.length > OUTPUTS_LIMIT) {
-    return problem(400, {
-      code: "work-item-outputs-too-many",
-      detail: workWords.outputsTooMany(outputs.length, OUTPUTS_LIMIT),
-    });
   }
   const paths = new Set<string>();
   for (const raw of outputs) {

@@ -86,9 +86,9 @@ export const workWords = {
    */
   inputsCleared: (why: string) =>
     `${why} What of them had landed was removed, so none of them was delivered.`,
-  /** An item's outputs past the most one item declares (hub work-items.ts `outputsOf`). */
-  outputsTooMany: (named: number, limit: number) =>
-    `outputs names ${named} files; one item declares ${limit} at most.`,
+  /** An item's outputs that add up past the bytes the copy takes (hub landing-run.ts `outputsProblem`). */
+  outputsTooLarge: (mib: string, limitMib: number) =>
+    `The outputs add up to ${mib} MiB; the copy stops at ${limitMib} MiB in all. Hand in fewer or smaller files.`,
   /**
    * A machine's ask of where a project's large files live, refused: it holds
    * no place of the project, a checkout or a delegate workspace (hub
