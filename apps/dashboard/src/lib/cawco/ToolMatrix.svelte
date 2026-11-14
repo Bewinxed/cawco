@@ -1,8 +1,15 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
-  import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
-  import { unhandled } from "@cawco/core/unhandled";
+  import { toolUpdateOf } from "@cawco/core/tool-updates";
+  import {
+    type ToolPolicy,
+    type ToolSpec,
+    type ToolStatus,
+    type ToolUpdates,
+    toolRuns,
+  } from "@cawco/core/tools";
   import { commonWords } from "@cawco/core/words/common";
+  import { toolUpdateWords } from "@cawco/core/words/tool-updates";
   import { toolWords } from "@cawco/core/words/tools";
   import Check from "#lib/cawco/accounts/Check.svelte";
   import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
@@ -28,13 +35,19 @@
   } from "#lib/icons.js";
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { blockingBehind } from "./blocking";
   import NoMachines from "./config/NoMachines.svelte";
   import { EMPTY_LINES } from "./empty-asks";
-  import { didntAnswer } from "./hub/control";
   import MachineLedger from "./MachineLedger.svelte";
   import NsPopover from "./spawn/NsPopover.svelte";
   import NsPopoverGroup from "./spawn/NsPopoverGroup.svelte";
   import type { Machine } from "./stores/board.svelte";
+  import ToolUpdateCell from "./ToolUpdateCell.svelte";
+  import {
+    pressInstall,
+    pressPending,
+    pressRefused,
+  } from "./tool-presses.svelte";
   import {
     dropToolSignin,
     heldToolSignin,
@@ -46,17 +59,22 @@
     toolSigninFlow,
     toolSigninKey,
   } from "./tool-signin.svelte";
-  import { installTool, policyFor, setPolicy } from "./tools";
-  import { TRY_AGAIN } from "./unanswered";
+  import { policyFor, setPolicy } from "./tools";
 
   let {
     machines,
     catalog,
     policies,
+    releases,
+    updates,
   }: {
     machines: Machine[];
     catalog: ToolSpec[];
     policies: ToolPolicy[];
+    /** The newest release of each CLI CawCo keeps current, by tool id. */
+    releases: Readonly<Record<string, string>>;
+    /** The fleet's choice for a copy CawCo doesn't run (core `ToolUpdates`). */
+    updates: ToolUpdates;
   } = $props();
 
   /**
@@ -71,13 +89,8 @@
   const policyOf = (spec: ToolSpec): ToolPolicy =>
     written[spec.id] ?? policyFor(policies, spec.id);
   let saving = $state<Record<string, boolean>>({});
-  let asked = $state<Record<string, boolean>>({});
-  /** Why a cell's last install request was refused: said in the cell. */
-  let refused = $state<Record<string, string>>({});
   /** Why a column's Required switch did not save: said under it. */
   let policyRefused = $state<Record<string, string>>({});
-  const cellKey = (machineId: string, toolId: string): string =>
-    `${machineId}:${toolId}`;
   /** A copy of the tool is there: installed, or being updated or refused with its version kept. */
   const hasCopy = (tool: ToolStatus | undefined): boolean =>
     tool?.state === "installed" ||
@@ -90,12 +103,14 @@
    */
   const installedOn = (spec: ToolSpec): number =>
     machines.filter((machine) => hasCopy(machine.tools?.[spec.id])).length;
-  /** Machines whose copy is at a version CawCo doesn't run: the row's "can't run". */
+  /**
+   * Machines whose copy CawCo can't run, being updated or not: the head's
+   * "can't run", counted as the Out of date group lists them
+   * (`blockingBehind`), so the page says one number for one fact.
+   */
+  const blocked = $derived(blockingBehind(machines, updates, releases));
   const cantRunOn = (spec: ToolSpec): number =>
-    machines.filter((machine) => {
-      const tool = machine.tools?.[spec.id];
-      return tool?.state === "failed" && tool.version !== undefined;
-    }).length;
+    blocked.find((entry) => entry.toolId === spec.id)?.machines.length ?? 0;
   /** Machines whose copy of a tool with its own sign-in reads signed in. */
   const signedInOn = (spec: ToolSpec): number =>
     machines.filter((machine) => {
@@ -246,32 +261,6 @@
     }
   }
 
-  async function install(machine: Machine, spec: ToolSpec) {
-    const key = cellKey(machine.machineId, spec.id);
-    asked[key] = true;
-    delete refused[key];
-    try {
-      const read = await installTool(machine.machineId, spec.id);
-      switch (read.kind) {
-        case "answered":
-          break;
-        case "unanswered":
-          // The cell follows the hub's publish; this says the machine went quiet.
-          refused[key] = didntAnswer(machine.machineId, read, {
-            outcome: "whether the install finished is not known",
-            again: TRY_AGAIN,
-          });
-          break;
-        default:
-          unhandled("read", read);
-      }
-    } catch (err) {
-      refused[key] = message(err);
-    } finally {
-      delete asked[key];
-    }
-  }
-
   async function requireEverywhere(spec: ToolSpec, required: boolean) {
     saving[spec.id] = true;
     delete policyRefused[spec.id];
@@ -287,9 +276,9 @@
 
 {#snippet cell(machine: Machine, spec: ToolSpec, online: boolean)}
   {@const toolStatus = machine.tools?.[spec.id]}
-  {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
+  {@const pending = pressPending(machine.machineId, spec.id)}
   {@const shown = toolStatus?.state ?? "unknown"}
-  {@const failed = cellKey(machine.machineId, spec.id) in refused}
+  {@const failed = pressRefused(machine.machineId, spec.id) !== undefined}
   <!-- A copy there at a version CawCo doesn't run (older than its floor, or
        not its one version) carries that version, the probe's word on it and
        an attempt's that left it there alike (core ToolStatus `triedAt` says
@@ -306,7 +295,7 @@
       disabled={!online}
       {failed}
       {label}
-      onclick={() => install(machine, spec)}
+      onclick={() => pressInstall(machine.machineId, spec.id)}
       {pending}
       {pendingLabel}
       size="xs"
@@ -316,9 +305,49 @@
   {/snippet}
 
   <!-- The state on the row's first line (MachineLedger `settle`), a
-       refusal under it. -->
-  <span class="flex items-center @phone/table:min-h-c-ledger-row-h">
-    {#if shown === "installed" && toolStatus?.detail}
+       refusal under it. Where the copy stands against the version CawCo
+       runs (core tool-updates.ts) is ToolUpdateCell's, but for the quiet
+       tick of a copy nobody moved, an install of a tool that wasn't there,
+       and a copy an update left older than its newest release (`detail`),
+       which keep their own cells below. -->
+  {@const update = toolUpdateOf(toolStatus, updates, releases)}
+  <!-- A copy the person installed that CawCo runs: left where it is, its
+       one press handing it to CawCo (its own install, which then follows
+       the fleet's choice), behind the layer that says so. -->
+  {@const ownRuns =
+    update?.kind === "runs" && toolStatus?.copy?.by === "person"}
+  {@const moved =
+    update !== undefined &&
+    !(
+      update.kind === "runs" &&
+      !ownRuns &&
+      (update.updatedAt === undefined || !!toolStatus?.detail)
+    ) &&
+    !(update.kind === "updating" && update.from === undefined)}
+  <span
+    class={[
+      "flex items-center self-stretch @phone/table:min-h-c-ledger-row-h",
+      // On a phone's card: its own line under the machine and its version,
+      // from the machine's name to the card's end, the quiet tick included,
+      // so its Reinstall is in reach.
+      "@max-phone/table:col-span-full @max-phone/table:ps-c-ledger-text-inset",
+    ]}
+  >
+    {#if moved && update}
+      <ToolUpdateCell
+        machine={where}
+        machineId={machine.machineId}
+        method={toolStatus?.method}
+        {online}
+        ownCopy={ownRuns}
+        blocks={update.kind === "updating"
+          ? !toolRuns(spec, update.from)
+          : toolStatus?.wants !== undefined}
+        paused={machine.pausedUntil !== null}
+        {spec}
+        {update}
+      />
+    {:else if shown === "installed" && toolStatus?.detail}
       <!-- A copy an update left older than its newest release (core
            ToolStatus.detail on installed): it still runs, so its version stays
            in ink; beside it the Needs you mark (a mark, never a surface), a
@@ -342,6 +371,7 @@
           <Popover.Content
             align="start"
             frame="panel-high"
+            gap="none"
             pad="none"
             width="widest"
           >
@@ -374,10 +404,10 @@
         <span
           class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
         >
-          <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
-          <code data-slot="num" class="num type-code"
-            >{toolStatus?.version ?? "—"}</code
-          >
+          <IconCheck
+            aria-label="Current"
+            class="size-icon-md shrink-0 text-status-done-glyph"
+          />
         </span>
         {#if !kept}
           <span
@@ -430,6 +460,7 @@
           <Popover.Content
             align="start"
             frame="panel-high"
+            gap="none"
             pad="none"
             width="widest"
           >
@@ -507,7 +538,7 @@
           disabled={!online}
           {failed}
           label="Install"
-          onclick={() => install(machine, spec)}
+          onclick={() => pressInstall(machine.machineId, spec.id)}
           {pending}
           pendingLabel="Installing…"
           size="xs"
@@ -519,11 +550,11 @@
   </span>
   <!-- An install the hub refused, in its words, in the cell it was asked in;
        on a phone's card, across the card under it from the machine's name,
-       so the State stays as narrow as its act. -->
+       so the State stays as narrow as its act. The row's own press is the
+       way on, so the fault offers none of its own. -->
   <RowFault
     class="@max-phone/table:col-span-full @max-phone/table:ps-c-ledger-text-inset"
-    again={online ? () => install(machine, spec) : undefined}
-    reason={refused[cellKey(machine.machineId, spec.id)]}
+    reason={pressRefused(machine.machineId, spec.id)}
   />
 {/snippet}
 
@@ -758,9 +789,11 @@
                   >{toolWords.signinHead}</Table.Head
                 >
               {/if}
-              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
-                >State</Table.Head
+              <Table.Head class="w-c-version-col-w" variant="band"
+                >{toolUpdateWords.versionHead}</Table.Head
+              >
+              <Table.Head class="w-c-tool-state-col-w" variant="band"
+                >{toolUpdateWords.stateHead}</Table.Head
               >
             {/snippet}
             {#snippet cells(machine: Machine, online: boolean)}
@@ -780,6 +813,20 @@
               <!-- On a phone's card the cell gives its parts to the card's
                    grid: the state at the card's end beside the machine, a
                    refusal on its own line under them. -->
+              {@const v = machine.tools?.[spec.id]}
+              <Table.Cell settle="top" variant="ledger-stacks">
+                <span
+                  class="flex items-center @phone/table:min-h-c-ledger-row-h"
+                >
+                  <code
+                    data-slot="num"
+                    class={[
+                      "num type-code",
+                      v?.version ? "text-ink-strong" : "text-ink-muted",
+                    ]}>{v?.version ?? "—"}</code
+                  >
+                </span>
+              </Table.Cell>
               <Table.Cell inCard="lends" settle="top" variant="ledger-stacks">
                 <div
                   class="flex flex-col items-start gap-space-1 whitespace-normal @max-phone/table:contents"
