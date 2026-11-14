@@ -57,7 +57,6 @@ import type {
   TrackerSynced as TrackerSyncedType,
   TrashedRows as TrashedRowsType,
   WorkItemSubmission as WorkItemSubmissionType,
-  WorkLanding as WorkLandingType,
   WorkspaceFrom as WorkspaceFromType,
 } from "./stored-types";
 
@@ -515,21 +514,6 @@ const WorkItemSubmissionShape = declared(
 export const WorkItemSubmissionSchema: z.ZodType<WorkItemSubmissionType> =
   WorkItemSubmissionShape;
 export type WorkItemSubmissionOutput = z.output<typeof WorkItemSubmissionShape>;
-
-const WorkLandingShape = declared(
-  z.object({
-    at: z.number().optional(),
-    gate: z
-      .object({ passed: z.array(z.string()), tree: z.string() })
-      .optional(),
-    onto: z.string().nullable(),
-    sha: z.string(),
-  }),
-  "WorkLanding",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const WorkLandingSchema: z.ZodType<WorkLandingType> = WorkLandingShape;
-export type WorkLandingOutput = z.output<typeof WorkLandingShape>;
 
 const WorkspaceFromShape = declared(
   z.object({ commit: z.string(), landed: z.boolean(), workspace: z.string() }),

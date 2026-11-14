@@ -2745,6 +2745,13 @@
       "when": 1794690728033,
       "tag": "0399_at_limit_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 400,
+      "version": "6",
+      "when": 1794695662505,
+      "tag": "0400_landed_columns",
+      "breakpoints": true
     }
   ]
 }

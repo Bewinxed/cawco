@@ -401,14 +401,20 @@ const SHA_SHOWN = 9;
 /**
  * The commit an attempt's work landed as, as its task's move names it: on
  * its base branch, or pushed to a branch of its own; "" when nothing of it
- * landed (work_items.landed).
+ * landed (work_items.landed_sha). A landing whose record does not read
+ * (work_items.landed_unread) is landed, its commit named when it read.
  */
-const landedAs = (item: Pick<WorkItemRow, "landed">): string => {
-  if (!item.landed) {
+const landedAs = (
+  item: Pick<WorkItemRow, "landedOnto" | "landedSha" | "landedUnread">
+): string => {
+  const sha = item.landedSha?.slice(0, SHA_SHOWN);
+  if (item.landedUnread !== null) {
+    return `; landed${sha ? ` ${sha}` : ""}, its landing's record unread`;
+  }
+  if (!sha) {
     return "";
   }
-  const sha = item.landed.sha.slice(0, SHA_SHOWN);
-  return item.landed.onto ? `; landed ${sha}` : `; pushed ${sha}`;
+  return item.landedOnto ? `; landed ${sha}` : `; pushed ${sha}`;
 };
 
 /**

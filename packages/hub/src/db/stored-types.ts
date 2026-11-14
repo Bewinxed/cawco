@@ -305,7 +305,11 @@ export interface GatePass {
   stage: string;
 }
 
-/** What a work item's landing put where ({@link workItems} `landed`). */
+/**
+ * What a work item's landing put where: written to its `landed_*` columns
+ * and its gate's commands to `work_item_landed_checks` (project-work.ts
+ * `updateWorkItem`).
+ */
 export interface WorkLanding {
   /**
    * When it was pushed (ms), for a push to a branch of its own: the newest

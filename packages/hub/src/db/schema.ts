@@ -161,7 +161,6 @@ import {
   TrackerSyncedSchema,
   TrashedRowsSchema,
   WorkItemSubmissionSchema,
-  WorkLandingSchema,
   WorkspaceFromSchema,
 } from "./stored-shapes";
 import type { SendHold } from "./stored-types";
@@ -1857,13 +1856,42 @@ export const workItems = sqliteTable(
      */
     headline: text("headline"),
     /**
-     * What its landing put where, kept when it runs again: the commit pushed,
-     * and the base commit it was rebased onto (`onto..sha` landed on its base
-     * branch), null for a push to a branch of its own. Set, its work is landed,
+     * What its landing put where (stored-types.ts `WorkLanding`), kept when
+     * it runs again: the commit pushed. Set, or {@link workItems}
+     * `landedUnread` set, its work is landed (project-work.ts `landedWork`),
      * and a follow-up that ends without landing leaves it done (work-items.ts
-     * `finish`). Null: nothing of it landed.
+     * `finish`). Both null: nothing of it landed. The commands its landing
+     * gate passed on `landedGateTree` are {@link workItemLandedChecks}.
      */
-    landed: storedJson(WorkLandingSchema)("landed"),
+    landedSha: text("landed_sha"),
+    /**
+     * The base commit it was rebased onto (`onto..sha` landed on its base
+     * branch); null for a push to a branch of its own, or nothing landed.
+     */
+    landedOnto: text("landed_onto"),
+    /**
+     * When it was pushed, for a push to a branch of its own: the newest is
+     * the commit the hub's next push there leases on (landing-run.ts
+     * `lastBranchPush`). Null on landings on the base, and on branch pushes
+     * before 2026-10-19.
+     */
+    landedAt: timestamp("landed_at"),
+    /**
+     * The tree that landed (`git rev-parse <sha>^{tree}`), when its landing
+     * gate's passes on it were recorded: what a release asks the hub of a
+     * commit's tree (`GET /api/landing-gate`). Null on landings before
+     * 2026-10-23, and where git could not name the tree.
+     */
+    landedGateTree: text("landed_gate_tree"),
+    /**
+     * Its landing as it was stored, when it was there and did not read whole
+     * as landings became columns (migration 0400): not JSON, not an object,
+     * or a field that is not its type. Its work is landed, so it is never
+     * landed again; the fields that read are placed beside it, a gate that
+     * does not read vouches for no tree, and it is no branch push's lease.
+     * A later landing of the item clears it.
+     */
+    landedUnread: text("landed_unread"),
     /**
      * Why it failed; on a done item, why the follow-up of its landed work
      * ended without landing (blocked, stopped, failed), what its task's
@@ -1926,6 +1954,7 @@ export const workItems = sqliteTable(
     index("work_items_workspace").on(table.workspaceId, table.state),
     index("work_items_parent").on(table.parentInstanceId, table.state),
     index("work_items_task").on(table.projectId, table.taskId),
+    index("work_items_landed_gate_tree").on(table.landedGateTree),
   ]
 );
 
@@ -1999,6 +2028,24 @@ export const workItemGlobs = sqliteTable(
     glob: text("glob").notNull(),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.glob] })]
+);
+
+/**
+ * Each command of a work item's landing gate that passed on the tree that
+ * landed ({@link workItems} `landedGateTree`), as gate.md writes it, one row
+ * each, in the gate's order: what a release of a commit holding that tree
+ * need not run again (work-items.ts `gatePassesOn`). Replaced whole by each
+ * landing that records its gate.
+ */
+export const workItemLandedChecks = sqliteTable(
+  "work_item_landed_checks",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    command: text("command").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.command] })]
 );
 
 /** The globs a queued delegate's request owns (`owns`), one row each: what holds it back. */

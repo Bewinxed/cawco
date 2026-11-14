@@ -28,6 +28,7 @@ import { logBudgetUnread } from "./budget-unread";
 import type { DbCore } from "./core";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
+import { logLandedUnread } from "./landed-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
@@ -115,6 +116,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every at-limit policy 0399 keeps as not read, read before it runs.
       logAtLimitUnread(client);
+    },
+  },
+  {
+    name: "landed-unread",
+    before: "0400_landed_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every landing 0400 keeps as not read, read before it runs.
+      logLandedUnread(client);
     },
   },
   {

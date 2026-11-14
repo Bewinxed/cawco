@@ -17,8 +17,8 @@
  * commit, against its hub; the seed below must fit that commit's Db.
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
- * budgets and at-limit policies besides ({@link seedLists},
- * {@link seedBudgets}, {@link seedAtLimit}), written to
+ * budgets, at-limit policies and landings besides ({@link seedLists},
+ * {@link seedBudgets}, {@link seedAtLimit}, {@link seedLanded}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -40,8 +40,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * `--lists`: the same fleet with every shape a session's or delegate type's
  * lists took before migration 0397 (what it may start, its starting set, a
  * trashed type, a continued work item), every shape a budget took before
- * migration 0398, and every shape a provider's at-limit policy took before
- * migration 0399, written here.
+ * migration 0398, every shape a provider's at-limit policy took before
+ * migration 0399, and every shape a work item's landing took before
+ * migration 0400, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -514,6 +515,106 @@ function seedAtLimit(dbPath: string): void {
   sqlite.close();
 }
 
+/** A commit's or a tree's name, made up: the same for the same words. */
+const gitName = (words: string): string =>
+  new Bun.CryptoHasher("sha1").update(words).digest("hex");
+
+/**
+ * Every shape migration 0400 reads a work item's landing in, as the hub's
+ * one writer stored it (landing-run.ts `landOnBase`, `landOnBranch`) and as
+ * a hand edit could: an item that landed nothing (null), a landing on the
+ * base with its gate and one from before gates were kept, a branch push
+ * with its time and one from before times were kept, a landing with all
+ * four fields, a key nothing reads, two items whose gates passed on one
+ * tree (one command twice), a landing that is not JSON, JSON `null`, an
+ * array, and three that read in part: a gate with no commands, no `onto`
+ * and an `at` that is words, no `sha`.
+ */
+function seedLanded(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const items = sqlite
+    .query<{ id: string }, []>("SELECT id FROM work_items ORDER BY rowid")
+    .all()
+    .map((row) => row.id);
+  const tree = gitName("tree of the release");
+  const gate = (passed: string[]) => ({ tree, passed });
+  const at = Date.UTC(2026, 9, 21, 14, 5);
+  const landings: [lands: string, landed: string | null][] = [
+    ["main", null],
+    [
+      "main",
+      JSON.stringify({
+        sha: gitName("landed 1"),
+        onto: gitName("main 1"),
+        gate: gate(["bun run check --all", "bun run test:binary"]),
+      }),
+    ],
+    [
+      "main",
+      JSON.stringify({ sha: gitName("landed 2"), onto: gitName("main 2") }),
+    ],
+    ["branch", JSON.stringify({ sha: gitName("pushed 3"), onto: null, at })],
+    ["pr", JSON.stringify({ sha: gitName("pushed 4"), onto: null })],
+    [
+      "main",
+      JSON.stringify({
+        sha: gitName("landed 5"),
+        onto: gitName("main 5"),
+        at,
+        gate: {
+          tree: gitName("tree 5"),
+          passed: ["bun run check --all"],
+        },
+      }),
+    ],
+    [
+      "branch",
+      JSON.stringify({
+        sha: gitName("pushed 6"),
+        onto: null,
+        at: at + HOUR_MS,
+        pr: "https://github.com/acme/atlas/pull/412",
+      }),
+    ],
+    [
+      "main",
+      JSON.stringify({
+        sha: gitName("landed 7"),
+        onto: gitName("main 7"),
+        gate: gate([
+          "bun run check --all",
+          "bun run check --all",
+          "swift build",
+        ]),
+      }),
+    ],
+    ["main", "landed abc123456 on main"],
+    ["main", "null"],
+    ["branch", JSON.stringify([gitName("pushed 10")])],
+    [
+      "main",
+      JSON.stringify({
+        sha: gitName("landed 11"),
+        onto: gitName("main 11"),
+        gate: { tree: gitName("tree 11") },
+      }),
+    ],
+    ["branch", JSON.stringify({ sha: gitName("pushed 12"), at: "yesterday" })],
+    ["main", JSON.stringify({ onto: gitName("main 13") })],
+  ];
+  for (const [n, [lands, landed]] of landings.entries()) {
+    const item = items[n];
+    if (!item) {
+      throw new Error(`The fixture has no work item ${n} to land.`);
+    }
+    sqlite.run(
+      "UPDATE work_items SET state = 'done', lands = ?, landed = ?, ended_at = ? WHERE id = ?",
+      [lands, landed, at + n * HOUR_MS, item]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -533,6 +634,7 @@ async function seed(
     seedByHand(dbPath, continued);
     seedBudgets(dbPath);
     seedAtLimit(dbPath);
+    seedLanded(dbPath);
   }
 }
 
