@@ -30,8 +30,8 @@
  */
 import { z } from "zod";
 
-/** An id, ref or name an entry points at. */
-const ref = z.string().min(1).max(400);
+/** An id, ref or path an entry points at: a path runs to Linux PATH_MAX, 4,096. */
+const ref = z.string().min(1).max(4096);
 
 /** One path component: not `.` or `..`, no slash. */
 const ONE_COMPONENT = /^(?!\.\.?$)[^/\\]+$/u;
@@ -39,11 +39,11 @@ const SEPARATORS = /[/\\]+/gu;
 const UNSAFE = /[^\w.@+-]+/gu;
 const LEADING_DOTS = /^[.-]+/u;
 
-/** A file name an entry lands under: one path component. */
+/** A file name an entry lands under: one path component, to Linux NAME_MAX, 255. */
 const fileName = z
   .string()
   .min(1)
-  .max(200)
+  .max(255)
   .regex(ONE_COMPONENT, "a file name, with no folder");
 
 /**
