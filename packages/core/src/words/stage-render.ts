@@ -15,6 +15,14 @@ const readAlone = (first: string | null): string =>
     : "it has no stories to draw";
 
 export const stageRenderWords = {
+  /**
+   * A story's frame refused because its `beforeEach` seeds a module no
+   * import chain from the states file carries to its component (a helper
+   * that imports the store, say): the story would draw the page's store,
+   * not its own (stage-host host.ts `ownSet`).
+   */
+  seedUnreached: (component: string) =>
+    `This story's seed cannot reach ${component}: its beforeEach imports a module that ${component} does not import, so the component reads the page's store, not this story's. Import the store the component reads in beforeEach itself (\`const store = await import("…")\`) and seed it there.`,
   /** Where a sweep stood in a section, as the clause after "it was still". */
   step: (at: SweepAt): string => {
     switch (at.step) {

@@ -27,6 +27,7 @@ import {
 } from "@cawco/core/stage";
 import { shellWords } from "@cawco/core/words/shell";
 import type { deltaOf } from "./measure";
+import type { OwnModules, RunnerModule } from "./own";
 import type { PageStyle } from "./page-style";
 import type { PseudoState, Rewrite } from "./pseudo";
 
@@ -59,7 +60,7 @@ export type PlayFn = (context: object) => Promise<void> | void;
 /** A story's or a meta's CSF object as the page reads it (Storybook's CSF 3): each field kept as the page can use it, any other dropped. */
 export interface Csf {
   args?: object;
-  /** Run once before the story's frames draw, as its section loads: what it writes into the modules it imports is its frame's own (host.ts `cawcoStandIns`). */
+  /** Run once before the story's frames draw, as its section loads: what it writes into the modules it imports is its frames' own (own.ts, a runner of its own). */
   beforeEach?: (context: object) => unknown;
   component?: unknown;
   decorators?: unknown[];
@@ -122,17 +123,16 @@ export function canvasOf(): HTMLElement {
 
 /** A states file's module as the stage serves it (`cawco:sheet/<file>.js`). */
 export interface SectionModule {
-  /** Each story that holds modules of its own, its own copy of the states file, by its export's name: what it mounts from. */
-  FRAMES?: Record<string, Record<string, unknown>>;
   module: Record<string, unknown>;
   SHEET: SectionSheet;
 }
 
-/** The states file story `name` of `mod` mounts from: its own copy where it holds modules of its own, else the page's. */
+/** The states file story `name` of `section` mounts from: its runner's where it holds modules of its own (own.ts), else the page's. */
 export const moduleOf = (
-  mod: SectionModule | undefined,
+  section: Section,
   name: string
-): Record<string, unknown> => mod?.FRAMES?.[name] ?? mod?.module ?? {};
+): Record<string, unknown> =>
+  section.own?.modules.get(name) ?? section.mod?.module ?? {};
 
 /**
  * Why a section didn't load: its states file isn't there (`missing`), the
@@ -179,6 +179,8 @@ export interface BootOptions {
   faces: string;
   /** A section's module; `fresh`, past whatever the browser kept of an import of it that failed. */
   load: (file: string, fresh?: boolean) => Promise<SectionModule>;
+  /** Vite's `vite/module-runner`, from the Vite serving the page (host.ts `moduleRunnerModule`): loaded the first time a story needs a runner of its own. */
+  moduleRunner: () => Promise<RunnerModule>;
   /**
    * The project's preview file (Storybook's `.storybook/preview.*`, host.ts
    * `previewFile`): its `decorators` wrap every story outside the meta's,
@@ -242,6 +244,8 @@ export interface Section {
   moves: MoveRender[];
   /** Its name in plain words: its states file's title, else its component's, else its file's. */
   name: string;
+  /** Its stories that hold modules of their own, each in its own runner; none while none does. */
+  own?: OwnModules;
   probes: Map<string, Probe>;
   /** Its interactions, probes and moves read since it was last shown: one pass at a time in the rig. */
   settling?: Promise<void>;

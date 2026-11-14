@@ -75,6 +75,7 @@ import {
   type FrameRender,
   HEALTH_PATH,
   MODULES_PATH,
+  OWN_PATH,
   type PageError,
   type PageSection,
   type PostedReport,
@@ -142,6 +143,13 @@ interface ModuleNode {
   url: string;
 }
 
+/** A module as Vite's transform serves it: its code, its source map, and the ETag its middleware answers with. */
+interface Transformed {
+  code: string;
+  etag?: string;
+  map?: unknown;
+}
+
 /** What the stage uses of the project's dev server: Vite's own API, its Environment API from Vite 6 on. */
 interface DevServer {
   close: () => Promise<void>;
@@ -166,7 +174,10 @@ interface DevServer {
       /** Vite's own transform of `url` ahead of a page's ask (its `warmupRequest`): kept in its graph, an error logged and passed by. */
       warmupRequest: (url: string) => Promise<void>;
       /** Vite's transform of `url` as its middleware asks it for a page (`environment.transformRequest`): what a request's error is thrown from. */
-      transformRequest: (url: string, ...rest: unknown[]) => Promise<unknown>;
+      transformRequest: (
+        url: string,
+        ...rest: unknown[]
+      ) => Promise<Transformed | null>;
       moduleGraph: {
         getModuleById: (id: string) => ModuleNode | undefined;
         getModuleByUrl: (url: string) => Promise<ModuleNode | undefined>;
@@ -187,6 +198,13 @@ interface DevServer {
       ) => void
     ) => void;
   };
+  /** Vite's SSR transform (its `ssrTransform`, exported as `moduleRunnerTransform`): code in the shape a `ModuleRunner` evaluates, its map from the code it was handed. */
+  ssrTransform: (
+    code: string,
+    inMap: null,
+    url: string,
+    originalCode: string
+  ) => Promise<{ code: string; map?: unknown } | null>;
   transformIndexHtml: (
     url: string,
     html: string,
@@ -257,7 +275,7 @@ interface Started {
 const BEAT_MS = 15_000;
 /** A states file's section module: `cawco:sheet/<file>.js`. */
 const VIRTUAL = "cawco:sheet/";
-/** The canvas's own modules: its entry, runtime, adapter and Svelte props holder. */
+/** The canvas's own modules: its entry, runtime, adapter, Svelte props holder and Vite's module runner. */
 const VIRTUAL_STAGE = "cawco:stage/";
 
 /** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens and the house faces. */
@@ -593,51 +611,78 @@ async function mountedFiles(abs: string, text: string): Promise<string[]> {
   return files.filter((file): file is string => !!file);
 }
 
-/** A source file's imports of other files, as it writes them: `import … from "…"`, `import "…"` and a barrel's `export … from "…"`, never a dynamic `import()` nor an `import type`, which loads nothing. Ours: no parser, a module's imports are its first lines. */
-const IMPORT_FROM =
-  /\b(?:import|export)\s+(?!type\s)(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/gu;
-/** A file whose imports the stage reads: a component or a script. */
-const SOURCE_FILE = /\.(?:svelte|vue|[cm]?[jt]sx?)$/u;
+/** A module another imports, as Vite's graph holds it: its address (the dev server's base off), its file, and whether the import is an `import()`. */
+interface Imported {
+  dynamic: boolean;
+  file: string | null;
+  url: string;
+}
+
+/** Each served module's imports, by the transform that wrote them: read again once Vite transforms the module again. */
+const importsKept = new WeakMap<object, Promise<Imported[]>>();
+
 /**
- * Each source file's resolved imports, kept by the file's time from the
- * moment they are asked for: every walk that reaches a changed file while
- * its resolve runs shares that one resolve. Kept only once resolved, the
- * 21 walks one edit of `client.svelte.ts` started at once each resolved all
- * its imports again.
+ * What module `url` (an address of Vite's graph, no base) imports, as Vite
+ * serves it: its code as a page gets it (Vite's transform, run here when no
+ * page has asked for it yet), each import read by es-module-lexer
+ * ({@link importLiterals}), the lexer Vite's own import analysis reads it
+ * with: static, `import("…")` of a literal, and a glob, which Vite's
+ * transform writes out as an import of each file it finds
+ * (`import.meta.glob`, and an `import()` of a template through its
+ * dynamic-import-vars). None for a module that doesn't transform or lex:
+ * the page says what is wrong with it.
  */
-const importsKept = new Map<string, { at: number; to: Promise<string[]> }>();
-
-/** The files source file `file` imports (absolute), resolved as Vite resolves them; none for a file that is no source (a stylesheet, an image). */
-function sourceImports(file: string): Promise<string[]> {
-  if (!SOURCE_FILE.test(file)) {
-    return Promise.resolve([]);
+async function importsOf(url: string): Promise<Imported[]> {
+  const result = await server?.environments.client
+    .transformRequest(url)
+    .catch(() => null);
+  if (!result) {
+    return [];
   }
-  const at = statTime(file);
-  const kept = importsKept.get(file);
-  if (kept?.at === at) {
-    return kept.to;
+  let kept = importsKept.get(result);
+  if (!kept) {
+    kept = importedBy(result.code);
+    importsKept.set(result, kept);
   }
-  const to = resolvedImports(file);
-  importsKept.set(file, { at, to });
-  // A file gone mid-read is read again by the next walk.
-  to.catch(() => {
-    if (importsKept.get(file)?.to === to) {
-      importsKept.delete(file);
-    }
-  });
-  return to;
+  return kept;
 }
 
-/** The files `file` imports, read from it now and resolved ({@link sourceImports} keeps them). */
-async function resolvedImports(file: string): Promise<string[]> {
-  const text = readFileSync(file, "utf8");
-  const sources = [
-    ...new Set([...text.matchAll(IMPORT_FROM)].flatMap((one) => one[1] ?? [])),
-  ];
-  return (
-    await Promise.all(sources.map((source) => resolved(source, file)))
-  ).filter((one): one is string => !!one);
+/** The modules `code` (as Vite serves it) imports, each found in Vite's graph, which its import analysis filled as it wrote them. */
+async function importedBy(code: string): Promise<Imported[]> {
+  const dev = server;
+  let literals: ImportLiteral[];
+  try {
+    literals = importLiterals(code);
+  } catch {
+    return [];
+  }
+  if (!dev) {
+    return [];
+  }
+  const found = await Promise.all(
+    literals.map(async (one) => {
+      const mod = await dev.environments.client.moduleGraph
+        .getModuleByUrl(graphAddress(one.value, dev.config.base))
+        .catch(() => undefined);
+      return mod
+        ? [{ url: mod.url, file: mod.file, dynamic: one.dynamic }]
+        : [];
+    })
+  );
+  return found.flat();
 }
+
+/** The address Vite's graph holds file `file` (absolute) at: under the root, its path from it; else Vite's `/@fs/`. */
+const addressOf = (file: string): string =>
+  file.startsWith(`${root}${sep}`)
+    ? `/${relative(root, file).split(sep).join("/")}`
+    : `/@fs${file}`;
+
+/** The project files module `file` (absolute) imports, as Vite serves it ({@link importsOf}). */
+const importedFiles = async (file: string): Promise<string[]> =>
+  (await importsOf(addressOf(file))).flatMap((one) =>
+    one.file ? [one.file] : []
+  );
 
 /** A file of the project's own: inside the toolchain root, not a package. */
 const ownFile = (file: string): boolean =>
@@ -646,9 +691,11 @@ const ownFile = (file: string): boolean =>
 
 /**
  * Every file a states file's frames are drawn from (absolute, sorted): the
- * states file, the components it mounts, and the project's own files those
- * import, all the way down. Its section's hash is of these files, and an
- * edit to any of them loads its section again (the plugin's `hotUpdate`).
+ * states file, the components it mounts, the project's own files those
+ * import, all the way down ({@link importedFiles}), and its stories' private
+ * modules ({@link ownSet}). Its section's hash is of these files, and an
+ * edit to any of them loads its section again (the plugin's `hotUpdate`),
+ * which makes each story's runner anew.
  */
 async function drawnFrom(abs: string, text: string): Promise<string[]> {
   const files = new Set<string>([abs]);
@@ -664,9 +711,10 @@ async function drawnFrom(abs: string, text: string): Promise<string[]> {
     for (const one of fresh) {
       files.add(one);
     }
-    level = (await Promise.all(fresh.map(sourceImports))).flat();
+    level = (await Promise.all(fresh.map(importedFiles))).flat();
   }
-  return [...files].sort();
+  const own = await ownSetOf(relative(root, abs)).catch(() => null);
+  return [...new Set([...files, ...(own?.files ?? [])])].sort();
 }
 
 /** The event a canvas page sends the stage over Vite's HMR channel as it loads a section: `{ file }`, its states file from the root. */
@@ -873,8 +921,9 @@ function globalStyles(): string[] {
  * (`getAllContexts` where its children render, `mount`'s `context`), so
  * each frame's component reads its own decorator's. A module the component
  * imports is the page's one, save where a story's `beforeEach` imports it:
- * that story mounts from its own copy ({@link cawcoStandIns}), its
- * component and its spec read off it (canvas runtime.ts `moduleOf`).
+ * that story mounts from its own runner's evaluation of its states file
+ * ({@link ownSet}, canvas own.ts), its component and its spec read off it
+ * (canvas page.ts `moduleOf`).
  * Svelte's props are a `$state` object
  * (`cawco:stage/svelte-props.js`, compiled by the project's own Svelte),
  * as its docs pass reactive props to `mount`; React's and Preact's render
@@ -1048,6 +1097,7 @@ boot({
     import.meta.hot?.send(${JSON.stringify(SECTION_HELD)}, { file });
     return import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js" + (fresh ? "?t=" + Date.now() : ""));
   },
+  moduleRunner: () => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL_STAGE}module-runner.js"),
 });
 if (import.meta.hot) {
   import.meta.hot.on("vite:beforeUpdate", (payload) => dispatchEvent(new CustomEvent("cawco:updates", { detail: payload.updates.map((one) => one.path) })));
@@ -1069,27 +1119,18 @@ if (import.meta.hot) {
  * ({@link keepReport}). It accepts itself: an edit to any file its frames
  * are drawn from (the plugin's `hotUpdate`) loads it again, with its sheet
  * read anew, and the runtime remounts that section alone (`cawco:section`)
- * and hands the inspector the new sheet. `FRAMES` holds, by story, the copy
- * of the states file each story that holds modules of its own mounts from
- * ({@link framesOf}).
+ * and hands the inspector the new sheet. A story that names a module in
+ * its `beforeEach` mounts from its own runner's copy of the states file
+ * (canvas own.ts), whose private modules ({@link ownSet}) are walked here,
+ * ahead of the page's ask for them.
  */
 async function sectionModule(file: string): Promise<string> {
   const abs = resolve(root, file);
   const sheet: SectionSheet = { ...(await sheetOf(file)).sheet, file };
-  const frames = framesOf(file);
-  const imports = frames
-    .map(
-      (one, at) =>
-        `import * as frame${at} from ${JSON.stringify(`${abs}?${FRAME_QUERY}=${one.token}`)};`
-    )
-    .join("\n");
-  const named = frames
-    .map((one, at) => `${JSON.stringify(one.story)}: frame${at}`)
-    .join(", ");
+  // The page asks for it once its section has loaded (OWN_PATH); a walk that fails says so then.
+  ownSetOf(file).catch(() => undefined);
   return `import * as module from ${JSON.stringify(abs)};
-${imports}
 export const SHEET = ${JSON.stringify(sheet)};
-export const FRAMES = { ${named} };
 export { module };
 if (import.meta.hot) {
   import.meta.hot.accept((next) => {
@@ -1886,6 +1927,17 @@ const TRAILING_SEPARATOR = /[?&]$/u;
 /** Vite's address of a module named by its id (`/@id/<id>`, its `wrapId`), and the null byte a virtual id starts with, written out in it. */
 const WRAPPED_ID = /^\/@id\//u;
 const NULL_BYTE = /^__x00__/u;
+/** Vite's HMR stamp on an address (`t=<ms>`, its `timestampRE`), which names no other module. */
+const TIME_QUERY = /([?&])t=\d+&?/u;
+
+/** An address a page asks for (the dev server's base in it), as Vite's own middleware takes it: its base off, its `?import` and HMR stamp off, a virtual module's `/@id/` unwrapped (its `unwrapId`). */
+const graphAddress = (url: string, base: string): string =>
+  (url.startsWith(base) ? `/${url.slice(base.length)}` : url)
+    .replace(IMPORT_QUERY, "$1")
+    .replace(TIME_QUERY, "$1")
+    .replace(TRAILING_SEPARATOR, "")
+    .replace(WRAPPED_ID, "")
+    .replace(NULL_BYTE, "\0");
 /** Each served module's static imports, as its code writes them, by the transform that wrote it. */
 const staticKept = new WeakMap<object, string[]>();
 
@@ -1910,13 +1962,7 @@ function staticOf(code: string): string[] {
  */
 async function staticImportsOf(dev: DevServer, url: string): Promise<string[]> {
   const env = dev.environments.client;
-  const { base } = dev.config;
-  // As Vite's own middleware takes it: its base off, its `?import` off, a virtual module's `/@id/` unwrapped (its `unwrapId`).
-  const own = (url.startsWith(base) ? `/${url.slice(base.length)}` : url)
-    .replace(IMPORT_QUERY, "$1")
-    .replace(TRAILING_SEPARATOR, "")
-    .replace(WRAPPED_ID, "")
-    .replace(NULL_BYTE, "\0");
+  const own = graphAddress(url, dev.config.base);
   await env.warmupRequest(own);
   const result = (await env.moduleGraph.getModuleByUrl(own))?.transformResult;
   if (!result) {
@@ -2440,7 +2486,7 @@ async function discovered(under: string): Promise<Found[]> {
 
 /** The component files `file` imports (absolute), resolved as Vite resolves them. */
 const componentImports = async (file: string): Promise<string[]> =>
-  (await sourceImports(file)).filter(
+  (await importedFiles(file)).filter(
     (one) => COMPONENT_FILE.test(one) && !STORY_FILE.test(one)
   );
 
@@ -2628,19 +2674,26 @@ const VIA_DEPTH = 6;
  * What sheet `file` loads, walked breadth first through Vite's module graph
  * from its story file's node (spec: Vite's own graph, no scanner of ours):
  * each module a page has asked for, counted once, under the story file's
- * import that reached it first. Null until a page has loaded the sheet.
+ * import that reached it first, and a private module ({@link ownSet}) once
+ * more for each story whose runner evaluates it. Null until a page has
+ * loaded the sheet.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of Vite's graph gives the totals, each import's share, its via, and what it brings
 async function weightOf(file: string): Promise<SheetWeight | null> {
   const abs = resolve(root, file);
-  // The states file's own module, and each story's own copy of it (`cawco-frame`): a page loads them all.
-  const served = [
-    ...(server?.environments.client.moduleGraph.getModulesByFile(abs) ?? []),
-  ].filter((one) => one.transformResult);
-  const story = served.find((one) => !(one.id && frameOf(one.id)));
-  if (!story) {
+  const dev = server;
+  const story = [
+    ...(dev?.environments.client.moduleGraph.getModulesByFile(abs) ?? []),
+  ].find((one) => one.transformResult && !one.url.includes("?"));
+  if (!(dev && story)) {
     return null;
   }
+  // Each story that runs in a runner of its own loads its private modules once more (ownSet).
+  const held = await ownSetOf(file);
+  const ownLoads = held.stories.length - Object.keys(held.unreached).length;
+  const privateUrls = new Set(
+    held.urls.map((url) => graphAddress(url, dev.config.base))
+  );
   // Each import as the story file writes it, by the file it resolves to.
   const writtenAs = new Map<string, string>();
   const read = readStoryFile(abs, readFileSync(abs, "utf8"));
@@ -2653,9 +2706,7 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
     })
   );
   // Each module under the story's import that reached it first, and the module that did.
-  const under = new Map<ModuleNode, ModuleNode>(
-    served.map((one) => [one, story] as const)
-  );
+  const under = new Map<ModuleNode, ModuleNode>([[story, story]]);
   /** A module reached, with the top import it is under and the module that reached it. */
   interface Reached {
     by: ModuleNode;
@@ -2669,14 +2720,8 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
       queue.push({ mod, by, from });
     }
   };
-  for (const copy of served) {
-    for (const top of copy.importedModules) {
-      // A copy's import is counted under the shared import of its file, where the states file writes it.
-      const shared = [...story.importedModules].find(
-        (one) => one.file === top.file
-      );
-      reach(top, shared ?? top, copy);
-    }
+  for (const top of story.importedModules) {
+    reach(top, top, story);
   }
   // Breadth first: an array's iterator reaches what is pushed while it runs.
   for (const { mod, by } of queue) {
@@ -2721,12 +2766,14 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
       deps.bytes += bytes;
       continue;
     }
-    own.modules += 1;
-    own.bytes += bytes;
+    // A private module: the page's, and each own story's runner's.
+    const loads = privateUrls.has(mod.url) ? 1 + ownLoads : 1;
+    own.modules += loads;
+    own.bytes += bytes * loads;
     if (top !== story) {
       const sum = byImport.get(top) ?? { modules: 0, bytes: 0 };
-      sum.modules += 1;
-      sum.bytes += bytes;
+      sum.modules += loads;
+      sum.bytes += bytes * loads;
       byImport.set(top, sum);
     }
   }
@@ -2903,6 +2950,20 @@ async function serveStage(
     res.setHeader("content-type", asset.type);
     res.setHeader("cache-control", "max-age=3600");
     res.end(asset.body);
+    return;
+  }
+  if (path === OWN_PATH) {
+    const file = storyFile(url.searchParams.get("file"));
+    if (file === null) {
+      json(res, 404, {
+        error: notStatesFile(url.searchParams.get("file") ?? ""),
+      });
+      return;
+    }
+    await ownAnswer(dev, file).then(
+      (answer) => json(res, 200, answer),
+      (error) => refusedWith(res, error)
+    );
     return;
   }
   if (path === RENDERED_PATH && req.method === "POST") {
@@ -3271,6 +3332,24 @@ function watchStory(file: string): void {
   }).unref();
 }
 
+/** The canvas's own module `name` (`cawco:stage/<name>`); null for a name it has none of. */
+function stageModule(name: string): string | Promise<string> | null {
+  switch (name) {
+    case "entry.js":
+      return entryModule();
+    case "runtime.js":
+      return CANVAS_RUNTIME;
+    case "adapter.js":
+      return ADAPTERS[framework];
+    case "svelte-props.js":
+      return svelteProps();
+    case "module-runner.js":
+      return server ? moduleRunnerModule(server) : null;
+    default:
+      return null;
+  }
+}
+
 /**
  * The plugin: the sheet's page, its virtual module and its stories; every
  * compile error the client is sent, kept until its module compiles again
@@ -3369,17 +3448,7 @@ function cawcoStage() {
     },
     load(id: string) {
       if (id.startsWith(`\0${VIRTUAL_STAGE}`)) {
-        const name = id.slice(VIRTUAL_STAGE.length + 1);
-        if (name === "entry.js") {
-          return entryModule();
-        }
-        if (name === "runtime.js") {
-          return CANVAS_RUNTIME;
-        }
-        if (name === "adapter.js") {
-          return ADAPTERS[framework];
-        }
-        return name === "svelte-props.js" ? svelteProps() : null;
+        return stageModule(id.slice(VIRTUAL_STAGE.length + 1));
       }
       if (!id.startsWith(`\0${VIRTUAL}`)) {
         return null;
@@ -3432,8 +3501,8 @@ function cawcoStage() {
       if (type !== "update" || isManifest(file)) {
         drawnKept.clear();
       }
-      // An edit may add or drop an import a frame's copies run through.
-      copiesKept.clear();
+      // An edit may add or drop an import a story's private modules run through.
+      ownKept.clear();
       if (isManifest(file)) {
         if (type !== "create") {
           return;
@@ -3571,9 +3640,7 @@ function stamp() {
 }
 
 /** One module stamped by code-inspector's transform; null when it is none the stage stamps. */
-async function stampTransform(code: string, served: string) {
-  // A story's own copy of a file is stamped as the file.
-  const id = unframed(served);
+async function stampTransform(code: string, id: string) {
   if (id.includes("?") || id.includes(`${sep}node_modules${sep}`)) {
     return null;
   }
@@ -3667,165 +3734,248 @@ export const applyAction = () => Promise.resolve();
 export const deserialize = (result) => JSON.parse(result);`,
 };
 
-/** The query a story's own copy of a module is served under: `?cawco-frame=<token>`, the token naming its states file and story ({@link framesOf}). */
-const FRAME_QUERY = "cawco-frame";
-const FRAME_PARAM = /[?&]cawco-frame=([\w-]+)/u;
-const FRAME_PART = /([?&])cawco-frame=[\w-]+&?/u;
-
-/** One story that holds modules of its own: its states file (from the root), its export's name, the modules its `beforeEach` imports as the file writes them, and its token. */
-interface Frame {
-  file: string;
-  modules: string[];
-  story: string;
-  token: string;
+/**
+ * What a states file's stories hold of their own: each story that names a
+ * module in its `beforeEach` (or the meta's, story-file.ts `standIns`) is
+ * evaluated in its own `ModuleRunner` on the canvas page (canvas own.ts),
+ * which evaluates the private modules itself and takes every other module
+ * from the page, so what its `beforeEach` writes into them is its frames'
+ * alone.
+ */
+interface OwnSet {
+  /** The states file's address as the page's code names it: each runner's entry. */
+  entry: string;
+  /** The private modules' files (absolute): kept on the stage, an edit to one loads the section again ({@link drawnFrom}). */
+  files: string[];
+  /** The stories that run in a runner of their own, by export name. */
+  stories: string[];
+  /** Each such story whose component is no private module (its seed can't reach it): the component's file from the root. */
+  unreached: Record<string, string>;
+  /** The private modules, by the address the page's code imports each at (the dev server's base in it). */
+  urls: string[];
 }
 
-/** Each frame by its token, written as its section's module is ({@link framesOf}): what a copy's import is resolved by. */
-const framesKept = new Map<string, Frame>();
+/** A private module's code as a story's runner evaluates it ({@link runnerCode}), or the error Vite's transform of it threw. */
+type OwnCode = { code: string; etag: string; map: unknown } | { error: string };
 
-/**
- * The stories of states file `file` that hold modules of their own: each
- * whose `beforeEach` (or the meta's) imports a module with `import("…")`
- * (story-file.ts `standIns`). Each such story's frame draws from its own
- * copy of the states file, and of every file between it and those modules,
- * so what its `beforeEach` writes into them is that frame's alone.
- */
-function framesOf(file: string): Frame[] {
-  const abs = resolve(root, file);
-  const { standIns } = readStoryFile(abs, readFileSync(abs, "utf8"));
-  return [...standIns].map(([story, modules]) => {
-    const token = createHash("sha256")
-      .update(`${file}\0${story}`)
-      .digest("base64url")
-      .slice(0, 12);
-    const frame = { file, story, modules, token };
-    framesKept.set(token, frame);
-    copiesKept.delete(token);
-    return frame;
-  });
+/** A states file's own set with its private modules' code, as the canvas page asks for it at {@link OWN_PATH}. */
+interface OwnAnswer extends Omit<OwnSet, "files"> {
+  modules: Record<string, OwnCode>;
 }
 
-/** The frame token module id `id` is a copy for; null for the shared module. */
-const frameOf = (id: string): string | null =>
-  id.match(FRAME_PARAM)?.[1] ?? null;
+/** Each states file's own set, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
+const ownKept = new Map<string, Promise<OwnSet>>();
 
-/** `id` as its shared module: the frame's query taken out. */
-const unframed = (id: string): string =>
-  id.replace(FRAME_PART, "$1").replace(TRAILING_SEPARATOR, "");
-
-/**
- * `id` as frame `token`'s copy: the frame first in its query, since Vite
- * and a framework's plugin read what a sub-request is off its query's end
- * (`…&lang.ts`, `…&lang.css`: Vite's `CSS_LANGS_RE` and its script
- * transforms' `[jt]sx?$` filters).
- */
-const framed = (id: string, token: string): string =>
-  withQuery(id, `${FRAME_QUERY}=${token}`);
-
-/**
- * A stylesheet request, as Vite's `isCSSRequest` tells one (its
- * `CSS_LANGS_RE`, Vite 8.3): a `.css` file, or a framework's style block
- * of a component (`X.svelte?svelte&type=style&lang.css`,
- * `X.vue?vue&type=style&index=0&scoped=…&lang.css`).
- */
-const CSS_REQUEST =
-  /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:$|\?)/u;
-
-/** Each frame's copied files, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
-const copiesKept = new Map<string, Promise<Set<string>>>();
-
-/**
- * The files frame `token` serves copies of (absolute): its states file, the
- * modules it names, and each of the project's own files a static import
- * chain from the states file reaches them through. The rest of the page's
- * graph (the framework, the kit, a module that never reaches a named one)
- * is the one every frame shares. Walked over the files' own imports
- * ({@link sourceImports}), kept by their times.
- */
-function copiesOf(token: string): Promise<Set<string>> {
-  const kept = copiesKept.get(token);
+/** States file `file`'s (from the root) own set, kept ({@link ownKept}). */
+function ownSetOf(file: string): Promise<OwnSet> {
+  const kept = ownKept.get(file);
   if (kept) {
     return kept;
   }
-  const frame = framesKept.get(token);
-  const walk = frame ? copiedFiles(frame) : Promise.resolve(new Set<string>());
-  // A walk that failed (a file gone mid-read) is walked again after the next edit, which clears them all.
-  copiesKept.set(token, walk);
+  const walk = ownSet(file);
+  ownKept.set(file, walk);
+  // A walk that failed (a file gone mid-read) is walked again on the next ask.
+  walk.catch(() => {
+    if (ownKept.get(file) === walk) {
+      ownKept.delete(file);
+    }
+  });
   return walk;
 }
 
-/** Frame `frame`'s copied files, walked now ({@link copiesOf}). */
-async function copiedFiles(frame: Frame): Promise<Set<string>> {
-  const abs = resolve(root, frame.file);
-  const named = (
-    await Promise.all(frame.modules.map((source) => resolved(source, abs)))
-  ).filter((one): one is string => !!one);
-  // Each of the project's own files the states file reaches, with what imports it.
+/**
+ * States file `file`'s own set, walked now ({@link ownSetOf}). Its private
+ * modules: the states file, the modules it imports with `import()` (its
+ * `beforeEach`'s, a glob's or a template's included, as Vite writes them
+ * out), and every module of the project's own through which an import
+ * chain from the states file reaches one of those, each module's imports
+ * read off the code Vite serves it ({@link importsOf}): static, dynamic and
+ * glob. A module asked for with a query (a component's style block,
+ * `?raw`, `?url`) is the page's: Vite serves it apart from its file's code,
+ * and CSS holds no module state.
+ */
+async function ownSet(file: string): Promise<OwnSet> {
+  const abs = resolve(root, file);
+  const stories = [
+    ...readStoryFile(abs, readFileSync(abs, "utf8")).standIns.keys(),
+  ];
+  const dev = server;
+  if (!dev || stories.length === 0) {
+    return { entry: "", files: [], stories: [], unreached: {}, urls: [] };
+  }
+  const top = addressOf(abs);
+  // Each of the project's own modules the states file reaches, with what imports it.
   const importers = new Map<string, string[]>();
-  const seen = new Set<string>([abs]);
-  let level = [abs];
+  const fileAt = new Map<string, string>([[top, abs]]);
+  const named = new Set<string>();
+  const seen = new Set<string>([top]);
+  let level = [top];
   while (level.length > 0) {
     const next: string[] = [];
     await Promise.all(
-      level.map(async (file) => {
-        for (const to of await sourceImports(file)) {
-          importers.set(to, [...(importers.get(to) ?? []), file]);
-          if (!seen.has(to) && ownFile(to) && existsSync(to)) {
-            seen.add(to);
-            next.push(to);
+      level.map(async (url) => {
+        for (const one of await importsOf(url)) {
+          if (!(one.file && ownFile(one.file)) || one.url.includes("?")) {
+            continue;
+          }
+          importers.set(one.url, [...(importers.get(one.url) ?? []), url]);
+          fileAt.set(one.url, one.file);
+          if (url === top && one.dynamic) {
+            named.add(one.url);
+          }
+          if (!seen.has(one.url)) {
+            seen.add(one.url);
+            next.push(one.url);
           }
         }
       })
     );
     level = next;
   }
-  // Up from the named modules: every file a chain to one of them runs through.
-  const copies = new Set<string>([abs, ...named]);
+  // Up from the named modules: every module a chain to one of them runs through.
+  const own = new Set<string>([top, ...named]);
   const queue = [...named];
-  for (let file = queue.shift(); file; file = queue.shift()) {
-    for (const up of importers.get(file) ?? []) {
-      if (!copies.has(up)) {
-        copies.add(up);
+  for (let url = queue.shift(); url; url = queue.shift()) {
+    for (const up of importers.get(url) ?? []) {
+      if (!own.has(up)) {
+        own.add(up);
         queue.push(up);
       }
     }
   }
-  return copies;
+  const { sheet } = await sheetOf(file);
+  const unreached: Record<string, string> = {};
+  for (const story of sheet.stories) {
+    const component = story.component ?? sheet.meta.component;
+    if (
+      stories.includes(story.name) &&
+      component &&
+      !own.has(addressOf(resolve(root, component)))
+    ) {
+      unreached[story.name] = component;
+    }
+  }
+  const { base } = dev.config;
+  return {
+    entry: `${base}${top.slice(1)}`,
+    files: [...own].flatMap((url) => fileAt.get(url) ?? []),
+    stories,
+    unreached,
+    urls: [...own].map((url) => `${base}${url.slice(1)}`),
+  };
+}
+
+/** Each module's code as a runner evaluates it, by the transform it was made from: converted once however many runners ask. */
+const runnerKept = new WeakMap<object, Promise<OwnCode>>();
+
+/** The line Vite's import analysis gives a module the page's hot context with: in a runner, the runner's own HMR client gives it one. */
+const HOT_CONTEXT = /import\.meta\.hot = __vite__createHotContext\("[^"]*"\);/u;
+
+/**
+ * Module `url`'s (an address of Vite's graph, no base) code as a story's
+ * runner evaluates it: the client environment's own transform of it, the
+ * one the page imports (every address it imports is then the page's own),
+ * its hot-context line blanked, put in the runner's shape by Vite's SSR
+ * transform (`moduleRunnerTransform`). Its map goes from that code to the
+ * client's, whose own map the stage reads an error's place with
+ * ({@link sourced}): the page maps a runner's frame back first (canvas
+ * own.ts).
+ */
+async function runnerCode(dev: DevServer, url: string): Promise<OwnCode> {
+  let result: Transformed | null;
+  try {
+    result = await dev.environments.client.transformRequest(url);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+  if (!result) {
+    return { error: `The stage served no module at ${url}.` };
+  }
+  const served = result;
+  let kept = runnerKept.get(served);
+  if (!kept) {
+    kept = (async (): Promise<OwnCode> => {
+      // Blanked, never cut: every other place in the code stays where the client's map has it.
+      const code = served.code.replace(HOT_CONTEXT, (line) =>
+        " ".repeat(line.length)
+      );
+      const shaped = await dev.ssrTransform(code, null, url, code);
+      return shaped
+        ? {
+            code: shaped.code,
+            map: shaped.map ?? null,
+            etag:
+              served.etag ?? createHash("sha256").update(code).digest("hex"),
+          }
+        : { error: `Vite gave no runner code for ${url}.` };
+    })();
+    runnerKept.set(served, kept);
+  }
+  return kept;
+}
+
+/** States file `file`'s own set with every private module's code ({@link runnerCode}): one answer for every runner of its section. */
+async function ownAnswer(dev: DevServer, file: string): Promise<OwnAnswer> {
+  const { files: _files, ...set } = await ownSetOf(file);
+  const modules = await Promise.all(
+    set.urls.map(
+      async (url) =>
+        [
+          url,
+          await runnerCode(dev, graphAddress(url, dev.config.base)),
+        ] as const
+    )
+  );
+  return { ...set, modules: Object.fromEntries(modules) };
+}
+
+/** An `import()` of anything but a literal: Vite's import analysis warns of each that says no `@vite-ignore`. */
+const VARIABLE_IMPORT = /\bimport\((?!\s*["'`]|\s*\/\*)/gu;
+
+/**
+ * Vite's `ModuleRunner`, from the Vite serving the page: its
+ * `vite/module-runner` export (its runner and evaluator, the runtime's
+ * half of the code its `ssrTransform` writes), read from the package
+ * its client (`/@vite/client`) is served from, whatever toolchain started
+ * it. Served as the stage's `cawco:stage/module-runner.js`; it imports
+ * nothing, and its evaluator's `import()` of each module a runner hands the
+ * page is marked as one Vite leaves be.
+ */
+async function moduleRunnerModule(dev: DevServer): Promise<string> {
+  const client =
+    await dev.environments.client.pluginContainer.resolveId("/@vite/client");
+  const at = client?.id.split("?")[0];
+  for (let dir = at ? dirname(at) : root; ; dir = dirname(dir)) {
+    const pkg = join(dir, "package.json");
+    if (existsSync(pkg)) {
+      const manifest = JSON.parse(readFileSync(pkg, "utf8"));
+      const entry =
+        manifest.name === "vite"
+          ? entryOf(manifest, "./module-runner")
+          : undefined;
+      if (entry) {
+        // Its evaluator's `import(filepath)` is the page's own import of a module the runner hands it: said so, Vite's analysis passes it by quietly.
+        return readFileSync(join(dir, entry), "utf8").replace(
+          VARIABLE_IMPORT,
+          "import(/* @vite-ignore */ "
+        );
+      }
+    }
+    if (dirname(dir) === dir) {
+      throw new Error(
+        `The Vite serving this stage (its client at ${at ?? "nowhere"}) exports no ./module-runner.`
+      );
+    }
+  }
 }
 
 /**
- * The stage's stand-ins for modules a component imports, as Storybook
- * stands in for them (its SvelteKit framework's mocks; its module mocking,
- * storybook.js.org/docs/writing-stories/mocking-data-and-modules/mocking-modules,
- * a story's `beforeEach` setting what a mocked module holds):
- *
- * - SvelteKit's client modules, for every frame: `$app/<name>` aliased to
- *   `cawco:kit/<name>`, loaded from {@link KIT_STUBS}. The alias goes in a
- *   config hook ordered after Kit's own, whose `$app` alias would match
- *   first otherwise (Vite merges a later hook's aliases ahead of the
- *   earlier ones').
- * - A story's own modules, for its frame alone: a story whose `beforeEach`
- *   imports a module (`await import("…")`) mounts
- *   from its own copy of its states file (`?cawco-frame=<token>`, imported
- *   by the section's module, {@link sectionModule}), and each import a copy
- *   makes of a file between the states file and that module
- *   ({@link copiesOf}) resolves to that file's copy for the same frame. The
- *   copy is the real module, its writers and derived views its own, so the
- *   `beforeEach` seeds it through its own writers and every story of one
- *   states file holds its own value on one page.
- * - A copied file's sub-requests, the parts a framework's plugin splits a
- *   component into, each by a query on the file's path: a style block
- *   (vite-plugin-svelte `?svelte&type=style&lang.css`; plugin-vue
- *   `?vue&type=style&index=<n>[&scoped=<id>]&lang.<lang>`), a template
- *   or script block served apart (plugin-vue `?vue&type=template…`, and
- *   `?vue&type=script…&lang.<lang>` for a `src` or a lang Vite compiles
- *   apart, `tsx` say) and a custom block (`?vue&type=<block>&index=<n>`).
- *   A script, template or custom block is code, which may import a
- *   module or hold state: it takes the frame. A style block is the shared
- *   one: CSS holds no module state, a copy compiles to the same CSS (its
- *   scope hash is the file's), and a plugin's cache and hot update
- *   address it by the file's own id. The frame goes first in the query
- *   ({@link framed}), whose end names what the sub-request is.
+ * SvelteKit's client modules on a stage, for every frame, as Storybook's
+ * SvelteKit framework mocks them: `$app/<name>` aliased to
+ * `cawco:kit/<name>`, loaded from {@link KIT_STUBS}. The alias goes in a
+ * config hook ordered after Kit's own, whose `$app` alias would match
+ * first otherwise (Vite merges a later hook's aliases ahead of the earlier
+ * ones'). A story runner's modules import the page's own stand-ins.
  */
 function cawcoStandIns() {
   return {
@@ -3845,47 +3995,8 @@ function cawcoStandIns() {
             }
           : {},
     },
-    async resolveId(
-      this: {
-        environment: { warmupRequest: (url: string) => Promise<void> };
-        resolve: (
-          source: string,
-          importer: string,
-          options: object
-        ) => Promise<{ external?: unknown; id: string } | null>;
-      },
-      id: string,
-      importer: string | undefined,
-      options: object
-    ) {
-      if (id.startsWith(KIT_STUB)) {
-        return `\0${id}`;
-      }
-      const token = importer ? frameOf(importer) : null;
-      if (!(importer && token) || id.startsWith("\0")) {
-        return null;
-      }
-      const found = await this.resolve(id, importer, {
-        ...options,
-        skipSelf: true,
-      });
-      if (!found || found.external || frameOf(found.id)) {
-        return found;
-      }
-      const file = pathOfId(found.id);
-      if (!(await copiesOf(token)).has(file)) {
-        return found;
-      }
-      if (!CSS_REQUEST.test(found.id)) {
-        return { ...found, id: framed(found.id, token) };
-      }
-      // A copied component's stylesheet is the shared one: CSS holds no
-      // module state, and the copy compiles to the same CSS (its scope
-      // hash is the file's). Its plugin serves it from the shared file's
-      // compile (vite-plugin-svelte's load-compiled-css reads it off
-      // `getModuleInfo(<file>)`), so that file is compiled first.
-      await this.environment.warmupRequest(file);
-      return found;
+    resolveId(id: string) {
+      return id.startsWith(KIT_STUB) ? `\0${id}` : null;
     },
     load(id: string) {
       return id.startsWith(`\0${KIT_STUB}`)

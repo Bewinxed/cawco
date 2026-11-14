@@ -15,6 +15,7 @@ import {
   unkeyedPath,
 } from "@cawco/core/stage";
 import { cutShort } from "@cawco/core/words/helpers";
+import { ownPlace } from "./own";
 
 /** Svelte's dev stack on an element (a dev compile's `__svelte_meta`). */
 interface SvelteMeta {
@@ -647,17 +648,24 @@ export function pageError(
     300
   );
   const stack = error instanceof Error ? (error.stack ?? "") : "";
-  for (const line of stack.split("\n")) {
-    const at = line.match(STACK_PLACE);
+  for (const frame of stack.split("\n")) {
+    const at = frame.match(STACK_PLACE);
     if (!at) {
       continue;
     }
     let path: string;
+    let line = Number(at[2]);
+    let column = Number(at[3]);
     try {
       // A module the stage keyed at its generation is named by its own address.
       path = unkeyedPath(new URL(at[1] ?? "").pathname);
     } catch {
       continue;
+    }
+    // A story runner's code, at its place in the client code the stage's map reads.
+    const placed = ownPlace(path, line, column);
+    if (placed) {
+      ({ path, line, column } = placed);
     }
     if (
       path.includes("/node_modules/") ||
@@ -669,7 +677,7 @@ export function pageError(
     const file = path.startsWith("/@fs/")
       ? fromRoot(path.slice("/@fs".length), root)
       : path.slice(base.length).replace(LEADING_SLASH, "");
-    return { message, file, line: Number(at[2]), column: Number(at[3]) };
+    return { message, file, line, column };
   }
   return { message, file: null, line: null, column: null };
 }
