@@ -17,6 +17,7 @@ export type MachineReportsContext = Pick<
   | "fleetSyncs"
   | "keepFleetReport"
   | "moves"
+  | "passkeyRelay"
   | "pendingInstalls"
   | "ridingReported"
   | "stageHeard"
@@ -198,6 +199,20 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     return "continue";
   };
 
+  const passkeyAdvertHeard = (run: FrameRun): FrameAnswer => {
+    const { agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A BLE scanner captured a FIDO advert: the passkey relay routes it.
+    if (kind === "passkey_advert") {
+      const { key } = body;
+      if (typeof key === "string") {
+        ctx.passkeyRelay.captured(key);
+      }
+      return "stop";
+    }
+    return "continue";
+  };
+
   const controlResultNamed = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
     const { kind } = agentFrame;
@@ -221,6 +236,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     catalogMoved,
     fleetConverging,
     browserHandedBack,
+    passkeyAdvertHeard,
     streamRelayHeard,
     moveProgressed,
     accountBorrowed,

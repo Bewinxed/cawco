@@ -447,3 +447,43 @@ const BROWSER_KEY = /^(?:project|machine):[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 
 /** A key as a name the runtime and the filesystem take: `project:abc` → `project-abc`. */
 export const browserSlug = (key: BrowserKey): string => key.replace(":", "-");
+
+// ---------------------------------------------------------------------------
+// Passkey relay: the hub tells machines to scan for BLE passkey adverts, and
+// tells dashboards how it is going.
+// ---------------------------------------------------------------------------
+
+/** Hub → daemon: start BLE scanning for passkey adverts. */
+export const PASSKEY_SCAN_START = "passkey.scanStart";
+
+/** Hub → daemon: stop BLE scanning. */
+export const PASSKEY_SCAN_STOP = "passkey.scanStop";
+
+/** The current phase of a passkey relay attempt. */
+export type PasskeyRelayStatus =
+  "scanning" | "captured" | "injected" | "authenticated" | "timeout" | "no_ble";
+
+/** Hub → dashboards: passkey relay status update. */
+export interface PasskeyStatusFrame {
+  /** The browser key that needs the passkey. */
+  key: BrowserKey;
+  kind: "passkey_status";
+  /** Human-readable message. */
+  message: string;
+  /** Which machines are scanning (machine names). */
+  scanningMachines?: string[];
+  /** Current state of the relay attempt. */
+  status: PasskeyRelayStatus;
+}
+
+/** Daemon → hub: a BLE scanner captured a FIDO advert for a passkey relay. */
+export interface PasskeyAdvertFrame {
+  /** The BLE device address that sent it. */
+  address: string;
+  /** Base64-encoded BLE advert payload. */
+  advert: string;
+  /** The browser key the scan was started for. */
+  key: BrowserKey;
+  kind: "passkey_advert";
+  machineId: string;
+}

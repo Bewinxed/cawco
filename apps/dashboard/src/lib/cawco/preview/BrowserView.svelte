@@ -100,6 +100,7 @@
     sinkKeyRole,
     typedBetween,
   } from "./keyboard-sink";
+  import PasskeyQr from "./PasskeyQr.svelte";
 
   /** The layout a take-over's page is in: a phone's or the desktop's. */
   type Form = TakeoverLayout["form"];
@@ -1485,6 +1486,9 @@
             {@render keyboardKey()}
           </BarGlass>
         </div>
+      {/if}
+      {#if browser}
+        <PasskeyQr browserKey={browser.key} />
       {/if}
     </div>
     {#if addressAtFoot && live}

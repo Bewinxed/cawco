@@ -43,6 +43,8 @@ import {
   type BrowserStartArgs,
   type BrowserViewersArgs,
   isBrowserKey,
+  PASSKEY_SCAN_START,
+  PASSKEY_SCAN_STOP,
 } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { timerMs } from "@cawco/core/clock";
@@ -2457,6 +2459,8 @@ const attach = (
         frame.kind === "browsers" ||
         frame.kind === "browser_handback" ||
         frame.kind === "browser_list" ||
+        frame.kind === "passkey_status" ||
+        frame.kind === "passkey_advert" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone" ||
         frame.kind === "catalog_moved"
@@ -3779,14 +3783,48 @@ const startDaemon = (rediscover = false) =>
       );
       return Promise.resolve(true);
     });
+    // Passkey BLE relay: the hub tells us to scan for FIDO BLE adverts
+    // when a browser needs a passkey. Lazy: only runs when the hub asks.
+    supervisor.declareControl(PASSKEY_SCAN_START, async (args) => {
+      const key = browserKeyOf(args);
+      const { scannerAvailable, startScan } = await import("./passkey-scanner");
+      if (!scannerAvailable()) {
+        return { ok: false, error: "No BLE scanner available" };
+      }
+      startScan(key, (result) => {
+        // Send the captured advert back to the hub as a frame.
+        framed({
+          kind: "passkey_advert",
+          machineId: machineIdValue,
+          key,
+          advert: result.advert,
+          address: result.address,
+        });
+      });
+      console.info(`[passkey] BLE scan started for ${key}`);
+      return { ok: true };
+    });
+    supervisor.declareControl(PASSKEY_SCAN_STOP, async (args) => {
+      const key = browserKeyOf(args);
+      const { stopScan } = await import("./passkey-scanner");
+      stopScan(key);
+      console.info(`[passkey] BLE scan stopped for ${key}`);
+      return { ok: true };
+    });
     // The records' watch and tick end with the daemon's scope, and one that
     // is still starting as it ends is stopped the moment it is ready.
+    // Also stop any BLE passkey scans.
     let unwatchBrowsers: (() => void) | undefined;
     let browsersEnded = false;
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         browsersEnded = true;
         unwatchBrowsers?.();
+        import("./passkey-scanner")
+          .then(({ stopAllScans }) => stopAllScans())
+          .catch((error: unknown) =>
+            console.warn(`[passkey] cleanup: ${String(error)}`)
+          );
       })
     );
     yield* Effect.forkScoped(

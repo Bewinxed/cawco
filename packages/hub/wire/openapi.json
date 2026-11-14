@@ -42497,6 +42497,12 @@
             "$ref": "#/components/schemas/MovesFrame"
           },
           {
+            "$ref": "#/components/schemas/PasskeyAdvertFrame"
+          },
+          {
+            "$ref": "#/components/schemas/PasskeyStatusFrame"
+          },
+          {
             "$ref": "#/components/schemas/PermissionRequestFrame"
           },
           {
@@ -42611,6 +42617,8 @@
             "laws.broken": "#/components/schemas/LawsBrokenFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "moves": "#/components/schemas/MovesFrame",
+            "passkey_advert": "#/components/schemas/PasskeyAdvertFrame",
+            "passkey_status": "#/components/schemas/PasskeyStatusFrame",
             "permission_request": "#/components/schemas/PermissionRequestFrame",
             "permission_settled": "#/components/schemas/PermissionSettledFrame",
             "person": "#/components/schemas/PersonFrame",
@@ -46169,6 +46177,7 @@
       "MachineCapabilityId": {
         "type": "string",
         "enum": [
+          "ble",
           "browser",
           "claude",
           "container-runtime",
@@ -49707,6 +49716,89 @@
           "machineId",
           "payload",
           "verb"
+        ]
+      },
+      "PasskeyAdvertFrame": {
+        "description": "Daemon → hub: a BLE scanner captured a FIDO advert for a passkey relay.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "description": "The BLE device address that sent it.",
+            "type": "string"
+          },
+          "advert": {
+            "description": "Base64-encoded BLE advert payload.",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser key the scan was started for."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_advert"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "advert",
+          "key",
+          "kind",
+          "machineId"
+        ]
+      },
+      "PasskeyRelayStatus": {
+        "description": "The current phase of a passkey relay attempt.",
+        "type": "string",
+        "enum": [
+          "authenticated",
+          "captured",
+          "injected",
+          "no_ble",
+          "scanning",
+          "timeout"
+        ]
+      },
+      "PasskeyStatusFrame": {
+        "description": "Hub → dashboards: passkey relay status update.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser key that needs the passkey."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_status"
+            ]
+          },
+          "message": {
+            "description": "Human-readable message.",
+            "type": "string"
+          },
+          "scanningMachines": {
+            "description": "Which machines are scanning (machine names).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/PasskeyRelayStatus",
+            "description": "Current state of the relay attempt."
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "message",
+          "status"
         ]
       },
       "PendingAccountSignin": {

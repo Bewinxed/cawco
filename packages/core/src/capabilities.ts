@@ -10,6 +10,7 @@ export interface MachineCapability {
     | HarnessKind
     | "node"
     | "browser"
+    | "ble"
     | "container-runtime"
     | "public-address"
     | "service-manager"

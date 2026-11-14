@@ -156,6 +156,23 @@ function linuxInstall(pkg: string): string {
 
 const VERSIONED: readonly string[] = ["git", ...HARNESSES, "node"];
 const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
+/** macOS `system_profiler` output when BLE hardware is present. */
+const BLE_SUPPORTED_RE = /Bluetooth Low Energy Supported:\s*Yes/iu;
+
+/**
+ * Drain a spawned child's stdout and exit code, discarding stderr, then
+ * untether its stdin so the process never outlives the agent.
+ */
+async function drainChild(
+  child: ReturnType<typeof spawnRead>
+): Promise<{ stdout: string; exitCode: number }> {
+  const [stdout, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    child.exited,
+    new Response(child.stderr).text(),
+  ]).finally(() => untether(child.stdin));
+  return { stdout, exitCode };
+}
 
 /**
  * Asks an installed tool for its version, so the report says which one it is.
@@ -177,11 +194,7 @@ function toolVersion(path: string): Promise<Bounded<string | undefined>> {
       stderr: "pipe",
       signal,
     });
-    const [stdout, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-      new Response(child.stderr).text(),
-    ]).finally(() => untether(child.stdin));
+    const { stdout, exitCode } = await drainChild(child);
     const text = stdout.trim();
     return exitCode === 0 ? (VERSION.exec(text)?.[0] ?? text) : undefined;
   });
@@ -233,6 +246,55 @@ async function foundRuntimeFacts(
     media: forwarding.media,
     ...(forwarding.advice ? { reason: forwarding.advice } : {}),
   };
+}
+
+/**
+ * Whether the machine has Bluetooth Low Energy hardware: macOS's
+ * `system_profiler` or Linux's `/sys/class/bluetooth/`. The passkey relay
+ * cascade (hub browsers.ts `startPasskeyRelay`) uses this to pick which
+ * machines scan for a phone's passkey advert.
+ */
+async function probeBle(): Promise<MachineCapability> {
+  const mac = platform() === "darwin";
+  try {
+    if (mac) {
+      const { stdout, exitCode } = await drainChild(
+        spawnRead(
+          ["system_profiler", "SPBluetoothDataType", "-detailLevel", "basic"],
+          { env: hostEnvironment(), stderr: "pipe" }
+        )
+      );
+      // "Bluetooth Low Energy Supported: Yes"
+      const supported = exitCode === 0 && BLE_SUPPORTED_RE.test(stdout);
+      return {
+        id: "ble",
+        available: supported,
+        installCommand: "",
+        ...(supported
+          ? {}
+          : { reason: "No Bluetooth Low Energy hardware found" }),
+      };
+    }
+    // Linux: /sys/class/bluetooth/ lists one entry per HCI adapter.
+    const adapters = existsSync("/sys/class/bluetooth")
+      ? readdirSync("/sys/class/bluetooth")
+      : [];
+    return {
+      id: "ble",
+      available: adapters.length > 0,
+      installCommand: "",
+      ...(adapters.length === 0
+        ? { reason: "No Bluetooth adapter found under /sys/class/bluetooth/" }
+        : {}),
+    };
+  } catch {
+    return {
+      id: "ble",
+      available: false,
+      installCommand: "",
+      reason: "Could not detect Bluetooth hardware",
+    };
+  }
 }
 
 /** Presence is read fresh on registration and every explicit probe. */
@@ -344,6 +406,8 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     },
     // What a delegate's workspace needs here, read as a delegate is refused by it.
     workspaceNeeds(),
+    // Bluetooth Low Energy: passkey relay (hub browsers.ts) scans on machines that have it.
+    await probeBle(),
   ];
   await Promise.all(items.map(readVersion));
   return { at: Date.now(), platform: platform(), items };

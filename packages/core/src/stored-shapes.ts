@@ -1859,6 +1859,7 @@ const MachineCapabilityShape = declared(
       HarnessKindShape,
       z.literal("node"),
       z.literal("browser"),
+      z.literal("ble"),
       z.literal("container-runtime"),
       z.literal("public-address"),
       z.literal("service-manager"),

@@ -179,6 +179,7 @@ import type { createMoves } from "./moves";
 import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
 import type { createOpenItems } from "./open-items";
+import type { createPasskeyRelay } from "./passkey-relay";
 import type { AnswerFrom, PendingShape } from "./pending";
 import type { PlacementInput } from "./placement";
 import type { PlanChanges } from "./plan-changes";
@@ -859,6 +860,7 @@ export interface ClosureContext {
   ownMachineIdRead: string | undefined;
   ownsPermission: (parked: Envelope) => boolean;
   parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
+  passkeyRelay: ReturnType<typeof createPasskeyRelay>;
   pending: PendingShape;
   pendingInstalls: Map<
     string,

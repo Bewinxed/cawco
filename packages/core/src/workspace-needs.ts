@@ -109,6 +109,11 @@ const PROGRAMS = {
     os: "linux",
     package: "bubblewrap",
   },
+  bluetoothctl: {
+    for: "BLE passkey scanning on Linux",
+    os: "linux",
+    package: "bluez",
+  },
   brew: { for: "finding Homebrew's JDK, which Maestro runs on" },
   caffeinate: { for: "keeping a Mac awake while work runs", os: "darwin" },
   cat: {
