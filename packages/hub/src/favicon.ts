@@ -397,7 +397,7 @@ export const faviconRoutes = () =>
   new Elysia().get(
     "/api/favicon",
     { query: t.Object({ host: t.String({ minLength: 1, maxLength: 253 }) }) },
-    async ({ query }) => {
+    async ({ query, set }) => {
       const host = query.host.trim().toLowerCase().replace(TRAILING_DOT, "");
       if (!publicName(host)) {
         return problem(400, {
@@ -430,13 +430,10 @@ export const faviconRoutes = () =>
           detail: "That site has no icon this hub could read.",
         });
       }
-      return new Response(new Uint8Array(icon.bytes), {
-        headers: {
-          "content-type": icon.type,
-          "cache-control": "public, max-age=86400",
-          "content-security-policy": "default-src 'none'; sandbox",
-          "x-content-type-options": "nosniff",
-        },
-      });
+      set.headers["content-type"] = icon.type;
+      set.headers["cache-control"] = "public, max-age=86400";
+      set.headers["content-security-policy"] = "default-src 'none'; sandbox";
+      set.headers["x-content-type-options"] = "nosniff";
+      return new Blob([new Uint8Array(icon.bytes)]);
     }
   );

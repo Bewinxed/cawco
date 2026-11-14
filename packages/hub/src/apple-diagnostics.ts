@@ -226,7 +226,7 @@ export const appleDiagnosticsRoutes = () =>
     .get(
       "/api/diagnostics/apple/:id",
       { ...hidden, query: t.Object({ format: t.Optional(t.Literal("text")) }) },
-      async ({ params, query }) => {
+      async ({ params, query, set }) => {
         if (!ID.test(params.id)) {
           return problem(404, {
             code: "no-such-diagnostic",
@@ -244,9 +244,8 @@ export const appleDiagnosticsRoutes = () =>
         const stack = stackText(record.diagnostic);
         if (query.format === "text") {
           const head = `${record.kind} · CawCo ${record.appVersion} (${record.build}) · ${record.os}${record.device ? ` · ${record.device}` : ""}`;
-          return new Response(`${head}\n\n${stack}\n`, {
-            headers: { "content-type": "text/plain; charset=utf-8" },
-          });
+          set.headers["content-type"] = "text/plain; charset=utf-8";
+          return `${head}\n\n${stack}\n`;
         }
         return { ...summary(record), diagnostic: record.diagnostic, stack };
       }

@@ -15,7 +15,7 @@ export const fileRoutes = () =>
   new Elysia()
     // An image a transcript referenced, by the hash of its bytes: the same
     // name can only ever mean the same picture, so the browser keeps it.
-    .get("/api/media/:name", async ({ params }) => {
+    .get("/api/media/:name", async ({ params, set }) => {
       const path = mediaFilePath(params.name);
       // Its write may still be under way (media.ts `writing`).
       const writing = path ? mediaWriting(params.name) : undefined;
@@ -23,12 +23,9 @@ export const fileRoutes = () =>
       if (!(writing || (file && (await file.exists())))) {
         return problem(404, { code: "no-such-media", detail: "no such media" });
       }
-      return new Response(writing ? new Uint8Array(writing) : file, {
-        headers: {
-          "Content-Type": mediaContentType(params.name),
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      });
+      set.headers["Content-Type"] = mediaContentType(params.name);
+      set.headers["Cache-Control"] = "public, max-age=31536000, immutable";
+      return writing ? new Blob([new Uint8Array(writing)]) : file;
     })
     // A file the reader attached, raw: its bytes are the body, its type the
     // Content-Type, its name `X-File-Name` (URI-encoded). Kept by the hash
@@ -64,16 +61,13 @@ export const fileRoutes = () =>
       }
     )
     // An attached file's bytes, by the hash a send's reference names.
-    .get("/api/files/:hash", async ({ params }) => {
+    .get("/api/files/:hash", async ({ params, set }) => {
       const path = storedFilePath(params.hash);
       const file = path ? Bun.file(path) : undefined;
       if (!(file && (await file.exists()))) {
         return problem(404, { code: "no-such-file", detail: "no such file" });
       }
-      return new Response(file, {
-        headers: {
-          "Content-Type": "application/octet-stream",
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      });
+      set.headers["Content-Type"] = "application/octet-stream";
+      set.headers["Cache-Control"] = "public, max-age=31536000, immutable";
+      return file;
     });

@@ -7,50 +7,6 @@ import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { machineOut } from "../machine-out";
 
-/**
- * A file's bytes as an answer to a request that may ask for a range of them:
- * a video element asks for ranges, and Safari plays nothing from a server
- * that answers a range with the whole file.
- */
-const rangedResponse = (
-  bytes: Uint8Array<ArrayBuffer>,
-  mediaType: string,
-  rangeHeader: string | null
-): Response => {
-  const total = bytes.byteLength;
-  const headers = {
-    "Content-Type": mediaType,
-    "Cache-Control": "no-store",
-    "Accept-Ranges": "bytes",
-  };
-  const range = BYTE_RANGE.exec(rangeHeader ?? "");
-  if (!(range && (range[1] || range[2]))) {
-    return new Response(bytes, {
-      headers: { ...headers, "Content-Length": String(total) },
-    });
-  }
-  const [, from, to] = range;
-  const start = from ? Number(from) : Math.max(0, total - Number(to));
-  const end = from && to ? Math.min(Number(to), total - 1) : total - 1;
-  if (start > end || start >= total) {
-    return new Response(null, {
-      status: 416,
-      headers: { "Content-Range": `bytes */${total}` },
-    });
-  }
-  return new Response(bytes.slice(start, end + 1), {
-    status: 206,
-    headers: {
-      ...headers,
-      "Content-Range": `bytes ${start}-${end}/${total}`,
-      "Content-Length": String(end - start + 1),
-    },
-  });
-};
-
-/** A `Range: bytes=a-b` header (one range, either end open). */
-const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/u;
-
 export const agentListRoutes = ({
   db,
   machineFault,
@@ -104,7 +60,7 @@ export const agentMediaRoutes = ({
     .get(
       "/api/agents/:machineId/media",
       { query: t.Object({ path: t.String() }) },
-      async ({ params, query, request }) => {
+      async ({ params, query, set }) => {
         const answer = await readMachineMedia(params.machineId, query.path);
         if (answer === "offline") {
           return problem(503, {
@@ -124,11 +80,12 @@ export const agentMediaRoutes = ({
             detail: answer.refused,
           });
         }
-        return rangedResponse(
-          answer.bytes,
-          answer.mediaType,
-          request.headers.get("range")
-        );
+        // A video element asks for ranges, and Safari plays nothing from a
+        // server that answers a range with the whole file: Elysia answers a
+        // Blob's `Range` itself (200, 206, 416).
+        set.headers["Content-Type"] = answer.mediaType;
+        set.headers["Cache-Control"] = "no-store";
+        return new Blob([answer.bytes]);
       }
     )
     // Forgetting a machine the fleet no longer has. Only an offline one: a

@@ -994,18 +994,13 @@ export const fileExtension = (path: string): string => {
  * anything else, read again every time, and an SVG opened on its own runs
  * nothing.
  */
-export const servedFile = (
-  bytes: Uint8Array<ArrayBuffer> | Blob,
-  type: string
-) =>
-  new Response(bytes, {
-    headers: {
-      "content-type": type,
-      "cache-control": "no-cache",
-      "x-content-type-options": "nosniff",
-      "content-security-policy":
-        "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-    },
+export const servedFile = (bytes: Blob, type: string) =>
+  new ElysiaStatus(200, bytes, {
+    "content-type": type,
+    "cache-control": "no-cache",
+    "x-content-type-options": "nosniff",
+    "content-security-policy":
+      "default-src 'none'; style-src 'unsafe-inline'; sandbox",
   });
 
 /** The largest file the raw route serves: a task's video or audio output. */
@@ -2527,7 +2522,7 @@ export const projectFolderRoutes = (
     .get(
       "/api/projects/:id/folder/raw",
       { query: t.Object({ path: t.String() }) },
-      async ({ params, query }) => {
+      async ({ params, query, set }) => {
         const missing = unknown(params.id);
         if (missing) {
           return missing;
@@ -2539,16 +2534,13 @@ export const projectFolderRoutes = (
         const body = Bun.file(file.real);
         // Served on the dashboard's own origin: a page or a drawing in the
         // folder is shown, never run (no script, no frame, no form).
-        return new Response(body, {
-          headers: {
-            "Content-Type": body.type || "application/octet-stream",
-            "Content-Length": String(file.size),
-            "Content-Disposition": "inline",
-            "Content-Security-Policy": "sandbox; default-src 'none'",
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "no-cache",
-          },
-        });
+        set.headers["Content-Type"] = body.type || "application/octet-stream";
+        set.headers["Content-Length"] = String(file.size);
+        set.headers["Content-Disposition"] = "inline";
+        set.headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+        set.headers["X-Content-Type-Options"] = "nosniff";
+        set.headers["Cache-Control"] = "no-cache";
+        return body;
       }
     )
     .put(

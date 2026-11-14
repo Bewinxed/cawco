@@ -461,18 +461,40 @@ const asProse = (value: unknown): unknown => {
   return fields;
 };
 
-/** A `Response` a handler returns carries its own status; it is no body here. */
-const withoutResponse = (schema: Schema): Schema | undefined => {
-  if (schema.$ref === RESPONSE) {
-    return undefined;
-  }
+/**
+ * A body Elysia sends as the bytes of a file: a `Blob` or Bun's file, bare or
+ * as the type of an Elysia status that carries one.
+ */
+const BYTES = new Set([
+  `${COMPONENT}Blob`,
+  `${COMPONENT}Bun.BunFile`,
+  `${DEFINITION}Blob`,
+  `${DEFINITION}Bun.BunFile`,
+]);
+const isBytes = (schema: Schema): boolean =>
+  (typeof schema.$ref === "string" && BYTES.has(schema.$ref)) ||
+  (Array.isArray(schema.allOf) && (schema.allOf as Schema[]).some(isBytes));
+
+/**
+ * A `Response` a handler returns carries its own status, and a file's bytes
+ * are no JSON: neither is a body here. `bytes` says a file's were there.
+ */
+const withoutResponse = (
+  schema: Schema
+): { body: Schema | undefined; bytes: boolean } => {
+  const sent = (one: Schema) => one.$ref === RESPONSE || isBytes(one);
   if (!Array.isArray(schema.anyOf)) {
-    return schema;
+    return sent(schema)
+      ? { body: undefined, bytes: isBytes(schema) }
+      : { body: schema, bytes: false };
   }
-  const rest = (schema.anyOf as Schema[]).filter(
-    (one) => one.$ref !== RESPONSE
-  );
-  return rest.length === 1 ? rest[0] : { ...schema, anyOf: rest };
+  const parts = schema.anyOf as Schema[];
+  const rest = parts.filter((one) => !sent(one));
+  const bytes = parts.some(isBytes);
+  if (rest.length <= 1) {
+    return { body: rest[0], bytes };
+  }
+  return { body: { ...schema, anyOf: rest }, bytes };
 };
 
 /** Elysia sends a string as text/plain, whatever named type it has. */
@@ -558,10 +580,10 @@ for (const { op, method, path } of operations) {
       op.responses[status] = { description };
       continue;
     }
-    const bare = withoutResponse(returned);
+    const { body: bare, bytes } = withoutResponse(returned);
     const schema = bare && (asProse(toDocument(bare)) as Schema);
     if (!schema) {
-      // Only a `Response`: the handler answers with bytes of its own.
+      // Only a `Response` or a file: the handler answers with bytes.
       op.responses[status] = { description, content: binary };
       continue;
     }
@@ -597,7 +619,10 @@ for (const { op, method, path } of operations) {
       const type = validation ? "application/problem+json" : "application/json";
       content[type] = { schema: { $ref: ref } };
     }
-    op.responses[status] = { description, content };
+    op.responses[status] = {
+      description,
+      content: bytes ? { ...content, ...binary } : content,
+    };
   }
   if (!Object.keys(op.responses).some((status) => status.startsWith("2"))) {
     untyped.push(`${op.operationId} 2xx`);
