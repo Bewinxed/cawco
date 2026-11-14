@@ -53,4 +53,4 @@ The canvas is the project's real component, mounted live by the project's own to
 | Tuning landed | `dials` or `tuned` holds a value the code does not carry |
 | A choice asked on a decision page | The person must pick and the canvas alone is in front of them |
 | The person sees a surface | The canvas's grid is what the person was given; a surface reaches them as a preview at its path |
-| Weight | A component's states file is `over` budget (250 modules, 1 MB): its `cut` names the seam. A screen carries its weight |
+| Weight | A component's states file is `over` budget (250 modules, 1 MB): its `cut` names the heaviest imports and whose each is. The states file's own imports are yours to cut; the component's own are its weight on any stage, and the story cannot cut them. A screen carries its weight |

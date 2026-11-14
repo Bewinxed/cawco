@@ -887,7 +887,7 @@ export interface SheetWeight {
   budget: { bytes: number; modules: number };
   /** Project code: its modules and their transformed bytes. */
   bytes: number;
-  /** Where to cut, one sentence: the import, or the seam in the component when it is the component's own; null under budget. */
+  /** Where the weight is: each heaviest import as the component's own or the states file's, then the states file's imports to cut, or that the weight is the component's and no story cuts it; null under budget. */
   cut: string | null;
   deps: { bytes: number; modules: number };
   heaviest: SheetImport[];

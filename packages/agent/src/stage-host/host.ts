@@ -2726,6 +2726,19 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
   const over =
     own.modules > COMPONENT_BUDGET.modules ||
     own.bytes > COMPONENT_BUDGET.bytes;
+  // The component's own imports: what any stage that mounts it loads.
+  const components = componentsOf(read);
+  const component = { modules: 0, bytes: 0 };
+  for (const [top, sum] of byImport) {
+    const at = top.file ?? top.url;
+    if (components.has(writtenAs.get(at) ?? relative(root, at))) {
+      component.modules += sum.modules;
+      component.bytes += sum.bytes;
+    }
+  }
+  const statesOver =
+    own.modules - component.modules > COMPONENT_BUDGET.modules ||
+    own.bytes - component.bytes > COMPONENT_BUDGET.bytes;
   return {
     ...own,
     deps,
@@ -2733,32 +2746,57 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
     measuredAt: new Date().toISOString(),
     budget: { ...COMPONENT_BUDGET },
     over,
-    cut: over ? cutOf(heaviest[0], read) : null,
+    cut: over ? cutOf(heaviest, components, statesOver) : null,
   };
 }
 
 const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
 
+/** The specifiers the states file imports its components by: `meta.component` and each story's. */
+const componentsOf = (read: ReturnType<typeof readStoryFile>) =>
+  new Set(
+    [read.meta.component, ...read.stories.map((one) => one.component)].flatMap(
+      (name) => {
+        const specifier = name ? read.imports.get(name) : undefined;
+        return specifier ? [specifier] : [];
+      }
+    )
+  );
+
 /**
- * Where to cut, one sentence from the graph: the story's own component
- * bringing the weight is a seam in the component (or a fixture), never the
- * story; any other import is the story's to cut.
+ * Where the weight is, from the graph: each heaviest import with whose it
+ * is (the component's own, or the states file's: its fixtures, frames,
+ * decorators and stand-ins), then what to do. Past the budget without the
+ * component's imports, the states file's own imports are the cut; within
+ * it, the weight is the component's and no story cuts it.
  */
 function cutOf(
-  top: SheetImport | undefined,
-  read: ReturnType<typeof readStoryFile>
+  heaviest: SheetImport[],
+  components: Set<string>,
+  statesOver: boolean
 ): string | null {
-  if (!top) {
+  if (heaviest.length === 0) {
     return null;
   }
-  const own = [read.meta.component, ...read.stories.map((one) => one.component)]
-    .map((name) => (name ? read.imports.get(name) : undefined))
-    .includes(top.specifier);
-  const [entry] = top.brings;
-  if (own && entry) {
-    return `${top.file.split("/").at(-1)} imports ${entry.file} (${megabytes(entry.bytes)}, ${entry.modules} modules): the component reads it itself, so the cut is a seam in the component (its state as props) or a fixture, not the story.`;
+  const named = heaviest.map((one) => {
+    const size = `${one.file} (${megabytes(one.bytes)}, ${one.modules} modules)`;
+    if (!components.has(one.specifier)) {
+      return `${size}, the states file's own import`;
+    }
+    const [entry] = one.brings;
+    return entry
+      ? `${size}, the component with its own imports, the heaviest ${entry.file} (${megabytes(entry.bytes)}, ${entry.modules} modules)`
+      : `${size}, the component with its own imports`;
+  });
+  const heaviestNamed = `Heaviest: ${named.join("; ")}.`;
+  if (statesOver) {
+    const cuts = heaviest
+      .filter((one) => !components.has(one.specifier))
+      .map((one) => one.specifier);
+    const what = cuts.length > 0 ? cuts.join(", ") : "its own imports";
+    return `${heaviestNamed} The states file's own imports are over budget without the component's: cut ${what} from the states file, or pass what they give as args.`;
   }
-  return `The states file's import ${top.specifier} brings ${megabytes(top.bytes)} in ${top.modules} modules: cut it from the states file, or pass what it gives as args.`;
+  return `${heaviestNamed} The weight is the component's own imports: without them the states file is within budget, and the story cannot cut them.`;
 }
 
 /** A refusal's answer: a write the file can't take is the person's or agent's to fix (422); anything else is the stage's. */

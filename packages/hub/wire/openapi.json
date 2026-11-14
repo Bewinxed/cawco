@@ -55438,7 +55438,7 @@
             "type": "number"
           },
           "cut": {
-            "description": "Where to cut, one sentence: the import, or the seam in the component when it is the component's own; null under budget.",
+            "description": "Where the weight is: each heaviest import as the component's own or the states file's, then the states file's imports to cut, or that the weight is the component's and no story cuts it; null under budget.",
             "type": "string"
           },
           "deps": {
