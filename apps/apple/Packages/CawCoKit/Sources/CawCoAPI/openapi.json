@@ -31511,6 +31511,106 @@
           }
         }
       }
+    },
+    "/api/browsers/{key}/passkey-advert": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "advert": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "advert"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyPasskeyAdvert",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert422"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiBrowsersByKeyPasskeyAdvert 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyPasskeyAdvert503"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -38163,13 +38263,7 @@
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
-            "$ref": "#/components/schemas/PasskeyRelayFrame"
-          },
-          {
             "$ref": "#/components/schemas/BrowserListFrame"
-          },
-          {
-            "$ref": "#/components/schemas/PasskeyQrFrame"
           },
           {
             "$ref": "#/components/schemas/RelayFrame"
@@ -38182,6 +38276,15 @@
           },
           {
             "$ref": "#/components/schemas/CatalogMovedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/PasskeyAdvertFrame"
+          },
+          {
+            "$ref": "#/components/schemas/PasskeyQrFrame"
+          },
+          {
+            "$ref": "#/components/schemas/PasskeyStatusFrame"
           }
         ],
         "discriminator": {
@@ -38239,13 +38342,14 @@
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
-            "passkey_relay": "#/components/schemas/PasskeyRelayFrame",
             "browser_list": "#/components/schemas/BrowserListFrame",
-            "passkey_qr": "#/components/schemas/PasskeyQrFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
             "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
             "stored": "#/components/schemas/StoredFrame",
-            "catalog_moved": "#/components/schemas/CatalogMovedFrame"
+            "catalog_moved": "#/components/schemas/CatalogMovedFrame",
+            "passkey_advert": "#/components/schemas/PasskeyAdvertFrame",
+            "passkey_status": "#/components/schemas/PasskeyStatusFrame",
+            "passkey_qr": "#/components/schemas/PasskeyQrFrame"
           }
         }
       },
@@ -39693,10 +39797,6 @@
             "description": "The origin of the page the person's view shows; absent while it shows none.",
             "type": "string"
           },
-          "passkeyRelay": {
-            "$ref": "#/components/schemas/PasskeyRelayCapability",
-            "description": "What this browser's machine can do for passkey relay; absent when neither is available."
-          },
           "progress": {
             "description": "How far an image build is, while `state` is `pulling` or `building`.",
             "type": "object",
@@ -39756,6 +39856,10 @@
           "why": {
             "description": "Why it is `failed`, one sentence.",
             "type": "string"
+          },
+          "passkeyRelay": {
+            "$ref": "#/components/schemas/PasskeyRelayCapability",
+            "description": "What this browser's machine can do for passkey relay; absent when neither is available."
           }
         },
         "required": [
@@ -39788,24 +39892,6 @@
             "type": "string",
             "pattern": "^machine:.*$"
           }
-        ]
-      },
-      "PasskeyRelayCapability": {
-        "description": "What a machine can do for passkey relay.",
-        "type": "object",
-        "properties": {
-          "hasBle": {
-            "description": "Has a BLE adapter for capturing FIDO adverts.",
-            "type": "boolean"
-          },
-          "hasVhci": {
-            "description": "Has /dev/vhci for injecting adverts into containers.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "hasBle",
-          "hasVhci"
         ]
       },
       "BrowserState": {
@@ -65055,12 +65141,12 @@
           "machineId": {
             "type": "string"
           },
+          "runtime": {
+            "$ref": "#/components/schemas/BrowserRuntime"
+          },
           "passkeyRelay": {
             "$ref": "#/components/schemas/PasskeyRelayCapability",
             "description": "What this machine can do for passkey relay; absent when neither is available."
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/BrowserRuntime"
           }
         },
         "required": [
@@ -67515,44 +67601,6 @@
           "requestId"
         ]
       },
-      "PasskeyRelayFrame": {
-        "description": "Daemon-originated: this machine's passkey relay capability changed.\nSent with the browser frame when the machine's BLE adapter is present\n(capture) or when its browsers can accept injected adverts (inject).",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "passkey_relay"
-            ]
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "role": {
-            "$ref": "#/components/schemas/PasskeyRelayRole"
-          },
-          "scanning": {
-            "description": "Whether BLE scanning is active right now.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "kind",
-          "machineId",
-          "role",
-          "scanning"
-        ]
-      },
-      "PasskeyRelayRole": {
-        "description": "Whether passkey relay is enabled on a machine: capture, inject, or both.",
-        "type": "string",
-        "enum": [
-          "both",
-          "capture",
-          "inject",
-          "none"
-        ]
-      },
       "BrowserListFrame": {
         "description": "Hub-originated, to every dashboard socket (the app's included): every\nbrowser of the fleet, whole, as the socket opens and on each change of\nany (a machine's frame, a start, stop, take-over, hand-back or removal).\nA view paints from it and follows it, and never polls.",
         "type": "object",
@@ -67573,40 +67621,6 @@
         "required": [
           "browsers",
           "kind"
-        ]
-      },
-      "PasskeyQrFrame": {
-        "description": "Daemon → hub: a FIDO URI extracted from a browser's passkey QR code.",
-        "type": "object",
-        "properties": {
-          "extractedAt": {
-            "description": "ms epoch when extracted.",
-            "type": "number"
-          },
-          "fidoUri": {
-            "description": "The full FIDO:/ URI from the QR code.",
-            "type": "string"
-          },
-          "key": {
-            "$ref": "#/components/schemas/BrowserKey",
-            "description": "The browser key showing the QR."
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "passkey_qr"
-            ]
-          },
-          "machineId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "extractedAt",
-          "fidoUri",
-          "key",
-          "kind",
-          "machineId"
         ]
       },
       "RelayFrame": {
@@ -68366,11 +68380,11 @@
           "git",
           "node",
           "opencode",
-          "passkey-relay",
           "pi",
           "public-address",
           "service-manager",
-          "workspace"
+          "workspace",
+          "passkey-relay"
         ]
       },
       "MachineCapabilityMedia": {
@@ -68764,6 +68778,475 @@
         "enum": [
           "moved",
           "pending"
+        ]
+      },
+      "postApiBrowsersByKeyPasskeyAdvert200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiBrowsersByKeyPasskeyAdvert422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "PasskeyRelayCapability": {
+        "description": "What a machine can do for passkey relay.",
+        "type": "object",
+        "properties": {
+          "hasBle": {
+            "description": "Has a BLE adapter for capturing FIDO adverts.",
+            "type": "boolean"
+          },
+          "hasVhci": {
+            "description": "Has /dev/vhci for injecting adverts into containers.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hasBle",
+          "hasVhci"
+        ]
+      },
+      "PasskeyRelayStatus": {
+        "description": "The current phase of a passkey relay attempt.",
+        "type": "string",
+        "enum": [
+          "authenticated",
+          "captured",
+          "injected",
+          "no_ble",
+          "scanning",
+          "timeout"
+        ]
+      },
+      "postApiBrowsersByKeyPasskeyAdvert400": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "browser-key-unfit"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiBrowsersByKeyPasskeyAdvert409": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "browser-machine-refused"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "browser-machine-unnamed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "PasskeyAdvertFrame": {
+        "description": "Daemon-originated: a FIDO BLE advertisement this machine captured, for the hub to relay.",
+        "type": "object",
+        "properties": {
+          "capturedAt": {
+            "description": "ms epoch when the advert was captured.",
+            "type": "number"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_advert"
+            ]
+          },
+          "rssi": {
+            "description": "The RSSI of the captured advertisement (informational).",
+            "type": "number"
+          },
+          "serviceData": {
+            "description": "The raw 20-byte BLE service data, base64-encoded.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capturedAt",
+          "kind",
+          "rssi",
+          "serviceData"
+        ]
+      },
+      "postApiBrowsersByKeyPasskeyAdvert404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "browser-unreported"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "PasskeyStatusFrame": {
+        "description": "Hub → dashboards: passkey relay status update.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser key that needs the passkey."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_status"
+            ]
+          },
+          "scanningMachines": {
+            "description": "Which machines are scanning (machine names).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/PasskeyRelayStatus",
+            "description": "Current state of the relay attempt."
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "status"
+        ]
+      },
+      "PasskeyQrFrame": {
+        "description": "A FIDO URI extracted from a browser's page during a take-over, for the\nperson to scan with their phone's camera. The daemon sends it to the hub,\nwhich broadcasts it as it arrives to every dashboard socket (the app's\nincluded): a dashboard renders the QR, a Chrome extension, when present,\nshows it as a popup, and the app starts the caBLE transport. Expires after\n{@link PASSKEY_QR_TTL_MS}.",
+        "type": "object",
+        "properties": {
+          "fidoUri": {
+            "description": "The FIDO CTAP URI the QR encodes (`FIDO:/`).",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser the passkey prompt appeared in."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_qr"
+            ]
+          },
+          "machineId": {
+            "description": "The machine whose browser showed the QR.",
+            "type": "string"
+          },
+          "raisedAt": {
+            "description": "ms epoch when the QR was read from the page; it expires at `raisedAt + PASSKEY_QR_TTL_MS`.",
+            "type": "number"
+          },
+          "rpOrigin": {
+            "description": "The relying party's origin, when the hub could read it (`https://github.com`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fidoUri",
+          "key",
+          "kind",
+          "machineId",
+          "raisedAt"
+        ]
+      },
+      "postApiBrowsersByKeyPasskeyAdvert503": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "browser-machine-away"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  503
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "browser-machine-late"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  503
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
         ]
       }
     }

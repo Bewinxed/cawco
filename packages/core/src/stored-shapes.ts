@@ -1860,6 +1860,7 @@ const MachineCapabilityShape = declared(
       z.literal("node"),
       z.literal("browser"),
       z.literal("container-runtime"),
+      z.literal("passkey-relay"),
       z.literal("public-address"),
       z.literal("service-manager"),
       z.literal("workspace"),

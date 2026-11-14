@@ -31,6 +31,14 @@ export type BrowserAskFrameOutput = z.output<typeof BrowserAskFrameShape>;
 const BrowserHostKindShape = z.enum(["container", "local"]);
 export type BrowserHostKindOutput = z.output<typeof BrowserHostKindShape>;
 
+const PasskeyRelayCapabilityShape = z.object({
+  hasBle: z.boolean(),
+  hasVhci: z.boolean(),
+});
+export type PasskeyRelayCapabilityOutput = z.output<
+  typeof PasskeyRelayCapabilityShape
+>;
+
 const BrowserStateShape = z.enum([
   "pulling",
   "building",
@@ -50,6 +58,7 @@ const ListedBrowserShape = z.object({
   machineName: z.string(),
   name: z.string(),
   origin: z.string().optional(),
+  passkeyRelay: PasskeyRelayCapabilityShape.optional(),
   progress: z
     .object({ done: z.number(), total: z.number(), what: z.literal("image") })
     .optional(),

@@ -675,7 +675,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       if (machineId instanceof ElysiaStatus) {
         return machineId;
       }
-      const sent = answered<unknown>(
+      const sent = answered<null>(
         await deps.call(
           machineId,
           BROWSER_INJECT_ADVERT,
@@ -696,8 +696,6 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       if (sent instanceof ElysiaStatus) {
         return sent;
       }
-      const done: { ok: true } = { ok: true };
-      return done;
     },
 
     /** Every browser of the fleet, for Settings, the project page and every browser view. */
@@ -874,8 +872,13 @@ export const browserRoutes = (browsers: Browsers) =>
       },
       async ({ params, body }) => {
         const key = keyOf(params.key);
-        return key instanceof ElysiaStatus
-          ? key
-          : await browsers.relayAdvert(key, body.machineId, body.advert);
+        if (key instanceof ElysiaStatus) {
+          return key;
+        }
+        const relayed: { ok: true } = { ok: true };
+        return (
+          (await browsers.relayAdvert(key, body.machineId, body.advert)) ??
+          relayed
+        );
       }
     );
