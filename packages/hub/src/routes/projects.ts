@@ -173,15 +173,11 @@ export const projectRoutes = ({
             detail: "This project is no longer recorded. Refresh.",
           });
         }
-        try {
-          projectStops.stop(params.id, body.instanceIds);
-        } catch (error) {
-          return problem(400, {
-            code: "project-not-edited",
-            detail: error instanceof Error ? error.message : String(error),
-          });
-        }
-        return { ok: true };
+        return (
+          projectStops.stop(params.id, body.instanceIds) ?? {
+            ok: true as const,
+          }
+        );
       }
     )
     // The person's own edit of a project: its name, whether it reviews

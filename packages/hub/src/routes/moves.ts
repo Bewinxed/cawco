@@ -4,7 +4,7 @@
 
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import type { MoveRequest } from "@cawco/core/move";
-import { Elysia, problem, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 
 import { harnessSchema } from "./harness-schema";
@@ -34,21 +34,6 @@ const moveBody = t.Object({
   attachments: continueBody.properties.attachments,
 });
 
-/**
- * A move's work, a failure it threw on the way (a machine's read, a step's
- * call) answered as the 422 it always was; its refusals it returns.
- */
-const moveAttempt = async <T>(work: () => T | Promise<T>) => {
-  try {
-    return await work();
-  } catch (error) {
-    return problem(422, {
-      code: "move-failed",
-      detail: error instanceof Error ? error.message : String(error),
-    });
-  }
-};
-
 export const moveRoutes = ({ moves }: Pick<HubContext, "moves">) =>
   new Elysia()
     // Moving a project to a machine without a checkout of it (moves.ts).
@@ -62,29 +47,23 @@ export const moveRoutes = ({ moves }: Pick<HubContext, "moves">) =>
           from: t.Optional(t.String({ minLength: 1 })),
         }),
       },
-      async ({ params, query }) =>
-        moveAttempt(() =>
-          moves.estimate(params.id, query.machine, {
-            ...(query.from === undefined ? {} : { from: query.from }),
-            ...(query.path === undefined ? {} : { path: query.path }),
-          })
-        )
+      // A machine's cause is thrown as its MachineProblem (a machine away,
+      // MachineAway), and anything else thrown is the hub's own failure:
+      // Elysia answers both. The move's refusals it returns.
+      ({ params, query }) =>
+        moves.estimate(params.id, query.machine, {
+          ...(query.from === undefined ? {} : { from: query.from }),
+          ...(query.path === undefined ? {} : { path: query.path }),
+        })
     )
     // Move & start: the hub owns the job from here; its stages reach every
     // screen on the `moves` frame. The no-move case is the ordinary spawn.
-    .post(
-      "/api/projects/:id/moves",
-      { body: moveBody },
-      async ({ params, body }) =>
-        moveAttempt(() => moves.start(params.id, body as MoveRequest))
+    .post("/api/projects/:id/moves", { body: moveBody }, ({ params, body }) =>
+      moves.start(params.id, body as MoveRequest)
     )
     // The moves the hub is carrying, for a screen that connects late.
     .get("/api/moves", () => moves.table())
     // Cancel: the step in flight stops; what is done stays, in `kept`.
-    .delete("/api/moves/:id", ({ params }) =>
-      moveAttempt(() => moves.cancel(params.id))
-    )
+    .delete("/api/moves/:id", ({ params }) => moves.cancel(params.id))
     // Retry: a failed move runs its failed step again.
-    .post("/api/moves/:id/retry", ({ params }) =>
-      moveAttempt(() => moves.retry(params.id))
-    );
+    .post("/api/moves/:id/retry", ({ params }) => moves.retry(params.id));

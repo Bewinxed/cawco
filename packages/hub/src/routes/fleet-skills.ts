@@ -4,11 +4,7 @@
 
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
-import {
-  type FleetSkillMeta,
-  NO_SKILL,
-  READ_SKILL_FILES,
-} from "@cawco/core/fleet";
+import { NO_SKILL, READ_SKILL_FILES } from "@cawco/core/fleet";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
@@ -162,15 +158,7 @@ export const fleetSkillCalls = (
     },
     /** On or off: the stored row's flag, its source and files as they are. Nothing is fetched; every machine is told, and a machine takes a disabled skill away and writes an enabled one from the stored files. */
     setEnabled: (name: string, enabled: boolean) => {
-      let row: FleetSkillMeta | undefined;
-      try {
-        row = db.setSkillEnabled(name, enabled);
-      } catch (error) {
-        return problem(400, {
-          code: "skill-not-saved",
-          detail: error instanceof Error ? error.message : String(error),
-        });
-      }
+      const row = db.setSkillEnabled(name, enabled);
       if (!row) {
         return problem(404, {
           code: "no-skill",
@@ -305,29 +293,22 @@ export const fleetSkillRoutes = (
           }
           const current = db
             .listSkills()
-            .find((skill) => skill.name === version.name);
-          try {
-            const skill = db.putSkill({
-              name: version.name,
-              source: version.skillSource,
-              enabled: current?.enabled ?? true,
-              hash: version.hash,
-              bytes: version.bytes,
-              files: version.files,
-            });
-            // A restore is no fetch: what the last one came to no longer
-            // says what the row holds.
-            db.noteSource({ skill: skill.name }, { lastRefresh: null });
-            fleetChanged();
-            return skillRow(
-              db.listSkills().find((row) => row.name === skill.name) ?? skill
-            );
-          } catch (error) {
-            return problem(400, {
-              code: "skill-not-saved",
-              detail: error instanceof Error ? error.message : String(error),
-            });
-          }
+            .find((one) => one.name === version.name);
+          const skill = db.putSkill({
+            name: version.name,
+            source: version.skillSource,
+            enabled: current?.enabled ?? true,
+            hash: version.hash,
+            bytes: version.bytes,
+            files: version.files,
+          });
+          // A restore is no fetch: what the last one came to no longer
+          // says what the row holds.
+          db.noteSource({ skill: skill.name }, { lastRefresh: null });
+          fleetChanged();
+          return skillRow(
+            db.listSkills().find((row) => row.name === skill.name) ?? skill
+          );
         }
       )
       // The click that settles a skill edited on one machine the fleet's way:

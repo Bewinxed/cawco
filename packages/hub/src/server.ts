@@ -511,7 +511,7 @@ import {
   memoryRoutes,
   ROUTINE_ORIGIN,
 } from "./memory";
-import { createMoves, MoveAway } from "./moves";
+import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
 import { createNoticesSeen } from "./notices";
 import {
@@ -6843,9 +6843,10 @@ export const createServer = (
   keyAtStart();
 
   /**
-   * Project moves (moves.ts): a machine's control throws {@link MoveAway}
+   * Project moves (moves.ts): a machine's control throws {@link awayError}
    * when the machine is not here or went while it answered, so the job
-   * waits for its register; anything else is the machine's own words.
+   * waits for its register; else silent or the machine's own failure, by
+   * its cause.
    */
   const moves = createMoves({
     db,
@@ -6856,7 +6857,7 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           throw asked.reason === "dead"
-            ? new MoveAway(machineId)
+            ? awayError(machineId)
             : new MachineProblem(
                 silentProblem(`${silentWords(machineId, asked)}.`)
               );
@@ -6869,7 +6870,7 @@ export const createServer = (
       if (!answer.ok) {
         throw answer.error === MACHINE_DISCONNECTED ||
           answer.error === AGENT_RESTARTING
-          ? new MoveAway(machineId)
+          ? awayError(machineId)
           : new MachineProblem(
               problem(502, {
                 code: "machine-call-failed",

@@ -121,6 +121,7 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
+import type { ProjectStops } from "./project-stops";
 import type { AnyProblem } from "./refusal";
 import type { CawToolName } from "./roles";
 import {
@@ -616,7 +617,7 @@ export interface CawDeps {
     running: (
       projectId: string
     ) => Omit<CawRunning, "kind" | "taskId" | "taskTitle">[];
-    stop: (projectId: string, ids: string[]) => void;
+    stop: ProjectStops["stop"];
   };
   /** A task as its project's files have it, or the problem of its read. */
   readonly task: (
@@ -1146,11 +1147,15 @@ export const createCaw = ({
     }
     const stopping = new Set(choice?.stop ?? []);
     const stopped = running.filter((one) => stopping.has(one.id));
-    if (stopped.length > 0) {
-      stops.stop(
-        project.id,
-        stopped.map((one) => one.id)
-      );
+    const notStopped =
+      stopped.length > 0
+        ? stops.stop(
+            project.id,
+            stopped.map((one) => one.id)
+          )
+        : undefined;
+    if (notStopped) {
+      return notStopped;
     }
     keep(running.filter((one) => !stopping.has(one.id)));
   };

@@ -2,6 +2,7 @@ import type { SessionCustody } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import { Elysia, problem } from "elysia";
 import type { HubContext } from "../hub-context";
+import { unansweredIn } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 
 import { unreachable } from "../unreachable";
@@ -79,10 +80,10 @@ export const instanceDeleteRoutes = ({
         );
         switch (stored.kind) {
           case "unanswered":
-            return problem(409, {
-              code: "sessions-machine-not-answering",
-              detail:
-                "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back.",
+            return unansweredIn(row.machineId, stored, {
+              away: "This session's machine isn't connected, so whether its transcript is still there can't be checked. Try again once it is back.",
+              silent:
+                "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again in a moment.",
             });
           case "answered":
             if (!stored.value.ok) {
@@ -103,14 +104,7 @@ export const instanceDeleteRoutes = ({
           });
         }
       }
-      try {
-        endSession(row.id, "delete", { kind: "person" });
-      } catch (error) {
-        return problem(409, {
-          code: "session-not-deleted",
-          detail: error instanceof Error ? error.message : String(error),
-        });
-      }
+      endSession(row.id, "delete", { kind: "person" });
       forgetInstances([row.id]);
       publishInstances(row.machineId);
       return { ok: true };

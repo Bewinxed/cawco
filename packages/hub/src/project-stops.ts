@@ -35,6 +35,7 @@ import type { ProjectStopFrame } from "@cawco/core/frames";
 import type { SessionPulse } from "@cawco/core/protocol";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { problem } from "elysia";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -267,17 +268,20 @@ export const createProjectStops = (ports: {
    * stopped at once; one on a machine that is away is recorded and reported
    * deferred; the rest are reported as their machines confirm (or a failure
    * arrives). A failure keeps the entry: a confirmation that comes later
-   * still reports the session stopped.
+   * still reports the session stopped. An id that is not the project's
+   * session is the ask's, 400, before anything stops.
    */
-  const stop = (projectId: string, ids: string[]): void => {
+  const stop = (projectId: string, ids: string[]) => {
     const mine = new Map(members(projectId).map((row) => [row.id, row]));
     const foreign = ids.filter((id) => !mine.has(id)).length;
     if (foreign > 0) {
-      throw new Error(
-        foreign === 1
-          ? "A session named here is not this project's. Refresh, then retry."
-          : `${foreign} sessions named here are not this project's. Refresh, then retry.`
-      );
+      return problem(400, {
+        code: "project-not-edited",
+        detail:
+          foreign === 1
+            ? "A session named here is not this project's. Refresh, then retry."
+            : `${foreign} sessions named here are not this project's. Refresh, then retry.`,
+      });
     }
     for (const id of ids) {
       const row = mine.get(id) as Row;
@@ -328,3 +332,6 @@ export const createProjectStops = (ports: {
     },
   };
 };
+
+/** A project's stops and what they came to. */
+export type ProjectStops = ReturnType<typeof createProjectStops>;
