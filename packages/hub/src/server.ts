@@ -8868,22 +8868,16 @@ export const createServer = (
     briefing: (request) => workItems.briefing(request),
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
     context: (projectId, task) => projectMemory.contextFor(projectId, task),
-    // Its design system, read in the attempt's clone inside its boundary.
-    // A clone it could not read fails the attempt's brief in the problem's
-    // words, as the thrown one did (dispatch.ts reads a brief's words alone).
-    designSection: async (clone) => {
-      const section = await designSection(
+    // Its design system, read in the attempt's clone inside its boundary,
+    // or the problem of a clone it could not read.
+    designSection: (clone) =>
+      designSection(
         (machineId, cwd, cmd, timeoutMs, workspace) =>
           runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
             what: "command",
           }),
         clone
-      );
-      if (section instanceof ElysiaStatus) {
-        throw new Error(section.response.detail);
-      }
-      return section;
-    },
+      ),
     db,
     lifetime,
     tasks,
