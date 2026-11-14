@@ -83,8 +83,6 @@ const GITHUB_RESOURCES: readonly GitHubResource[] = [
 
 /** The edge of the window read again each poll: late-visible changes are not missed. Our choice. */
 const OVERLAP_MS = 2 * 60_000;
-/** Pages one resource's poll reads at most. Our choice. */
-const MAX_PAGES = 10;
 const PER_PAGE = 100;
 /** One request. Our choice. */
 const REQUEST_MS = 30_000;
@@ -866,8 +864,9 @@ export const pollRepo = async (input: {
 
   /**
    * A resource's pages from `page` on, their events kept, until the
-   * window's edge, the last page or {@link MAX_PAGES}: answers the newest
-   * time it took in.
+   * window's edge or the last page: answers the newest time it took in. The
+   * cursor moves only on this answer, so a read ended by a refusal or by a
+   * request not answered leaves the cursor where it was and loses nothing.
    */
   const pagesFrom = async (
     resource: GitHubResource,
@@ -878,12 +877,12 @@ export const pollRepo = async (input: {
   ): Promise<Bounded<number>> => {
     let newest = edge;
     let page = from;
-    for (let read = 1; page && read <= MAX_PAGES; read += 1) {
+    while (page) {
       const taken = readPage(resource, page.data, edge);
       out.events.push(...taken.events);
       newest = Math.max(newest, taken.newest);
       out.resumeAt = waitOf(page.headers, input.now) ?? out.resumeAt;
-      if (taken.past || read === MAX_PAGES) {
+      if (taken.past) {
         break;
       }
       const got = await pageOf(next, path);
@@ -897,8 +896,7 @@ export const pollRepo = async (input: {
 
   /**
    * The repository's discussions, newest updated first, through GraphQL
-   * (REST lists none), page after page until the window's edge or
-   * {@link MAX_PAGES}, each request within {@link REQUEST_MS}, no redirect
+   * (REST lists none), page after page until the window's edge, each request within {@link REQUEST_MS}, no redirect
    * followed. Its cursor keeps only the newest time: a POST has no ETag. A
    * repository with discussions off answers none.
    */
@@ -913,7 +911,7 @@ export const pollRepo = async (input: {
     const [owner = "", name = ""] = input.repo.split("/");
     let newest = edge;
     let after: string | null = null;
-    for (let read = 1; read <= MAX_PAGES; read += 1) {
+    for (;;) {
       const asked = await readWithin(REQUEST_MS, async (signal) => {
         try {
           return (await octokit.graphql(DISCUSSIONS_QUERY, {
@@ -945,7 +943,11 @@ export const pollRepo = async (input: {
       const taken = readPage("discussions", nodes, edge);
       out.events.push(...taken.events);
       newest = Math.max(newest, taken.newest);
-      if (taken.past || !page?.pageInfo.hasNextPage) {
+      if (
+        taken.past ||
+        !page?.pageInfo.hasNextPage ||
+        page.pageInfo.endCursor === null
+      ) {
         break;
       }
       after = page.pageInfo.endCursor;

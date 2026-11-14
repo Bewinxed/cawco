@@ -56,8 +56,6 @@ const REQUEST_MS = 30_000;
 const OVERLAP_MS = 2 * 60_000;
 /** Linear's default page; a connection's complexity stays low. */
 const PER_PAGE = 50;
-/** Pages one list reads at most in a poll. Our choice. */
-const MAX_PAGES = 10;
 const ISSUE_URL =
   /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)(?:\/|$)/iu;
 
@@ -371,7 +369,7 @@ export const linearAdapter = (
     return names.map((name) => byName.get(name.toLowerCase()) as string);
   };
 
-  /** A list since the cursor, newest change first, page by page within the poll's bound. */
+  /** A list since the cursor, newest change first, page by page to its last page. */
   const listSince = async <Raw, T>(
     what: string,
     query: string,
@@ -386,7 +384,7 @@ export const linearAdapter = (
     const items: T[] = [];
     let newest = cursor.since;
     let after: string | null = null;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
+    for (;;) {
       const data = await ask<Record<string, Page<Raw>>>(what, query, {
         team: teamId,
         since,
