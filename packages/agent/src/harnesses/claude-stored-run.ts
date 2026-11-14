@@ -36,8 +36,10 @@ import {
   projectClaudeDir,
 } from "@cawco/core/paths/claude";
 import type { RanFrom, StoredRun } from "@cawco/core/session-messages";
+import { toolWords } from "@cawco/core/words/tools";
 import { ReverseReader, typeFilter } from "@cawco/jsonl-parser";
 import { z } from "zod";
+import { readSettingsFile } from "../claude-settings-file";
 
 /** How far back from a transcript's end its mode and model are looked for. Ours: the CLI appends the mode after each turn, and a turn's assistant record is within one tool result of it. */
 const LOOK_BACK_BYTES = 8 * 1024 * 1024;
@@ -68,17 +70,16 @@ type Settings = z.infer<typeof SettingsSchema>;
  * read or does not parse sets nothing either, and says why in the log.
  */
 const settingsAt = async (path: string): Promise<Settings | undefined> => {
-  const file = Bun.file(path);
-  if (!(await file.exists())) {
+  const read = await readSettingsFile(path);
+  if (read.state === "unread") {
+    console.warn(
+      `[claude] ${toolWords.settingsSourceUnread(path, read.why)}, so it sets nothing here`
+    );
     return;
   }
-  try {
-    return SettingsSchema.safeParse(JSON.parse(await file.text())).data;
-  } catch (error) {
-    console.warn(
-      `[claude] ${path} sets nothing: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  return read.state === "read"
+    ? SettingsSchema.safeParse(read.settings).data
+    : undefined;
 };
 
 /** The transcript's newest mode and model, read backward from its end. */

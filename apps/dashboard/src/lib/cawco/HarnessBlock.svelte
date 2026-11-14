@@ -7,7 +7,9 @@
    * itself (CawCo's own, while the fleet updates such copies: the block's
    * `auto`) takes no press: the block says CawCo is updating it and to
    * which version, or that it waits for the machine's pause to end; only
-   * an update that failed offers Retry (`offersPress`). The fix is the hub's tool cell
+   * an update that failed offers Retry (`offersPress`). An install under
+   * way is a wait whoever started it: one line saying who (CawCo, or the
+   * person's press) and to which version, no warning and no press. The fix is the hub's tool cell
    * (harness-block.svelte.ts), so its progress and its outcome come back
    * after a reload, on every dashboard, and go on when this is closed. A
    * failed one says why in the machine's words, and the press reads Retry.
@@ -17,7 +19,6 @@
   import { toolWords } from "@cawco/core/words/tools";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconDownload, IconNotYet, IconWarningTriangle } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
@@ -53,11 +54,14 @@
 
   const running = $derived(block.fix.phase === "running");
   /**
-   * CawCo updates it with no press (`auto`): the block says so, to which
-   * version, and that the session starts once it lands; a machine its
-   * owner paused, that it waits for the pause's end.
+   * Nothing waits on the person: CawCo updates it with no press (`auto`),
+   * or an install runs now, whoever started it. The block says who puts it
+   * on and to which version; a machine its owner paused, that CawCo's own
+   * waits for the pause's end.
    */
-  const byCawco = $derived(block.auto && block.fix.phase !== "failed");
+  const waits = $derived(
+    (block.auto && block.fix.phase !== "failed") || running
+  );
   const paused = $derived(
     (boardStore.machines.find((one) => one.machineId === machineId)
       ?.pausedUntil ?? null) !== null
@@ -105,8 +109,8 @@
   data-phase={block.fix.phase}
   class="flex min-w-0 flex-col gap-space-2"
 >
-  {#if byCawco}
-    <!-- Nothing waits on the person: one line, CawCo's own update with its
+  {#if waits}
+    <!-- Nothing waits on the person: one line, who is putting it on with its
          version, the ledger's spinner beside it (the not-yet ring while the
          machine is paused); no warning, and the refusal it answers is not
          said again. -->
@@ -120,15 +124,17 @@
             class="size-icon-md text-ink-muted"
           />{:else}<Spinner />{/if}</span
       ><span class="min-w-0"
-        >{paused && !running
-          ? toolUpdateWords.autoPaused(block.spec.name, block.machine)
-          : toolWords.cawcoPutting(
-              block.kind === "not-installed",
-              block.spec.name,
-              block.machine,
-              (block.fix.phase === "running" ? block.fix.to : undefined) ??
-                block.spec.exactVersion
-            )}</span
+        >{#if paused && !running}{toolUpdateWords.autoPaused(
+            block.spec.name,
+            block.machine
+          )}{:else if running}{words.running(
+            block
+          )}{:else}{toolWords.cawcoPutting(
+            block.kind === "not-installed",
+            block.spec.name,
+            block.machine,
+            block.spec.exactVersion
+          )}{/if}</span
       >
     </p>
   {:else}
@@ -145,35 +151,22 @@
       <span class="min-w-0">{block.why}</span>
     </p>
   {/if}
-  {#if !byCawco && (offersPress(block) || running)}
+  {#if !waits && offersPress(block)}
     <div
       data-slot="row"
       class="flex min-w-0 flex-wrap items-center gap-space-2"
     >
-      {#if offersPress(block)}
-        <Button
-          disabled={!online}
-          failed={block.fix.phase === "failed" || refused !== null}
-          icon={IconDownload}
-          label={block.fix.phase === "failed" ? "Retry" : words.press(block)}
-          onclick={press}
-          pending={asking || running}
-          pendingLabel={words.pressing(block)}
-          size="sm"
-          variant="outline"
-        />
-      {/if}
-      {#if running}
-        <!-- The live dot breathes beside the words (Live work breathes); the words hold still. -->
-        <span
-          data-slot="progress"
-          class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
-          role="status"
-          ><span class="mark-cell"><LiveDot /></span><span class="min-w-0"
-            >{words.running(block)}</span
-          ></span
-        >
-      {/if}
+      <Button
+        disabled={!online}
+        failed={block.fix.phase === "failed" || refused !== null}
+        icon={IconDownload}
+        label={block.fix.phase === "failed" ? "Retry" : words.press(block)}
+        onclick={press}
+        pending={asking}
+        pendingLabel={words.pressing(block)}
+        size="sm"
+        variant="outline"
+      />
     </div>
   {/if}
   {#if refused}

@@ -131,6 +131,13 @@ export const toolWords = {
    */
   settingsSourceUnread: (where: string, why: string) =>
     `${where} is there but couldn't be read: ${why}`,
+  /**
+   * A Claude Code settings file CawCo meant to write and left, said on the
+   * agent's log (agent claude-settings-file.ts): `unread` is
+   * {@link toolWords.settingsSourceUnread}'s sentence.
+   */
+  settingsLeft: (unread: string) =>
+    `${unread}. CawCo left it as it is and reads it again at its next start.`,
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings path that is a folder, a pipe or anything else not a file. */
   settingsNotAFile: "it isn't a file",
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file larger than any CawCo reads. */
