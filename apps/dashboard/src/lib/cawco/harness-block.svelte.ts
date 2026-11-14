@@ -46,10 +46,10 @@ type HarnessFix =
 
 export interface HarnessBlock {
   /**
-   * CawCo updates it with no press: a copy it put there that it doesn't
-   * run, while the fleet updates such copies (core tool-updates.ts `due`),
-   * or, from a machine too old to say whose its copy is, a CLI CawCo keeps
-   * at its newest release.
+   * CawCo updates it with no press: a copy it put there, while the fleet
+   * updates such copies (core tool-updates.ts `due`). A copy the person
+   * installed, or one from a machine too old to say whose it is, takes the
+   * press.
    */
   auto: boolean;
   /** What fixes it: an update, or an install. */
@@ -93,7 +93,11 @@ export function harnessBlockOf(
     return null;
   }
   const { kind, spec, why } = refusal;
-  const update = toolUpdateOf(tool, toolUpdatesStore.updates);
+  const update = toolUpdateOf(
+    tool,
+    toolUpdatesStore.updates,
+    toolUpdatesStore.releases
+  );
   return {
     harness,
     kind,
@@ -101,7 +105,7 @@ export function harnessBlockOf(
     spec,
     why,
     fix: fixOf(spec, tool, update),
-    auto: tool?.wants ? update?.kind === "due" : keptCurrent(spec),
+    auto: update?.kind === "due",
   };
 }
 
@@ -122,19 +126,11 @@ export const machineBlocksOf = (machine: Machine): HarnessBlock[] =>
   );
 
 /**
- * Whether CawCo keeps the harness's CLI at its newest release by itself
- * (core `ToolSpec.release`: Claude Code): the hub sends each machine whose
- * copy is older, and runs, its update. A machine too old to say whose its
- * copy is ({@link HarnessBlock.auto}) has every such copy updated so.
- */
-const keptCurrent = (spec: ToolSpec): boolean => spec.release !== undefined;
-
-/**
  * Where the fix stands, off the hub's cell (core tool-updates.ts
  * `toolUpdateOf`): an install running; one that ran and left the copy
  * refused (`failed`, with the installer's words), or failed with no copy
- * there; and, from a machine too old to say what an attempt left, any
- * failure on a CLI CawCo keeps current, whose every failure was its update's.
+ * there. A copy at a version CawCo doesn't run that nothing tried on is
+ * idle, with its press.
  */
 const fixOf = (
   spec: ToolSpec,
@@ -150,11 +146,7 @@ const fixOf = (
       said: update.output || "The machine didn't say why.",
     };
   }
-  if (
-    tool?.state === "failed" &&
-    (tool.version === undefined ||
-      (keptCurrent(spec) && tool.wants === undefined))
-  ) {
+  if (tool?.state === "failed" && tool.version === undefined) {
     return {
       phase: "failed",
       said: tool.detail ?? "The machine didn't say why.",

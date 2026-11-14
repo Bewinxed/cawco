@@ -1,8 +1,12 @@
 /**
- * EVERY MACHINE RUNS THE NEWEST RELEASE OF EACH CLI CAWCO KEEPS CURRENT
- * (core `ToolSpec.release`: Claude Code), with no press and no running
- * session cut off. The owner, 2026-11-04: two machines on two Claude Code
- * builds worded one API refusal two ways, so one incident read as two.
+ * EVERY COPY CAWCO PUT ON A MACHINE RUNS THE NEWEST RELEASE OF EACH CLI
+ * CAWCO KEEPS CURRENT (core `ToolSpec.release`: Claude Code), with no press
+ * and no running session cut off, while the fleet is set to update. The
+ * owner, 2026-11-04: two machines on two Claude Code builds worded one API
+ * refusal two ways, so one incident read as two. Narrowed 2026-11-14 to the
+ * rule every tool follows (core tool-updates.ts): a copy the person
+ * installed is never updated by CawCo, and under "ask" CawCo's own copy
+ * waits on the person's Update.
  *
  * Why CawCo runs the updater: Claude Code updates itself only from its
  * interactive REPL (its footer's `AutoUpdaterWrapper`, on mount and every
@@ -14,7 +18,7 @@
  *
  * The hub reads each kept CLI's release (upstreams.ts `TOOL_RELEASES`, the
  * catalog's URLs) as it starts and every {@link RELEASE_READ_MS}, and each
- * machine whose copy says a version older than it is sent the catalog's
+ * machine whose copy CawCo put there says a version older than it is sent the catalog's
  * install, with that release to reach (tool-installs.ts `keepCurrent`): the same
  * control a press sends, so the agent runs the copy's own updater (`claude
  * update`) and answers what the copy says after it (agent tools.ts
@@ -38,6 +42,7 @@ import {
   type ToolPolicy,
   type ToolSpec,
   type ToolStatus,
+  type ToolUpdates,
 } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
 import { cutShort } from "@cawco/core/words/helpers";
@@ -119,18 +124,21 @@ export interface UpdateOwed {
 }
 
 /**
- * Each update one machine is owed, from the hub's cells for it: a tool CawCo
- * keeps current ({@link releaseTarget}) whose policy pins no version, whose
- * copy there says a version older than its release (`installed`, or
- * `failed` with a version: older than CawCo runs, or an update that failed),
- * with no install of it in flight there (`installing`, or one the hub awaits:
- * `inFlight`), and no update for that release answered on this connection
- * (`tried`). A copy that says no version, and a tool not there, are left to
- * a press: there is no version to compare, and CawCo installs nothing it
- * wasn't asked to. A copy its machine says CawCo doesn't run at all (its
- * cell's `wants`: older than the floor) is not a release's to update but
- * the fleet's choice's (tool-installs.ts `keepRunnable`): an agent too old
- * to say so leaves it to this, as before.
+ * Each update one machine is owed, from the hub's cells for it: with the
+ * fleet set to update (core `ToolUpdates`), a tool CawCo keeps current
+ * ({@link releaseTarget}) whose policy pins no version, whose copy there
+ * CawCo put there (core `ToolCopy`: never a copy the person installed, which
+ * CawCo leaves where it is, the owner's rule for every tool, 2026-11-14) and
+ * says a version older than its release (`installed`, or `failed` with a
+ * version: an update that failed), with no install of it in flight there
+ * (`installing`, or one the hub awaits: `inFlight`), and no update for that
+ * release answered on this connection (`tried`). A copy that says no
+ * version, and a tool not there, are left to a press: there is no version
+ * to compare, and CawCo installs nothing it wasn't asked to. A copy its
+ * machine says CawCo doesn't run at all (its cell's `wants`: older than the
+ * floor) is not a release's to update but the fleet's choice's
+ * (tool-installs.ts `keepRunnable`). An agent too old to say whose its copy
+ * is says no `copy`, and its copy is updated by no one but a press.
  */
 export const updatesOwed = (
   machine: {
@@ -142,29 +150,31 @@ export const updatesOwed = (
     catalog: readonly ToolSpec[];
     newest: (toolId: string) => string | undefined;
     policies: readonly ToolPolicy[];
+    updates: ToolUpdates;
   }
 ): UpdateOwed[] =>
-  fleet.catalog.flatMap((spec) => {
-    const newest = releaseTarget(spec, fleet.newest(spec.id));
-    const cell = machine.cells[spec.id];
-    const pinned = fleet.policies.some(
-      (policy) => policy.id === spec.id && policy.pinnedVersion !== null
-    );
-    if (
-      !(newest && cell?.version) ||
-      // A copy its machine says CawCo doesn't run is the fleet's choice and
-      // its owner's (tool-installs.ts `keepRunnable`), not a release's.
-      cell.wants !== undefined ||
-      pinned ||
-      (cell.state !== "installed" && cell.state !== "failed") ||
-      !olderThan(cell.version, newest) ||
-      machine.inFlight(spec.id) ||
-      machine.tried(spec.id) === newest
-    ) {
-      return [];
-    }
-    return [{ toolId: spec.id, version: cell.version, newest }];
-  });
+  fleet.updates === "update"
+    ? fleet.catalog.flatMap((spec) => {
+        const newest = releaseTarget(spec, fleet.newest(spec.id));
+        const cell = machine.cells[spec.id];
+        const pinned = fleet.policies.some(
+          (policy) => policy.id === spec.id && policy.pinnedVersion !== null
+        );
+        if (
+          !(newest && cell?.version) ||
+          cell.copy?.by !== "cawco" ||
+          cell.wants !== undefined ||
+          pinned ||
+          (cell.state !== "installed" && cell.state !== "failed") ||
+          !olderThan(cell.version, newest) ||
+          machine.inFlight(spec.id) ||
+          machine.tried(spec.id) === newest
+        ) {
+          return [];
+        }
+        return [{ toolId: spec.id, version: cell.version, newest }];
+      })
+    : [];
 
 /** Where a machine's tool is in {@link ToolReleases}' memory of what it tried. */
 const triedKey = (machineId: string, toolId: string): string =>
