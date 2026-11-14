@@ -215,10 +215,13 @@ export function readFaultOf(
   if (away) {
     return awayFault(away, reconnectingUntil);
   }
-  return {
-    reason: HARNESS_WAITS.has(failure.code ?? "") ? "refused" : "failed",
-    message: refusalClause(failure),
-  };
+  const message = refusalClause(failure);
+  if (!HARNESS_WAITS.has(failure.code ?? "")) {
+    return { reason: "failed", message };
+  }
+  return failure.code === "harness-updating"
+    ? { reason: "refused", updating: true, message }
+    : { reason: "refused", message };
 }
 
 /** A read's machine away, as its fault says it ({@link readFaultOf}). */

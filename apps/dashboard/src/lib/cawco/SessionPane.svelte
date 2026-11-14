@@ -1,12 +1,14 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { harnessSpec } from "@cawco/core/harness-refusal";
   import { questionsOf } from "@cawco/core/question";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { CONTINUED_IN } from "@cawco/core/words/relaunch";
+  import { toolUpdateWords } from "@cawco/core/words/tool-updates";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
@@ -37,7 +39,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
-  import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
+  import { IconAlert, IconChat, IconLaptop, IconRefresh } from "#lib/icons.js";
   import {
     crossIn,
     crossOut,
@@ -705,11 +707,21 @@
    * server's until this pane's read answers. A card with a button, never a
    * skeleton.
    */
-  const fault = $derived(
-    session?.messages.length || askAlone
-      ? null
-      : (session?.readFault ?? servedFault)
-  );
+  const fault = $derived.by(() => {
+    if (session?.messages.length || askAlone) {
+      return null;
+    }
+    const now = session?.readFault ?? servedFault;
+    // A refusal whose fix landed is a read under way, not a refusal: the
+    // re-read it set off replaces it (`readAfterFix`).
+    return now !== null && now === readAfterFix ? null : now;
+  });
+  /**
+   * The refusal standing when its machine's fix landed and the read went
+   * again: until that read answers, the pane shows the read under way, never
+   * the refusal it already answered. Any other fault is shown as it comes.
+   */
+  let readAfterFix = $state.raw<ReadFault | null>(null);
 
   /**
    * A read of the transcript landed and there is nothing in it, running or
@@ -815,6 +827,9 @@
    * through, or the read failed.
    */
   const faultTitle = $derived.by(() => {
+    if (fault?.reason === "refused" && awaitsUpdate) {
+      return toolUpdateWords.readWaits(harnessName);
+    }
     if (fault?.reason === "refused") {
       return "This conversation can't be shown yet";
     }
@@ -906,6 +921,35 @@
     return machine && block ? { machine, block } : null;
   });
   /**
+   * The read waits on CawCo's own install of the harness CLI, which nothing
+   * of the person's moves: the hub said one runs (`harness-updating`), or
+   * the machine's block is CawCo's (`auto`) and has not failed. Said as a
+   * wait, never as a refusal.
+   */
+  const awaitsUpdate = $derived(
+    fault?.reason === "refused" &&
+      (fault.updating === true ||
+        (unreadFix?.block.auto === true &&
+          unreadFix.block.fix.phase !== "failed"))
+  );
+  /** The harness CLI the conversation is read through, by its name. */
+  const harnessName = $derived.by(() => {
+    if (unreadFix) {
+      return unreadFix.block.spec.name;
+    }
+    const harness = boardStore.rowOf(viewId)?.harness;
+    return harness ? harnessSpec(harness).name : "";
+  });
+
+  /** The fault state's mark: the machine, a wait on an update, or a fault. */
+  const faultIcon = $derived.by(() => {
+    if (fault?.reason === "offline") {
+      return IconLaptop;
+    }
+    return awaitsUpdate ? IconRefresh : IconAlert;
+  });
+
+  /**
    * Whether the read stood refused with its fix in hand when last looked
    * at: the fix landing (the block gone, its machine running the harness
    * now) is when the conversation can be read, and it is read then.
@@ -923,6 +967,7 @@
         return;
       }
       if (!blocked && unreadFixed === false) {
+        readAfterFix = held?.readFault ?? servedFault;
         reread("harnessRuns");
       }
       unreadFixed = !blocked;
@@ -1603,7 +1648,7 @@
 {#snippet faultState(fault: ReadFault)}
   <EmptyState
     pad="transcript"
-    icon={fault.reason === "offline" ? IconLaptop : IconAlert}
+    icon={faultIcon}
     line={fault.reason === "refused" && unreadFix ? undefined : faultLine}
     role="alert"
     title={faultTitle}
