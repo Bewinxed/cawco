@@ -63,6 +63,11 @@ export function previewUrl(value: unknown, origin: string): string | null {
   }
 }
 
+/** Whether a screenshot the overlay sent is longer than the pane takes (a picture of that size is dropped). */
+export function previewPngTooLong(value: unknown): boolean {
+  return typeof value === "string" && value.length > PNG_MAX;
+}
+
 /** A screenshot as the overlay sends it, or nothing. */
 function previewPng(value: unknown): string | null {
   return typeof value === "string" &&

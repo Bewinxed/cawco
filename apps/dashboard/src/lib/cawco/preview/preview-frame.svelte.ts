@@ -9,6 +9,7 @@ import {
   type ShownFailure,
 } from "@cawco/core/preview/protocol";
 import { PAGE_SILENT_MS, probePreview } from "@cawco/core/preview/reach";
+import { sheetWords } from "@cawco/core/words/sheet";
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
 import { settleAway } from "#lib/platform/motion/rest.js";
@@ -29,7 +30,12 @@ import type { PaneSubject } from "./pane-subject.svelte";
 import { enterPreviews, turnedAwayWords } from "./pass";
 import type { PreviewReach } from "./preview-reach.svelte";
 import { PROBE_FIRST_MS, PROBE_MOST_MS } from "./preview-reach.svelte";
-import { previewError, previewErrorOf, previewThumbnail } from "./wire";
+import {
+  previewError,
+  previewErrorOf,
+  previewPngTooLong,
+  previewThumbnail,
+} from "./wire";
 
 const frameError = (message: string | null) =>
   message ? { message, again: "reload" as const } : null;
@@ -686,7 +692,11 @@ export class PreviewFrame {
         );
       }
     }
-    this.#deps.paneNotice.say(frameError(previewError(message.error)));
+    this.#deps.paneNotice.say(
+      previewPngTooLong(message.png) || previewPngTooLong(message.other)
+        ? { message: sheetWords.pictureTooLarge, again: null }
+        : frameError(previewError(message.error))
+    );
     this.retrying = false;
   }
 

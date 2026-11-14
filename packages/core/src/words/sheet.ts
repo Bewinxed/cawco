@@ -14,6 +14,8 @@ export const sheetWords = {
   /** One cut in that list. */
   sheetCutOf: (kept: number, of: number, what: string) =>
     `${kept} of ${of} ${what}`,
+  /** The notice when a page's thumbnail was too large for the pane to take. */
+  pictureTooLarge:
     "The page's picture was too large to take, so it was not kept.",
   /** The loading cover's line while the stage first starts. */
   starting: (dir: string) => `Starting the dev server in ${dir}…`,
