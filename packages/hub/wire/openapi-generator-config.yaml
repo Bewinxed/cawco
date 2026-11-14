@@ -221,6 +221,7 @@ typeOverrides:
     ToolPlatform: OpenEnums.ToolPlatform
     ToolSigninState: OpenEnums.ToolSigninState
     ToolState: OpenEnums.ToolState
+    ToolUpdates: OpenEnums.ToolUpdates
     Tracker: OpenEnums.Tracker
     TrackerSyncState: OpenEnums.TrackerSyncState
     TranscriptBlockState: OpenEnums.TranscriptBlockState

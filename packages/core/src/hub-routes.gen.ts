@@ -935,6 +935,7 @@ export interface components {
     "GET /api/stream-relay": Record<string, never>;
     "GET /api/stream-relay/try": Record<string, never>;
     "GET /api/tailnet-https": Record<string, never>;
+    "GET /api/tool-updates": Record<string, never>;
     "GET /api/tools": Record<string, never>;
     "GET /api/trim-routine/fleet": Record<string, never>;
     "GET /api/usage/limits": Record<string, never>;
@@ -3055,6 +3056,11 @@ export interface components {
         text: string;
       };
     };
+    "POST /api/tools/:id/update-all": {
+      path: {
+        id: string | number;
+      };
+    };
     "POST /api/trash/:id/restore": {
       path: {
         id: number | string;
@@ -3704,6 +3710,12 @@ export interface components {
       body: {
         /** @enum {string} */
         onCap: "pause" | "quiet" | "both";
+      };
+    };
+    "PUT /api/tool-updates": {
+      body: {
+        /** @enum {string} */
+        updates: "update" | "ask";
       };
     };
     "PUT /api/tools/:id": {

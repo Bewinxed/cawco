@@ -627,7 +627,9 @@ const writeBinaryUnits = async (services: boolean): Promise<void> => {
 /**
  * `cawco binary-pins`, run from this build by the build before it, before the
  * swap (agent binary-update.ts `putOnPins`): this build's pinned harnesses go
- * on, with the methods this build knows, each recorded as it lands. `cawco
+ * on as the fleet chose (agent tools.ts `putOnFleetPins`: CawCo's own copies,
+ * under "update"), with the methods this build knows, each recorded as it
+ * lands; what it left, and why, is said with what went on. `cawco
  * binary-pins back <build>`, run from the build that runs instead of <build>:
  * what went on for <build> goes back on for this one (agent pin-record.ts).
  * Says what it did on one line; a failure is one sentence on stderr and exit 1,
@@ -643,16 +645,17 @@ const runBinaryPins = async (args: Args): Promise<number> => {
         "binary-pins takes nothing, or back <the build that will not run>"
       );
     }
-    const { pinMoveWords, putOnPins } = await import("@cawco/agent/tools");
-    const { putBackPins, recordPinMove } =
+    const { putOnFleetPins } = await import("@cawco/agent/tools");
+    const { fleetToolUpdates, putBackPins, recordPinMove } =
       await import("@cawco/agent/pin-record");
     const said = back
       ? await putBackPins(back, CLI_VERSION)
-      : (
-          await putOnPins(pinnedTools(), CLI_VERSION, (move) =>
-            recordPinMove(CLI_VERSION, move)
-          )
-        ).map(pinMoveWords);
+      : await putOnFleetPins(
+          pinnedTools(),
+          CLI_VERSION,
+          await fleetToolUpdates(),
+          (move) => recordPinMove(CLI_VERSION, move)
+        );
     console.log(said.join(", "));
     return 0;
   } catch (error) {

@@ -11,14 +11,18 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   binaryRoot,
+  readInstallation,
   versionExecutable,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { hostEnvironment } from "@cawco/core/session-env";
+import type { ToolUpdates } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
+import { hubClient } from "./hub-client";
+import { provenFetch } from "./hub-proof";
 import { type PinMove, pinMoveWords, putOnPins } from "./tools";
 
 const PinRecord = z.object({
@@ -165,5 +169,48 @@ export async function runBinaryPins(
       );
     default:
       unhandled("read", ran);
+  }
+}
+
+/** How long the hub is given to say what the fleet does with a copy CawCo doesn't run. */
+const UPDATES_READ_MS = 10_000;
+
+/**
+ * What the fleet does with a copy of a tool at a version CawCo does not run
+ * (core `ToolUpdates`), as this machine's hub says it now, asked as this
+ * machine: what a build's pins go on by before its swap (tools.ts
+ * `putOnFleetPins`). Undefined, and why in the log, when the hub could not
+ * be asked or did not say: nothing goes on before the swap then, and the
+ * build's agent reports what it found to a hub that decides.
+ */
+export async function fleetToolUpdates(): Promise<ToolUpdates | undefined> {
+  const installation = await readInstallation();
+  if (!installation) {
+    return;
+  }
+  const hub = installation.hubUrl;
+  try {
+    const read = await readWithin(UPDATES_READ_MS, async (signal) =>
+      hubClient(hub, (url, init) => provenFetch(url, { ...init, signal })).api[
+        "tool-updates"
+      ].get()
+    );
+    if (read.kind === "unanswered") {
+      console.error(
+        `the hub at ${hub} didn't say within ${UPDATES_READ_MS / 1000} s whether the fleet updates a copy CawCo doesn't run`
+      );
+      return;
+    }
+    if (read.value.error) {
+      console.error(
+        `the hub at ${hub} answered ${read.value.status} when asked whether the fleet updates a copy CawCo doesn't run`
+      );
+      return;
+    }
+    return read.value.data.updates;
+  } catch (error) {
+    console.error(
+      `the hub at ${hub} wasn't reached to ask whether the fleet updates a copy CawCo doesn't run: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }

@@ -30477,6 +30477,80 @@
         }
       }
     },
+    "/api/tool-updates": {
+      "get": {
+        "operationId": "getApiToolUpdates",
+        "responses": {
+          "200": {
+            "description": "getApiToolUpdates 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolUpdatesState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiToolUpdates 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiToolUpdates422"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "updates": {
+                    "enum": [
+                      "ask",
+                      "update"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "updates"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiToolUpdates",
+        "responses": {
+          "200": {
+            "description": "putApiToolUpdates 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolUpdatesState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiToolUpdates 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiToolUpdates422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tools": {
       "get": {
         "operationId": "getApiTools",
@@ -30565,6 +30639,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/putApiToolsById422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tools/{id}/update-all": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiToolsByIdUpdateAll",
+        "responses": {
+          "200": {
+            "description": "postApiToolsByIdUpdateAll 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiToolsByIdUpdateAll200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiToolsByIdUpdateAll 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiToolsByIdUpdateAll404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiToolsByIdUpdateAll 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiToolsByIdUpdateAll422"
                 }
               }
             }
@@ -58570,6 +58691,172 @@
           "text"
         ]
       },
+      "ToolBehind": {
+        "description": "One tool some machines are behind on: the version CawCo runs, and each\nsuch machine with where it stands, so Needs you draws one entry per tool\nwith a line per machine, or one per machine and tool, from the same data.",
+        "type": "object",
+        "properties": {
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolBehindMachine"
+            }
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "wants": {
+            "$ref": "#/components/schemas/ToolWants",
+            "description": "What CawCo runs, as the first machine listed says it (its build's catalog)."
+          }
+        },
+        "required": [
+          "machines",
+          "toolId"
+        ]
+      },
+      "ToolBehindMachine": {
+        "description": "One machine whose copy of a tool CawCo does not run, or is updating.",
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string"
+          },
+          "needsYou": {
+            "description": "The copy waits on the person (`failed`, `own`, `asked`): Needs you\nlists it, with Update. The rest CawCo is updating, or will once the\nmachine is connected (`due`).",
+            "type": "boolean"
+          },
+          "online": {
+            "description": "Its agent is connected: an Update can be sent to it now.",
+            "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "found": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "asked"
+                    ]
+                  },
+                  "wants": {
+                    "$ref": "#/components/schemas/ToolWants"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "wants"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "found": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "due"
+                    ]
+                  },
+                  "wants": {
+                    "$ref": "#/components/schemas/ToolWants"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "wants"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  },
+                  "found": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "failed"
+                    ]
+                  },
+                  "output": {
+                    "type": "string"
+                  },
+                  "own": {
+                    "type": "boolean"
+                  },
+                  "wants": {
+                    "$ref": "#/components/schemas/ToolWants"
+                  }
+                },
+                "required": [
+                  "at",
+                  "kind",
+                  "output",
+                  "own",
+                  "wants"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "found": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "own"
+                    ]
+                  },
+                  "wants": {
+                    "$ref": "#/components/schemas/ToolWants"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "wants"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "updating"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "machineId",
+          "needsYou",
+          "online",
+          "state"
+        ]
+      },
       "ToolGlance": {
         "description": "The tool a session is running right now — the fleet view's glance line.",
         "type": "object",
@@ -58846,6 +59133,13 @@
             "description": "The one version this fleet runs, for a tool CawCo's own code is built\nagainst: every install puts exactly this one on the machine, whatever the\npolicy pins, and a probe that finds another reports it failed.",
             "type": "string"
           },
+          "formerVersions": {
+            "description": "The versions earlier CawCo builds ran as {@link exactVersion}, oldest\nfirst: a copy at one of them, held by one of the catalog's methods, is\ntaken for one CawCo put there when no record of the daemon's names it\n({@link ToolCopy}), as every copy CawCo installed before its daemon\nkept that record is. Each move of `exactVersion` adds the one it leaves.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "homepage": {
             "type": "string"
           },
@@ -58925,6 +59219,42 @@
             "description": "When this was learnt, ms epoch.",
             "type": "number"
           },
+          "copy": {
+            "description": "Whose the copy on the machine is ({@link ToolCopy}), on every status of\na tool that is there, from a daemon that judges it (this field's build\non): absent from an older daemon, and where no copy is.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  },
+                  "by": {
+                    "type": "string",
+                    "enum": [
+                      "cawco"
+                    ]
+                  }
+                },
+                "required": [
+                  "by"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "by": {
+                    "type": "string",
+                    "enum": [
+                      "person"
+                    ]
+                  }
+                },
+                "required": [
+                  "by"
+                ]
+              }
+            ]
+          },
           "detail": {
             "description": "`failed`: the tail of the installer's stderr. `unsupported`: what is\nmissing, named exactly — 'needs npm (Node 20+)' beats a grey chip.\n`installed`: set only on a tool CawCo keeps at its newest release\n({@link ToolSpec.release}), when the last update it ran here left the\ncopy older than the release it was after: why, in the updater's words.\nThe copy still runs; the update is owed until a newer release, a Retry,\nor the copy moving some other way.",
             "type": "string"
@@ -58943,9 +59273,21 @@
           "state": {
             "$ref": "#/components/schemas/ToolState"
           },
-          "version": {
-            "description": "The version the copy here says: on `installed`; on `failed`, a copy\nCawCo does not run (older than its floor, or not its one version), or,\nfor a tool CawCo keeps at its newest release, the copy an update that\nfailed left there; on `installing`, the copy being updated. An attempt\nthat failed on any other tool carries none.",
+          "to": {
+            "description": "On `installing`: the version being put on, when the one asking knows it.",
             "type": "string"
+          },
+          "triedAt": {
+            "description": "When an install attempt ran that left the copy where `detail` says, in\nthe installer's words: set on what an install answered short of a copy\nCawCo runs, and on every report of the copy after it while it stays\nwhere the attempt left it (agent tools.ts `failures`, per boot). The hub\nsends no update unasked while it stands.",
+            "type": "number"
+          },
+          "version": {
+            "description": "The version the copy here says: on `installed`; on `failed`, a copy\nCawCo does not run (older than its floor, or not its one version), or\nthe copy an attempt that failed left there; on `installing`, the copy\nbeing updated. An attempt that failed with no copy there carries none.",
+            "type": "string"
+          },
+          "wants": {
+            "$ref": "#/components/schemas/ToolWants",
+            "description": "Set while the copy here is one this machine's CawCo does not run: the\nversion it runs (its build's catalog, which may not be the hub's while a\nrelease rolls out). Absent from an older daemon."
           }
         },
         "required": [
@@ -59053,6 +59395,49 @@
           "engine",
           "every",
           "places"
+        ]
+      },
+      "ToolUpdates": {
+        "description": "What the fleet does when a machine's copy of a tool CawCo manages is at a\nversion CawCo does not run, one choice for the whole fleet (the owner,\n2026-11-14, default \"Update it\"). `update`: the hub sends that machine the\ninstall its Update button sends, once, for a copy CawCo put there (hub\ntool-installs.ts `keepRunnable`); `ask`: nothing installs, and the\nmachine's copy stands behind until a person presses Update. A person's own\ncopy ({@link ToolCopy}) is never updated unasked under either.",
+        "type": "string",
+        "enum": [
+          "ask",
+          "update"
+        ]
+      },
+      "ToolUpdatesState": {
+        "description": "`/api/tool-updates`: the fleet's choice, and every tool some machine is\nbehind on with each such machine ({@link toolsBehind}), as the hub holds\nthem when asked. After that, each machine's cell moves on the `instances`\nframe, and {@link toolsBehind} over the machines says the same.",
+        "type": "object",
+        "properties": {
+          "behind": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolBehind"
+            }
+          },
+          "updates": {
+            "$ref": "#/components/schemas/ToolUpdates"
+          }
+        },
+        "required": [
+          "behind",
+          "updates"
+        ]
+      },
+      "ToolWants": {
+        "description": "The version a machine's CawCo runs of a tool: `version` exactly, or `version` or newer (`orNewer`).",
+        "type": "object",
+        "properties": {
+          "orNewer": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "orNewer",
+          "version"
         ]
       },
       "Tracker": {
@@ -106931,6 +107316,42 @@
         ]
       },
       "getApiTailnetHttps422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiToolUpdates422": {
         "type": "object",
         "properties": {
           "code": {
@@ -196696,6 +197117,99 @@
           "type"
         ]
       },
+      "postApiToolsByIdUpdateAll200": {
+        "type": "object",
+        "properties": {
+          "away": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sent": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "away",
+          "sent"
+        ]
+      },
+      "postApiToolsByIdUpdateAll404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-tool"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiToolsByIdUpdateAll422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "postApiTrashByIdRestore200": {
         "anyOf": [
           {
@@ -212290,6 +212804,106 @@
         ]
       },
       "putApiSpendSettings422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "putApiToolUpdates422": {
         "anyOf": [
           {
             "type": "object",

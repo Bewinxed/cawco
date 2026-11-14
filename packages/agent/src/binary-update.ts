@@ -2098,14 +2098,19 @@ function putBackPins(version: string): Promise<string | undefined> {
 }
 
 /**
- * THE HARNESSES THE BUILD PINS GO ON BEFORE IT DOES: `cawco binary-pins`,
- * run from the staged build itself, so its own catalog says what it pins
- * and how a copy here got here (pin-record.ts `runBinaryPins`). After the
- * drain, under the install's fence, so nothing new starts on a harness
- * between its install and the swap, and before the helper is launched. One
- * that does not go on ends the attempt with its sentence: nothing is
- * swapped, what already went on goes back, and the build is tried again on
- * the retry schedule.
+ * THE HARNESSES THE BUILD PINS GO ON BEFORE IT DOES, AS THE FLEET CHOSE:
+ * `cawco binary-pins`, run from the staged build itself, so its own catalog
+ * says what it pins, how a copy here got here and whose it is (pin-record.ts
+ * `runBinaryPins`, tools.ts `putOnFleetPins`: CawCo's own copies, while the
+ * fleet updates them). After the drain, under the install's fence, so
+ * nothing new starts on a harness between its install and the swap, and
+ * before the helper is launched. What it left (a person's own copy, the
+ * fleet asking first, an install that failed) is said here and the build
+ * goes on: its agent reports the copy to the hub, which updates it or tells
+ * the person. A `binary-pins` that fails outright (its build would not
+ * start) ends the attempt with its sentence: nothing is swapped, what
+ * already went on goes back, and the build is tried again on the retry
+ * schedule.
  */
 async function putOnPins(version: string): Promise<void> {
   const said = await runBinaryPins(version);
