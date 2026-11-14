@@ -203,7 +203,7 @@ import {
 } from "./workspaces";
 
 /** How long the name a caller gives a delegate or a started session may run. */
-export const SESSION_TITLE_MAX = 48;
+export const SESSION_TITLE_MAX = 64;
 
 /** What the caller's model is asked for when it names a delegate or a started session. */
 export const SESSION_TITLE_DESCRIPTION =

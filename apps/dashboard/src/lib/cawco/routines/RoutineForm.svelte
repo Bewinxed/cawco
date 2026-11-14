@@ -92,7 +92,7 @@
   const TARGETS = ["delegate", "orchestrator"] as const;
 
   /** The hub's limit on a name (hub work-items `SESSION_TITLE_MAX`). */
-  const NAME_MAX = 48;
+  const NAME_MAX = 64;
   /** How long typing rests before the schedule is read back. */
   const PREVIEW_SETTLE_MS = 250;
 

@@ -145,7 +145,7 @@ const pressCreate = async ({ canvas, userEvent }: Play) => {
 const LONG_PROMPT =
   "Read every issue opened or reopened in the northwind-logistics/customer-onboarding-portal repository since the last run, including the ones filed by the support bot from the shared inbox, label each one with its area (billing, onboarding, notifications, admin, infrastructure) and its severity, close the exact duplicates with a link to the issue they repeat, and end with a short list of the ones that need me today, each with one sentence on why and a link: https://github.com/northwind-logistics/customer-onboarding-portal/issues?q=is%3Aopen+label%3Aneeds-triage+sort%3Acreated-desc";
 
-/** The longest name the hub takes (its `SESSION_TITLE_MAX`, 48), as a person writes one. */
+/** The longest name the hub takes (its `SESSION_TITLE_MAX`, 64), as a person writes one. */
 const LONGEST_NAME = "Weekly triage of each onboarding portal's issues";
 
 const filled = {
