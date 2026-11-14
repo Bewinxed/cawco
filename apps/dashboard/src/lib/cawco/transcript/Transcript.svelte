@@ -328,13 +328,15 @@
 
   const whole = new ListWhole(host);
 
+  // Before the keeper: a transcript mounted hidden (a tab restored behind
+  // another) keeps its place as it is built, and that reads the pin.
+  const pin = new ScrollPin(host);
+
   const keeper = new KeptPlace(host);
 
   const seek = new RecordSeek(host);
 
   const older = new OlderPages(host);
-
-  const pin = new ScrollPin(host);
 
   const landing = new ListLanding(host);
 
