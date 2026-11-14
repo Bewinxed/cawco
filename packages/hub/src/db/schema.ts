@@ -3391,6 +3391,19 @@ export const sessionLimits = sqliteTable("session_limits", {
   memoryPercent: integer("memory_percent"),
   cpuPercent: integer("cpu_percent"),
 });
+
+/**
+ * The fleet's passkey relay settings — one row, keyed `'passkey'`,
+ * following the {@link spendSettings} precedent: whether the relay is
+ * enabled across the fleet. No row reads as disabled.
+ */
+export const passkeySettings = sqliteTable("passkey_settings", {
+  /** Always `'passkey'`. */
+  id: text("id").primaryKey(),
+  /** Whether passkey relay is enabled fleet-wide. */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+});
+
 /** The one row of {@link decidesSettings}. */
 export const DECIDES_ID = "decides";
 
