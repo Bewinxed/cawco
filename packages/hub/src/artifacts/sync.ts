@@ -61,6 +61,7 @@ import {
 import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
+import { picturesBodyTooLong } from "@cawco/core/words/comment-lines";
 import type { ServerWebSocket } from "bun";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
@@ -707,7 +708,7 @@ export const artifactPictures =
       return problemResponse({
         status: 413,
         code: "post-carries-most-pictures",
-        detail: `A pictures post is at most ${PICTURES_BODY_MAX} characters.`,
+        detail: picturesBodyTooLong(PICTURES_BODY_MAX),
       });
     }
     let body: unknown;

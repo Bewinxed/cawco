@@ -40,3 +40,15 @@ export const askedAgainLine = (item: ChangedItem): string =>
 /** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
 export const wroteLine = (text: string): string =>
   `- I wrote: ${JSON.stringify(text)}`;
+
+/** A pictures post whose body passed `most` characters. */
+export const picturesBodyTooLong = (most: number): string =>
+  `A pictures post is at most ${most} characters.`;
+
+/** A seen map's revision with more than `most` anchors. */
+export const seenTooManyAnchors = (most: number): string =>
+  `A look names at most ${most} anchors.`;
+
+/** A seen map's anchor longer than `most` characters. */
+export const seenAnchorTooLong = (most: number): string =>
+  `An anchor holds at most ${most} characters.`;

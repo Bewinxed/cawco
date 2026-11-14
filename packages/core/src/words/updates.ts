@@ -10,6 +10,9 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const updatesWords = {
+  /** The agent's restart route asked for a fence longer than `minutes` (agent mcp-oauth.ts): refused, never shortened. */
+  fenceTooLong: (minutes: number) =>
+    `A restart fence stands at most ${minutes} minutes; ask for no more.`,
   /** The update policy reset, refused by the hub: what came of it (`hubRefusal`). */
   policyNotResetThen: "so the update policy was not reset. Try again.",
   /** The notice's title while a build waits. */

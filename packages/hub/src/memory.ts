@@ -125,6 +125,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
+import { memoryWords } from "@cawco/core/words/memory";
 import { memoryCardWords } from "@cawco/core/words/memory-card";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
@@ -1630,8 +1631,7 @@ const spentOn = (admitted: Map<string, FactLine[]>): number =>
     .reduce((sum, fact) => sum + fact.raw.length + 1, 0);
 
 /** A file the brief has no room for, named so its reader knows it exists. */
-const leftOutBlock = (path: string): string =>
-  `### ${path}\n\n(left out: the brief's context is full; read it in the project's folder)`;
+const leftOutBlock = (path: string): string => memoryWords.briefLeftOut(path);
 
 /**
  * Prose files from before fact lines, each one block marked as such, up to

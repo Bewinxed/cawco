@@ -6,6 +6,7 @@ import {
 import { portHolder } from "@cawco/core/live-processes";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
+import { updatesWords } from "@cawco/core/words/updates";
 import type { BrowserPorts } from "./browser/browsers";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
@@ -357,7 +358,7 @@ async function restartRoute(
     if (typeof ms === "number" && ms > RESTART_FENCE_MAX_MS) {
       return Response.json(
         {
-          error: `A restart fence stands at most ${RESTART_FENCE_MAX_MS / 60_000} minutes; ask for no more.`,
+          error: updatesWords.fenceTooLong(RESTART_FENCE_MAX_MS / 60_000),
         },
         { status: 400 }
       );

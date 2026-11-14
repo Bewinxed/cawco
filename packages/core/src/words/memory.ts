@@ -122,4 +122,7 @@ export const memoryWords = {
   scopeIn: (projects: string) => `in ${projects}`,
   scopeAnd: " and ",
   scopeGone: "a project that is gone",
+  /** A knowledge file the brief has no room for (hub memory.ts), named so its reader knows it exists. */
+  briefLeftOut: (path: string) =>
+    `### ${path}\n\n(left out: the brief's context is full; read it in the project's folder)`,
 };

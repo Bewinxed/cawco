@@ -2,7 +2,11 @@
 
 import type { MapDoc } from "../doc-maps";
 import { readFileSpot } from "../file-spot";
-import { commentsFull } from "../words/comment-lines";
+import {
+  commentsFull,
+  seenAnchorTooLong,
+  seenTooManyAnchors,
+} from "../words/comment-lines";
 import {
   attachmentsProblem,
   CHANGES_LIMIT,
@@ -36,10 +40,10 @@ export function seenProblem(seen: Map<string, unknown>): string | null {
       return "A look is a revision's list of the anchors seen.";
     }
     if (anchors.length > CHANGES_LIMIT) {
-      return `A look names at most ${CHANGES_LIMIT} anchors.`;
+      return seenTooManyAnchors(CHANGES_LIMIT);
     }
     if (anchors.some((anchor) => anchor.length > SEEN_ANCHOR_MAX)) {
-      return `An anchor holds at most ${SEEN_ANCHOR_MAX} characters.`;
+      return seenAnchorTooLong(SEEN_ANCHOR_MAX);
     }
   }
   return null;
