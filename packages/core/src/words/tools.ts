@@ -138,6 +138,9 @@ export const toolWords = {
    */
   settingsLeft: (unread: string) =>
     `${unread}. CawCo left it as it is and reads it again at its next start.`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a path that is a symlink to nothing (agent json-on-disk.ts). */
+  fileLinksToNothing: (to: string) =>
+    `it links to ${to || "a path it doesn't say"}, which isn't there`,
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings path that is a folder, a pipe or anything else not a file. */
   settingsNotAFile: "it isn't a file",
   /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file larger than any CawCo reads. */

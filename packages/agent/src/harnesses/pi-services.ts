@@ -1,5 +1,5 @@
 /** Pi metadata, history and fleet profile. Shared with the host; no turn factory. */
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
@@ -23,7 +23,6 @@ import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
 } from "@cawco/core/session/controls";
-import { hostEnvironment } from "@cawco/core/session-env";
 import type {
   AuthState,
   NeutralAssistantBlock,
@@ -35,6 +34,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
+import { harnessRefusedWords } from "@cawco/core/words/harness";
 import {
   type LocatedRecord,
   readSpans,
@@ -823,19 +823,19 @@ async function piWindow(
 }
 
 /**
+ * An ask of a pi conversation (a read, a delete) that names no folder: pi keeps each one under
+ * the folder it ran in, so with none it can't be found, which is no answer
+ * that it holds nothing.
+ */
+const piUnlocated = (sessionKey: string): string =>
+  `pi keeps conversation ${sessionKey} under the folder it ran in, and this ask named none, so it can't be found`;
+
+/**
  * The file pi stores a session in: `<timestamp>_<id>.jsonl` in the folder pi
  * keeps its sessions for `cwd` (named by pi itself: `getSessionDir` of a
  * session not yet written, which writes nothing). Found by its name alone:
  * pi's own listing reads every session file in the folder through.
  */
-/**
- * A read of a pi conversation that names no folder: pi keeps each one under
- * the folder it ran in, so with none it can't be found, which is no answer
- * that it holds nothing.
- */
-const piUnlocated = (sessionKey: string): string =>
-  `pi keeps conversation ${sessionKey} under the folder it ran in, and this read named none, so it can't be read`;
-
 export async function piSessionPath(
   sessionKey: string,
   cwd: string
@@ -1224,19 +1224,51 @@ export class PiProfile {
     });
   }
 
+  /**
+   * pi keeps no name CawCo sets on a conversation (`renameSession: false`):
+   * the rename is refused in those words, never answered as done.
+   */
   renameSession(): Promise<void> {
-    return Promise.resolve();
+    return Promise.reject(
+      new Error(
+        harnessRefusedWords.keepsNo(
+          "pi",
+          "conversation name",
+          "this conversation wasn't renamed"
+        )
+      )
+    );
   }
-  tagSession(): Promise<void> {
-    return Promise.resolve();
+  /**
+   * pi keeps no tag (`tagSession: false`): a tag cleared is one it never
+   * had, which is done; a tag set is refused in those words, never answered
+   * as done.
+   */
+  tagSession(_sessionKey: string, tag: string | null): Promise<void> {
+    return tag === null
+      ? Promise.resolve()
+      : Promise.reject(
+          new Error(
+            harnessRefusedWords.keepsNo(
+              "pi",
+              "tag",
+              "this conversation wasn't tagged"
+            )
+          )
+        );
   }
+  /**
+   * The session's file removed. A read that names no folder can't find it,
+   * and a removal that failed says why: neither is answered as done. A file
+   * that is not there is a conversation already gone.
+   */
   async deleteSession(sessionKey: string, dir?: string): Promise<void> {
     if (!dir) {
-      return;
+      throw new Error(piUnlocated(sessionKey));
     }
     const path = await piSessionPath(sessionKey, dir);
     if (path) {
-      await Bun.$`rm -f ${path}`.env(hostEnvironment()).quiet().nothrow();
+      await rm(path, { force: true });
     }
   }
   dispose(): Promise<void> {
