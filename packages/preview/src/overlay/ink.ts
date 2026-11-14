@@ -715,6 +715,7 @@ export function startInk(deps: InkDeps): Ink {
         );
         if (left.length > 0) {
           const kept = regroup(group, left, at);
+          sayLeftOut(left.at(-1)?.points.at(-1) as Point);
           ink.set(id, {
             ...kept,
             ...(group.sentAt ? { sentAt: group.sentAt } : {}),
@@ -909,6 +910,17 @@ export function startInk(deps: InkDeps): Ink {
 
   /** How many elements the last read of marks left out past what a group names. */
   let leftOut = 0;
+
+  /** Says what the last regroup left out past what a group names, at `at` (the page's px). */
+  const sayLeftOut = (at: Point) => {
+    if (leftOut > 0) {
+      chrome.say(
+        previewWords.inkMarksLeftOut(MARKED_MAX, leftOut),
+        at[0] - scrollX,
+        at[1] - scrollY
+      );
+    }
+  };
 
   const marksOf = (strokes: Point[][], named: Element[][]): Marks | null => {
     leftOut = 0;
@@ -1133,7 +1145,9 @@ export function startInk(deps: InkDeps): Ink {
       ) {
         return;
       }
-      const moved = regroup(now, strokesInPage(now), now.at, inside);
+      const page = strokesInPage(now);
+      const moved = regroup(now, page, now.at, inside);
+      sayLeftOut(page.at(-1)?.points.at(-1) as Point);
       doc.transact(
         () =>
           ink.set(id, {
@@ -1167,13 +1181,7 @@ export function startInk(deps: InkDeps): Ink {
     }
     const group = groupOf(open, points, new Date(now).toISOString());
     doc.transact(() => ink.set(group.id, group));
-    if (leftOut > 0) {
-      chrome.say(
-        previewWords.inkMarksLeftOut(MARKED_MAX, leftOut),
-        end[0] - scrollX,
-        end[1] - scrollY
-      );
-    }
+    sayLeftOut(end);
     last = { id: group.id, at: now };
     deps.ended(group.id);
     reachIn(group.id);
