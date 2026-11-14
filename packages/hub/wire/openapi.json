@@ -88150,7 +88150,13 @@
           "detail": {
             "type": "string"
           },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
           "instance": {
+            "type": "string"
+          },
+          "machineId": {
             "type": "string"
           },
           "status": {
@@ -88186,7 +88192,13 @@
           "detail": {
             "type": "string"
           },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
           "instance": {
+            "type": "string"
+          },
+          "machineId": {
             "type": "string"
           },
           "status": {
@@ -89745,7 +89757,13 @@
           "detail": {
             "type": "string"
           },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
           "instance": {
+            "type": "string"
+          },
+          "machineId": {
             "type": "string"
           },
           "status": {
@@ -89781,7 +89799,13 @@
           "detail": {
             "type": "string"
           },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
           "instance": {
+            "type": "string"
+          },
+          "machineId": {
             "type": "string"
           },
           "status": {
