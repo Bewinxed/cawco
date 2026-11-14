@@ -2,6 +2,7 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
 import type {
   FleetHoldings,
@@ -827,12 +828,22 @@ async function piWindow(
  * session not yet written, which writes nothing). Found by its name alone:
  * pi's own listing reads every session file in the folder through.
  */
+/**
+ * A read of a pi conversation that names no folder: pi keeps each one under
+ * the folder it ran in, so with none it can't be found, which is no answer
+ * that it holds nothing.
+ */
+const piUnlocated = (sessionKey: string): string =>
+  `pi keeps conversation ${sessionKey} under the folder it ran in, and this read named none, so it can't be read`;
+
 export async function piSessionPath(
   sessionKey: string,
   cwd: string
 ): Promise<string | undefined> {
   const dir = SessionManager.create(cwd).getSessionDir();
-  const names = await readdir(dir).catch(() => [] as string[]);
+  // Nothing there is no session; a folder that couldn't be read fails with
+  // why, never answered as a conversation that was never stored.
+  const names = await readdir(dir).catch(unlessGone([] as string[]));
   const name = names.find(
     (one) => one.endsWith(".jsonl") && one.includes(sessionKey)
   );
@@ -1072,6 +1083,15 @@ export class PiProfile {
    * tell a session it can resume from one that left nothing.
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
+    // pi's own listing answers a folder it could not read as one that holds
+    // no conversation (its `listSessionsFromDir` and `listAll` catch every
+    // failure and answer []): the folder is looked in here first, so one
+    // that is there and unreadable fails with why. Nothing there lists none.
+    await readdir(
+      dir
+        ? SessionManager.create(dir).getSessionDir()
+        : join(piAgentDir(), "sessions")
+    ).catch(unlessGone([]));
     const sessions = dir
       ? await SessionManager.list(dir)
       : await SessionManager.listAll();
@@ -1156,7 +1176,7 @@ export class PiProfile {
     span: TranscriptSpan = "chain"
   ): Promise<SessionMessage[]> {
     if (!dir) {
-      return [];
+      throw new Error(piUnlocated(sessionKey));
     }
     if (tail) {
       const window = await this.readTranscriptWindow(sessionKey, dir, {
@@ -1189,8 +1209,11 @@ export class PiProfile {
     dir: string | undefined,
     ask: WindowAsk
   ): Promise<TranscriptWindow> {
-    const path = dir ? await piSessionPath(sessionKey, dir) : undefined;
-    if (!(path && dir)) {
+    if (!dir) {
+      throw new Error(piUnlocated(sessionKey));
+    }
+    const path = await piSessionPath(sessionKey, dir);
+    if (!path) {
       return { entries: [], older: null, newer: null };
     }
     // A session file deleted while it is read reads as one never found.

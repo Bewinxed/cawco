@@ -20,12 +20,12 @@
  * code.claude.com/docs/en/managed-settings).
  */
 
-import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { resolveSettings } from "@anthropic-ai/claude-agent-sdk";
 import { claudeHome } from "@cawco/core/paths/claude";
 import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
+import { readSettingsFile } from "./claude-settings-file";
 
 /**
  * A settings `env`'s values as a source may hold them: a profile's plist
@@ -72,83 +72,6 @@ const narrowed = (
   );
 
 /**
- * The largest settings file read: a settings file is a few kilobytes, and
- * one past this is no settings file anyone wrote by hand (a 200 MB one
- * stood in the host run's probes).
- */
-const SETTINGS_FILE_LIMIT = 4 * 1024 * 1024;
-
-/**
- * Where a settings file stands: absent (nothing there, or no folder it
- * could be in), read (its text one JSON object, `keys` how many it has), or
- * there and unread, with why.
- */
-type FileRead =
-  | { state: "absent" }
-  | { keys: number; state: "read" }
-  | { state: "unread"; why: string };
-
-const errorCode = (error: unknown): string | undefined =>
-  error instanceof Error && "code" in error && typeof error.code === "string"
-    ? error.code
-    : undefined;
-
-const errorWords = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-/**
- * One settings file as Claude Code would read it, read here first: the
- * engine (`resolveSettings`) answers a file it could not read as one that
- * is not there, so a settings file at mode 000, in a folder at mode 000,
- * malformed, a folder or a pipe in its place, a symlink loop, or one too
- * large all read as "no settings" (the host run's probes, every one exit 0
- * with `sources: []`). Absent only when nothing is at the path (ENOENT) or
- * a file stands where its folder would (ENOTDIR), as the engine itself
- * takes a managed-settings folder (`f==="ENOENT"||f==="ENOTDIR"`, the SDK's
- * bundle). A pipe is never opened: a read of one waits for a writer.
- */
-const readSettingsFile = async (path: string): Promise<FileRead> => {
-  let info: Awaited<ReturnType<typeof stat>>;
-  try {
-    info = await stat(path);
-  } catch (error) {
-    const code = errorCode(error);
-    return code === "ENOENT" || code === "ENOTDIR"
-      ? { state: "absent" }
-      : { state: "unread", why: errorWords(error) };
-  }
-  if (!info.isFile()) {
-    return { state: "unread", why: toolWords.settingsNotAFile };
-  }
-  if (info.size > SETTINGS_FILE_LIMIT) {
-    return {
-      state: "unread",
-      why: toolWords.settingsTooLarge(info.size, SETTINGS_FILE_LIMIT),
-    };
-  }
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    return { state: "unread", why: errorWords(error) };
-  }
-  // The engine reads an empty file as no settings ("if(e.trim()==="")return
-  // {settings:{},errors:[],loadState:"loaded"}").
-  if (text.trim() === "") {
-    return { state: "read", keys: 0 };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    return { state: "unread", why: errorWords(error) };
-  }
-  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-    ? { state: "read", keys: Object.keys(parsed).length }
-    : { state: "unread", why: toolWords.settingsNotAnObject };
-};
-
-/**
  * Claude Code's config dir as its engine names it: `CLAUDE_CONFIG_DIR` when
  * set at all, else `~/.claude` (core `claudeHome`; the SDK's
  * `Iu()??R8(A8(),".claude")`, where `Iu()` is
@@ -165,7 +88,11 @@ const claudeConfigDir = (): string =>
  * not there; `SDKSettingsParseError` is only on a session's own
  * `get_settings`), so this read tells them apart:
  * - the user's `settings.json` in the config dir, read here
- *   ({@link readSettingsFile}); one read here with keys in it that the
+ *   (claude-settings-file.ts `readSettingsFile`, which the engine's answer
+ *   cannot tell an unread file from an absent one without: it reads a file
+ *   at mode 000, malformed, a folder or a pipe in its place, a symlink loop
+ *   or one too large as "no settings", the host run's probes every one exit
+ *   0 with `sources: []`); one read here with keys in it that the
  *   engine's `sources` leaves out was skipped by the engine (a schema it
  *   refuses: "the file is skipped", sdk.d.ts `SDKSettingsParseError`);
  * - the server-managed settings Claude Code last fetched, its
@@ -192,7 +119,7 @@ const unreadSources = async (
     unread.push(toolWords.settingsSourceUnread(user, userRead.why));
   } else if (
     userRead.state === "read" &&
-    userRead.keys > 0 &&
+    Object.keys(userRead.settings).length > 0 &&
     !resolved.sources.some((one) => one.source === "user")
   ) {
     unread.push(

@@ -115,6 +115,24 @@ export const toolUpdateWords = {
   /** A session page's conversation while CawCo's own install of its CLI runs: the wait, said as one. */
   readWaits: (name: string) =>
     `This conversation shows once ${name} is updated`,
+  /**
+   * A refused harness whose CLI an install the person pressed puts on now
+   * (core `ToolStatus.startedBy` "person"), beside CawCo's own (core words
+   * tools.ts `cawcoPutting`): who started it, and that it goes on unwatched.
+   */
+  youPutting: (
+    installs: boolean,
+    name: string,
+    machine: string,
+    to: string | undefined
+  ) =>
+    `You started ${installs ? "installing" : "updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}. It goes on if you close this.`,
+  /**
+   * A row's press on a machine its owner paused: Update all leaves it (hub
+   * tool-installs.ts `updateAll`), and its own press runs now (a person's
+   * press is no work CawCo starts), so the row says the pause beside it.
+   */
+  machinePaused: "Machine paused",
   /** A refused harness whose CLI CawCo updates with no press, on a machine its owner paused. */
   autoPaused: (name: string, machine: string) =>
     `CawCo updates ${name} on ${machine} once its pause ends.`,

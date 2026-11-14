@@ -44,7 +44,13 @@ import { userLayerPath } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { clockWords } from "@cawco/core/words/account-lines";
+import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
+import {
+  readSettingsFile,
+  settingsOf,
+  writeSettingsFile,
+} from "./claude-settings-file";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
 const SETTINGS = userLayerPath("settings.json");
@@ -87,24 +93,27 @@ const UNSYNCED = `this machine has not written the fleet's denied tools (${SIDEC
  * is only ever the operator's own, cleared in the hub.
  */
 export const readFleetDenials = async (): Promise<FleetDenialsRead> => {
-  const file = Bun.file(SIDECAR);
-  if (!(await file.exists())) {
+  // Read as a settings file is (claude-settings-file.ts): it is in Claude
+  // Code's folder, and a pipe or a folder in its place is never opened.
+  const read = await readSettingsFile(SIDECAR);
+  if (read.state === "absent") {
     return { kind: "unsynced", reason: UNSYNCED };
   }
-  let stored: unknown;
-  try {
-    stored = await file.json();
-  } catch (error) {
+  if (read.state === "unread") {
     return {
       kind: "unreadable",
-      reason: `could not parse ${SIDECAR}: ${said(error)}`,
+      reason: toolWords.settingsSourceUnread(SIDECAR, read.why),
     };
   }
+  const stored: unknown = read.settings;
   const sidecar = asRecord(stored);
   if (!sidecar) {
     return {
       kind: "unreadable",
-      reason: `${SIDECAR} is not a JSON object`,
+      reason: toolWords.settingsSourceUnread(
+        SIDECAR,
+        toolWords.settingsNotAnObject
+      ),
     };
   }
   if (sidecar.deniedTools === undefined) {
@@ -162,12 +171,11 @@ export const applyFleetDenials = (
       await sidecarTurn(async () => {
         const read = await readFleetDenials();
         before = read.kind === "known" ? machineDenyList(read.denials) : [];
-        const file = Bun.file(SIDECAR);
         // A sidecar that does not parse holds nothing to keep: the converge
-        // after this rewrites it whole, as it always has.
-        const stored = (await file.exists())
-          ? asRecord(await file.json().catch(() => undefined))
-          : undefined;
+        // after this rewrites it whole, as it always has. It is CawCo's own
+        // file, never the person's.
+        const sidecar = await readSettingsFile(SIDECAR);
+        const stored = sidecar.state === "read" ? sidecar.settings : undefined;
         await writeStateFile(
           SIDECAR,
           JSON.stringify({ ...stored, deniedTools: [...deniedTools] }, null, 2)
@@ -286,9 +294,12 @@ export type DenyConvergence =
  * denials ({@link machineDenyList}), taking out `dropped`: the names cawco
  * wrote for the fleet before and the fleet no longer denies (a fleet sync
  * knows them; daemon start passes none). Writes only when that changes the
- * file. Nothing is written over a file that cannot
- * be parsed: the rest of it is the user's own, and a rewrite from an empty
- * root would take their settings with it. Nothing is written either while the
+ * file. Nothing is written over a file that is there and could not be read
+ * (claude-settings-file.ts): the rest of it is the user's own, and a rewrite
+ * from an empty root would take their settings with it; that is `failed`,
+ * said with why, and the next start or fleet sync converges again. Nothing
+ * is ever waited on either: a pipe in its place is never opened, so the
+ * daemon's start, which runs this first, goes on. Nothing is written either while the
  * fleet's denials are not known here: `unsynced` until the first sync,
  * `failed` with the sidecar's own fault.
  */
@@ -305,27 +316,20 @@ export const convergeDeniedTools = async (
     }
     const deny = machineDenyList(read.denials);
 
-    const file = Bun.file(SETTINGS);
-    let settings: unknown = {};
-    if (await file.exists()) {
-      try {
-        settings = await file.json();
-      } catch (error) {
-        return {
-          state: "failed",
-          detail: `could not parse ${SETTINGS}: ${said(error)}`,
-        };
-      }
+    const file = await readSettingsFile(SETTINGS);
+    if (file.state === "unread") {
+      return {
+        state: "failed",
+        detail: toolWords.settingsLeft(
+          toolWords.settingsSourceUnread(SETTINGS, file.why)
+        ),
+      };
     }
 
-    const { changed, next } = withDeniedTools(settings, deny, dropped);
-    if (!changed) {
+    const { changed, next } = withDeniedTools(settingsOf(file), deny, dropped);
+    if (!(changed && (await writeSettingsFile(SETTINGS, file, next)))) {
       return { state: "unchanged" };
     }
-
-    // Written whole and moved into place: a half-written settings file is a
-    // machine whose next `claude` starts with none of the user's settings.
-    await writeStateFile(SETTINGS, JSON.stringify(next, null, 2));
     return { state: "applied" };
   } catch (error) {
     return {

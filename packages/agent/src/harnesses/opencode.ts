@@ -89,6 +89,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { contactWords } from "@cawco/core/words/contact";
+import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { opencodeSignInFaultWords } from "@cawco/core/words/harness-lines";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
@@ -6152,14 +6153,14 @@ class OpencodeHarness implements Harness<"opencode"> {
   /**
    * The sessions OpenCode holds on this machine, root sessions only: every
    * server's database, the machine's and each account's, read in place
-   * ({@link sessionsOnMachine}), so no server is started to list them. A
+   * ({@link sessionsOnMachine}), so no server is started to list them, and
+   * none needs OpenCode's binary: the databases are read whether or not it is
+   * on disk now (npm moves it aside for the half minute an update takes, and
+   * a listing then that said none told the hub every session was gone). A
    * 1.x database 2.0 has not converted yet holds no 2.0 sessions table, and
    * lists none until a session's server converts it.
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    if ((await opencodeBinary()) === undefined) {
-      return [];
-    }
     const tags = await readTags();
     return (await sessionsOnMachine(dir ? { directory: dir } : {})).map(
       (session) => sessionToInfo(session, tags[session.id])
@@ -6194,10 +6195,8 @@ class OpencodeHarness implements Harness<"opencode"> {
     sessionKey: string,
     _dir?: string
   ): Promise<NeutralSessionInfo | undefined> {
-    if ((await opencodeBinary()) === undefined) {
-      return;
-    }
-    // A read-only lookup: a key that cannot be an OpenCode session answers
+    // Read in the databases, binary or not ({@link listSessions}). A
+    // read-only lookup: a key that cannot be an OpenCode session answers
     // "not held" rather than being sent.
     if (!OPENCODE_SESSION_ID.test(sessionKey)) {
       return;
@@ -6287,8 +6286,14 @@ class OpencodeHarness implements Harness<"opencode"> {
     ) => Promise<MessageWindow>,
     newest: boolean
   ): Promise<TranscriptWindow> {
+    // OpenCode's conversation is read only through its server, which runs
+    // its binary: with none on disk (npm moves it aside while it updates it,
+    // 32 s in the host run of 2026-11-14) the conversation can't be read,
+    // which is a failed read with why, never an empty one. Answered empty,
+    // the hub kept "Nothing has been said here yet" as the conversation
+    // until it restarted, while OpenCode's store held every message.
     if ((await opencodeBinary()) === undefined) {
-      return { entries: [], older: null, newer: null };
+      throw new Error(harnessRefusedWords.noBinaryUnread("OpenCode"));
     }
     assertOpencodeKey(sessionKey, "getSessionMessages");
     const client = await this.#homeClient(sessionKey);

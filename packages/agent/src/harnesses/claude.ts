@@ -46,7 +46,7 @@ import {
   type SyncHookJSONOutput,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
-import { isGone } from "@cawco/core/absent";
+import { errnoCode, isGone } from "@cawco/core/absent";
 import type { AccountIdentity, AccountKind } from "@cawco/core/accounts";
 import { identityOf } from "@cawco/core/accounts";
 import {
@@ -708,7 +708,11 @@ function attachQuestionResult(
 /**
  * The session file the CLI stores a session under, by its id alone, or null
  * when it is not found: the lookup for a caller with no row to name its dir,
- * so every config dir on the machine is searched.
+ * so every config dir on the machine is searched. Not found means looked for
+ * everywhere and absent (ENOENT, ENOTDIR): a place that could not be looked
+ * in (a projects folder at mode 000, a disk error) fails the lookup with
+ * why once no other place holds the file, so a transcript that can't be
+ * read is never answered as one that was never stored.
  */
 async function claudeSessionFile(
   sessionId: string,
@@ -716,50 +720,70 @@ async function claudeSessionFile(
 ): Promise<string | null> {
   const projects = claudeConfigDirs().map((config) => join(config, "projects"));
   const fileName = `${sessionId}.jsonl`;
+  const looks = new PlaceLooks();
   // The CLI names the project dir from the session's cwd: realpath, then
   // `projectSlug`. Try that first — it is the exact file `getSessionMessages`
   // reads — and only scan when the cwd is gone or the slug no longer resolves
   // (a cwd that has since moved).
-  let slug: string | null = null;
-  if (dir) {
-    try {
-      slug = projectSlug(await realpath(dir));
-    } catch {
-      slug = null;
-    }
-  }
-  if (slug) {
-    for (const projectsDir of projects) {
-      const candidate = join(projectsDir, slug, fileName);
-      try {
-        await access(candidate);
-        return candidate;
-      } catch {
-        // not under this config dir
-      }
+  const slug = dir ? await realpath(dir).then(projectSlug, () => null) : null;
+  for (const projectsDir of slug ? projects : []) {
+    const candidate = join(projectsDir, slug ?? "", fileName);
+    if (await looks.there(() => access(candidate))) {
+      return candidate;
     }
   }
   for (const projectsDir of projects) {
-    let entries: Dirent[];
-    try {
-      entries = await readdir(projectsDir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
+    for (const entry of await looks.entries(projectsDir)) {
       const candidate = join(projectsDir, entry.name, fileName);
-      try {
-        await access(candidate);
+      if (entry.isDirectory() && (await looks.there(() => access(candidate)))) {
         return candidate;
-      } catch {
-        // not in this project
       }
     }
   }
+  if (looks.unread !== undefined) {
+    throw new Error(
+      `Claude Code's stored conversation ${sessionId} couldn't be looked for: ${looks.unread instanceof Error ? looks.unread.message : String(looks.unread)}`,
+      { cause: looks.unread }
+    );
+  }
   return null;
+}
+
+/**
+ * Looks in places for a stored conversation ({@link claudeSessionFile}),
+ * keeping the first that could not be looked in: nothing there (ENOENT,
+ * ENOTDIR) is an answer, anything else is not.
+ */
+class PlaceLooks {
+  unread: unknown;
+
+  /** Whether `look` found the place there. */
+  async there(look: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await look();
+      return true;
+    } catch (error) {
+      this.#keep(error);
+      return false;
+    }
+  }
+
+  /** The entries of the folder `dir`; none when it is not there or could not be read. */
+  async entries(dir: string): Promise<Dirent[]> {
+    try {
+      return await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      this.#keep(error);
+      return [];
+    }
+  }
+
+  #keep(error: unknown): void {
+    const code = errnoCode(error);
+    if (!(code === "ENOENT" || code === "ENOTDIR")) {
+      this.unread ??= error;
+    }
+  }
 }
 
 /**

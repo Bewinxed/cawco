@@ -714,6 +714,7 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { createToolCallKeys } from "./tool-call-keys";
+import { createToolFacts } from "./tool-facts";
 import { createToolInstalls } from "./tool-installs";
 import { ToolReleases } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
@@ -1645,6 +1646,7 @@ export const createServer = (
     stallOf: () => stallOfPort.now(),
     stalledNow: () => stalledNowPort.now(),
     unansweredFault: () => unansweredFault,
+    toolFacts: () => toolFacts,
     toolReleases: () => toolReleases,
     boardBase: () => boardBase,
     browsers: () => browsers,
@@ -3514,6 +3516,11 @@ export const createServer = (
    */
   /** What a machine last reported of each harness, kept until its next report. */
   const capabilityReports = new Map<string, HarnessReport[]>();
+  /** Whether each machine's tool cells are its connection's now: set at its register, heard at its tools report. */
+  const toolFacts = createToolFacts();
+  registry.onAgentLeft((machineId, socketId) =>
+    toolFacts.left(machineId, socketId)
+  );
   const harnessReportOf = (
     machineId: string,
     harness: string
@@ -12447,6 +12454,9 @@ export const createServer = (
       sayTakenOver(machineId, tools);
       db.mergeAgentTools(machineId, tools);
       keepCopiesOn(machineId);
+      // The cells are this connection's now, with any install the pass just
+      // sent: a read waiting to ask them why it failed asks now.
+      toolFacts.reported(machineId);
     }
     const capabilities = keptCapabilities(agentFrame.machineCapabilities);
     if (!capabilities) {

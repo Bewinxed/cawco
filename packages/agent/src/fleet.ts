@@ -82,10 +82,17 @@ import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { versionSaid } from "@cawco/core/version-said";
 import { lastLines } from "@cawco/core/words/helpers";
+import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { claudeExecutable } from "./auth";
 import { excludeFromCheckout, gitIn } from "./checkout-exclude";
+import {
+  readSettingsFile,
+  settingsOf,
+  type WritableSettings,
+  writeSettingsFile,
+} from "./claude-settings-file";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { readFleetDenials, sidecarTurn } from "./denied-tools";
 import { readyHarnessRows, syncHarnessConfig } from "./fleet-harness-config";
@@ -1691,9 +1698,20 @@ const dropRecords = async (
  * both), so uninstalling a record at project scope there takes the user
  * scope's `enabledPlugins` entry with it (2.1.311).
  */
-const enabledForUser = async (id: string): Promise<boolean> =>
-  (await readJson<{ enabledPlugins?: Record<string, unknown> }>(SETTINGS_PATH))
-    ?.enabledPlugins?.[id] === true;
+const enabledForUser = async (
+  id: string
+): Promise<boolean | { unread: string }> => {
+  const read = await readSettingsJson(SETTINGS_PATH);
+  if (read.state === "unread") {
+    return { unread: read.why };
+  }
+  const { enabledPlugins } = read.settings as { enabledPlugins?: unknown };
+  return (
+    typeof enabledPlugins === "object" &&
+    enabledPlugins !== null &&
+    (enabledPlugins as Record<string, unknown>)[id] === true
+  );
+};
 
 /**
  * Takes away a carried plugin's records outside user scope and its upstream
@@ -1707,7 +1725,21 @@ const keepUserScopeOnly = async (
   records: readonly ListedPlugin[]
 ): Promise<string[]> => {
   const { dropped, left } = await dropRecords(bin, records);
-  if (dropped > 0 && !(await enabledForUser(vendoredId))) {
+  if (dropped === 0) {
+    return left;
+  }
+  // A settings file that couldn't be read is no word that the plugin is
+  // off: nothing is turned on through it, and the next sync looks again.
+  const before = await enabledForUser(vendoredId);
+  if (typeof before !== "boolean") {
+    left.push(
+      toolWords.settingsLeft(
+        toolWords.settingsSourceUnread(SETTINGS_PATH, before.unread)
+      )
+    );
+    return left;
+  }
+  if (!before) {
     const ran = await runClaude(bin, [
       "plugin",
       "enable",
@@ -1715,7 +1747,7 @@ const keepUserScopeOnly = async (
       "--scope",
       "user",
     ]);
-    if (await enabledForUser(vendoredId)) {
+    if ((await enabledForUser(vendoredId)) === true) {
       console.info(`[fleet] ${vendoredId}: turned back on at user scope`);
     } else {
       left.push(`${vendoredId} is off at user scope: ${ran.output}`);
@@ -2736,11 +2768,31 @@ const SettingsJsonSchema = z.looseObject({
 });
 type SettingsJson = z.infer<typeof SettingsJsonSchema>;
 
-/** The settings file at `path`; undefined when there is none, it does not parse, or it is not a settings file. */
-const readSettingsJson = async (
-  path: string
-): Promise<SettingsJson | undefined> =>
-  SettingsJsonSchema.safeParse(await readJson<unknown>(path)).data;
+/**
+ * A Claude Code settings file as the fleet reads it: read
+ * (claude-settings-file.ts; `{}` when nothing is there), its object as it
+ * stands (so an unchanged one compares equal and is not written), or there
+ * and unread with why, which is never written over. One whose hooks are not
+ * the shape Claude Code writes is unread too: the fleet would rewrite them.
+ */
+type FleetSettings =
+  | { state: "unread"; why: string }
+  | { file: WritableSettings; settings: SettingsJson; state: "read" };
+
+const readSettingsJson = async (path: string): Promise<FleetSettings> => {
+  const file = await readSettingsFile(path);
+  if (file.state === "unread") {
+    return file;
+  }
+  const settings = settingsOf(file);
+  const parsed = SettingsJsonSchema.safeParse(settings);
+  return parsed.success
+    ? { state: "read", file, settings: settings as SettingsJson }
+    : {
+        state: "unread",
+        why: `its hooks aren't the shape Claude Code writes (${parsed.error.issues[0]?.message ?? "no reason given"})`,
+      };
+};
 
 /**
  * The same list without cawco's own entries. A matcher entry that held
@@ -2869,10 +2921,14 @@ const dropCheckoutHooks = async (
     }
   }
   for (const [file, records] of byFile) {
-    const stored = await readSettingsJson(file);
-    if (!stored) {
+    const read = await readSettingsJson(file);
+    if (read.state === "unread") {
+      console.warn(
+        `[fleet] the hooks an earlier build registered in ${file} were not taken out: ${toolWords.settingsLeft(toolWords.settingsSourceUnread(file, read.why))}`
+      );
       continue;
     }
+    const stored = read.settings;
     const commands = records.map((record) => record.command);
     const hooks = Object.fromEntries(
       Object.entries(stored.hooks ?? {})
@@ -2881,10 +2937,7 @@ const dropCheckoutHooks = async (
     );
     const { hooks: _hooks, ...rest } = stored;
     const next = Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
-    if (JSON.stringify(next) === JSON.stringify(stored)) {
-      continue;
-    }
-    await writeJson(file, next).catch((error: unknown) =>
+    await writeSettingsFile(file, read.file, next).catch((error: unknown) =>
       console.warn(
         `[fleet] the hooks an earlier build registered in ${file} were not taken out: ${said(error)}`
       )
@@ -3172,17 +3225,19 @@ const syncHooks = async (
   // Registration in the user settings — a hook whose row was disabled or
   // deleted still gets its old entry taken out of it.
   const stored = await readSettingsJson(SETTINGS_PATH);
-  // Nothing is written over a file that cannot be read: the rest of it is the
-  // user's own permissions and plugins, and a rewrite from an empty root
-  // would take them with it.
-  if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
-    const detail = `could not parse ${SETTINGS_PATH}`;
+  // Nothing is written over a file that is there and could not be read
+  // (claude-settings-file.ts): the rest of it is the user's own permissions
+  // and plugins, and a rewrite from an empty root would take them with it.
+  if (stored.state === "unread") {
+    const detail = toolWords.settingsLeft(
+      toolWords.settingsSourceUnread(SETTINGS_PATH, stored.why)
+    );
     for (const hook of fleetWide) {
       keep(hook.id);
       report[hook.id] = { state: "failed", cause: "unparsable", detail };
     }
   } else {
-    const root = stored ?? {};
+    const root = stored.settings;
     const settingsHooks = { ...root.hooks };
 
     // Everything cawco registered out of this file last time, whatever event
@@ -3239,12 +3294,10 @@ const syncHooks = async (
     }
 
     let unwritable: string | undefined;
-    if (JSON.stringify(settings) !== JSON.stringify(root)) {
-      try {
-        await writeJson(SETTINGS_PATH, settings);
-      } catch (error) {
-        unwritable = tail(said(error));
-      }
+    try {
+      await writeSettingsFile(SETTINGS_PATH, stored.file, settings);
+    } catch (error) {
+      unwritable = tail(said(error));
     }
     for (const hook of fleetWide) {
       if (unwritable) {
@@ -3731,7 +3784,7 @@ export const probeToolchain = (): Promise<FleetToolchain> =>
 const hookState = async (
   id: string,
   record: ManagedHook,
-  settings: () => Promise<SettingsJson | undefined>
+  settings: () => Promise<FleetSettings>
 ): Promise<FleetItemState> => {
   const scriptPath = scriptPathOf(record);
   if (scriptPath?.startsWith(HOOKS_DIR)) {
@@ -3766,7 +3819,15 @@ const hookState = async (
         };
   }
   const stored = await settings();
-  const entries = stored?.hooks?.[record.event] ?? [];
+  // A settings file that couldn't be read is no word that the entry is gone.
+  if (stored.state === "unread") {
+    return {
+      state: "failed",
+      cause: "unparsable",
+      detail: toolWords.settingsSourceUnread(SETTINGS_PATH, stored.why),
+    };
+  }
+  const entries = stored.settings.hooks?.[record.event] ?? [];
   const present = entries.some((entry) =>
     (entry.hooks ?? []).some((one) => entryKey(one) === record.command)
   );
@@ -3929,8 +3990,8 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     ),
   };
   // Read once, at the first fleet hook that asks.
-  let readSettings: Promise<SettingsJson | undefined> | undefined;
-  const settings = (): Promise<SettingsJson | undefined> => {
+  let readSettings: Promise<FleetSettings> | undefined;
+  const settings = (): Promise<FleetSettings> => {
     readSettings ??= readSettingsJson(SETTINGS_PATH);
     return readSettings;
   };

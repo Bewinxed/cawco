@@ -921,14 +921,18 @@
     return machine && block ? { machine, block } : null;
   });
   /**
-   * The read waits on CawCo's own install of the harness CLI, which nothing
-   * of the person's moves: the hub said one runs (`harness-updating`), or
-   * the machine's block is CawCo's (`auto`) and has not failed. Said as a
-   * wait, never as a refusal.
+   * The read waits on an install of the harness CLI, which nothing more of
+   * the person's moves: the hub said one runs (`harness-updating`), the
+   * machine's block has one running whoever started it (the block's own
+   * Update or Retry pressed here: frames s6-A6c-390d-004 to 006 of the host
+   * run said "can't be shown yet" under a warning while it ran), or the
+   * block is CawCo's (`auto`) and has not failed. Said as a wait, never as
+   * a refusal.
    */
   const awaitsUpdate = $derived(
     fault?.reason === "refused" &&
       (fault.updating === true ||
+        unreadFix?.block.fix.phase === "running" ||
         (unreadFix?.block.auto === true &&
           unreadFix.block.fix.phase !== "failed"))
   );

@@ -468,6 +468,24 @@ export interface TranscriptWindow {
   older: string | null;
 }
 
+/**
+ * A machine's answer to a window read as the window it is, or undefined
+ * when it is none: a read that could not see the store fails with why (each
+ * harness's `readTranscriptWindow`), so an answer that holds no `entries`
+ * list is no read of the store, and is never taken as an empty conversation.
+ */
+export const transcriptWindowOf = (
+  answer: unknown
+): TranscriptWindow | undefined => {
+  if (typeof answer !== "object" || answer === null) {
+    return;
+  }
+  const { entries, older, newer } = answer as Partial<TranscriptWindow>;
+  return Array.isArray(entries)
+    ? { entries, older: older ?? null, newer: newer ?? null }
+    : undefined;
+};
+
 /** Where a transcript was found: the machine, folder, key and harness. */
 export interface TranscriptWhere {
   cwd: string;

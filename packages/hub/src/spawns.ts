@@ -323,8 +323,16 @@ export const createSpawns = (ctx: SpawnsContext) => {
             case "unanswered":
               return "unanswered" as const;
             case "answered": {
+              // A lookup that failed (a store that couldn't be read, a
+              // harness CLI npm moved aside) is no word that the machine
+              // holds no such session: remembered as nowhere, it stood as a
+              // 404 for the hub's lifetime, past the store being readable
+              // again. It counts as not answered, and is asked again.
               if (!answer.value.ok) {
-                return null;
+                console.warn(
+                  `[hub] locating ${id}: ${ctx.machineName(agent.machineId)}'s ${harness} couldn't say whether it holds it: ${answer.value.error ?? "no reason given"}`
+                );
+                return "unanswered" as const;
               }
               const info = answer.value.result as
                 { sessionId?: string; cwd?: string } | undefined | null;
