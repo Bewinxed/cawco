@@ -1,4 +1,5 @@
 import type { ArtifactDoes, ArtifactKind } from "@cawco/core/artifact-kinds";
+import type { PictureCut } from "@cawco/core/artifact-picture";
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { excalidrawFile } from "@cawco/core/canvas";
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
@@ -283,6 +284,8 @@ export interface ArtifactRead {
   pictureAt?: string | null;
   /** A canvas's picture is from before your last write to it: no screen drew it again within the wait. */
   pictureBehind?: true;
+  /** A preview's or page's picture drew only its top: `drawn` of `of` CSS px (core `PICTURE_LIMITS.maxHeight`). */
+  pictureCut?: PictureCut;
   /** Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, the one after your last write once a screen draws it, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage. */
   png?: string | null;
   /** A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one. */

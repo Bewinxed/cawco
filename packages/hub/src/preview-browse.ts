@@ -1,4 +1,8 @@
-import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
+import {
+  ARTIFACT_PICTURE,
+  PICTURE_LIMITS,
+  type PictureCut,
+} from "@cawco/core/artifact-picture";
 import {
   placeAtLink,
   previewEnterUrl,
@@ -219,7 +223,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * would, on its own preview origin, here on loopback, so the proxy's
    * overlay and the real origin are in it; a sleeping server is woken by
    * the page's load; at its state's `link` (a query merged into its own, or
-   * a hash) when one is named. Its picture, base64 PNG; refused in words
+   * a hash) when one is named. Its picture, base64 PNG, with how much of it was drawn when the page ran past the limit; refused in words
    * when no daemon runs on the hub's machine or it didn't draw in time.
    */
   const pictureOf = async (
@@ -267,7 +271,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       default:
         throw unreachable(asked);
     }
-    const png = (asked.value.result as { png?: unknown } | undefined)?.png;
+    const told = asked.value.result as
+      { png?: unknown; cut?: PictureCut } | undefined;
+    const png = told?.png;
     if (!asked.value.ok || typeof png !== "string") {
       return problem(503, {
         code: "picture-none",
@@ -276,7 +282,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
           `${row.name} wasn't drawn: the hub's machine answered no picture.`,
       });
     }
-    return png;
+    return { png, ...(told?.cut ? { cut: told.cut } : {}) };
   };
 
   /**

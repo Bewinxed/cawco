@@ -2370,7 +2370,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : heldAnswer({
           ...pageNow(row, now, since, ownersRead),
           ...(since === undefined ? programRead(now) : {}),
-          ...(picture === undefined ? {} : { png: picture }),
+          ...(picture === undefined
+            ? {}
+            : {
+                png: picture.png,
+                ...(picture.cut ? { pictureCut: picture.cut } : {}),
+              }),
         });
   };
 

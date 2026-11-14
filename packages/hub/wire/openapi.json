@@ -32865,6 +32865,10 @@
             "const": true,
             "type": "boolean"
           },
+          "pictureCut": {
+            "$ref": "#/components/schemas/PictureCut",
+            "description": "A preview's or page's picture drew only its top: `drawn` of `of` CSS px (core `PICTURE_LIMITS.maxHeight`)."
+          },
           "png": {
             "description": "Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, the one after your last write once a screen draws it, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage.",
             "type": "string"
@@ -50078,6 +50082,22 @@
         "enum": [
           "conversation",
           "jev"
+        ]
+      },
+      "PictureCut": {
+        "description": "How much of a page longer than `PICTURE_LIMITS.maxHeight` its picture drew: `drawn` of `of` CSS px, from the top.",
+        "type": "object",
+        "properties": {
+          "drawn": {
+            "type": "number"
+          },
+          "of": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "drawn",
+          "of"
         ]
       },
       "Pin": {

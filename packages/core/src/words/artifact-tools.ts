@@ -91,6 +91,9 @@ export const artifactToolWords = {
   /** Where a stage or a served preview runs, `dir` from its clone's root ("." the root itself): "Its server at the repo's root: live." */
   stageAt: (runs: "serve" | "sheet", dir: string, status: string) =>
     `Its ${runs === "serve" ? "server" : "stage"} ${dir === "." ? "at the repo's root" : `in ${dir}`}: ${status}`,
+  /** A page's picture, cut at the picture's height limit: the agent saw its top only. */
+  pictureCut: (drawn: number, of: number) =>
+    `Its picture is drawn to ${drawn.toLocaleString("en-US")} of ${of.toLocaleString("en-US")} px, from the page's top; what lies below is not in it.`,
   /** Where `artifact_read`'s `save` kept the picture, as the session named it. */
   pictureSaved: (path: string) => `Its picture is saved at ${path}.`,
   /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither its panel's, its delegation tree's nor a page of its project. */

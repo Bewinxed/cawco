@@ -14,9 +14,16 @@ export const PICTURE_VIEW = { width: 640, height: 800 } as const;
  * person's panel does (agent artifact-picture.ts), in the hub machine's
  * Chromium on the artifact's own preview origin, overlay and all. Takes
  * `{ url, width, artifact: { id, kind, name }, sync }` and answers
- * `{ png }`, base64.
+ * `{ png, cut? }`, base64; `cut` says how much of a page longer than
+ * `PICTURE_LIMITS.maxHeight` was drawn: `{ drawn, of }` in px.
  */
 export const ARTIFACT_PICTURE = "artifactPicture";
+
+/** How much of a page longer than `PICTURE_LIMITS.maxHeight` its picture drew: `drawn` of `of` CSS px, from the top. */
+export interface PictureCut {
+  drawn: number;
+  of: number;
+}
 
 /**
  * What scrolls a decision page (dashboard decisions host Decisions.svelte): the
@@ -30,7 +37,7 @@ export const PICTURE_LIMITS = {
   /** Widths a read may name, in CSS px: a phone's to a wide desk's. */
   minWidth: 320,
   maxWidth: 2560,
-  /** The tallest picture, in CSS px: a page longer than this is drawn from its top. Our call: three panes' worth. */
+  /** The tallest picture, in CSS px: a page longer than this is drawn from its top, and the read says so. Our call: three panes' worth. */
   maxHeight: 2400,
   /**
    * The page's load, through its preview origin: a sleeping server is woken

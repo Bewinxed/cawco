@@ -485,6 +485,8 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
     read.program !== undefined &&
       'Its program is in response_format: "detailed"; artifact_update\'s statements revise it.',
     `Read at seq ${read.seq}: since: ${read.seq} reads only what changes after this.`,
+    read.pictureCut &&
+      artifactToolWords.pictureCut(read.pictureCut.drawn, read.pictureCut.of),
     read.saved && artifactToolWords.pictureSaved(read.saved)
   );
   const pictures = picturesOf(read);

@@ -1,3 +1,4 @@
+import type { PictureCut } from "@cawco/core/artifact-picture";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
@@ -323,15 +324,15 @@ export interface ArtifactServiceDeps {
    * session `instance`'s `artifact_read` with `png` (server.ts, agent
    * artifact-picture.ts): on its own preview origin in the Chromium of the
    * hub's machine, `width` CSS px wide, at its state's `link` when one is
-   * named, a sleeping server woken first. Its picture, base64 PNG, or the
-   * refusal saying why it can't be drawn.
+   * named, a sleeping server woken first. Its picture, base64 PNG, with how much
+   * of it was drawn when the page ran past the limit, or the refusal saying why it can't be drawn.
    */
   picture: (
     instance: InstanceRow,
     artifact: ArtifactRow,
     drawn: { link?: string; width: number }
   ) => Promise<
-    | string
+    | { png: string; cut?: PictureCut }
     | OriginRefused
     | ReturnType<
         typeof problem<503, { code: "picture-no-daemon"; detail: string }>

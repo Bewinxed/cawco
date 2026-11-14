@@ -27,6 +27,7 @@ import {
   PICTURE_LIMITS,
   PICTURE_PAGE_SCROLLER,
   PICTURE_VIEW,
+  type PictureCut,
 } from "@cawco/core/artifact-picture";
 import { PREVIEW_DOWNS } from "@cawco/core/preview/protocol";
 import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
@@ -191,20 +192,25 @@ const framesReady = async (page: Page, until: number): Promise<void> => {
  * inside, so a window's picture of it is its first screen. The window opens to
  * its scroller's length, up to `PICTURE_LIMITS.maxHeight`; any other page's
  * length is the document's, and its layout stands at the window it asked for.
+ * Answers the length the window would need, which is past the limit when the
+ * picture will be cut.
  */
-const openToLength = async (page: Page, width: number): Promise<void> => {
+const openToLength = async (page: Page, width: number): Promise<number> => {
   const hidden = await page.evaluate(hiddenLength, PICTURE_PAGE_SCROLLER);
+  const view = page.viewportSize()?.height ?? PICTURE_VIEW.height;
   if (hidden > 0) {
-    const view = page.viewportSize()?.height ?? PICTURE_VIEW.height;
     await page.setViewportSize({
       width,
       height: Math.min(view + hidden, PICTURE_LIMITS.maxHeight),
     });
   }
+  return view + hidden;
 };
 
 /** The picture of `ask.url`, base64 PNG. Throws in words a tool answers when it can't be drawn. */
-export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
+export async function drawArtifact(
+  ask: PictureAsk
+): Promise<{ png: string; cut?: PictureCut }> {
   if (!(isHelloArtifact(ask) && URL.canParse(ask.url))) {
     throw new Error(
       "A picture names the page's URL and the artifact: its id, kind, name and sync path."
@@ -258,13 +264,11 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
     // The hello places the person's pins: the quiet counts from it too.
     await page.evaluate(markChanged);
     await ready(page, Math.max(0, deadline - Date.now()));
-    await openToLength(page, width);
+    const scrolled = await openToLength(page, width);
     await framesReady(page, deadline);
     const tall = await page.evaluate(documentHeight);
-    const height = Math.min(
-      Math.max(tall, PICTURE_VIEW.height),
-      PICTURE_LIMITS.maxHeight
-    );
+    const whole = Math.max(tall, scrolled, PICTURE_VIEW.height);
+    const height = Math.min(whole, PICTURE_LIMITS.maxHeight);
     await holdTimeAnimations(page);
     const png = await page.screenshot({
       fullPage: true,
@@ -272,7 +276,10 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
       caret: "hide",
       timeout: PICTURE_LIMITS.shotMs,
     });
-    return { png: png.toString("base64") };
+    return {
+      png: png.toString("base64"),
+      ...(whole > height ? { cut: { drawn: height, of: whole } } : {}),
+    };
   } finally {
     await browser.close().catch(() => undefined);
   }
