@@ -4,7 +4,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, Envelope } from "@cawco/core/protocol";
-import type { ToolSpec, ToolStatus } from "@cawco/core/tools";
+import type { ToolSpec, ToolStatus, ToolWants } from "@cawco/core/tools";
 import { isToolStatus, TOOL_CATALOG, toolSpec } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
 import type { HubContext } from "./hub-context";
@@ -73,10 +73,15 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       if (awaitingInstall(machineId, policy.id)) {
         continue;
       }
-      sendInstall(machineId, agent, {
-        toolId: policy.id,
-        ...installAsk(policy.id),
-      });
+      sendInstall(
+        machineId,
+        agent,
+        { toolId: policy.id, ...installAsk(policy.id) },
+        true
+      );
+      sent = true;
+    }
+    if (keepRunnable(machineId, agent, cells)) {
       sent = true;
     }
     if (keepCurrent(machineId, agent, cells)) {
@@ -121,15 +126,25 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   ): unknown[] => [toolId, ask.pin, ask.newest, automatic];
 
   /**
-   * Sends the machine one install of the hub's own (a required tool it is
-   * missing, an update it is owed): its cell reads `installing`, with the
-   * version of the copy being updated, until the machine answers, and the
-   * answer is the cell (the `pendingInstalls` path). The caller publishes.
+   * Sends the machine one install: the hub's own (a required tool it is
+   * missing, an update it is owed; `automatic`, which a machine whose owner
+   * turned the tool's automatic updates off declines), or a person's
+   * (Update all). Its cell reads `installing`, with the version of the copy
+   * being updated and the one being put on (`to`) when known, until the
+   * machine answers, and the answer is the cell (the `pendingInstalls`
+   * path). The caller publishes.
    */
   const sendInstall = (
     machineId: string,
     agent: HubSocket,
-    install: { newest?: string; pin?: string; toolId: string; version?: string }
+    install: {
+      newest?: string;
+      pin?: string;
+      to?: string;
+      toolId: string;
+      version?: string;
+    },
+    automatic: boolean
   ): void => {
     const requestId = crypto.randomUUID();
     ctx.pendingInstalls.set(requestId, {
@@ -143,15 +158,144 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       payload: {
         requestId,
         method: "installTool",
-        args: installArgs(install.toolId, install, true),
+        args: installArgs(install.toolId, install, automatic),
       },
     } satisfies Envelope<ControlPayload>);
     ctx.db.setAgentToolCell(machineId, {
       id: install.toolId,
       state: "installing",
       ...(install.version ? { version: install.version } : {}),
+      ...(install.to ? { to: install.to } : {}),
       at: Date.now(),
     });
+  };
+
+  /**
+   * The version an update of a copy behind `wants` puts on, when the hub can
+   * say it: the one version, else, for a tool CawCo keeps current, the
+   * release it is sent to reach. A floor's updater says its own.
+   */
+  const targetOf = (
+    wants: ToolWants,
+    ask: { newest?: string }
+  ): { to?: string } => {
+    if (!wants.orNewer) {
+      return { to: wants.version };
+    }
+    return ask.newest ? { to: ask.newest } : {};
+  };
+
+  /**
+   * A COPY CAWCO DOES NOT RUN IS UPDATED, OR THE PERSON IS TOLD (the owner,
+   * 2026-11-14; core `ToolUpdates`). With the fleet set to update, each tool
+   * whose cell says the machine's copy is one its CawCo does not run
+   * (`wants`, the machine's own judgement by its own build's catalog), that
+   * CawCo put there (`copy`), with no attempt standing since (`triedAt`: an
+   * install that failed is not sent again on this boot of the machine's
+   * agent, and its row says why) and none in flight, is sent the install its
+   * Update button sends, as an automatic one. Anything else stands behind on
+   * its row and in Needs you (core tool-updates.ts) until a press. A paused
+   * machine is sent none until its pause ends. Answers whether any was sent.
+   */
+  const keepRunnable = (
+    machineId: string,
+    agent: HubSocket,
+    cells: Record<string, ToolStatus>
+  ): boolean => {
+    if (
+      ctx.db.toolUpdates() !== "update" ||
+      ctx.machinePause.until(machineId) !== undefined
+    ) {
+      return false;
+    }
+    let sent = false;
+    for (const [toolId, cell] of Object.entries(cells)) {
+      const spec = toolSpec(toolId);
+      if (
+        !(spec && cell.wants) ||
+        cell.state !== "failed" ||
+        cell.copy?.by !== "cawco" ||
+        cell.triedAt !== undefined ||
+        awaitingInstall(machineId, toolId)
+      ) {
+        continue;
+      }
+      const ask = installAsk(toolId);
+      const target = targetOf(cell.wants, ask);
+      console.info(
+        `[hub] updating ${spec.name} ${cell.version ?? "(no version said)"} on ${ctx.machineName(machineId)}${target.to ? ` to ${target.to}` : ""}: CawCo put that copy there, and the fleet updates a copy it doesn't run`
+      );
+      sendInstall(
+        machineId,
+        agent,
+        {
+          toolId,
+          ...ask,
+          ...target,
+          ...(cell.version ? { version: cell.version } : {}),
+        },
+        true
+      );
+      sent = true;
+    }
+    return sent;
+  };
+
+  /**
+   * UPDATE ALL: a person's Update of `toolId` on every machine whose copy is
+   * one its CawCo does not run (`wants`), the same install each machine's own
+   * Update sends (a press: a copy that is the person's own is updated too,
+   * and one whose last attempt failed is tried again), sent to each machine
+   * connected now with none of it in flight. Answers the machines it was
+   * sent to, and those behind that are not connected, which nothing reaches
+   * until they are.
+   */
+  const updateAll = (toolId: string): { away: string[]; sent: string[] } => {
+    const sent: string[] = [];
+    const away: string[] = [];
+    for (const { machineId } of ctx.db.namedMachines()) {
+      const cell = ctx.db.agentTools(machineId)[toolId];
+      if (!cell?.wants || cell.state === "installing") {
+        continue;
+      }
+      const agent = ctx.registry.agent(machineId);
+      if (!agent) {
+        away.push(machineId);
+      } else if (!awaitingInstall(machineId, toolId)) {
+        pressUpdate(machineId, agent, toolId, { ...cell, wants: cell.wants });
+        sent.push(machineId);
+      }
+    }
+    if (sent.length > 0) {
+      const names = (ids: string[]) =>
+        ids.map((one) => ctx.machineName(one)).join(", ");
+      console.info(
+        `[hub] Update all ${toolSpec(toolId)?.name ?? toolId}: sent to ${names(sent)}${away.length > 0 ? `; ${names(away)} not connected` : ""}`
+      );
+    }
+    return { sent, away };
+  };
+
+  /** One machine's part of {@link updateAll}: its Update, as a press sends it, published. */
+  const pressUpdate = (
+    machineId: string,
+    agent: HubSocket,
+    toolId: string,
+    cell: ToolStatus & { wants: ToolWants }
+  ): void => {
+    const ask = installAsk(toolId);
+    sendInstall(
+      machineId,
+      agent,
+      {
+        toolId,
+        ...ask,
+        ...targetOf(cell.wants, ask),
+        ...(cell.version ? { version: cell.version } : {}),
+      },
+      false
+    );
+    ctx.publishInstances(machineId);
   };
 
   /**
@@ -186,7 +330,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       console.info(
         `[hub] updating ${toolSpec(update.toolId)?.name ?? update.toolId} ${update.version} on ${ctx.machineName(machineId)} to ${update.newest}`
       );
-      sendInstall(machineId, agent, update);
+      sendInstall(machineId, agent, { ...update, to: update.newest }, true);
     }
     return owed.length > 0;
   };
@@ -381,5 +525,6 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     installAsk,
     installArgs,
     readyHarnesses,
+    updateAll,
   };
 };

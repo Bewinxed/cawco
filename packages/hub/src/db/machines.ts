@@ -366,6 +366,10 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     ...(row.signin === null
       ? {}
       : { signin: { ...row.signin, state: signinStateOf(row.signin.state) } }),
+    ...(row.copy === null ? {} : { copy: row.copy }),
+    ...(row.wants === null ? {} : { wants: row.wants }),
+    ...(row.triedAt === null ? {} : { triedAt: row.triedAt.getTime() }),
+    ...(row.goingTo === null ? {} : { to: row.goingTo }),
   });
 
   /** Each machine's tool statuses by catalog id; one machine's with `machineId`. */
@@ -410,6 +414,11 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           method: status.method ?? null,
           detail: status.detail ?? null,
           signin: status.signin ?? null,
+          copy: status.copy ?? null,
+          wants: status.wants ?? null,
+          triedAt:
+            status.triedAt === undefined ? null : new Date(status.triedAt),
+          goingTo: status.to ?? null,
           at: new Date(status.at),
         };
         tx.insert(agentTools)
