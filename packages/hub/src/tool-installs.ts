@@ -186,6 +186,21 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   };
 
   /**
+   * THE ONE RULE for a copy CawCo does not run, whatever asks it (the hub's
+   * own pass, {@link keepRunnable}; adding a machine, {@link readyHarness}):
+   * CawCo updates it unasked only while the fleet is set to update, when
+   * the machine says CawCo put it there (`copy`), and when no attempt of
+   * this agent's boot failed on it (`triedAt`). Anything else waits on the
+   * person's Update.
+   */
+  const updatesUnasked = (cell: ToolStatus): boolean =>
+    ctx.db.toolUpdates() === "update" &&
+    cell.wants !== undefined &&
+    cell.state === "failed" &&
+    cell.copy?.by === "cawco" &&
+    cell.triedAt === undefined;
+
+  /**
    * A COPY CAWCO DOES NOT RUN IS UPDATED, OR THE PERSON IS TOLD (the owner,
    * 2026-11-14; core `ToolUpdates`). With the fleet set to update, each tool
    * whose cell says the machine's copy is one its CawCo does not run
@@ -202,20 +217,14 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     agent: HubSocket,
     cells: Record<string, ToolStatus>
   ): boolean => {
-    if (
-      ctx.db.toolUpdates() !== "update" ||
-      ctx.machinePause.until(machineId) !== undefined
-    ) {
+    if (ctx.machinePause.until(machineId) !== undefined) {
       return false;
     }
     let sent = false;
     for (const [toolId, cell] of Object.entries(cells)) {
       const spec = toolSpec(toolId);
       if (
-        !(spec && cell.wants) ||
-        cell.state !== "failed" ||
-        cell.copy?.by !== "cawco" ||
-        cell.triedAt !== undefined ||
+        !(spec && cell.wants && updatesUnasked(cell)) ||
         awaitingInstall(machineId, toolId)
       ) {
         continue;
@@ -383,12 +392,15 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
    * ADDING A MACHINE LEAVES IT READY (installs.ts `ready`): a machine that
    * just joined is asked what tools it has, then each harness CLI is brought
    * to a version CawCo runs, one at a time, through the catalog's install
-   * (`installAwaited`): Claude Code installed when missing or updated when
-   * older than core's `CLAUDE_VERSION_FLOOR`; OpenCode and pi, which a
-   * machine runs only when its person put them there, updated when they are
-   * there at a version CawCo doesn't run. So it joins able to start sessions
-   * and sign accounts in. Answers what runs there now, and what could not be
-   * brought up and why, in words; `say` takes each step's line.
+   * (`installAwaited`): Claude Code installed when missing (what adding a
+   * machine is for); a copy of any of them there at a version CawCo doesn't
+   * run updated by the rule every update unasked follows
+   * ({@link updatesUnasked}: CawCo's own copy, while the fleet is set to
+   * update), and otherwise left, said, and listed as waiting on the person
+   * (core tool-updates.ts). So it joins able to start sessions and sign
+   * accounts in, or says what waits on the person. Answers what runs there
+   * now, what was left and why, and what could not be brought up and why,
+   * in words; `say` takes each step's line.
    */
   const readyHarnesses = async (
     machineId: string,
@@ -405,33 +417,68 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     }
     const runs: string[] = [];
     const failed: string[] = [];
+    const left: string[] = [];
     for (const harness of HARNESSES) {
       const brought = await readyHarness(machineId, harness, tools, say);
       if ("runs" in brought) {
         runs.push(brought.runs);
       } else if ("failed" in brought) {
         failed.push(brought.failed);
+      } else if ("left" in brought) {
+        say(brought.left);
+        left.push(brought.left);
       }
     }
     const ran = runs.length > 0 ? `${runs.join(", ")} on ${name}.` : "";
     if (failed.length > 0) {
-      return [ran, ...failed, fix].filter(Boolean).join(" ");
+      return [ran, ...left, ...failed, fix].filter(Boolean).join(" ");
+    }
+    if (left.length > 0) {
+      return [ran, ...left].filter(Boolean).join(" ");
     }
     return ran || `Nothing to bring up on ${name}.`;
   };
 
   /**
+   * Why adding a machine left its copy of `spec` at a version CawCo doesn't
+   * run ({@link updatesUnasked} said no), and where the person updates it.
+   */
+  const leftWords = (
+    machineId: string,
+    spec: ToolSpec,
+    has: ToolStatus
+  ): string => {
+    const copy = `${spec.name} ${has.version ?? "(no version said)"} on ${ctx.machineName(machineId)}`;
+    const update = `Update it from Needs you or ${configurePage("cli-tools")}.`;
+    if (!has.wants) {
+      return `${copy} isn't one CawCo runs, and that machine's CawCo didn't say whose copy it is, so CawCo left it. ${update}`;
+    }
+    const runs = has.wants.orNewer
+      ? `${has.wants.version} or newer`
+      : has.wants.version;
+    if (has.copy?.by !== "cawco") {
+      return `${copy} is a copy you installed, and CawCo runs ${runs}. CawCo leaves your own copies alone. ${update}`;
+    }
+    if (has.triedAt !== undefined) {
+      return `${copy} didn't update when CawCo tried earlier, and CawCo runs ${runs}: ${has.detail ?? "the machine didn't say why"} ${update}`;
+    }
+    return `${copy} isn't one CawCo runs (${runs}), and the fleet asks before CawCo updates one. ${update}`;
+  };
+
+  /**
    * One harness on a joined machine (`readyHarnesses`): what runs, brought
-   * up when it needs it, or why not, in words; nothing to say for an
-   * OpenCode or pi the machine doesn't have (only Claude Code is put on
-   * unasked) or whose build's catalog lacks it.
+   * up when it needs it and the rule allows, left and why, or why not, in
+   * words; nothing to say for an OpenCode or pi the machine doesn't have
+   * (only Claude Code is put on unasked) or whose build's catalog lacks it.
    */
   const readyHarness = (
     machineId: string,
     harness: HarnessKind,
     tools: ToolStatus[],
     say: (line: string) => void
-  ): Promise<{ runs: string } | { failed: string } | { skipped: true }> => {
+  ): Promise<
+    { runs: string } | { failed: string } | { left: string } | { skipped: true }
+  > => {
     const spec = toolSpec(HARNESS_TOOL[harness]);
     const has = tools.find((tool) => tool.id === HARNESS_TOOL[harness]);
     if (!(spec && has)) {
@@ -450,10 +497,16 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         runs: `${spec.name}${has.version ? ` ${has.version}` : ""}`,
       });
     }
-    if (has.state === "missing" && !traitsOf(harness).requiredOnEveryMachine) {
-      return Promise.resolve({ skipped: true });
+    // No copy there (missing, or no installer here): installed only for the
+    // harness every machine runs.
+    if (has.version === undefined && has.copy === undefined) {
+      return traitsOf(harness).requiredOnEveryMachine
+        ? bringTool(machineId, spec, has, say)
+        : Promise.resolve({ skipped: true });
     }
-    return bringTool(machineId, spec, has, say);
+    return updatesUnasked(has)
+      ? bringTool(machineId, spec, has, say)
+      : Promise.resolve({ left: leftWords(machineId, spec, has) });
   };
 
   /**
