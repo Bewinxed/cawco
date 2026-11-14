@@ -31,7 +31,7 @@
  * - a plain text column that becomes a stored JSON one: it reads as new;
  * - a union whose first option reads a row as the wrong member.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { baseRefOf } from "./openapi-inputs";
@@ -349,14 +349,25 @@ const valueNarrowings = (was: Schema, now: Schema, said: string): string[] => {
   const removed = wasValues.filter(
     (value) => !nowValues.some((kept) => same(kept, value))
   );
-  return removed.length > 0 ? [`${said}no longer takes ${quoted(removed)}`] : [];
+  return removed.length > 0
+    ? [`${said}no longer takes ${quoted(removed)}`]
+    : [];
 };
 
 /** What `now` asks of a value beyond what `was` did, on its bounds, patterns and code. */
-const keywordNarrowings = (was: Schema, now: Schema, said: string): string[] => {
-  const bound = (key: string, holds: (old: number, next: number) => boolean) => {
+const keywordNarrowings = (
+  was: Schema,
+  now: Schema,
+  said: string
+): string[] => {
+  const bound = (
+    key: string,
+    holds: (old: number, next: number) => boolean
+  ) => {
     const [old, next] = [was[key], now[key]];
-    return typeof next === "number" && !(typeof old === "number" && holds(old, next));
+    return (
+      typeof next === "number" && !(typeof old === "number" && holds(old, next))
+    );
   };
   const added = marksOf(now).filter((mark) => !marksOf(was).includes(mark));
   return [
@@ -386,7 +397,11 @@ const keywordNarrowings = (was: Schema, now: Schema, said: string): string[] => 
  * value: `.key`, `[]` an array's element, `{}` a record's value, `{key}` a
  * record's key.
  */
-const narrowings = (wasValue: unknown, nowValue: unknown, at = ""): string[] => {
+const narrowings = (
+  wasValue: unknown,
+  nowValue: unknown,
+  at = ""
+): string[] => {
   const was = schemaOf(wasValue);
   const now = schemaOf(nowValue);
   if (same(was, now) || isNever(was)) {
@@ -404,8 +419,14 @@ const narrowings = (wasValue: unknown, nowValue: unknown, at = ""): string[] => 
   }
   const out: string[] = [];
   for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
-    if (!(JUDGED.has(key) || ANNOTATIONS.has(key) || same(was[key], now[key]))) {
-      out.push(`${said}its \`${key}\` changed, which this check does not judge`);
+    if (!(
+      JUDGED.has(key) ||
+      ANNOTATIONS.has(key) ||
+      same(was[key], now[key])
+    )) {
+      out.push(
+        `${said}its \`${key}\` changed, which this check does not judge`
+      );
     }
   }
   if (isNever(now)) {
@@ -460,16 +481,13 @@ const unquote = (name: string): string => name.replaceAll('"', "");
 const renamed = (key: string, tags: readonly string[]): string => {
   let [table = "", column = ""] = key.split(".");
   for (const tag of tags) {
-    let text: string;
-    try {
-      text = readFileSync(
-        join(ROOT, SNAPSHOTS, `${tag.slice(0, 4)}_snapshot.json`),
-        "utf8"
-      );
-    } catch {
+    const snapshot = join(ROOT, SNAPSHOTS, `${tag.slice(0, 4)}_snapshot.json`);
+    if (!existsSync(snapshot)) {
       continue;
     }
-    const meta = RenamesSchema.parse(JSON.parse(text))._meta;
+    const meta = RenamesSchema.parse(
+      JSON.parse(readFileSync(snapshot, "utf8"))
+    )._meta;
     for (const [from, to] of Object.entries(meta?.tables ?? {})) {
       if (unquote(from) === table) {
         table = unquote(to);
@@ -490,8 +508,7 @@ const exists = (commit: string, path: string): boolean =>
   Bun.spawnSync(["git", "cat-file", "-e", `${commit}:${path}`], {
     cwd: ROOT,
     env: process.env,
-  })
-    .exitCode === 0;
+  }).exitCode === 0;
 
 const shapes = await columnShapes();
 const record = `${JSON.stringify(shapes, null, 2)}\n`;
@@ -504,12 +521,7 @@ if (!process.argv.includes("--check")) {
 }
 
 const problems: string[] = [];
-let current = "";
-try {
-  current = readFileSync(recordPath, "utf8");
-} catch {
-  // Not written yet.
-}
+const current = existsSync(recordPath) ? readFileSync(recordPath, "utf8") : "";
 if (current !== record) {
   problems.push(
     `stored-compat: ${RECORD} is not what the stored columns make; run \`bun run stored-shapes\` in packages/hub`

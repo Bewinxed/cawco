@@ -527,7 +527,10 @@ export const kindsOf = (schema: Schema): Set<string> => {
 };
 
 /** Kinds in `wider` that `narrower` does not admit (an integer is a number). */
-export const extraKinds = (wider: Set<string>, narrower: Set<string>): string[] => {
+export const extraKinds = (
+  wider: Set<string>,
+  narrower: Set<string>
+): string[] => {
   if (narrower.has("any")) {
     return [];
   }
