@@ -64,7 +64,7 @@ import { byId, handleId, isHandle, mentioned } from "./handles";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
-import type { AnyProblem } from "./refusal";
+import type { AnyProblem, ProblemsOf } from "./refusal";
 import type { SessionCalls } from "./session-calls";
 import {
   activeAt,
@@ -922,7 +922,10 @@ export interface HandoffActions {
        */
       task?: string;
     }
-  ) => ReturnType<WorkItemCalls["delegate"]>;
+  ) => Promise<
+    | Awaited<ReturnType<WorkItemCalls["delegate"]>>
+    | ProblemsOf<ReturnType<typeof checkCold>>
+  >;
   /**
    * This session's delegation tree: its delegates, theirs nested; the
    * delegates still queued; and the tree's held workspaces, whose items
@@ -1167,25 +1170,27 @@ function warmNow(
 }
 
 /**
- * Jev's answer about a cold session stands: attach delivers (returns), fresh
- * refuses, and a Jev that did not answer refuses saying so; none of them is
- * handed back to the caller to repeat.
+ * Jev's answer about a cold session stands: attach delivers (none), fresh
+ * is its problem, and a Jev that did not answer is one saying so; none of
+ * them is handed back to the caller to repeat.
  */
 function jevVerdict(
   row: KeepAliveRow,
   jev: { attach: boolean; noul: number } | { error: string }
-): void {
+) {
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   if ("error" in jev) {
-    throw new Error(
-      `Refused: "${title}" (${idHandle(row.id)}) is cold, and ${jev.error} Nothing was sent.`
-    );
+    return problem(502, {
+      code: "cold-jev-unanswered",
+      detail: `Refused: "${title}" (${idHandle(row.id)}) is cold, and ${jev.error} Nothing was sent.`,
+    });
   }
-  if (!jev.attach) {
-    throw new Error(
-      `Refused: "${title}" (${idHandle(row.id)}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`
-    );
-  }
+  return jev.attach
+    ? undefined
+    : problem(409, {
+        code: "cold-fresh-fits",
+        detail: `Refused: "${title}" (${idHandle(row.id)}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`,
+      });
 }
 
 /**
@@ -1269,7 +1274,7 @@ function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
  * the hub asks Jev whether that session's history matters to `message`, and
  * its answer stands (a Jev that does not answer refuses, saying so); Jev
  * off, the first call is refused with the cost, and the same call again is
- * delivered.
+ * delivered. Answers nothing when the message may go, else why it did not.
  */
 async function checkCold(
   calls: SessionCalls,
@@ -1277,8 +1282,11 @@ async function checkCold(
   workspace: string | undefined,
   caller: string,
   message: string
-): Promise<void> {
+) {
   const state = await readFollowupState(calls, instanceId, workspace, message);
+  if (state instanceof ElysiaStatus) {
+    return state;
+  }
   if (!state.row) {
     return;
   }
@@ -1289,13 +1297,12 @@ async function checkCold(
   }
   if (unlanded) {
     const decided = unlandedVerdict(row, caller, lastTurnAt, unlanded);
-    if (decided) {
-      return;
+    if (decided !== false) {
+      return decided === true ? undefined : decided;
     }
   }
   if (jev) {
-    jevVerdict(row, jev);
-    return;
+    return jevVerdict(row, jev);
   }
   if (repeatOfRefused(row, caller, lastTurnAt)) {
     return;
@@ -1304,34 +1311,36 @@ async function checkCold(
     row.contextTokens === null
       ? await measuredContext(calls, row.id)
       : row.contextTokens;
-  throw new Error(
-    coldRefusalText(
+  return problem(409, {
+    code: "session-cold",
+    detail: coldRefusalText(
       { ...row, contextTokens },
       lastTurnAt as string,
       activityBound,
       hasTurns
-    )
-  );
+    ),
+  });
 }
 
 /**
  * What a cold session's workspace holds on no remote decides first: true
  * when it delivers (uncommitted changes, which only that clone reaches, or
- * the repeat of a `from` refusal); thrown when it refuses (commits with a
- * clean tree, naming `from`; a read that failed); false when it holds
- * neither, and Jev or the caller decides.
+ * the repeat of a `from` refusal); its problem when it does not (commits
+ * with a clean tree, naming `from`; a read that failed); false when it
+ * holds neither, and Jev or the caller decides.
  */
 function unlandedVerdict(
   row: KeepAliveRow,
   caller: string,
   lastTurnAt: string | null,
   unlanded: Unlanded | { error: string }
-): boolean {
+) {
   if ("error" in unlanded) {
     const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
-    throw new Error(
-      `Refused: "${title}" (${idHandle(row.id)}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`
-    );
+    return problem(502, {
+      code: "cold-unlanded-unread",
+      detail: `Refused: "${title}" (${idHandle(row.id)}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`,
+    });
   }
   if (unlanded.changed > 0) {
     return true;
@@ -1342,7 +1351,10 @@ function unlandedVerdict(
   if (repeatOfRefused(row, caller, lastTurnAt)) {
     return true;
   }
-  throw new Error(fromRefusalText(row, unlanded));
+  return problem(409, {
+    code: "cold-commits-unlanded",
+    detail: fromRefusalText(row, unlanded),
+  });
 }
 
 /** A session's context size, read once for a cold refusal; null when its machine does not say in time. */
@@ -1372,32 +1384,27 @@ async function measuredContext(
   }
 }
 
-/** What the hub reads of a session a message is about to reach (`/api/followup-state`); unknown is refused. */
+/** What the hub reads of a session a message is about to reach (`/api/followup-state`), or why it read nothing; unknown is never read as cold or warm. */
 async function readFollowupState(
   calls: SessionCalls,
   instanceId: string | undefined,
   workspace: string | undefined,
   message: string
 ) {
-  const read = await readWithin(FOLLOWUP_STATE_MS, async () => {
-    const state = await calls.followupState({ instanceId, workspace, message });
-    if (state instanceof ElysiaStatus) {
-      throw new Error(state.response.detail);
-    }
-    return state;
-  });
+  const read = await readWithin(FOLLOWUP_STATE_MS, () =>
+    calls.followupState({ instanceId, workspace, message })
+  );
   switch (read.kind) {
     case "answered":
-      break;
+      return read.value;
     case "unanswered":
-      // Its state is unknown: never read as cold or warm.
-      throw new Error(
-        `The hub did not answer within ${secondsOf(read.after)} s whether that session's cache is warm, so nothing was sent. Retry.`
-      );
+      return problem(504, {
+        code: "followup-state-unanswered",
+        detail: `The hub did not answer within ${secondsOf(read.after)} s whether that session's cache is warm, so nothing was sent. Retry.`,
+      });
     default:
-      unhandled("read", read);
+      return unhandled("read", read);
   }
-  return read.value;
 }
 
 function coldRefusalText(
@@ -1735,7 +1742,16 @@ export const handoffActions = ({
         throw new Error(forkOwnedWords(peer, owner));
       }
       if (peer.row.id !== own?.parentInstanceId) {
-        await checkCold(calls, peer.row.id, undefined, instanceId, message);
+        const cold = await checkCold(
+          calls,
+          peer.row.id,
+          undefined,
+          instanceId,
+          message
+        );
+        if (cold) {
+          return cold;
+        }
       }
       const whose =
         peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
@@ -1879,7 +1895,16 @@ export const handoffActions = ({
         ? resolveMachine(fleet.machines(), machine)
         : undefined;
       if (opts.workspace) {
-        await checkCold(calls, undefined, opts.workspace, instanceId, prompt);
+        const cold = await checkCold(
+          calls,
+          undefined,
+          opts.workspace,
+          instanceId,
+          prompt
+        );
+        if (cold) {
+          return cold;
+        }
       }
       // A fresh remote fetch and, on failure, its acknowledged discard take
       // minutes: nothing here times it out.
