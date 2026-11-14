@@ -3,6 +3,7 @@
  * dashboard reads to detect the extension, and relays passkey QR
  * messages from the page to the background worker.
  */
+import { defineContentScript } from "wxt/utils/define-content-script";
 
 export default defineContentScript({
   matches: ["*://*.localhost/*", "*://*.ts.net:*/*"],
