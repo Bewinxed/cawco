@@ -639,7 +639,8 @@ export interface ClosureContext {
   installArgs: (
     toolId: string,
     ask: { newest?: string; pin?: string },
-    automatic: boolean
+    automatic: boolean,
+    startedBy: "cawco" | "person"
   ) => unknown[];
   installAsk: (toolId: string) => { newest?: string; pin?: string };
   installFromFolder: (

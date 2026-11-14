@@ -15452,6 +15452,16 @@
               }
             }
           },
+          "423": {
+            "description": "getApiInstancesByIdAttachments 423",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdAttachments423"
+                }
+              }
+            }
+          },
           "424": {
             "description": "getApiInstancesByIdAttachments 424",
             "content": {
@@ -16624,6 +16634,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiInstancesByIdTranscript422"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "getApiInstancesByIdTranscript 423",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdTranscript423"
                 }
               }
             }
@@ -59249,6 +59269,9 @@
                       "updating"
                     ]
                   },
+                  "startedBy": {
+                    "$ref": "#/components/schemas/ToolBehindMachineStartedBy"
+                  },
                   "to": {
                     "type": "string"
                   }
@@ -59265,6 +59288,13 @@
           "needsYou",
           "online",
           "state"
+        ]
+      },
+      "ToolBehindMachineStartedBy": {
+        "type": "string",
+        "enum": [
+          "cawco",
+          "person"
         ]
       },
       "ToolGlance": {
@@ -59643,6 +59673,9 @@
                     "enum": [
                       "cawco"
                     ]
+                  },
+                  "takenOver": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -59679,6 +59712,10 @@
           "signin": {
             "$ref": "#/components/schemas/ToolSignin",
             "description": "For a tool with its own sign-in ({@link ToolSpec.signin}), installed here: whether it is signed in."
+          },
+          "startedBy": {
+            "$ref": "#/components/schemas/ToolBehindMachineStartedBy",
+            "description": "On `installing`: who started the install. `cawco`: the hub's own (an\nupdate of CawCo's copy, a required tool, adding a machine); `person`: a\npress of Install, Update, Retry or Update all. Absent from a machine or\nhub too old to say."
           },
           "state": {
             "$ref": "#/components/schemas/ToolState"
@@ -88039,6 +88076,42 @@
           "type"
         ]
       },
+      "getApiInstancesByIdAttachments423": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "harness-updating"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              423
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiInstancesByIdAttachments424": {
         "type": "object",
         "properties": {
@@ -89596,6 +89669,42 @@
               "type"
             ]
           }
+        ]
+      },
+      "getApiInstancesByIdTranscript423": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "harness-updating"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              423
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "getApiInstancesByIdTranscript424": {

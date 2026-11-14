@@ -7282,6 +7282,24 @@ export const createServer = (
     },
   });
 
+  /**
+   * A machine's report naming a copy CawCo took into its care once, as the
+   * copy CawCo was already keeping current (agent tools.ts `takeOverKept`),
+   * said in the hub's log the first time its cell says so.
+   */
+  const sayTakenOver = (machineId: string, tools: ToolStatus[]): void => {
+    const before = db.agentTools(machineId);
+    for (const tool of tools) {
+      const copy = tool.copy?.by === "cawco" ? tool.copy : undefined;
+      const was = before[tool.id]?.copy;
+      if (copy?.takenOver && !(was?.by === "cawco" && was.takenOver)) {
+        console.info(
+          `[hub] ${toolSpec(tool.id)?.name ?? tool.id} ${tool.version ?? "(no version said)"} on ${machineName(machineId)} is CawCo's from now on: CawCo was keeping it current before its machine kept a record of CawCo's installs`
+        );
+      }
+    }
+  };
+
   /** Every known machine's fleet items hashed, before the hub listens (fleet-sync.ts `warmHashes`). */
   const warmFleetHashes = (): void => {
     for (const { machineId } of db.namedMachines()) {
@@ -12427,6 +12445,7 @@ export const createServer = (
   ): void => {
     const tools = agentFrame.tools.map(keptToolStatus);
     if (tools.length > 0) {
+      sayTakenOver(machineId, tools);
       db.mergeAgentTools(machineId, tools);
       autoInstall(machineId, ws);
     }
