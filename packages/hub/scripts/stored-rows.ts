@@ -131,6 +131,24 @@ const readColumn = (
   result.undeclared.push(...undeclared.values());
 };
 
+/** Every stored JSON column the schema declares: its table, name, primary key columns and shape. */
+export const storedColumns = async (): Promise<
+  { table: string; column: string; keys: string[]; shape: StoredShape }[]
+> => {
+  const schema = await import("../src/db/schema");
+  return Object.values(schema).flatMap((table) => {
+    if (!is(table, SQLiteTable)) {
+      return [];
+    }
+    const { name, columns } = getTableConfig(table);
+    const keys = primaryKeyOf(table).map((key) => key.name);
+    return columns.flatMap((column) => {
+      const shape = storedShapeOf(column);
+      return shape ? [{ table: name, column: column.name, keys, shape }] : [];
+    });
+  });
+};
+
 /**
  * Every stored JSON row in `sqlite`. `open` opens a sealed column's value
  * (the hub's key, secret-box.ts `makeSecretBox`); without it, sealed columns
@@ -140,7 +158,6 @@ export const storedRows = async (
   sqlite: Database,
   open?: (raw: string) => string | null
 ): Promise<StoredRows> => {
-  const schema = await import("../src/db/schema");
   const result: StoredRows = {
     checked: 0,
     columns: 0,
@@ -150,38 +167,26 @@ export const storedRows = async (
     undeclared: [],
     unopened: 0,
   };
-  for (const table of Object.values(schema)) {
-    if (!is(table, SQLiteTable)) {
-      continue;
+  const present = new Map<string, Set<string>>();
+  for (const { table, column, keys, shape } of await storedColumns()) {
+    let names = present.get(table);
+    if (!names) {
+      names = new Set(
+        sqlite
+          .query<{ name: string }, []>(`PRAGMA table_info(${quote(table)})`)
+          .all()
+          .map((row) => row.name)
+      );
+      present.set(table, names);
     }
-    const { name, columns } = getTableConfig(table);
-    const present = new Set(
-      sqlite
-        .query<{ name: string }, []>(`PRAGMA table_info(${quote(name)})`)
-        .all()
-        .map((row) => row.name)
-    );
-    const keys = primaryKeyOf(table).map((key) => key.name);
-    for (const column of columns) {
-      const shape = storedShapeOf(column);
-      const at = `${name}.${column.name}`;
-      if (!shape) {
-        continue;
-      }
-      if (!present.has(column.name)) {
-        result.missing.push(at);
-      } else if (shape.seal && !open) {
-        result.sealed.push(at);
-      } else {
-        result.columns += 1;
-        readColumn(
-          sqlite,
-          { table: name, column: column.name, keys },
-          shape,
-          open,
-          result
-        );
-      }
+    const at = `${table}.${column}`;
+    if (!names.has(column)) {
+      result.missing.push(at);
+    } else if (shape.seal && !open) {
+      result.sealed.push(at);
+    } else {
+      result.columns += 1;
+      readColumn(sqlite, { table, column, keys }, shape, open, result);
     }
   }
   return result;

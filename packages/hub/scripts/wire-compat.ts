@@ -460,7 +460,7 @@ const UNIONS = ["oneOf", "anyOf"] as const;
 const MAX_HOPS = 32;
 const OPEN_ENUM = /^ {4}([A-Za-z0-9_]+): OpenEnums\./gmu;
 
-const isObject = (value: unknown): value is Schema =>
+export const isObject = (value: unknown): value is Schema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const refOf = (schema: Schema): string | undefined =>
@@ -497,7 +497,7 @@ const valueKind = (value: unknown): string => {
   return typeof value;
 };
 
-const valuesOf = (schema: Schema): unknown[] | undefined => {
+export const valuesOf = (schema: Schema): unknown[] | undefined => {
   if (Array.isArray(schema.enum)) {
     return schema.enum;
   }
@@ -505,7 +505,7 @@ const valuesOf = (schema: Schema): unknown[] | undefined => {
 };
 
 /** The JSON kinds a schema admits ("any" when it names none). */
-const kindsOf = (schema: Schema): Set<string> => {
+export const kindsOf = (schema: Schema): Set<string> => {
   const { type } = schema;
   if (Array.isArray(type)) {
     return new Set(type.map(String));
@@ -527,7 +527,7 @@ const kindsOf = (schema: Schema): Set<string> => {
 };
 
 /** Kinds in `wider` that `narrower` does not admit (an integer is a number). */
-const extraKinds = (wider: Set<string>, narrower: Set<string>): string[] => {
+export const extraKinds = (wider: Set<string>, narrower: Set<string>): string[] => {
   if (narrower.has("any")) {
     return [];
   }
@@ -578,7 +578,7 @@ const taggedIn = (
   return out;
 };
 
-const quoted = (values: unknown[]): string =>
+export const quoted = (values: unknown[]): string =>
   values.map((value) => JSON.stringify(value)).join(", ");
 
 const contentSchema = (content: Content | undefined): Schema | undefined =>

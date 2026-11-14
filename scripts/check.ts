@@ -530,6 +530,19 @@ const run = (dir: string, name: string): Gated => {
     ],
   };
 };
+/**
+ * The commits a check holds the code to (the base and what is shipped, read
+ * off origin's tags), so a pass holds only for those. Origin out of reach:
+ * what is shipped is unknown, and no pass is reused (the check then says why
+ * it cannot run).
+ */
+const shippedBases = (): Promise<string[]> => {
+  try {
+    return Promise.resolve(wireBaselines([]));
+  } catch (error) {
+    return Promise.resolve([`${String(error)} ${crypto.randomUUID()}`]);
+  }
+};
 const tsconfigs = files.filter((p) => TSCONFIG.test(p));
 const manifests = files.filter((p) => MANIFEST.test(p));
 const gated: Gated[] = [
@@ -586,26 +599,15 @@ const gated: Gated[] = [
   bun("scripts/preview-switcher-check.ts"),
   bun("scripts/surface-briefs-check.ts"),
   bun("scripts/setup-draft-check.ts"),
-  {
-    ...run("packages/hub", "openapi:check"),
-    // It holds the wire to the commits readers were built at (the base and
-    // what is shipped, read off origin's tags), so a pass holds only for
-    // those. Origin out of reach: what is shipped is unknown, and no pass
-    // is reused (the check then says why it cannot run).
-    extra: () => {
-      try {
-        return Promise.resolve(wireBaselines([]));
-      } catch (error) {
-        return Promise.resolve([`${String(error)} ${crypto.randomUUID()}`]);
-      }
-    },
-  },
+  { ...run("packages/hub", "openapi:check"), extra: shippedBases },
   run("packages/hub", "migrations:check"),
   // The types it reads come through packages/hub/tsconfig.json, which
   // extends tsconfig.base.json, which extends tsconfig.paths.json, and from
   // the installed packages (TypeScript, @types/node, the MCP SDK, zod),
   // which bun.lock pins.
-  run("packages/hub", "stored-shapes:check"),
+  // Its stored-compat step holds each stored column's shape to the base
+  // and the newest nightly as well.
+  { ...run("packages/hub", "stored-shapes:check"), extra: shippedBases },
   run("packages/hub", "roles:check"),
   run("packages/core", "openui:check"),
   bun("scripts/claude-paths-check.ts"),
