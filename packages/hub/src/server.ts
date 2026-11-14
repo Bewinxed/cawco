@@ -6790,16 +6790,12 @@ export const createServer = (
     settled: (machineId, path) => placeRepos.settled(machineId, path),
     // A move is a New session the person started on another place: its mode
     // is the one the form chose.
-    spawn: async (machineId, payload) => {
+    spawn: (machineId, payload) => {
       const chosen = permissionModeNamed(payload.permissionMode);
       if (chosen) {
         db.chooseMode(machineId, payload.harness ?? "claude", chosen);
       }
-      const spawned = await spawnSession(machineId, payload, "person");
-      // moves.ts reads a start that does not go as a rejection.
-      if (spawned instanceof ElysiaStatus) {
-        throw new Error(spawned.response.detail);
-      }
+      return spawnSession(machineId, payload, "person");
     },
     send: (envelope) => {
       const sent = deliverSend(envelope);

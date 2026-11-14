@@ -22,7 +22,11 @@ import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { detach } from "@cawco/core/detach";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
-import { MachinePathRefused, machinePath } from "@cawco/core/machine-path";
+import {
+  type MachinePath,
+  MachinePathRefused,
+  machinePath,
+} from "@cawco/core/machine-path";
 import {
   CONTROL_MOVE_CANCEL,
   CONTROL_MOVE_CLONE,
@@ -70,6 +74,7 @@ import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
 
+import type { SpawnProblem } from "./spawn-problems";
 import { received } from "./stored-json";
 
 /** A machine a step needs is away: the job waits for its next register. */
@@ -143,8 +148,11 @@ export interface MovesDeps {
    * (place-repo.ts `settled`): the plan reads the source as it settled.
    */
   readonly settled: (machineId: string, path: string) => Promise<void>;
-  /** Starts the session as every hub-started session starts (spawns.ts `spawnSession`). */
-  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** Starts the session as every hub-started session starts (spawns.ts `spawnSession`): the folder it runs in, or why it did not start. */
+  readonly spawn: (
+    machineId: string,
+    payload: SpawnPayload
+  ) => Promise<MachinePath | SpawnProblem>;
 }
 
 /** How long a step may take before the hub stops waiting on its answer. */
@@ -1156,7 +1164,9 @@ export const createMoves = (deps: MovesDeps) => {
     state.steps[state.steps.indexOf(stage) + 1] ?? "started";
 
   /** What a job's current step does, and what it learned. */
-  const runStep = async (row: MoveRow): Promise<Partial<MoveState>> => {
+  const runStep = async (
+    row: MoveRow
+  ): Promise<Partial<MoveState> | SpawnProblem> => {
     const { state } = row;
     const stage = row.stage as MoveStep;
     const target = deps.machineName(state.targetMachineId);
@@ -1269,7 +1279,9 @@ export const createMoves = (deps: MovesDeps) => {
    * project, the session starts there from the stored request, and its first
    * prompt goes to it. The words of what moved and what stayed are kept.
    */
-  const startSession = async (row: MoveRow): Promise<Partial<MoveState>> => {
+  const startSession = async (
+    row: MoveRow
+  ): Promise<Partial<MoveState> | SpawnProblem> => {
     const { state, request } = row;
     const { place, added } = db.addPlace({
       projectId: row.projectId,
@@ -1295,7 +1307,7 @@ export const createMoves = (deps: MovesDeps) => {
     );
     // Before the spawn: the line opens the transcript, ahead of its first prompt.
     const at = Date.now();
-    await deps.spawn(state.targetMachineId, {
+    const spawned = await deps.spawn(state.targetMachineId, {
       instanceId: state.targetInstanceId,
       requestId: crypto.randomUUID(),
       cwd: state.targetPath,
@@ -1303,6 +1315,9 @@ export const createMoves = (deps: MovesDeps) => {
       ...request.spawn,
       ...(sessionKey ? { resume: { sessionKey } } : {}),
     });
+    if (spawned instanceof ElysiaStatus) {
+      return spawned;
+    }
     const ready = readyWords(row);
     if (ready.moved) {
       deps.movedHere(state.targetInstanceId, {
@@ -1364,9 +1379,10 @@ export const createMoves = (deps: MovesDeps) => {
   /**
    * A job's steps from where its record stands, each only while its machine
    * is here. The approval waits on the person's answer; every other step
-   * runs and moves the job on.
+   * runs and moves the job on. Answers why its session did not start, when
+   * the start step's spawn did not go.
    */
-  const runSteps = async (id: string): Promise<void> => {
+  const runSteps = async (id: string): Promise<SpawnProblem | undefined> => {
     for (;;) {
       const row = db.moveRow(id);
       if (!(row && WORKING.has(row.stage))) {
@@ -1381,6 +1397,9 @@ export const createMoves = (deps: MovesDeps) => {
       }
       const stage = row.stage as MoveStep;
       const learned = await runStep(row);
+      if (learned instanceof ElysiaStatus) {
+        return learned;
+      }
       if (db.moveRow(id)?.stage !== stage) {
         // A Cancel landed while the step ran; it stands.
         return;
@@ -1394,9 +1413,10 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   /**
-   * A step that threw: nothing when the job settled meanwhile (a Cancel); a
-   * wait when its machine went away; else the job fails at the step, in the
-   * error's own words. True when it waits for its machine.
+   * A step that threw, or a start that did not go (its problem's words):
+   * nothing when the job settled meanwhile (a Cancel); a wait when its
+   * machine went away; else the job fails at the step, in the error's own
+   * words. True when it waits for its machine.
    */
   const stepFailed = (id: string, error: unknown): boolean => {
     const row = db.moveRow(id);
@@ -1423,7 +1443,10 @@ export const createMoves = (deps: MovesDeps) => {
     advancing.add(id);
     let away = false;
     try {
-      await runSteps(id);
+      const unstarted = await runSteps(id);
+      if (unstarted) {
+        away = stepFailed(id, unstarted.response.detail);
+      }
     } catch (error) {
       away = stepFailed(id, error);
     } finally {

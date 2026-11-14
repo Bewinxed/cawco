@@ -5,7 +5,7 @@ import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { MachinePathRefused } from "@cawco/core/machine-path";
+import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import type {
   Envelope,
   InstanceRow,
@@ -42,6 +42,7 @@ import type { ForecastRead } from "./rebalance";
 import { kindBurn, readForecast } from "./rebalance";
 import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
+import type { SpawnProblem } from "./spawn-problems";
 import type { createStartHolds } from "./start-holds";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
@@ -1243,7 +1244,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     /** Who asked for it: its row's origin. */
     by: SessionOrigin,
     fallbackMode?: string
-  ) => {
+  ): Promise<MachinePath | SpawnProblem> => {
     const named = namedSpawn(payload);
     if ("refusal" in named) {
       return problem(400, {
