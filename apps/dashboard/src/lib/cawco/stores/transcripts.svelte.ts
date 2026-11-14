@@ -412,14 +412,20 @@ function updateBlock(target: SessionState, block: TranscriptBlock): void {
  * after that row; at the front when it is the conversation's first row and
  * the view holds the conversation's start. -1: the row before it is one this
  * view has not read yet (older than its first row), and the block comes with
- * that page.
+ * that page. A view no page has reached holds none of the rows the hub's go
+ * after (its read refused or failed, hub transcripts.ts `load`): what the
+ * hub says meanwhile, a send it refused, is its rows in the order said, and
+ * the page that lands later takes them in by id.
  */
 function insertAt(target: SessionState, after: string | null): number {
   if (after === null) {
     return target.cursor === null ? 0 : -1;
   }
   const at = target.blocks.findLastIndex((message) => message.id === after);
-  return at < 0 ? -1 : at + 1;
+  if (at >= 0) {
+    return at + 1;
+  }
+  return target.reads === 0 ? target.blocks.length : -1;
 }
 
 /**
