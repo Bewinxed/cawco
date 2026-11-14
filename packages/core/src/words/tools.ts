@@ -163,7 +163,7 @@ export const toolWords = {
     machine: string,
     to: string | undefined
   ) =>
-    `CawCo is ${installs ? "installing" : "updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}. Nothing to press: sessions there carry on, and this clears by itself once it lands.`,
+    `CawCo is ${installs ? "installing" : "updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}.`,
   /** Configure → CLI tools: the cell while CawCo updates a copy that is there. */
   updating: "Updating…",
   /** Configure → CLI tools: the mark beside a copy's version that its last update left older. */

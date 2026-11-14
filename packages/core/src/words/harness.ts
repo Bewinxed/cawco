@@ -86,7 +86,7 @@ export const harnessRefusedWords = {
    * page reads it again by itself once the install lands.
    */
   updatingUnread: (name: string, machine: string, to: string | undefined) =>
-    `CawCo is putting ${name}${to ? ` ${to}` : ""} on ${machine} right now, and this conversation is read through ${name}, so it shows here again by itself once that lands`,
+    `CawCo is updating ${name} on ${machine}${to ? ` to ${to}` : ""}, and this conversation shows again once that lands`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**
