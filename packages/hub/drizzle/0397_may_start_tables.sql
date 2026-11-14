@@ -4,7 +4,7 @@
 -- `*_starting_set` rows, and a type's skills, denied tools and connections
 -- as rows of their own. `delegate_types` and `delegate_types_meta` join the
 -- schema: db/delegate-types.ts made and grew them by hand, and the step
--- before this migration (db/migrate.ts `delegate-types-hand-shape`) brings
+-- before this migration (db/migrate.ts `may-start-tables`) brings
 -- them to that code's last shape, so here they are renamed out of the way,
 -- copied, and dropped. A type in the trash is kept in the trash's new shape
 -- (its row, then its lists), read by the same rule as a live one.

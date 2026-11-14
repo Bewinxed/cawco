@@ -26,6 +26,7 @@ import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { DbCore } from "./core";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
+import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
@@ -86,11 +87,14 @@ export const MIGRATION_STEPS: readonly Step[] = [
     },
   },
   {
-    name: "delegate-types-hand-shape",
+    name: "may-start-tables",
     before: "0397_may_start_tables",
     at: "migrator",
     run: (client) => {
+      // The hand-made tables at their last shape, then the log of every
+      // session and type 0397 places narrow, read before it runs.
       delegateTypesHandShape(client);
+      logMayStartNarrowed(client);
     },
   },
   {
