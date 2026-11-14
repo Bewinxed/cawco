@@ -10546,6 +10546,132 @@ export const createServer = (
     areas: projectAreas,
     republishPreviews,
   });
+  /**
+   * The delegate `instanceId` names, which `requester` may control: its
+   * parent, or its project's conversation (a co-parent of every work item of
+   * the project, which may answer, steer and stop it); refused when it is
+   * neither's, or retired.
+   */
+  const delegateControlled = (
+    instanceId: string | undefined,
+    requester: InstanceRow
+  ) => {
+    // A delegate named by a former id is acted on by its id now.
+    const row = instanceId
+      ? db.getInstancesByIds([db.instanceIdOf(instanceId)])[0]
+      : undefined;
+    if (!(
+      row &&
+      (row.parentInstanceId === requester.id ||
+        workItems.ledBy(row.id, requester.id))
+    )) {
+      return problem(403, {
+        code: "delegation-control-not-yours",
+        detail:
+          "you can only control your own delegates, or the work items of the project whose conversation you are",
+      });
+    }
+    const retired = workItems.refusal(row, {
+      kind: "peer",
+      fromSession: requester.id,
+    });
+    if (retired) {
+      return problem(409, {
+        code: "delegation-control-retired",
+        detail: retired.reason,
+      });
+    }
+    return row;
+  };
+  /**
+   * A delegate's ask answered by `requester`, its parent or its project's
+   * conversation: a question the hub owns (asks.ts) is its asker's parent's
+   * to answer too, and a permit is, as the prompt it was kept from was; an
+   * ask the hub raised and settles itself (an approval, a browser or connect
+   * ask, a move, a proposal) only the person answers (delegate-waits.ts
+   * `personOnly`). The answer's problem goes on in its status and code,
+   * said for the delegate the target named.
+   */
+  const answerForDelegate = async (
+    row: InstanceRow,
+    requester: InstanceRow,
+    control: ControlPayload
+  ) => {
+    const result = control.args?.[1] as PermissionResult;
+    const answer = peekAnswer(control);
+    if (!answer) {
+      throw new Error("A permission answer names no request.");
+    }
+    const owned = db.asks.get(answer.requestId);
+    const parked = pending.get(answer.requestId);
+    if (parked && delegateWaits.personOnly(parked)) {
+      return problem(403, {
+        code: "delegation-ask-person-only",
+        detail: delegateWaitWords.refused,
+      });
+    }
+    if (owned && owned.instanceId !== row.id) {
+      return problem(403, {
+        code: "delegation-ask-not-theirs",
+        detail: "That ask isn't this delegate's.",
+      });
+    }
+    // Its refusal says which delegate the target named: an ask that is
+    // no longer pending reads the same for every session otherwise.
+    const said = (why: string) =>
+      `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${why}`;
+    const answered = await answerPermission(
+      pending,
+      row.id,
+      answer.requestId,
+      result,
+      { via: "session", name: sessionName(requester) }
+    ).catch((error: unknown) => {
+      throw new Error(
+        said(error instanceof Error ? error.message : String(error)),
+        { cause: error }
+      );
+    });
+    if (answered) {
+      return problem(answered.status, {
+        code: answered.response.code,
+        detail: said(answered.response.detail),
+      });
+    }
+  };
+  /**
+   * A control `requester` sends its delegate `row` on its machine, from
+   * `requester`; an interrupt is noted and cuts the turn it lands in, said
+   * as that session's.
+   */
+  const controlDelegate = (
+    envelope: Envelope,
+    row: InstanceRow,
+    requester: InstanceRow,
+    control: ControlPayload
+  ) => {
+    const agent = registry.agent(row.machineId);
+    if (!agent) {
+      return problem(404, {
+        code: "delegation-machine-offline",
+        detail: machineFault(row.machineId, "offline"),
+      });
+    }
+    sendFrame(agent, {
+      ...envelope,
+      instanceId: row.id,
+      machineId: row.machineId,
+      payload: { ...control, instanceId: row.id, from: requester.id },
+    });
+    if (control.method === CONTROL_INTERRUPT) {
+      saidInterrupt(row.id, `by session ${requester.id}`);
+      noteInterrupt(row.id);
+      cutTurn(
+        row.id,
+        turnCutWords.interruptFrom(`“${sessionName(requester)}”`)
+      );
+    }
+  };
   const delegationMcp = createDelegationMcp({
     workItemCalls: workItemCalls(ctx),
     adminCalls: adminCallsMade,
@@ -10780,7 +10906,9 @@ export const createServer = (
         fallbackPermissionMode
       );
     },
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
+    // One in-process dispatcher in place of six relay routes: the caller,
+    // then the verb, then the target's ownership and retirement, each
+    // checked in that order before the answer or the control goes.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
       // on an envelope. Recheck the row in case its permission changed mid-call.
@@ -10788,7 +10916,6 @@ export const createServer = (
       if (requester instanceof ElysiaStatus) {
         return requester;
       }
-      const { instanceId } = envelope;
       if (envelope.verb === "send") {
         const sent = sessionSend(envelope as Envelope<SendPayload>, requester);
         return sent instanceof ElysiaStatus ? sent : undefined;
@@ -10801,105 +10928,13 @@ export const createServer = (
       )) {
         throw new Error(`Unsupported delegation operation ${envelope.verb}`);
       }
-      // A delegate named by a former id is acted on by its id now.
-      const row = instanceId
-        ? db.getInstancesByIds([db.instanceIdOf(instanceId)])[0]
-        : undefined;
-      // Its parent, or its project's conversation: a co-parent of every work item of
-      // the project, which may answer, steer and stop it.
-      if (!(
-        row &&
-        (row.parentInstanceId === requester.id ||
-          workItems.ledBy(row.id, requester.id))
-      )) {
-        return problem(403, {
-          code: "delegation-control-not-yours",
-          detail:
-            "you can only control your own delegates, or the work items of the project whose conversation you are",
-        });
+      const row = delegateControlled(envelope.instanceId, requester);
+      if (row instanceof ElysiaStatus) {
+        return row;
       }
-      const retired = workItems.refusal(row, {
-        kind: "peer",
-        fromSession: requester.id,
-      });
-      if (retired) {
-        return problem(409, {
-          code: "delegation-control-retired",
-          detail: retired.reason,
-        });
-      }
-      const result = control.args?.[1] as PermissionResult;
-      if (control.method === RESOLVE_PERMISSION) {
-        const answer = peekAnswer(control);
-        if (!answer) {
-          throw new Error("A permission answer names no request.");
-        }
-        // A question the hub owns (asks.ts) is its asker's parent's to
-        // answer too, and a permit is, as the prompt it was kept from was;
-        // an ask the hub raised and settles itself (an approval, a browser
-        // or connect ask, a move, a proposal) only the person answers
-        // (delegate-waits.ts `personOnly`).
-        const owned = db.asks.get(answer.requestId);
-        const parked = pending.get(answer.requestId);
-        if (parked && delegateWaits.personOnly(parked)) {
-          return problem(403, {
-            code: "delegation-ask-person-only",
-            detail: delegateWaitWords.refused,
-          });
-        }
-        if (owned && owned.instanceId !== row.id) {
-          return problem(403, {
-            code: "delegation-ask-not-theirs",
-            detail: "That ask isn't this delegate's.",
-          });
-        }
-        // Its refusal says which delegate the target named: an ask that is
-        // no longer pending reads the same for every session otherwise.
-        const said = (why: string) =>
-          `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${why}`;
-        const answered = await answerPermission(
-          pending,
-          row.id,
-          answer.requestId,
-          result,
-          { via: "session", name: sessionName(requester) }
-        ).catch((error: unknown) => {
-          throw new Error(
-            said(error instanceof Error ? error.message : String(error)),
-            { cause: error }
-          );
-        });
-        // The answer's problem goes on in its status and code, said for
-        // the delegate the target named.
-        if (answered) {
-          return problem(answered.status, {
-            code: answered.response.code,
-            detail: said(answered.response.detail),
-          });
-        }
-        return;
-      }
-      const agent = registry.agent(row.machineId);
-      if (!agent) {
-        return problem(404, {
-          code: "delegation-machine-offline",
-          detail: machineFault(row.machineId, "offline"),
-        });
-      }
-      sendFrame(agent, {
-        ...envelope,
-        instanceId: row.id,
-        machineId: row.machineId,
-        payload: { ...control, instanceId: row.id, from: requester.id },
-      });
-      if (control.method === CONTROL_INTERRUPT) {
-        saidInterrupt(row.id, `by session ${requester.id}`);
-        noteInterrupt(row.id);
-        cutTurn(
-          row.id,
-          turnCutWords.interruptFrom(`“${sessionName(requester)}”`)
-        );
-      }
+      return control.method === RESOLVE_PERMISSION
+        ? await answerForDelegate(row, requester, control)
+        : controlDelegate(envelope, row, requester, control);
     },
   });
   toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
