@@ -3,6 +3,12 @@
  * an edit's controls, the send. The dashboard renders them from here.
  */
 export const transcriptWords = {
+  /** The toast when a stored composer draft was dropped to keep the stored drafts under their size cap: `what` names the draft by its first words. */
+  draftDropped: (what: string) =>
+    `Storage for unsent drafts was full, so the oldest draft was dropped: ${what}`,
+  /** The toast when an unsaved Configure editor's edits were dropped for the same reason: `where` is the editor's path. */
+  editorDraftDropped: (where: string) =>
+    `Storage for unsaved edits was full, so the oldest unsaved edits were dropped: ${where}`,
   /** A tab's details card, and the tabs of a pane's group. */
   sessionDetails: "Session details",
   /**

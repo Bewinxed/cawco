@@ -62,6 +62,8 @@ export interface PageErrorReport {
 
 /** Faults as the artifact's doc keeps them (`meta.faults`): the latest revision's alone, the first {@link PAGE_FAULTS_KEPT}. */
 export interface PageFaultsKept {
+  /** How many new faults came after the first {@link PAGE_FAULTS_KEPT} and were let go. */
+  dropped?: number;
   faults: PageFault[];
   revision: number;
 }
@@ -82,7 +84,7 @@ export const sameFault = (one: PageFault, other: PageFault): boolean =>
 /**
  * The faults an artifact keeps once `fault` is met at `revision`, with
  * `had` kept: those of `revision` alone, each once, the first
- * {@link PAGE_FAULTS_KEPT}; null when it keeps nothing new.
+ * {@link PAGE_FAULTS_KEPT}, with a count of the ones let go; null when it keeps nothing new.
  */
 export function faultsWith(
   had: PageFaultsKept | undefined,
@@ -90,10 +92,13 @@ export function faultsWith(
   fault: PageFault
 ): PageFaultsKept | null {
   const faults = had?.revision === revision ? had.faults : [];
-  return faults.length >= PAGE_FAULTS_KEPT ||
-    faults.some((one) => sameFault(one, fault))
-    ? null
-    : { revision, faults: [...faults, fault] };
+  if (faults.some((one) => sameFault(one, fault))) {
+    return null;
+  }
+  if (faults.length >= PAGE_FAULTS_KEPT) {
+    return { revision, faults, dropped: (had?.dropped ?? 0) + 1 };
+  }
+  return { revision, faults: [...faults, fault] };
 }
 
 /** The faults kept of `revision`: none when what is kept is another revision's. */
@@ -101,3 +106,9 @@ export const faultsAt = (
   kept: PageFaultsKept | undefined,
   revision: number
 ): PageFault[] => (kept?.revision === revision ? kept.faults : []);
+
+/** How many faults of `revision` were let go past the first {@link PAGE_FAULTS_KEPT}. */
+export const faultsDroppedAt = (
+  kept: PageFaultsKept | undefined,
+  revision: number
+): number => (kept?.revision === revision ? (kept.dropped ?? 0) : 0);

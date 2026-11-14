@@ -651,6 +651,8 @@ export interface ActivityLine {
   answered: boolean;
   at: string;
   before?: string;
+  /** On the oldest line kept alone: how many lines before it were let go past {@link ACTIVITY_LIMIT}. */
+  earlier?: number;
   element: string;
   moved?: { after: string; before: string };
   revision: number;
@@ -660,7 +662,19 @@ export interface ActivityLine {
 export const CHANGE_WORDS_MOST = 600;
 
 /** Lines one pin's thread keeps of what changed for it, newest last. Our call. */
-export const ACTIVITY_LIMIT = 30;
+const ACTIVITY_LIMIT = 30;
+
+/** `lines` held to {@link ACTIVITY_LIMIT}: the oldest let go, the count of all let go carried on the oldest kept. */
+export function keptActivity(lines: ActivityLine[]): ActivityLine[] {
+  const cut = lines.length - ACTIVITY_LIMIT;
+  if (cut <= 0) {
+    return lines;
+  }
+  const [first, ...rest] = lines.slice(cut);
+  return first
+    ? [{ ...first, earlier: (lines[0]?.earlier ?? 0) + cut }, ...rest]
+    : [];
+}
 
 /** The doc's `activity`: each pin's change lines ({@link ActivityLine}), by pin id. */
 export const activityOf = (doc: MapDoc) =>
@@ -833,7 +847,7 @@ export function answeredLines(
         (line) => line.anchor === one.anchor && line.revision === one.revision
       )
   );
-  return [...next, ...added].slice(-ACTIVITY_LIMIT);
+  return keptActivity([...next, ...added]);
 }
 
 /** Items one revision's changes keep. Our call: past it, the page changed whole. */

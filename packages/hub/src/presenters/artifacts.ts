@@ -476,6 +476,7 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
       artifactToolWords.faultsHead(read.revision),
       ...read.faults.map(artifactToolWords.pageFault),
     ],
+    !!read.faultsDropped && artifactToolWords.faultsDropped(read.faultsDropped),
     canvasLines(read, now),
     writeLines(read),
     read.workspace &&

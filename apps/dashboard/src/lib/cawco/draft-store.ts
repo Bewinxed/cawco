@@ -13,8 +13,10 @@
  * written.
  */
 
+import { transcriptWords } from "@cawco/core/words/transcript";
 import { DraftRecordSchema } from "#lib/cawco/stored-shapes.js";
 import { newId } from "#lib/platform/id.js";
+import { toast } from "#lib/platform/toasts.js";
 import { database, done, result, DRAFTS as STORE } from "./idb";
 import type {
   DraftCanvas,
@@ -187,6 +189,7 @@ export async function saveDraft(
     return read.success ? [read.data] : [];
   });
   let total = all.reduce((sum, each) => sum + each.size, 0);
+  const dropped: DraftRecord[] = [];
   for (const old of all
     .filter((each) => each.sessionId !== sessionId)
     .sort((a, b) => a.updatedAt - b.updatedAt)) {
@@ -195,6 +198,15 @@ export async function saveDraft(
     }
     store.delete(old.sessionId);
     total -= old.size;
+    dropped.push(old);
   }
-  return finished;
+  await finished;
+  for (const old of dropped) {
+    const first = old.text.trim().slice(0, 60);
+    toast.info(
+      transcriptWords.draftDropped(
+        first ? `"${first}"` : "a draft with attachments and no words"
+      )
+    );
+  }
 }

@@ -10,6 +10,10 @@ import {
   installerRan,
 } from "../install";
 
+/** The first line of an install's output once its oldest lines went past what the hub keeps. */
+export const outputCutWords = (count: number): string =>
+  `[The first ${count} ${count === 1 ? "line" : "lines"} of this output ${count === 1 ? "is" : "are"} gone: the hub keeps the last lines only.]`;
+
 /** Each step in the person's words, by route. */
 export const stepWords = (route: InstallRoute, step: InstallStep): string => {
   if (route === "command") {

@@ -4,7 +4,6 @@ import {
   noteText,
 } from "@cawco/core/choices";
 import {
-  ACTIVITY_LIMIT,
   activityLines,
   activityOf,
   answerChanges,
@@ -12,6 +11,7 @@ import {
   bindChanges,
   CHANGES_LIMIT,
   carryChanges,
+  keptActivity,
   readPins,
   seenOf,
 } from "@cawco/core/comments/model";
@@ -311,7 +311,7 @@ export const createPageKind = (ctx: PageKindContext) => {
       for (const [pin, lines] of activityLines(fresh, at)) {
         activity.set(
           pin,
-          [...(activity.get(pin) ?? []), ...lines].slice(-ACTIVITY_LIMIT)
+          keptActivity([...(activity.get(pin) ?? []), ...lines])
         );
       }
     });

@@ -132,6 +132,9 @@ export const commentWords = {
   /** A change line whose words run past its lines: opened in place, and folded again. */
   more: "More",
   less: "Less",
+  /** The note over a pin's change lines when the oldest were let go past the most a thread keeps. */
+  earlierLines: (count: number) =>
+    `${count} earlier change ${count === 1 ? "line was" : "lines were"} let go; the oldest shown is not the first.`,
   /** A change line's thing put in: no before. */
   added: "added",
   noneToCheck: "All looked at",

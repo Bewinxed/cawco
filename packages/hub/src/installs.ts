@@ -67,6 +67,7 @@ import {
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
+import { outputCutWords } from "@cawco/core/words/install";
 import { InstallsRecordSchema } from "./db/stored-shapes";
 import type { InstallsRecord } from "./db/stored-types";
 import type { HubLifetimeShape } from "./lifetime";
@@ -160,6 +161,8 @@ const LINGER_USER = /enable-linger (\S+)/u;
 /** What an install holds besides what every dashboard reads. */
 interface Kept {
   code: string | null;
+  /** Lines let go from the front of `lines` past {@link MAX_LINES}. */
+  dropped: number;
   exitCode: number | null;
   /** The SSH add's hub address as the machine reaches it, for the legacy read. */
   hubUrl: string;
@@ -498,6 +501,7 @@ export const createInstalls = (deps: InstallsDeps) => {
         // Whatever ran is lost, so no code of it works any more.
         code: null,
         lines: [...install.tail],
+        dropped: 0,
         exitCode: null,
         hubUrl: "",
         run: null,
@@ -675,7 +679,9 @@ export const createInstalls = (deps: InstallsDeps) => {
     }
     entry.lines.push(line);
     if (entry.lines.length > MAX_LINES) {
-      entry.lines.splice(0, entry.lines.length - MAX_LINES);
+      const over = entry.lines.length - MAX_LINES;
+      entry.lines.splice(0, over);
+      entry.dropped += over;
     }
     entry.install.tail = entry.lines
       .filter((one) => one.trim())
@@ -1151,6 +1157,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       install,
       code: null,
       lines: [],
+      dropped: 0,
       exitCode: null,
       hubUrl: "",
       run: null,
@@ -1199,6 +1206,7 @@ export const createInstalls = (deps: InstallsDeps) => {
       install,
       code,
       lines: [],
+      dropped: 0,
       exitCode: null,
       hubUrl: "",
       run: null,
@@ -1378,6 +1386,7 @@ export const createInstalls = (deps: InstallsDeps) => {
     } satisfies Partial<Install>);
     // The keys an earlier run wrote stay on the machine: `keys` keeps them.
     entry.lines = [];
+    entry.dropped = 0;
     entry.exitCode = null;
     entry.hubUrl = "";
     entry.legacyStep = undefined;
@@ -1463,7 +1472,14 @@ export const createInstalls = (deps: InstallsDeps) => {
       runningFor(target, port)?.install,
     output: (id: string): InstallOutput | undefined => {
       const entry = kept.get(id);
-      return entry ? { lines: entry.lines } : undefined;
+      return entry
+        ? {
+            lines:
+              entry.dropped > 0
+                ? [outputCutWords(entry.dropped), ...entry.lines]
+                : entry.lines,
+          }
+        : undefined;
     },
     /**
      * The draft the person is filling in, kept as they type; never a

@@ -94,6 +94,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
   faultsAt,
+  faultsDroppedAt,
   faultsWith,
   type PageFaultReport,
 } from "@cawco/core/page-faults";
@@ -1358,9 +1359,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const faultsOf = (
     row: ArtifactRow,
     doc: Doc
-  ): Pick<ArtifactRead, "faults"> => {
-    const faults = faultsAt(getMeta(doc, "faults"), row.revision);
-    return faults.length > 0 ? { faults } : {};
+  ): Pick<ArtifactRead, "faults" | "faultsDropped"> => {
+    const kept = getMeta(doc, "faults");
+    const faults = faultsAt(kept, row.revision);
+    const dropped = faultsDroppedAt(kept, row.revision);
+    return faults.length > 0
+      ? { faults, ...(dropped > 0 ? { faultsDropped: dropped } : {}) }
+      : {};
   };
 
   /**

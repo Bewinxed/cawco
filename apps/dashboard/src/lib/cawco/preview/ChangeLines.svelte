@@ -5,6 +5,8 @@
     /** Where pressing the line goes on the page, for a line that steps there (the rail's unasked row). */
     anchor?: string;
     before?: string;
+    /** Lines before this one that were let go. */
+    earlier?: number;
     element: string;
     moved?: { after: string; before: string };
     revision?: number;
@@ -129,6 +131,11 @@
     {#if unanswered}
       <p class="m-0 text-status-attn-ink type-meta" data-slot="no-answer">
         {commentWords.changedNoAnswer}
+      </p>
+    {/if}
+    {#if lines[0]?.earlier}
+      <p class="m-0 text-ink-muted type-meta" data-slot="earlier-lines">
+        {commentWords.earlierLines(lines[0].earlier)}
       </p>
     {/if}
     <ul class="m-0 flex list-none flex-col gap-space-1 p-0">

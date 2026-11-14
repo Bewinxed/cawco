@@ -11,6 +11,9 @@ export const artifactToolWords = {
   /** The head of `artifact_read`'s faults: what a browser met as it drew the page at this revision (core page-faults.ts). */
   faultsHead: (revision: number) =>
     `What a browser met drawing revision ${revision} (each once, the first 20):`,
+  /** The line after the faults when more came than are kept. */
+  faultsDropped: (count: number) =>
+    `${count} more ${count === 1 ? "fault" : "faults"} came after these and ${count === 1 ? "was" : "were"} not kept.`,
   /** One fault a page met, in words. */
   pageFault: (fault: PageFault): string => {
     if (fault.kind === "dial") {

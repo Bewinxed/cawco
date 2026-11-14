@@ -267,6 +267,8 @@ export interface ArtifactRead {
   };
   /** What a browser met drawing it at this revision (core page-faults.ts): dials its panel doesn't draw, uncaught errors, assets that failed. */
   faults?: PageFault[];
+  /** How many more faults a browser met at this revision past the first 20, which are not kept. */
+  faultsDropped?: number;
   /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
   held?: string;
   id: string;

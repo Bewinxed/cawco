@@ -41,6 +41,7 @@ export const lineOfActivity = (line: ActivityLine): ChangeLine => ({
   anchor: line.anchor,
   revision: line.revision,
   ...(line.before === undefined ? {} : { before: line.before }),
+  ...(line.earlier ? { earlier: line.earlier } : {}),
   ...(line.moved ? { moved: line.moved } : {}),
 });
 export interface ChangeTourDeps {

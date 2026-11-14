@@ -14,8 +14,11 @@
  * upgrade, which a tab still open on the previous build blocks until it
  * reloads.
  */
+
+import { transcriptWords } from "@cawco/core/words/transcript";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
+import { toast } from "#lib/platform/toasts.js";
 import { browser } from "$app/env";
 import { result } from "../idb";
 import { keepsDrafts } from "../reload.svelte";
@@ -144,6 +147,7 @@ class EditorDrafts {
     const changes = [...this.#unwritten];
     this.#unwritten.clear();
     this.#writing = database().then(async (db) => {
+      const dropped: string[] = [];
       const transaction = db.transaction(STORE, "readwrite");
       const committed = new Promise<void>((resolve, reject) => {
         transaction.oncomplete = () => resolve();
@@ -172,8 +176,12 @@ class EditorDrafts {
         }
         store.delete(old.path);
         total -= old.size;
+        dropped.push(old.path);
       }
       await committed;
+      for (const path of dropped) {
+        toast.info(transcriptWords.editorDraftDropped(path));
+      }
     });
   }
 }

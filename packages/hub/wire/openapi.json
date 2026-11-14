@@ -32819,6 +32819,10 @@
               "$ref": "#/components/schemas/PageFault"
             }
           },
+          "faultsDropped": {
+            "description": "How many more faults a browser met at this revision past the first 20, which are not kept.",
+            "type": "number"
+          },
           "held": {
             "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
             "type": "string"
