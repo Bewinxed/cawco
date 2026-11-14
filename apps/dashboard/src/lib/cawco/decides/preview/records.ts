@@ -45,7 +45,6 @@ const agent = (id: string, name: string, job: string, hue: number): Member => ({
   pose: null,
   hear: "each",
   delegateType: id,
-  reach: null,
 });
 
 /** Agents and a person he added, beside the built-ins. */

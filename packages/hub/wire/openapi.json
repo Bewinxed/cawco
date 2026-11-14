@@ -45702,29 +45702,6 @@
           "contextTokens": {
             "type": "number"
           },
-          "lastPingUsage": {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "number"
-              },
-              "input": {
-                "type": "number"
-              },
-              "read": {
-                "type": "number"
-              },
-              "write": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "at",
-              "input",
-              "read",
-              "write"
-            ]
-          },
           "nextAt": {
             "type": "number"
           },
@@ -46459,26 +46436,6 @@
             "$ref": "#/components/schemas/FleetDecidesAdvisor",
             "description": "Caw's flock: the pose it wears; null for the rest."
           },
-          "reach": {
-            "description": "A person or channel: how it is reached. Null until that slice.",
-            "type": "object",
-            "properties": {
-              "address": {
-                "type": "string"
-              },
-              "via": {
-                "$ref": "#/components/schemas/MemberVia"
-              },
-              "wait": {
-                "$ref": "#/components/schemas/MemberWait"
-              }
-            },
-            "required": [
-              "address",
-              "via",
-              "wait"
-            ]
-          },
           "subject": {
             "description": "In a sentence: \"Roost iOS sends scope to the advisor\".",
             "type": "string"
@@ -46515,21 +46472,6 @@
           "person",
           "practice",
           "you"
-        ]
-      },
-      "MemberVia": {
-        "type": "string",
-        "enum": [
-          "email",
-          "slack"
-        ]
-      },
-      "MemberWait": {
-        "type": "string",
-        "enum": [
-          "1d",
-          "4h",
-          "wait"
         ]
       },
       "MemoryDocRow": {
@@ -200098,12 +200040,6 @@
           "path": {
             "$ref": "#/components/schemas/MachinePath"
           },
-          "ports": {
-            "type": "array",
-            "items": {
-              "type": "number"
-            }
-          },
           "repoRoot": {
             "$ref": "#/components/schemas/MachinePath"
           },
@@ -200127,7 +200063,6 @@
           "kind",
           "machineId",
           "path",
-          "ports",
           "repoRoot",
           "state"
         ]

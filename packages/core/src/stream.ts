@@ -328,12 +328,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    problem where it answered 502 `caw-failed`, and an attempt whose clone's
  *    design/ is unread 502 `design-clone-unread` where it answered 500. A
  *    page built for 66 reads those answers closed, so it reloads first.
+ * 68: three fields nothing read are gone: a session's `keepAlive`
+ *    `lastPingUsage`, a Who decides member's `reach`, and an archived
+ *    workspace's `ports`. A page built for 67 may hold them as required,
+ *    so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 67;
+export const WIRE_PROTOCOL = 68;
 
 /**
  * What a session's stream carries: the changes each frame made to its

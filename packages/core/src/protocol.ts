@@ -1306,12 +1306,6 @@ export interface KeepAlive {
   cold: { reason: string; at: number } | null;
   contextReadAt: number | null;
   contextTokens: number | null;
-  lastPingUsage: {
-    input: number;
-    read: number;
-    write: number;
-    at: number;
-  } | null;
   nextAt: number | null;
   on: boolean;
   sent: number;

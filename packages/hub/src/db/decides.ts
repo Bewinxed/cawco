@@ -140,7 +140,6 @@ const memberOfRow = (row: MemberRow): Member => ({
   pose: null,
   hear: row.hear,
   delegateType: row.delegateType,
-  reach: row.reach,
 });
 
 /** The built-in members with what `settings` changed of them. */

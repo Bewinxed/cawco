@@ -136,8 +136,6 @@ typeOverrides:
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemberHear: OpenEnums.MemberHear
     MemberType: OpenEnums.MemberType
-    MemberVia: OpenEnums.MemberVia
-    MemberWait: OpenEnums.MemberWait
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage

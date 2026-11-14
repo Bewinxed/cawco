@@ -46,7 +46,6 @@ import type {
   ContinuationAsker as ContinuationAskerType,
   ContinueRequest as ContinueRequestType,
   DesignFinding as DesignFindingType,
-  DesignPick as DesignPickType,
   DesignProposalFile as DesignProposalFileType,
   GatePass as GatePassType,
   InstallsRecord as InstallsRecordType,
@@ -255,14 +254,6 @@ const DesignFindingShape = declared(
 export const DesignFindingSchema: z.ZodType<DesignFindingType> =
   DesignFindingShape;
 export type DesignFindingOutput = z.output<typeof DesignFindingShape>;
-
-const DesignPickShape = declared(
-  z.object({ variant: z.string(), why: z.string() }),
-  "DesignPick",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const DesignPickSchema: z.ZodType<DesignPickType> = DesignPickShape;
-export type DesignPickOutput = z.output<typeof DesignPickShape>;
 
 const DesignProposalFileShape = declared(
   z.object({ after: z.string(), before: z.string(), path: z.string() }),

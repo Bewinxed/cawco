@@ -873,7 +873,6 @@ export interface InstancesDb {
         | "contextTokens"
         | "contextReadAt"
         | "cacheCold"
-        | "lastPingUsage"
         | "keepAliveTurn"
       >
     >

@@ -96,7 +96,6 @@ export const keepAliveState = (
     cap: keepAliveCap(row),
     ttl: row.cacheTtl,
     cold: row.cacheCold,
-    lastPingUsage: row.lastPingUsage,
     contextTokens: row.contextTokens,
     contextReadAt: row.contextReadAt?.getTime() ?? null,
   };
@@ -197,7 +196,6 @@ export const keepAliveResult = (
       : { lastRequestAt: new Date(result.lastRequestAt) }),
     keepAliveSent: sent,
     cacheCold: cold,
-    lastPingUsage: ping ? { ...usage, at } : row.lastPingUsage,
     keepAliveTurn: null,
     keepAliveStopped: stopped,
     ...(stopped ? { keepAliveEnabled: false } : {}),

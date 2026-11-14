@@ -148,7 +148,6 @@ import {
   ContinuationAskerSchema,
   ContinueRequestSchema,
   DesignFindingSchema,
-  DesignPickSchema,
   DesignProposalFileSchema,
   GatePassSchema,
   ItemBlockSchema,
@@ -1001,14 +1000,6 @@ export const instances = sqliteTable("instances", {
       at: z.number(),
     })
   )("cache_cold"),
-  lastPingUsage: storedJson(
-    z.object({
-      input: z.number(),
-      read: z.number(),
-      write: z.number(),
-      at: z.number(),
-    })
-  )("last_ping_usage"),
   /** In-flight ping identity survives a hub or agent restart. */
   keepAliveTurn: text("keep_alive_turn"),
   /**
@@ -1374,8 +1365,6 @@ export const workspaces = sqliteTable("workspaces", {
    */
   boundaryPid: integer("boundary_pid"),
   state: text("state").$type<WorkspaceState>().notNull().default("active"),
-  /** Ports the workspace's processes listen on, recorded when they start. */
-  ports: storedJson(z.array(z.number()))("ports").notNull().default([]),
   /**
    * The workspace's scratch dir on its machine, its commands' `TMPDIR`, as
    * the machine named it when the workspace was cut. Null for a workspace
@@ -3473,14 +3462,6 @@ export const decidesMembers = sqliteTable("decides_members", {
   hear: text("hear", { enum: HEARS }).notNull(),
   /** An agent's fleet delegate type; null for a person or channel. */
   delegateType: text("delegate_type"),
-  /** A person's or channel's way to be reached; null until that slice. */
-  reach: storedJson(
-    z.object({
-      via: z.enum(["slack", "email"]),
-      address: z.string(),
-      wait: z.enum(["4h", "1d", "wait"]),
-    })
-  )("reach"),
   createdAt: stampedNow("created_at"),
 });
 
@@ -4260,7 +4241,6 @@ export const designChecks = sqliteTable(
     /** The builder's `finish_item`, held while the verifier works; run again on a pass. */
     submission: storedJson(WorkItemSubmissionSchema)("submission"),
     findings: storedJson(z.array(DesignFindingSchema))("findings"),
-    pick: storedJson(DesignPickSchema)("pick"),
     createdAt: timestamp("created_at").notNull(),
     endedAt: timestamp("ended_at"),
   },

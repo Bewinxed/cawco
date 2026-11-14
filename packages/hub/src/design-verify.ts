@@ -445,7 +445,6 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       state: "checking",
       submission,
       findings: null,
-      pick: null,
       createdAt: new Date(),
       endedAt: null,
     };
@@ -717,7 +716,6 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         state: "checking",
         submission: null,
         findings: null,
-        pick: null,
         createdAt: new Date(),
         endedAt: null,
       };
@@ -746,7 +744,6 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       db.designChecks.set(check.id, {
         state: passed ? "passed" : "findings",
         findings: verdict.findings,
-        pick: verdict.pick ?? null,
         endedAt: new Date(),
       });
       if (check.artifactId) {

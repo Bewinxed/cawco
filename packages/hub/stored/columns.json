@@ -4371,34 +4371,6 @@
       "why"
     ]
   },
-  "decides_members.reach": {
-    "type": "object",
-    "properties": {
-      "via": {
-        "type": "string",
-        "enum": [
-          "slack",
-          "email"
-        ]
-      },
-      "address": {
-        "type": "string"
-      },
-      "wait": {
-        "type": "string",
-        "enum": [
-          "4h",
-          "1d",
-          "wait"
-        ]
-      }
-    },
-    "required": [
-      "via",
-      "address",
-      "wait"
-    ]
-  },
   "decides_settings.hear": {
     "type": "object",
     "properties": {
@@ -4601,21 +4573,6 @@
         "selector"
       ]
     }
-  },
-  "design_checks.pick": {
-    "type": "object",
-    "properties": {
-      "variant": {
-        "type": "string"
-      },
-      "why": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "variant",
-      "why"
-    ]
   },
   "design_checks.submission": {
     "type": "object",
@@ -5958,29 +5915,6 @@
     "required": [
       "names",
       "skills"
-    ]
-  },
-  "instances.last_ping_usage": {
-    "type": "object",
-    "properties": {
-      "input": {
-        "type": "number"
-      },
-      "read": {
-        "type": "number"
-      },
-      "write": {
-        "type": "number"
-      },
-      "at": {
-        "type": "number"
-      }
-    },
-    "required": [
-      "input",
-      "read",
-      "write",
-      "at"
     ]
   },
   "instances.may_start": {
@@ -14657,11 +14591,5 @@
         ]
       }
     ]
-  },
-  "workspaces.ports": {
-    "type": "array",
-    "items": {
-      "type": "number"
-    }
   }
 }

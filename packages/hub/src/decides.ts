@@ -493,7 +493,6 @@ export const decidesRoutes = (deps: DecidesDeps) => {
               hue: body.hue,
               hear: body.hear,
               delegateType: id,
-              reach: null,
             },
             type
           );

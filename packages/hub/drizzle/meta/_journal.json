@@ -2717,6 +2717,13 @@
       "when": 1794665090026,
       "tag": "0395_ended_blocked",
       "breakpoints": true
+    },
+    {
+      "idx": 396,
+      "version": "6",
+      "when": 1794665364546,
+      "tag": "0396_drop_dead_columns",
+      "breakpoints": true
     }
   ]
 }
