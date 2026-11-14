@@ -12648,12 +12648,13 @@ export const createServer = (
    * one already detaching), the process lived on under sessiond, and the
    * register after the restart restored it as a session the user had left
    * running. Filed `stopped`, the row is no orphan to restore, no beat
-   * promotes it, and the first beat that still lists a process for it ends
-   * that process (`endStopped`, in the heartbeat). Only a send brings it
-   * back (`wakeForSend`). Both Stop and Discard wait for the machine's
-   * teardown receipt: persisting intent is not proof that the runner has
-   * ended. Then it cuts the turn it lands in, as an interrupt does, and
-   * what it cut says it was the person's Stop.
+   * promotes it, and each beat whose custody still lists a process for it
+   * sends that process its stop again until a fresh reading finds it gone
+   * (session-lifecycle.ts `reconcile`, from {@link beatReconciled}). Only a
+   * send brings it back (`wakeForSend`). Both Stop and Discard wait for
+   * the machine's teardown receipt: persisting intent is not proof that the
+   * runner has ended. Then it cuts the turn it lands in, as an interrupt
+   * does, and what it cut says it was the person's Stop.
    */
   const stopAskedByDashboard: DashboardVerb = (ws, message) => {
     stopFromDashboard(ws, message);
