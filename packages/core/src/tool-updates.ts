@@ -67,6 +67,8 @@ export type ToolUpdateState =
     }
   | {
       at: number;
+      /** The line of `output` that says why ({@link causeOf}), when one does. */
+      cause?: string;
       found?: string;
       kind: "failed";
       output: string;
@@ -137,6 +139,7 @@ const cannotRun = (
       ...found,
       wants,
       output: cell.detail ?? "",
+      ...causeField(cell.detail),
       at: cell.triedAt,
       own: !ours,
     };
@@ -172,11 +175,46 @@ const behindRelease = (
       kind: "failed",
       ...behind,
       output: cell.detail,
+      ...causeField(cell.detail),
       at: cell.at,
       own: false,
     };
   }
   return { kind: updates === "update" ? "due" : "asked", ...behind };
+};
+
+/** A line that says it is an error, with its words after a colon: "Error: EACCES: …", "fatal: …", "error: …". */
+const ERROR_SAID = /\b(?:error|fatal)\s*:/iu;
+/** A line that names a failure without that form: "curl: (7) Failed to connect …", "Permission denied". */
+const ERROR_WORD = /\b(?:error|fatal|failed|denied|refused|not found)\b/iu;
+
+/**
+ * The line of an installer's output that says why it failed, by one rule
+ * for every installer (no installer is read specially): the first line that
+ * says "error:" or "fatal:", from those words on (npm's `npm error Error:
+ * EACCES: permission denied, rename …` reads `Error: EACCES: permission
+ * denied, rename …`); else the first line naming a failure (error, fatal,
+ * failed, denied, refused, not found), whole; else none, and the output
+ * stands alone. Lines are read in the order the installer said them, which
+ * the agent keeps errors first (agent tools.ts `runMethod`).
+ */
+const causeOf = (output: string): string | undefined => {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    const said = ERROR_SAID.exec(line);
+    if (said) {
+      return line.slice(said.index);
+    }
+  }
+  return lines.find((line) => ERROR_WORD.test(line));
+};
+
+const causeField = (output: string | undefined): { cause?: string } => {
+  const cause = output ? causeOf(output) : undefined;
+  return cause ? { cause } : {};
 };
 
 /** Whether a machine's copy in this state waits on the person: Needs you lists it. */

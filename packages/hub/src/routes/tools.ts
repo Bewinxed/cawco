@@ -99,8 +99,10 @@ export const toolRoutes = ({
           return fleetUpdates();
         }
       )
-      // Update all: a person's Update of the tool on every machine whose copy
-      // is one its CawCo does not run (tool-installs.ts `updateAll`). Each
+      // Update all: the Update of the tool on every connected, unpaused
+      // machine whose copy CawCo put there and does not run; a person's own
+      // copy and the rest are left, each with why (tool-installs.ts
+      // `updateAll`). Each
       // machine's cell reads `installing` until it answers, on the `instances`
       // frame, as after its own Update.
       .post("/api/tools/:id/update-all", ({ params }) => {

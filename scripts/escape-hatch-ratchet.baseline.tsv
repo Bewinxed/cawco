@@ -193,7 +193,7 @@ empty-catch		packages/sessiond/src/server.ts	1
 empty-catch		packages/sessiond/src/tasks.ts	1
 empty-catch		scripts/hooks/delegate-nudge.ts	2
 suppression	@ts-expect-error	scripts/lib/tool-call.fixtures.ts	4
-suppression	biome-ignore lint/a11y/noHeaderScope	apps/dashboard/src/lib/cawco/ToolMatrix.svelte	2
+suppression	biome-ignore lint/a11y/noHeaderScope	apps/dashboard/src/lib/cawco/ToolMatrix.svelte	1
 suppression	biome-ignore lint/a11y/noHeaderScope	apps/dashboard/src/lib/cawco/views/openui/ViewTable.svelte	1
 suppression	biome-ignore lint/a11y/noLabelWithoutControl	apps/dashboard/src/lib/cawco/connect/ReachStep.svelte	1
 suppression	biome-ignore lint/a11y/noNoninteractiveElementInteractions	apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte	1

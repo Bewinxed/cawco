@@ -51345,6 +51345,14 @@
           "pending"
         ]
       },
+      "PostApiToolsByIdUpdateAll200Why": {
+        "type": "string",
+        "enum": [
+          "away",
+          "own",
+          "paused"
+        ]
+      },
       "PresenceDevice": {
         "description": "One device as the person's presence menu lists it: a machine whose agent reads its desktop.",
         "type": "object",
@@ -59208,6 +59216,10 @@
                 "properties": {
                   "at": {
                     "type": "number"
+                  },
+                  "cause": {
+                    "description": "The line of `output` that says why ({@link causeOf}), when one does.",
+                    "type": "string"
                   },
                   "found": {
                     "type": "string"
@@ -200929,10 +200941,22 @@
       "postApiToolsByIdUpdateAll200": {
         "type": "object",
         "properties": {
-          "away": {
+          "left": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object",
+              "properties": {
+                "machineId": {
+                  "type": "string"
+                },
+                "why": {
+                  "$ref": "#/components/schemas/PostApiToolsByIdUpdateAll200Why"
+                }
+              },
+              "required": [
+                "machineId",
+                "why"
+              ]
             }
           },
           "sent": {
@@ -200943,7 +200967,7 @@
           }
         },
         "required": [
-          "away",
+          "left",
           "sent"
         ]
       },
