@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1b160407-7a6c-4c17-b8ef-c6aad9e9d25e",
-  "prevId": "9b26c3f7-b642-4a2b-9ba9-289db70c364d",
+  "id": "444f091f-2e6a-4222-93af-914935d4170f",
+  "prevId": "5f5fa4f4-2d5a-4b23-84d3-8d6dbe42297c",
   "tables": {
     "account_bench": {
       "name": "account_bench",
@@ -1028,13 +1028,6 @@
         },
         "going_to": {
           "name": "going_to",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "started_by": {
-          "name": "started_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -3367,6 +3360,348 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "delegate_type_connections": {
+      "name": "delegate_type_connections",
+      "columns": {
+        "type_name": {
+          "name": "type_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "connection": {
+          "name": "connection",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "delegate_type_connections_type_name_delegate_types_name_fk": {
+          "name": "delegate_type_connections_type_name_delegate_types_name_fk",
+          "tableFrom": "delegate_type_connections",
+          "tableTo": "delegate_types",
+          "columnsFrom": [
+            "type_name"
+          ],
+          "columnsTo": [
+            "name"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "delegate_type_connections_type_name_connection_pk": {
+          "columns": [
+            "type_name",
+            "connection"
+          ],
+          "name": "delegate_type_connections_type_name_connection_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "delegate_type_deny_tools": {
+      "name": "delegate_type_deny_tools",
+      "columns": {
+        "type_name": {
+          "name": "type_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tool": {
+          "name": "tool",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "delegate_type_deny_tools_type_name_delegate_types_name_fk": {
+          "name": "delegate_type_deny_tools_type_name_delegate_types_name_fk",
+          "tableFrom": "delegate_type_deny_tools",
+          "tableTo": "delegate_types",
+          "columnsFrom": [
+            "type_name"
+          ],
+          "columnsTo": [
+            "name"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "delegate_type_deny_tools_type_name_tool_pk": {
+          "columns": [
+            "type_name",
+            "tool"
+          ],
+          "name": "delegate_type_deny_tools_type_name_tool_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "delegate_type_may_start": {
+      "name": "delegate_type_may_start",
+      "columns": {
+        "type_name": {
+          "name": "type_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delegate_type": {
+          "name": "delegate_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "delegate_type_may_start_type_name_delegate_types_name_fk": {
+          "name": "delegate_type_may_start_type_name_delegate_types_name_fk",
+          "tableFrom": "delegate_type_may_start",
+          "tableTo": "delegate_types",
+          "columnsFrom": [
+            "type_name"
+          ],
+          "columnsTo": [
+            "name"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "delegate_type_may_start_type_name_delegate_type_pk": {
+          "columns": [
+            "type_name",
+            "delegate_type"
+          ],
+          "name": "delegate_type_may_start_type_name_delegate_type_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "delegate_type_skills": {
+      "name": "delegate_type_skills",
+      "columns": {
+        "type_name": {
+          "name": "type_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "skill": {
+          "name": "skill",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "delegate_type_skills_type_name_delegate_types_name_fk": {
+          "name": "delegate_type_skills_type_name_delegate_types_name_fk",
+          "tableFrom": "delegate_type_skills",
+          "tableTo": "delegate_types",
+          "columnsFrom": [
+            "type_name"
+          ],
+          "columnsTo": [
+            "name"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "delegate_type_skills_type_name_skill_pk": {
+          "columns": [
+            "type_name",
+            "skill"
+          ],
+          "name": "delegate_type_skills_type_name_skill_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "delegate_type_starting_set": {
+      "name": "delegate_type_starting_set",
+      "columns": {
+        "type_name": {
+          "name": "type_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "delegate_type_starting_set_type_name_delegate_types_name_fk": {
+          "name": "delegate_type_starting_set_type_name_delegate_types_name_fk",
+          "tableFrom": "delegate_type_starting_set",
+          "tableTo": "delegate_types",
+          "columnsFrom": [
+            "type_name"
+          ],
+          "columnsTo": [
+            "name"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "delegate_type_starting_set_type_name_kind_name_pk": {
+          "columns": [
+            "type_name",
+            "kind",
+            "name"
+          ],
+          "name": "delegate_type_starting_set_type_name_kind_name_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "delegate_type_starting_set_kind": {
+          "name": "delegate_type_starting_set_kind",
+          "value": "\"kind\" in ('skill', 'server')"
+        }
+      }
+    },
+    "delegate_types": {
+      "name": "delegate_types",
+      "columns": {
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "harness": {
+          "name": "harness",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effort": {
+          "name": "effort",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "account": {
+          "name": "account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "may_start_any": {
+          "name": "may_start_any",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "starts_with_all": {
+          "name": "starts_with_all",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "delegate_types_meta": {
+      "name": "delegate_types_meta",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "design_checks": {
       "name": "design_checks",
       "columns": {
@@ -5520,6 +5855,111 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "instance_may_start": {
+      "name": "instance_may_start",
+      "columns": {
+        "instance_id": {
+          "name": "instance_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delegate_type": {
+          "name": "delegate_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "instance_may_start_instance_id_instances_id_fk": {
+          "name": "instance_may_start_instance_id_instances_id_fk",
+          "tableFrom": "instance_may_start",
+          "tableTo": "instances",
+          "columnsFrom": [
+            "instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "instance_may_start_instance_id_delegate_type_pk": {
+          "columns": [
+            "instance_id",
+            "delegate_type"
+          ],
+          "name": "instance_may_start_instance_id_delegate_type_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "instance_starting_set": {
+      "name": "instance_starting_set",
+      "columns": {
+        "instance_id": {
+          "name": "instance_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "instance_starting_set_instance_id_instances_id_fk": {
+          "name": "instance_starting_set_instance_id_instances_id_fk",
+          "tableFrom": "instance_starting_set",
+          "tableTo": "instances",
+          "columnsFrom": [
+            "instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "instance_starting_set_instance_id_kind_name_pk": {
+          "columns": [
+            "instance_id",
+            "kind",
+            "name"
+          ],
+          "name": "instance_starting_set_instance_id_kind_name_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "instance_starting_set_kind": {
+          "name": "instance_starting_set_kind",
+          "value": "\"kind\" in ('skill', 'server')"
+        }
+      }
+    },
     "instances": {
       "name": "instances",
       "columns": {
@@ -5874,12 +6314,13 @@
           "notNull": false,
           "autoincrement": false
         },
-        "may_start": {
-          "name": "may_start",
-          "type": "text",
+        "may_start_any": {
+          "name": "may_start_any",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "role": {
           "name": "role",
@@ -5910,12 +6351,13 @@
           "autoincrement": false,
           "default": false
         },
-        "starting_set": {
-          "name": "starting_set",
-          "type": "text",
+        "starts_with_all": {
+          "name": "starts_with_all",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "status": {
           "name": "status",
