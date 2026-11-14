@@ -15,6 +15,10 @@
  *
  * With `--at`, this file and hub-in-process.ts run inside a worktree of that
  * commit, against its hub; the seed below must fit that commit's Db.
+ *
+ * With `--lists`, the same fleet and the lists fixture's sessions and types
+ * besides ({@link seedLists}), written to fixtures/lists-db.sqlite.gz: the
+ * migration check runs over both.
  */
 import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -31,6 +35,13 @@ const fixturePath = (raw: string) => machinePath("/home/dev", raw, "fixture");
 
 const HUB = resolve(import.meta.dir, "..");
 export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
+/**
+ * `--lists`: the same fleet with every shape a session's or delegate type's
+ * lists took before migration 0397 (what it may start, its starting set, a
+ * trashed type, a continued work item), written here.
+ */
+export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
+const LISTS = "--lists";
 
 const flag = (name: string): string | undefined => {
   const at = process.argv.indexOf(name);
@@ -90,36 +101,6 @@ function seedProjects(db: HubDb): string[] {
   return projects;
 }
 
-/** What a delegate may start, as `delegate` calls and their types say it. */
-const DELEGATE_MAY_START = [
-  [],
-  [],
-  [],
-  ["browser"],
-  ["browser", "advisor"],
-  ["any"],
-];
-
-/** Starting sets a session's type or project gave it; none (everything installed) for most. */
-const STARTING_SETS = [
-  { skills: ["code-review", "frontend-design"], servers: ["github"] },
-  { skills: [], servers: [] },
-];
-
-/** A delegate's row: its parent and what it may start, or, every ninth, a work item's that named no list (a row from before every delegate's start named one). */
-const delegatedFrom = (parent: Seeded, s: number) =>
-  s % 9 === 0
-    ? { parentInstanceId: parent.id, workItemId: id("wi", s) }
-    : { parentInstanceId: parent.id, mayStart: pick(DELEGATE_MAY_START) };
-
-/** A session's kind: a share scratch, a few a continuation's summariser. */
-const kindOf = (s: number): "mainline" | "scratch" | "summariser" => {
-  if (s % 25 === 0) {
-    return "scratch";
-  }
-  return s % 37 === 0 ? "summariser" : "mainline";
-};
-
 /** Sessions, a share of them delegates, each with its sends; half ended, a tenth failed. */
 function seedSessions(db: HubDb, projects: string[]): Seeded[] {
   const sessions: Seeded[] = [];
@@ -136,10 +117,10 @@ function seedSessions(db: HubDb, projects: string[]): Seeded[] {
       harness: pick(HARNESSES),
       origin: parent ? "delegate" : "person",
       projectId,
-      ...(parent ? delegatedFrom(parent, s) : {}),
-      startingSet: s % 11 === 0 ? pick(STARTING_SETS) : null,
+      ...(parent ? { parentInstanceId: parent.id, mayStart: [] } : {}),
+      startingSet: null,
       title: pick(WORDS),
-      kind: kindOf(s),
+      kind: s % 25 === 0 ? "scratch" : "mainline",
       permissionMode: "bypassPermissions",
       model: "model-a",
     });
@@ -226,7 +207,89 @@ function seedWorkspaces(db: HubDb, sessions: Seeded[]): void {
   }
 }
 
-/** The fleet's own delegate types beside the seeded defaults, each list of a type in use. */
+/** What a delegate may start, as `delegate` calls and their types say it. */
+const DELEGATE_MAY_START = [[], ["browser"], ["browser", "advisor"], ["any"]];
+
+/** Starting sets a session's type or project gave it. */
+const STARTING_SETS = [
+  { skills: ["code-review", "frontend-design"], servers: ["github"] },
+  { skills: [], servers: [] },
+];
+
+/** A session of the lists fixture's, opened as the hub's own start opens one. */
+const openListed = (
+  db: HubDb,
+  parent: Seeded,
+  fields: Partial<Parameters<HubDb["openInstance"]>[0]>
+): Seeded => {
+  const instanceId = crypto.randomUUID();
+  db.openInstance({
+    id: instanceId,
+    machineId: parent.machineId,
+    cwd: fixturePath(`/home/dev/src/${parent.projectId}`),
+    sessionId: crypto.randomUUID(),
+    harness: pick(HARNESSES),
+    origin: "delegate",
+    projectId: parent.projectId,
+    parentInstanceId: parent.id,
+    title: pick(WORDS),
+    kind: "mainline",
+    permissionMode: "bypassPermissions",
+    model: "model-a",
+    startingSet: null,
+    ...fields,
+  });
+  return {
+    id: instanceId,
+    machineId: parent.machineId,
+    projectId: parent.projectId,
+  };
+};
+
+/**
+ * Every shape the lists of migration 0397 take, on sessions under `sessions`:
+ * each list a delegate is given, a work item's session that named none,
+ * summarisers, starting sets, and continued work items whose later sessions
+ * named none (each continuation's `continued_into`, written after the hub
+ * closes, {@link seedByHand}). Answers each continuation's pair of ids.
+ */
+function seedLists(db: HubDb, sessions: Seeded[]): [string, string][] {
+  const continued: [string, string][] = [];
+  for (let s = 0; s < 60; s += 1) {
+    const parent = pick(sessions);
+    openListed(db, parent, {
+      mayStart: DELEGATE_MAY_START[s % DELEGATE_MAY_START.length],
+      workItemId: id("wi", s),
+      ...(s % 5 === 0 ? { startingSet: pick(STARTING_SETS) } : {}),
+    });
+  }
+  for (let s = 0; s < 6; s += 1) {
+    const parent = pick(sessions);
+    // A work item's session that named no list, nothing before it.
+    openListed(db, parent, { workItemId: id("wi-alone", s) });
+    // A continuation's summariser: no parent, no list.
+    openListed(db, parent, { kind: "summariser", origin: "check" });
+    // A work item continued twice; its later sessions named no list. Every
+    // third, the first two sessions' lists differ.
+    const item = id("wi-continued", s);
+    const first = openListed(db, parent, {
+      mayStart: ["browser"],
+      workItemId: item,
+    });
+    const second = openListed(
+      db,
+      parent,
+      s % 3 === 0
+        ? { mayStart: ["advisor"], workItemId: item }
+        : { workItemId: item }
+    );
+    const third = openListed(db, parent, { workItemId: item });
+    continued.push([first.id, second.id], [second.id, third.id]);
+  }
+  return continued;
+}
+
+/** The fleet's own delegate types beside the seeded defaults, each list of a type in use; one more in the trash. */
 function seedDelegateTypes(db: HubDb): void {
   db.delegateTypes.put({
     name: "browser",
@@ -257,17 +320,37 @@ function seedDelegateTypes(db: HubDb): void {
     mayStart: ["browser", "advisor"],
     startingSet: { skills: [], servers: [] },
   });
+  db.delegateTypes.put({
+    name: "reviewer",
+    description: "Reads a diff and answers with ranked findings.",
+    harness: "claude",
+    model: "model-a",
+    mayStart: ["advisor"],
+    skills: ["code-review"],
+    denyTools: ["Write"],
+    connections: ["github-dev"],
+    startingSet: { skills: ["code-review"], servers: [] },
+  });
+  db.trash.put({ kind: "delegateType", key: "reviewer" }, Date.now());
 }
 
 /**
- * Values no code of the hub writes but a hand edit of the database could:
- * a session's list and set, and a delegate type's denied tools, that are not
- * the JSON their column held. Migration 0397 places each as the narrow value.
+ * What the hub's own code writes after it closes, and values no code of
+ * the hub writes but a hand edit of the database could: each continuation's
+ * `continued_into`; a session's list and set and a delegate type's denied
+ * tools that are not the JSON their column held; a trash entry for a type
+ * that is not one row. Migration 0397 places each.
  */
-function seedUnreadable(dbPath: string): void {
+function seedByHand(dbPath: string, continued: [string, string][]): void {
   const sqlite = new Database(dbPath);
+  for (const [from, to] of continued) {
+    sqlite.run("UPDATE instances SET continued_into = ? WHERE id = ?", [
+      to,
+      from,
+    ]);
+  }
   sqlite.run(
-    "UPDATE instances SET may_start = 'browser, advisor' WHERE id = (SELECT id FROM instances WHERE parent_instance_id IS NOT NULL ORDER BY id LIMIT 1)"
+    "UPDATE instances SET may_start = 'browser, advisor' WHERE id = (SELECT id FROM instances WHERE work_item_id IS NOT NULL ORDER BY id LIMIT 1)"
   );
   sqlite.run(
     `UPDATE instances SET starting_set = '{"skills":"all"}' WHERE id = (SELECT id FROM instances ORDER BY id DESC LIMIT 1)`
@@ -275,18 +358,31 @@ function seedUnreadable(dbPath: string): void {
   sqlite.run(
     "UPDATE delegate_types SET deny_tools = 'Write Edit' WHERE name = 'tester'"
   );
+  sqlite.run(
+    "INSERT INTO config_trash (kind, key, rows, deleted_at) VALUES ('delegateType', 'half', '[]', ?)",
+    [Date.now()]
+  );
   sqlite.close();
 }
 
-async function seed(dbPath: string, home: string): Promise<void> {
+async function seed(
+  dbPath: string,
+  home: string,
+  withLists: boolean
+): Promise<void> {
   const { db, lifetime } = await hubInProcess(dbPath, home);
   const projects = seedProjects(db);
   const sessions = seedSessions(db, projects);
   seedTasks(db, projects);
   seedWorkspaces(db, sessions);
-  seedDelegateTypes(db);
+  const continued = withLists ? seedLists(db, sessions) : [];
+  if (withLists) {
+    seedDelegateTypes(db);
+  }
   lifetime.close();
-  seedUnreadable(dbPath);
+  if (withLists) {
+    seedByHand(dbPath, continued);
+  }
 }
 
 const out = flag("--seed");
@@ -295,7 +391,7 @@ if (out) {
   try {
     const dbPath = join(scratch, "hub.db");
     mkdirSync(join(scratch, "home"));
-    await seed(dbPath, join(scratch, "home"));
+    await seed(dbPath, join(scratch, "home"), process.argv.includes(LISTS));
     const sqlite = new Database(dbPath);
     sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)");
     sqlite.run("VACUUM");
@@ -307,7 +403,10 @@ if (out) {
   process.exit(0);
 }
 
-// The made database: seeded at `--at` (the newest published nightly when not given), written to FIXTURE.
+// The made database: seeded at `--at` (the newest published nightly when
+// not given), written to FIXTURE, or with `--lists` to LISTS_FIXTURE.
+const lists = process.argv.includes(LISTS);
+const written = lists ? LISTS_FIXTURE : FIXTURE;
 const started = performance.now();
 const run = (command: string[], cwd: string): void => {
   const child = Bun.spawnSync(command, {
@@ -334,12 +433,18 @@ try {
     );
   }
   run(
-    [process.execPath, "packages/hub/scripts/fixture-db.ts", "--seed", FIXTURE],
+    [
+      process.execPath,
+      "packages/hub/scripts/fixture-db.ts",
+      "--seed",
+      written,
+      ...(lists ? [LISTS] : []),
+    ],
     tree
   );
 } finally {
   run(["git", "worktree", "remove", "--force", tree], HUB);
 }
 console.log(
-  `fixture-db: seeded at ${at}, written to ${FIXTURE} in ${((performance.now() - started) / 1000).toFixed(1)} s`
+  `fixture-db: seeded at ${at}, written to ${written} in ${((performance.now() - started) / 1000).toFixed(1)} s`
 );

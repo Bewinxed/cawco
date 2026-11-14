@@ -17,6 +17,13 @@ export const spawnWords = {
   /** One refused start, in the refusal's own words. */
   refusedLine: (refusal: string) => `${spawnWords.refused}: ${refusal}`,
   /**
+   * A start refused because its project's starting-set file does not read
+   * (hub server.ts `startingSetOf`), to the agent or person who asked: it
+   * never starts with everything for a file the hub could not read.
+   */
+  startingSetUnread: (project: string, file: string, problems: string[]) =>
+    `Not started: ${project}'s ${file}, which names the skills and MCP servers its sessions start with, does not read, so the hub cannot tell what this session may load. ${problems.join(" ")} Fix it in the project's folder (or with project_settings' set_starting_set), then start it again.`,
+  /**
    * A start refused on a model its harness does not list (hub server.ts
    * `modelRefusal`), to the agent or person who asked: the harness by name
    * (`harness`, accountsWords.harnesses), the model ids it does list, and

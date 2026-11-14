@@ -1,8 +1,10 @@
 /**
  * `bun run migrations:check` in packages/hub (part of the root typecheck):
  * every migration applies to a realistic database, and the hub opened on it
- * answers. The database is fixtures/realistic-db.sqlite.gz (fixture-db.ts):
- * a seeded scratch fleet's, at a published nightly's schema, so every
+ * answers. The database is fixtures/realistic-db.sqlite.gz (fixture-db.ts),
+ * or with `--fixture lists` fixtures/lists-db.sqlite.gz (fixture-db.ts
+ * `--lists`; the package's script runs both): a seeded scratch fleet's, at
+ * a published nightly's schema, so every
  * migration added since runs over real row shapes, as it will on a hub
  * updating from that nightly. A table the fixture had rows in must still
  * have rows: a migration that empties one is caught here, and one that drops
@@ -147,7 +149,11 @@ const titlesAfter = (dbPath: string): Map<string, string> => {
 
 const started = performance.now();
 const HUB = resolve(import.meta.dir, "..");
-const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
+const fixtureAt = process.argv.indexOf("--fixture");
+/** Which fixture: the realistic one, or `--fixture lists` (fixture-db.ts `--lists`). */
+const FIXTURE_NAME =
+  fixtureAt === -1 ? "realistic" : process.argv[fixtureAt + 1];
+const FIXTURE = join(HUB, "fixtures", `${FIXTURE_NAME}-db.sqlite.gz`);
 const at = process.argv.indexOf("--db");
 /** A database to check instead of the fixture, copied first; undefined: the fixture. */
 const GIVEN = at === -1 ? undefined : process.argv[at + 1];
@@ -1063,7 +1069,7 @@ try {
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });
