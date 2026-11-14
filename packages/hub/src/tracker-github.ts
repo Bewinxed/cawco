@@ -51,8 +51,6 @@ const REQUEST_MS = 30_000;
 /** The edge of the window read again each poll. Our choice, as github.ts's. */
 const OVERLAP_MS = 2 * 60_000;
 const PER_PAGE = 100;
-/** Pages one list reads at most in a poll; the next poll goes on from its newest. Our choice. */
-const MAX_PAGES = 10;
 /** Pages of repositories a binding's choice lists before a search; a search reads on to the last page. Our choice. */
 const TARGET_PAGES = 3;
 
@@ -419,17 +417,23 @@ export const githubAdapter = (
       }
     });
 
-  /** A list read since the cursor, page by page, its first page asked with the cursor's ETag (a 304 costs nothing). */
+  /**
+   * A list read since the cursor, its first page asked with the cursor's ETag
+   * (a 304 costs nothing). After a full page it asks again `since` that
+   * page's last stamp, dropping the items already read, until a page comes
+   * back short: a read by page number alone skips an item when one on an
+   * earlier page is updated during the read. A page full of one stamp cannot
+   * move `since`, so its further pages are read by number inside that stamp.
+   */
   const listSince = async <Raw, T>(
     what: string,
     route: ListRoute,
     cursor: ListCursor,
     read: (raw: Raw) => T | null,
-    stamp: (raw: Raw) => number
+    stamp: (raw: Raw) => number,
+    idOf: (raw: Raw) => number | string
   ): Promise<Listed<T> | TrackerProblem> => {
-    const since = new Date(
-      Math.max(0, cursor.since - OVERLAP_MS)
-    ).toISOString();
+    let since = new Date(Math.max(0, cursor.since - OVERLAP_MS)).toISOString();
     const first = await readPage(what, route, since, 1, cursor.etag);
     if (first instanceof ElysiaStatus) {
       return first;
@@ -437,16 +441,34 @@ export const githubAdapter = (
     if (first.kind === "unchanged") {
       return { kind: "unchanged" };
     }
-    const raws = [...first.raws] as Raw[];
-    let last = first.raws.length;
-    for (let page = 2; last === PER_PAGE && page <= MAX_PAGES; page += 1) {
+    const raws: Raw[] = [];
+    const seen = new Set<number | string>();
+    const take = (items: unknown[]) => {
+      for (const raw of items as Raw[]) {
+        const id = idOf(raw);
+        if (!seen.has(id)) {
+          seen.add(id);
+          raws.push(raw);
+        }
+      }
+    };
+    take(first.raws);
+    let current = first.raws;
+    let page = 1;
+    while (current.length === PER_PAGE) {
+      const stampAt = new Date(stamp(current.at(-1) as Raw)).toISOString();
+      if (stampAt === since) {
+        page += 1;
+      } else {
+        since = stampAt;
+        page = 1;
+      }
       const next = await readPage(what, route, since, page, null);
       if (next instanceof ElysiaStatus) {
         return next;
       }
-      const more = next.kind === "page" ? next.raws : [];
-      raws.push(...(more as Raw[]));
-      last = more.length;
+      current = next.kind === "page" ? next.raws : [];
+      take(current);
     }
     return {
       kind: "read",
@@ -554,7 +576,8 @@ export const githubAdapter = (
         ISSUES_ROUTE,
         cursor,
         issueOf,
-        (raw) => Date.parse(raw.updated_at)
+        (raw) => Date.parse(raw.updated_at),
+        (raw) => raw.number
       ),
 
     comments: (cursor) =>
@@ -563,7 +586,8 @@ export const githubAdapter = (
         COMMENTS_ROUTE,
         cursor,
         commentOf,
-        (raw) => Date.parse(raw.updated_at ?? raw.created_at)
+        (raw) => Date.parse(raw.updated_at ?? raw.created_at),
+        (raw) => raw.id
       ),
 
     comment: (issue, author, body) =>

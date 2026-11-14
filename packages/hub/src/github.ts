@@ -159,7 +159,7 @@ const discussionComment = z.object({
 
 /**
  * A discussion as the poll's GraphQL query answers it (`Discussion`), with
- * its repository's name, which the query knows, and its newest comments.
+ * its repository's name, which the query knows, and its comments.
  */
 const discussionNode = z.object({
   repo: z.string(),
@@ -406,7 +406,7 @@ const discussionCommentEvent = (
   at: one.at,
 });
 
-/** A polled discussion's events: its opening, and each of its newest comments. */
+/** A polled discussion's events: its opening, and each of its comments. */
 const discussionEvents = (
   one: z.infer<typeof discussionNode>
 ): InboundEvent[] => [
@@ -635,7 +635,7 @@ const movedAt = (item: unknown): number => {
 
 /**
  * A page of the repository's discussions, newest updated first, each with
- * its labels and its newest comments (docs.github.com/en/graphql/reference/objects#discussion).
+ * its labels and its comments (docs.github.com/en/graphql/reference/objects#discussion).
  */
 const DISCUSSIONS_QUERY = `query CawcoDiscussions($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
@@ -648,13 +648,36 @@ const DISCUSSIONS_QUERY = `query CawcoDiscussions($owner: String!, $name: String
         author { login }
         createdAt
         updatedAt
-        labels(first: 20) { nodes { name } }
-        comments(last: 20) { nodes { id url body author { login } createdAt } }
+        labels(first: 20) { nodes { name } pageInfo { hasNextPage endCursor } }
+        comments(first: 20) { nodes { id url body author { login } createdAt } pageInfo { hasNextPage endCursor } }
       }
       pageInfo { hasNextPage endCursor }
     }
   }
 }`;
+
+/** The further labels and comments of one discussion, from the cursors the first read ended at. */
+const DISCUSSION_MORE_QUERY = `query CawcoDiscussionMore($owner: String!, $name: String!, $number: Int!, $isLabels: Boolean!, $isComments: Boolean!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    discussion(number: $number) {
+      labels(first: 100, after: $after) @include(if: $isLabels) { nodes { name } pageInfo { hasNextPage endCursor } }
+      comments(first: 100, after: $after) @include(if: $isComments) { nodes { id url body author { login } createdAt } pageInfo { hasNextPage endCursor } }
+    }
+  }
+}`;
+
+/** What {@link DISCUSSION_MORE_QUERY} answers. */
+interface DiscussionMore {
+  repository: {
+    discussion: Partial<Record<"comments" | "labels", Connection>> | null;
+  } | null;
+}
+
+/** One connection of a discussion: a page of its nodes and where the next begins. */
+interface Connection {
+  nodes?: unknown[];
+  pageInfo?: { endCursor: string | null; hasNextPage: boolean };
+}
 
 /** What {@link DISCUSSIONS_QUERY} answers. */
 interface DiscussionsPage {
@@ -665,6 +688,9 @@ interface DiscussionsPage {
     };
   } | null;
 }
+
+/** One page of discussions, as {@link DISCUSSIONS_QUERY} answers it. */
+type Discussions = NonNullable<DiscussionsPage["repository"]>["discussions"];
 
 /** An answer's headers as Octokit hands them over: lower-case names. */
 type Headers = Readonly<Record<string, string | number | undefined>>;
@@ -895,6 +921,117 @@ export const pollRepo = async (input: {
     return { kind: "answered", value: newest };
   };
 
+  /** A GraphQL request within {@link REQUEST_MS}, no redirect followed; a refusal thrown in the words the project's ingress view reads. */
+  const ask = <T>(
+    query: string,
+    variables: Record<string, unknown>
+  ): Promise<Bounded<T>> =>
+    readWithin(REQUEST_MS, async (signal) => {
+      try {
+        return (await octokit.graphql(query, {
+          ...variables,
+          request: { redirect: "error", signal },
+        })) as T;
+      } catch (error) {
+        const refused = refusedOf(error);
+        if (refused) {
+          throw refusal(refused, "discussions", input.connection, input.now);
+        }
+        const { errors } = error as { errors?: { message?: string }[] };
+        throw errors?.[0]?.message
+          ? new Stop(
+              `GitHub refused the discussions: ${cutShort(errors[0].message, 200)}`
+            )
+          : error;
+      }
+    });
+
+  /** The nodes of a discussion's connection past its first page, and the first's with them. */
+  const follow = async (
+    first: Connection | null | undefined,
+    owner: string,
+    name: string,
+    number: unknown,
+    field: "comments" | "labels"
+  ): Promise<Bounded<unknown[]>> => {
+    const nodes = [...(first?.nodes ?? [])];
+    let after = first?.pageInfo?.hasNextPage ? first.pageInfo.endCursor : null;
+    while (after !== null) {
+      const more = await ask<DiscussionMore>(DISCUSSION_MORE_QUERY, {
+        owner,
+        name,
+        number,
+        isLabels: field === "labels",
+        isComments: field === "comments",
+        after,
+      });
+      if (more.kind === "unanswered") {
+        return more;
+      }
+      const found = more.value.repository?.discussion?.[field];
+      nodes.push(...(found?.nodes ?? []));
+      after = found?.pageInfo?.hasNextPage ? found.pageInfo.endCursor : null;
+    }
+    return { kind: "answered", value: nodes };
+  };
+
+  /** A discussion with all its labels and comments: those past the first page read on. */
+  const fill = async (
+    node: Record<string, unknown>,
+    owner: string,
+    name: string
+  ): Promise<Bounded<Record<string, unknown>>> => {
+    const labels = await follow(
+      node.labels as Connection | null | undefined,
+      owner,
+      name,
+      node.number,
+      "labels"
+    );
+    if (labels.kind === "unanswered") {
+      return labels;
+    }
+    const comments = await follow(
+      node.comments as Connection | null | undefined,
+      owner,
+      name,
+      node.number,
+      "comments"
+    );
+    if (comments.kind === "unanswered") {
+      return comments;
+    }
+    return {
+      kind: "answered",
+      value: {
+        ...node,
+        labels: { nodes: labels.value },
+        comments: { nodes: comments.value },
+      },
+    };
+  };
+
+  /** A page's discussions, each with all its labels and comments, and its repository's name. */
+  const fillAll = async (
+    page: (Record<string, unknown> | null)[],
+    owner: string,
+    name: string
+  ): Promise<
+    Record<string, unknown>[] | Extract<Bounded<null>, { kind: "unanswered" }>
+  > => {
+    const nodes: Record<string, unknown>[] = [];
+    for (const node of page) {
+      if (node) {
+        const whole = await fill(node, owner, name);
+        if (whole.kind === "unanswered") {
+          return whole;
+        }
+        nodes.push({ ...whole.value, repo: input.repo });
+      }
+    }
+    return nodes;
+  };
+
   /**
    * The repository's discussions, newest updated first, through GraphQL
    * (REST lists none), page after page until the window's edge, each request within {@link REQUEST_MS}, no redirect
@@ -913,34 +1050,22 @@ export const pollRepo = async (input: {
     let newest = edge;
     let after: string | null = null;
     for (;;) {
-      const asked = await readWithin(REQUEST_MS, async (signal) => {
-        try {
-          return (await octokit.graphql(DISCUSSIONS_QUERY, {
-            owner,
-            name,
-            after,
-            request: { redirect: "error", signal },
-          })) as DiscussionsPage;
-        } catch (error) {
-          const refused = refusedOf(error);
-          if (refused) {
-            throw refusal(refused, "discussions", input.connection, input.now);
-          }
-          const { errors } = error as { errors?: { message?: string }[] };
-          throw errors?.[0]?.message
-            ? new Stop(
-                `GitHub refused the discussions: ${cutShort(errors[0].message, 200)}`
-              )
-            : error;
+      const asked: Bounded<DiscussionsPage> = await ask<DiscussionsPage>(
+        DISCUSSIONS_QUERY,
+        {
+          owner,
+          name,
+          after,
         }
-      });
+      );
       if (asked.kind === "unanswered") {
         return asked;
       }
-      const page = asked.value.repository?.discussions;
-      const nodes = (page?.nodes ?? []).flatMap((node) =>
-        node ? [{ ...node, repo: input.repo }] : []
-      );
+      const page: Discussions | undefined = asked.value.repository?.discussions;
+      const nodes = await fillAll(page?.nodes ?? [], owner, name);
+      if (!Array.isArray(nodes)) {
+        return nodes;
+      }
       const taken = readPage("discussions", nodes, edge);
       out.events.push(...taken.events);
       newest = Math.max(newest, taken.newest);

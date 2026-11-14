@@ -107,7 +107,7 @@ const ISSUE = `
   createdAt
   updatedAt
   state { id name type }
-  labels(first: 50) { nodes { name } }
+  labels(first: 50) { nodes { name } pageInfo { hasNextPage endCursor } }
   creator { name }
   botActor { name }
 `;
@@ -117,19 +117,32 @@ const TEAM_QUERY = `query CawcoTeam($id: String!) {
     id
     key
     name
-    states(first: 100) { nodes { id name type position } }
+    states(first: 100) { nodes { id name type position } pageInfo { hasNextPage endCursor } }
   }
   organization { urlKey }
 }`;
 
-const TEAMS_QUERY = `query CawcoTeams {
-  teams(first: 100) { nodes { id key name } }
+const STATES_MORE_QUERY = `query CawcoStates($id: String!, $after: String) {
+  team(id: $id) {
+    states(first: 100, after: $after) { nodes { id name type position } pageInfo { hasNextPage endCursor } }
+  }
+}`;
+
+const TEAMS_QUERY = `query CawcoTeams($after: String) {
+  teams(first: 100, after: $after) { nodes { id key name } pageInfo { hasNextPage endCursor } }
   organization { urlKey }
 }`;
 
-const LABELS_QUERY = `query CawcoLabels($team: ID!) {
-  issueLabels(first: 250, filter: { or: [{ team: { id: { eq: $team } } }, { team: { null: true } }] }) {
+const LABELS_QUERY = `query CawcoLabels($team: ID!, $after: String) {
+  issueLabels(first: 250, after: $after, filter: { or: [{ team: { id: { eq: $team } } }, { team: { null: true } }] }) {
     nodes { id name }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+const ISSUE_LABELS_QUERY = `query CawcoIssueLabels($id: String!, $after: String) {
+  issue(id: $id) {
+    labels(first: 50, after: $after) { nodes { name } pageInfo { hasNextPage endCursor } }
   }
 }`;
 
@@ -172,7 +185,7 @@ interface RawIssue {
   description?: string | null;
   id: string;
   identifier: string;
-  labels?: { nodes: { name: string }[] } | null;
+  labels?: Page<{ name: string }> | null;
   state: { id: string; name: string; type: string };
   title: string;
   updatedAt: string;
@@ -183,6 +196,24 @@ interface Page<T> {
   nodes: T[];
   pageInfo: { endCursor?: string | null; hasNextPage: boolean };
 }
+
+/** The nodes of a connection past its first page: each next page asked with the cursor the last one ended at. */
+const restOf = async <N>(
+  first: Page<N>,
+  more: (after: string) => Promise<Page<N> | TrackerProblem>
+): Promise<N[] | TrackerProblem> => {
+  const nodes = [...first.nodes];
+  let { pageInfo } = first;
+  while (pageInfo.hasNextPage && pageInfo.endCursor) {
+    const next = await more(pageInfo.endCursor);
+    if (next instanceof ElysiaStatus) {
+      return next;
+    }
+    nodes.push(...next.nodes);
+    ({ pageInfo } = next);
+  }
+  return nodes;
+};
 
 const TYPES: ReadonlySet<string> = new Set<StateType>([
   "triage",
@@ -327,7 +358,7 @@ export const linearAdapter = (
         id: string;
         key: string;
         name: string;
-        states: { nodes: (RawIssue["state"] & { position: number })[] };
+        states: Page<RawIssue["state"] & { position: number }>;
       } | null;
     }>("read the team", TEAM_QUERY, { id: teamId });
     if (data instanceof ElysiaStatus) {
@@ -340,7 +371,53 @@ export const linearAdapter = (
       });
     }
     teamName = `${data.team.key} · ${data.team.name}`;
-    return { ...data.team, urlKey: data.organization.urlKey };
+    const states = await restOf(data.team.states, async (after) => {
+      const more = await ask<{
+        team: {
+          states: Page<RawIssue["state"] & { position: number }>;
+        } | null;
+      }>("read the team", STATES_MORE_QUERY, { id: teamId, after });
+      return more instanceof ElysiaStatus
+        ? more
+        : (more.team?.states ?? {
+            nodes: [],
+            pageInfo: { hasNextPage: false },
+          });
+    });
+    if (states instanceof ElysiaStatus) {
+      return states;
+    }
+    return {
+      ...data.team,
+      states: { nodes: states },
+      urlKey: data.organization.urlKey,
+    };
+  };
+
+  /** An issue with all its labels: those past the first page read on. */
+  const whole = async <I extends RawIssue>(
+    raw: I
+  ): Promise<I | TrackerProblem> => {
+    if (!raw.labels) {
+      return raw;
+    }
+    const labels = await restOf(raw.labels, async (after) => {
+      const more = await ask<{
+        issue: { labels: Page<{ name: string }> } | null;
+      }>(`read the labels of ${raw.identifier}`, ISSUE_LABELS_QUERY, {
+        id: raw.id,
+        after,
+      });
+      return more instanceof ElysiaStatus
+        ? more
+        : (more.issue?.labels ?? {
+            nodes: [],
+            pageInfo: { hasNextPage: false },
+          });
+    });
+    return labels instanceof ElysiaStatus
+      ? labels
+      : { ...raw, labels: { nodes: labels, pageInfo: { hasNextPage: false } } };
   };
 
   /** Each label name the team's issues can carry (its own and the workspace's), to its id. */
@@ -356,9 +433,17 @@ export const linearAdapter = (
     if (labels instanceof ElysiaStatus) {
       return labels;
     }
-    const { issueLabels } = labels;
+    const all = await restOf(labels.issueLabels, async (after) => {
+      const more = await ask<{
+        issueLabels: Page<{ id: string; name: string }>;
+      }>("read its labels", LABELS_QUERY, { team: teamId, after });
+      return more instanceof ElysiaStatus ? more : more.issueLabels;
+    });
+    if (all instanceof ElysiaStatus) {
+      return all;
+    }
     const byName = new Map(
-      issueLabels.nodes.map((label) => [label.name.toLowerCase(), label.id])
+      all.map((label) => [label.name.toLowerCase(), label.id])
     );
     const missing = names.filter((name) => !byName.has(name.toLowerCase()));
     if (missing.length > 0) {
@@ -376,6 +461,7 @@ export const linearAdapter = (
     query: string,
     field: "comments" | "issues",
     cursor: ListCursor,
+    fill: (raw: Raw) => Promise<Raw | TrackerProblem>,
     read: (raw: Raw) => T,
     stamp: (raw: Raw) => number
   ): Promise<Listed<T> | TrackerProblem> => {
@@ -397,7 +483,11 @@ export const linearAdapter = (
       const listed = data[field] as Page<Raw>;
       for (const raw of listed.nodes) {
         newest = Math.max(newest, stamp(raw));
-        items.push(read(raw));
+        const full = await fill(raw);
+        if (full instanceof ElysiaStatus) {
+          return full;
+        }
+        items.push(read(full));
       }
       if (!(listed.pageInfo.hasNextPage && listed.pageInfo.endCursor)) {
         break;
@@ -454,7 +544,11 @@ export const linearAdapter = (
         return read.response.code === "tracker-input" ? null : read;
       }
       const { issue } = read;
-      return issue && issue.team.id === teamId ? issueOf(issue) : null;
+      if (!issue || issue.team.id !== teamId) {
+        return null;
+      }
+      const full = await whole(issue);
+      return full instanceof ElysiaStatus ? full : issueOf(full);
     },
 
     keyOf: async (url) => {
@@ -491,7 +585,8 @@ export const linearAdapter = (
           detail: `Linear did not create the issue in ${teamName}.`,
         });
       }
-      return issueOf(issueCreate.issue);
+      const full = await whole(issueCreate.issue);
+      return full instanceof ElysiaStatus ? full : issueOf(full);
     },
 
     update: async (issue, patch: IssuePatch) => {
@@ -515,7 +610,8 @@ export const linearAdapter = (
           detail: `Linear did not change ${issue.ref} in ${teamName}.`,
         });
       }
-      return issueOf(issueUpdate.issue);
+      const full = await whole(issueUpdate.issue);
+      return full instanceof ElysiaStatus ? full : issueOf(full);
     },
 
     changed: (cursor) =>
@@ -524,6 +620,7 @@ export const linearAdapter = (
         ISSUES_QUERY,
         "issues",
         cursor,
+        whole,
         issueOf,
         (raw) => Date.parse(raw.updatedAt)
       ),
@@ -546,6 +643,7 @@ export const linearAdapter = (
         COMMENTS_QUERY,
         "comments",
         cursor,
+        (raw) => Promise.resolve(raw),
         (raw) => {
           const author =
             raw.user?.name ?? raw.botActor?.name ?? "an integration";
@@ -600,14 +698,24 @@ export const linearAdapter = (
 export const linearTargets = async (
   client: LinearClientFor
 ): Promise<TrackerTarget[] | TrackerProblem> => {
-  const data = await within<{
+  interface Teams {
     organization: { urlKey: string };
     teams: Page<{ id: string; key: string; name: string }>;
-  }>(client, "list its teams", "Linear", TEAMS_QUERY, {});
+  }
+  const askTeams = (after: string | null) =>
+    within<Teams>(client, "list its teams", "Linear", TEAMS_QUERY, { after });
+  const data = await askTeams(null);
   if (data instanceof ElysiaStatus) {
     return data;
   }
-  return data.teams.nodes.map((team) => ({
+  const teams = await restOf(data.teams, async (after) => {
+    const more = await askTeams(after);
+    return more instanceof ElysiaStatus ? more : more.teams;
+  });
+  if (teams instanceof ElysiaStatus) {
+    return teams;
+  }
+  return teams.map((team) => ({
     id: team.id,
     name: `${team.key} · ${team.name}`,
     url: `https://linear.app/${data.organization.urlKey}/team/${team.key}`,
