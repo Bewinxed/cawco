@@ -61,6 +61,7 @@ import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
 import type { ServerWebSocket } from "bun";
+import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -231,9 +232,9 @@ const metaProblem = (
         ? "A screen keeps only penMode, penDetected and heldNote in a canvas's meta."
         : "A page changes its artifact's meta only by its held note.";
     }
-    const problem = CLIENT_META[key as ClientMetaKey](value);
-    if (problem) {
-      return problem;
+    const why = CLIENT_META[key as ClientMetaKey](value);
+    if (why) {
+      return why;
     }
   }
   return null;
@@ -345,7 +346,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
     elements
       .toArray()
       .map(entryProblem)
-      .find((problem) => problem !== null) ??
+      .find((why) => why !== null) ??
     madeProblem(elementsOf(doc), elements) ??
     filesProblem(doc.getMap("files"), trial.getMap("files")) ??
     requestsProblem(
@@ -390,14 +391,14 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   const before = doc.getMap("state");
   for (const [key, value] of state.entries()) {
     if (JSON.stringify(value) !== JSON.stringify(before.get(key))) {
-      const problem =
+      const why =
         choiceEntryProblem(key, value) ??
         settledWriteProblem(
           before.get(key) as ChoiceEntry | undefined,
           value as ChoiceEntry
         );
-      if (problem) {
-        return problem;
+      if (why) {
+        return why;
       }
     }
   }
@@ -721,9 +722,9 @@ export const artifactPictures =
         detail: PICTURES_SHAPE,
       });
     }
-    const problem = picturesBodyProblem(body);
-    if (problem) {
-      return problemResponse({ status: 400, code: "refused", detail: problem });
+    const why = picturesBodyProblem(body);
+    if (why) {
+      return problemResponse({ status: 400, code: "refused", detail: why });
     }
     const kept = keep(instanceId, artifactId, body as MarkPictures);
     return "response" in kept ? problemOf(kept) : Response.json(kept);
@@ -749,9 +750,9 @@ const takeUpdate = (
   origin: { client: ArtifactClient } | undefined
 ): string | null => {
   const doc = docs.doc(artifactId);
-  const problem = updateProblem(doc, update);
-  if (problem) {
-    return problem;
+  const why = updateProblem(doc, update);
+  if (why) {
+    return why;
   }
   applyUpdate(doc, update, origin);
   if (getMeta(doc, "kind") === "canvas") {
@@ -796,12 +797,15 @@ const sentWritesProblem = (writes: unknown): string | null =>
     : `writes is a base64 Yjs update of at most ${SEND_WRITES_MAX.toLocaleString()} characters.`;
 
 /**
- * The person sends their picks (`cawco.send`): the page's own writes it
- * carries applied first, as its socket's would be ({@link takeUpdate}), so
- * the picks the page counts are the ones read; then what the send applies
- * (a project's setup page: its name, shape and account), then the session
- * hears it has new responses to read (service.ts `send`). `instanceId`
- * already owns `artifactId` (the listener checked).
+ * The person sends their picks (`cawco.send`): `raw`, the body as JSON text,
+ * is read (its size, its shape), the page's own writes it carries applied
+ * first, as its socket's would be ({@link takeUpdate}), so the picks the
+ * page counts are the ones read; then what the send applies (a project's
+ * setup page: its name, shape and account), then the session hears it has
+ * new responses to read (service.ts `send`). A Send with nothing new reads
+ * as sent (`{ sent: "already" }`): what he asked for already holds. The
+ * hub's route and the page's listener (preview.ts) both answer it.
+ * `instanceId` already owns `artifactId` (the listener checked).
  */
 export const artifactSend =
   (
@@ -814,20 +818,13 @@ export const artifactSend =
     docs: ArtifactDocs
   ) =>
   async (
-    request: Request,
     instanceId: string,
-    artifactId: string
-  ): Promise<Response> => {
-    if (request.method !== "POST") {
-      return problemResponse(
-        { status: 405, code: "send-post", detail: "Send is a POST." },
-        { allow: "POST" }
-      );
-    }
-    const raw = await request.text();
+    artifactId: string,
+    raw: string,
+    route: string
+  ) => {
     if (raw.length > SEND_BODY_MAX) {
-      return problemResponse({
-        status: 413,
+      return problem(413, {
         code: "send-carries-most-pictures",
         detail: `A send carries at most ${COMMENT_LIMITS.pictures} pictures and ${CHOICE_LIMITS.note} characters of text.`,
       });
@@ -836,46 +833,35 @@ export const artifactSend =
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch {
-      return problemResponse({
-        status: 400,
-        code: "refused",
-        detail: SEND_SHAPE,
-      });
+      return problem(400, { code: "refused", detail: SEND_SHAPE });
     }
-    const problem = sendBodyProblem(body);
-    if (problem) {
-      return problemResponse({ status: 400, code: "refused", detail: problem });
+    const bodyProblem = sendBodyProblem(body);
+    if (bodyProblem) {
+      return problem(400, { code: "refused", detail: bodyProblem });
     }
     const { writes } = body as SendBody;
     if (writes) {
       const refused = takeSentWrites(docs, artifactId, writes);
       if (refused) {
-        return problemResponse({
-          status: 422,
-          code: "refused",
-          detail: refused,
-        });
+        return problem(422, { code: "refused", detail: refused });
       }
     }
     const sent = await send(
       instanceId,
       artifactId,
       sentBody(body as SendBody),
-      `POST ${new URL(request.url).pathname}`
+      route
     );
-    return "response" in sent ? refusedSend(sent) : Response.json(sent);
+    if (!("response" in sent)) {
+      return sent;
+    }
+    return sent.response.code === "artifact-nothing-new"
+      ? { sent: "already" as const }
+      : problem(sent.status, {
+          code: sent.response.code,
+          detail: sent.response.detail,
+        });
   };
-
-/**
- * The page's answer for a Send the service refused, in its words and
- * status; a Send with nothing new reads as sent (his press after every pick
- * had gone, by the hub's own send or an earlier press: what he asked for
- * holds).
- */
-const refusedSend = (refused: AnyProblem): Response =>
-  refused.response.code === "artifact-nothing-new"
-    ? Response.json({ sent: "already" })
-    : problemOf(refused);
 
 /** A refusal the service answered, as the page reads it: Elysia's problem, its status, code and words. */
 const problemOf = ({ status, response }: AnyProblem): Response =>
@@ -920,15 +906,15 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
     ) {
       return;
     }
-    const problem = takeUpdate(
+    const why = takeUpdate(
       docs,
       artifactId,
       readVarUint8Array(decoder),
       origin
     );
-    if (problem) {
+    if (why) {
       socket.data.refused = true;
-      socket.send(refusal(problem));
+      socket.send(refusal(why));
     }
   },
   close(socket: ServerWebSocket<ArtifactSocket>, code?: number) {

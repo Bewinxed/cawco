@@ -184,13 +184,10 @@ export const previewRoutes = (deps: {
           const owner = deps.listener.ownerOf(params.artifact);
           return owner && deps.panelSees(params.id, params.artifact)
             ? deps.listener.send(
-                new Request(request.url, {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify(body),
-                }),
                 owner,
-                params.artifact
+                params.artifact,
+                JSON.stringify(body),
+                `POST ${new URL(request.url).pathname}`
               )
             : problem(404, {
                 code: "no-such-artifact",

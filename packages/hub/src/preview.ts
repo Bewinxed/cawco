@@ -57,6 +57,7 @@ import {
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { ElysiaStatus, problem } from "elysia";
+import { problemResponse } from "elysia/error";
 import { serveCanvas } from "./artifacts/canvas";
 import {
   ARTIFACT_PATH,
@@ -462,6 +463,34 @@ export interface PreviewListenerDeps {
   upstream: (row: MachineRow) => Upstream | undefined;
 }
 
+/** The page's own Send as the listener answers it: JSON text in, the send's typed answer (artifacts/sync.ts `artifactSend`) as JSON or a problem. */
+const sendAnswer = async (
+  request: Request,
+  instanceId: string,
+  artifactId: string,
+  deps: PreviewListenerDeps
+): Promise<Response> => {
+  if (request.method !== "POST") {
+    return problemResponse(
+      { status: 405, code: "send-post", detail: "Send is a POST." },
+      { allow: "POST" }
+    );
+  }
+  const sent = await deps.send(
+    instanceId,
+    artifactId,
+    await request.text(),
+    `POST ${new URL(request.url).pathname}`
+  );
+  return sent instanceof ElysiaStatus
+    ? problemResponse({
+        status: sent.status,
+        code: sent.response.code,
+        detail: sent.response.detail,
+      })
+    : Response.json(sent);
+};
+
 /** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), on the origin that serves it only ({@link PreviewListenerDeps.originOf}). */
 const joinArtifact = (
   request: Request,
@@ -490,7 +519,7 @@ const joinArtifact = (
     );
   }
   if (action === "/send") {
-    return deps.send(request, instanceId, artifactId);
+    return sendAnswer(request, instanceId, artifactId, deps);
   }
   if (action === "/picture") {
     return deps.picture(request, artifactId);
