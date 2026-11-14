@@ -28,6 +28,7 @@ export const toolRoutes = ({
   pendingToolSignins,
   publishInstances,
   registry,
+  toolReleases,
   updateAll,
 }: Pick<
   HubContext,
@@ -40,17 +41,28 @@ export const toolRoutes = ({
   | "pendingToolSignins"
   | "publishInstances"
   | "registry"
+  | "toolReleases"
   | "updateAll"
 >) => {
   /** The fleet's choice and each tool some machine is behind on, as the cells stand now. */
   const fleetUpdates = (): ToolUpdatesState => {
     const updates = db.toolUpdates();
+    const releases = Object.fromEntries(
+      TOOL_CATALOG.flatMap((spec) => {
+        const newest = toolReleases.newest(spec.id);
+        return newest ? [[spec.id, newest]] : [];
+      })
+    );
     const machines = db.namedMachines().map(({ machineId }) => ({
       machineId,
       status: registry.agent(machineId) ? "online" : "offline",
       tools: db.agentTools(machineId),
     }));
-    return { updates, behind: toolsBehind(machines, updates) };
+    return {
+      updates,
+      releases,
+      behind: toolsBehind(machines, updates, releases),
+    };
   };
   return (
     new Elysia()

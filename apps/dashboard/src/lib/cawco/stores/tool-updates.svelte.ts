@@ -11,20 +11,28 @@ import { hub } from "#lib/platform/hub.js";
 import { hubData } from "#lib/platform/hub-read.js";
 import { load } from "../hub/load";
 
-const toolUpdatesState = $state<{ updates: ToolUpdates }>({
+const toolUpdatesState = $state<{
+  releases: Record<string, string>;
+  updates: ToolUpdates;
+}>({
+  releases: {},
   updates: TOOL_UPDATES_DEFAULT,
 });
 
-/** The fleet's choice, as the hub holds it now; the default until it answers. */
+/** The fleet's choice, and the releases CawCo keeps its copies at, as the hub holds them now; the default until it answers. */
 export async function readToolUpdates(): Promise<void> {
   const read = await load(hubData(hub.api["tool-updates"].get()));
   if (read) {
     toolUpdatesState.updates = read.updates;
+    toolUpdatesState.releases = read.releases;
   }
 }
 
-/** The fleet's choice for a copy of a tool CawCo does not run, as last read. */
+/** The fleet's choice for a copy of a tool CawCo does not run, and each kept CLI's newest release, as last read. */
 export const toolUpdatesStore = {
+  get releases(): Record<string, string> {
+    return toolUpdatesState.releases;
+  },
   get updates(): ToolUpdates {
     return toolUpdatesState.updates;
   },
