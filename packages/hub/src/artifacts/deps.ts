@@ -3,7 +3,6 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { PlanStep } from "@cawco/core/plan";
-import type { PreviewDown } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasSpec,
@@ -23,11 +22,11 @@ import type { Caw } from "../caw";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import type { DecisionLinks } from "../decision-problems";
 import type { ArtifactNamed } from "../decision-program";
-
 import type { HubLifetimeShape } from "../lifetime";
 import type { AwayProblem, SilentProblem } from "../machine-answers";
 import type { PageBuilt, PageFolderProblem } from "../page-problems";
-import type { PreviewListeners } from "../preview";
+import type { PreviewListeners, PreviewUnloaded } from "../preview";
+import type { OpenStop } from "../preview-stops";
 import type { ProblemsOf } from "../refusal";
 import type { CardsRouted, Settler } from "../settling-answers";
 import type { SentPage } from "../setup";
@@ -310,7 +309,10 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     panel?: string | null,
     again?: boolean
-  ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
+  ) => Promise<
+    | { ok: true; revision: string }
+    | { error: string; ok: false; stop: OpenStop }
+  >;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
   /**
@@ -373,9 +375,7 @@ export interface ArtifactServiceDeps {
    * preview handed to a parent is checked
    * so before it reaches them.
    */
-  reachable: (
-    row: ArtifactRow
-  ) => Promise<{ failure: PreviewDown; why: string | null } | null>;
+  reachable: (row: ArtifactRow) => Promise<PreviewUnloaded | null>;
   /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
    * the frame it follows (the panel's open frame, unchanged otherwise); none

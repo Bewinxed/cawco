@@ -93,7 +93,9 @@ import type { LeadHomeProblem } from "./caw-problems";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
+import type { StoredSendRefusal } from "./db/stored-types";
 import { boardTitle } from "./labels";
+import { awayProblem } from "./machine-answers";
 import { defineTool, type McpTool, sentence } from "./mcp-tool";
 import {
   AGENTS_FILE,
@@ -592,6 +594,7 @@ export interface CawDeps {
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
+    refusal: StoredSendRefusal | null;
     state: string;
   };
   /**
@@ -804,7 +807,7 @@ export const createCaw = ({
   const message = (
     target: InstanceRow,
     said: Said
-  ): { uuid: string } | { why: string } => {
+  ): { uuid: string } | { why: string; refusal: StoredSendRefusal | null } => {
     const uuid = crypto.randomUUID();
     const record = send({
       verb: "send",
@@ -825,7 +828,7 @@ export const createCaw = ({
     });
     return record.state === "pending"
       ? { uuid }
-      : { why: record.reason ?? NOT_TAKEN };
+      : { why: record.reason ?? NOT_TAKEN, refusal: record.refusal };
   };
 
   /** What starts the conversation: how it routes, its first send once its row is there, and how. */
@@ -1001,8 +1004,21 @@ export const createCaw = ({
         : message(conversation.row, said(conversation.row));
     return "uuid" in sent
       ? { instanceId: conversation.row.id, send: sent.uuid }
-      : problem(409, { code: "caw-send-not-taken", detail: sent.why });
+      : notTaken(sent);
   };
+
+  /**
+   * A send to the conversation its record says was not taken: its machine
+   * away answered as one, naming it; any other refusal is the hub's, by
+   * where the conversation stands (core SendRefusal).
+   */
+  const notTaken = (sent: {
+    refusal: StoredSendRefusal | null;
+    why: string;
+  }) =>
+    sent.refusal?.kind === "machine-away"
+      ? awayProblem(sent.refusal.machineId, sent.why)
+      : problem(409, { code: "caw-send-not-taken", detail: sent.why });
 
   /** {@link tell} for the tellers that only log what did not go: an event is never lost silently. */
   const tellQuietly = (projectId: string, event: ProjectEvent): void => {

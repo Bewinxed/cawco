@@ -24,13 +24,6 @@ language js
 // - a canvas's screen or a session, not its machine: artifact-canvas-no-screen,
 //   artifact-canvas-undrawn, artifact-canvas-screen-unjoined,
 //   artifact-comment-undelivered.
-//
-// Known, and owed their split (each says a machine away or silent among
-// other causes in one sentence): a preview's start (preview-service.ts
-// `PreviewReach`, `down: "machine"`), answered artifact-preview-unstarted,
-// artifact-show-unstarted, artifact-sheet-unshown and
-// artifact-unanswered-unhanded; and a decision page's tasks asked of Caw
-// (decisions.ts), decision-tasks-unasked.
 or {
   or {
     `problem($status, $fields)`,
@@ -59,12 +52,7 @@ or {
       `code: "artifact-canvas-no-screen"`,
       `code: "artifact-canvas-undrawn"`,
       `code: "artifact-canvas-screen-unjoined"`,
-      `code: "artifact-comment-undelivered"`,
-      `code: "artifact-preview-unstarted"`,
-      `code: "artifact-show-unstarted"`,
-      `code: "artifact-sheet-unshown"`,
-      `code: "artifact-unanswered-unhanded"`,
-      `code: "decision-tasks-unasked"`
+      `code: "artifact-comment-undelivered"`
     },
     register_diagnostic(span=$hit, message="A 503 is a machine away and a 504 a machine silent (the owner's machine-status rule): answer awayProblem or silentProblem (packages/hub/src/machine-answers.ts). A cause that is no machine's is named, with why, in scripts/lint/machine-answers.grit.")
   },

@@ -4718,11 +4718,12 @@ export const createServer = (
         return {
           ok: false,
           error: `No session holds ${artifact.name} now: it is its project's page.`,
+          stop: { kind: "closed" },
         };
       }
       const opened = await openPreview(panel, artifact, again);
       if (!opened.ok) {
-        return { ok: false, error: opened.error };
+        return opened;
       }
       return { ok: true, revision: opened.frame.revision };
     },
@@ -8728,7 +8729,7 @@ export const createServer = (
     send: (envelope) => {
       const sent = deliverToSession(byIdNow(envelope), false);
       return sent instanceof ElysiaStatus
-        ? { reason: sent.response.detail, state: "failed" }
+        ? { reason: sent.response.detail, refusal: null, state: "failed" }
         : sent;
     },
     end: (instanceId) =>
