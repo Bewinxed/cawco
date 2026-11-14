@@ -1,15 +1,12 @@
 import { Elysia, problem, t, ValidationError } from "elysia";
-import type {
-  ContinuationAsker,
-  PreparedContinuation,
-} from "../db/stored-types";
 import type { HubContext } from "../hub-context";
 import { MachineAway } from "../hub-shapes";
 import type { MachineReadsContext } from "../machine-reads";
 import { awayStatus } from "../machine-reads";
 
-import { continueBody } from "../routes/session-bodies";
+import { continuationCalls } from "../session-calls";
 import { firstValidationIssue } from "../validation-issue";
+import { continueBody } from "./session-bodies";
 
 /** A thrown value in its own words. */
 const thrownWords = (error: unknown): string =>
@@ -31,14 +28,11 @@ export const continuationRoutes = (
 ) => {
   const {
     cancelContinuation,
-    cloneForContinuation,
     continuationJob,
-    continuationRefusal,
     continuationTable,
-    inFlightFor,
     prepareContinuation,
-    startContinuation,
   } = ctx;
+  const { continueFrom } = continuationCalls(ctx);
   return (
     new Elysia()
       // What a continuation of this session would carry, sized — for the
@@ -108,62 +102,10 @@ export const continuationRoutes = (
             }
           },
         },
-        async ({ params, body, set }) => {
-          const { askedBy, ...request } = body;
-          const asker: ContinuationAsker = askedBy
-            ? { kind: "session", id: askedBy }
-            : { kind: "person" };
-          let prepared: PreparedContinuation;
-          let why: string | undefined;
-          let release: () => void = () => undefined;
-          try {
-            release = await cloneForContinuation(params.id);
-            prepared = await prepareContinuation(
-              params.id,
-              body.note,
-              body.asksOnly
-            );
-            why = await continuationRefusal(prepared, request, asker);
-          } catch (error) {
-            release();
-            if (error instanceof MachineAway) {
-              return awayStatus(ctx, set, error.machineId, error.message);
-            }
-            return problem(422, {
-              code: "thrown-words",
-              detail: thrownWords(error),
-            });
-          }
-          if (why) {
-            release();
-            return problem(409, { code: "continuation-refused", detail: why });
-          }
-          // What the source's process holds that ending it would lose: the
-          // job waits for it, and the caller hears so at once.
-          const inFlight = await inFlightFor(params.id);
-          if ("refusal" in inFlight) {
-            release();
-            return problem(422, {
-              code: "work-in-flight",
-              detail: inFlight.refusal,
-            });
-          }
-          const row = startContinuation(
-            prepared,
-            request,
-            asker,
-            inFlight.work
-          );
-          // Its record holds the source's workspace from here (workspaces.ts `holdsOf`).
-          release();
-          const job = continuationJob(row);
-          return {
-            continuationId: row.id,
-            targetInstanceId: row.targetInstanceId,
-            summariserInstanceId: row.summariserInstanceId,
-            ...(job.waiting ? { waiting: job.waiting } : {}),
-          };
-        }
+        ({ params, body, set }) =>
+          continueFrom(params.id, body, (machineId, words) =>
+            awayStatus(ctx, set, machineId, words)
+          )
       )
       // The continuations the hub is carrying: what a dashboard that connects
       // late reads before the next publish reaches it.

@@ -2,6 +2,7 @@ import type { AccountMove } from "@cawco/core/accounts";
 import { namedAccount } from "@cawco/core/accounts";
 import { RESTART_WAIT_CAP_MS, waitedOut } from "@cawco/core/binary-updates";
 import {
+  CONTINUATION_CANCELLED,
   contextFitRefusal,
   estimateTokens,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
@@ -71,8 +72,6 @@ const askerWords = (by: ContinuationAsker): string => {
       return "a person (the dashboard or the API)";
   }
 };
-/** The words a continuation stopped by its Cancel ends with. */
-export const CONTINUATION_CANCELLED = "the continuation was cancelled";
 
 /**
  * A start the hub's own work asked of a machine that is connected but takes

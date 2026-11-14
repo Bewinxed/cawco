@@ -2,16 +2,16 @@
  * A session's follow-up reading, as keep-alive and the dashboard ask it.
  */
 
-import { Elysia, problem, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { followupCalls } from "../session-calls";
 
-export const followupStateRoutes = ({
-  coldReading,
-  db,
-  followupState,
-}: Pick<HubContext, "coldReading" | "db" | "followupState">) =>
-  new Elysia().post(
+export const followupStateRoutes = (
+  ctx: Pick<HubContext, "coldReading" | "db" | "followupState">
+) => {
+  const { followupState } = followupCalls(ctx);
+  return new Elysia().post(
     "/api/followup-state",
     {
       ...hidden,
@@ -22,36 +22,6 @@ export const followupStateRoutes = ({
         message: t.Optional(t.String()),
       }),
     },
-    async ({ body }) => {
-      let { instanceId } = body;
-      if (body.workspace) {
-        const workspaces = db.workspacesNamed(body.workspace.trim());
-        if (workspaces.length !== 1) {
-          return problem(404, {
-            code: "no-unique-workspace",
-            detail: `No unique workspace "${body.workspace}".`,
-          });
-        }
-        instanceId = db.workItemsIn(workspaces[0].id)[0]?.instanceId;
-      }
-      const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
-      if (!row) {
-        return {
-          row: null,
-          midTurn: false,
-          hasTurns: false,
-          lastTurnAt: null,
-          activityBound: false,
-        };
-      }
-      const state = followupState(row);
-      return {
-        row,
-        midTurn: state.midTurn,
-        hasTurns: state.hasTurns,
-        lastTurnAt: state.lastTurnAt,
-        activityBound: state.activityBound,
-        ...(await coldReading(row, state, body.message)),
-      };
-    }
+    ({ body }) => followupState(body)
   );
+};

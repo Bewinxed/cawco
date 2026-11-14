@@ -7,83 +7,35 @@
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
 
-import {
-  ARTIFACT_DOES,
-  ARTIFACT_NAME,
-  ARTIFACT_TITLE_LIMIT,
-  ASK_LIMIT,
-} from "@cawco/core/artifact-kinds";
 import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
-import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
-import { CHOICE_LIMITS } from "@cawco/core/choices";
-import { COMMENT_LIMITS } from "@cawco/core/comments/model";
-import {
-  PREVIEW_START_PATH,
-  SHOWN_FAILURES,
-} from "@cawco/core/preview/protocol";
-import {
-  CANVAS_SPEC_LIMITS,
-  DESIGN_MAP_LIMITS,
-  INTERACTIONS,
-  SERVE_COMMAND_LIMIT,
-  STORY_FILE,
-  type StoryOp,
-} from "@cawco/core/stage";
+import { SHOWN_FAILURES } from "@cawco/core/preview/protocol";
+import { DESIGN_MAP_LIMITS } from "@cawco/core/stage";
 import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
-import type { Operation } from "rfc6902";
-import { z } from "zod";
-import { PAGE_LIMIT } from "../decision-page";
-import { PROGRAM_MAX } from "../decision-program";
-
-import type { StateAsk } from "./component";
-import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
-import { type Artifacts, THUMBNAIL_BYTES } from "./service";
-import type {
-  CanvasChange,
-  PageChange,
-  SheetChange,
-  SkeletonElement,
-} from "./shapes";
-import { PNG_SIGNATURE } from "./sync";
 import {
-  ARGS_LIMIT,
-  isStateStory,
-  PATCH_LIMIT,
-  STORY_NAME,
-  WORKSPACE_ID,
-} from "./tools";
-
-/** A read's frame, from its JSON; refused with the shape when it is none. */
-const STATE_ASK = z.object({
-  interaction: z.enum(INTERACTIONS).optional(),
-  scheme: z.enum(["light", "dark"]).optional(),
-  story: z.string().refine(isStateStory),
-  width: z.number().positive().optional(),
-});
-/** A preview's or a page's state: the query or hash its own link for that state adds. */
-const STATE_LINK = /^[?#]\S+$/u;
-/** A read's `state`, from its JSON: a component's frame, or a preview's or a page's state link; refused with the shape when it is neither. */
-const stateOf = (text: string) => {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    value = null;
-  }
-  if (typeof value === "string" && STATE_LINK.test(value)) {
-    const link: { link: string } = { link: value };
-    return link;
-  }
-  const read = STATE_ASK.safeParse(value);
-  if (!read.success) {
-    return problem(400, {
-      code: "artifact-read-state-shape",
-      detail: SHAPES.read,
-    });
-  }
-  const state: { state: StateAsk } = { state: read.data };
-  return state;
-};
+  askBody,
+  closeQuestionBody,
+  commentsFields,
+  componentBody,
+  createBody,
+  readFields,
+  replyBody,
+  resolveBody,
+  SHAPES,
+  settleBody,
+  sheetBody,
+  statementsBody,
+  titleBody,
+  updateBody,
+} from "./bodies";
+import {
+  createArtifact,
+  readAsked,
+  sheetChangeOf,
+  updateArtifact,
+  updateComponent,
+} from "./calls";
+import { type Artifacts, THUMBNAIL_BYTES } from "./service";
+import { PNG_SIGNATURE } from "./sync";
 
 /** A thumbnail's scheme as the pane sends it: base64 PNG, or null where none was drawn. */
 const thumbnailPng = t.Nullable(
@@ -107,233 +59,6 @@ const pngOf = (base64: string | null) => {
 
 /** Who moves the panel: `by=agent` from the session's own tools; left out, the person. */
 const handQuery = t.Object({ by: t.Optional(t.Literal("agent")) });
-
-/** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
-const skeletons = t.Array(
-  t.Object(
-    {
-      type: t.UnionEnum(SKELETON_TYPES),
-      id: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
-    },
-    { additionalProperties: true }
-  ),
-  { minItems: 1, maxItems: CANVAS_LIMITS.elementsPerCall }
-);
-
-const mermaid = t.String({ minLength: 1, maxLength: CANVAS_LIMITS.mermaid });
-
-const operation = t.Object({
-  op: t.Union([
-    t.Literal("add"),
-    t.Literal("remove"),
-    t.Literal("replace"),
-    t.Literal("move"),
-    t.Literal("copy"),
-    t.Literal("test"),
-  ]),
-  path: t.String({ maxLength: 1000 }),
-  from: t.Optional(t.String({ maxLength: 1000 })),
-  value: t.Optional(t.Unknown()),
-});
-
-const storyName = t.String({ pattern: STORY_NAME.source });
-const argValues = t.Record(
-  t.String({ minLength: 1, maxLength: 100 }),
-  t.Unknown(),
-  {
-    maxProperties: ARGS_LIMIT,
-  }
-);
-
-/** A states file, from the clone's root or absolute. */
-const statesFile = t.String({
-  minLength: 1,
-  maxLength: 1000,
-  pattern: STORY_FILE.source,
-});
-
-/** A story on a canvas: `Story`, or `file:Story` across sections. */
-const storyRef = t.String({ minLength: 1, maxLength: 1100 });
-
-/** What the person does on an artifact, and its one line in the panel's head. */
-const doesField = t.UnionEnum(ARTIFACT_DOES);
-const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
-const titleField = t.String({ minLength: 1, maxLength: ARTIFACT_TITLE_LIMIT });
-
-/** A component canvas's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
-const canvasFields = {
-  edges: t.Optional(
-    t.Array(
-      t.Object({
-        from: storyRef,
-        to: storyRef,
-        label: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
-      }),
-      { maxItems: CANVAS_SPEC_LIMITS.edges }
-    )
-  ),
-  group: t.Optional(t.Record(storyRef, storyRef, { maxProperties: 200 })),
-  dials: t.Optional(
-    t.Array(
-      t.Object({
-        name: t.String({
-          minLength: 1,
-          maxLength: 60,
-          pattern: "^[A-Za-z][\\w-]*$",
-        }),
-        label: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
-        kind: t.Union([
-          t.Literal("number"),
-          t.Literal("color"),
-          t.Literal("select"),
-          t.Literal("toggle"),
-          t.Literal("text"),
-          t.Literal("action"),
-        ]),
-        group: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
-        min: t.Optional(t.Number()),
-        max: t.Optional(t.Number()),
-        step: t.Optional(t.Number({ exclusiveMinimum: 0 })),
-        unit: t.Optional(t.String({ maxLength: 10 })),
-        options: t.Optional(
-          t.Array(t.String({ maxLength: 100 }), { maxItems: 24 })
-        ),
-        target: t.Union([
-          t.Object({
-            cssVar: t.String({ pattern: "^--[\\w-]+$", maxLength: 100 }),
-          }),
-          t.Object({ arg: t.String({ minLength: 1, maxLength: 100 }) }),
-        ]),
-      }),
-      { maxItems: CANVAS_SPEC_LIMITS.dials }
-    )
-  ),
-};
-
-/** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (component canvas G3). */
-const SHAPES = {
-  create: CREATE_SHAPE,
-  update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
-  read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story: "Story" or, where two states files export it, "file:Story", interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
-  map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
-};
-
-/** A sheet's change (core `SheetWrite` less its file): one story's args, or one story op. */
-const sheetChange = {
-  args: t.Optional(
-    t.Object({
-      story: storyName,
-      values: argValues,
-      unset: t.Optional(
-        t.Array(t.String({ minLength: 1, maxLength: 100 }), {
-          maxItems: ARGS_LIMIT,
-        })
-      ),
-    })
-  ),
-  story: t.Optional(
-    t.Union([
-      t.Object({ add: storyName, args: t.Optional(argValues) }),
-      t.Object({ duplicate: storyName, as: storyName }),
-      t.Object({ remove: storyName }),
-      t.Object({ move: storyName, before: t.Union([storyName, t.Null()]) }),
-    ])
-  ),
-};
-
-/** The one change a sheet's write names. */
-const sheetChangeOf = (body: {
-  args?: Extract<SheetChange, { args: unknown }>["args"];
-  story?: StoryOp;
-}) => {
-  if (body.args !== undefined && body.story === undefined) {
-    const args: SheetChange = { args: body.args };
-    return args;
-  }
-  if (body.story !== undefined && body.args === undefined) {
-    const story: SheetChange = { story: body.story };
-    return story;
-  }
-  return problem(400, {
-    code: "artifact-sheet-change-one",
-    detail: "A sheet takes exactly one of args or story.",
-  });
-};
-
-/** The one change an update names (a decision page's statements and a component canvas each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
-const changeOf = (body: {
-  delete?: string[];
-  elements?: SkeletonElement[];
-  html?: string;
-  mermaid?: string;
-  patch?: unknown[];
-}) => {
-  const named = (
-    ["html", "patch", "elements", "delete", "mermaid"] as const
-  ).filter((key) => body[key] !== undefined);
-  return named.length === 1
-    ? oneChange(body)
-    : problem(400, {
-        code: "artifact-update-change-one",
-        detail:
-          "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes.",
-      });
-};
-
-/** The change a body naming exactly one ({@link changeOf}) names. */
-const oneChange = (body: {
-  delete?: string[];
-  elements?: SkeletonElement[];
-  html?: string;
-  mermaid?: string;
-  patch?: unknown[];
-}): Exclude<PageChange, { statements: string }> | CanvasChange => {
-  if (body.html !== undefined) {
-    return { html: body.html };
-  }
-  if (body.patch !== undefined) {
-    return { patch: body.patch as Operation[] };
-  }
-  if (body.elements !== undefined) {
-    return { elements: body.elements };
-  }
-  return body.delete === undefined
-    ? { mermaid: body.mermaid ?? "" }
-    : { delete: body.delete };
-};
-
-/** An artifact's read as its route asks it (`artifact_read`): its state's JSON read first, refused with the read's shape when it is none. */
-const readAsked = async (
-  artifacts: Artifacts,
-  instanceId: string,
-  id: string,
-  query: {
-    detail?: "summary" | "story";
-    png?: boolean;
-    render?: boolean;
-    save?: string;
-    since?: number;
-    state?: string;
-    story?: string;
-    verify?: boolean;
-    width?: number;
-  }
-) => {
-  const state = query.state ? stateOf(query.state) : undefined;
-  if (state instanceof ElysiaStatus) {
-    return state;
-  }
-  return await artifacts.read(instanceId, id, query.since, query.png === true, {
-    ...(query.detail ? { detail: query.detail } : {}),
-    ...(query.story ? { story: query.story } : {}),
-    ...(state ?? {}),
-    ...(query.save ? { save: query.save } : {}),
-    ...(query.render ? { render: true } : {}),
-    ...(query.verify ? { verify: true } : {}),
-    ...(query.width === undefined ? {} : { width: query.width }),
-  });
-};
 
 export const artifactRoutes = (artifacts: Artifacts) =>
   new Elysia()
@@ -432,76 +157,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     .post(
       "/api/instances/:id/artifacts",
-      {
-        body: t.Object({
-          kind: t.Union([
-            t.Literal("page"),
-            t.Literal("component"),
-            t.Literal("preview"),
-            t.Literal("canvas"),
-            // Shipped apps' generated client still lists it (the wire guard): refused with the new shape.
-            t.Literal("sheet"),
-          ]),
-          // Every create names all three but the person's own composer canvas (draft), which shipped apps make without them: refused with the tool's shape when missing (service.ts `askedOf`).
-          does: t.Optional(doesField),
-          ask: t.Optional(askField),
-          title: t.Optional(titleField),
-          ...canvasFields,
-          elements: t.Optional(skeletons),
-          mermaid: t.Optional(mermaid),
-          name: t.String({ pattern: ARTIFACT_NAME.source }),
-          html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
-          program: t.Optional(
-            t.String({ minLength: 1, maxLength: PROGRAM_MAX })
-          ),
-          file: t.Optional(
-            t.Union([
-              statesFile,
-              t.Array(statesFile, {
-                minItems: 1,
-                maxItems: CANVAS_SPEC_LIMITS.files,
-              }),
-            ])
-          ),
-          dir: t.Optional(
-            t.String({ minLength: 2, maxLength: 4096, pattern: "^/" })
-          ),
-          port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
-          path: t.Optional(
-            t.String({ maxLength: 2000, pattern: PREVIEW_START_PATH.source })
-          ),
-          machine: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-          workspace: t.Optional(t.String({ pattern: WORKSPACE_ID.source })),
-          serve: t.Optional(
-            t.Object({
-              command: t.String({
-                minLength: 1,
-                maxLength: SERVE_COMMAND_LIMIT,
-              }),
-              cwd: t.Optional(t.String({ maxLength: 1000 })),
-            })
-          ),
-          draft: t.Optional(t.Boolean()),
-          // A delegate hands it to its parent, unopened.
-          to: t.Optional(t.Literal("parent")),
-        }),
-      },
-      async ({ params, body }) => {
-        const { kind } = body;
-        if (kind === "sheet") {
-          return problem(400, {
-            code: "artifact-kind-sheet",
-            detail: `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`,
-          });
-        }
-        if (body.draft && kind !== "canvas") {
-          return problem(400, {
-            code: "artifact-draft-not-canvas",
-            detail: "Only a canvas is a draft.",
-          });
-        }
-        return await artifacts.create(params.id, { ...body, kind });
-      }
+      { body: createBody },
+      ({ params, body }) => createArtifact(artifacts, params.id, body)
     )
     .get(
       "/api/instances/:id/artifacts/:artifact",
@@ -520,11 +177,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           detail: t.Optional(
             t.Union([t.Literal("summary"), t.Literal("story")])
           ),
-          story: t.Optional(storyName),
-          // JSON: a frame { story, interaction?, scheme?, width? }, or a state link's "?query" or "#hash".
-          state: t.Optional(t.String({ maxLength: 1400 })),
-          // Where the picture is kept in the session's workspace.
-          save: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
+          ...readFields.properties,
           render: t.Optional(t.BooleanString()),
           verify: t.Optional(t.BooleanString()),
         }),
@@ -534,118 +187,56 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     .patch(
       "/api/instances/:id/artifacts/:artifact",
-      {
-        body: t.Object({
-          html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
-          patch: t.Optional(
-            t.Array(operation, { minItems: 1, maxItems: PATCH_LIMIT })
-          ),
-          elements: t.Optional(skeletons),
-          delete: t.Optional(
-            t.Array(t.String({ minLength: 1, maxLength: 100 }), {
-              minItems: 1,
-              maxItems: CANVAS_LIMITS.deletePerCall,
-            })
-          ),
-          mermaid: t.Optional(mermaid),
-        }),
-      },
-      async ({ params, body }) => {
-        const change = changeOf(body);
-        return change instanceof ElysiaStatus
-          ? change
-          : await artifacts.update(params.id, params.artifact, change);
-      }
+      { body: updateBody },
+      ({ params, body }) =>
+        updateArtifact(artifacts, params.id, params.artifact, body)
     )
     // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own edges, groups or dials.
     .patch(
       "/api/instances/:id/artifacts/:artifact/component",
       // The agent's tool alone calls it: no dashboard or app reads its answer.
-      {
-        body: t.Object({ ...sheetChange, ...canvasFields }),
-        detail: { hide: true },
-      },
-      async ({ params, body }) => {
-        const { edges, group, dials, args, story } = body;
-        const canvas = [edges, group, dials].some((one) => one !== undefined);
-        if (canvas && (args !== undefined || story !== undefined)) {
-          return problem(400, {
-            code: "artifact-component-change-mixed",
-            detail:
-              "edges, group and dials change the canvas itself: send them apart from a states file's args or story.",
-          });
-        }
-        if (canvas) {
-          return await artifacts.canvasUpdate(params.id, params.artifact, {
-            edges,
-            group,
-            dials,
-          });
-        }
-        const change = sheetChangeOf({ args, story });
-        return change instanceof ElysiaStatus
-          ? change
-          : await artifacts.sheetUpdate(params.id, params.artifact, change);
-      }
+      { body: componentBody, detail: { hide: true } },
+      ({ params, body }) =>
+        updateComponent(artifacts, params.id, params.artifact, body)
     )
     // Any kind's head line (artifact_update's ask): checked as a create's is, then every open view's head morphs to it.
     .post(
       "/api/instances/:id/artifacts/:artifact/ask",
-      { body: t.Object({ ask: askField }), detail: { hide: true } },
+      { body: askBody, detail: { hide: true } },
       ({ params, body }) =>
         artifacts.askUpdate(params.id, params.artifact, body.ask)
     )
     // Any kind's title (artifact_update's title): checked as a create's is, then every surface that names it says it.
     .post(
       "/api/instances/:id/artifacts/:artifact/title",
-      { body: t.Object({ title: titleField }), detail: { hide: true } },
+      { body: titleBody, detail: { hide: true } },
       ({ params, body }) =>
         artifacts.titleUpdate(params.id, params.artifact, body.title)
     )
     // A card settled for the person (settle, Who decides): written as the person's pick is, with who settled it.
     .post(
       "/api/instances/:id/artifacts/:artifact/settle",
-      {
-        body: t.Object({
-          card: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.id }),
-          option: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.option }),
-          why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
-          sources: t.Array(
-            t.String({ minLength: 1, maxLength: CHOICE_LIMITS.source }),
-            { maxItems: CHOICE_LIMITS.sources }
-          ),
-        }),
-      },
+      { body: settleBody },
       async ({ params, body }) =>
         await artifacts.settle(params.id, params.artifact, body)
     )
     // question_close: the session takes a question from the person's answer, or withdraws it; nothing is deleted.
     .post(
       "/api/instances/:id/artifacts/questions/close",
-      {
-        body: t.Object({
-          question: t.String({ minLength: 1, maxLength: 400 }),
-          as: t.Union([t.Literal("taken"), t.Literal("withdrawn")]),
-          why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
-        }),
-      },
+      { body: closeQuestionBody },
       ({ params, body }) => artifacts.closeQuestion(params.id, body)
     )
     // A decision page's revision (artifact_update's statements): merged into its program by name; what changed.
     .post(
       "/api/instances/:id/artifacts/:artifact/statements",
-      {
-        body: t.Object({
-          statements: t.String({ minLength: 1, maxLength: PROGRAM_MAX }),
-        }),
-      },
+      { body: statementsBody },
       async ({ params, body }) =>
         await artifacts.revise(params.id, params.artifact, body.statements)
     )
     // The person's Save in a sheet's inspector, or its story buttons: written by the stage, told to the session.
     .post(
       "/api/instances/:id/artifacts/:artifact/sheet",
-      { body: t.Object(sheetChange) },
+      { body: sheetBody },
       async ({ params, body }) => {
         const change = sheetChangeOf(body);
         return change instanceof ElysiaStatus
@@ -701,16 +292,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts/comments",
       {
         query: t.Object({
-          // Its id, or (the session's comment_read) its name or handle.
-          artifact: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
-          filter: t.Optional(
-            t.Union([
-              t.Literal("open"),
-              t.Literal("resolved"),
-              t.Literal("all"),
-            ])
-          ),
-          since: t.Optional(t.String({ maxLength: 40 })),
+          ...commentsFields,
           // The session itself reads them (its comment_read tool): what it reads counts as heard.
           reader: t.Optional(t.Literal("session")),
         }),
@@ -726,30 +308,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     // The agent answers a pin in its thread (comment_reply).
     .post(
       "/api/instances/:id/artifacts/comments/:pin/reply",
-      {
-        body: t.Object({
-          text: t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text }),
-          files: t.Optional(
-            t.Array(
-              t.String({ minLength: 1, maxLength: COMMENT_LIMITS.file }),
-              { maxItems: COMMENT_LIMITS.files }
-            )
-          ),
-          asks: t.Optional(t.Boolean()),
-        }),
-      },
+      { body: replyBody },
       ({ params, body }) => artifacts.commentReply(params.id, params.pin, body)
     )
     // The agent resolves a pin (comment_resolve).
     .post(
       "/api/instances/:id/artifacts/comments/:pin/resolve",
-      {
-        body: t.Object({
-          text: t.Optional(
-            t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text })
-          ),
-        }),
-      },
+      { body: resolveBody },
       ({ params, body }) =>
         artifacts.commentResolve(params.id, params.pin, body.text)
     )

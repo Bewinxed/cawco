@@ -52,18 +52,6 @@ import {
   verbatim,
 } from "./words";
 
-/** What `artifact_update`'s `ask` answers. */
-export interface AskChanged {
-  ask: string;
-  id: string;
-}
-
-/** What `artifact_update`'s `title` answers. */
-export interface TitleChanged {
-  id: string;
-  title: string;
-}
-
 /** What `artifact_update` with only `ask` or `title` (or both) answers: the head's new words. */
 export interface HeadChanged {
   ask?: string;

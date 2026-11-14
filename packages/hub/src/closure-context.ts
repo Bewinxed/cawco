@@ -86,7 +86,6 @@ import type {
   EndedTask,
   GitChanges,
   MoveEnded,
-  WorkInFlight,
 } from "@cawco/core/session/controls";
 import type {
   ModeAsk,
@@ -136,13 +135,7 @@ import type { OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
-import type {
-  ContinuationAsker,
-  ContinuationSource,
-  ContinueRequest,
-  PreparedContinuation,
-  StoredSendRefusal,
-} from "./db/stored-types";
+import type { ContinuationSource, StoredSendRefusal } from "./db/stored-types";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
 import type { createDelegationMcp } from "./delegation-mcp";
@@ -160,7 +153,6 @@ import type { hubRestarts } from "./hub-restart";
 import type {
   AccountUse,
   AuthSocket,
-  ContinueOutcome,
   FetchedCopy,
   FolderSkillBody,
   Located,
@@ -213,6 +205,7 @@ import type { createRelayJourney } from "./relay-journey";
 import type { createRoutines, Routines } from "./routines";
 import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
+import type { SessionCallsDeps } from "./session-calls";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
@@ -238,7 +231,6 @@ import type { HubSocket } from "./wire-socket";
 import type { WorkItemCallsDeps } from "./work-item-calls";
 import type { createWorkItems } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
-import type { Unlanded } from "./workspaces";
 
 export interface ClosureContext {
   accountKindRefusal: (
@@ -379,14 +371,7 @@ export interface ClosureContext {
   byIdNow: <P extends { instanceId?: string }>(
     envelope: Envelope<P>
   ) => Envelope<P>;
-  callAgent: (
-    machineId: string,
-    method: string,
-    args: unknown[],
-    timeoutMs: number,
-    harness?: HarnessKind,
-    instanceId?: string
-  ) => Promise<Bounded<ControlResult>>;
+  callAgent: SessionCallsDeps["callAgent"];
   callFs: (
     machineId: string,
     agent: HubSocket,
@@ -426,16 +411,9 @@ export interface ClosureContext {
     machineId: string,
     row: Parameters<ClosureContext["accountToPlace"]>[1]
   ) => { accountId?: string } | { refusal: string };
-  cloneForContinuation: (sourceId: string) => Promise<() => void>;
+  cloneForContinuation: SessionCallsDeps["cloneForContinuation"];
   closePreview: (instanceId: string) => { instanceId: string; state: "closed" };
-  coldReading: (
-    row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
-    state: { lastTurnAt: string | null; midTurn: boolean },
-    message: string | undefined
-  ) => Promise<{
-    jev?: { attach: boolean; noul: number } | { error: string };
-    unlanded?: Unlanded | { error: string };
-  }>;
+  coldReading: SessionCallsDeps["coldReading"];
   coldWork: WorkItemCallsDeps["coldWork"];
   commandQueues: Map<string, (queue: CommandQueue | null) => void>;
   completeOn: (
@@ -456,13 +434,9 @@ export interface ClosureContext {
     harness: HarnessKind,
     model: string | undefined
   ) => Promise<number | undefined>;
-  continuationJob: (row: ContinuationSlip) => ContinuationJob;
+  continuationJob: SessionCallsDeps["continuationJob"];
   continuationNow: (instanceId: string) => string;
-  continuationRefusal: (
-    prepared: PreparedContinuation,
-    request: ContinueRequest,
-    askedBy: ContinuationAsker
-  ) => Promise<string | undefined>;
+  continuationRefusal: SessionCallsDeps["continuationRefusal"];
   continuationTable: () => ContinuationJob[];
   /** project-joining.ts `createOrJoinProject`, plain-typed: typing it from there closes project-joining → hub-context → closure-context → project-joining. */
   createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade | AnyProblem>;
@@ -524,13 +498,7 @@ export interface ClosureContext {
   fleetChanged: (why?: string) => void;
   fleetMcp: FleetMcp;
   fleetSyncs: FleetSync;
-  followupState: (row: KeepAliveRow) => {
-    midTurn: boolean;
-    hasTurns: boolean;
-    recordedTurnAt: string | null;
-    lastTurnAt: string | null;
-    activityBound: boolean;
-  };
+  followupState: SessionCallsDeps["followupState"];
   forgePosts: ReturnType<typeof createForgePosts>;
   forgetInstances: (ids: readonly string[]) => void;
   forgetOn: (
@@ -609,9 +577,7 @@ export interface ClosureContext {
   hubStep: (event: HandoverEvent) => HandoverCommand[];
   identities: ReturnType<typeof createSessionIdentities>;
   inCustody: Map<string, { machineId: string; since: number; told: boolean }>;
-  inFlightFor: (
-    sourceId: string
-  ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
+  inFlightFor: SessionCallsDeps["inFlightFor"];
   inFlightRefusal: (instanceId: string) => string | undefined;
   inputRefusal: (
     instanceId: string,
@@ -754,7 +720,7 @@ export interface ClosureContext {
   machineName: (machineId: string) => string;
   machinePause: MachinePause;
   machinePresence: (machineId: string) => Presence;
-  machineRow: (machineId: string) => AgentRow | undefined;
+  machineRow: SessionCallsDeps["machineRow"];
   marketplaceLinks: Map<string, MarketplaceLink>;
   /** A fleet server as a read says it: every secret as set. */
   maskedMcp: (name: string) => FleetMcpServerView | undefined;
@@ -856,7 +822,7 @@ export interface ClosureContext {
   openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
   originKeyOf: (id: string) => string | undefined;
-  outcomeOf: (row: ContinuationRow) => ContinueOutcome;
+  outcomeOf: SessionCallsDeps["outcomeOf"];
   owedAfterBoard: (
     broken: ReturnType<ClosureContext["laws"]["broken"]>
   ) => FramePayload[];
@@ -902,11 +868,7 @@ export interface ClosureContext {
   planChanges: PlanChanges | undefined;
   plans: ReturnType<typeof createPlans>;
   pluginRow: (row: FleetPlugin) => FleetPlugin;
-  prepareContinuation: (
-    sourceId: string,
-    note?: string | undefined,
-    asksOnly?: boolean
-  ) => Promise<PreparedContinuation>;
+  prepareContinuation: SessionCallsDeps["prepareContinuation"];
   presenced: (envelope: Envelope<SendPayload>) => Envelope<SendPayload>;
   presenceSaid: (request: Request) => string | null;
   previewListeners: ReturnType<typeof createPreviewListeners>;
@@ -953,7 +915,7 @@ export interface ClosureContext {
   >;
   publishedOverlays: Map<string, string>;
   publishedRows: Map<string, string>;
-  publishInstances: (machineId: string) => void;
+  publishInstances: SessionCallsDeps["publishInstances"];
   publishSend: (row: SentMessageRow) => void;
   publishStalls: () => void;
   publishUsage: (machineId?: string) => void;
@@ -1044,11 +1006,7 @@ export interface ClosureContext {
   replaceAtWake: (
     row: ReturnType<ClosureContext["db"]["getInstancesByIds"]>[number]
   ) => void;
-  reportedContextOf: (
-    row: KeepAliveRow
-  ) => Promise<
-    { tokens: number; readAt: number } | { reason: string } | Unanswered
-  >;
+  reportedContextOf: SessionCallsDeps["reportedContextOf"];
   reportedMachinePath: (
     machineId: string,
     raw: string
@@ -1155,8 +1113,8 @@ export interface ClosureContext {
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
   sessionName: WorkItemCallsDeps["sessionName"];
   sessionStartOf: (where: SessionLocation) => Promise<string>;
-  sessionWorkspace: (row: InstanceRow) => WorkspaceRef | undefined;
-  settledContinuation: (id: string) => Promise<ContinuationRow | undefined>;
+  sessionWorkspace: SessionCallsDeps["sessionWorkspace"];
+  settledContinuation: SessionCallsDeps["settledContinuation"];
   settleMode: (
     machineId: string,
     payload: NamedSpawn,
@@ -1241,35 +1199,7 @@ export interface ClosureContext {
     move: AccountMove,
     stopped: false | "limit" | "signin"
   ) => void;
-  startContinuation: (
-    prepared: PreparedContinuation,
-    request: ContinueRequest,
-    askedBy: ContinuationAsker,
-    inFlight?: WorkInFlight | undefined
-  ) => {
-    error: string | null;
-    stage:
-      | "failed"
-      | "cancelled"
-      | "filing"
-      | "starting"
-      | "waiting"
-      | "started"
-      | "summarising";
-    id: string;
-    createdAt: Date;
-    updatedAt: Date;
-    summary: string | null;
-    waiting: { from: number; since: number | null; why: string } | null;
-    request: ContinueRequest;
-    openItems: string | null;
-    sourceInstanceId: string;
-    prepared: PreparedContinuation;
-    summariserInstanceId: string | null;
-    targetInstanceId: string;
-    openingUuid: string;
-    askedBy: ContinuationAsker;
-  };
+  startContinuation: SessionCallsDeps["startContinuation"];
   startHold: (
     machineId: string
   ) =>

@@ -6,6 +6,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { contextSizeCalls } from "../session-calls";
 
 /**
  * How many conversations one naming request may ask about. A reader's open tabs
@@ -105,20 +106,9 @@ export const instanceTitleRoutes = ({
           : moved;
       }
     )
-    .post("/api/instances/:id/context-size", hidden, async ({ params }) => {
-      const [row] = db.getInstancesByIds([params.id]);
-      if (!row) {
-        return problem(404, {
-          code: "session-not-found",
-          detail: "Session not found",
-        });
-      }
-      const reported = await reportedContextOf(row);
-      // The answer's own words for a machine that did not answer.
-      return "kind" in reported
-        ? { reason: reported.reason === "dead" ? "offline" : "timeout" }
-        : reported;
-    })
+    .post("/api/instances/:id/context-size", hidden, ({ params }) =>
+      contextSizeCalls({ db, reportedContextOf }).contextSize(params.id)
+    )
     // Recent's stored transcripts, as the hub keeps them (stored-recent.ts).
     .get("/api/stored", () => laws.raise(storedRecent.now))
     // What each tab's id names, as the dashboard asks of the tabs it kept

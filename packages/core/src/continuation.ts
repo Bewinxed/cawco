@@ -3,6 +3,9 @@
  * dashboard's pickers show, stated once so both say the same thing.
  */
 
+/** The words a continuation stopped by its Cancel ends with. */
+export const CONTINUATION_CANCELLED = "the continuation was cancelled";
+
 /** The summariser's answer is asked to stay under this; the opening budgets for it. */
 export const SUMMARY_CAP_TOKENS = 8000;
 /** Room a summariser needs beyond what it reads, for what it writes. */

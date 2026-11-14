@@ -29,7 +29,6 @@ import type { Caw } from "./caw";
 import { CONNECT_TOOLS, type ConnectAsks } from "./connect-asks";
 import type { Connections } from "./connections";
 import {
-  delegateTypesListed,
   type Fleet,
   type ForkOrigin,
   type HandoffDeps,
@@ -76,6 +75,7 @@ import {
   TRIAGE_TOOLS,
 } from "./roles";
 import { ROUTINE_TOOLS, type Routines } from "./routines";
+import type { SessionCalls } from "./session-calls";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
 import type { WorkItemCalls } from "./work-item-calls";
@@ -289,6 +289,8 @@ export function createDelegationMcp(options: {
   tasks?: Tasks;
   /** The work-item calls a session's tools make directly (work-item-calls.ts). */
   workItemCalls: WorkItemCalls;
+  /** The other calls a session's tools make directly, each the function its route calls (session-calls.ts). */
+  sessionCalls: SessionCalls;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
@@ -797,7 +799,10 @@ export function createDelegationMcp(options: {
       }
       const projectId = caller?.projectId ?? undefined;
       return await listDelegateTypesTool.call(input, {
-        actions: { listDelegateTypes: () => delegateTypesListed(projectId) },
+        actions: {
+          listDelegateTypes: () =>
+            Promise.resolve(options.sessionCalls.delegateTypes(projectId)),
+        },
       });
     }
     return undefined;
@@ -1001,7 +1006,7 @@ export function createDelegationMcp(options: {
       }
       return (
         (await route(actor, name, input, toolUseId, cut)) ??
-        (await sessionCall(actor, name, input, authorization, callId, cut))
+        (await sessionCall(actor, name, input, callId, cut))
       );
     } catch (error) {
       return {
@@ -1021,7 +1026,6 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
-    authorization?: string,
     callId?: string,
     cut?: AbortSignal
   ): Promise<CallToolResult> => {
@@ -1032,7 +1036,6 @@ export function createDelegationMcp(options: {
       instanceById: options.instanceById,
       formerIds: options.formerIds,
       fleet: options.fleet,
-      authorization,
       callId,
       cwd: actor.cwd,
       ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
@@ -1052,6 +1055,7 @@ export function createDelegationMcp(options: {
       spawn: (envelope) => options.spawn(envelope, actor),
       started: startedBy(actor, name, cut),
       work: options.workItemCalls,
+      calls: options.sessionCalls,
     };
     const entry = tools(viewOf(actor)).find((tool) => tool.name === name);
     if (!entry) {

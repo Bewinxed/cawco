@@ -476,19 +476,30 @@ export const makeProjectDelegateTypes = (
 };
 
 /**
- * `GET /api/projects/:id/delegate-types`: the catalog a session of that
- * project sees, and the files under `delegates/` that did not make a type.
+ * The catalog a session of project `id` sees, and the files under
+ * `delegates/` that did not make a type; the problem when the hub keeps no
+ * such project. The route answers it, and a session's tools read it directly.
  */
+export const catalogOfProject =
+  (
+    types: Pick<ProjectDelegateTypes, "catalog">,
+    projectExists: (id: string) => boolean
+  ) =>
+  (id: string) =>
+    projectExists(id)
+      ? types.catalog(id)
+      : problem(404, {
+          code: "no-project",
+          detail: `The hub keeps no project ${id}.`,
+        });
+
+/** `GET /api/projects/:id/delegate-types`: {@link catalogOfProject}. */
 export const projectDelegateTypesRoutes = (
   types: ProjectDelegateTypes,
   projectExists: (id: string) => boolean
-) =>
-  new Elysia().get("/api/projects/:id/delegate-types", ({ params }) => {
-    if (!projectExists(params.id)) {
-      return problem(404, {
-        code: "no-project",
-        detail: `The hub keeps no project ${params.id}.`,
-      });
-    }
-    return types.catalog(params.id);
-  });
+) => {
+  const catalogOf = catalogOfProject(types, projectExists);
+  return new Elysia().get("/api/projects/:id/delegate-types", ({ params }) =>
+    catalogOf(params.id)
+  );
+};

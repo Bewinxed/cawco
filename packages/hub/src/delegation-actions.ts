@@ -10,9 +10,8 @@
  * `customTools`), and this file is the body they share.
  */
 
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { readWithin } from "@cawco/core/bounded";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
-import { delegateTypeProblem } from "@cawco/core/delegate-types";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import type {
   HarnessKind,
@@ -47,7 +46,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { Started } from "./call-cuts";
 import type {
   SendHold,
@@ -62,11 +61,11 @@ import type {
 } from "./delegation-tree";
 import { cursorAt } from "./find";
 import { byId, handleId, isHandle, mentioned } from "./handles";
-import { hubHttpUrl, selfFetch } from "./hub-self";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
 import type { AnyProblem } from "./refusal";
+import type { SessionCalls } from "./session-calls";
 import {
   activeAt,
   pageOf,
@@ -81,71 +80,6 @@ import {
 import type { WorkItemCalls } from "./work-item-calls";
 import { type HandoffInputs, resolveSpawnType } from "./work-items";
 import type { Unlanded } from "./workspaces";
-
-// Every call this module makes is the hub calling its own routes, as itself
-// (hub-self.ts): `selfFetch` refuses any other origin.
-const fetch = selfFetch;
-
-/**
- * The fleet's delegate types (`@cawco/core`'s `DelegateType`), read once
- * per session. There is no fleet sync path for them yet (unlike MCP servers
- * and skills) — a daemon fetches this directly from the hub it already knows
- * the address of, right before it builds the `delegate` tool's description,
- * and the caller freezes what comes back for the session's whole life.
- * Failures, and a hub that did not answer in time, are logged and thrown in
- * their own words: a valid empty catalog remains distinct from both.
- * Descriptions take a startup snapshot. Catalog reads and named dispatch fetch
- * again so saved routing changes apply to sessions already running.
- *
- * With `projectId`, the catalog a session of that project sees: the project's
- * own types (the `delegates/` files in its folder) shadowing fleet types of
- * the same name (project-delegate-types.ts).
- */
-async function fetchDelegateTypes(projectId?: string): Promise<DelegateType[]> {
-  const path = projectId
-    ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
-    : "/api/delegate-types";
-  let read: Bounded<DelegateType[]>;
-  try {
-    read = await readWithin(DELEGATE_TYPES_MS, async (signal) => {
-      const res = await fetch(`${hubHttpUrl()}${path}`, { signal });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const body = (await res.json()) as { types?: DelegateType[] } | null;
-      if (
-        !Array.isArray(body?.types) ||
-        body.types.some((type) => !type || delegateTypeProblem(type))
-      ) {
-        throw new Error("Invalid delegate catalog response");
-      }
-      return body.types;
-    });
-  } catch (error) {
-    const message = `Could not load delegate types: ${error instanceof Error ? error.message : String(error)}`;
-    console.warn(`[cawco] ${message}`);
-    throw new Error(message, { cause: error });
-  }
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered": {
-      // Not answered is never an empty catalog.
-      const message = `Could not load delegate types: the hub did not answer within ${secondsOf(read.after)} s`;
-      console.warn(`[cawco] ${message}`);
-      throw new Error(message);
-    }
-    default:
-      unhandled("read", read);
-  }
-}
-
-/** `list_delegate_types`'s answer: the live types, a project's own replacing the fleet's of the same name. */
-export const delegateTypesListed = async (
-  projectId?: string
-): Promise<{ types: DelegateType[] }> => ({
-  types: await fetchDelegateTypes(projectId),
-});
 
 /**
  * What a type the caller named adds to a started session. Denied tools come
@@ -784,14 +718,17 @@ const deliveryWords = (delivery: SendDelivery): string => {
 };
 
 export interface HandoffDeps {
-  /** This invocation's session credential; never a tool argument or persisted metadata. */
-  readonly authorization?: string;
   /**
    * The harness's id for this call (Claude Code's tool_use id, pi's
    * toolCallId, OpenCode's call id), when it names one: a machine_pause of
    * the caller's own machine cuts its turn once this call is answered.
    */
   readonly callId?: string;
+  /**
+   * The calls its other tools make, the same functions their routes call
+   * (session-calls.ts): called directly, never over the hub's own HTTP.
+   */
+  readonly calls: SessionCalls;
   /** What it is working on, so the receiver knows who is calling. */
   readonly cwd: string;
   /** This session's own delegation tree, read by the hub (delegation-tree.ts). */
@@ -906,15 +843,8 @@ export interface HandoffActions {
     answers?: Record<string, string>,
     deny?: boolean
   ) => string;
-  /**
-   * One of the session's artifact routes (artifacts/routes.ts), at `path`
-   * under its `/artifacts`: the hub's JSON answer, or its refusal thrown.
-   */
-  readonly artifactCall: (
-    method: "GET" | "POST" | "PATCH" | "DELETE",
-    path: string,
-    body?: unknown
-  ) => Promise<unknown>;
+  /** The session's artifact tools' calls (artifacts/calls.ts). */
+  readonly artifacts: ReturnType<SessionCalls["artifacts"]>;
   readonly continueSession: (input: {
     session: string;
     from?: "summary" | "asks";
@@ -924,11 +854,14 @@ export interface HandoffActions {
     target_model: string;
     target_permission_mode?: SessionChosenMode;
     note?: string;
-  }) => Promise<{
-    summariserInstanceId: string | null;
-    targetInstanceId: string;
-    text: string;
-  }>;
+  }) => Promise<
+    | {
+        summariserInstanceId: string | null;
+        targetInstanceId: string;
+        text: string;
+      }
+    | AnyProblem
+  >;
   /**
    * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
    * in an existing one, on the session that workspace's last item ran. The
@@ -1023,10 +956,10 @@ export interface HandoffActions {
   readonly forgePost: (ask: {
     repo?: string;
     write: ForgeWrite;
-  }) => Promise<string>;
+  }) => Promise<string | AnyProblem>;
   readonly generateImage: (
     request: ImageGenerationRequest
-  ) => Promise<GeneratedImage>;
+  ) => Promise<GeneratedImage | AnyProblem>;
   /**
    * Sends `message` to another session; `inputs` (hub handed-input.ts)
    * are written first into the target's inputs folder (its work item's
@@ -1040,7 +973,9 @@ export interface HandoffActions {
     inputs?: unknown[]
   ) => Promise<string | AnyProblem>;
   interruptDelegate: (target: string) => string;
-  readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
+  readonly listDelegateTypes: () => Promise<
+    { types: DelegateType[] } | AnyProblem
+  >;
   /** The fleet's sessions as `list_sessions` asks for them (session-list.ts). */
   listSessions: (query: SessionListQuery) => Promise<SessionList>;
   /**
@@ -1051,7 +986,7 @@ export interface HandoffActions {
     machine: string,
     minutes?: number,
     resume?: boolean
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   /**
    * Summarises another session with the chosen summariser through the hub's
    * own continuation: a new session starts seeded with the summary and that
@@ -1065,11 +1000,11 @@ export interface HandoffActions {
   readonly openItems: (
     cursor?: string,
     format?: "concise" | "detailed"
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
   sendToUser: (message: string, attachments?: string[]) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
-  readonly setTitle: (title: string) => Promise<string>;
+  readonly setTitle: (title: string) => Promise<string | AnyProblem>;
   /** `show_image`: what the transcript says it shows; throws when the session may not show it (shown-files.ts). */
   readonly showImage: (path: string) => string;
   startSession: (
@@ -1193,23 +1128,6 @@ function resolveDelegate(
   }
 }
 
-/** A JSON POST to the hub's own API at `path`, with the caller's authorization when it has one. */
-const postToHub = (
-  path: string,
-  body: unknown,
-  authorization: string | undefined,
-  init: Parameters<typeof fetch>[1] = {}
-): Promise<Response> =>
-  fetch(`${hubHttpUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(authorization ? { Authorization: authorization } : {}),
-    },
-    body: JSON.stringify(body),
-    ...init,
-  });
-
 /**
  * A request as `POST /api/work-items` reads it, which the start reads as
  * that route has always handed it: a key left undefined is absent, as it
@@ -1220,22 +1138,12 @@ const asRouteReadsIt = <T extends object>(request: T): T =>
     Object.entries(request).filter(([, value]) => value !== undefined)
   ) as T;
 
-/** The words a hub route answered; its refusal is thrown in its words. */
-const hubText = async (response: Response): Promise<string> => {
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return ((await response.json()) as { text: string }).text;
-};
-
 const coldRefusals = new Map<string, string>();
 
 /** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
 const FOLLOWUP_STATE_MS = 30_000;
 /** A cold refusal's context-size read: short, as it cannot hold the refusal on an offline machine. */
 const CONTEXT_SIZE_MS = 3000;
-/** The delegate catalog, read from the hub. */
-const DELEGATE_TYPES_MS = 5000;
 
 /**
  * Whether a session's prompt cache is warm now (mid-turn, unmeasured, or
@@ -1364,17 +1272,18 @@ function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
  * delivered.
  */
 async function checkCold(
+  calls: SessionCalls,
   instanceId: string | undefined,
   workspace: string | undefined,
   caller: string,
   message: string
 ): Promise<void> {
-  const { row, midTurn, hasTurns, lastTurnAt, activityBound, unlanded, jev } =
-    await readFollowupState(instanceId, workspace, message);
-  if (!row) {
+  const state = await readFollowupState(calls, instanceId, workspace, message);
+  if (!state.row) {
     return;
   }
-  row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
+  const { row, midTurn, hasTurns, lastTurnAt, activityBound, unlanded, jev } =
+    state;
   if (warmNow(row, midTurn, lastTurnAt)) {
     return;
   }
@@ -1391,11 +1300,17 @@ async function checkCold(
   if (repeatOfRefused(row, caller, lastTurnAt)) {
     return;
   }
-  if (row.contextTokens === null) {
-    row.contextTokens = await measuredContext(row.id);
-  }
+  const contextTokens =
+    row.contextTokens === null
+      ? await measuredContext(calls, row.id)
+      : row.contextTokens;
   throw new Error(
-    coldRefusalText(row, lastTurnAt as string, activityBound, hasTurns)
+    coldRefusalText(
+      { ...row, contextTokens },
+      lastTurnAt as string,
+      activityBound,
+      hasTurns
+    )
   );
 }
 
@@ -1431,20 +1346,20 @@ function unlandedVerdict(
 }
 
 /** A session's context size, read once for a cold refusal; null when its machine does not say in time. */
-async function measuredContext(id: string): Promise<number | null> {
+async function measuredContext(
+  calls: SessionCalls,
+  id: string
+): Promise<number | null> {
   try {
-    const measured = await readWithin(CONTEXT_SIZE_MS, async (signal) => {
-      const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(id)}/context-size`,
-        { method: "POST", signal }
-      );
-      return response.ok
-        ? ((await response.json()) as { tokens?: number | null })
-        : undefined;
+    const measured = await readWithin(CONTEXT_SIZE_MS, async () => {
+      const reported = await calls.contextSize(id);
+      return reported instanceof ElysiaStatus ? undefined : reported;
     });
     switch (measured.kind) {
       case "answered":
-        return measured.value?.tokens ?? null;
+        return measured.value && "tokens" in measured.value
+          ? measured.value.tokens
+          : null;
       case "unanswered":
         // The size stays unknown; the refusal says so as it always has.
         return null;
@@ -1459,31 +1374,17 @@ async function measuredContext(id: string): Promise<number | null> {
 
 /** What the hub reads of a session a message is about to reach (`/api/followup-state`); unknown is refused. */
 async function readFollowupState(
+  calls: SessionCalls,
   instanceId: string | undefined,
   workspace: string | undefined,
   message: string
 ) {
-  const read = await readWithin(FOLLOWUP_STATE_MS, async (signal) => {
-    const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ instanceId, workspace, message }),
-      signal,
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
+  const read = await readWithin(FOLLOWUP_STATE_MS, async () => {
+    const state = await calls.followupState({ instanceId, workspace, message });
+    if (state instanceof ElysiaStatus) {
+      throw new Error(state.response.detail);
     }
-    return (await response.json()) as {
-      row: KeepAliveRow | null;
-      midTurn: boolean;
-      hasTurns: boolean;
-      lastTurnAt: string | null;
-      activityBound: boolean;
-      /** What a cold session's workspace holds on no remote, or why that could not be read. */
-      unlanded?: Unlanded | { error: string };
-      /** Jev's answer, when Jev is on and the hub found the session cold with nothing unlanded. */
-      jev?: { attach: boolean; noul: number } | { error: string };
-    };
+    return state;
   });
   switch (read.kind) {
     case "answered":
@@ -1550,7 +1451,8 @@ const summariserOf = (input: ContinueSessionInput): string =>
 const continuedFrom = (
   input: ContinueSessionInput
 ):
-  { asksOnly: true } | { summarizer?: { harness: string; model?: string } } => {
+  | { asksOnly: true }
+  | { summarizer?: { harness: HarnessKind; model?: string } } => {
   if (input.from === "asks") {
     return { asksOnly: true };
   }
@@ -1587,7 +1489,6 @@ export const handoffActions = ({
   handOff,
   emit,
   spawn,
-  authorization,
   callId,
   started: startedBy,
   projectId,
@@ -1600,6 +1501,7 @@ export const handoffActions = ({
   fleet,
   instancesByShortId,
   work,
+  calls,
 }: HandoffDeps): HandoffActions => {
   /** A running delegate of the caller's that `target` names, through any continuation it was followed by. */
   const runningDelegate = (target: string) => {
@@ -1620,12 +1522,16 @@ export const handoffActions = ({
    * so its row opens there (server.ts `projectOfStart`), and that project's
    * catalog, whose own types shadow the fleet's.
    */
-  const startProject = async (machineId: string, workdir: string) => {
+  const startProject = (machineId: string, workdir: string) => {
     const project = projectAt(machineId, workdir) ?? projectId;
+    const catalog = calls.delegateTypes(project);
+    if (catalog instanceof ElysiaStatus) {
+      return catalog;
+    }
     return {
       project,
       inProject: project ? { projectId: project } : {},
-      types: await fetchDelegateTypes(project),
+      types: catalog.types,
     };
   };
   return {
@@ -1638,14 +1544,8 @@ export const handoffActions = ({
       return await delegateList(query);
     },
     async openItems(cursor, format) {
-      const query = new URLSearchParams({
-        ...(cursor ? { cursor } : {}),
-        ...(format === "detailed" ? { format } : {}),
-      }).toString();
-      const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items${query ? `?${query}` : ""}`
-      );
-      return await hubText(response);
+      const items = await calls.openItems(instanceId, { cursor, format });
+      return items instanceof ElysiaStatus ? items : items.text;
     },
     async continueSession(input) {
       const { rows, hosts } = fleetInstances(fleet);
@@ -1662,34 +1562,29 @@ export const handoffActions = ({
       // The new session answers permissions as the caller does as it starts
       // (`askedBy`), where its harness has modes; the hub settles it, never
       // the machine's default.
-      const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
+      const started = await calls.continueFrom(
+        source,
         {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            ...continuedFrom(input),
-            target: {
-              harness: input.target_harness,
-              model: input.target_model,
-              ...(input.target_permission_mode
-                ? { permissionMode: input.target_permission_mode }
-                : {}),
-            },
-            askedBy: instanceId,
-            ...(input.note ? { note: input.note } : {}),
-          }),
-        }
+          ...continuedFrom(input),
+          target: {
+            harness: input.target_harness,
+            model: input.target_model,
+            ...(input.target_permission_mode
+              ? { permissionMode: input.target_permission_mode }
+              : {}),
+          },
+          askedBy: instanceId,
+          ...(input.note ? { note: input.note } : {}),
+        },
+        // A machine that is away is answered with its words alone: a tool's
+        // call has no response to carry the headers a dashboard reads.
+        (_machineId, words) =>
+          problem(503, { code: "machine-away", detail: words })
       );
-      if (!response.ok) {
-        throw new Error(await response.text());
+      if (started instanceof ElysiaStatus) {
+        return started;
       }
-      const { continuationId, targetInstanceId, waiting } =
-        (await response.json()) as {
-          continuationId: string;
-          targetInstanceId: string;
-          waiting?: { since: number | null; until: number; why: string };
-        };
+      const { continuationId, targetInstanceId, waiting } = started;
       // Its source holds work in flight that ending it would lose: the job
       // waits for that and goes on by itself, which the caller hears now.
       if (waiting) {
@@ -1700,17 +1595,10 @@ export const handoffActions = ({
         };
       }
       // The hub runs the continuation as its own job; this waits for its report.
-      const outcome = await fetch(
-        `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
-      );
-      if (!outcome.ok) {
-        throw new Error(await outcome.text());
+      const done = await calls.continuationOutcome(continuationId);
+      if (done instanceof ElysiaStatus) {
+        return done;
       }
-      const done = (await outcome.json()) as {
-        summariserInstanceId: string | null;
-        targetInstanceId: string;
-        opening: string;
-      };
       return {
         summariserInstanceId: done.summariserInstanceId,
         targetInstanceId: done.targetInstanceId,
@@ -1723,69 +1611,24 @@ export const handoffActions = ({
       };
     },
     async generateImage(request) {
-      const read = await readWithin(
-        IMAGE_GENERATION_TIMEOUT_MS + 60_000,
-        async (signal) => {
-          const response = await fetch(
-            `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(request),
-              signal,
-            }
-          );
-          if (!response.ok) {
-            throw new Error(await response.text());
-          }
-          return (await response.json()) as GeneratedImage;
-        }
+      const read = await readWithin(IMAGE_GENERATION_TIMEOUT_MS + 60_000, () =>
+        calls.generateImage(instanceId, request)
       );
       switch (read.kind) {
         case "answered":
           return read.value;
         case "unanswered":
-          throw new Error(
-            `The hub did not answer within ${secondsOf(read.after)} s with the image.`
-          );
+          return problem(504, {
+            code: "image-hub-unanswered",
+            detail: `The hub did not answer within ${secondsOf(read.after)} s with the image.`,
+          });
         default:
           unhandled("read", read);
       }
     },
-    async forgePost(ask) {
-      const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/forge-post`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(ask),
-        }
-      );
-      const text = (await response.text()).trim();
-      if (!response.ok) {
-        throw new Error(text);
-      }
-      return text;
-    },
-    async artifactCall(method, path, body) {
-      const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/artifacts${path}`,
-        {
-          method,
-          ...(body === undefined
-            ? {}
-            : {
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(body),
-              }),
-        }
-      );
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      return response.json();
-    },
-    listDelegateTypes: () => delegateTypesListed(projectId),
+    forgePost: (ask) => calls.forgePost(instanceId, ask),
+    artifacts: calls.artifacts(instanceId),
+    listDelegateTypes: () => Promise.resolve(calls.delegateTypes(projectId)),
     async listSessions(query: SessionListQuery): Promise<SessionList> {
       const { peers, own, hosts } = roster(fleet, instanceId);
       const machines = fleet.machines();
@@ -1892,7 +1735,7 @@ export const handoffActions = ({
         throw new Error(forkOwnedWords(peer, owner));
       }
       if (peer.row.id !== own?.parentInstanceId) {
-        await checkCold(peer.row.id, undefined, instanceId, message);
+        await checkCold(calls, peer.row.id, undefined, instanceId, message);
       }
       const whose =
         peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
@@ -1944,10 +1787,11 @@ export const handoffActions = ({
       const machineId = target?.machineId ?? "";
       // Nothing is left to the machine's defaults: the type (or `medium`) says
       // what runs, and the caller's own mode is how it answers permissions.
-      const { project, inProject, types } = await startProject(
-        machineId,
-        workdir
-      );
+      const started = startProject(machineId, workdir);
+      if (started instanceof ElysiaStatus) {
+        return started;
+      }
+      const { project, inProject, types } = started;
       const { rows } = fleetInstances(fleet);
       const resolved = resolveSpawnType(types, {
         type: typeName,
@@ -2035,7 +1879,7 @@ export const handoffActions = ({
         ? resolveMachine(fleet.machines(), machine)
         : undefined;
       if (opts.workspace) {
-        await checkCold(undefined, opts.workspace, instanceId, prompt);
+        await checkCold(calls, undefined, opts.workspace, instanceId, prompt);
       }
       // A fresh remote fetch and, on failure, its acknowledged discard take
       // minutes: nothing here times it out.
@@ -2155,29 +1999,23 @@ export const handoffActions = ({
           "Pass minutes to pause the machine, or resume: true to end its pause."
         );
       }
-      const path = `/api/machines/${encodeURIComponent(found.machineId)}/${resume ? "resume" : "pause"}`;
-      const response = await postToHub(
-        path,
-        resume
-          ? {}
-          : {
+      const row = resume
+        ? calls.resumeMachine(found.machineId)
+        : await calls.pauseMachine(
+            found.machineId,
+            {
               until: new Date(
                 Date.now() + (minutes ?? 0) * 60_000
               ).toISOString(),
-              // Its own turn, when the machine is its own, is cut once this
-              // call is answered, never under it (hub machine-pause.ts
-              // `PauseCaller`).
-              ...(callId ? { call: callId } : {}),
             },
-        authorization
-      );
-      if (!response.ok) {
-        throw new Error(await response.text());
+            // Its own turn, when the machine is its own, is cut once this
+            // call is answered, never under it (hub machine-pause.ts
+            // `PauseCaller`).
+            { instanceId, ...(callId ? { call: callId } : {}) }
+          );
+      if (row instanceof ElysiaStatus) {
+        return row;
       }
-      const row = (await response.json()) as {
-        pausedUntil: number | null;
-        pauseStopped: string | null;
-      };
       return row.pausedUntil === null
         ? `${name} is not paused: what was kept for it goes now.`
         : `Paused ${name} until ${pauseClock(row.pausedUntil)}: its running turns were stopped${row.pauseStopped ? `, it ${row.pauseStopped}` : ""}, and nothing starts there until then. Work for it waits and runs when the pause ends.`;
@@ -2244,20 +2082,6 @@ export const handoffActions = ({
       return `Shown in the transcript: ${path}. If the file is missing or later moves, the user sees that instead.`;
     },
 
-    async setTitle(title) {
-      const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/title`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ title }),
-        }
-      );
-      const text = await response.text();
-      if (!response.ok) {
-        throw new Error(text);
-      }
-      return text;
-    },
+    setTitle: (title) => Promise.resolve(calls.setTitle(instanceId, title)),
   };
 };

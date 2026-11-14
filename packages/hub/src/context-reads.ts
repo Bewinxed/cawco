@@ -1,4 +1,7 @@
-import { estimateTokens } from "@cawco/core/continuation";
+import {
+  CONTINUATION_CANCELLED,
+  estimateTokens,
+} from "@cawco/core/continuation";
 import type {
   HarnessKind,
   ModelInfo,
@@ -24,7 +27,6 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus } from "elysia";
 import { machineAccount } from "./accounts";
 import { finishedAnswer } from "./continuation-words";
-import { CONTINUATION_CANCELLED } from "./continuations";
 import type { ContinuationSource } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
 import type { SessionLocation } from "./hub-shapes";

@@ -22,23 +22,9 @@ import {
 import { LANDS_MODES } from "@cawco/core/injected";
 import { NO_REPLY_OWED, NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { REFERENCE_GUIDANCE } from "@cawco/core/references";
-import type { DesignMap } from "@cawco/core/stage";
 import { kindsLine } from "@cawco/core/words/decides-lines";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
-import type {
-  ArtifactList,
-  ArtifactRead,
-  Browsed,
-  CommentRead,
-  Created,
-  Promoted,
-  QuestionClosed,
-  Removed,
-  Revised,
-  Settled,
-  Shown,
-} from "./artifacts/shapes";
 import {
   artifactBrowse,
   artifactCreate,
@@ -65,7 +51,6 @@ import { decodeCursor } from "./find";
 import { handedInputsListed } from "./handed-input";
 import { type Presenter, sentence, toolOn } from "./mcp-tool";
 import {
-  type AskChanged,
   artifactBrowsedWords,
   artifactCreatedDetailed,
   artifactCreatedWords,
@@ -77,17 +62,12 @@ import {
   artifactShownWords,
   artifactUpdatedDetailed,
   artifactUpdatedWords,
-  type CommentReplied,
-  type CommentResolved,
-  type ComponentChanged,
   commentReadWords,
   commentRepliedWords,
   commentResolvedWords,
   designMapWords,
-  type HeadChanged,
   questionClosedWords,
   settledWords,
-  type TitleChanged,
   type Updated,
 } from "./presenters/artifacts";
 import {
@@ -98,6 +78,7 @@ import {
   sessionListWords,
   startedWords,
 } from "./presenters/sessions";
+import type { AnyProblem } from "./refusal";
 import {
   SESSION_LIST_LIMIT,
   SESSION_LIST_MAX,
@@ -404,23 +385,22 @@ const headWritten = async (
   id: string,
   ask: string | undefined,
   title: string | undefined
-): Promise<HeadChanged | undefined> => {
+) => {
   if (ask === undefined && title === undefined) {
     return;
   }
-  const at = `/${encodeURIComponent(id)}`;
   const asked =
-    ask === undefined
-      ? undefined
-      : ((await actions.artifactCall("POST", `${at}/ask`, {
-          ask,
-        })) as AskChanged);
+    ask === undefined ? undefined : await actions.artifacts.askUpdate(id, ask);
+  if (asked instanceof ElysiaStatus) {
+    return asked;
+  }
   const titled =
     title === undefined
       ? undefined
-      : ((await actions.artifactCall("POST", `${at}/title`, {
-          title,
-        })) as TitleChanged);
+      : await actions.artifacts.titleUpdate(id, title);
+  if (titled instanceof ElysiaStatus) {
+    return titled;
+  }
   return {
     id,
     ...(asked ? { ask: asked.ask } : {}),
@@ -1172,13 +1152,7 @@ export function handoffTools(view: ToolView) {
       artifactList.name,
       artifactList.description,
       artifactList.input,
-      ({ cursor }, _format, bound) => {
-        const query = new URLSearchParams(cursor ? { cursor } : {}).toString();
-        return bound.actions.artifactCall(
-          "GET",
-          `/list${query ? `?${query}` : ""}`
-        ) as Promise<ArtifactList>;
-      },
+      ({ cursor }, _format, bound) => bound.actions.artifacts.status(cursor),
       artifactListWords,
       { annotations: READ_ONLY }
     ),
@@ -1188,8 +1162,7 @@ export function handoffTools(view: ToolView) {
           artifactCreate.name,
           artifactCreate.description + artifactCreateToParent.description,
           { ...artifactCreate.input, ...artifactCreateToParent.input },
-          (input, _format, bound) =>
-            bound.actions.artifactCall("POST", "", input) as Promise<Created>,
+          (input, _format, bound) => bound.actions.artifacts.create(input),
           artifactCreatedWords,
           { detailed: artifactCreatedDetailed }
         )
@@ -1197,8 +1170,7 @@ export function handoffTools(view: ToolView) {
           artifactCreate.name,
           artifactCreate.description,
           artifactCreate.input,
-          (input, _format, bound) =>
-            bound.actions.artifactCall("POST", "", input) as Promise<Created>,
+          (input, _format, bound) => bound.actions.artifacts.create(input),
           artifactCreatedWords,
           { detailed: artifactCreatedDetailed }
         ),
@@ -1210,8 +1182,7 @@ export function handoffTools(view: ToolView) {
         { id, statements, ask, title, ...change },
         _format,
         bound
-      ): Promise<Updated> => {
-        const at = `/${encodeURIComponent(id)}`;
+      ): Promise<Updated | AnyProblem> => {
         const changes = Object.values(change).some(
           (value) => value !== undefined
         );
@@ -1222,17 +1193,14 @@ export function handoffTools(view: ToolView) {
         }
         // A new ask and title are checked and written first, so a refused one changes nothing.
         const head = await headWritten(bound.actions, id, ask, title);
+        if (head instanceof ElysiaStatus) {
+          return head;
+        }
         if (statements !== undefined) {
-          return {
-            change: "statements",
-            answer: (await bound.actions.artifactCall(
-              "POST",
-              `${at}/statements`,
-              {
-                statements,
-              }
-            )) as Revised,
-          };
+          const answer = await bound.actions.artifacts.revise(id, statements);
+          return answer instanceof ElysiaStatus
+            ? answer
+            : { change: "statements", answer };
         }
         if (!changes && head) {
           return { change: "head", answer: head };
@@ -1241,23 +1209,19 @@ export function handoffTools(view: ToolView) {
         const component = (
           ["args", "story", "edges", "group", "dials"] as const
         ).some((key) => change[key] !== undefined);
-        return component
-          ? {
-              change: "component",
-              answer: (await bound.actions.artifactCall(
-                "PATCH",
-                `${at}/component`,
-                change
-              )) as ComponentChanged,
-            }
-          : {
-              change: "page",
-              answer: (await bound.actions.artifactCall(
-                "PATCH",
-                at,
-                change
-              )) as ArtifactRead,
-            };
+        if (component) {
+          const answer = await bound.actions.artifacts.updateComponent(
+            id,
+            change
+          );
+          return answer instanceof ElysiaStatus
+            ? answer
+            : { change: "component", answer };
+        }
+        const answer = await bound.actions.artifacts.update(id, change);
+        return answer instanceof ElysiaStatus
+          ? answer
+          : { change: "page", answer };
       },
       artifactUpdatedWords,
       { detailed: artifactUpdatedDetailed }
@@ -1271,11 +1235,10 @@ export function handoffTools(view: ToolView) {
         if (hash <= 0 || hash === card.length - 1) {
           throw new Error(`“${card}” names no card: write <page>#<card>.`);
         }
-        return bound.actions.artifactCall(
-          "POST",
-          `/${encodeURIComponent(card.slice(0, hash))}/settle`,
-          { card: card.slice(hash + 1), ...picked }
-        ) as Promise<Settled>;
+        return bound.actions.artifacts.settle(card.slice(0, hash), {
+          card: card.slice(hash + 1),
+          ...picked,
+        });
       },
       settledWords
     ),
@@ -1284,11 +1247,7 @@ export function handoffTools(view: ToolView) {
       questionClose.description,
       questionClose.input,
       (closing, _format, bound) =>
-        bound.actions.artifactCall(
-          "POST",
-          "/questions/close",
-          closing
-        ) as Promise<QuestionClosed>,
+        bound.actions.artifacts.closeQuestion(closing),
       questionClosedWords
     ),
     handoffTool(
@@ -1296,29 +1255,25 @@ export function handoffTools(view: ToolView) {
       artifactRead.description,
       artifactRead.input,
       async ({ id, state, ...asked }, _format, bound) => {
-        // Each read field given into the query, a frame's `state` as JSON; a flag left off stays out.
-        const query = new URLSearchParams(
-          Object.entries({
-            ...asked,
-            ...(state ? { state: JSON.stringify(state) } : {}),
-          }).flatMap(([key, value]): [string, string][] =>
-            value === undefined || value === false ? [] : [[key, String(value)]]
-          )
-        ).toString();
         let target = id;
         if (target === undefined) {
-          const [newest] = (await bound.actions.artifactCall("GET", "")) as {
-            id: string;
-          }[];
-          if (!newest) {
-            throw new Error("This session has made no artifact yet.");
+          const newest = bound.actions.artifacts.newest();
+          if (newest instanceof ElysiaStatus || newest === undefined) {
+            return (
+              newest ??
+              problem(404, {
+                code: "artifact-none-made",
+                detail: "This session has made no artifact yet.",
+              })
+            );
           }
-          target = newest.id;
+          target = newest;
         }
-        return (await bound.actions.artifactCall(
-          "GET",
-          `/${encodeURIComponent(target)}${query ? `?${query}` : ""}`
-        )) as ArtifactRead;
+        // A frame's `state` goes as its JSON, as the read takes it.
+        return await bound.actions.artifacts.read(target, {
+          ...asked,
+          ...(state ? { state: JSON.stringify(state) } : {}),
+        });
       },
       artifactReadWords,
       { annotations: READ_ONLY, detailed: artifactReadDetailed }
@@ -1327,18 +1282,15 @@ export function handoffTools(view: ToolView) {
       designMap.name,
       designMap.description,
       designMap.input,
-      (ask, format, bound) => {
-        const query = new URLSearchParams([
-          ...Object.entries(ask)
-            .filter(([, value]) => value !== undefined)
-            .map(([key, value]): [string, string] => [key, String(value)]),
-          ["response_format", format],
-        ]).toString();
-        return bound.actions.artifactCall(
-          "GET",
-          `/design-map${query ? `?${query}` : ""}`
-        ) as Promise<DesignMap>;
-      },
+      ({ dir, query, component, limit, cursor }, format, bound) =>
+        bound.actions.artifacts.designMap({
+          ...(dir ? { dir } : {}),
+          ...(query ? { query } : {}),
+          ...(component ? { component } : {}),
+          ...(limit ? { limit } : {}),
+          ...(cursor ? { cursor } : {}),
+          ...(format === "detailed" ? { detailed: true } : {}),
+        }),
       designMapWords,
       { annotations: READ_ONLY }
     ),
@@ -1346,22 +1298,14 @@ export function handoffTools(view: ToolView) {
       artifactShow.name,
       artifactShow.description,
       artifactShow.input,
-      ({ id }, _format, bound) =>
-        bound.actions.artifactCall(
-          "POST",
-          `/${encodeURIComponent(id)}/show?by=agent`
-        ) as Promise<Shown>,
+      ({ id }, _format, bound) => bound.actions.artifacts.show(id),
       artifactShownWords
     ),
     handoffTool(
       artifactBrowse.name,
       artifactBrowse.description,
       artifactBrowse.input,
-      ({ id }, _format, bound) =>
-        bound.actions.artifactCall(
-          "POST",
-          `/${encodeURIComponent(id)}/browse`
-        ) as Promise<Browsed & { link: string }>,
+      ({ id }, _format, bound) => bound.actions.artifacts.browse(id),
       artifactBrowsedWords,
       {
         annotations: {
@@ -1376,11 +1320,7 @@ export function handoffTools(view: ToolView) {
       artifactPromote.name,
       artifactPromote.description,
       artifactPromote.input,
-      ({ id }, _format, bound) =>
-        bound.actions.artifactCall(
-          "POST",
-          `/${encodeURIComponent(id)}/promote`
-        ) as Promise<Promoted>,
+      ({ id }, _format, bound) => bound.actions.artifacts.promote(id),
       artifactPromotedWords,
       {
         annotations: {
@@ -1395,30 +1335,19 @@ export function handoffTools(view: ToolView) {
       artifactDelete.name,
       artifactDelete.description,
       artifactDelete.input,
-      ({ id }, _format, bound) =>
-        bound.actions.artifactCall(
-          "DELETE",
-          `/${encodeURIComponent(id)}?by=agent`
-        ) as Promise<Removed>,
+      ({ id }, _format, bound) => bound.actions.artifacts.remove(id),
       artifactRemovedWords
     ),
     handoffTool(
       commentRead.name,
       commentRead.description,
       commentRead.input,
-      ({ artifact, filter, since }, _format, bound) => {
-        // The session reads them itself: what it reads counts as heard.
-        const query = new URLSearchParams({
+      ({ artifact, filter, since }, _format, bound) =>
+        bound.actions.artifacts.commentRead({
           filter,
-          reader: "session",
           ...(artifact ? { artifact } : {}),
           ...(since ? { since } : {}),
-        }).toString();
-        return bound.actions.artifactCall(
-          "GET",
-          `/comments?${query}`
-        ) as Promise<CommentRead>;
-      },
+        }),
       commentReadWords,
       { annotations: READ_ONLY }
     ),
@@ -1427,11 +1356,7 @@ export function handoffTools(view: ToolView) {
       commentReply.description,
       commentReply.input,
       ({ pin, ...reply }, _format, bound) =>
-        bound.actions.artifactCall(
-          "POST",
-          `/comments/${encodeURIComponent(pin)}/reply`,
-          reply
-        ) as Promise<CommentReplied>,
+        bound.actions.artifacts.commentReply(pin, reply),
       commentRepliedWords
     ),
     handoffTool(
@@ -1439,11 +1364,7 @@ export function handoffTools(view: ToolView) {
       commentResolve.description,
       commentResolve.input,
       ({ pin, ...resolve }, _format, bound) =>
-        bound.actions.artifactCall(
-          "POST",
-          `/comments/${encodeURIComponent(pin)}/resolve`,
-          resolve
-        ) as Promise<CommentResolved>,
+        bound.actions.artifacts.commentResolve(pin, resolve),
       commentResolvedWords
     ),
   ];
