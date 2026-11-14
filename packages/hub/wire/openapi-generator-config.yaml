@@ -15,6 +15,7 @@ typeOverrides:
     AccountSigninRefusalReach: OpenEnums.AccountSigninRefusalReach
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
+    AgentRowClaude: OpenEnums.AgentRowClaude
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactReadSentBy: OpenEnums.ArtifactReadSentBy
@@ -64,12 +65,12 @@ typeOverrides:
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
+    DelegateTypeEffort: OpenEnums.DelegateTypeEffort
     DelegateTypeRole: OpenEnums.DelegateTypeRole
     DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
     DesignOfferStateAnswer: OpenEnums.DesignOfferStateAnswer
     DeviceKind: OpenEnums.DeviceKind
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
-    EffortLevel: OpenEnums.EffortLevel
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     EventRouteViewMode: OpenEnums.EventRouteViewMode
@@ -148,10 +149,7 @@ typeOverrides:
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
-    PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
-    PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
-    PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
     PersonReadState: OpenEnums.PersonReadState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy

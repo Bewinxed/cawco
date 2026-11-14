@@ -32025,13 +32025,13 @@
             "type": "object",
             "properties": {
               "claude": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               },
               "opencode": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               },
               "pi": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               }
             },
             "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
@@ -32298,6 +32298,18 @@
           "unauthenticated",
           "unknown",
           "unreadable-credentials"
+        ]
+      },
+      "AgentRowClaude": {
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "dontAsk",
+          "fullSend",
+          "plan"
         ]
       },
       "Anchor": {
@@ -34615,7 +34627,7 @@
             "type": "string"
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/PermissionMode",
+            "$ref": "#/components/schemas/AgentRowClaude",
             "description": "`init` only, and re-reported every turn: what the session answers tools with."
           },
           "preTokens": {
@@ -35898,7 +35910,7 @@
             "type": "string"
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/PermissionMode"
+            "$ref": "#/components/schemas/AgentRowClaude"
           }
         },
         "required": [
@@ -38657,7 +38669,7 @@
             "type": "string"
           },
           "effort": {
-            "$ref": "#/components/schemas/EffortLevel",
+            "$ref": "#/components/schemas/DelegateTypeEffort",
             "description": "How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses."
           },
           "harness": {
@@ -38697,6 +38709,16 @@
           "harness",
           "model",
           "name"
+        ]
+      },
+      "DelegateTypeEffort": {
+        "type": "string",
+        "enum": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "xhigh"
         ]
       },
       "DelegateTypeRole": {
@@ -39115,17 +39137,6 @@
           "queued",
           "review",
           "reviewLimit"
-        ]
-      },
-      "EffortLevel": {
-        "description": "How hard the model thinks, and how much it spends doing it: Claude Code's\neffort scale, in its own order. Hand-written rather than tunnelled from the\nSDK — nothing in this file imports a harness SDK, and `@cawco/core` has no\ndependencies at all — but it is the SDK's `EffortLevel` verbatim, so the\nclaude adapter hands it straight on.\n\nEffort is not only thinking depth. A lower level also buys fewer and more\nconsolidated tool calls, less preamble and terser confirmations; a higher one\nspends tokens in all of those places. A harness with no such knob reports\n`effort: false` rather than mapping onto this.",
-        "type": "string",
-        "enum": [
-          "high",
-          "low",
-          "max",
-          "medium",
-          "xhigh"
         ]
       },
       "EndedBy": {
@@ -43057,7 +43068,7 @@
           "permissionModes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PermissionMode"
+              "$ref": "#/components/schemas/AgentRowClaude"
             }
           },
           "plugins": {
@@ -44975,7 +44986,7 @@
             "type": "string"
           },
           "chosenEffort": {
-            "$ref": "#/components/schemas/EffortLevel",
+            "$ref": "#/components/schemas/DelegateTypeEffort",
             "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
           },
           "clean": {
@@ -46670,7 +46681,7 @@
             "type": "string"
           },
           "refused": {
-            "$ref": "#/components/schemas/PermissionMode",
+            "$ref": "#/components/schemas/AgentRowClaude",
             "description": "The mode it would have started on, which its machine doesn't take; absent when none was named at all."
           }
         },
@@ -46688,8 +46699,8 @@
             "type": "number"
           },
           "defaultEffort": {
-            "$ref": "#/components/schemas/EffortLevel",
-            "description": "The effort the CLI applies when a spawn omits effort, measured by the\nharness. Null when the model takes none; absent when not measured."
+            "description": "The effort the CLI applies when a spawn omits effort, measured by the\nharness. Null when the model takes none; absent when not measured. The\nharness's own word, held as a string: a level a later release adds must\nnot refuse the catalog, and a reader narrows with {@link isEffortLevel}.",
+            "type": "string"
           },
           "description": {
             "type": "string"
@@ -46705,9 +46716,10 @@
             "type": "string"
           },
           "supportedEffortLevels": {
+            "description": "The effort levels the model takes, in the harness's own words (Claude\nCode's model list): held as strings for the same reason as\n`defaultEffort`, and narrowed with {@link isEffortLevel} where read.",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/EffortLevel"
+              "type": "string"
             }
           },
           "supportsAdaptiveThinking": {
@@ -48209,7 +48221,7 @@
             "type": "string"
           },
           "effort": {
-            "$ref": "#/components/schemas/EffortLevel"
+            "$ref": "#/components/schemas/DelegateTypeEffort"
           },
           "exit_code": {
             "type": "number"
@@ -48797,7 +48809,7 @@
             }
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/PermissionMode",
+            "$ref": "#/components/schemas/AgentRowClaude",
             "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is."
           },
           "rate_limit_info": {
@@ -49798,19 +49810,6 @@
           "value"
         ]
       },
-      "PermissionMode": {
-        "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is.",
-        "type": "string",
-        "enum": [
-          "acceptEdits",
-          "auto",
-          "bypassPermissions",
-          "default",
-          "dontAsk",
-          "fullSend",
-          "plan"
-        ]
-      },
       "PermissionPresentation": {
         "type": "object",
         "properties": {
@@ -49926,10 +49925,9 @@
             "description": "Where an install the ask proposes fetches from (hub source-facts.ts)."
           },
           "suggestions": {
+            "description": "The harness's own suggested permission updates (Claude's\n`PermissionUpdate[]`), held as the provider's: passed through whole and\nnever enumerated here, so a destination, type or mode a later release adds\ncannot make the hub refuse the ask. A reader narrows where it reads.",
             "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PermissionUpdate"
-            }
+            "items": {}
           },
           "toolName": {
             "type": "string"
@@ -49999,119 +49997,6 @@
         "enum": [
           "answered",
           "cancelled"
-        ]
-      },
-      "PermissionUpdate": {
-        "description": "A permission the SDK suggests persisting, so \"always allow\" has something to write.",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "behavior": {
-                "$ref": "#/components/schemas/PermissionUpdateBehavior"
-              },
-              "destination": {
-                "$ref": "#/components/schemas/PermissionUpdateDestination"
-              },
-              "rules": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "ruleContent": {
-                      "type": "string"
-                    },
-                    "toolName": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "toolName"
-                  ]
-                }
-              },
-              "type": {
-                "enum": [
-                  "addRules",
-                  "removeRules",
-                  "replaceRules"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "behavior",
-              "destination",
-              "rules",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "destination": {
-                "$ref": "#/components/schemas/PermissionUpdateDestination"
-              },
-              "directories": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "type": {
-                "enum": [
-                  "addDirectories",
-                  "removeDirectories"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "destination",
-              "directories",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "destination": {
-                "$ref": "#/components/schemas/PermissionUpdateDestination"
-              },
-              "mode": {
-                "$ref": "#/components/schemas/PermissionMode"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "setMode"
-                ]
-              }
-            },
-            "required": [
-              "destination",
-              "mode",
-              "type"
-            ]
-          }
-        ]
-      },
-      "PermissionUpdateBehavior": {
-        "type": "string",
-        "enum": [
-          "allow",
-          "ask",
-          "deny"
-        ]
-      },
-      "PermissionUpdateDestination": {
-        "type": "string",
-        "enum": [
-          "cliArg",
-          "localSettings",
-          "projectSettings",
-          "session",
-          "userSettings"
         ]
       },
       "PersonFrame": {
@@ -59693,7 +59578,7 @@
                     "type": "string"
                   },
                   "permissionMode": {
-                    "$ref": "#/components/schemas/PermissionMode",
+                    "$ref": "#/components/schemas/AgentRowClaude",
                     "description": "How the session answers tool permissions, by the newest `init`."
                   },
                   "sdkStatus": {
@@ -59948,7 +59833,7 @@
             "type": "string"
           },
           "permissionMode": {
-            "$ref": "#/components/schemas/PermissionMode",
+            "$ref": "#/components/schemas/AgentRowClaude",
             "description": "How the session answers tool permissions, by the newest `init`."
           },
           "sdkStatus": {
@@ -75417,13 +75302,13 @@
               "type": "object",
               "properties": {
                 "claude": {
-                  "$ref": "#/components/schemas/PermissionMode"
+                  "$ref": "#/components/schemas/AgentRowClaude"
                 },
                 "opencode": {
-                  "$ref": "#/components/schemas/PermissionMode"
+                  "$ref": "#/components/schemas/AgentRowClaude"
                 },
                 "pi": {
-                  "$ref": "#/components/schemas/PermissionMode"
+                  "$ref": "#/components/schemas/AgentRowClaude"
                 }
               },
               "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
@@ -83657,7 +83542,7 @@
               "type": "string"
             },
             "chosenEffort": {
-              "$ref": "#/components/schemas/EffortLevel"
+              "$ref": "#/components/schemas/DelegateTypeEffort"
             },
             "clean": {
               "type": "boolean"
@@ -109759,7 +109644,7 @@
             "type": "string"
           },
           "chosenEffort": {
-            "$ref": "#/components/schemas/EffortLevel"
+            "$ref": "#/components/schemas/DelegateTypeEffort"
           },
           "clean": {
             "type": "boolean"
@@ -149102,13 +148987,13 @@
             "type": "object",
             "properties": {
               "claude": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               },
               "opencode": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               },
               "pi": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               }
             },
             "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
@@ -149586,13 +149471,13 @@
             "type": "object",
             "properties": {
               "claude": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               },
               "opencode": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               },
               "pi": {
-                "$ref": "#/components/schemas/PermissionMode"
+                "$ref": "#/components/schemas/AgentRowClaude"
               }
             },
             "description": "The permission mode the person last started each harness's session in\non this machine, from any device (the hub's `chosen_modes`): the mode the\nNew session form opens on there. Absent for a harness never started."
