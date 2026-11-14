@@ -474,7 +474,7 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     // is (the gate let only them upgrade): a browser reads no refused
     // upgrade's answer, only a close's code and reason.
     const caller = deps.classify(socket.header, "GET", path, socket.address);
-    if (!(caller.kind === "owner" || caller.kind === "hub")) {
+    if (caller.kind !== "owner") {
       shut(socket, 4401, PAIRING_REQUIRED);
       return;
     }

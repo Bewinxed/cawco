@@ -1,7 +1,7 @@
 /**
  * Who may call the hub (core hub-auth.ts names the two modes).
  *
- * Every request is one class: the **hub** itself (hub-self.ts), a **session**
+ * Every request is one class: a **session**
  * (`Authorization: Bearer <its credential>`), the **owner** (a paired
  * device's token, `Authorization: Owner <token>` or the browser's cookie), a
  * **machine** (its key's proof, core machine-key.ts), or **anonymous**.
@@ -57,7 +57,6 @@ import { connectWords } from "@cawco/core/words/connect";
 import { Elysia, problem, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import { recordHubEvent } from "./hub-record";
-import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
 import type { RouteSet } from "./machine-answers";
 
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
@@ -67,7 +66,6 @@ const AGENT_ROW = /^\/api\/agents\/([^/]+)$/u;
 
 /** What a request is, once its credential is read. */
 export type Caller =
-  | { kind: "hub" }
   | { kind: "owner"; device: { id: string; name: string } | null }
   /** `instanceId` null: a Bearer that names no session. Still a session: never the owner. */
   | { kind: "session"; instanceId: string | null }
@@ -171,8 +169,7 @@ const namesAnother = (path: string, machineId: string): boolean =>
  * session hearing the person's answers on it (artifacts/service.ts stamps
  * `readSeq`), and answers it has heard settle with nothing sent to it
  * (artifacts/needs.ts `answersUnheard`). So it answers that session's own
- * credential and the hub's tool door acting for it (hub-self.ts), never the
- * person, a machine or another session: a read by any of them would tell the
+ * credential, never the person, a machine or another session: a read by any of them would tell the
  * hub the session heard what it never read (the artifacts probe's leg 5,
  * de28a8786). The person reads an artifact at its `/view`.
  */
@@ -596,9 +593,6 @@ export const createHubAuth = ({
     path: string,
     address: string | null
   ): Caller => {
-    if (isHubSelf(header(HUB_SELF_HEADER))) {
-      return { kind: "hub" };
-    }
     const authorization = header("authorization");
     if (authorization?.startsWith("Bearer ")) {
       const named = session(authorization)?.instanceId;
@@ -642,9 +636,6 @@ export const createHubAuth = ({
     held: HubAuthMode
   ): boolean => {
     const access = accessOf(method, path);
-    if (caller.kind === "hub") {
-      return true;
-    }
     if (caller.kind === "machine" && namesAnother(path, caller.machineId)) {
       return false;
     }
@@ -757,7 +748,7 @@ export const createHubAuth = ({
 
   const state = (caller: Caller): HubAuthState => ({
     mode: mode(),
-    caller: caller.kind === "hub" ? "owner" : caller.kind,
+    caller: caller.kind,
     device: caller.kind === "owner" ? caller.device : null,
   });
 
