@@ -120,7 +120,7 @@ export const instanceEditRoutes = (
             case "failed":
               break;
           }
-          return problem(500, {
+          return problem(502, {
             code: "transcript-unread",
             detail: page.message,
           });
@@ -155,7 +155,7 @@ export const instanceEditRoutes = (
                 detail: read.message,
               });
             case "failed":
-              return problem(500, {
+              return problem(502, {
                 code: "transcript-unread",
                 detail: read.message,
               });

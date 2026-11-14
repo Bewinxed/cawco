@@ -371,7 +371,7 @@ export const fleetSkillRoutes = (
           // No copy on the machine is nothing to keep; any other refusal
           // stops the push, because the copy it would destroy was not read.
           if (!(answer.ok || answer.error?.startsWith("no skill "))) {
-            return problem(500, {
+            return problem(502, {
               code: "skill-unread",
               detail: answer.error ?? "the machine could not read the skill",
             });

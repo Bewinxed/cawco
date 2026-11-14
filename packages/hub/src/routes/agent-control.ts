@@ -70,6 +70,11 @@ export const agentUpdate =
               `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`
             );
       case "answered":
+        // The machine's failure stays at 500, not the 502 a machine's
+        // failure answers elsewhere: the frozen iOS app's installUpdate reads
+        // only a 500 here as "could not start the update" and would show a
+        // running install for a 502. Its move waits on the branch
+        // cawco/agent-update-failed for the owner's word on the app hold.
         return answer.value.ok
           ? (answer.value.result as UpdateReport)
           : problem(500, {
@@ -109,7 +114,7 @@ export const agentControlRoutes = (
           case "answered":
             return answer.value.ok
               ? (answer.value.result as { busy: number; instances: string[] })
-              : problem(500, {
+              : problem(502, {
                   code: "busy-probe-failed",
                   detail: answer.value.error ?? "the busy probe failed",
                 });
@@ -147,7 +152,7 @@ export const agentControlRoutes = (
                     answer.value
                       .result as import("@cawco/core/fleet").ConfigInspection
                   )
-                : problem(500, {
+                : problem(502, {
                     code: "config-unread",
                     detail:
                       answer.value.error ??
@@ -191,7 +196,7 @@ export const agentControlRoutes = (
             case "answered":
               return answer.value.ok
                 ? (answer.value.result as SupportedCommands)
-                : problem(500, {
+                : problem(502, {
                     code: "config-not-written",
                     detail:
                       answer.value.error ??

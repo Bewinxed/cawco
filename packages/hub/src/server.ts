@@ -485,8 +485,10 @@ import { createLoginMoves } from "./login-moves";
 import {
   awayProblem,
   type ControlResult,
+  MachineProblem,
   silentProblem,
   type Unanswered,
+  unansweredIn,
 } from "./machine-answers";
 import { createMachineCalls } from "./machine-calls";
 import { createMachineCommands } from "./machine-commands";
@@ -3329,17 +3331,20 @@ export const createServer = (
   /**
    * A read its machine left unanswered, as the read throws it: not connected
    * (or away past its deadline, `asRead`) is {@link awayError}, which a route
-   * answers 503 naming the machine and a continuation waits out; silent, a
-   * plain error, `what` (the read, in words) followed by {@link silentWords}.
+   * answers 503 naming the machine and a continuation waits out; silent,
+   * 504 machine-silent, `what` (the read, in words) followed by
+   * {@link silentWords}.
    */
   const unansweredError = (
     machineId: string,
     answer: Unanswered,
     what: string
-  ): Error =>
+  ): MachineProblem =>
     answer.reason === "dead"
       ? awayError(machineId)
-      : new Error(`${what}: ${silentWords(machineId, answer)}`);
+      : new MachineProblem(
+          silentProblem(`${what}: ${silentWords(machineId, answer)}`)
+        );
   /** A session as a sentence names it. */
   const sessionName = (row: {
     derivedTitle?: string | null;
@@ -3539,12 +3544,9 @@ export const createServer = (
    * that model from here, so placement and the session agree on it. When pi
    * would pick among the machine's own providers, or the session is resumed,
    * or is not pi's, the payload is as it was. A machine that cannot say
-   * refuses the start.
+   * refuses the start: silent, or its failure (502 spawn-default-unnamed).
    */
-  const piDefaultFor = async (
-    machineId: string,
-    payload: NamedSpawn
-  ): Promise<NamedSpawn | { refusal: string }> => {
+  const piDefaultFor = async (machineId: string, payload: NamedSpawn) => {
     if (!asksPiDefault(payload)) {
       return payload;
     }
@@ -3560,14 +3562,15 @@ export const createServer = (
         if (answer.reason === "dead") {
           return payload;
         }
-        return {
-          refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${secondsOf(answer.after)} s. Nothing was started.`,
-        };
+        return silentProblem(
+          `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${secondsOf(answer.after)} s. Nothing was started.`
+        );
       case "answered": {
         if (!answer.value.ok) {
-          return {
-            refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
-          };
+          return problem(502, {
+            code: "spawn-default-unnamed",
+            detail: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
+          });
         }
         const model = answer.value.result as string | null;
         return model ? { ...payload, model } : payload;
@@ -4171,13 +4174,13 @@ export const createServer = (
     }
     const answer = asked.value;
     if (!answer.ok) {
-      return problem(500, {
+      return problem(502, {
         code: "mode-refused",
         detail: answer.error ?? "Permission mode was refused",
       });
     }
     if (peek(answer.result, "permissionMode") !== mode) {
-      return problem(500, {
+      return problem(502, {
         code: "mode-refused",
         detail: "Harness did not acknowledge the permission mode",
       });
@@ -6852,7 +6855,9 @@ export const createServer = (
         case "unanswered":
           throw asked.reason === "dead"
             ? new MoveAway(machineId)
-            : new Error(`${silentWords(machineId, asked)}.`);
+            : new MachineProblem(
+                silentProblem(`${silentWords(machineId, asked)}.`)
+              );
         case "answered":
           break;
         default:
@@ -6863,8 +6868,12 @@ export const createServer = (
         throw answer.error === MACHINE_DISCONNECTED ||
           answer.error === AGENT_RESTARTING
           ? new MoveAway(machineId)
-          : new Error(
-              answer.error ?? `${machineName(machineId)} gave no answer.`
+          : new MachineProblem(
+              problem(502, {
+                code: "machine-call-failed",
+                detail:
+                  answer.error ?? `${machineName(machineId)} gave no answer.`,
+              })
             );
       }
       return answer.result;
@@ -7779,7 +7788,11 @@ export const createServer = (
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
   });
-  /** A machine-scoped daemon function, answered or thrown in the machine's own words. */
+  /**
+   * A machine-scoped daemon function, answered, or thrown as its cause
+   * (`MachineProblem`): its machine away, silent, or its failure in the
+   * machine's own words (502 machine-call-failed).
+   */
   const callMachine = async (
     machineId: string,
     method: string,
@@ -7815,16 +7828,21 @@ export const createServer = (
         : await callAgent(machineId, method, args, timeout);
     switch (answer.kind) {
       case "unanswered":
-        throw new Error(
-          answer.reason === "dead"
-            ? machineFault(machineId, "offline")
-            : `${machineName(machineId)} didn't answer ${method} within ${secondsOf(answer.after)} s. Try again in a moment.`
+        throw new MachineProblem(
+          unansweredIn(machineId, answer, {
+            away: machineFault(machineId, "offline"),
+            silent: `${machineName(machineId)} didn't answer ${method} within ${secondsOf(answer.after)} s. Try again in a moment.`,
+          })
         );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            answer.value.error ??
-              `${method} failed on ${machineName(machineId)}`
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail:
+                answer.value.error ??
+                `${method} failed on ${machineName(machineId)}`,
+            })
           );
         }
         return answer.value.result;
@@ -11621,11 +11639,11 @@ export const createServer = (
   const startFromDashboard = (
     ws: HubSocket,
     message: Envelope,
-    asked: NamedSpawn | { refusal: string }
+    asked: Awaited<ReturnType<typeof piDefaultFor>>
   ): void => {
-    if ("refusal" in asked) {
-      console.warn(spawnWords.refusedLine(asked.refusal));
-      sendFrame(ws, failure(message, asked.refusal));
+    if (asked instanceof ElysiaStatus) {
+      console.warn(spawnWords.refusedLine(asked.response.detail));
+      sendFrame(ws, failure(message, asked.response.detail));
       return;
     }
     // A session the hub has a row for is started again (a relaunch, a
@@ -12711,6 +12729,8 @@ export const createServer = (
     handle(ws, message);
   };
 
+  /** The one setter of an away machine's headers (machine-reads.ts `nameAwayMachine`). */
+  const nameAway = nameAwayMachine(ctx);
   return Object.assign(
     // Every body, query and params schema closed (Elysia's
     // `nonAdditionalProperties`): a field a route doesn't take is refused,
@@ -12722,7 +12742,16 @@ export const createServer = (
       // A request with a field its route doesn't take: a 422 naming each
       // (unknown-fields.ts), before any plugin's or route's own error
       // words, which would say only that the shape was wrong.
-      .onError("global", ({ error }) => {
+      .onError("global", ({ error, set }) => {
+        // A machine's cause thrown from deep in a step: Elysia answers the
+        // problem it holds (machine-answers.ts `MachineProblem`), and its
+        // machine, when away, is named on it by the one setter a returned
+        // answer meets below. Returning it here would add it to every
+        // route's answers.
+        if (error instanceof MachineProblem) {
+          nameAway({ responseValue: error.value(), set });
+          return;
+        }
         const unknown = unknownFieldsOf(error);
         return unknown
           ? problem(422, {
@@ -12772,7 +12801,7 @@ export const createServer = (
       // A machine that is away named on whatever answer says so, however
       // deep it was made (machine-answers.ts `awayProblem`): its headers'
       // one setter, before every route.
-      .mapResponse("global", nameAwayMachine(ctx))
+      .mapResponse("global", nameAway)
       .use(
         previewRoutes({
           deviceOf: (request) => {

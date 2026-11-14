@@ -341,8 +341,8 @@ const placementFix = (code: string | undefined): PlacementFix | null => {
  * Undefined when it cannot be read; a refusal is thrown in the hub's words
  * with where its fix is ({@link PlacementRefused}): no account can take it
  * or the machine refuses the harness's CLI (400), or the machine could not
- * say which model pi starts on in that folder (503), any of which refuses
- * the start too.
+ * say which model pi starts on in that folder (502, its failure; 504, it did
+ * not answer in time), any of which refuses the start too.
  */
 export async function placementFor(query: {
   cwd?: string;
@@ -354,7 +354,7 @@ export async function placementFor(query: {
   const answer = await hubAsk(hub.api.accounts.placement.get({ query }));
   if (!answer.ok) {
     const { status } = answer.refused.error;
-    if (status === 400 || status === 503) {
+    if (status === 400 || status === 502 || status === 504) {
       throw new PlacementRefused(
         hubRefusal(answer.refused).message,
         placementFix(hubFailure(answer.refused).code)

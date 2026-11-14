@@ -9,7 +9,7 @@ import {
   PLACEMENT_STRATEGIES,
 } from "@cawco/core/accounts/kinds";
 import { DAY_MS } from "@cawco/core/time";
-import { Elysia, problem, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { accountForecasts, carrySequence, historyPoints } from "../forecast";
 import type { HubContext } from "../hub-context";
 import { place as placeAccount } from "../placement";
@@ -205,11 +205,8 @@ export const accountPlacementRoutes = ({
       },
       async ({ query }) => {
         const asked = await askedStart(query);
-        if ("refusal" in asked) {
-          return problem(asked.status, {
-            code: "placement-refused",
-            detail: asked.refusal,
-          });
+        if (asked instanceof ElysiaStatus) {
+          return asked;
         }
         // Where a start would go says what its start would: a machine
         // that refuses the harness refuses it (`placeSpawn`).

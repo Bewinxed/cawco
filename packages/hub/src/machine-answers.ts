@@ -3,7 +3,7 @@ import type { MachineMemorySet, SkillFile } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
 import { SkillFileSchema } from "@cawco/core/stored-shapes";
 import { isToolStatus, type ToolStatus } from "@cawco/core/tools";
-import { problem } from "elysia";
+import { HTTPError, problem } from "elysia";
 import { z } from "zod";
 import { received } from "./stored-json";
 
@@ -46,6 +46,33 @@ export type AwayProblem = ReturnType<typeof awayProblem>;
 
 /** {@link silentProblem}'s answer. */
 export type SilentProblem = ReturnType<typeof silentProblem>;
+
+/** A machine that answered a call with its failure: 502, in the machine's words, at the code of what failed. */
+export type MachineFailed = ReturnType<
+  typeof problem<502, { code: string; detail: string }>
+>;
+
+/**
+ * A machine's cause thrown where its caller throws (server.ts `callMachine`,
+ * a session's context read, a hub start): Elysia's own thrown problem
+ * (`HTTPError`), whose `value()` is the problem it holds, so a route it
+ * reaches answers that problem, and the hub's error hook names an away
+ * machine on it (machine-reads.ts `nameAwayMachine`). Its message is the problem's words, for a caller that
+ * catches it and says them.
+ */
+export class MachineProblem extends HTTPError {
+  /** As `problem()` writes it: the problem's `code` says what it is. */
+  readonly type = "about:blank";
+  readonly problem: AwayProblem | SilentProblem | MachineFailed;
+  constructor(answer: AwayProblem | SilentProblem | MachineFailed) {
+    super(answer.response.detail);
+    this.name = "MachineProblem";
+    this.problem = answer;
+  }
+  override value() {
+    return this.problem;
+  }
+}
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 export type ControlResult = Extract<FramePayload, { kind: "control_result" }>;

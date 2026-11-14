@@ -251,7 +251,7 @@ type HomeLoginRefused<Status extends 409 | 422> = ReturnType<
 >;
 
 /** A session's permission mode not applied, at `Status`, in the words of what refused it (server.ts `applyPermissionMode`). */
-type ModeRefused<Status extends 400 | 500> = ReturnType<
+type ModeRefused<Status extends 400 | 502> = ReturnType<
   typeof problem<Status, { code: "mode-refused"; detail: string }>
 >;
 
@@ -329,7 +329,7 @@ export interface ClosureContext {
     | ModeRefused<400>
     | AwayProblem
     | SilentProblem
-    | ModeRefused<500>
+    | ModeRefused<502>
     | undefined
   >;
   archiveView: () => ArchiveView;
@@ -357,7 +357,13 @@ export interface ClosureContext {
     model?: string;
     projectId?: string;
     type?: string;
-  }) => Promise<NamedSpawn | { refusal: string; status: 400 | 503 }>;
+  }) => Promise<
+    | NamedSpawn
+    | ReturnType<
+        typeof problem<400, { code: "placement-refused"; detail: string }>
+      >
+    | Exclude<Awaited<ReturnType<ClosureContext["piDefaultFor"]>>, NamedSpawn>
+  >;
   askerOf: (request: Request) => string;
   askersOf: (row: InstanceRow | undefined) => string[];
   askInOrder: (
@@ -897,7 +903,13 @@ export interface ClosureContext {
   piDefaultFor: (
     machineId: string,
     payload: NamedSpawn
-  ) => Promise<NamedSpawn | { refusal: string }>;
+  ) => Promise<
+    | NamedSpawn
+    | SilentProblem
+    | ReturnType<
+        typeof problem<502, { code: "spawn-default-unnamed"; detail: string }>
+      >
+  >;
   placedOn: (machineId: string, accountId: string) => boolean;
   placementInput: (
     machineId: string,

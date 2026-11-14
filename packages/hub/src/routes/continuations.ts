@@ -1,7 +1,6 @@
 import { Elysia, problem, t, ValidationError } from "elysia";
 import type { HubContext } from "../hub-context";
-import { MachineAway } from "../hub-shapes";
-import { awayProblem } from "../machine-answers";
+import { MachineProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
 import { continuationCalls } from "../session-calls";
 import { firstValidationIssue } from "../validation-issue";
@@ -61,8 +60,8 @@ export const continuationRoutes = (
               entries: prepared.entries,
             };
           } catch (error) {
-            if (error instanceof MachineAway) {
-              return awayProblem(error.machineId, error.message);
+            if (error instanceof MachineProblem) {
+              return error.value();
             }
             return problem(422, {
               code: "thrown-words",

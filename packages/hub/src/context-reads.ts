@@ -24,14 +24,18 @@ import type {
 } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { machineAccount } from "./accounts";
 import { finishedAnswer } from "./continuation-words";
 import type { ContinuationSource } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
 import type { SessionLocation } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
-import type { Unanswered } from "./machine-answers";
+import {
+  MachineProblem,
+  silentProblem,
+  type Unanswered,
+} from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { unreachable } from "./unreachable";
 
@@ -196,11 +200,13 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        throw new Error(
-          asked.reason === "dead"
-            ? ctx.machineFault(machineId, "offline")
-            : `${ctx.machineName(machineId)} didn't list its ${harness} models within ${secondsOf(asked.after)} s. Try again in a moment.`
-        );
+        throw asked.reason === "dead"
+          ? ctx.awayError(machineId)
+          : new MachineProblem(
+              silentProblem(
+                `${ctx.machineName(machineId)} didn't list its ${harness} models within ${secondsOf(asked.after)} s. Try again in a moment.`
+              )
+            );
       case "answered":
         break;
       default:
@@ -208,7 +214,12 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     }
     const answer = asked.value;
     if (!answer.ok) {
-      throw new Error(answer.error ?? `${harness} could not list its models`);
+      throw new MachineProblem(
+        problem(502, {
+          code: "machine-call-failed",
+          detail: answer.error ?? `${harness} could not list its models`,
+        })
+      );
     }
     return (answer.result as ModelInfo[]).find((row) => row.value === model)
       ?.contextWindow;
@@ -303,8 +314,10 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     }
     const reported = await reportedContextOf(row);
     if ("kind" in reported) {
-      throw new Error(
-        `${ctx.sessionName(row)}'s context could not be read: ${ctx.silentWords(row.machineId, reported)}`
+      throw ctx.unansweredError(
+        row.machineId,
+        reported,
+        `${ctx.sessionName(row)}'s context could not be read`
       );
     }
     return "tokens" in reported ? reported.tokens : estimateTokens(scopeChars);
@@ -317,13 +330,19 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       case "unanswered":
         throw answer.reason === "dead"
           ? ctx.awayError(row.machineId)
-          : new Error(
-              `session ${row.id} did not report its context within ${secondsOf(answer.after)} s`
+          : new MachineProblem(
+              silentProblem(
+                `session ${row.id} did not report its context within ${secondsOf(answer.after)} s`
+              )
             );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            answer.value.error ?? "the session could not read its context"
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail:
+                answer.value.error ?? "the session could not read its context",
+            })
           );
         }
         return (answer.value.result as { totalTokens: number }).totalTokens;
@@ -417,11 +436,16 @@ export const createContextReads = (ctx: ContextReadsContext) => {
       case "unanswered":
         throw answer.reason === "dead"
           ? ctx.awayError(where.machineId)
-          : new Error(ctx.machineFault(where.machineId, "silent"));
+          : new MachineProblem(
+              silentProblem(ctx.machineFault(where.machineId, "silent"))
+            );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            answer.value.error ?? "the transcript could not be read"
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail: answer.value.error ?? "the transcript could not be read",
+            })
           );
         }
         return (

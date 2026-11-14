@@ -19,10 +19,10 @@ export type SpawnProblem =
   | Problem<400, "spawn-payload-unnamed">
   | Problem<409, "spawn-session-key-held">
   | AwayProblem
-  | Problem<503, "spawn-default-unnamed">
+  | Problem<502, "spawn-default-unnamed">
   | Problem<400, "spawn-not-settled">
   | Problem<404, "spawn-project-deleted">
   | Problem<400, "spawn-not-placed">
   | Problem<409, "launch-account-unavailable">
   | SilentProblem
-  | Problem<422, "spawn-start-failed">;
+  | Problem<502, "spawn-start-failed">;

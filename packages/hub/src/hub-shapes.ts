@@ -8,19 +8,21 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { NamedSpawn } from "@cawco/core/protocol";
 import type { DbShape } from "./db";
+import { awayProblem, MachineProblem } from "./machine-answers";
 import type { HubSocket } from "./wire-socket";
 
 /**
  * A step or a read that could not finish because its machine went away. Not
  * a failure: a continuation waits, and the machine's next register carries it
- * on; a route answers it as the machine away (`awayProblem`: 503 naming it),
- * which a reader reads again once the machine is back.
+ * on; thrown to a route it is answered as the machine away (a
+ * `MachineProblem` holding `awayProblem`: 503 naming it), which a reader
+ * reads again once the machine is back.
  */
-export class MachineAway extends Error {
+export class MachineAway extends MachineProblem {
   readonly machineId: string;
   /** `words`: the hub's `machineFault`, the machine by its name. */
   constructor(machineId: string, words: string) {
-    super(words);
+    super(awayProblem(machineId, words));
     this.name = "MachineAway";
     this.machineId = machineId;
   }

@@ -45,10 +45,10 @@ import type {
   PreparedContinuation,
 } from "./db/stored-types";
 import type { createForgePosts } from "./forge-posts";
-import { type ContinueOutcome, MachineAway } from "./hub-shapes";
+import type { ContinueOutcome } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import type { ControlResult, Unanswered } from "./machine-answers";
-import { awayProblem, silentProblem } from "./machine-answers";
+import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
 import { machineOut } from "./machine-out";
 import type { MachinePause, PauseCaller } from "./machine-pause";
 import type { createOpenItems } from "./open-items";
@@ -278,7 +278,7 @@ export const continuationCalls = ({
    * starts the job and answers with its ids at once. The job's stages reach
    * every dashboard on the `instances` frames (`continuations`); nothing about
    * the request that started it can stop it, only its Cancel. A machine
-   * that is away is answered `awayProblem`.
+   * that is away, silent or failing is answered as its `MachineProblem`.
    */
   continueFrom: async (sourceId: string, body: ContinueAsk) => {
     const { askedBy, ...request } = body;
@@ -294,8 +294,8 @@ export const continuationCalls = ({
       why = await continuationRefusal(prepared, request, asker);
     } catch (error) {
       release();
-      if (error instanceof MachineAway) {
-        return awayProblem(error.machineId, error.message);
+      if (error instanceof MachineProblem) {
+        return error.value();
       }
       return problem(422, {
         code: "thrown-words",

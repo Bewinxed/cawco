@@ -102,9 +102,9 @@ const awayHeaders = (
 
 /**
  * The hub's one setter of {@link awayHeaders}: Elysia's `mapResponse`, run on
- * every answer a route sends (a returned problem, and a thrown one the hub's
- * error hook answers as returned). An answer that is `awayProblem`'s, from
- * however deep, names its machine on its headers; any other is left as it is.
+ * every answer a route returns, and its `onError`, on a `MachineProblem` one
+ * throws. An answer that is `awayProblem`'s, from however deep, names its
+ * machine on its headers; any other is left as it is.
  */
 export const nameAwayMachine =
   (ctx: MachineReadsContext) =>
@@ -227,7 +227,7 @@ const readOffMachine = async <Copy>(
     case "answered":
       return answer.value.ok
         ? { copy: copyOf(answer.value.result) }
-        : problem(500, {
+        : problem(502, {
             code: "machine-read-failed",
             detail: answer.value.error ?? failed,
           });

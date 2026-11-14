@@ -28,7 +28,7 @@ import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
 import { sessionLabel } from "./labels";
 import type { createLaunches } from "./launches";
-import { awayProblem, silentProblem } from "./machine-answers";
+import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek, peekResume } from "./payload-peeks";
 import type { PlacementInput } from "./placement";
@@ -776,8 +776,9 @@ export const createSpawns = (ctx: SpawnsContext) => {
   /**
    * A start as the placement explain query describes it, for placement to
    * read, with pi's `default` named as its machine answers it in `cwd`; or
-   * why there is none: a 400 for a harness CawCo does not run, a 503 for a
-   * machine that could not say pi's default.
+   * why there is none: a 400 for a harness CawCo does not run, or the
+   * machine's own problem when it could not say pi's default (silent, or
+   * its failure).
    */
   const askedStart = async (query: {
     account?: string;
@@ -788,10 +789,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
     model?: string;
     projectId?: string;
     type?: string;
-  }): Promise<NamedSpawn | { refusal: string; status: 400 | 503 }> => {
+  }) => {
     const harness = harnessNamed(query.harness);
     if (!harness) {
-      return { refusal: HARNESS_UNNAMED, status: 400 };
+      return problem(400, {
+        code: "placement-refused",
+        detail: HARNESS_UNNAMED,
+      });
     }
     const { projectId } = query;
     const asked = await ctx.piDefaultFor(query.machineId, {
@@ -804,7 +808,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...(query.type ? { delegateType: { name: query.type, projectId } } : {}),
       ...(query.kind === "delegates" ? { spawnedBy: { instanceId: "" } } : {}),
     });
-    return "refusal" in asked ? { ...asked, status: 503 } : asked;
+    return asked;
   };
 
   /** {@link placeSpawn} as a problem a caller passes up: a deleted project's is a 404, any other a 400. */
@@ -1183,11 +1187,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     fallbackMode?: string
   ) => {
     const payload = await ctx.piDefaultFor(machineId, asked);
-    if ("refusal" in payload) {
-      return problem(503, {
-        code: "spawn-default-unnamed",
-        detail: payload.refusal,
-      });
+    if (payload instanceof ElysiaStatus) {
+      return payload;
     }
     // Cleared before it waits on anything: what stops a start is said here.
     const cleared = clearedToStart(
@@ -1222,10 +1223,12 @@ export const createSpawns = (ctx: SpawnsContext) => {
         );
       case "answered":
         if (!reply.value.ok) {
-          return problem(422, {
-            code: "spawn-start-failed",
-            detail: reply.value.error ?? "the session failed to start",
-          });
+          return reply.value.error === MACHINE_DISCONNECTED
+            ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
+            : problem(502, {
+                code: "spawn-start-failed",
+                detail: reply.value.error ?? "the session failed to start",
+              });
         }
         return;
       default:
@@ -1365,8 +1368,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
       throw new StartsHeld(machineId, held.words);
     }
     const named = await ctx.piDefaultFor(machineId, asked);
-    if ("refusal" in named) {
-      throw new Error(named.refusal);
+    if (named instanceof ElysiaStatus) {
+      throw new MachineProblem(named);
     }
     const settled = settleSpawn(machineId, named, fallbackMode);
     if ("refusal" in settled) {
@@ -1431,7 +1434,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return startedOrThrown(reply, machineId, payload.harness);
   };
 
-  /** A hub start's answer from its machine: nothing when the session is in place; else its failure thrown in the machine's words. */
+  /** A hub start's answer from its machine: nothing when the session is in place; else its cause thrown (`MachineProblem`), in the machine's words. */
   const startedOrThrown = (
     reply: Awaited<ReturnType<typeof ctx.awaitStart>>,
     machineId: string,
@@ -1439,14 +1442,21 @@ export const createSpawns = (ctx: SpawnsContext) => {
   ): undefined => {
     switch (reply.kind) {
       case "unanswered":
-        throw new Error(
-          `the ${harness} session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
+        throw new MachineProblem(
+          silentProblem(
+            `the ${harness} session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
+          )
         );
       case "answered":
         if (!reply.value.ok) {
           throw reply.value.error === MACHINE_DISCONNECTED
             ? ctx.awayError(machineId)
-            : new Error(reply.value.error ?? "the session failed to start");
+            : new MachineProblem(
+                problem(502, {
+                  code: "spawn-start-failed",
+                  detail: reply.value.error ?? "the session failed to start",
+                })
+              );
         }
         return;
       default:
