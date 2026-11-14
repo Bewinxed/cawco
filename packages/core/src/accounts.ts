@@ -397,6 +397,34 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
 };
 
 /**
+ * The policy the hub acts on for a provider whose saved policy does not
+ * read (hub db/accounts.ts `routing`, migration 0399): never the default,
+ * and nothing the hub does by itself that the saved policy may not have
+ * allowed. It moves no session to another account at its limit or ahead
+ * of a run-out (`move` off: the hub's rule 3 waits, `off`); a move it still
+ * makes (a person's, a refused sign-in's) goes whole, compacted and
+ * summarised by none, and announced first however small its context
+ * (`moveWholeUnderK` 0), so a person can stop it; no session is sent a
+ * filing turn (`fileRoom` 0); a hold an hour past its reset, the shortest
+ * cutoff a person can save, waits for a person or its parent; and a hold
+ * with no reset to wait for is looked at again after an hour, not sooner.
+ * The summariser only writes a summary someone asks for, so it stays the
+ * default's. A save of the policy replaces it.
+ */
+export const RESTRICTIVE_AT_LIMIT: AtLimit = {
+  move: false,
+  waitMinutes: 60,
+  staleAfterHours: 1,
+  moveWholeUnderK: 0,
+  compaction: {
+    beforeMove: "whole",
+    atLimit: "whole",
+    fileRoom: 0,
+    summarizer: DEFAULT_COMPACTION.summarizer,
+  },
+};
+
+/**
  * The strategies a provider's routing can choose from. Spread weighs how
  * long each account lasts and Soonest reset when its windows reset, both
  * read from the account's limits; a provider whose limits CawCo doesn't read

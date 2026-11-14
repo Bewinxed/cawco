@@ -1718,13 +1718,21 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      * {@link carryStall}), held until the earliest reset (`until`, epoch ms;
      * its own account's, or another's that frees first and takes it), held
      * on a refused sign-in until an account can take it, or held past the
-     * cutoff (`stale`), carried on only once written to. Undefined while it
+     * cutoff (`stale`), carried on only once written to; a hold whose
+     * provider's saved policy does not read says so. Undefined while it
      * runs.
      */
     stall(instanceId: string): Stall | undefined {
       const held = db.atLimit.hold(instanceId);
       if (held) {
-        return heldStall(held);
+        const stall = heldStall(held);
+        const provider = db.accounts.get(held.accountId)?.provider;
+        return provider && db.accounts.atLimitUnread(provider) !== null
+          ? {
+              ...stall,
+              words: accountsWords.stalled.policyUnread(stall.words),
+            }
+          : stall;
       }
       const moving = towards.get(instanceId);
       if (!moving) {

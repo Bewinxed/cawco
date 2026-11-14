@@ -23,6 +23,7 @@ import { eq, is, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
 import type { DbCore } from "./core";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
@@ -105,6 +106,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every budget 0398 keeps as not read, read before it runs.
       logBudgetUnread(client);
+    },
+  },
+  {
+    name: "at-limit-unread",
+    before: "0399_at_limit_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every at-limit policy 0399 keeps as not read, read before it runs.
+      logAtLimitUnread(client);
     },
   },
   {

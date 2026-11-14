@@ -464,6 +464,14 @@ export const accountsWords = {
     /** The same, held on a refused sign-in. */
     staleSignedOut: (from: string, day: string) =>
       `Stopped: ${from}’s sign-in was refused on ${day}; carries on once written to`,
+    /**
+     * Any of the above, held on an account whose provider's saved at-limit
+     * policy does not read (hub db/accounts.ts `atLimitUnread`): the hub acts
+     * on the restrictive policy (core `RESTRICTIVE_AT_LIMIT`) until it is
+     * saved again.
+     */
+    policyUnread: (stalled: string) =>
+      `${stalled} · Its provider’s saved at-limit policy can’t be read, so CawCo moves, compacts and files nothing by itself until it is saved again in Configure › Accounts`,
   },
 
   // ── A session held past the cutoff, in Needs you (hub at-limit.ts `goneStale`) ─

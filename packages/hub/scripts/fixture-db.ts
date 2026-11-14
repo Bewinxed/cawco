@@ -16,8 +16,9 @@
  * With `--at`, this file and hub-in-process.ts run inside a worktree of that
  * commit, against its hub; the seed below must fit that commit's Db.
  *
- * With `--lists`, the same fleet and the lists fixture's sessions, types and
- * budgets besides ({@link seedLists}, {@link seedBudgets}), written to
+ * With `--lists`, the same fleet and the lists fixture's sessions, types,
+ * budgets and at-limit policies besides ({@link seedLists},
+ * {@link seedBudgets}, {@link seedAtLimit}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -38,8 +39,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
 /**
  * `--lists`: the same fleet with every shape a session's or delegate type's
  * lists took before migration 0397 (what it may start, its starting set, a
- * trashed type, a continued work item), and every shape a budget took before
- * migration 0398, written here.
+ * trashed type, a continued work item), every shape a budget took before
+ * migration 0398, and every shape a provider's at-limit policy took before
+ * migration 0399, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -472,6 +474,46 @@ function seedBudgets(dbPath: string): void {
   sqlite.close();
 }
 
+/**
+ * Every shape migration 0399 reads a provider's at-limit policy in, as the
+ * hub's one writer stored it (the whole policy as JSON, a key the hub no
+ * longer reads kept) and as a hand edit could: a provider never saved (an
+ * account and no row), the shape every live row holds, each field set away
+ * from its default, a room left from before `fileRoom` (`fileAtPct` 0,
+ * filing off), a policy that is not JSON, and one that reads in part.
+ */
+function seedAtLimit(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  sqlite.run(
+    "INSERT INTO accounts (id, provider, kind, label, hue, \"order\", created_at) VALUES (?, 'deepseek', 'api_key', 'DeepSeek key', 'amber', 0, ?)",
+    [crypto.randomUUID(), Date.UTC(2026, 9, 3)]
+  );
+  const routing = (provider: string, atLimit: string): void => {
+    sqlite.run(
+      "INSERT INTO account_routing (provider, yours_strategy, delegates_strategy, at_limit) VALUES (?, 'fill-first', 'fill-first', ?)",
+      [provider, atLimit]
+    );
+  };
+  routing(
+    "anthropic",
+    '{"move":true,"waitMinutes":15,"moveWholeUnderK":200,"delegateWork":"move","staleAfterHours":24,"compaction":{"beforeMove":"native","atLimit":"summary","summarizer":{"harness":"claude","model":"claude-sonnet-5-5"},"fileRoom":30000}}'
+  );
+  routing(
+    "openai",
+    '{"move":false,"waitMinutes":0,"moveWholeUnderK":50,"staleAfterHours":6,"compaction":{"beforeMove":"whole","atLimit":"native","fileRoom":0,"summarizer":{"harness":"opencode","model":"openai/gpt-5.5"}}}'
+  );
+  routing(
+    "openrouter",
+    '{"move":true,"waitMinutes":30,"moveWholeUnderK":120,"staleAfterHours":48,"compaction":{"beforeMove":"summary","atLimit":"summary","fileAtPct":0,"summarizer":{"harness":"pi","model":"anthropic/claude-haiku-5"}}}'
+  );
+  routing("zai", "move at the limit, wait 15");
+  routing(
+    "moonshot",
+    '{"move":true,"waitMinutes":15,"moveWholeUnderK":200,"staleAfterHours":"a day","compaction":{"beforeMove":"native","atLimit":"summary","fileAtPct":85,"summarizer":{"harness":"claude","model":""}}}'
+  );
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -490,6 +532,7 @@ async function seed(
   if (withLists) {
     seedByHand(dbPath, continued);
     seedBudgets(dbPath);
+    seedAtLimit(dbPath);
   }
 }
 

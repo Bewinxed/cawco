@@ -260,39 +260,6 @@ const ArtifactThumbnailShape = declared(
 export const ArtifactThumbnailSchema = ArtifactThumbnailShape;
 export type ArtifactThumbnailOutput = z.output<typeof ArtifactThumbnailShape>;
 
-const CompactMethodShape = declared(
-  z.enum(["native", "summary", "whole"]),
-  "CompactMethod",
-  "packages/core/src/accounts/kinds.ts"
-);
-export type CompactMethodOutput = z.output<typeof CompactMethodShape>;
-
-const CompactionShape = declared(
-  z.object({
-    atLimit: CompactMethodShape,
-    beforeMove: CompactMethodShape,
-    fileRoom: z.number(),
-    summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
-  }),
-  "Compaction",
-  "packages/core/src/accounts.ts"
-);
-export type CompactionOutput = z.output<typeof CompactionShape>;
-
-const AtLimitShape = declared(
-  z.object({
-    compaction: CompactionShape,
-    move: z.boolean(),
-    moveWholeUnderK: z.number(),
-    staleAfterHours: z.number(),
-    waitMinutes: z.number(),
-  }),
-  "AtLimit",
-  "packages/core/src/accounts.ts"
-);
-export const AtLimitSchema = AtLimitShape;
-export type AtLimitOutput = z.output<typeof AtLimitShape>;
-
 const ArtifactBaseShape = declared(
   z.object({ name: z.string().optional(), primary: z.boolean().optional() }),
   "ArtifactBase",
