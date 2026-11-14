@@ -24,8 +24,8 @@
  *
  * And every `cawco tool <name> … '<json>'` a script runs (a session's tool,
  * through the CLI's door): its arguments, the first JSON object after the
- * tool's name, are matched against that tool's input schema (route-types.ts
- * reads the same listing, hub tool-inputs.ts), its expansions read as above,
+ * tool's name, are matched against that tool's input schema (hub
+ * tool-inputs.ts), its expansions read as above,
  * and a tool no session is listed is named.
  *
  * It fails naming each field a route or tool doesn't take, each body it

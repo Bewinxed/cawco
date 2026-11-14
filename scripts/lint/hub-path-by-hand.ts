@@ -2,18 +2,20 @@
  * A hub path is the clients' to write: every TypeScript caller of the hub
  * reaches it through Eden's typed client (`@cawco/hub/client`, which the
  * dashboard's `platform/hub.ts` builds from too), or a route's address from
- * it (`hubPath`) for a link, so a hub path (`/api/…`, `/health`) built by hand in a string or
- * a template anywhere else is refused, whether it is fetched there or handed
- * on. The client's own transport hands it on as a whole URL, which this rule
- * reads from no literal.
+ * it (`hubPath`) for a link, so a hub path (`/api/…`, `/health`) built by
+ * hand in a string or a template anywhere else is refused, whether it is
+ * fetched there or handed on. The client's own transport hands it on as a
+ * whole URL, which this rule reads from no literal.
  *
  * A path that is only compared stands: an operand of `===` or `!==`, the
  * argument of `startsWith`, `endsWith`, `includes` or `indexOf`, or a `case`
  * label (a test that reads a URL the page asked, a stand-in hub that answers
  * by path). So does one in an import or a type, and one in {@link NOT_HUB}:
  * a path on something other than the hub (OpenCode's server, neko, a
- * GitHub Enterprise host). The files below are the clients' seams and what
- * serves or proxies the hub's paths rather than asking them.
+ * GitHub Enterprise host). So do the files {@link OWN} lists, each with
+ * why: data that holds a path the hub wrote, the `/api` proxy that forwards
+ * them, code pinned to the native app's interpreter, and the checks that
+ * read the paths others send.
  *
  * `hubPath` (`@cawco/hub/client`: a route's address from Eden's path, for a
  * send Eden's client cannot make) only in the files {@link HUB_PATH_USERS}
@@ -57,9 +59,6 @@ const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/gu;
 
 /** Files that write hub paths of necessity, each with why. */
 const OWN: Record<string, string> = {
-  "packages/core/src/hub-request.ts": "the door itself",
-  "packages/core/src/hub-routes.gen.ts":
-    "the route table's types, generated, keyed by each route's path",
   "packages/core/src/attachments.ts":
     "a shown file's `ref` is the stored form the hub writes (routes/files.ts) and a message keeps: data, sent by nothing here",
   "apps/dashboard/src/routes/api/[...path]/+server.ts":
@@ -83,7 +82,7 @@ const HUB_PATH_USERS: Record<string, string> = {
   "apps/dashboard/src/lib/cawco/transcript/file-upload.ts":
     "an upload that says how far it has gone: only an XHR does",
   "apps/dashboard/src/lib/cawco/views-api.ts":
-    "a view's own Query arguments, which no type holds and Eden types per tool",
+    "a view's tool arguments are runtime data from a view program, so no static type holds them and Eden's client takes each tool's body only as its route types it; the hub's body schema checks them",
   "apps/dashboard/src/lib/cawco/artifact-api.ts":
     "an artifact's thumbnail, an element's src",
   "apps/dashboard/src/lib/platform/hub-file.ts":

@@ -6,10 +6,11 @@
  * `fetch` sends without one, and a reader sees that it does.
  *
  * The agent's update loop bound `fetch` to `provenFetch` this way; moved onto
- * core's door, whose sender defaulted to the platform's `fetch`, its calls
+ * a hub client whose sender defaulted to the platform's `fetch`, its calls
  * went out with no machine proof, and a hub requiring paired devices refused
- * them as anonymous (the nightly from 886030601). core's `fetchHub` now takes
- * its sender at every call; this keeps the name from meaning two things.
+ * them as anonymous (the nightly from 886030601). The hub's client
+ * (`@cawco/hub/client` `hubClient`) now takes its sender at every client;
+ * this keeps the name from meaning two things.
  *
  * A parameter named `fetch` stands (a SvelteKit load's own, handed in), and
  * so does an assignment to `globalThis.fetch` or a property named `fetch`.

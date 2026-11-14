@@ -8,7 +8,6 @@
     "**/dist/**",
     "**/fixtures/**",
     "packages/core/src/stored-shapes.ts",
-    "packages/core/src/hub-routes.gen.ts",
     "packages/hub/src/db/stored-shapes.ts",
     "packages/agent/src/stored-shapes.ts",
     "apps/dashboard/src/lib/cawco/stored-shapes.ts",

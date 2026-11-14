@@ -600,9 +600,6 @@ const gated: Gated[] = [
       }
     },
   },
-  // What every hub route takes, for core's request door (hub-request.ts):
-  // read off the same in-process hub, so the same inputs.
-  run("packages/hub", "route-types:check"),
   run("packages/hub", "migrations:check"),
   // The types it reads come through packages/hub/tsconfig.json, which
   // extends tsconfig.base.json, which extends tsconfig.paths.json, and from

@@ -20,8 +20,6 @@
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",
-    "route-types": "bun scripts/route-types.ts",
-    "route-types:check": "bun scripts/route-types.ts --check",
     "skills:check": "bun scripts/skills-check.ts",
     "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts",
     "stored-shapes": "bun scripts/stored-shapes.ts && bun scripts/stored-shapes.ts --dashboard",
@@ -71,7 +69,6 @@
     "@elysia/openapi": "2.0.0-rc.1",
     "@types/bun": "^1.4.3",
     "drizzle-kit": "^0.31.11",
-    "openapi-typescript": "7.13.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-json-schema": "0.68.0"
   }

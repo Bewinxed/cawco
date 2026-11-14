@@ -4,7 +4,6 @@
  */
 
 import type { ProjectCap } from "@cawco/core/areas";
-import type { HubSent } from "@cawco/core/hub-request";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type {
   ClaudeExtraUsage,
@@ -51,8 +50,9 @@ export function hubMidnight(
  * kept for as long as the surface stands.
  */
 /** What a summary is grouped by, as the hub's route takes it. */
-export type SummaryGroup =
-  HubSent<"GET /api/usage/summary">["query"]["groupBy"];
+export type SummaryGroup = NonNullable<
+  Parameters<typeof hub.api.usage.summary.get>[0]
+>["query"]["groupBy"];
 
 export function summaryReader(): (
   harness: string,

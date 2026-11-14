@@ -1,9 +1,11 @@
 /**
  * What a machine's agent calls on its hub, read from the agent's source at
  * any commit: every string the agent builds a hub path from (`/api/…`,
- * `/ws…`, `/mcp…`, `/health`), and every route it names to core's request
- * door (`"GET /api/agents/:machineId"`), as a path pattern, with where it is
- * built.
+ * `/ws…`, `/mcp…`, `/health`), every chain it asks the hub's typed client
+ * along (`client.api.lfs.projects({ id }).get()`), and every route literal
+ * an older agent named to core's request door, since deleted
+ * (`"GET /api/agents/:machineId"`, nightlies up to 7813), as a path pattern,
+ * with where it is built.
  *
  * A path built from pieces is folded where its pieces are consts of the same
  * file: nightly 4670 asked `${hub}/api/binary-updates/${path}`, `path` a
@@ -128,7 +130,7 @@ function render(
  * (`cawcoBase + "/api/instances"`).
  */
 const EMBEDDED = /["'](\/(?:api|ws|mcp|health)(?=[/?#"']|$)[^\s"'`?#]*)/gu;
-/** A route literal of core's request door (hub-request.ts `hubRequest`): its method, then the path as the hub declares it. */
+/** A route literal of core's former request door, which shipped agents up to nightly 7813 named: its method, then the path as the hub declares it. */
 const DOOR_ROUTE = /^(?:GET|POST|PUT|PATCH|DELETE) (\/[^\s\0]*)$/u;
 
 /**
@@ -153,7 +155,7 @@ const patternOf = (path: string): string => {
  * into the string it is (code the agent writes out spans lines).
  */
 const hubPathsIn = (built: string): { lines: number; pattern: string }[] => {
-  // A route as core's request door names it (`"GET /api/agents/:machineId"`):
+  // A route as core's former request door named it (`"GET /api/agents/:machineId"`):
   // each parameter is a segment any value fills.
   const route = DOOR_ROUTE.exec(built)?.[1];
   if (route) {
@@ -201,6 +203,231 @@ const isLocalUrl = (node: ts.Node): boolean =>
   node.parent.expression.text === LOCAL_URL_HELPER &&
   node.parent.arguments.includes(node as ts.Expression);
 
+/**
+ * The hub's typed client (`@cawco/hub/client`): a client is built by
+ * `hubClient(…)` and typed `HubClient`. Its routes alone, for an address
+ * handed on, are `hubRoutes` (read by the `hubPath` function), and were
+ * `hubPath` itself in the agent's own hub-client.ts of nightly 7813, read by
+ * `["~path"]`.
+ */
+const CLIENT_MAKER = "hubClient";
+const CLIENT_TYPE = "HubClient";
+const ROUTES_ONLY = new Set(["hubRoutes", "hubPath"]);
+/** Eden's member that answers a chain's path: no segment, the chain's end. */
+const PATH_MEMBER = "~path";
+/** The members that send a request at the end of a client's chain (Eden treaty2's methods), not path segments. */
+const EDEN_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "delete",
+  "patch",
+  "query",
+  "options",
+  "head",
+  "connect",
+  "subscribe",
+]);
+
+/** The function or variable `statements` declare by `name`. */
+const declaredIn = (
+  statements: readonly ts.Statement[],
+  name: string
+): ts.VariableDeclaration | ts.FunctionDeclaration | undefined => {
+  for (const statement of statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) {
+      return statement;
+    }
+    const declared = ts.isVariableStatement(statement)
+      ? statement.declarationList.declarations.find(
+          (one) => ts.isIdentifier(one.name) && one.name.text === name
+        )
+      : undefined;
+    if (declared) {
+      return declared;
+    }
+  }
+};
+
+/** The declaration `name` binds where `at` reads it: a parameter, a variable or a function, the nearest scope's, outward. */
+const bindingAt = (
+  at: ts.Node,
+  name: string
+):
+  | ts.ParameterDeclaration
+  | ts.VariableDeclaration
+  | ts.FunctionDeclaration
+  | undefined => {
+  for (let scope = at.parent; scope; scope = scope.parent) {
+    const bound =
+      (ts.isFunctionLike(scope)
+        ? scope.parameters.find(
+            (one) => ts.isIdentifier(one.name) && one.name.text === name
+          )
+        : undefined) ??
+      (ts.isBlock(scope) || ts.isSourceFile(scope)
+        ? declaredIn(scope.statements, name)
+        : undefined);
+    if (bound) {
+      return bound;
+    }
+  }
+};
+
+/** Whether `type` is written as the client's type. */
+const namesClientType = (type: ts.TypeNode | undefined): boolean =>
+  type !== undefined &&
+  ts.isTypeReferenceNode(type) &&
+  ts.isIdentifier(type.typeName) &&
+  type.typeName.text === CLIENT_TYPE;
+
+/** Whether `node` makes a client: `hubClient(…)`. */
+const makesClient = (node: ts.Node): boolean =>
+  ts.isCallExpression(node) &&
+  ts.isIdentifier(node.expression) &&
+  node.expression.text === CLIENT_MAKER;
+
+/**
+ * Whether the untyped parameter `parameter` is handed a client: its function
+ * is an argument of a call to a function of the same file whose parameter
+ * there is typed `(client: HubClient) => …` (binary-update.ts `askHub`,
+ * host-lfs.ts `askHub`).
+ */
+const handedClient = (parameter: ts.ParameterDeclaration): boolean => {
+  const fn = parameter.parent;
+  const call = fn.parent;
+  if (!(
+    (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) &&
+    fn.parameters.indexOf(parameter) === 0 &&
+    ts.isCallExpression(call) &&
+    ts.isIdentifier(call.expression)
+  )) {
+    return false;
+  }
+  const callee = bindingAt(call, call.expression.text);
+  const declared =
+    callee && ts.isVariableDeclaration(callee) ? callee.initializer : callee;
+  if (!(
+    declared &&
+    (ts.isFunctionDeclaration(declared) ||
+      ts.isArrowFunction(declared) ||
+      ts.isFunctionExpression(declared))
+  )) {
+    return false;
+  }
+  const taking = declared.parameters[call.arguments.indexOf(fn)]?.type;
+  return (
+    taking !== undefined &&
+    ts.isFunctionTypeNode(taking) &&
+    namesClientType(taking.parameters[0]?.type)
+  );
+};
+
+/** Whether `node` is a client, or the client's routes, that a chain of the hub's routes starts from. */
+const isClientRoot = (node: ts.Node): boolean => {
+  if (makesClient(node)) {
+    return true;
+  }
+  if (!ts.isIdentifier(node)) {
+    return false;
+  }
+  if (ROUTES_ONLY.has(node.text)) {
+    return (
+      ts.isPropertyAccessExpression(node.parent) &&
+      node.parent.expression === node
+    );
+  }
+  // Only where it is read: not a declaration's own name, nor a member's.
+  if (
+    (ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) ||
+    (ts.isParameter(node.parent) && node.parent.name === node) ||
+    (ts.isVariableDeclaration(node.parent) && node.parent.name === node)
+  ) {
+    return false;
+  }
+  const bound = bindingAt(node, node.text);
+  if (!bound || ts.isFunctionDeclaration(bound)) {
+    return false;
+  }
+  if (namesClientType(bound.type)) {
+    return true;
+  }
+  if (ts.isVariableDeclaration(bound)) {
+    return bound.initializer !== undefined && makesClient(bound.initializer);
+  }
+  return bound.type === undefined && handedClient(bound);
+};
+
+/** The chain goes no further: `up` is not a member or a call of it. */
+const STOP = Symbol("stop");
+/** The chain ends at `up`: a method that sends it, or Eden's `["~path"]`. */
+const END = Symbol("end");
+
+/** What `up`, read off `at`, adds to a chain whose last segment is `last`: a segment, its end, or nothing. */
+const edenStep = (
+  at: ts.Node,
+  up: ts.Node,
+  last: string | undefined
+): string | typeof STOP | typeof END => {
+  if (ts.isPropertyAccessExpression(up) && up.expression === at) {
+    return up.name.text;
+  }
+  if (ts.isElementAccessExpression(up) && up.expression === at) {
+    const key = up.argumentExpression;
+    if (!(ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key))) {
+      return "*";
+    }
+    return key.text === PATH_MEMBER ? END : key.text;
+  }
+  if (ts.isCallExpression(up) && up.expression === at) {
+    return last !== undefined && EDEN_METHODS.has(last) ? END : "*";
+  }
+  return STOP;
+};
+
+/**
+ * The route a chain on a client names, as a path pattern: each member a segment (`.api.lfs`, `["binary-updates"]`), each
+ * call with a path's parameter (`projects({ id })`) a segment any value fills
+ * (`*`), as Eden treaty2 builds the path, up to the method that sends it
+ * (`.get(…)`), which is no segment. A member Eden does not know by its name
+ * (`[key]`) is any segment.
+ */
+const edenRoute = (root: ts.Expression): string | undefined => {
+  const segments: string[] = [];
+  let at: ts.Node = root;
+  for (;;) {
+    const up: ts.Node = at.parent;
+    const step = edenStep(at, up, segments.at(-1));
+    if (step === STOP) {
+      break;
+    }
+    if (step === END) {
+      // The method that sends it is no segment.
+      if (ts.isCallExpression(up)) {
+        segments.pop();
+      }
+      break;
+    }
+    segments.push(step);
+    at = up;
+  }
+  return segments.length ? `/${segments.join("/")}` : undefined;
+};
+
+/** The hub paths a string or template builds, when `node` is one (a template's own pieces are read with it, not again alone). */
+const builtCalls = (
+  file: ts.SourceFile,
+  node: ts.Node
+): { lines: number; pattern: string }[] => {
+  if (!isLiteral(node) || ts.isTemplateSpan(node.parent)) {
+    return [];
+  }
+  const local = isLocalUrl(node);
+  return render(file, node, 0)
+    .filter((built) => !(local && GATEWAY_OWN.test(built)))
+    .flatMap(hubPathsIn);
+};
+
 /** Every hub call the agent's source builds. */
 export const agentCalls = (files: SourceFile[]): AgentCalls => {
   const calls: AgentCalls = new Map();
@@ -215,19 +442,17 @@ export const agentCalls = (files: SourceFile[]): AgentCalls => {
   for (const { path, text } of files) {
     const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node): void => {
-      // A template's own pieces are read with it, not again alone.
-      if (isLiteral(node) && !ts.isTemplateSpan(node.parent)) {
-        const line =
-          file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
-        const local = isLocalUrl(node);
-        for (const built of render(file, node, 0)) {
-          if (local && GATEWAY_OWN.test(built)) {
-            continue;
-          }
-          for (const { pattern, lines } of hubPathsIn(built)) {
-            record(path, pattern, line + lines);
-          }
-        }
+      const line =
+        file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
+      for (const { pattern, lines } of builtCalls(file, node)) {
+        record(path, pattern, line + lines);
+      }
+      const route =
+        ts.isExpression(node) && isClientRoot(node)
+          ? edenRoute(node)
+          : undefined;
+      if (route) {
+        record(path, route, line);
       }
       ts.forEachChild(node, visit);
     };
