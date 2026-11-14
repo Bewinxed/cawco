@@ -451,8 +451,10 @@
     fleet: () => fleet,
     held: () => held,
     heldWhy: () => heldWhy,
-    onstop,
-    onsubmit,
+    // Through the props, never their values: a composer handed another
+    // conversation sends to that one.
+    onstop: () => onstop(),
+    onsubmit: (text, extras, id) => onsubmit(text, extras, id),
     room: () => canvas.room,
     sendError: () => sendError,
     sending: () => sending,
@@ -661,7 +663,7 @@
     fleet: () => fleet,
     mentionField: () => mentionField,
     natural: () => fieldFold.natural,
-    onstop,
+    onstop: () => onstop(),
     pill: () => pill,
     recalled: () => recalled,
     recalling: () => !!recalling.recall,
