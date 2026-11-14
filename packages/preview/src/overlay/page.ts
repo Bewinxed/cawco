@@ -3431,8 +3431,7 @@ async function markPictures(): Promise<MarkPicture[]> {
   const marks = [...readPins(artifact.doc()).values()]
     .filter(pinUnsent)
     .sort((a, b) => a.number - b.number)
-    .map((pin) => ({ id: pin.id, png: pinPicture(pin.id) }))
-    .slice(0, COMMENT_LIMITS.pictures);
+    .map((pin) => ({ id: pin.id, png: pinPicture(pin.id) }));
   const pictures: MarkPicture[] = [];
   for (const { id, png } of marks) {
     const drawn = await png;
@@ -3455,9 +3454,13 @@ let picturesTimer: ReturnType<typeof setTimeout> | undefined;
 /** The pictures of what is unheard, to the hub now. */
 async function postPictures(): Promise<void> {
   const pictures = await markPictures();
-  if (pictures.length > 0) {
+  // One post carries at most COMMENT_LIMITS.pictures: the rest follow in posts of their own, so no mark goes without its picture here.
+  for (let at = 0; at < pictures.length; at += COMMENT_LIMITS.pictures) {
     await artifact
-      .pictures({ pictures, url: location.href })
+      .pictures({
+        pictures: pictures.slice(at, at + COMMENT_LIMITS.pictures),
+        url: location.href,
+      })
       .catch((error: unknown) => {
         console.warn(
           `[cawco] the marks' pictures did not reach the hub: ${error instanceof Error ? error.message : String(error)}`

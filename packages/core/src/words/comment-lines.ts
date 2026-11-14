@@ -21,6 +21,10 @@ export const chainWords = (anchor: PageAnchor): string | null => {
 export const notedLine = (text: string): string =>
   `- My note with these comments: ${JSON.stringify(text)}`;
 
+/** A delivery's line for the marks whose picture the message had no room for: its crops stop at `room`. */
+export const noCropLine = (room: number, marks: string[]): string =>
+  `- A message carries ${room} pictures of marks, so these marks have none: ${marks.join(", ")}.`;
+
 /** A delivery's line for what an update changed under a comment the agent didn't answer: its element, before and after. */
 export const askedAgainLine = (item: ChangedItem): string =>
   `- Your update changed ${item.element ?? "it"}${item.before === undefined ? "" : ` from ${JSON.stringify(item.before)}`} to ${JSON.stringify(item.after ?? item.label)}${item.moved ? ", and moved it" : ""}.`;

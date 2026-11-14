@@ -32,6 +32,7 @@ import type { StageError } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import {
   askedAgainLine,
+  noCropLine,
   notedLine,
   wroteLine,
 } from "@cawco/core/words/comment-lines";
@@ -477,10 +478,14 @@ export const createMarks = (ctx: MarksContext) => {
     const images: { data: string; mediaType: string }[] = [];
     const attachments: SendAttachment[] = [];
     const carried = new Map<string, Carried>();
+    // Marks whose crop the message had no room for: the delivery names them.
+    const uncropped: Pin[] = [];
     for (const pin of owed) {
       const picture = crop(pin);
       if (picture && images.length < COMMENT_LIMITS.pictures) {
         images.push({ data: picture, mediaType: "image/png" });
+      } else if (picture) {
+        uncropped.push(pin);
       }
       const stored = unheardEntries(pin).flatMap((entry) =>
         (entry.attachments ?? []).flatMap((one) => {
@@ -500,7 +505,7 @@ export const createMarks = (ctx: MarksContext) => {
         }
       }
     }
-    return { images, attachments, carried };
+    return { images, attachments, carried, uncropped };
   };
   /** Each owed pin's section of artifact `artifact`, its link with it, what it carries named as the delivery carries it. */
   const pinSections = (
@@ -555,7 +560,7 @@ export const createMarks = (ctx: MarksContext) => {
       return "nothing";
     }
     const url = ctx.addressOf(id, doc);
-    const { images, attachments, carried } = carryAttachments(
+    const { images, attachments, carried, uncropped } = carryAttachments(
       owed,
       (pin) => held.picture(id, pin.id) ?? undefined
     );
@@ -563,13 +568,21 @@ export const createMarks = (ctx: MarksContext) => {
     const note = only ? undefined : heldNoteOf(doc);
     const marks = [
       ...(note && owed.length > 0 ? [notedLine(note.text)] : []),
+      ...(uncropped.length > 0
+        ? [
+            noCropLine(
+              COMMENT_LIMITS.pictures,
+              uncropped.map((pin) => linkOfPin(row.id, pin))
+            ),
+          ]
+        : []),
       ...pinSections(row.id, owed, groups, url, carried),
     ];
     // A sheet's saves and compile errors go on the person's marks' own channel.
     const text = marksText(row, marks, errors, saves);
     const outcome = await deps.deliverMarks(instance, row, {
       text,
-      images: images.slice(0, COMMENT_LIMITS.pictures),
+      images,
       attachments,
     });
     sayDelivery(row, instance, {

@@ -107,7 +107,7 @@ export const COMMENT_LIMITS = {
   file: 4096,
   /** Characters of the element's text an anchor keeps. */
   anchorText: 200,
-  /** Pictures one post carries: one crop per mark. Our call. */
+  /** Pictures one post carries, and one delivery's message: one crop per mark; marks past it are posted in more posts and named in the delivery. Our call. */
   pictures: 20,
   /** Base64 characters one picture holds, about 2.2 MB of PNG. Our call. */
   pictureChars: 3_000_000,
