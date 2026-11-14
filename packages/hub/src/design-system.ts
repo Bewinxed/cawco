@@ -903,9 +903,15 @@ const COMMAND_MS = 60_000;
 /** Base64 per command, well under one shell argument's 128 KiB. */
 const CHUNK = 64 * 1024;
 
+/** The last `count` lines of a command's words joined on one line, with "…" ahead of them when earlier lines were left out. */
+const lastLines = (words: string, count: number): string => {
+  const lines = words.split("\n");
+  return `${lines.length > count ? "… " : ""}${lines.slice(-count).join(" ")}`;
+};
+
 /** What a failed command said: `what` could not be done, then the last lines it answered. */
 const failedWords = (what: string, result: CommandResult): string =>
-  `${what}: ${(result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`).split("\n").slice(-4).join(" ")}`;
+  `${what}: ${lastLines(result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`, 4)}`;
 
 /** One file's bytes at `<target>.cawco-<index>`, in base64 chunks one shell command each. */
 const writeTemporary = async (

@@ -2,8 +2,10 @@
  * One call of the `tailscale` CLI on the hub's machine, bounded: what Funnel
  * (funnel.ts) and HTTPS on the tailnet name (tailnet-https.ts) both run.
  */
+
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { cutShort } from "@cawco/core/words/helpers";
 
 /** What one call printed and how it ended; `missing` when there is no CLI to run. */
 export interface Ran {
@@ -21,11 +23,13 @@ export interface Heard {
 
 /** A call's first line of output, trimmed, for a sentence. */
 export const firstLine = (text: string) =>
-  text
-    .split("\n")
-    .map((line) => line.trim())
-    .find(Boolean)
-    ?.slice(0, 300) ?? "no output";
+  cutShort(
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean) ?? "no output",
+    300
+  );
 
 /**
  * Runs `bin` with `args` within `ms`. What it printed is kept in `heard` as

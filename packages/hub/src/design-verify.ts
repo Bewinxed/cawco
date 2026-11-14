@@ -260,15 +260,13 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       moves
     );
     if (result.exitCode !== 0) {
+      const lines = (
+        result.stderr.trim() ||
+        result.stdout.trim() ||
+        `exit ${result.exitCode}`
+      ).split("\n");
       throw new Error(
-        (
-          result.stderr.trim() ||
-          result.stdout.trim() ||
-          `exit ${result.exitCode}`
-        )
-          .split("\n")
-          .slice(-3)
-          .join(" ")
+        `${lines.length > 3 ? "… " : ""}${lines.slice(-3).join(" ")}`
       );
     }
     return result.stdout;

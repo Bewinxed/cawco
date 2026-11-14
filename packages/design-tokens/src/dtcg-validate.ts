@@ -13,6 +13,8 @@
  *   cawco.tokens.json size.c-caw-panel-h: a dimension is { value, unit } (unit px or rem), got the string "640px"
  */
 
+import { cutShort } from "@cawco/core/words/helpers";
+
 type Json = Record<string, unknown>;
 
 const REF = /^\{[^{}]+\}$/u;
@@ -77,12 +79,12 @@ function got(value: unknown): string {
     return `the string ${JSON.stringify(value)}`;
   }
   if (Array.isArray(value)) {
-    return `an array (${JSON.stringify(value).slice(0, 80)})`;
+    return `an array (${cutShort(JSON.stringify(value), 80)})`;
   }
   if (value === null || value === undefined) {
     return String(value);
   }
-  return `${typeof value === "object" ? "" : `the ${typeof value} `}${JSON.stringify(value).slice(0, 80)}`;
+  return `${typeof value === "object" ? "" : `the ${typeof value} `}${cutShort(JSON.stringify(value), 80)}`;
 }
 
 /** A unit-bearing value `{ value, unit }` with a unit among `units`. */

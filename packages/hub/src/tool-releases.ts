@@ -40,6 +40,7 @@ import {
   type ToolStatus,
 } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
+import { cutShort } from "@cawco/core/words/helpers";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**
@@ -91,7 +92,7 @@ const readRelease = async (
       at: Date.now(),
       failed:
         status === 200
-          ? `it answered no version (“${body.trim().slice(0, 80)}”)`
+          ? `it answered no version (“${cutShort(body.trim(), 80)}”)`
           : `it answered ${status}`,
     };
   }

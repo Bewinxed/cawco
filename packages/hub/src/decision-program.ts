@@ -59,6 +59,7 @@ import {
 import { blockFile, programLibraryOf } from "@cawco/core/inline-blocks";
 import { type PageLinks, programReferences } from "@cawco/core/reference-faces";
 import { unhandled } from "@cawco/core/unhandled";
+import { cutShort } from "@cawco/core/words/helpers";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import {
   type ASTNode,
@@ -141,7 +142,7 @@ const wordProblem = (
   if (component === "Diagram" && prop === "mermaid") {
     return null;
   }
-  const quoted = value.slice(0, 60);
+  const quoted = cutShort(value, 60);
   if (URL_LIKE.test(value)) {
     return library === "block"
       ? transcriptWords.blockUrlRefused(quoted)

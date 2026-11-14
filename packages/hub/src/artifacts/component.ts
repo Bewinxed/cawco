@@ -26,6 +26,7 @@ import {
   type StageErrorKind,
   storyRefOf,
 } from "@cawco/core/stage";
+import { cutShort } from "@cawco/core/words/helpers";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 
 /** What a component canvas's create or update names beyond its files. */
@@ -322,7 +323,7 @@ export const errorsSaid = (errors: StageError[]): ErrorSaid[] =>
     file: one.file,
     line: one.line,
     column: one.column,
-    message: one.message.split("\n")[0]?.slice(0, 300),
+    message: cutShort(one.message.split("\n")[0] ?? "", 300),
     ...(one.frame ? { frame: one.frame } : {}),
   }));
 

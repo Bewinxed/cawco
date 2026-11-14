@@ -26,6 +26,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { VIEW_TOOLS, type ViewToolName } from "@cawco/core/views";
 import { viewToolArgsFaults } from "@cawco/core/views-library";
 import spec from "@cawco/core/views-spec";
+import { cutShort } from "@cawco/core/words/helpers";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import {
   type ASTNode,
@@ -81,11 +82,11 @@ const unsafe = (source: string): string[] => {
     if (token.t === TOKEN.Str) {
       if (URL_LIKE.test(value)) {
         found.push(
-          `“${value.slice(0, 60)}” is a URL: a view cannot reach the network.`
+          `“${cutShort(value, 60)}” is a URL: a view cannot reach the network.`
         );
       } else if (MARKUP.test(value)) {
         found.push(
-          `“${value.slice(0, 60)}” holds markup: a view's text is plain.`
+          `“${cutShort(value, 60)}” holds markup: a view's text is plain.`
         );
       }
     } else if (

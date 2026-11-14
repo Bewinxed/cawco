@@ -22,6 +22,7 @@ import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import { readRange } from "@cawco/core/file-range";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
+import { cutShort } from "@cawco/core/words/helpers";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus, problem } from "elysia";
 import type { Artifacts } from "./artifacts/service";
@@ -360,7 +361,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     }
     const name = src.replace(MEDIA_PREFIX, "");
     if (!mediaFilePath(name)) {
-      return `its picture is at ${src.slice(0, 80)}, which the hub does not hold`;
+      return `its picture is at ${cutShort(src, 80)}, which the hub does not hold`;
     }
     const bytes = mediaBytes(name);
     return bytes
