@@ -1185,6 +1185,9 @@ migration_rolled_back() {
   fi
   [[ $out == *"the hub is down: /tmp/newer/cawco.db was migrated by a newer build of CawCo"* ]] \
     || { echo "ASSERTION FAILED: cawco status does not say the hub is down and why: $out"; return 1; }
+  # With the hub down, the last update's failure is read there too, in the words the update wrote.
+  [[ $out == *"cawco: the last update failed: "*"what it stored during the trial is in $aside"* ]] \
+    || { echo "ASSERTION FAILED: cawco status does not say how the last update ended: $out"; return 1; }
   # With the update's copy from before beside it, the stop names that copy as the way back.
   as_user "$hubc" cp "$DB.pre-$NEXT.bak" "/tmp/newer/cawco.db.pre-$NEXT.bak"
   if out=$(hub_on /tmp/newer/cawco.db); then
@@ -1236,30 +1239,43 @@ reshaped_rolled_back() {
   one_copy "$NEXT"
   others_kept
 }
-# A rollback with no room to put the copy beside the database (the filling build fills the data dir as its hub):
-# the live database stays at its path and opens, and the rollback says why. Room again, and it is put back.
+# The hub's machine settled: its hub answers and no trial is open, whatever a check before left.
+settled() { wait_until 300 'need_hub && ! has_file "$hubc" trial.json'; }
+# What a no-room check leaves, undone on its way out: the filler gone, and the build the hub runs offered again, so no
+# build it refused waits to be tried again in the next check.
+room_again() {
+  as_user "$hubc" rm -f "$DATA/e2e-filler"
+  use_feed next
+  learn > /dev/null
+}
+# A rollback with no room to put the copy beside the database (the filling build fills the data dir as its hub, and
+# migrates nothing): the live database stays at its path, sound, the rollback goes on, and the build rolled back to
+# runs on the database the trial left, its hub saying through its API why the copy did not go in.
 no_room_to_put_back() {
-  need_hub
+  settled
+  on_exit room_again
   use_feed filling
   learn
-  wait_until 360 '[[ "$(field $hid error)" == *"database was not put back"* ]]'
-  echo "the update said: $(field $hid error)"
-  [[ "$(field $hid error)" == *"$DB is still the one the trial left"* ]]
+  wait_until 360 '[[ "$(field $hid failedVersion)" == 0.0.1-test.11 && "$(phase $hid)" == failed-rolled-back ]]'
+  need_hub
+  [[ "$(build_version $hid)" == $NEXT ]]
+  local said
+  said=$(field $hid error)
+  echo "the update said: $said"
+  [[ $said == *"the hub's database was not put back (ENOSPC"* && $said == *"so $DB still holds what the hub stored during the trial"* && $said == *"the copy from before the update is $DB.pre-$NEXT.bak"* ]] \
+    || { echo "ASSERTION FAILED: the rollback does not say the copy did not go in, and where the trial's rows are"; return 1; }
+  [[ $said != *"doesn't start on it"* ]] || { echo "ASSERTION FAILED: the rollback says the hub stays stopped on a database the trial did not migrate"; return 1; }
   as_user "$hubc" test -s "$DB" || { echo "ASSERTION FAILED: nothing is at $DB"; return 1; }
   [[ "$(db_rows check "$DB")" == ok ]] || { echo "ASSERTION FAILED: the live database does not open sound"; return 1; }
   ! as_user "$hubc" test -e "$DB.restoring" || { echo "ASSERTION FAILED: the copy that did not fit is left beside the database"; return 1; }
   one_copy "$NEXT"
   others_kept
-  as_user "$hubc" rm -f "$DATA/e2e-filler"
-  wait_until 360 '! has_file "$hubc" trial.json && [[ "$(phase $hid)" == failed* ]]'
-  echo "the update said, once it had room: $(field $hid error)"
-  wait_until 120 need_hub
-  [[ "$(build_version $hid)" == $NEXT ]]
 }
 # An update with less room than its copies need is not started: nothing is copied or swapped, and the copy before
 # stays.
 no_room_to_copy() {
-  need_hub
+  settled
+  on_exit room_again
   as_user "$hubc" sh -c 'db=$(stat -c %s "$1"); free=$(df -B1 --output=avail "$2" | tail -n 1 | tr -dc 0-9); fallocate -l $((free - db)) "$2/e2e-filler"' sh "$DB" "$DATA"
   use_feed roomless
   learn
@@ -1269,9 +1285,8 @@ no_room_to_copy() {
   ! has_file "$hubc" trial.json
   one_copy "$NEXT"
   others_kept
-  as_user "$hubc" rm -f "$DATA/e2e-filler"
 }
-export -f db_rows data_files copy_made one_copy others_kept rolled_back hub_on plant_others confirmed_update_copies migration_rolled_back installs_stop_on_newer reshaped_rolled_back no_room_to_put_back no_room_to_copy
+export -f settled room_again db_rows data_files copy_made one_copy others_kept rolled_back hub_on plant_others confirmed_update_copies migration_rolled_back installs_stop_on_newer reshaped_rolled_back no_room_to_put_back no_room_to_copy
 rig_rollback() {
   # The hub's database at a path of the installer's choosing, which only the hub's unit records.
   export HUB_DB_PATH=/home/cawco/hub-db/cawco.db DB=/home/cawco/hub-db/cawco.db
@@ -1288,8 +1303,8 @@ rig_migration() {
   check "a build with a new migration that fails to start is rolled back: the row from before is in the live database, the trial's is in the file the rollback names, one copy is kept, and the build rolled back to does not open the moved-aside database" migration_rolled_back 900 "an update of the hub that confirms copies its database first"
   check "service install and a first install stop on a database a newer build migrated, changing nothing" installs_stop_on_newer 300 "a build with a new migration that fails to start is rolled back: the row from before is in the live database, the trial's is in the file the rollback names, one copy is kept, and the build rolled back to does not open the moved-aside database"
   check "a build with no new migration that leaves a row its predecessor cannot read is rolled back, and the hub reads its rows from the copy" reshaped_rolled_back 600 "an update of the hub that confirms copies its database first"
-  check "a rollback with no room for the copy beside the database leaves the live database at its path, sound, and says why" no_room_to_put_back 900 "an update of the hub that confirms copies its database first"
   check "an update with too little room for its copies is not started, and the copy before stays" no_room_to_copy 600 "an update of the hub that confirms copies its database first"
+  check "a rollback with no room for the copy beside the database leaves the live database at its path, sound, and goes on: the build rolled back to runs on it and says why" no_room_to_put_back 900 "an update of the hub that confirms copies its database first"
 }
 
 # ---------------------------------------------------------------- handover: a joined machine with sessions on its

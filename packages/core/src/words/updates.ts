@@ -85,18 +85,29 @@ export const updatesWords = {
   /** An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs. */
   trialUndecided: (version: string, tries: number, why: string) =>
     `${version}'s health could not be checked after ${tries} tries: ${why}.`,
+  /** `cawco status` on the hub's machine, when the hub does not answer and the last update failed: the update's own words. */
+  lastFailed: (error: string) => `the last update failed: ${error}`,
   /** An install stopped before anything changed: the disk the hub's database is on has less free than its copy and a rollback's copy need (cli binary-apply.ts `requireRoom`). */
   noRoomForDatabaseCopy: (version: string, needed: string, free: string) =>
     `${version} was not installed: copying the hub's database needs ${needed} free on its disk, and ${free} is free. Nothing was changed. Free space there, then install again.`,
   /** A rollback put the hub's database back: said after the reason, naming the file that holds what the trial wrote. */
   databasePutBack: (file: string) =>
     `the hub's database is back as it was before the update; what it stored during the trial is in ${file}`,
-  /** A rollback's restore that did not happen (no room for the copy beside the database, the hub still holding it): the live database stays where it is. */
-  databaseNotPutBack: (database: string, why: string) =>
-    `the hub's database was not put back (${why}), so ${database} is still the one the trial left; putting it back is tried again`,
-  /** A rollback whose restore failed every try (cli binary-apply.ts `endUndecided`): after the trial's own words. */
-  databaseLeftAsTrialLeft: (database: string, copy: string, previous: string) =>
-    `The hub's database could not be put back, so ${database} is the one the trial left, and the copy from before the update is ${copy}. If the trial migrated it, ${previous}'s hub doesn't open it and stays stopped until that copy is put in its place. That copy holds nothing the hub stored during the trial.`,
+  /**
+   * A rollback whose copy could not be put back (no room for it beside the
+   * database, the hub still holding it): said after the reason. The rollback
+   * goes on, and the build rolled back to runs on the database the trial
+   * left. `stopped`: that database holds migrations `previous` lacks, so its
+   * hub does not start on it (core migrations-ahead.ts).
+   */
+  databaseNotPutBack: (
+    database: string,
+    why: string,
+    copy: string,
+    previous: string,
+    stopped: boolean
+  ) =>
+    `the hub's database was not put back (${why}), so ${database} still holds what the hub stored during the trial; the copy from before the update is ${copy}${stopped ? `. The trial migrated it, so ${previous}'s hub doesn't start on it: put that copy in its place to start the hub, which loses what it stored during the trial` : ""}`,
   /** The update helper's log line for an older copy or moved-aside database it removed, once a newer one was written whole and checked. */
   olderCopyRemoved: (file: string, size: string) =>
     `${file} (${size}) was removed: a newer copy replaces it`,

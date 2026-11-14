@@ -141,8 +141,9 @@ if (verb === "keys") {
   //   and a row of the trial's (`e2e-trial-row`);
   // - `reshapes`: no migration, and every agents.build a value the build
   //   before it does not read;
-  // - `fills`: the disk the database is on filled to half the room the copy
-  //   taken before the update needs, so a rollback cannot put it back.
+  // - `fills`: the disk the database is on filled to 64 KiB short of the copy
+  //   taken before the update, so a rollback cannot put that copy beside the
+  //   database, and the hub rolled back to has the rest to run in.
   const [outFile, mode] = args;
   const buildInfo = `if [ "$1" = build-info ]; then
   echo '${JSON.stringify({ version: "broken", protocol: protocolRange })}'
@@ -163,7 +164,7 @@ fi
   if [ ! -e "$dir/e2e-filler" ]; then
     copy=$(stat -c %s "$db".pre-*.bak | head -n 1)
     free=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -dc 0-9)
-    fallocate -l $((free - copy / 2)) "$dir/e2e-filler"
+    fallocate -l $((free - copy + 65536)) "$dir/e2e-filler"
   fi`,
   };
   const step = mode ? asHub[mode] : undefined;
