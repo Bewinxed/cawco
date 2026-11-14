@@ -451,7 +451,7 @@ export const mediaCalls = ({
       case "answered":
         return answer.value.ok
           ? (answer.value.result as GeneratedImage)
-          : problem(422, {
+          : problem(502, {
               code: "image-not-generated",
               detail: answer.value.error ?? "Image generation failed.",
             });

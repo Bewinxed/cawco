@@ -78,7 +78,7 @@ export const accountHomeLoginRoutes = (
               return silentProblem(awayWords(query.machineId, others));
             case "answered":
               if (!others.value.ok) {
-                return problem(422, {
+                return problem(502, {
                   code: "home-logins-unread",
                   detail: others.value.error ?? "The machine gave no reason.",
                 });

@@ -131,7 +131,7 @@ export const fleetMcpCalls = (
       return unansweredProblem(ctx, machineId, asked);
     }
     if (!asked.value.ok) {
-      return problem(400, {
+      return problem(502, {
         code: "config-unread",
         detail: asked.value.error ?? "the machine could not read its config",
       });

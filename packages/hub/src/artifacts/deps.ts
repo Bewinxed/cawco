@@ -61,7 +61,7 @@ type StageRefused =
       typeof problem<409, { code: "stage-workspace-unplaced"; detail: string }>
     >
   | Unanswered
-  | ReturnType<typeof problem<422, { code: "stage-said-no"; detail: string }>>;
+  | ReturnType<typeof problem<502, { code: "stage-said-no"; detail: string }>>;
 
 /** Why an artifact has no origin a browser of the session's own opens (preview-browse.ts `browsedOrigin`): no session holds it, no machine serves it, or its listener does not open. */
 type OriginRefused =
@@ -200,7 +200,7 @@ export interface ArtifactServiceDeps {
     | FolderWeight
     | Unanswered
     | ReturnType<
-        typeof problem<422, { code: "artifact-folder-unread"; detail: string }>
+        typeof problem<502, { code: "artifact-folder-unread"; detail: string }>
       >
   >;
   /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
@@ -442,7 +442,7 @@ export interface ArtifactServiceDeps {
     | Unanswered
     | ReturnType<
         typeof problem<
-          422,
+          502,
           { code: "artifact-serve-unstarted"; detail: string }
         >
       >

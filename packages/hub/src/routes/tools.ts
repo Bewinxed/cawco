@@ -79,7 +79,7 @@ export const toolRoutes = ({
             );
           case "answered": {
             if (!answer.value.ok) {
-              return problem(422, {
+              return problem(502, {
                 code: "tool-signin-not-started",
                 detail: answer.value.error ?? "The sign-in did not start.",
               });
@@ -125,7 +125,7 @@ export const toolRoutes = ({
             pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);
             const tool = peekToolStatus({ result: answer.value.result });
             if (!(answer.value.ok && tool)) {
-              return problem(422, {
+              return problem(502, {
                 code: "tool-signin-not-finished",
                 detail: answer.value.error ?? "The sign-in did not finish.",
               });

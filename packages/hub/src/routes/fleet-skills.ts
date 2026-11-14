@@ -4,7 +4,11 @@
 
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
-import { type FleetSkillMeta, READ_SKILL_FILES } from "@cawco/core/fleet";
+import {
+  type FleetSkillMeta,
+  NO_SKILL,
+  READ_SKILL_FILES,
+} from "@cawco/core/fleet";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
@@ -370,7 +374,7 @@ export const fleetSkillRoutes = (
           const answer = asked.value;
           // No copy on the machine is nothing to keep; any other refusal
           // stops the push, because the copy it would destroy was not read.
-          if (!(answer.ok || answer.error?.startsWith("no skill "))) {
+          if (!(answer.ok || answer.error?.startsWith(NO_SKILL))) {
             return problem(502, {
               code: "skill-unread",
               detail: answer.error ?? "the machine could not read the skill",

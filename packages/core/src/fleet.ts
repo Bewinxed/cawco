@@ -1599,6 +1599,12 @@ export const FLEET_STATUS = "fleetStatus";
 export const INSPECT_CONFIG = "inspectConfig";
 export const READ_SKILL_FILES = "readSkillFiles";
 /**
+ * How a machine's {@link READ_SKILL_FILES} answer begins when it has no
+ * skill by that name (`no skill <name> on this machine`): the ask names
+ * nothing there, which is not the machine's failure.
+ */
+export const NO_SKILL = "no skill ";
+/**
  * `readSkillFolder(path: string) => SkillFile[]` — the files of a skill
  * folder anywhere on the machine (its SKILL.md and everything beside it),
  * for an install from that folder (hub skills.ts, a `file://` source).

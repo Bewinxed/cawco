@@ -247,7 +247,7 @@ export interface HomeCredentialFound {
 }
 
 /** A credential's move refused at `Status`, in the words of why (account-signin.ts `homeCredentialOf`). */
-type HomeLoginRefused<Status extends 409 | 422> = ReturnType<
+type HomeLoginRefused<Status extends 409 | 502> = ReturnType<
   typeof problem<Status, { code: "home-login-refused"; detail: string }>
 >;
 
@@ -601,7 +601,7 @@ export interface ClosureContext {
     | AwayProblem
     | SilentProblem
     | HomeLoginRefused<409>
-    | HomeLoginRefused<422>
+    | HomeLoginRefused<502>
   >;
   homeLoginMoveOf: (
     machineId: string,

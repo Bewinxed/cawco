@@ -8,6 +8,7 @@
 
 import type { MachineHookScript } from "@cawco/core/fleet";
 import {
+  NO_SKILL,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -170,10 +171,12 @@ export const skillFilesOff = async (
   }
   const answer = asked.value;
   if (!answer.ok) {
-    return problem(400, {
-      code: "skill-unread",
-      detail: answer.error ?? "the machine could not read the skill",
-    });
+    const detail = answer.error ?? "the machine could not read the skill";
+    // A skill the machine has none of by that name is the ask's (agent
+    // fleet.ts `readSkillFiles`); any other failure is the machine's.
+    return answer.error?.startsWith(NO_SKILL)
+      ? problem(404, { code: "skill-unread", detail })
+      : problem(502, { code: "skill-unread", detail });
   }
   return { files: machineSkillFiles(answer.result) };
 };

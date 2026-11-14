@@ -324,7 +324,7 @@ export const accountRoutes = ({
               );
         case "answered":
           if (!answer.value.ok) {
-            return problem(409, {
+            return problem(502, {
               code: "did-not-sign-out",
               detail: `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`,
             });

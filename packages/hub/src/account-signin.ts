@@ -158,7 +158,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     }
     const read = asked.value;
     if (!read.ok) {
-      return problem(422, {
+      return problem(502, {
         code: "home-login-refused",
         detail: read.error ?? `${machine} could not say what its stores hold.`,
       });

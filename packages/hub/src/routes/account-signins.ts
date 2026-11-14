@@ -155,7 +155,7 @@ export const accountSigninRoutes = ({
             case "answered": {
               if (!answer.value.ok) {
                 pendingSignins.delete(pendingKey(params.id, params.machineId));
-                return problem(422, {
+                return problem(502, {
                   code: "signin-not-started",
                   detail: answer.value.error ?? "The sign-in did not start.",
                 });
@@ -219,7 +219,7 @@ export const accountSigninRoutes = ({
           if (!answer.ok) {
             // The machine's login stopped: its link or code is spent.
             pendingSignins.delete(pendingKey(params.id, params.machineId));
-            return problem(422, {
+            return problem(502, {
               code: "signin-not-finished",
               detail: answer.error ?? "The sign-in did not finish.",
             });

@@ -154,13 +154,13 @@ export interface StreamRelayDeps {
   renewed: (expiresAt: number) => void;
 }
 
-/** The relay's machine's refusal: away or late (503), or refusing in its own words (409). */
+/** The relay's machine's refusal: away (503) or silent (504), or its failure in its own words (502). */
 export type RelayMachineRefusal =
   | AwayProblem
   | SilentProblem
   | ReturnType<
       typeof problem<
-        409,
+        502,
         { code: "stream-relay-machine-refused"; detail: string }
       >
     >;
@@ -287,7 +287,7 @@ const answered = <T>(
         );
   }
   if (!read.value.ok) {
-    return problem(409, {
+    return problem(502, {
       code: "stream-relay-machine-refused",
       detail: read.value.error ?? `The stream relay was not ${what}.`,
     });
@@ -323,7 +323,7 @@ export interface StreamRelay {
     | undefined
     | ReturnType<
         typeof problem<
-          409,
+          502,
           { code: "stream-relay-not-removed"; detail: string }
         >
       >
@@ -582,7 +582,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
       if (read.kind === "answered" && !read.value.ok) {
-        return problem(409, {
+        return problem(502, {
           code: "stream-relay-not-removed",
           detail:
             read.value.error ??

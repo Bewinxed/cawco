@@ -46,6 +46,7 @@ import type {
 } from "@cawco/core/fleet";
 import {
   memoryDocProblem,
+  NO_SKILL,
   SKILL_FOLDER_LIMIT_BYTES,
   SKILL_SKIPPED_DIRS,
   skillDescription,
@@ -4306,7 +4307,7 @@ export const readSkillFiles = async (
     (one) => one.name === name
   );
   if (!skill) {
-    throw new Error(`no skill ${name} on this machine`);
+    throw new Error(`${NO_SKILL}${name} on this machine`);
   }
   return await skillFilesAt(skill.path);
 };

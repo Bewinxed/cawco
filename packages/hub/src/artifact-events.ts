@@ -708,7 +708,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     const answer = asked.value;
     if (!answer.ok) {
-      return problem(422, {
+      return problem(502, {
         code: "stage-said-no",
         detail: answer.error ?? "The stage said no.",
       });

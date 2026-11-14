@@ -144,7 +144,7 @@ export const answered = <T>(
         );
   }
   if (!read.value.ok) {
-    return problem(409, {
+    return problem(502, {
       code: "browser-machine-refused",
       detail: read.value.error ?? `${machine}'s browser did not ${what}.`,
     });

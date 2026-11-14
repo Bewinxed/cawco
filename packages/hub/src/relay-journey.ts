@@ -141,7 +141,7 @@ type RelayActRefusal =
     >
   | RelayMachineRefusal
   | ReturnType<
-      typeof problem<409, { code: "stream-relay-not-removed"; detail: string }>
+      typeof problem<502, { code: "stream-relay-not-removed"; detail: string }>
     >;
 
 /** What an act answers: nothing, or its refusal. */

@@ -4976,7 +4976,7 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        return problem(422, {
+        return problem(502, {
           code: "artifact-serve-unstarted",
           detail: answer.error ?? "The server didn't start.",
         });
@@ -5008,7 +5008,7 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        return problem(422, {
+        return problem(502, {
           code: "artifact-folder-unread",
           detail: answer.error ?? "The folder couldn't be read.",
         });
