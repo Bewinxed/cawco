@@ -248,17 +248,20 @@ export interface UsageLimitsResponse {
 
 /**
  * The real transcript `message.usage` shape (USAGE-SPEC.md §2.3). Field names
- * are the on-disk snake_case, not the neutral {@link UsageTokens}.
+ * are the on-disk snake_case, not the neutral {@link UsageTokens}. Nullable
+ * where the Messages API's `BetaUsage` is (@anthropic-ai/sdk
+ * resources/beta/messages): Claude Code writes `service_tier: null` and
+ * `speed: null` on the `<synthetic>` message it stores for a failed request.
  */
 export interface RawClaudeUsage {
   cache_creation?: {
     ephemeral_5m_input_tokens?: number;
     ephemeral_1h_input_tokens?: number;
-  };
-  cache_creation_input_tokens?: number;
-  cache_read_input_tokens?: number;
+  } | null;
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
   input_tokens: number;
   output_tokens: number;
-  service_tier?: string;
-  speed?: string;
+  service_tier?: string | null;
+  speed?: string | null;
 }
