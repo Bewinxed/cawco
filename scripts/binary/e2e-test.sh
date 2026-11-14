@@ -197,14 +197,17 @@ orchestrate() {
   STARTED=$SECONDS
   mkdir -p "$out/tmp" "$out/shared" "$out/feeds" "$out/rigs" "$out/logs" "$out/images"
   orchestrator_done() {
+    # The status the run ends with, kept through the cleanup and exited with, as rig_done does: a setup that failed
+    # (exit 3), a rig that failed or a check NOT RUN (exit 1) never ends as 0.
+    local rc=$? pids
     # It waits for every rig's cleanup to end: a second stop does not cut it short.
     trap '' INT TERM
     trap - EXIT
     # Every rig still running ends, and cleans up its own containers and storage on the way out (rig_done).
-    local pids
     pids=$(jobs -rp)
     [[ -z $pids ]] || { kill $pids 2> /dev/null; wait 2> /dev/null; }
     rm -f "$bins/keys/test-release-private.pem" "$TMPDIR"
+    exit "$rc"
   }
   trap orchestrator_done EXIT
   trap 'trap "" INT TERM; exit 130' INT
