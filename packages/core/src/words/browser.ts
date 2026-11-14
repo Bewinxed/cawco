@@ -78,6 +78,27 @@ export const browserWords = {
 };
 
 /**
+ * The passkey QR overlay in the take-over view: a FIDO URI from the
+ * browser's page, rendered as a QR for the person's phone to scan.
+ */
+export const passkeyWords = {
+  /** The overlay's title. */
+  title: "Passkey sign-in required",
+  /** The line under the QR, naming the relying party. */
+  scanTo: (origin: string) => `Scan with your phone to sign in to ${origin}`,
+  /** The line when no RP origin is known. */
+  scan: "Scan with your phone to sign in",
+  /** The extension prompt. */
+  extensionPrompt: "For easier scanning, install the CawCo Chrome extension",
+  /** The extension prompt's link. */
+  install: "Install",
+  /** The overlay's state once the QR is sent to the extension. */
+  sentToExtension: "QR sent to extension",
+  /** The QR expired. */
+  expired: "The passkey QR expired",
+};
+
+/**
  * What a `browser_ask` call answers its agent (hub browser-tools.ts): the
  * person's decline, their hand-back, or its refusal when the agent has no
  * page open on the origin it named (agent shield.ts `askedPage`); and the

@@ -439,6 +439,29 @@ export interface BrowserHandedBackFrame extends BrowserHandback {
   why: "person" | "unwatched" | "stopped";
 }
 
+/**
+ * Hub-originated, to every dashboard socket: a FIDO URI extracted from a
+ * browser's page during a take-over, for the person to scan with their
+ * phone's camera. The hub broadcasts it as it arrives, and a dashboard
+ * renders the QR; a Chrome extension, when present, shows it as a popup.
+ * Expires after {@link PASSKEY_QR_TTL_MS}.
+ */
+export interface PasskeyQrFrame {
+  /** The FIDO CTAP URI the QR encodes (`FIDO:/`). */
+  fidoUri: string;
+  instanceId?: undefined;
+  /** The browser the passkey prompt appeared in. */
+  key: BrowserKey;
+  kind: "passkey_qr";
+  /** ms epoch when the QR was read from the page; it expires at `raisedAt + PASSKEY_QR_TTL_MS`. */
+  raisedAt: number;
+  /** The relying party's origin, when the hub could read it (`https://github.com`). */
+  rpOrigin?: string;
+}
+
+/** How long a passkey QR is valid, ms: the CTAP spec's 5 minutes, as the authenticator times it. */
+export const PASSKEY_QR_TTL_MS = 5 * 60_000;
+
 /** Whether `value` is a {@link BrowserKey}. */
 export const isBrowserKey = (value: unknown): value is BrowserKey =>
   typeof value === "string" && BROWSER_KEY.test(value);

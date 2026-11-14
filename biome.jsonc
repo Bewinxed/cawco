@@ -107,6 +107,8 @@
       // Tailwind 4 syntax (`@theme static`, `@theme inline`), compiled by Tailwind in vite build;
       // Biome 2.5.15's parser does not read it.
       "!apps/dashboard/src/lib/tokens/theme.css",
+      // The Chrome extension: a standalone WXT project with its own build and types.
+      "!apps/chrome-extension",
     ],
   },
   // The dashboard's Tailwind theme, utilities and variants, which the

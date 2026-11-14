@@ -88,6 +88,7 @@ import {
   takeWatchNotices,
 } from "./stores/needs.svelte";
 import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
+import { takePasskeyQr } from "./stores/passkey-qr.svelte";
 import { plansState } from "./stores/plans.svelte";
 import {
   previewsState,
@@ -463,6 +464,7 @@ routeFrames([
   // Something that needs the person, shown on the desk tab they use.
   onFrame("desk_alert", (frame) => showDeskAlert(frame, instanceIndex)),
   onFrame("browser_list", takeBrowsers),
+  onFrame("passkey_qr", takePasskeyQr),
   // The stream relay's journey moved: every place that draws it follows.
   onFrame("stream_relay.journey", (frame) => keepRelayJourney(frame.journey)),
   onFrame("tailnet.https", takeTailnet),
