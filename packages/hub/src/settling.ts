@@ -33,7 +33,7 @@ import { PICKED_TAKEN_BACK } from "./db/migration-names";
  * counts as decided only what the member settled itself.
  */
 
-import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
+import type { ChoiceEntry } from "@cawco/core/choices";
 import {
   BUILT_IN,
   type FleetDecides,
@@ -50,11 +50,12 @@ import { decisionLink, sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import { routeLine } from "@cawco/core/words/decides-lines";
-import type { TellProblem } from "./caw-problems";
+import type { Caw } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable } from "./decides-file";
 import { sessionLabel } from "./labels";
+import type { CardsRouted, Settler, Signing } from "./settling-answers";
 
 import {
   SESSION_TITLE_MAX,
@@ -117,7 +118,7 @@ export interface SettlingDeps {
   readonly tellCaw: (
     projectId: string,
     event: { text: string; trigger: string }
-  ) => Promise<{ instanceId: string } | TellProblem>;
+  ) => ReturnType<Caw["tell"]>;
   /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `cacheWarmNow`). */
   readonly warm: (id: string) => boolean;
 }
@@ -710,7 +711,7 @@ export const createSettling = (deps: SettlingDeps) => {
       cards: DecisionCard[],
       all: DecisionCard[],
       state: Record<string, ChoiceEntry>
-    ) => {
+    ): Promise<CardsRouted> => {
       const lines: Record<string, string> = {};
       if (!all.some((card) => card.kind !== null) || cards.length === 0) {
         return lines;
@@ -769,7 +770,7 @@ export const createSettling = (deps: SettlingDeps) => {
       settler: InstanceRow,
       row: ArtifactRow,
       card: DecisionCard
-    ) => {
+    ): Promise<Settler> => {
       const fleet = deps.db.fleet();
       const routed = await routeOf(fleet, row, card);
       if (routed instanceof ElysiaStatus) {
@@ -778,9 +779,7 @@ export const createSettling = (deps: SettlingDeps) => {
       const { member, where } = routed;
       const name = kindName(fleet, card.kind);
       const kept = deps.db.settling(row.id, card.id);
-      const signed: Pick<SettledBy, "by" | "name" | "runs"> & {
-        member: Member;
-      } = {
+      const signed: Signing = {
         member,
         by: member.id,
         name: member.name,

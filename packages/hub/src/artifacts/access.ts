@@ -8,6 +8,7 @@ import { sessionLink } from "@cawco/core/references";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../db/artifacts";
+import type { ArtifactUnnamed } from "../decision-program";
 import { byHandle, type Handled, namesAny } from "../handles";
 import { sessionLabel } from "../labels";
 
@@ -40,7 +41,7 @@ const artifactByHandle = (
 export const artifactNamed = (
   asked: string,
   rows: () => readonly { id: string; kind: string; name: string }[]
-) => {
+): string | ArtifactUnnamed => {
   try {
     return artifactByHandle(asked, rows());
   } catch (error) {

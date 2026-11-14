@@ -60,7 +60,7 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { ElysiaStatus } from "elysia";
-import type { AskedArtifact } from "./artifacts/shapes";
+import type { AskedArtifact, DesignAsk } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
@@ -74,7 +74,11 @@ import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
 import { hubActor, type Tasks } from "./tasks";
 import { isLive, type Parent, verifierParent } from "./work-item-state";
-import type { WorkItemRequest, WorkItems } from "./work-items";
+import type {
+  DesignHoldProblem,
+  WorkItemRequest,
+  WorkItems,
+} from "./work-items";
 
 /** What the builder's chip says while a verifier works. */
 const CHECKING = "being checked against the design system";
@@ -643,7 +647,10 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
 
   return {
     /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on; the problem of a task or a history that could not be read. */
-    async hold(item: WorkItemRow, submission: WorkItemSubmission) {
+    async hold(
+      item: WorkItemRow,
+      submission: WorkItemSubmission
+    ): Promise<string | undefined | DesignHoldProblem> {
       const subject = await judged(item);
       if (!subject || subject instanceof ElysiaStatus) {
         return subject;
@@ -674,10 +681,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
      * workspace its stage runs in, judged as a task's is; its verdict goes to
      * `requester`. Answers what the ask did, one sentence.
      */
-    async ask(
-      requester: InstanceRow,
-      artifact: AskedArtifact
-    ): Promise<string> {
+    async ask(requester, artifact) {
       const key = `${ARTIFACT_KEY}${artifact.id}`;
       // A sheet made in a place (a session with no work item) names the
       // place; its stage runs in the place's stage clone, the workspace a
@@ -807,5 +811,5 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         }
       }
     },
-  };
+  } satisfies { ask: DesignAsk; [member: string]: unknown };
 };

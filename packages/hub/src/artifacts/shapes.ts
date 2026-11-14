@@ -3,6 +3,7 @@ import type { SendAttachment } from "@cawco/core/attachments";
 import type { excalidrawFile } from "@cawco/core/canvas";
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments/model";
+import type { ProgramRead } from "@cawco/core/decisions";
 import type { QuestionClose, SentBy } from "@cawco/core/doc-meta";
 import type { InkGroup } from "@cawco/core/ink";
 import type { PageFault } from "@cawco/core/page-faults";
@@ -31,6 +32,9 @@ import type {
   weightSaid,
 } from "./component";
 import type { Question } from "./questions";
+
+/** Starts the stages and servers a decision page's Previews show, once its program is read (kinds/preview.ts `warmPreviews`). */
+export type WarmPreviews = (page: ArtifactRow, program: ProgramRead) => void;
 
 /** A page's files as they stood before a revision wrote the next: its HTML, a decision page's program, and its pictures' fingerprints by address. */
 export interface PageWas {
@@ -726,6 +730,12 @@ export type PageHearer =
         trigger: string;
       };
     };
+
+/** A round a chat asks of an artifact, its verdict going to `requester`: one sentence on what the ask did (design-verify.ts `ask`). */
+export type DesignAsk = (
+  requester: InstanceRow,
+  artifact: AskedArtifact
+) => Promise<string>;
 
 /** An artifact a chat asks a round of: what it is, and the workspace its stage runs in. */
 export interface AskedArtifact {

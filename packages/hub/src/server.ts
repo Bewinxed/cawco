@@ -579,7 +579,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
-import type { AnyProblem, ProblemStatus } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl, peekAnswer } from "./relay-control";
@@ -4521,33 +4521,10 @@ export const createServer = (
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
   const artifacts: Artifacts = createArtifacts({
-    // Settling's refusals, said again across the import cycle
-    // (settling.ts imports work-items.ts, which imports the artifacts).
     decides: {
-      routed: async (asker, row, cards, all, state) => {
-        const routed = await settling.routed(asker, row, cards, all, state);
-        return routed instanceof ElysiaStatus
-          ? problem<ProblemStatus, { code: string; detail: string }>(
-              routed.status,
-              {
-                code: routed.response.code,
-                detail: routed.response.detail,
-              }
-            )
-          : routed;
-      },
-      settler: async (settler, row, card) => {
-        const signs = await settling.settler(settler, row, card);
-        return signs instanceof ElysiaStatus
-          ? problem<ProblemStatus, { code: string; detail: string }>(
-              signs.status,
-              {
-                code: signs.response.code,
-                detail: signs.response.detail,
-              }
-            )
-          : signs;
-      },
+      routed: (asker, row, cards, all, state) =>
+        settling.routed(asker, row, cards, all, state),
+      settler: (settler, row, card) => settling.settler(settler, row, card),
       settled: (row, card, member, answer) =>
         settling.settled(row, card, member, answer),
     },
@@ -4705,64 +4682,11 @@ export const createServer = (
       }
       return { ok: true, revision: opened.frame.revision };
     },
-    // The pages', the decisions' and the preview browse's refusals, said
-    // again across the import cycle (each reaches the artifacts' deps).
-    page: async (instance, name, from, keep, artifact) => {
-      const built = await keptArtifactPage(
-        instance,
-        name,
-        from,
-        keep,
-        artifact
-      );
-      return built instanceof ElysiaStatus
-        ? problem<ProblemStatus, { code: string; detail: string }>(
-            built.status,
-            {
-              code: built.response.code,
-              detail: built.response.detail,
-            }
-          )
-        : built;
-    },
-    afterLinks: async (projectId, name, cards) => {
-      const links = await decisions.linksOf(projectId, name, cards);
-      return links instanceof ElysiaStatus
-        ? problem<ProblemStatus, { code: string; detail: string }>(
-            links.status,
-            {
-              code: links.response.code,
-              detail: links.response.detail,
-            }
-          )
-        : links;
-    },
-    keepPage: async (instance, name, page) => {
-      const refused = await keepPage(instance, name, page);
-      return (
-        refused &&
-        problem<ProblemStatus, { code: string; detail: string }>(
-          refused.status,
-          {
-            code: refused.response.code,
-            detail: refused.response.detail,
-          }
-        )
-      );
-    },
-    dropPage: async (instance, projectId, name) => {
-      const refused = await dropPage(instance, projectId, name);
-      return (
-        refused &&
-        problem<ProblemStatus, { code: string; detail: string }>(
-          refused.status,
-          {
-            code: refused.response.code,
-            detail: refused.response.detail,
-          }
-        )
-      );
-    },
+    page: keptArtifactPage,
+    afterLinks: (projectId, name, cards) =>
+      decisions.linksOf(projectId, name, cards),
+    keepPage,
+    dropPage,
     sending: async (to, artifact, page) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
       if ("session" in to) {

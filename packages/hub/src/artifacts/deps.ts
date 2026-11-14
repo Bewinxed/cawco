@@ -1,6 +1,6 @@
-import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
+import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
-import type { AfterLinks, DecisionCard } from "@cawco/core/decisions";
+import type { DecisionCard } from "@cawco/core/decisions";
 import type { PlanStep } from "@cawco/core/plan";
 import type { PreviewDown } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
@@ -18,35 +18,29 @@ import type {
 } from "@cawco/core/stage";
 import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
-import type { TellProblem } from "../caw-problems";
+import type { Caw } from "../caw";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
-import type { ArtifactNamed, BuiltProgram } from "../decision-program";
+import type { DecisionLinks } from "../decision-problems";
+import type { ArtifactNamed } from "../decision-program";
 
 import type { HubLifetimeShape } from "../lifetime";
+import type { PageBuilt, PageFolderProblem } from "../page-problems";
 import type { PreviewListeners } from "../preview";
-import type { ProblemStatus } from "../refusal";
+import type { ProblemsOf } from "../refusal";
+import type { CardsRouted, Settler } from "../settling-answers";
 import type { SentPage } from "../setup";
 import type { StateAsk } from "./component";
 import type { ArtifactDocs } from "./docs";
 import type {
-  AskedArtifact,
   Browsed,
   CanvasScreen,
+  DesignAsk,
   MarksDelivery,
   MarksOutcome,
   PageFrom,
   PageHearer,
   StageAt,
 } from "./shapes";
-
-/**
- * A problem from across the hub's import cycle (decisions, settling and the
- * artifact pages reach this file again): the wiring makes it again with
- * Elysia's `problem`, its status and code typed as a number and a string.
- */
-type Resaid = ReturnType<
-  typeof problem<ProblemStatus, { code: string; detail: string }>
->;
 
 /** A problem of each status of `Status` alone, its code and words as the wiring says them. */
 type PerStatus<Status extends number> = Status extends number
@@ -89,7 +83,7 @@ export interface ArtifactServiceDeps {
     projectId: string,
     name: string,
     cards: DecisionCard[]
-  ) => Promise<AfterLinks | Resaid>;
+  ) => Promise<DecisionLinks>;
   /**
    * Who hears the person on `artifact`, which `writer` made: the one his
    * marks and the hub's own send of his answers go to (artifacts/taker.ts),
@@ -139,7 +133,7 @@ export interface ArtifactServiceDeps {
       cards: DecisionCard[],
       all: DecisionCard[],
       state: Record<string, ChoiceEntry>
-    ) => Promise<Record<string, string> | Resaid>;
+    ) => Promise<CardsRouted>;
     settled: (
       row: ArtifactRow,
       card: DecisionCard,
@@ -150,9 +144,7 @@ export interface ArtifactServiceDeps {
       settler: InstanceRow,
       row: ArtifactRow,
       card: DecisionCard
-    ) => Promise<
-      (Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }) | Resaid
-    >;
+    ) => Promise<Settler>;
   };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
@@ -181,7 +173,7 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     projectId: string,
     name: string
-  ) => Promise<Resaid | undefined>;
+  ) => Promise<PageFolderProblem | undefined>;
   /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /**
@@ -244,7 +236,7 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     name: string,
     page: { html: string; program?: string }
-  ) => Promise<Resaid | undefined>;
+  ) => Promise<PageFolderProblem | undefined>;
   /**
    * Picture `png` (base64) kept at `path` in session `instance`'s workspace
    * (`artifact_read`'s `save`), written by its machine (core
@@ -325,7 +317,7 @@ export interface ArtifactServiceDeps {
     keep: boolean,
     /** The artifact a program's Canvas or Preview names, whole (`whole`). */
     artifact: ArtifactNamed
-  ) => Promise<{ html: string; program?: BuiltProgram } | Resaid>;
+  ) => Promise<PageBuilt>;
   /**
    * Preview or page `artifact` drawn as the person's panel draws it, for
    * session `instance`'s `artifact_read` with `png` (server.ts, agent
@@ -470,7 +462,7 @@ export interface ArtifactServiceDeps {
     to: PageHearer,
     artifact: ArtifactRow,
     responses: { since: number }
-  ) => Promise<string | TellProblem>;
+  ) => Promise<string | ProblemsOf<ReturnType<Caw["tell"]>>>;
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
    * `ensureStage`), started or woken there and waited on: its port, root and
@@ -538,7 +530,7 @@ export interface ArtifactServiceDeps {
    * design-verify.ts `ask`): its verdict goes to `requester`. Answers what
    * the ask did, one sentence.
    */
-  verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
+  verify: DesignAsk;
   /**
    * One stage warmed for a decision page as it goes out (agent stage.ts
    * `warmStage`): started or woken there and every canvas of `warm` compiled

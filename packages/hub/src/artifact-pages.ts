@@ -31,6 +31,7 @@ import {
 } from "./kept-blocks";
 import { sessionLabel } from "./labels";
 import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
+import type { PageBuilt, PageFolderProblem } from "./page-problems";
 import type { PreviewTarget } from "./preview";
 import {
   previewFrame,
@@ -739,7 +740,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     row: InstanceRow,
     name: string,
     page: { html: string; program?: string }
-  ) => {
+  ): Promise<PageFolderProblem | undefined> => {
     const { projectId } = row;
     if (!projectId) {
       return;
@@ -785,7 +786,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     row: InstanceRow,
     projectId: string,
     name: string
-  ) => {
+  ): Promise<PageFolderProblem | undefined> => {
     const paths = pageSourcePaths(name);
     const held = await Promise.all(
       paths.map((path) => folderText(projectId, path))
@@ -877,7 +878,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     from: PageFrom,
     keep: boolean,
     artifact: ArtifactNamed
-  ) => {
+  ): Promise<PageBuilt> => {
     const built = await buildArtifactPage(row, name, from, artifact);
     if (built instanceof ElysiaStatus || !keep) {
       return built;

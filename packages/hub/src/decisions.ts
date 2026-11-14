@@ -75,9 +75,11 @@ import type { ArtifactTaker } from "./artifacts/taker";
 import type { Caw, PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import type { FolderProblem } from "./decision-page";
+import type { DecisionLinks, DecisionProblem } from "./decision-problems";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
 import type { changeFolderFiles, folderFileNames } from "./project-folder";
+import type { ProblemsOf } from "./refusal";
 import type { Tasks } from "./tasks";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
@@ -341,16 +343,6 @@ interface DecidedTask {
   title: string;
 }
 
-/** The problems a folder or task call answers: its result without its value. */
-type Problems<R> = Extract<R, { readonly "~status": true }>;
-
-/** Every problem a decisions dep answers: a folder file's read, a commit, a listing or the tasks' list. */
-type DecisionProblem =
-  | FolderProblem
-  | Problems<Awaited<ReturnType<typeof changeFolderFiles>>>
-  | Problems<Awaited<ReturnType<typeof folderFileNames>>>
-  | Problems<Awaited<ReturnType<Tasks["list"]>>>;
-
 export interface DecisionsDeps {
   /** The page artifacts of a project, newest first. */
   artifacts: (projectId: string) => ArtifactRow[];
@@ -364,16 +356,12 @@ export interface DecisionsDeps {
       writes: { content: string; path: string }[];
     },
     message: string
-  ) => Promise<
-    Problems<Awaited<ReturnType<typeof changeFolderFiles>>> | undefined
-  >;
+  ) => Promise<ProblemsOf<ReturnType<typeof changeFolderFiles>> | undefined>;
   /** The names of the entries in one folder of the project's; the folder's problem when it does not list. */
   folderNames: (
     projectId: string,
     path: string
-  ) => Promise<
-    string[] | Problems<Awaited<ReturnType<typeof folderFileNames>>>
-  >;
+  ) => Promise<string[] | ProblemsOf<ReturnType<typeof folderFileNames>>>;
   /** A project's folder file, undefined when it is not there, the folder's problem when it does not read. */
   folderText: (
     projectId: string,
@@ -410,7 +398,7 @@ export interface DecisionsDeps {
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
   tasks: (
     projectId: string
-  ) => Promise<DecidedTask[] | Problems<Awaited<ReturnType<Tasks["list"]>>>>;
+  ) => Promise<DecidedTask[] | ProblemsOf<ReturnType<Tasks["list"]>>>;
   /** The person's words or act to a session ({@link PersonsSend}), through the one send path, as the send `uuid`. */
   tell: (instance: InstanceRow, said: PersonsSend, uuid: string) => void;
   /** The person's words or act to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
@@ -1536,7 +1524,11 @@ export const createDecisions = (deps: DecisionsDeps) => {
      * and each of its decisions another page comes after. The other pages
      * as the folder keeps them.
      */
-    async linksOf(projectId: string, name: string, cards: DecisionCard[]) {
+    async linksOf(
+      projectId: string,
+      name: string,
+      cards: DecisionCard[]
+    ): Promise<DecisionLinks> {
       return (
         unknownProject(projectId) ??
         (await afterLinksOf(projectId, name, cards))

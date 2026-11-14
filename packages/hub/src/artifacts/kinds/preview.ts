@@ -1,4 +1,3 @@
-import type { ProgramRead } from "@cawco/core/decisions";
 import { detach } from "@cawco/core/detach";
 import { machineLabel } from "@cawco/core/machine-names";
 import { CAWCO_HUB_PORT, localDashboardPort } from "@cawco/core/ports";
@@ -9,7 +8,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
 import { servedOf, sheetOf } from "../served";
-import type { ArtifactInput, Making, Placed } from "../shapes";
+import type { ArtifactInput, Making, Placed, WarmPreviews } from "../shapes";
 import type { KindContext } from "./context";
 
 /** Why a preview's fields do not go together, or nothing. */
@@ -266,7 +265,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * and changes nothing the page's write answers. A Canvas shows a drawing,
    * which no stage serves.
    */
-  const warmPreviews = (page: ArtifactRow, program: ProgramRead): void => {
+  const warmPreviews: WarmPreviews = (page, program) => {
     const shown = new Set(
       program.artifacts
         .filter((one) => one.component === "Preview")

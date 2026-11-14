@@ -71,7 +71,6 @@ import {
   tokenize,
 } from "@openuidev/lang-core";
 import { ElysiaStatus, problem } from "elysia";
-import type { AnyProblem } from "./refusal";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
@@ -466,12 +465,17 @@ const afterProblems = (
         ];
   });
 
+/** An id that names no artifact, or several: its refusal in words (artifacts/access.ts `artifactNamed`). */
+export type ArtifactUnnamed = ReturnType<
+  typeof problem<404, { code: "artifact-unnamed"; detail: string }>
+>;
+
 /**
  * The artifact an id names, whole: the artifacts service's resolver
  * (access.ts `whole`, handles.ts), its refusal in words when it names none
  * or several.
  */
-export type ArtifactNamed = (asked: string) => string | AnyProblem;
+export type ArtifactNamed = (asked: string) => string | ArtifactUnnamed;
 
 /** `artifact`'s whole id for `id`, or why it names none: its refusal's words, or what it threw. */
 const wholeOf = (

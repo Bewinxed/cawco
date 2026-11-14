@@ -1,4 +1,3 @@
-import type { ProgramRead } from "@cawco/core/decisions";
 import { docMeta, getMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
@@ -14,7 +13,7 @@ import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
 import { servedOf } from "./served";
-import type { Making } from "./shapes";
+import type { Making, WarmPreviews } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
 export interface VersionsContext {
@@ -40,7 +39,7 @@ export interface VersionsContext {
   >;
   store: ReturnType<typeof createPageStore>;
   versionMoved: (row: ArtifactRow) => void;
-  warmPreviews: (page: ArtifactRow, program: ProgramRead) => void;
+  warmPreviews: WarmPreviews;
   writeStage: (row: ArtifactRow, state: StageState, sheet?: SheetRead) => void;
 }
 
