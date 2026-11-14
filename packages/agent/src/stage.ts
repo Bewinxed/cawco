@@ -50,6 +50,7 @@
  * so it outlives the shell, the command and the session that asked for it;
  * its last artifact's removal stops it ({@link stopServed}).
  */
+
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -105,6 +106,7 @@ import {
   StageErrorSchema,
 } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
+import { cutShort, lastLines } from "@cawco/core/words/helpers";
 import { sheetWords } from "@cawco/core/words/sheet";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
@@ -1404,12 +1406,14 @@ async function start(stage: Stage): Promise<void> {
           }
           const why =
             fatal ??
-            (said
-              .split("\n")
-              .filter((line) => line.trim())
-              .slice(-3)
-              .join(" ")
-              .slice(0, 400) ||
+            (cutShort(
+              lastLines(
+                said.split("\n").filter((line) => line.trim()),
+                3,
+                " "
+              ),
+              400
+            ) ||
               `it ended (${ended ?? `status ${code}`})`);
           settle(new Error(why));
           (served ? crashed : failedStart)(stage, why);

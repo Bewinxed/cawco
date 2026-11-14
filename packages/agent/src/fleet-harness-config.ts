@@ -9,6 +9,7 @@
  * (opencode-plugin-module.ts), pi's `additionalExtensionPaths` (pi-runtime.ts).
  * Whatever no row names any more is taken away.
  */
+
 import { createHash } from "node:crypto";
 import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,6 +23,7 @@ import {
 } from "@cawco/core/harness-config";
 import { fleetPlacedDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { lastLines } from "@cawco/core/words/helpers";
 import { z } from "zod";
 import type { SetHarnessConfig } from "./fleet-set-rows";
 import { resolveBin, toolEnv } from "./tools";
@@ -94,7 +96,7 @@ const install = async (
     await rm(staging, { recursive: true, force: true });
     return ran.kind === "unanswered"
       ? `npm install ${name}@${version} did not finish within ${NPM_INSTALL_MS / 1000} s.`
-      : `npm install ${name}@${version} failed: ${ran.value.stderr.trim().split("\n").slice(-4).join("\n")}`;
+      : `npm install ${name}@${version} failed: ${lastLines(ran.value.stderr.trim().split("\n"), 4, "\n")}`;
   }
   await rm(dir, { recursive: true, force: true });
   await rename(staging, dir);

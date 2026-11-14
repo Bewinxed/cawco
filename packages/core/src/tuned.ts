@@ -12,9 +12,11 @@
  * move's moment, so it counts as the judgement's answer and goes with a
  * Send as a choice entry does.
  */
+
 import { type ChoiceEntry, PAGE_HASH } from "./choices";
 import type { MapDoc } from "./doc-maps";
 import type { ClipRepeat, ClipValue } from "./stage-graph";
+import { cutShort } from "./words/helpers";
 
 /** The doc's map of tuned moves. */
 export const TUNED_MAP = "tuned";
@@ -113,13 +115,13 @@ export function tunedProblem(moves: [string, unknown][]): string | null {
       PAGE_HASH.test(one.pageHash) &&
       Array.isArray(one.records)
     )) {
-      return `Tuned move ${move.slice(0, 80)} holds at, pageHash and records.`;
+      return `Tuned move ${cutShort(move, 80)} holds at, pageHash and records.`;
     }
     if (one.records.length > TUNED_LIMITS.records) {
       return `A tuned move keeps at most ${TUNED_LIMITS.records} records.`;
     }
     if (!one.records.every(recordOk)) {
-      return `A record of tuned move ${move.slice(0, 80)} is not a tuned timing: it holds move, animation, delay, duration, easing and offTokens, each within ${TUNED_LIMITS.text} characters.`;
+      return `A record of tuned move ${cutShort(move, 80)} is not a tuned timing: it holds move, animation, delay, duration, easing and offTokens, each within ${TUNED_LIMITS.text} characters.`;
     }
   }
   return null;

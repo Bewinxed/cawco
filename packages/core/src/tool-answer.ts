@@ -9,6 +9,8 @@
  */
 
 /** What a caller reads of an answer: the agent's words, or the hub's record. */
+import { cutShort } from "./words/helpers";
+
 export type ToolForm = "words" | "record";
 
 /** The arguments a call sends for `form`: a record is asked for by `response_format`. */
@@ -45,6 +47,6 @@ export const recordOf = (name: string, text: string): unknown => {
     }
   }
   throw new NotARecord(
-    `${name} answered words, not its record (response_format "detailed"): ${trimmed.slice(0, 300)}`
+    `${name} answered words, not its record (response_format "detailed"): ${cutShort(trimmed, 300)}`
   );
 };

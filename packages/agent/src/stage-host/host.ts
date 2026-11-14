@@ -35,6 +35,7 @@
  * ({@link WEIGHT_PATH}) and lists the components ({@link COMPONENTS_PATH},
  * spec §6's discovery).
  */
+
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -106,6 +107,7 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
+import { lastLines } from "@cawco/core/words/helpers";
 import { transformCode } from "@code-inspector/core";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
@@ -2267,7 +2269,11 @@ async function formatted(
     });
     if (ran.status !== 0) {
       throw new StoryRefusal(
-        `The project's Biome could not format the story it wrote, so nothing was written: ${(ran.stderr || ran.stdout || `exit ${ran.status}`).trim().split("\n").slice(-3).join(" ")}`
+        `The project's Biome could not format the story it wrote, so nothing was written: ${lastLines(
+          (ran.stderr || ran.stdout || `exit ${ran.status}`).trim().split("\n"),
+          3,
+          " "
+        )}`
       );
     }
     return { by: "biome", code: ran.stdout };

@@ -1,4 +1,5 @@
 import { credentialAccountIds } from "@cawco/core/paths/claude";
+import { cutShort } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { GoogleGenAI } from "@google/genai";
 import { readHeld } from "../provider-accounts";
@@ -150,7 +151,7 @@ const httpRefusal = (
   return {
     status,
     code: field("code"),
-    message: (field("message") || error.message).slice(0, 1000),
+    message: cutShort(field("message") || error.message, 1000),
   };
 };
 
@@ -248,10 +249,10 @@ const askGemini = async (
   const image = interaction.output_image?.data;
   if (!image) {
     const [fault] = interaction.errors ?? [];
-    const text = [interaction.output_text ?? "", fault?.message ?? ""]
-      .join(" ")
-      .trim()
-      .slice(0, 600);
+    const text = cutShort(
+      [interaction.output_text ?? "", fault?.message ?? ""].join(" ").trim(),
+      600
+    );
     throw new Error(
       imageGenerationWords.geminiNoImage(
         fault?.code || interaction.status,

@@ -1,4 +1,5 @@
 import type { PageFault } from "../page-faults";
+import { cutShort } from "./helpers";
 
 /**
  * What the hub's artifact tools answer a session (artifact_create,
@@ -206,10 +207,10 @@ export const artifactToolWords = {
     const parts = [
       entry.options.length > 0 && `picked ${entry.options.join(", ")}`,
       entry.note?.trim() &&
-        `noted ${JSON.stringify(entry.note.trim().slice(0, 200))}`,
+        `noted ${JSON.stringify(cutShort(entry.note.trim(), 200))}`,
       entry.value !== null &&
         entry.value !== undefined &&
-        `set to ${JSON.stringify(entry.value).slice(0, 200)}`,
+        `set to ${cutShort(JSON.stringify(entry.value), 200)}`,
     ].filter(Boolean);
     return `${id} (${parts.length > 0 ? parts.join("; ") : "cleared"})`;
   },

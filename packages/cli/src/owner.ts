@@ -25,6 +25,7 @@ import type { PairingPoll, PairingStart } from "@cawco/core/hub-auth";
 import { OWNER_SCHEME } from "@cawco/core/hub-auth";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { cutShort } from "@cawco/core/words/helpers";
 
 /** This run's approval, once the person gave it. */
 let token: string | undefined;
@@ -48,10 +49,13 @@ const approve = async (origin: string, command: string): Promise<string> => {
       : {
           ok: false as const,
           status: answer.status,
-          said: refusalText({
-            status: answer.status,
-            value: answer.error.value,
-          }).slice(0, 300),
+          said: cutShort(
+            refusalText({
+              status: answer.status,
+              value: answer.error.value,
+            }),
+            300
+          ),
         };
   });
   let pairing: PairingStart;

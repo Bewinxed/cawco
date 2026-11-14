@@ -80,6 +80,7 @@ import {
   stageRoomOf,
   stageSeekOf,
 } from "@cawco/core/stage-graph";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   type Anchorable,
   anchorable,
@@ -831,7 +832,7 @@ function failed(
   of: "artifact" | "field" | "morph" | "send" | "state",
   message: string
 ) {
-  post("cawco:error", { message: message.slice(0, 300), of });
+  post("cawco:error", { message: cutShort(message, 300), of });
 }
 
 /** Writes one change into the doc; refused with the bound's sentence, which the host also hears. */

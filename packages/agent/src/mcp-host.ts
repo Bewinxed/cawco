@@ -98,6 +98,7 @@ import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { cutShortTail } from "@cawco/core/words/helpers";
 import { z } from "zod";
 import type { BrowserPorts } from "./browser/browsers";
 import { harnessMcpUrl } from "./delegation";
@@ -329,7 +330,7 @@ class Child {
       started.delete(pid);
       recordStarted();
       const said = this.#stderr.join("\n").trim();
-      this.#ended = `The ${name} MCP server exited (code ${code})${said ? `: ${said.slice(-400)}` : ""}. Its next call starts it again.`;
+      this.#ended = `The ${name} MCP server exited (code ${code})${said ? `: ${cutShortTail(said, 400)}` : ""}. Its next call starts it again.`;
       console.warn(`[mcp-host] ${this.#ended}`);
       for (const { reject } of this.#pending.values()) {
         reject(new Error(this.#ended));

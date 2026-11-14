@@ -50,6 +50,7 @@
  * carry the settings it was made with and its DNS name, so a daemon that
  * restarts reads the relay back from it.
  */
+
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -83,6 +84,7 @@ import {
   STREAM_RELAY_PORT,
   STREAM_RELAY_TLS_PORT,
 } from "@cawco/core/stream-relay";
+import { lastLines } from "@cawco/core/words/helpers";
 import type Docker from "dockerode";
 import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
@@ -465,7 +467,7 @@ const certbotWords = (said: string): string => {
     .map((line) => line.trim())
     .filter(Boolean);
   const errors = lines.filter((line) => CERTBOT_ERROR.test(line));
-  return (errors.length > 0 ? errors : lines.slice(-4)).join(" ");
+  return errors.length > 0 ? errors.join(" ") : lastLines(lines, 4, " ");
 };
 
 /**
@@ -656,7 +658,7 @@ const waitLive = async (
         RELAY_FAILURES.coturnExited(
           hostname(),
           String(inspected?.State.ExitCode ?? "unknown"),
-          said.trim().split("\n").slice(-4).join(" ")
+          lastLines(said.trim().split("\n"), 4, " ")
         )
       );
     }

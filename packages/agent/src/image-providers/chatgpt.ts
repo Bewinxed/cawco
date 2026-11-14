@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { arch, platform, release } from "node:os";
 import { credentialAccountIds } from "@cawco/core/paths/claude";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   type BlockedLogin,
   imageGenerationWords,
@@ -157,7 +158,7 @@ async function errorDetail(response: Response): Promise<string> {
   } catch {
     // Not JSON: report the text as sent.
   }
-  return text.slice(0, 1000) || "(empty body)";
+  return cutShort(text, 1000) || "(empty body)";
 }
 
 /**

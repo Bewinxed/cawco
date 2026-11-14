@@ -4,6 +4,7 @@
  * elements came from, the computed-style delta a forced state makes, and the
  * animations a change fired, from `getAnimations()`.
  */
+
 import { fnv1a } from "@cawco/core/fnv1a";
 import {
   type AnimationRead,
@@ -13,6 +14,7 @@ import {
   type StyleDelta,
   unkeyedPath,
 } from "@cawco/core/stage";
+import { cutShort } from "@cawco/core/words/helpers";
 
 /** Svelte's dev stack on an element (a dev compile's `__svelte_meta`). */
 interface SvelteMeta {
@@ -630,11 +632,10 @@ export function pageError(
     (error instanceof Error ? error.message : String(error ?? "error")).split(
       "\n"
     )[0] ?? "";
-  const message = first
-    .replace(KEYED_PREFIX, "")
-    .replace(VITE_STAMP, "")
-    .trim()
-    .slice(0, 300);
+  const message = cutShort(
+    first.replace(KEYED_PREFIX, "").replace(VITE_STAMP, "").trim(),
+    300
+  );
   const stack = error instanceof Error ? (error.stack ?? "") : "";
   for (const line of stack.split("\n")) {
     const at = line.match(STACK_PLACE);

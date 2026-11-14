@@ -10,6 +10,7 @@ import { homedir, hostname, platform, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { toolSpec } from "@cawco/core/tools";
+import { cutShort, lastLines } from "@cawco/core/words/helpers";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { z } from "zod";
@@ -217,7 +218,7 @@ const INTERNAL = /INTERNAL \(code 500\)|\b500 INTERNAL\b/u;
 
 /** The last lines of what agy said on its errors, for a sentence. */
 const tailOf = (text: string): string =>
-  Bun.stripANSI(text).trim().split("\n").slice(-4).join(" / ").slice(0, 600);
+  cutShort(lastLines(Bun.stripANSI(text).trim().split("\n"), 4, " / "), 600);
 
 /**
  * A run that ended with no image, as a refusal in words, by what agy said:

@@ -28,6 +28,7 @@
  * to any parent: it says nothing else). Until then, and for a frame whose
  * document runs no overlay, the frame is one element, as frames.ts has it.
  */
+
 import type {
   AnchorFound,
   PageAnchor,
@@ -35,6 +36,7 @@ import type {
 } from "@cawco/core/comments/anchor";
 import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/preview/routes";
 import { EMBED_ARRIVING, EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
+import { cutShort } from "@cawco/core/words/helpers";
 import { thrownBeforeLoad } from "./faults";
 import {
   contentBox,
@@ -781,7 +783,7 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     const failed = failures.get(asked);
     failures.delete(asked);
     for (const message of Array.isArray(errors) ? errors.slice(0, 4) : []) {
-      failed?.(String(message).slice(0, 300));
+      failed?.(cutShort(String(message), 300));
     }
     // Base64 PNG, as picture.ts `cropPicture` answers it.
     drawn(typeof png === "string" && png.length > 0 ? png : null);

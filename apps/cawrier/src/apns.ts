@@ -29,6 +29,7 @@
  */
 
 import { Buffer } from "node:buffer";
+import { cutShort } from "@cawco/core/words/helpers";
 
 export type ApnsEnvironment = "production" | "sandbox";
 
@@ -158,7 +159,7 @@ export const sendApns = async (
           : undefined;
       reason = typeof field === "string" ? field : null;
     } catch {
-      reason = text.slice(0, 200) || null;
+      reason = cutShort(text, 200) || null;
     }
     if (
       reason === "ExpiredProviderToken" ||

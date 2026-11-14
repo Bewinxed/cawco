@@ -18,6 +18,7 @@
  * Built into the overlay's bundle as text (preview proxy.ts
  * `bundleOverlay`), and started from it as a blob (artifact.ts).
  */
+
 import { honourDeletions, lostWrites } from "@cawco/core/comments/model";
 import {
   ARTIFACT_GONE,
@@ -28,6 +29,7 @@ import {
   watchSilence,
 } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
+import { cutShort } from "@cawco/core/words/helpers";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
@@ -309,7 +311,7 @@ const closedBecause = (
   event: { code: number; reason: string } | null
 ) =>
   event
-    ? `Its link to ${host} closed (code ${event.code}${event.reason ? `: ${event.reason.slice(0, 80)}` : ""})`
+    ? `Its link to ${host} closed (code ${event.code}${event.reason ? `: ${cutShort(event.reason, 80)}` : ""})`
     : `Its link to ${host} stopped answering`;
 
 const connect = () => {

@@ -24,3 +24,15 @@ export const pad2 = (n: number): string => String(n).padStart(2, "0");
 /** A sentence a person reads, kept to `max` characters and ending in "…" where it was cut. */
 export const cutShort = (text: string, max: number): string =>
   text.length > max ? `${text.slice(0, max)}…` : text;
+
+/** The end of a sentence a person reads, kept to `max` characters and opening in "…" where it was cut. */
+export const cutShortTail = (text: string, max: number): string =>
+  text.length > max ? `…${text.slice(-max)}` : text;
+
+/** The last `count` of `lines` joined by `between`, opening in "…" where earlier lines were left out. */
+export const lastLines = (
+  lines: readonly string[],
+  count: number,
+  between: string
+): string =>
+  `${lines.length > count ? `…${between}` : ""}${lines.slice(-count).join(between)}`;
