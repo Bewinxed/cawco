@@ -38,11 +38,21 @@ export const runtimeCommit =
  * `PREVIEW_START` carries `for`, which the agent refuses a start without,
  * and the register's previews carry `for` in place of their `source`; an
  * epoch-6 hub starts every preview with no `for` and reads a `source` the
- * register no longer sends. A hub sends a launch only to an agent whose
- * range holds its own, and a joined machine installs only a build whose
- * range overlaps its hub's.
+ * register no longer sends. Epoch 8: a delegate's or handoff's inputs cross
+ * in batches of ranges and appended pieces (core workspace/controls.ts
+ * `inputBatches`): `CONTROL_INPUTS_ADMIT` answers each file's `size`,
+ * `CONTROL_INPUTS_READ` takes `[bound, project, InputWant[]]` and answers
+ * `contents`, `CONTROL_INPUTS_WRITE` takes `InputPiece[]` appended to a
+ * part, and `CONTROL_INPUTS_ROOM` and `CONTROL_INPUTS_CLEAR` are new; an
+ * epoch-7 agent admits with no `size`, answers ROOM and CLEAR as unknown
+ * controls, throws on READ's bound as no list of paths, and writes each
+ * piece whole over its file, so the hub sends it no inputs and reads none
+ * from it (hub work-items.ts `olderBuild`); an epoch-7 hub sends READ and
+ * WRITE their whole-file shapes, which an epoch-8 agent refuses. A hub sends a
+ * launch only to an agent whose range holds its own, and a joined machine
+ * installs only a build whose range overlaps its hub's.
  */
-export const protocolRange = { min: 7, max: 7 } as const;
+export const protocolRange = { min: 8, max: 8 } as const;
 export const runtimeDataDir = () =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),

@@ -39,6 +39,20 @@ export const updatesWords = {
    * `hubWaitWords`); it installs by itself once the hub runs a build that
    * speaks it and has confirmed it.
    */
+  /**
+   * A connected machine whose agent's contract range (core runtime.ts
+   * `protocolRange`) does not hold its hub's: the hub sends it no work it
+   * cannot carry (`cannot` says which) and offers it the hub's build, which
+   * it installs by itself. Said where that work is held or refused: a held
+   * start (hub start-holds.ts `startHold`), a delegate's or handoff's inputs
+   * (hub work-items.ts `handInto`).
+   */
+  olderBuild: (machine: string, cannot: string) =>
+    `${machine} runs a CawCo build older than its hub's, which cannot ${cannot} until it installs the hub's build`,
+  /** {@link updatesWords.olderBuild}'s `cannot` for a session's start. */
+  olderBuildStarts: "start sessions for this hub",
+  /** {@link updatesWords.olderBuild}'s `cannot` for a delegate's or handoff's inputs. */
+  olderBuildInputs: "send or take a session's inputs",
   /** `behind`: the hub does not speak the build's wire protocol yet. */
   waitsForHubToTake: (version: string) =>
     `Waits for its hub to take ${version} first`,

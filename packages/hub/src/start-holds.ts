@@ -1,4 +1,5 @@
 import type { Envelope, SpawnPayload } from "@cawco/core/protocol";
+import { updatesWords } from "@cawco/core/words/updates";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { createLaunches } from "./launches";
@@ -91,7 +92,10 @@ export const createStartHolds = (
     if (!ctx.speaksContract(ctx.agentProtocols.get(machineId))) {
       return {
         kind: "build",
-        words: `${ctx.machineName(machineId)} runs a CawCo build older than its hub's, which cannot start sessions for this hub until it installs the hub's build`,
+        words: updatesWords.olderBuild(
+          ctx.machineName(machineId),
+          updatesWords.olderBuildStarts
+        ),
       };
     }
     return undefined;

@@ -261,6 +261,7 @@ import {
   relaunchWords,
 } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { updatesWords } from "@cawco/core/words/updates";
 import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_HOST_OUTPUTS,
@@ -8006,6 +8007,14 @@ export const createServer = (
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
+    olderBuild: (machineId) =>
+      registry.agent(machineId) &&
+      !speaksContract(agentProtocols.get(machineId))
+        ? updatesWords.olderBuild(
+            machineName(machineId),
+            updatesWords.olderBuildInputs
+          )
+        : undefined,
     stalled: (instanceId) => stallOfPort.now()(instanceId)?.words,
     // The sweep's wake of work asleep asks the same gate every sender does,
     // and leaves a session to the send already on its way to it.

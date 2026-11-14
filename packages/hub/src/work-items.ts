@@ -755,6 +755,14 @@ interface WorkItemDeps extends Pick<
     harness: HarnessKind,
     model: string | undefined
   ) => string | undefined;
+  /**
+   * "Omars-MacBook-Pro runs a CawCo build older than its hub's, which
+   * cannot send or take a session's inputs until it installs the hub's
+   * build" while `machineId`'s connected agent does not speak this hub's
+   * contract (core runtime.ts `protocolRange`): the inputs controls it
+   * answers are another epoch's shapes. Undefined when it speaks it.
+   */
+  readonly olderBuild: (machineId: string) => string | undefined;
   /** Whether `machineId`'s agent is connected now: the Apple build gate runs only on one that is. */
   readonly online: (machineId: string) => boolean;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
@@ -1446,6 +1454,7 @@ export const createWorkItems = ({
   missingFor,
   unblocked,
   machinePaused,
+  olderBuild,
   modelRefusal,
   online,
   personWait,
@@ -3387,6 +3396,13 @@ export const createWorkItems = ({
     if (paths.length === 0) {
       return [];
     }
+    const older = olderBuild(reader.machineId);
+    if (older) {
+      return problem(400, {
+        code: "work-item-inputs-older-build",
+        detail: inputsLine(older),
+      });
+    }
     const judged = (await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
       paths,
       bound,
@@ -3603,6 +3619,18 @@ export const createWorkItems = ({
   ) => {
     if (inputs.held.length === 0 && inputs.paths.length === 0) {
       return;
+    }
+    // Both ends speak this hub's inputs controls, or no byte moves: an
+    // older agent answers another epoch's shapes (core runtime.ts
+    // `protocolRange`), and is offered the hub's build.
+    const older =
+      olderBuild(machineId) ??
+      (inputs.paths.length > 0 ? olderBuild(inputs.machineId) : undefined);
+    if (older) {
+      return problem(400, {
+        code: "work-item-inputs-older-build",
+        detail: inputsLine(older),
+      });
     }
     const held = await Promise.all(
       inputs.held.map(async (file) => {

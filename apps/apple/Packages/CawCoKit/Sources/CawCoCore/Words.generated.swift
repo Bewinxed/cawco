@@ -2421,6 +2421,17 @@ public enum Words {
             "No new builds could be looked for: \(why). Machines keep the build they run; Try again to check."
         }
 
+        /// A connected machine whose agent's contract range (core runtime.ts `protocolRange`) does not hold its hub's: the hub sends it no work it cannot carry (`cannot` says which) and offers it the hub's build, which it installs by itself. Said where that work is held or refused: a held start (hub start-holds.ts `startHold`), a delegate's or handoff's inputs (hub work-items.ts `handInto`).
+        public static func olderBuild(machine: String, cannot: String) -> String {
+            "\(machine) runs a CawCo build older than its hub's, which cannot \(cannot) until it installs the hub's build"
+        }
+
+        /// {@link updatesWords.olderBuild}'s `cannot` for a session's start.
+        public static let olderBuildStarts = "start sessions for this hub"
+
+        /// {@link updatesWords.olderBuild}'s `cannot` for a delegate's or handoff's inputs.
+        public static let olderBuildInputs = "send or take a session's inputs"
+
         /// `behind`: the hub does not speak the build's wire protocol yet.
         public static func waitsForHubToTake(version: String) -> String {
             "Waits for its hub to take \(version) first"

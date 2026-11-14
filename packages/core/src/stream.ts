@@ -310,12 +310,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    `eventsMore` count the older actions and events (numbers, where 63 sent
  *    booleans), and each list takes a `skip` to read them. A page built for
  *    63 reads a number as a flag, so it reloads first.
+ * 65: a delegation's or handoff's inputs to or from a machine whose agent
+ *    is older than the hub's contract (core runtime.ts `protocolRange`) are
+ *    refused (`work-item-inputs-older-build`) until it installs the hub's
+ *    build. A page built for 64 does not know the new code, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 64;
+export const WIRE_PROTOCOL = 65;
 
 /**
  * What a session's stream carries: the changes each frame made to its
