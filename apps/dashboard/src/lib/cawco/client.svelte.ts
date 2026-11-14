@@ -125,6 +125,7 @@ import {
   takeStarters,
   takeTasksChanged,
 } from "./stores/tickers.svelte";
+import { readToolUpdates } from "./stores/tool-updates.svelte";
 import { readBehind, readTranscript } from "./stores/transcript-reads.svelte";
 import { addNote, applyTranscript } from "./stores/transcripts.svelte";
 import {
@@ -219,6 +220,9 @@ async function refresh(): Promise<boolean> {
   readWaitingActions();
   // Fleet watch's notices to you: frames keep them from here.
   readWatchNotices();
+  // Whether CawCo updates a copy of a CLI it doesn't run by itself: a
+  // harness block's press reads it.
+  readToolUpdates();
   // The person's presence: the rail's dot, and Needs you's row for this browser.
   readPerson().catch(() => undefined);
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
