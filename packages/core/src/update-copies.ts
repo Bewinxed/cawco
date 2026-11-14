@@ -2,7 +2,7 @@
  * The files the update helper writes beside the hub's database (cli
  * binary-apply.ts), by their names: THE ONE MATCHER, read by the helper,
  * which keeps one of each kind, and by the hub's start, which names the copy
- * from before an update when it does not open the database (migrations-ahead.ts).
+ * from before an update when it does not open the database (migration-state.ts).
  */
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";

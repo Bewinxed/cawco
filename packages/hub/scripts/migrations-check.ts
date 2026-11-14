@@ -42,6 +42,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { choiceEntryProblem } from "@cawco/core/choices";
+import {
+  type AppliedRow,
+  appliedRows,
+  type JournalEntry,
+  journalEntries,
+  migrationState,
+} from "@cawco/core/migration-state";
 import { getTableName, is } from "drizzle-orm";
 import {
   getTableConfig,
@@ -49,11 +56,14 @@ import {
   SQLiteTable,
 } from "drizzle-orm/sqlite-core";
 import { applyUpdate, Doc } from "yjs";
+import { z } from "zod";
 import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
 import type { OwnedOp, OwnedRow } from "../src/db/owned-rows";
 import { type OwnerKind, ownerOf } from "../src/db/owner-columns";
 import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
+import { baseRefOf } from "./openapi-inputs";
+import { newestNightly } from "./shipped";
 import { storedRows, storedRowsReport } from "./stored-rows";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
@@ -144,6 +154,256 @@ const GIVEN = at === -1 ? undefined : process.argv[at + 1];
 const scratch = mkdtempSync(join(tmpdir(), "cawco-migrations-"));
 
 /**
+ * Two journal entries with one `when` or one file hash: either witness would
+ * then name two migrations (core migration-state.ts resolves a row by its
+ * `created_at`, then its hash), each as a sentence.
+ */
+const sharedWitnesses = (journal: readonly JournalEntry[]): string[] => {
+  const problems: string[] = [];
+  for (const witness of ["when", "hash"] as const) {
+    const seen = new Map<string | number, string>();
+    for (const entry of journal) {
+      const first = seen.get(entry[witness]);
+      if (first) {
+        problems.push(
+          `\`${entry.tag}\` has the same ${witness} as \`${first}\`: a database's row of one would read as the other`
+        );
+      }
+      seen.set(entry[witness], entry.tag);
+    }
+  }
+  return problems;
+};
+
+/** git in this repository: its output, or `undefined` where it fails (a path a commit does not hold). */
+const gitOut = (args: string[]): string | undefined => {
+  const run = Bun.spawnSync(["git", ...args], {
+    cwd: HUB,
+    env: process.env,
+    stderr: "pipe",
+  });
+  return run.exitCode === 0 ? run.stdout.toString() : undefined;
+};
+
+/** A journal as a commit kept it: each entry's tag and `when`. */
+const JournalTags = z.object({
+  entries: z.array(z.object({ tag: z.string(), when: z.number() })),
+});
+
+/**
+ * A MIGRATION ON MAIN IS FROZEN. Every entry of the journal at the base (the
+ * merge-base with origin/main, or `--base`) and at the newest published
+ * nightly keeps its `when` here, and the entry with that `when` keeps that
+ * commit's `.sql` bytes: a database records `(hash, created_at)` and nothing
+ * else, so an edited or re-stamped migration reads as another one (core
+ * migration-state.ts). Its tag may be renumbered. A migration found wrong
+ * after it lands is fixed by a new one. The bases are the ones
+ * stored-compat.ts holds the stored shapes to.
+ */
+const editedMigrations = (
+  journal: readonly JournalEntry[]
+): { problems: string[]; said: string } => {
+  const byWhen = new Map(journal.map((entry) => [entry.when, entry]));
+  const bases = new Map<string, string>();
+  for (const base of [
+    { label: "the base", commit: baseRefOf(process.argv) },
+    newestNightly(HUB),
+  ]) {
+    const commit = gitOut(["rev-parse", `${base.commit}^{commit}`])?.trim();
+    if (!commit) {
+      throw new Error(`${base.label} (${base.commit}) is not a commit here`);
+    }
+    if (!bases.has(commit)) {
+      bases.set(
+        commit,
+        base.label === "the base"
+          ? `the base ${commit.slice(0, 12)}`
+          : base.label
+      );
+    }
+  }
+  const problems: string[] = [];
+  for (const [commit, label] of bases) {
+    const text = gitOut([
+      "show",
+      `${commit}:packages/hub/drizzle/meta/_journal.json`,
+    ]);
+    if (!text) {
+      continue;
+    }
+    const then = JournalTags.parse(JSON.parse(text)).entries;
+    for (const entry of then) {
+      const now = byWhen.get(entry.when);
+      if (!now) {
+        problems.push(
+          `${entry.tag} (when ${entry.when}) is in ${label}'s journal and in none here: a migration on main keeps its \`when\`; fix it with a new migration`
+        );
+        continue;
+      }
+      const sqlThen = gitOut([
+        "show",
+        `${commit}:packages/hub/drizzle/${entry.tag}.sql`,
+      ]);
+      const sqlNow = readFileSync(
+        join(HUB, "drizzle", `${now.tag}.sql`),
+        "utf8"
+      );
+      if (sqlThen !== undefined && sqlThen !== sqlNow) {
+        problems.push(
+          `${now.tag}.sql differs from ${label}'s ${entry.tag}.sql: a migration on main keeps its bytes; fix it with a new migration`
+        );
+      }
+    }
+  }
+  return {
+    problems,
+    said: `every migration in ${[...bases.values()].join(" and ")} keeps its \`when\` and its SQL here`,
+  };
+};
+
+/** SQL that makes, alters, drops or renames something: a migration without it runs again on a finished schema. */
+const SCHEMA_CHANGE = /\b(CREATE|ALTER|DROP|RENAME)\b/iu;
+
+/** `__drizzle_migrations` and `sqlite_master` as they stand: what a database refused must still be. */
+const shapeOf = (path: string): string => {
+  const sqlite = new Database(path, { readwrite: true });
+  const said = JSON.stringify([
+    sqlite
+      .query("SELECT hash, created_at FROM __drizzle_migrations ORDER BY rowid")
+      .all(),
+    sqlite
+      .query("SELECT type, name, sql FROM sqlite_master ORDER BY name")
+      .all(),
+  ]);
+  sqlite.close();
+  return said;
+};
+
+/** A row no migration of this build is: `created_at` given, its hash of a text no migration file has. */
+const foreignRow = (path: string, createdAt: number): AppliedRow => {
+  const hash = new Bun.CryptoHasher("sha256")
+    .update("migrations:check: a migration from elsewhere")
+    .digest("hex");
+  const sqlite = new Database(path, { readwrite: true });
+  sqlite.run(
+    'INSERT INTO "__drizzle_migrations" ("hash", "created_at") VALUES (?, ?)',
+    [hash, createdAt]
+  );
+  sqlite.close();
+  return { hash, createdAt };
+};
+
+/** Opens the database at `path` as the hub does (db/index.ts `make`): its migrations, by identity. */
+const openAsHub = async (path: string): Promise<void> => {
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { applyMigrations } = await import("../src/db/migrate");
+  const db = drizzle(path);
+  try {
+    await applyMigrations(db, db.$client, path);
+  } finally {
+    db.$client.close();
+  }
+};
+
+/**
+ * THE THREE WAYS DRIZZLE'S NEWEST-STAMP TEST GOES WRONG, each on a scratch
+ * copy, opened as the hub opens its database:
+ * - R1, the live hub's case: a row from elsewhere stamped above the journal's
+ *   newest. Stock drizzle 0.45 applies none of the fixture's pending
+ *   migrations and returns. Here: not opened, nothing applied.
+ * - R2: the same row stamped inside the journal's range, which the newest
+ *   stamp alone lets through. Here: not opened, nothing applied.
+ * - A: an older migration left unapplied behind applied ones (the newest
+ *   before the last whose SQL makes, alters, drops or renames nothing, so it
+ *   runs again on the finished schema). Stock drizzle skips it. Here: applied,
+ *   and the schema guard passes.
+ * One line for each.
+ */
+const identityCases = async (
+  migrated: string,
+  journal: readonly JournalEntry[]
+): Promise<string[]> => {
+  const said: string[] = [];
+  const newestEntry = Math.max(...journal.map((entry) => entry.when));
+  const fixture = Bun.gunzipSync(
+    new Uint8Array(await Bun.file(FIXTURE).arrayBuffer())
+  );
+  for (const [name, stamp] of [
+    ["R1", (_fixtureNewest: number) => newestEntry + 1],
+    ["R2", (fixtureNewest: number) => fixtureNewest + 1],
+  ] as const) {
+    const path = join(scratch, `case-${name}.db`);
+    await Bun.write(path, fixture);
+    const sqlite = new Database(path, { readwrite: true });
+    const fixtureNewest = Math.max(
+      ...appliedRows(sqlite).map((applied) => applied.createdAt)
+    );
+    sqlite.close();
+    const row = foreignRow(path, stamp(fixtureNewest));
+    const shape = shapeOf(path);
+    const pending = migrationState(
+      [...appliedRows(new Database(path, { readwrite: true }))],
+      journal
+    ).pending.length;
+    const refused = await openAsHub(path).then(
+      () => undefined,
+      (error: unknown) =>
+        error instanceof Error ? error.message : String(error)
+    );
+    const time = new Date(row.createdAt).toISOString();
+    if (!(
+      refused?.includes("holds a migration this build of CawCo doesn't have") &&
+      refused.includes(`written ${time}, hash ${row.hash.slice(0, 12)}`)
+    )) {
+      throw new Error(
+        `case ${name}: a database holding a migration stamped ${time} that this build does not have was ${refused ? `refused with other words: ${refused}` : "opened"}`
+      );
+    }
+    if (shapeOf(path) !== shape) {
+      throw new Error(`case ${name}: the database it did not open was changed`);
+    }
+    said.push(
+      `case ${name}: a row from elsewhere stamped ${time} (${name === "R1" ? "above the journal's newest" : "inside the journal's range"}), ${pending} migrations pending: not opened, nothing applied`
+    );
+  }
+  const path = join(scratch, "case-A.db");
+  const source = new Database(migrated, { readwrite: true });
+  source.run(`VACUUM INTO '${path.replaceAll("'", "''")}'`);
+  source.close();
+  const older = journal
+    .slice(0, -1)
+    .findLast(
+      (entry) =>
+        !SCHEMA_CHANGE.test(
+          readFileSync(join(HUB, "drizzle", `${entry.tag}.sql`), "utf8")
+        )
+    );
+  if (!older) {
+    throw new Error(
+      "case A: no migration's SQL runs again on a finished schema"
+    );
+  }
+  const sqlite = new Database(path, { readwrite: true });
+  sqlite.run('DELETE FROM "__drizzle_migrations" WHERE created_at = ?', [
+    older.when,
+  ]);
+  sqlite.close();
+  await openAsHub(path);
+  const after = new Database(path, { readwrite: true });
+  const state = migrationState(appliedRows(after), journal);
+  after.close();
+  if (state.pending.length > 0 || state.unknown.length > 0) {
+    throw new Error(
+      `case A: ${older.tag}, unapplied behind the rest, is still pending once the database was opened`
+    );
+  }
+  said.push(
+    `case A: ${older.tag} unapplied behind ${journal.at(-1)?.tag}: applied, recorded, every declared table and column there`
+  );
+  return said;
+};
+
+/**
  * Rows in every table, and how many migrations the database records.
  * Opened read-write, on the scratch copy only: the fixture is a WAL database
  * (it was a hub's), and a read-only open of one with no -shm beside it is
@@ -166,16 +426,7 @@ const read = (path: string) => {
         .get()?.n ?? 0,
     ])
   );
-  const applied = new Set(
-    rows.get("__drizzle_migrations")
-      ? sqlite
-          .query<{ at: number }, []>(
-            "SELECT created_at AS at FROM __drizzle_migrations"
-          )
-          .all()
-          .map((row) => Number(row.at))
-      : []
-  );
+  const applied = appliedRows(sqlite);
   sqlite.close();
   return {
     rows,
@@ -595,6 +846,15 @@ try {
       `The migration journal's \`when\` must increase with idx:\n${disordered.join("\n")}`
     );
   }
+  const journal = journalEntries(join(HUB, "drizzle"));
+  const twins = sharedWitnesses(journal);
+  if (twins.length) {
+    throw new Error(twins.join("\n"));
+  }
+  const thawed = editedMigrations(journal);
+  if (thawed.problems.length) {
+    throw new Error(thawed.problems.join("\n"));
+  }
   const last = sorted.at(-1);
   const qualified = last ? await qualifiedChecks(last.tag) : [];
   if (qualified.length) {
@@ -641,14 +901,12 @@ try {
     );
   }
   const before = read(dbPath);
-  // A move runs on this database when its migration is newer than the
-  // newest the database records, as drizzle applies it.
-  const whenOf = new Map(entries.map((entry) => [entry.tag, entry.when]));
-  const newestBefore = Math.max(0, ...before.applied);
-  const moved = moving(
-    dbPath,
-    (migration) => (whenOf.get(migration) ?? 0) > newestBefore
+  // A move runs on this database when its migration was pending before the
+  // start, as the hub applies them (by identity, core migration-state.ts).
+  const pendingBefore = new Set(
+    migrationState(before.applied, journal).pending.map((entry) => entry.tag)
   );
+  const moved = moving(dbPath, (migration) => pendingBefore.has(migration));
   const untitled = untitledBefore(dbPath);
   const { hub, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
   const answers: string[] = [];
@@ -674,20 +932,12 @@ try {
   await answer(`/api/projects/${project}/caw`);
   lifetime.close();
   const after = read(dbPath);
-  const journal = entries.length;
-  // A given database is a live hub's: drizzle applies only what is newer
-  // than the newest it records, so that is what must be recorded after.
-  const unapplied = entries.filter(
-    (entry) => entry.when > newestBefore && !after.applied.has(entry.when)
-  );
-  if (GIVEN && unapplied.length) {
+  // Both ways, the fixture and a given database alike: every journal entry
+  // is a row of the database once the hub started, and every row an entry.
+  const resolved = migrationState(after.applied, journal);
+  if (resolved.pending.length > 0 || resolved.unknown.length > 0) {
     throw new Error(
-      `The database records none of ${unapplied.map((entry) => entry.tag).join(", ")}, newer than its newest before`
-    );
-  }
-  if (!GIVEN && after.migrations !== journal) {
-    throw new Error(
-      `The database records ${after.migrations} migrations; this commit has ${journal}`
+      `Once the hub started, the database records none of ${resolved.pending.map((entry) => entry.tag).join(", ") || "no entry"}, and holds rows no journal entry is: ${resolved.unknown.map((row) => `${row.createdAt} ${row.hash.slice(0, 12)}`).join(", ") || "none"}`
     );
   }
   // What a given database's start empties by itself, never a migration: the
@@ -809,7 +1059,9 @@ try {
   if (unowned.length) {
     throw new Error(unowned.join("\n"));
   }
+  const cases = await identityCases(dbPath, journal);
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
+  console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(
     `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );

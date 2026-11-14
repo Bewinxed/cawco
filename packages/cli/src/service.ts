@@ -47,7 +47,7 @@ import {
   launchdLogsDir,
   unxml,
 } from "@cawco/core/launchd";
-import { newerDatabase } from "@cawco/core/migrations-ahead";
+import { unknownMigrations } from "@cawco/core/migration-state";
 import { hubDbPath } from "@cawco/core/paths/hub";
 import {
   CAWCO_HUB_PORT,
@@ -807,14 +807,14 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       restartSec: 2,
       cpuWeight: OWN_CPU_WEIGHT,
       processType: "Interactive",
-      // The database the unit names: a newer build migrated it, and the hub
+      // The database the unit names holds a migration this build does not have, and the hub
       // this unit runs would not open it, so the hub running now is left
-      // running (core migrations-ahead.ts).
+      // running (core migration-state.ts).
       check: () => {
         needs(layout.hub, "hub")();
-        const newer = newerDatabase(hubDbPath());
-        if (newer) {
-          throw new ServiceError(newer);
+        const unknown = unknownMigrations(hubDbPath());
+        if (unknown) {
+          throw new ServiceError(unknown);
         }
       },
       probe: probeHub,

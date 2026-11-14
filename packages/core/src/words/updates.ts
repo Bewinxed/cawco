@@ -98,7 +98,7 @@ export const updatesWords = {
    * database, the hub still holding it): said after the reason. The rollback
    * goes on, and the build rolled back to runs on the database the trial
    * left. `stopped`: that database holds migrations `previous` lacks, so its
-   * hub does not start on it (core migrations-ahead.ts).
+   * hub does not start on it (core migration-state.ts).
    */
   databaseNotPutBack: (
     database: string,

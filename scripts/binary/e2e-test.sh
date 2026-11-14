@@ -1161,7 +1161,7 @@ migration_rolled_back() {
   [[ "$(db_rows has "$aside" e2e-trial-row)" == yes ]] || { echo "ASSERTION FAILED: the trial's row is not in $aside"; return 1; }
   # A hub started in the rollback's window, before the copy was back, stopped on the migrated file and wrote why;
   # the start on the copy removed that.
-  echo "starts that stopped on the migrated database: $(as_user "$hubc" journalctl --user --no-pager -u cawco-hub.service | grep -c 'was migrated by a newer build of CawCo' || true)"
+  echo "starts that stopped on the migrated database: $(as_user "$hubc" journalctl --user --no-pager -u cawco-hub.service | grep -c "this build of CawCo doesn.t have" || true)"
   ! as_user "$hubc" test -e "$DB.stopped" || { echo "ASSERTION FAILED: $DB.stopped is there though the hub opened its database"; return 1; }
   # Two updates (to NEXT, then this one), one copy: NEXT's. The files no update wrote stay.
   one_copy "$NEXT"
@@ -1175,15 +1175,15 @@ migration_rolled_back() {
     return 1
   fi
   echo "the hub said: $out"
-  [[ $out == *"/tmp/newer/cawco.db was migrated by a newer build of CawCo: it holds 1 migration newer than this build's"* && $out == *"Install the build that migrated it, or a newer one."* ]] \
+  [[ $out == *"/tmp/newer/cawco.db holds a migration this build of CawCo doesn't have (written "*", hash e2e-newer), so this hub doesn't open it."* && $out == *"Install a build that has it."* ]] \
     || { echo "ASSERTION FAILED: the hub stopped without its words"; return 1; }
-  [[ "$(as_user "$hubc" cat /tmp/newer/cawco.db.stopped)" == *"was migrated by a newer build of CawCo"* ]] \
+  [[ "$(as_user "$hubc" cat /tmp/newer/cawco.db.stopped)" == *"holds a migration this build of CawCo doesn't have"* ]] \
     || { echo "ASSERTION FAILED: no /tmp/newer/cawco.db.stopped saying why"; return 1; }
   if out=$(as_user "$hubc" env CAWCO_DB_PATH=/tmp/newer/cawco.db "$DATA/binary/versions/$NEXT/cawco" status --hub http://127.0.0.1:43999 2>&1); then
     echo "ASSERTION FAILED: cawco status answered for a hub that is down: $out"
     return 1
   fi
-  [[ $out == *"the hub is down: /tmp/newer/cawco.db was migrated by a newer build of CawCo"* ]] \
+  [[ $out == *"the hub is down: /tmp/newer/cawco.db holds a migration this build of CawCo doesn't have"* ]] \
     || { echo "ASSERTION FAILED: cawco status does not say the hub is down and why: $out"; return 1; }
   # With the hub down, the last update's failure is read there too, in the words the update wrote.
   [[ $out == *"cawco: the last update failed: "*"what it stored during the trial is in $aside"* ]] \
@@ -1208,16 +1208,48 @@ installs_stop_on_newer() {
     echo "ASSERTION FAILED: service install went on over a newer database: $out"
     return 1
   fi
-  [[ $out == *"was migrated by a newer build of CawCo"* ]] || { echo "ASSERTION FAILED: service install stopped without the words: $out"; return 1; }
+  [[ $out == *"holds a migration this build of CawCo doesn't have"* ]] || { echo "ASSERTION FAILED: service install stopped without the words: $out"; return 1; }
   if out=$(as_user "$hubc" env CAWCO_DB_PATH=/tmp/newer/cawco.db "$DATA/binary/versions/$NEXT/cawco" binary-install hub 2>&1); then
     echo "ASSERTION FAILED: a first install went on over a newer database: $out"
     return 1
   fi
-  [[ $out == *"was migrated by a newer build of CawCo"* ]] || { echo "ASSERTION FAILED: the install stopped without the words: $out"; return 1; }
+  [[ $out == *"holds a migration this build of CawCo doesn't have"* ]] || { echo "ASSERTION FAILED: the install stopped without the words: $out"; return 1; }
   as_user "$hubc" sh -c 'for f in /tmp/before/cawco-*.service; do cmp "$f" "$1/${f##*/}" || exit 1; done; cmp /tmp/before/installation.json "$2/installation.json"' sh "$units" "$DATA/binary" \
     || { echo "ASSERTION FAILED: a unit or the install's record changed"; return 1; }
   need_hub
   [[ "$(build_version $hid)" == $NEXT ]]
+}
+# MIGRATIONS BY IDENTITY (core migration-state.ts), on copies of the hub's database, each started as the build installed
+# starts its hub. A row this build does not have, stamped below its newest (which drizzle's newest-stamp test, and the
+# rule before this one, let through): the hub does not open it, and says which.
+unknown_below_newest() {
+  need_hub
+  local out at
+  as_user "$hubc" sh -c 'rm -rf /tmp/below && mkdir /tmp/below'
+  db_rows copy "$DB" /tmp/below/cawco.db
+  at=$(db_rows foreign /tmp/below/cawco.db)
+  if out=$(hub_on /tmp/below/cawco.db); then
+    echo "ASSERTION FAILED: the hub started on a database holding a migration it does not have: $out"
+    return 1
+  fi
+  echo "the hub said: $out"
+  [[ $out == *"/tmp/below/cawco.db holds a migration this build of CawCo doesn't have (written $(bun -e "console.log(new Date($at).toISOString())"), hash e2e-foreign)"* ]] \
+    || { echo "ASSERTION FAILED: the hub stopped without naming the migration it does not have"; return 1; }
+}
+# A database missing an older migration of this build's, applied behind later ones: the hub applies it as it starts,
+# says so, and runs.
+older_applied_at_start() {
+  need_hub
+  local tag pid
+  as_user "$hubc" sh -c 'rm -rf /tmp/older && mkdir /tmp/older'
+  db_rows copy "$DB" /tmp/older/cawco.db
+  tag=$(db_rows unapply /tmp/older/cawco.db "$DATA/runtime/$NEXT/drizzle")
+  echo "taken out: $tag"
+  pid=$(as_user "$hubc" sh -c 'env CAWCO_DB_PATH=/tmp/older/cawco.db CAWCO_HUB_PORT=43999 CAWCO_NO_MDNS=1 "$1" hub > /tmp/older/hub.log 2>&1 & echo $!' sh "$DATA/binary/versions/$NEXT/cawco")
+  on_exit "as_user \"\$hubc\" kill $pid"
+  wait_until 90 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:43999/health | grep -q "\"ok\":true"'
+  as_user "$hubc" grep -F "[migrations] applied $tag behind" /tmp/older/hub.log \
+    || { echo "ASSERTION FAILED: the hub did not say it applied $tag behind a later one: $(as_user "$hubc" tail -n 20 /tmp/older/hub.log)"; return 1; }
 }
 # A build with no migration of its own leaves a row the build before it does not read (agents.build), and fails:
 # rolled back, and the hub reads its own rows, from the copy.
@@ -1286,7 +1318,7 @@ no_room_to_copy() {
   one_copy "$NEXT"
   others_kept
 }
-export -f settled room_again db_rows data_files copy_made one_copy others_kept rolled_back hub_on plant_others confirmed_update_copies migration_rolled_back installs_stop_on_newer reshaped_rolled_back no_room_to_put_back no_room_to_copy
+export -f unknown_below_newest older_applied_at_start settled room_again db_rows data_files copy_made one_copy others_kept rolled_back hub_on plant_others confirmed_update_copies migration_rolled_back installs_stop_on_newer reshaped_rolled_back no_room_to_put_back no_room_to_copy
 rig_rollback() {
   # The hub's database at a path of the installer's choosing, which only the hub's unit records.
   export HUB_DB_PATH=/home/cawco/hub-db/cawco.db DB=/home/cawco/hub-db/cawco.db
@@ -1302,6 +1334,8 @@ rig_migration() {
   check "an update of the hub that confirms copies its database first" confirmed_update_copies
   check "a build with a new migration that fails to start is rolled back: the row from before is in the live database, the trial's is in the file the rollback names, one copy is kept, and the build rolled back to does not open the moved-aside database" migration_rolled_back 900 "an update of the hub that confirms copies its database first"
   check "service install and a first install stop on a database a newer build migrated, changing nothing" installs_stop_on_newer 300 "a build with a new migration that fails to start is rolled back: the row from before is in the live database, the trial's is in the file the rollback names, one copy is kept, and the build rolled back to does not open the moved-aside database"
+  check "a database holding a migration this build does not have, stamped below its newest, is not opened, and the hub says which" unknown_below_newest 300 "an update of the hub that confirms copies its database first"
+  check "a database missing an older migration of this build's gets it applied at start, and the hub runs" older_applied_at_start 300 "an update of the hub that confirms copies its database first"
   check "a build with no new migration that leaves a row its predecessor cannot read is rolled back, and the hub reads its rows from the copy" reshaped_rolled_back 600 "an update of the hub that confirms copies its database first"
   check "an update with too little room for its copies is not started, and the copy before stays" no_room_to_copy 600 "an update of the hub that confirms copies its database first"
   check "a rollback with no room for the copy beside the database leaves the live database at its path, sound, and goes on: the build rolled back to runs on it and says why" no_room_to_put_back 900 "an update of the hub that confirms copies its database first"
