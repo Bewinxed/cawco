@@ -404,8 +404,15 @@ export const mediaCalls = ({
       : problem(422, { code: "forge-post-refused", detail: answer.text });
   },
 
-  /** A session's `generate_image`, made on its machine with the sign-in there. */
-  generateImage: async (id: string, body: ImageGenerationRequest) => {
+  /**
+   * A session's `generate_image`, made on its machine with the sign-in
+   * there. Its machine away is answered by `away` ({@link continueFrom}'s).
+   */
+  generateImage: async (
+    id: string,
+    body: ImageGenerationRequest,
+    away: (machineId: string, words: string) => AwayProblem
+  ) => {
     const [row] = db.listedInstancesByIds([id]);
     if (!row) {
       return problem(404, {
@@ -442,11 +449,10 @@ export const mediaCalls = ({
     switch (answer.kind) {
       case "unanswered":
         return answer.reason === "dead"
-          ? problem(503, {
-              code: "sessions-machine-offline-image",
-              detail:
-                "The session's machine is offline; image generation was not started.",
-            })
+          ? away(
+              row.machineId,
+              "The session's machine is offline; image generation was not started."
+            )
           : problem(504, {
               code: "image-generation-did-not",
               detail: `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`,

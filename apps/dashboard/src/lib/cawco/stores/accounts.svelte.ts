@@ -278,7 +278,8 @@ export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
 
 /**
  * Signs an account out on one machine and drops its store there; the hub
- * refuses a machine that is offline (409) or not signed in (404).
+ * refuses a machine that is offline (503, named as away) or not signed in
+ * (404).
  */
 export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
   accountsWrite(

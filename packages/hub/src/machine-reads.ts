@@ -15,7 +15,7 @@ import {
 import { ElysiaStatus, problem } from "elysia";
 import type { HubContext } from "./hub-context";
 import type { MachineMemory, RouteSet, Unanswered } from "./machine-answers";
-import { machineSkillFiles } from "./machine-answers";
+import { awayProblem, machineSkillFiles } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 
 import { unreachable } from "./unreachable";
@@ -99,8 +99,8 @@ const awayHeaders = (
 
 /**
  * {@link awayHeaders} put on a route's `set`, and the 503 the route
- * answers with: `words`, the read's own sentence, else the machine's
- * offline fault.
+ * answers with (machine-answers.ts `awayProblem`): `words`, the read's own
+ * sentence, else the machine's offline fault.
  */
 export const awayStatus = (
   ctx: MachineReadsContext,
@@ -109,10 +109,7 @@ export const awayStatus = (
   words?: string
 ) => {
   Object.assign(set.headers, awayHeaders(ctx, machineId));
-  return problem(503, {
-    code: "machine-away",
-    detail: words ?? ctx.machineFault(machineId, "offline"),
-  });
+  return awayProblem(words ?? ctx.machineFault(machineId, "offline"));
 };
 
 /**
@@ -184,17 +181,15 @@ export const hookCopyOff = async (
   return { current, copy: read.copy };
 };
 
-/** The fleet to push to `body.machineId`, or what the route answers when that machine is not connected. */
+/** The fleet to push to `body.machineId`, or what the route answers when that machine is not connected ({@link awayStatus}). */
 export const pushTarget = (
   ctx: MachineReadsContext,
-  body: { machineId: string }
+  body: { machineId: string },
+  set: RouteSet
 ) =>
   ctx.registry.agent(body.machineId)
     ? { config: ctx.db.fleetConfig() }
-    : problem(404, {
-        code: "machine-offline",
-        detail: ctx.machineFault(body.machineId, "offline"),
-      });
+    : awayStatus(ctx, set, body.machineId);
 
 /**
  * One machine's own user CLAUDE.md, whoever wrote it. A peek is this alone,

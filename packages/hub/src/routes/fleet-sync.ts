@@ -1,28 +1,24 @@
 /**
  * Pushing the fleet to its machines and retrying what a machine refused.
  */
-import { Elysia, problem, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { awayStatus, type MachineReadsContext } from "../machine-reads";
 
-export const fleetSyncRoutes = ({
-  fleetSyncs,
-  machineFault,
-  registry,
-}: Pick<HubContext, "fleetSyncs" | "machineFault" | "registry">) =>
+export const fleetSyncRoutes = (
+  ctx: Pick<HubContext, "fleetSyncs"> & MachineReadsContext
+) =>
   new Elysia()
     // The click for a machine that drifted, or for the whole fleet: what
     // moved goes, and every item the machine holds converges again.
     .post(
       "/api/fleet/sync",
       { body: t.Object({ machineId: t.Optional(t.String()) }) },
-      ({ body }) => {
-        if (body.machineId && !registry.agent(body.machineId)) {
-          return problem(404, {
-            code: "machine-offline",
-            detail: machineFault(body.machineId, "offline"),
-          });
+      ({ body, set }) => {
+        if (body.machineId && !ctx.registry.agent(body.machineId)) {
+          return awayStatus(ctx, set, body.machineId);
         }
-        fleetSyncs.changed("asked for", {
+        ctx.fleetSyncs.changed("asked for", {
           reconverge: true,
           ...(body.machineId ? { machineId: body.machineId } : {}),
         });
@@ -40,14 +36,11 @@ export const fleetSyncRoutes = ({
           ids: t.Array(t.String(), { minItems: 1 }),
         }),
       },
-      ({ body }) => {
-        if (!registry.agent(body.machineId)) {
-          return problem(404, {
-            code: "machine-offline",
-            detail: machineFault(body.machineId, "offline"),
-          });
+      ({ body, set }) => {
+        if (!ctx.registry.agent(body.machineId)) {
+          return awayStatus(ctx, set, body.machineId);
         }
-        fleetSyncs.retry(body.machineId, body.ids);
+        ctx.fleetSyncs.retry(body.machineId, body.ids);
         return { ok: true };
       }
     );
