@@ -161,7 +161,6 @@ import {
   TrackerCursorSchema,
   TrackerSyncedSchema,
   TrashedRowsSchema,
-  WorkBudgetSchema,
   WorkItemSubmissionSchema,
   WorkLandingSchema,
   WorkspaceFromSchema,
@@ -197,6 +196,27 @@ const fleetRowProject = () =>
   projectColumn("project_id").references(() => projects.id, {
     onDelete: "cascade",
   });
+
+/**
+ * A budget (stored-types.ts `WorkBudget`) as a row's columns: what a work
+ * item may spend, or what a project's or a routine's work items may, before
+ * the hub stops it (work-items.ts `overBudget`). Each limit null is not set
+ * here: a work item's was taken field by field from its call, task or
+ * routine, then its project, when it was made (work-items.ts `budgetFrom`),
+ * so one null there is no limit. `budget_unread` is a budget that was stored
+ * and did not read whole when budgets became columns (migration 0398), kept
+ * as it was stored: while it is set, the work it governs stops, and its
+ * readable limits are in the columns beside it.
+ */
+const budgetColumns = () => ({
+  /** Dollars, above 0. */
+  budgetUsd: real("budget_usd"),
+  /** Turns its session ends, a whole number from 1. */
+  budgetTurns: integer("budget_turns"),
+  /** Minutes since the item started, a whole number from 1. */
+  budgetMinutes: integer("budget_minutes"),
+  budgetUnread: text("budget_unread"),
+});
 
 /** A row that goes with its area: deleted when the area is. */
 const areaKey = () =>
@@ -564,11 +584,11 @@ export const projects = sqliteTable("projects", {
    */
   runsOn: text("runs_on"),
   /**
-   * The budget every work item of the project runs under, field by field,
+   * The budget every work item of the project runs under, limit by limit,
    * where neither its delegate call nor its task names one (work-items.ts
-   * `overBudget`). Null: no default.
+   * `overBudget`). One that did not read holds every attempt of the project.
    */
-  budget: storedJson(WorkBudgetSchema)("budget"),
+  ...budgetColumns(),
   /**
    * What the project may spend in a period (`cap_period`), in dollars: every
    * session of it, its Caw and its attempts (project-caps.ts). Null: no cap,
@@ -1887,8 +1907,8 @@ export const workItems = sqliteTable(
      * line, written when it lands.
      */
     digest: text("digest"),
-    /** What it may spend before the hub stops it; null: no limit. */
-    budget: storedJson(WorkBudgetSchema)("budget"),
+    /** What it may spend before the hub stops it; one that did not read stops it. */
+    ...budgetColumns(),
     /** Turns its session has ended since it started. */
     turns: integer("turns").notNull().default(0),
     /**
@@ -5163,8 +5183,8 @@ export const routines = sqliteTable(
     delegateType: text("delegate_type"),
     /** Where a `delegate` run's commits go: `none` unless the routine says. */
     lands: text("lands").$type<LandsMode>().notNull().default("none"),
-    /** What each run's work item may spend. */
-    budget: storedJson(WorkBudgetSchema)("budget"),
+    /** What each run's work item may spend; one that did not read skips every run. */
+    ...budgetColumns(),
     /** Dollars its runs may spend in a day of its time zone; null: no cap. */
     dailyCapUsd: real("daily_cap_usd"),
     /**

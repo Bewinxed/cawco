@@ -69,9 +69,9 @@ export const createProviderRetries = ({
 
   /** The deadline a stretch begun at `since` has: the hub's, or the item's minutes budget when that ends sooner. */
   const deadlineOf = (item: WorkItemRow, since: number): number => {
-    const minutes = item.budget?.minutes;
+    const minutes = item.budgetMinutes;
     const budgeted =
-      minutes === undefined
+      minutes === null
         ? Number.POSITIVE_INFINITY
         : item.createdAt.getTime() + minutes * 60_000;
     return Math.min(since + PROVIDER_RETRY_DEADLINE_MS, budgeted);

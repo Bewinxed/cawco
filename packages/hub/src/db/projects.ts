@@ -441,7 +441,10 @@ export interface ProjectsDb {
     change: Partial<
       Pick<
         ProjectRow,
-        | "budget"
+        | "budgetMinutes"
+        | "budgetTurns"
+        | "budgetUnread"
+        | "budgetUsd"
         | "dispatch"
         | "lands"
         | "maxAttempts"

@@ -187,7 +187,14 @@ import {
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
 } from "./work-item-state";
-import { budgetProblem, globOf, ownsProblem } from "./work-limits";
+import {
+  type BudgetColumns,
+  budgetColumns,
+  budgetOf,
+  budgetProblem,
+  globOf,
+  ownsProblem,
+} from "./work-limits";
 import type { WorkPlace } from "./work-place";
 import {
   createWorkspaces,
@@ -357,6 +364,10 @@ const overBudget = (
   }
   return undefined;
 };
+
+/** Whether a row holds a budget: a limit, or one that did not read. */
+const budgetHeld = (row: BudgetColumns): boolean =>
+  row.budgetUnread !== null || budgetOf(row) !== null;
 
 /** `1 turn`, `40 turns`. */
 const counted = (count: number, one: string): string =>
@@ -1013,8 +1024,8 @@ const ASLEEP_WAKE_LIMIT_MS = DAY_MS;
 
 /** The longest `item`'s session may sleep and be woken: its budget's minutes, else {@link ASLEEP_WAKE_LIMIT_MS}. */
 const asleepLimit = (item: WorkItemRow): { ms: number; words: string } => {
-  const minutes = item.budget?.minutes;
-  return minutes === undefined
+  const minutes = item.budgetMinutes;
+  return minutes === null
     ? { ms: ASLEEP_WAKE_LIMIT_MS, words: workWords.aDay }
     : { ms: minutes * 60_000, words: workWords.budgetMinutes(minutes) };
 };
@@ -2024,19 +2035,25 @@ export const createWorkItems = ({
   };
 
   /**
-   * Stops a live item that has reached its budget ({@link overBudget}): it
-   * fails with the sentence that names the budget, its parent (and its project's conversation) are
+   * Stops a live item that has reached its budget ({@link overBudget}), or
+   * whose budget does not read (`budgetUnread`): it fails with the sentence
+   * that names the budget, its parent (and its project's conversation) are
    * told, and its session is ended. An item whose landing is running is left
    * to it.
    */
   const enforceBudget = (item: WorkItemRow): void => {
     if (
-      !(item.budget && LIVE.has(item.state)) ||
+      !(budgetHeld(item) && LIVE.has(item.state)) ||
       itemHold(item, ["landing"], {})
     ) {
       return;
     }
-    const reason = overBudget(item.budget, usedBy(item));
+    const reason =
+      item.budgetUnread === null
+        ? overBudget(budgetOf(item), usedBy(item))
+        : workWords.budgetUnreadStopped(
+            workWords.budgetUnread(item.budgetUnread)
+          );
     if (!reason) {
       return;
     }
@@ -2436,7 +2453,7 @@ export const createWorkItems = ({
 
   lifetime.every(BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {
-      if (item.budget && !item.stoppingAt) {
+      if (budgetHeld(item) && !item.stoppingAt) {
         enforceBudget(item);
       }
     }
@@ -3406,7 +3423,8 @@ export const createWorkItems = ({
   /**
    * The problem that stops `parent` starting `request`: it may not start
    * that type, the request does not stand, its task's project holds its
-   * attempts, or its outputs have no project's folder to go to.
+   * attempts, its project's budget does not read, or its outputs have no
+   * project's folder to go to.
    */
   const admissionProblem = (request: WorkItemRequest, parent: Parent) => {
     const unmayed = mayStartIt(request, parent);
@@ -3423,6 +3441,19 @@ export const createWorkItems = ({
       return problem(409, {
         code: "work-item-attempts-paused",
         detail: capped,
+      });
+    }
+    // Every item of a project runs under its budget: one that does not read
+    // holds them all, as a cap that pauses does.
+    const projectId = request.task?.projectId ?? parent.projectId;
+    const project = projectId ? db.project(projectId) : undefined;
+    if (project && project.budgetUnread !== null) {
+      return problem(409, {
+        code: "work-item-attempts-paused",
+        detail: workWords.projectBudgetUnread(
+          project.name,
+          workWords.budgetUnread(project.budgetUnread)
+        ),
       });
     }
     return request.outputs && !(request.task?.projectId ?? parent.projectId)
@@ -4297,7 +4328,9 @@ export const createWorkItems = ({
       group: request.group?.trim() || null,
       owns: request.owns?.length ? request.owns : null,
       waitedOn: request.waitedOn?.length ? request.waitedOn : null,
-      budget: budgetFrom(request.budget, project?.budget),
+      ...budgetColumns(
+        budgetFrom(request.budget, project ? budgetOf(project) : null)
+      ),
     };
   };
 
@@ -4319,15 +4352,13 @@ export const createWorkItems = ({
         ? ` It is in group “${item.group}”: its report waits until every item of the group has ended (a failure reports at once).`
         : "",
       owns.length > 0 ? ` It owns ${owns.join(", ")}.` : "",
-      item.budget
+      budgetOf(item)
         ? ` Its budget: ${[
-            item.budget.usd === undefined ? "" : `$${item.budget.usd}`,
-            item.budget.turns === undefined
+            item.budgetUsd === null ? "" : `$${item.budgetUsd}`,
+            item.budgetTurns === null ? "" : counted(item.budgetTurns, "turn"),
+            item.budgetMinutes === null
               ? ""
-              : counted(item.budget.turns, "turn"),
-            item.budget.minutes === undefined
-              ? ""
-              : counted(item.budget.minutes, "minute"),
+              : counted(item.budgetMinutes, "minute"),
           ]
             .filter(Boolean)
             .join(", ")}.`

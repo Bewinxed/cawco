@@ -56,7 +56,6 @@ import type {
   TrackerCursor as TrackerCursorType,
   TrackerSynced as TrackerSyncedType,
   TrashedRows as TrashedRowsType,
-  WorkBudget as WorkBudgetType,
   WorkItemSubmission as WorkItemSubmissionType,
   WorkLanding as WorkLandingType,
   WorkspaceFrom as WorkspaceFromType,
@@ -499,18 +498,6 @@ const TrashedRowsShape = declared(
 );
 export const TrashedRowsSchema: z.ZodType<TrashedRowsType> = TrashedRowsShape;
 export type TrashedRowsOutput = z.output<typeof TrashedRowsShape>;
-
-const WorkBudgetShape = declared(
-  z.object({
-    minutes: z.number().optional(),
-    turns: z.number().optional(),
-    usd: z.number().optional(),
-  }),
-  "WorkBudget",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const WorkBudgetSchema: z.ZodType<WorkBudgetType> = WorkBudgetShape;
-export type WorkBudgetOutput = z.output<typeof WorkBudgetShape>;
 
 const WorkItemSubmissionShape = declared(
   z.object({
