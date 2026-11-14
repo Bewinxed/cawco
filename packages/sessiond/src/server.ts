@@ -61,6 +61,7 @@ import {
   spawnedPid,
 } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
+import { cutShort } from "@cawco/core/words/helpers";
 import { notAliveReason } from "@cawco/core/words/sessiond";
 import { workWords } from "@cawco/core/words/work";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -1031,7 +1032,7 @@ export class SessiondServer {
         .map((pid) => {
           const command = proc.named.get(pid);
           return command
-            ? `pid ${pid} (${command.slice(0, 120)})`
+            ? `pid ${pid} (${cutShort(command, 120)})`
             : `pid ${pid}`;
         })
         .join(", ")}`

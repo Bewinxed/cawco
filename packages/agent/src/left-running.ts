@@ -22,6 +22,7 @@
  * lives: an OpenCode server that runs on for other sessions keeps its work.
  * Read by lineage, on Linux and macOS alike (core `processLineage`).
  */
+
 import {
   commandLine,
   commandLines,
@@ -30,6 +31,7 @@ import {
   processTable,
 } from "@cawco/core/process-identity";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
+import { cutShort } from "@cawco/core/words/helpers";
 import { workWords } from "@cawco/core/words/work";
 
 /** How long what a dead harness left is given to end on SIGTERM before SIGKILL. Ours: the sweep's own (sessiond `SWEEP_GRACE_MS`). */
@@ -214,11 +216,11 @@ export const createLeftRunning = () => {
       `[agent] ${instanceId}: ${workWords.leftRunningEnded}: ${[
         ...left.map(
           (row) =>
-            `pid ${row.pid} (${(named.get(row.pid) ?? "?").slice(0, 120)})`
+            `pid ${row.pid} (${cutShort(named.get(row.pid) ?? "?", 120)})`
         ),
         ...gone.map(
           (one) =>
-            `${one.command.slice(0, 120)} (${workWords.leftRunningGoneFirst})`
+            `${cutShort(one.command, 120)} (${workWords.leftRunningGoneFirst})`
         ),
       ].join(", ")}`
     );

@@ -51,6 +51,7 @@ import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
+import { cutShort } from "@cawco/core/words/helpers";
 import {
   type KeeperJob,
   KeeperKept,
@@ -228,8 +229,7 @@ const minutes = (ms: number): string => {
   return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
 };
 
-const brief = (row: Row): string =>
-  `${row.pid} ${row.args.length > 60 ? `${row.args.slice(0, 57)}...` : row.args}`;
+const brief = (row: Row): string => `${row.pid} ${cutShort(row.args, 60)}`;
 
 interface Streak {
   details: string[];

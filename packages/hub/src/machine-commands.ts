@@ -5,6 +5,7 @@ import {
   QUEUE_WAIT_MAX_MS,
 } from "@cawco/core/commands/controls";
 import type { RunKind, StoppedCommands } from "@cawco/core/protocol";
+import { cutShort } from "@cawco/core/words/helpers";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { ClosureContext } from "./closure-context";
@@ -211,7 +212,7 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
      */
     const cancel = (): void => {
       console.log(
-        `[command] ${machineId}: cancelling ${how.what ?? "command"} run ${run.id}, its owner stopped: \`${cmd.slice(0, 120)}\``
+        `[command] ${machineId}: cancelling ${how.what ?? "command"} run ${run.id}, its owner stopped: \`${cutShort(cmd, 120)}\``
       );
       cancelRun(machineId, run.id).catch((error: unknown) =>
         console.warn(

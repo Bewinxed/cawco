@@ -27,8 +27,10 @@
  * The pause is the machine's row (`agents.paused_until`), so it survives the
  * hub's restart and its agent's; the timer is armed again as the hub starts.
  */
+
 import type { RunKind, StoppedCommands } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
+import { cutShort } from "@cawco/core/words/helpers";
 import { pauseClock, stoppedWords } from "@cawco/core/words/machine-pause";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -101,7 +103,7 @@ export class CommandStopped extends Error {}
 export const throwIfStopped = (how: CommandOptions, cmd: string): void => {
   if (how.stop?.aborted) {
     throw new CommandStopped(
-      `the ${how.what ?? "command"} was stopped with its owner: \`${cmd.slice(0, 120)}\``
+      `the ${how.what ?? "command"} was stopped with its owner: \`${cutShort(cmd, 120)}\``
     );
   }
 };

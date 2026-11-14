@@ -52,6 +52,7 @@
  * shouldn't crash such a machine, if a test leaks it should notify somehow so
  * the agent can fix it. But it doesn't stop it."
  */
+
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -64,6 +65,7 @@ import {
   processLineage,
   residentBytes,
 } from "@cawco/core/process-identity";
+import { cutShort } from "@cawco/core/words/helpers";
 import { leakWords } from "@cawco/core/words/leaks";
 import { keeperChildren } from "./sessiond-client";
 
@@ -211,7 +213,7 @@ const shownPid = async (pid: number): Promise<number> => {
 /** A process's command line, cut to one line a person reads. */
 const commandOf = async (pid: number): Promise<string> => {
   const command = ((await commandLine(pid)) ?? "?").replaceAll("`", "'");
-  return command.length > 160 ? `${command.slice(0, 157)}…` : command;
+  return cutShort(command, 160);
 };
 
 /** Where a child's process runs, in words: its workspace, else this machine and its directory. */

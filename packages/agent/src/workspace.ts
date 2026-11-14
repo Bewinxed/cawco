@@ -12,6 +12,7 @@
  * it is held ({@link accessOf}): never the person's folder beneath a Linux
  * view.
  */
+
 import { constants } from "node:fs";
 import {
   chmod,
@@ -57,6 +58,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { cutShort } from "@cawco/core/words/helpers";
 import { holdingWords } from "@cawco/core/words/workspace-holding";
 import type {
   CarryRestored,
@@ -1332,7 +1334,7 @@ const insideGit =
     );
     if (result.exitCode !== 0) {
       throw new Error(
-        `${cmd.split(" ").slice(0, 3).join(" ")} failed in workspace ${workspace.id}: ${(result.stderr || result.stdout).trim() || `exit ${result.exitCode}`}`
+        `${firstWords(cmd)} failed in workspace ${workspace.id}: ${(result.stderr || result.stdout).trim() || `exit ${result.exitCode}`}`
       );
     }
     return result.stdout.trim();
@@ -2287,9 +2289,17 @@ const whoseLeft = async (
   );
 };
 
+/** A command's first three words, with "…" where more followed. */
+const firstWords = (cmd: string): string => {
+  const words = cmd.split(" ");
+  return words.length > 3 ? `${words.slice(0, 3).join(" ")}…` : cmd;
+};
+
 /** Processes in words: `pid 12 (vite preview)`, each command cut short. */
 const processWords = (left: readonly LeftInside[]): string =>
-  left.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ");
+  left
+    .map((one) => `pid ${one.pid} (${cutShort(one.command, 200)})`)
+    .join("; ");
 
 /**
  * A Linux view's processes, every process in its namespace, ended whole
@@ -2305,7 +2315,7 @@ const endViewProcesses = async (workspace: WorkspaceRef): Promise<void> => {
   const { ended, left } = await endView(workspace.id);
   if (ended.length > 0) {
     console.info(
-      `[workspace] ${workspace.id}: ended ${ended.length} process(es) left running in its view once its boundary was stopped: ${ended.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)})`).join("; ")}`
+      `[workspace] ${workspace.id}: ended ${ended.length} process(es) left running in its view once its boundary was stopped: ${ended.map((one) => `pid ${one.pid} (${cutShort(one.command, 200)})`).join("; ")}`
     );
   }
   if (left.length > 0) {
@@ -2361,14 +2371,14 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
   }
   if (killed.size > 0) {
     console.info(
-      `[workspace] ${workspace.id}: ended ${killed.size} process(es) left running from its clone or scratch dir once its boundary was stopped: ${[...killed].map(([pid, command]) => `pid ${pid} (${command.slice(0, 200)})`).join("; ")}`
+      `[workspace] ${workspace.id}: ended ${killed.size} process(es) left running from its clone or scratch dir once its boundary was stopped: ${[...killed].map(([pid, command]) => `pid ${pid} (${cutShort(command, 200)})`).join("; ")}`
     );
   }
   const left = await read();
   const owned = left.filter((one) => one.owner);
   if (owned.length > 0) {
     throw new Error(
-      `Workspace ${workspace.id} was not archived: ${owned.map((one) => `pid ${one.pid} (${one.command.slice(0, 200)}), under pid ${one.owner?.pid} (${one.owner?.command.slice(0, 200)})`).join("; ")} ${owned.length === 1 ? "runs" : "run"} from its clone or scratch dir, started from outside CawCo, so ${owned.length === 1 ? "it is" : "they are"} left running and nothing was deleted; the archive is tried again at the next sweep.`
+      `Workspace ${workspace.id} was not archived: ${owned.map((one) => `pid ${one.pid} (${cutShort(one.command, 200)}), under pid ${one.owner?.pid} (${cutShort(one.owner?.command ?? "", 200)})`).join("; ")} ${owned.length === 1 ? "runs" : "run"} from its clone or scratch dir, started from outside CawCo, so ${owned.length === 1 ? "it is" : "they are"} left running and nothing was deleted; the archive is tried again at the next sweep.`
     );
   }
   if (left.length > 0) {

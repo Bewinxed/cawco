@@ -4,8 +4,10 @@
  * (`TranscriptBuilder`, @cawco/core). Which tools draw a picture or a
  * preview is the tool presentation's (@cawco/core tool-presentation).
  */
+
 import { isObject } from "@cawco/core/comments/model";
 import { getToolGlance } from "@cawco/core/transcript-rules";
+import { cutShort } from "@cawco/core/words/helpers";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { Message } from "../types";
 
@@ -208,7 +210,7 @@ export function askShortOf(
     return `${tool} ${filepath.split("/").filter(Boolean).pop() ?? filepath}`;
   }
   if (typeof input.command === "string") {
-    return `${tool} ${input.command.slice(0, 80)}`;
+    return `${tool} ${cutShort(input.command, 80)}`;
   }
   return tool;
 }
