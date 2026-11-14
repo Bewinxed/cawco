@@ -145,8 +145,9 @@ export const modelAccessRoutes = ({
             }
           );
           if (!response.ok) {
-            return new Response(await response.text(), {
-              status: response.status,
+            return problem(502, {
+              code: "openrouter-exchange-failed",
+              detail: `OpenRouter answered ${response.status}: ${(await response.text()) || response.statusText}`,
             });
           }
           const { key } = (await response.json()) as { key: string };

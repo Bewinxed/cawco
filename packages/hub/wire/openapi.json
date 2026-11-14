@@ -17904,6 +17904,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "postApiOpenrouterExchange 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiOpenrouterExchange502"
+                }
+              }
+            }
           }
         }
       }
@@ -144390,6 +144400,42 @@
               "type"
             ]
           }
+        ]
+      },
+      "postApiOpenrouterExchange502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "openrouter-exchange-failed"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiPair409": {
