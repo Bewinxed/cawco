@@ -570,6 +570,9 @@ const gated: Gated[] = [
   bun("scripts/style-greps.ts"),
   bun("scripts/tool-answer-check.ts"),
   bun("scripts/route-families-check.ts"),
+  // Every hub route answers a value Eden can type: a Response or unknown
+  // only from a protocol endpoint whose client is not ours.
+  bun("scripts/route-answers-check.ts"),
   bun("scripts/icon-imports-check.ts"),
   bun("scripts/docker-client-check.ts"),
   bun("scripts/browser-image-check.ts"),
