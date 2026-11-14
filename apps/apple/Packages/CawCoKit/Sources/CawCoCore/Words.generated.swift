@@ -400,7 +400,7 @@ public enum Words {
             /// Part of the page's code: the machine's login still waits for the whole of it.
             public static let notWhole = "That's only part of the code. Copy all of it from the sign-in page, then paste it again."
 
-            /// The app's alone: a machine that answered a device code where a link was asked for.
+            /// A machine that answered a device code where a link was asked for.
             public static let notALink = "The machine answered a code, not a sign-in link. Update CawCo on it, then start again."
         }
 
@@ -1744,6 +1744,11 @@ public enum Words {
 
     public enum Preview {
         // packages/core/src/words/preview.ts `previewWords`
+        /// A stroke group marking more elements than a group names: how many it kept and left out.
+        public static func inkMarksLeftOut(kept: Int, left: Int) -> String {
+            "This stroke marks more elements than a group names, so it kept the first \(kept) and left out \(left). Draw round fewer elements."
+        }
+
         /// The pane's mode tabs (Preview, Comment, …), as a screen reader names them.
         public static let previewMode = "Preview mode"
 
@@ -3940,7 +3945,7 @@ public enum Words {
 
         public static let problemTrimmerRole = "role trimmer is the unused skills and servers routine's: the hub starts that run itself, and it denies shell, edit and web tools"
 
-        // packages/core/src/harness.ts `EFFORT_LEVELS`
+        // packages/core/src/harness/kinds.ts `EFFORT_LEVELS`
         /// Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read.
         public static let effortLevels: [String] = ["low", "medium", "high", "xhigh", "max"]
     }

@@ -62,6 +62,7 @@ import { buryPin, newId, readPins } from "@cawco/core/comments/model";
 import type { DocMap } from "@cawco/core/doc-maps";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { boxOf } from "@cawco/core/shapes";
+import { previewWords } from "@cawco/core/words/preview";
 import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
 import { artifact, PLACED } from "./artifact";
@@ -906,7 +907,11 @@ export function startInk(deps: InkDeps): Ink {
     return (past === -1 ? holders.at(-1) : holders[past - 1]) ?? el;
   };
 
+  /** How many elements the last read of marks left out past what a group names. */
+  let leftOut = 0;
+
   const marksOf = (strokes: Point[][], named: Element[][]): Marks | null => {
+    leftOut = 0;
     const boxes = new Map<Element, Box>();
     const boxed = (el: Element) => {
       const known = boxes.get(el);
@@ -939,6 +944,7 @@ export function startInk(deps: InkDeps): Ink {
       return { anchor: el, onOwnScroll: scrollsContent(el), over: [el] };
     }
     const marked = over.slice(0, MARKED_MAX);
+    leftOut = over.length - marked.length;
     const first = marked[0] as Element;
     const common = marked.length > 1 ? containerOf(marked) : null;
     const anchor =
@@ -1161,6 +1167,13 @@ export function startInk(deps: InkDeps): Ink {
     }
     const group = groupOf(open, points, new Date(now).toISOString());
     doc.transact(() => ink.set(group.id, group));
+    if (leftOut > 0) {
+      chrome.say(
+        previewWords.inkMarksLeftOut(MARKED_MAX, leftOut),
+        end[0] - scrollX,
+        end[1] - scrollY
+      );
+    }
     last = { id: group.id, at: now };
     deps.ended(group.id);
     reachIn(group.id);

@@ -8,6 +8,9 @@ import { commonWords } from "./common";
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const previewWords = {
+  /** A stroke group marking more elements than a group names: how many it kept and left out. */
+  inkMarksLeftOut: (kept: number, left: number) =>
+    `This stroke marks more elements than a group names, so it kept the first ${kept} and left out ${left}. Draw round fewer elements.`,
   /** The pane's mode tabs (Preview, Comment, …), as a screen reader names them. */
   previewMode: "Preview mode",
   /** A preview the hub couldn't reach, and its line's end. */
