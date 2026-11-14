@@ -77,7 +77,7 @@ export const harnessRefusedWords = {
    * history.ts `refusedRead`).
    */
   unread: (name: string, machine: string) =>
-    `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a ${name} it runs, so it shows here once CawCo runs ${name} there.`,
+    `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**
    * The machine's Claude Code still answering `claude --version` after the
    * wait (`seconds`): no start until it answers, and the agent reads Claude
