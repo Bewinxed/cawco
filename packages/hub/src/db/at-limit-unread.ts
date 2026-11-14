@@ -84,7 +84,7 @@ const OBJECT =
   "CASE WHEN json_valid(at_limit) THEN json_type(at_limit) = 'object' ELSE 0 END";
 
 /** A policy 0399 reads whole: an object whose nine fields each read. */
-export const POLICY_READS = `CASE WHEN ${OBJECT} THEN ${FIELDS.map((field) => `coalesce((${field.reads}), 0)`).join(" AND ")} ELSE 0 END`;
+const POLICY_READS = `CASE WHEN ${OBJECT} THEN ${FIELDS.map((field) => `coalesce((${field.reads}), 0)`).join(" AND ")} ELSE 0 END`;
 
 /** Each field that is not read: its JSON as stored (null when missing), as columns `f0`… */
 const BAD_FIELDS = FIELDS.map(
@@ -124,7 +124,7 @@ const why = (row: Unread): string => {
 const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
 
 /** Every provider whose saved policy does not read, by provider. */
-export const unreadPolicies = (
+const unreadPolicies = (
   client: Database
 ): { provider: string; raw: string; why: string }[] =>
   client
