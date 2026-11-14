@@ -125,6 +125,7 @@ export default {
         "scripts/codemods/type-roles.ts",
         "scripts/codemods/style-spaces.ts",
         "scripts/codemods/move-exports.ts",
+        "scripts/codemods/closure-context.ts",
         // scripts/check.ts
         "scripts/shell-bodies-check.ts",
         // scripts/check.ts, beside spacing-ratchet.ts

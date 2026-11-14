@@ -19,14 +19,15 @@ import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { ElysiaStatus, problem } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import { StartsHeld } from "./continuations";
 import type { DbShape } from "./db/index";
 import type { InstanceKind } from "./db/instances";
 import { handleId, isHandle } from "./handles";
-import type { HubContext } from "./hub-context";
 import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
 import { sessionLabel } from "./labels";
+import type { createLaunches } from "./launches";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek, peekResume } from "./payload-peeks";
 import type { PlacementInput } from "./placement";
@@ -39,7 +40,9 @@ import {
 import { projectOfHubFolder, projectRoot } from "./project-folder";
 import type { ForecastRead } from "./rebalance";
 import { kindBurn, readForecast } from "./rebalance";
+import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
+import type { createStartHolds } from "./start-holds";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
 
@@ -185,15 +188,13 @@ const resolveDelegatePermissionMode = (
 };
 
 export type SpawnsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountProviderFor"
   | "accountStartRefusal"
   | "awaitStart"
   | "awaitingFirstTurn"
   | "awayError"
-  | "bounded"
   | "db"
-  | "deliverSend"
   | "forgetPending"
   | "forkedFromOf"
   | "harnessReportOf"
@@ -216,7 +217,6 @@ export type SpawnsContext = Pick<
   | "refusedHarness"
   | "registry"
   | "sendAnswerable"
-  | "sendSpawn"
   | "sessionName"
   | "ownMachineIdRead"
   | "settleMode"
@@ -225,7 +225,10 @@ export type SpawnsContext = Pick<
   | "workItems"
   | "startingSetOf"
   | "startsOnHomeLogin"
->;
+> &
+  Pick<ReturnType<typeof createLaunches>, "bounded"> &
+  Pick<ReturnType<typeof createSends>, "deliverSend"> &
+  Pick<ReturnType<typeof createStartHolds>, "sendSpawn">;
 
 export const createSpawns = (ctx: SpawnsContext) => {
   /**

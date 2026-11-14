@@ -15,8 +15,8 @@ import type {
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { problem } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
-import type { HubContext } from "./hub-context";
 import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
 import type { ControlResult } from "./machine-answers";
 import { machineSkillFiles } from "./machine-answers";
@@ -43,7 +43,7 @@ const ABANDON_MS = 5000;
 const UNROUTED_REPLY_LIMIT = 4096;
 
 export type MachineCallsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "db"
   | "fleetChanged"
   | "machineName"

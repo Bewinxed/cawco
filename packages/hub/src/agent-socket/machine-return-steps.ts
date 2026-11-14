@@ -403,7 +403,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // Sessions that ran on while this hub was away: a read that
     // happened meanwhile was framed to nobody, and the transcript
     // says it happened. The rest goes again behind the ack
-    // ({@link handAgain}).
+    // (machine-calls.ts `handAgain`).
     for (const instanceId of agentFrame.instances) {
       ctx.settlePending(instanceId, UNREAD.ended, "wait");
     }

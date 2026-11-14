@@ -59,7 +59,7 @@ export interface ProjectOffersDeps {
    * Makes the project with Caw, or joins the one that has the folder's
    * remote (project-joining.ts `createOrJoinProject`), or its refusal.
    * Plain-typed: typing it from there closes project-offers →
-   * project-joining → hub-context → project-offers.
+   * project-joining → hub-context → closure-context → project-offers.
    */
   createProject: (asked: {
     name: string;

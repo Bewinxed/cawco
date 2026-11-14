@@ -6,6 +6,7 @@ import { accountMoveSentence } from "@cawco/core/words/account-lines";
 import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
 import { noticeWords } from "@cawco/core/words/notices";
+import type { ClosureContext } from "./closure-context";
 import { waitsLine } from "./db/at-limit";
 import {
   limitLine,
@@ -13,7 +14,6 @@ import {
   projectNoteLine,
   watchLine,
 } from "./history";
-import type { HubContext } from "./hub-context";
 import { uuidOf } from "./named-uuid";
 
 /** The system origin name of the hub's word that something a session started leaks (core `LEAK_FOUND`). */
@@ -49,7 +49,7 @@ const leakLine = (
 };
 
 export type SessionNotesContext = Pick<
-  HubContext,
+  ClosureContext,
   | "changeSend"
   | "db"
   | "firstTellingOfLeak"

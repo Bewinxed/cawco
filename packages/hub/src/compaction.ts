@@ -18,8 +18,8 @@ import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import type { LimitCompaction } from "./db/at-limit";
-import type { HubContext } from "./hub-context";
 import { fileDue } from "./limit-decision";
 import {
   COMPACT_FOCUS,
@@ -27,6 +27,7 @@ import {
   filingWrote,
   recordsOf,
 } from "./open-items";
+import type { createSends } from "./sends";
 import { LIMIT_ORIGIN } from "./sends";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
@@ -52,14 +53,13 @@ export const contextLine = (
 });
 
 export type CompactionContext = Pick<
-  HubContext,
+  ClosureContext,
   | "SETTLED"
   | "accountOf"
   | "accountWords"
   | "atLimit"
   | "carryTo"
   | "db"
-  | "deliverSend"
   | "inputRefusal"
   | "lastRequestContext"
   | "noteAtLimit"
@@ -74,7 +74,8 @@ export type CompactionContext = Pick<
   | "sessionName"
   | "transcripts"
   | "unnoteAtLimit"
->;
+> &
+  Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createCompaction = (ctx: CompactionContext) => {
   /**

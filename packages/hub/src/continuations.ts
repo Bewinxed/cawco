@@ -26,6 +26,7 @@ import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
 import { ContinuationReadSchema } from "@cawco/core/stored-shapes";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { ElysiaStatus } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import {
   asksOpening,
   gitSection,
@@ -39,13 +40,13 @@ import type {
   ContinueRequest,
   PreparedContinuation,
 } from "./db/stored-types";
-import type { HubContext } from "./hub-context";
 import type { ContinueOutcome } from "./hub-shapes";
 import { MachineAway, type SessionLocation } from "./hub-shapes";
 import { leafOf, sessionLabel } from "./labels";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { filingPrompt } from "./open-items";
 import { askEnvelope } from "./pending";
+import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
 import { received } from "./stored-json";
 import { unreachable } from "./unreachable";
@@ -91,7 +92,7 @@ export class StartsHeld extends Error {
 }
 
 export type ContinuationsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountWords"
   | "askersOf"
   | "atLimit"
@@ -100,7 +101,6 @@ export type ContinuationsContext = Pick<
   | "contextTokensOf"
   | "contextWindowOf"
   | "db"
-  | "deliverSend"
   | "designSystem"
   | "dropCompaction"
   | "endSession"
@@ -138,7 +138,8 @@ export type ContinuationsContext = Pick<
   | "unansweredError"
   | "unlocatedWords"
   | "workItems"
->;
+> &
+  Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createContinuations = (ctx: ContinuationsContext) => {
   const readContinuationOf = async (

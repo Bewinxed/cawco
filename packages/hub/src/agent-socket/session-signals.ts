@@ -138,7 +138,7 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     if (signal) {
       // Its harness taking up a send is its turn starting, but
       // for CawCo's quiet notes alone, which it stores at rest
-      // and reads with its next turn ({@link notesOnly}).
+      // and reads with its next turn (sends.ts `notesOnly`).
       if (signal.kind === "read" && !ctx.notesOnly(signal.read)) {
         ctx.turnUnderWay(instanceId);
       }

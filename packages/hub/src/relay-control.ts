@@ -51,13 +51,14 @@ import {
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
 import { answeredWithOriginal } from "./ask-presentation";
-import type { HubContext } from "./hub-context";
+import type { ClosureContext } from "./closure-context";
 import type { ControlResult } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek } from "./payload-peeks";
 import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
 import type { AnyProblem } from "./refusal";
+import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
 import type { HubSocket } from "./wire-socket";
 
@@ -140,7 +141,7 @@ export const peekAnswer = (
 };
 
 export type RelayControlContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountProviderFor"
   | "answeredFrom"
   | "answeringPermissions"
@@ -151,7 +152,6 @@ export type RelayControlContext = Pick<
   | "connectAsks"
   | "cutTurn"
   | "db"
-  | "deliverSend"
   | "designSystem"
   | "endSession"
   | "forward"
@@ -175,7 +175,8 @@ export type RelayControlContext = Pick<
   | "sessionIdle"
   | "silentWords"
   | "streams"
->;
+> &
+  Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createRelayControl = (ctx: RelayControlContext) => {
   /**

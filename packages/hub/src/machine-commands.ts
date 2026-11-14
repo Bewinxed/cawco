@@ -7,7 +7,7 @@ import {
 import type { RunKind, StoppedCommands } from "@cawco/core/protocol";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import type { HubContext } from "./hub-context";
+import type { ClosureContext } from "./closure-context";
 import type { CommandOptions } from "./machine-pause";
 import { throwIfStopped, WouldWait, whenStopped } from "./machine-pause";
 import { mergeSameRemote } from "./project-merge";
@@ -15,7 +15,7 @@ import { readCheckout } from "./projects";
 import { unreachable } from "./unreachable";
 
 export type MachineCommandsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "callAgent"
   | "commandQueues"
   | "db"

@@ -1,6 +1,6 @@
 import type { Envelope, SpawnPayload } from "@cawco/core/protocol";
 import { ElysiaStatus } from "elysia";
-import type { HubContext } from "./hub-context";
+import type { ClosureContext } from "./closure-context";
 import type { createLaunches } from "./launches";
 import type { HubTimer } from "./lifetime";
 import { UNREAD } from "./sends";
@@ -14,7 +14,7 @@ interface Pacing {
 }
 
 export type StartHoldsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountStartRefusal"
   | "agentProtocols"
   | "binaryUpdateStates"

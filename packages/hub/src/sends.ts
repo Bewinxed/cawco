@@ -49,13 +49,13 @@ import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus, problem } from "elysia";
 import type { PersonsSend } from "./caw";
+import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
 import type { WorkItemRow } from "./db/project-work";
 import type { SentMessageRow } from "./db/sends";
 import type { SendHold, StoredSendRefusal } from "./db/stored-types";
 import type { SendDelivery } from "./delegation-actions";
-import type { HubContext } from "./hub-context";
 import type { Unstored } from "./hub-shapes";
 import { isKeepAlive } from "./keep-alive";
 import { sessionLabel } from "./labels";
@@ -386,7 +386,7 @@ const firstWorkHold = (holds: {
 };
 
 export type SendsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountWords"
   | "advanceCompaction"
   | "artifactLane"
@@ -2728,7 +2728,7 @@ export const createSends = (ctx: SendsContext) => {
   /**
    * Whether a session cannot take a send now though its machine is
    * connected: its start is held while the machine installs an update
-   * ({@link sendSpawn}), or a send owed before this one has not gone yet.
+   * (start-holds.ts `sendSpawn`), or a send owed before this one has not gone yet.
    */
   const sendWaits = (instanceId: string): boolean =>
     ctx.db.owesSpawn(instanceId) || ctx.db.owedSends({ instanceId }).length > 0;

@@ -16,11 +16,11 @@ import type {
   TranscriptWindow,
   WindowAsk,
 } from "@cawco/core/transcript-types";
+import type { ClosureContext } from "./closure-context";
 import type { HubLineMessage } from "./compaction";
 import { contextLine } from "./compaction";
 import { freshStartLine, machineLine } from "./cut-turns";
 import type { PriorConversation } from "./db/schema";
-import type { HubContext } from "./hub-context";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages } from "./media";
 import { HISTORY_WINDOW } from "./sends";
@@ -148,7 +148,7 @@ export const userTurnText = (message: unknown): string | undefined => {
 };
 
 export type HistoryContext = Pick<
-  HubContext,
+  ClosureContext,
   | "db"
   | "firstTurnOf"
   | "heldSessions"

@@ -11,8 +11,8 @@ import { detach } from "@cawco/core/detach";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
+import type { ClosureContext } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
-import type { HubContext } from "./hub-context";
 import type { LoginMoveResults } from "./hub-shapes";
 import type { HubTimer } from "./lifetime";
 import type { Unanswered } from "./machine-answers";
@@ -22,7 +22,7 @@ import { unreachable } from "./unreachable";
 export const SIGNIN_TIMEOUT_MS = ACCOUNT_RULES.signinWaitMs;
 
 export type LoginMovesContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountWords"
   | "callAgent"
   | "db"

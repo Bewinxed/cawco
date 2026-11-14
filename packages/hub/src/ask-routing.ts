@@ -16,14 +16,15 @@ import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
 import { clientAsk } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
+import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
 import type { SentMessageRow } from "./db/sends";
 import type { StoredSendRefusal } from "./db/stored-types";
-import type { HubContext } from "./hub-context";
 import type { ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
 import { peek } from "./payload-peeks";
 import { outlivesSession } from "./pending";
+import type { createSends } from "./sends";
 import { sessionWord } from "./session-word";
 
 /** `text` with `line` after its marker (core `markerTag`, its first line), when there is a line. */
@@ -77,13 +78,12 @@ const renderDelegateAsk = (payload: unknown): string => {
 };
 
 export type AskRoutingContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountWords"
   | "awaitingFirstTurn"
   | "connectAsks"
   | "db"
   | "delegateWaits"
-  | "deliverSend"
   | "homeLoginMoveOf"
   | "hubAsks"
   | "inCustody"
@@ -110,7 +110,8 @@ export type AskRoutingContext = Pick<
   | "wakesForSend"
   | "watch"
   | "workItems"
->;
+> &
+  Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createAskRouting = (ctx: AskRoutingContext) => {
   /**

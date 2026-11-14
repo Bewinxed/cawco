@@ -27,12 +27,12 @@ import { relaunchWords } from "@cawco/core/words/relaunch";
 import { machineAccount } from "./accounts";
 import { pricedTokens, projectedMove, usdWords } from "./admission";
 import { accountsRead } from "./at-limit";
+import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
 import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
-import type { HubContext } from "./hub-context";
 import type { MoveOffWhy, StoredRow } from "./hub-shapes";
 import { cacheWarmNow, promptCacheExpiresAt } from "./keep-alive";
 import {
@@ -67,7 +67,7 @@ const AT_REST: ReadonlySet<InstanceStatus> = new Set([
 type MoverRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 export type LimitMovesContext = Pick<
-  HubContext,
+  ClosureContext,
   | "SETTLED"
   | "accountWords"
   | "admission"

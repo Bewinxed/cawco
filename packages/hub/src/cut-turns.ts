@@ -15,15 +15,16 @@ import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import type { HubLineMessage } from "./compaction";
 import type { PublicInstanceRow } from "./db/instances";
 import type { MachineLineKind } from "./db/schema";
 import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
-import type { HubContext } from "./hub-context";
 import { isKeepAlive } from "./keep-alive";
 import { uuidOf } from "./named-uuid";
 import { peek } from "./payload-peeks";
+import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
 
 /** A clock time as a hand-back says it: `12:09 UTC`. */
@@ -99,13 +100,11 @@ export const machineLine = (
 });
 
 export type CutTurnsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "SETTLED"
   | "atLimit"
   | "cutTasksWords"
   | "db"
-  | "deliverSend"
-  | "deliverToSession"
   | "escalateRoutedAsks"
   | "losePending"
   | "machineName"
@@ -122,7 +121,8 @@ export type CutTurnsContext = Pick<
   | "transcripts"
   | "turnOver"
   | "turnWaiters"
->;
+> &
+  Pick<ReturnType<typeof createSends>, "deliverSend" | "deliverToSession">;
 
 export const createCutTurns = (ctx: CutTurnsContext) => {
   /**
@@ -300,7 +300,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   /**
    * The send that hands a cut turn back, by a uuid its turn decides: one
    * made again for the same turn (a second register, a hub that died after
-   * making it) is the same send, which {@link deliverSend} hands over once.
+   * making it) is the same send, which sends.ts `deliverSend` hands over once.
    * The hub's own word, never a person's, so it goes into the session itself.
    * Why it did not go, in words, or nothing when it did.
    */

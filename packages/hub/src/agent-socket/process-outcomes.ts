@@ -62,7 +62,7 @@ export const processOutcomeStagesOf = (ctx: ProcessOutcomesContext) => {
     const { message, agentFrame } = run;
     const { kind, body } = agentFrame;
     // A send handed over again that the session took already: read,
-    // and no turn follows ({@link takeTaken}).
+    // and no turn follows (sends.ts `takeTaken`).
     if (kind === "taken_send" && message.instanceId) {
       const { uuid } = body;
       ctx.takeTaken(message.instanceId, uuid);

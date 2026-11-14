@@ -38,14 +38,14 @@ import {
   uncompared,
   withOrgIdFrom,
 } from "./accounts";
+import type { ClosureContext } from "./closure-context";
 import type { LoginMove } from "./db/accounts";
-import type { HubContext } from "./hub-context";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import type { Unanswered } from "./machine-answers";
 import { unreachable } from "./unreachable";
 
 export type AccountSigninContext = Pick<
-  HubContext,
+  ClosureContext,
   | "advanceMove"
   | "callAgent"
   | "db"

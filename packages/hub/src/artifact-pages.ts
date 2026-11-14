@@ -12,6 +12,7 @@ import { transcriptWords } from "@cawco/core/words/transcript";
 import { ElysiaStatus, problem } from "elysia";
 import { timedShowStep } from "./artifacts/service";
 import type { PageFrom } from "./artifacts/shapes";
+import type { ClosureContext } from "./closure-context";
 import type { ArtifactRow } from "./db/artifacts";
 import { artifactOrigin, projectOrigin } from "./db/previews";
 import type { PageSources } from "./decision-page";
@@ -22,7 +23,6 @@ import type {
   ImageRead,
 } from "./decision-program";
 import { buildProgram, PROGRAM_FILE } from "./decision-program";
-import type { HubContext } from "./hub-context";
 import {
   blockFolder,
   isBlockProgram,
@@ -74,7 +74,7 @@ interface ImageAt {
 }
 
 export type ArtifactPagesContext = Pick<
-  HubContext,
+  ClosureContext,
   | "artifactSessions"
   | "artifacts"
   | "callFs"

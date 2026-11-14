@@ -24,13 +24,13 @@ import {
   refusalsDue,
   usageLimits,
 } from "./accounts";
-import type { HubContext } from "./hub-context";
+import type { ClosureContext } from "./closure-context";
 import type { HubTimer } from "./lifetime";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { unreachable } from "./unreachable";
 
 export type AccountProbesContext = Pick<
-  HubContext,
+  ClosureContext,
   | "accountWords"
   | "accountsMoved"
   | "db"

@@ -22,12 +22,13 @@ import {
 import { noticeWords } from "@cawco/core/words/notices";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import type { AccountLeave } from "./db/accounts";
-import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import type { Kept } from "./limit-decision";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import type { createSends } from "./sends";
 import { LIMIT_ORIGIN } from "./sends";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
@@ -41,13 +42,12 @@ type CarryOutcome =
   CarrySessionOutcome | { error: string; machine: true; state: "failed" };
 
 export type AccountCarryContext = Pick<
-  HubContext,
+  ClosureContext,
   | "MOVE_TICK_MS"
   | "SLEEP_TIMEOUT_MS"
   | "awayWords"
   | "callAgent"
   | "db"
-  | "deliverSend"
   | "launchInFlight"
   | "lifetime"
   | "machineName"
@@ -62,7 +62,8 @@ export type AccountCarryContext = Pick<
   | "sessionName"
   | "silentWords"
   | "takeUpOwedMove"
->;
+> &
+  Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createAccountCarry = (ctx: AccountCarryContext) => {
   /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */

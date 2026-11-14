@@ -22,10 +22,10 @@ import { spawnWords } from "@cawco/core/words/spawn";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
 import { cleanSpawn, fencedSpawn } from "./caw";
+import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
 import type { StoredSendRefusal } from "./db/stored-types";
-import type { HubContext } from "./hub-context";
 import type { AccountUse, SettledSpawn } from "./hub-shapes";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { peekResume } from "./payload-peeks";
@@ -68,7 +68,7 @@ const peekSessionSettings = (
 };
 
 export type LaunchesContext = Pick<
-  HubContext,
+  ClosureContext,
   | "db"
   | "harnessReportOf"
   | "hubAsks"

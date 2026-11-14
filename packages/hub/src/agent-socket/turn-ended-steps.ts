@@ -126,7 +126,7 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
     // Every turn's end: its own row, by its key.
     const [row] = ctx.db.listedInstancesByIds([instanceId]);
     const parentId = row?.parentInstanceId;
-    // A turn an interrupt cut ({@link interruptedTurns}), on
+    // A turn an interrupt cut (sends.ts `interruptedTurns`), on
     // any harness, or one its server's stop cut (OpenCode's
     // `serverStopped`, which the session is handed back,
     // `resumeCutTurn`): nothing is handed back for it, no rule

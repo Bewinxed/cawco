@@ -11,7 +11,7 @@ type Problem<Status extends number, Code extends string> = ReturnType<
  * starts: the project's folder on the hub (the folder's own problems), or a
  * machine that does not say where its home is. Said here, off the folder it
  * reads, because typing it from project-joining.ts closes the cycle caw →
- * project-joining → hub-context → caw.
+ * project-joining → hub-context → closure-context → caw.
  */
 export type LeadHomeProblem =
   | Extract<
