@@ -1004,7 +1004,7 @@ export const servedFile = (bytes: Blob, type: string) =>
   });
 
 /** The largest file the raw route serves: a task's video or audio output. */
-export const FOLDER_RAW_LIMIT = 256 * 1024 * 1024;
+const FOLDER_RAW_LIMIT = 256 * 1024 * 1024;
 
 /**
  * One file of the folder, text or not, up to `limit`: where it really is and

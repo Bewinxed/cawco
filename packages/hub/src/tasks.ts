@@ -119,7 +119,6 @@ import { boardTitle } from "./labels";
 import {
   deleteFolderFile,
   type Exclusive,
-  FOLDER_RAW_LIMIT,
   type FolderAuthor,
   type FolderListing,
   type FolderWriteOptions,
@@ -1103,8 +1102,6 @@ const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
 
 /** How long a failure's first line may run in its task's sentence. */
 const WHY_LIMIT = 200;
-/** The largest output a task's read serves: a picture an attempt made fits. */
-const OUTPUT_FILE_LIMIT = 10 * 1024 * 1024;
 
 /** Who stopped an attempt, as its task says it. */
 const stopperWords = (by: EndedBy): string => {
@@ -6253,8 +6250,7 @@ export const taskRoutes = (tasks: Tasks) =>
         const media = MEDIA_TYPES[extension];
         const file = await folderFileRaw(
           params.id,
-          `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`,
-          media ? FOLDER_RAW_LIMIT : OUTPUT_FILE_LIMIT
+          `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`
         );
         if (file instanceof ElysiaStatus) {
           return file;
