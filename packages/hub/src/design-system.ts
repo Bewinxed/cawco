@@ -61,6 +61,7 @@ import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { askWords } from "@cawco/core/words/asks";
+import { lastLines } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import {
   type BuiltTokens,
@@ -903,15 +904,9 @@ const COMMAND_MS = 60_000;
 /** Base64 per command, well under one shell argument's 128 KiB. */
 const CHUNK = 64 * 1024;
 
-/** The last `count` lines of a command's words joined on one line, with "…" ahead of them when earlier lines were left out. */
-const lastLines = (words: string, count: number): string => {
-  const lines = words.split("\n");
-  return `${lines.length > count ? "… " : ""}${lines.slice(-count).join(" ")}`;
-};
-
 /** What a failed command said: `what` could not be done, then the last lines it answered. */
 const failedWords = (what: string, result: CommandResult): string =>
-  `${what}: ${lastLines(result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`, 4)}`;
+  `${what}: ${lastLines((result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`).split("\n"), 4, " ")}`;
 
 /** One file's bytes at `<target>.cawco-<index>`, in base64 chunks one shell command each. */
 const writeTemporary = async (

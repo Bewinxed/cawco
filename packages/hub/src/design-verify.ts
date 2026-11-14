@@ -54,10 +54,12 @@
  *   judges it; its verdict goes to the session that asked, as one message,
  *   and nothing is held or finished.
  */
+
 import type { ResultArtifact } from "@cawco/core/deliverables";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { lastLines } from "@cawco/core/words/helpers";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { ElysiaStatus } from "elysia";
 import type { AskedArtifact, DesignAsk } from "./artifacts/shapes";
@@ -265,9 +267,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         result.stdout.trim() ||
         `exit ${result.exitCode}`
       ).split("\n");
-      throw new Error(
-        `${lines.length > 3 ? "… " : ""}${lines.slice(-3).join(" ")}`
-      );
+      throw new Error(lastLines(lines, 3, " "));
     }
     return result.stdout;
   };

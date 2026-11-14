@@ -28,6 +28,7 @@
  * - `text`: words the caller writes, under `name`;
  * - `blob`: bytes the caller holds, base64, under `name`.
  */
+import { cutShort } from "@cawco/core/words/helpers";
 import { z } from "zod";
 
 /** An id, ref or path an entry points at: a path runs to Linux PATH_MAX, 4,096. */
@@ -100,7 +101,7 @@ export const handedInputs = (
     const parsed = HANDED_INPUT.safeParse(entry);
     if (!parsed.success) {
       return {
-        refused: `inputs[${at}] (${String(JSON.stringify(entry)).slice(0, 120)}) is none of the shapes it takes: ${HANDED_SHAPES}`,
+        refused: `inputs[${at}] (${cutShort(String(JSON.stringify(entry)), 120)}) is none of the shapes it takes: ${HANDED_SHAPES}`,
       };
     }
     inputs.push(parsed.data);
