@@ -94,6 +94,8 @@ async function answer<T>(
 export interface Ask {
   /** Who said it, for the part of the answer read from transcripts. */
   by?: FindBy | null;
+  /** The cursor a finished page gave (`FindAnswer.next`): the page after it. */
+  cursor?: string;
   kinds?: readonly FindKind[];
   limit?: number;
   /** A machine whose stored sessions the hub lists again before it answers (Try again on its left-out line). */
@@ -103,7 +105,7 @@ export interface Ask {
 
 const query = (
   q: string,
-  { by, kinds, limit, relist, signal }: Ask,
+  { by, cursor, kinds, limit, relist, signal }: Ask,
   transcripts: boolean
 ) =>
   hubAsk(
@@ -111,6 +113,7 @@ const query = (
       query: {
         q,
         ...(limit ? { limit: String(limit) } : {}),
+        ...(cursor ? { cursor } : {}),
         ...(kinds && kinds.length > 0 ? { kinds: kinds.join(",") } : {}),
         ...(by ? { by } : {}),
         ...(relist ? { relist } : {}),

@@ -306,6 +306,12 @@
       : "Searching the hub…"
   );
 
+  const moreWords = {
+    asking: searchWords.loadingMore,
+    failed: searchWords.moreFailed,
+    idle: searchWords.showMore,
+  };
+
   type Fold = Extract<GoTo, { type: "fold" }>;
   type Item =
     | { t: "waiting"; key: string }
@@ -320,6 +326,7 @@
     | { t: "acts"; key: string; result: FindResult }
     | { t: "fold"; key: string; entry: Fold }
     | { t: "skeleton"; key: string; tall: boolean }
+    | { t: "more"; key: string; source: "names" | "said" }
     | { t: "nothing"; key: string };
   /** A section: what stands at its head, then its units (a row and what hangs from it). */
   interface Section {
@@ -343,6 +350,13 @@
       unit.push({ t: "acts", key: `${key}#acts`, result });
     }
     return unit;
+  };
+  /** The row that ends a list whose answer has a next page. */
+  const moreUnit = (source: "names" | "said"): Item[][] => {
+    const answer = source === "names" ? finder.names : finder.everywhere;
+    return answer.state === "ok" && answer.value.next !== null
+      ? [[{ t: "more", key: `more:${source}`, source }]]
+      : [];
   };
   const skeletons = (section: string, n: number, tall = false): Item[][] =>
     Array.from({ length: n }, (_, i) => [
@@ -373,7 +387,9 @@
         key: "loading",
         lead: [],
         units:
-          namesWaiting && nameRows.length === 0 ? skeletons("names", 3) : [],
+          namesWaiting && nameRows.length === 0
+            ? skeletons("names", 3)
+            : moreUnit("names"),
       },
     ];
   }
@@ -432,6 +448,12 @@
       if (said.units.length === 0 && everyWaiting) {
         said.units = skeletons("said", 2, true);
       }
+    }
+    if (nameUnits.length > 0) {
+      nameUnits.push(...moreUnit("names"));
+    }
+    if (said.units.length > 0) {
+      said.units.push(...moreUnit("said"));
     }
     return [goTo, { key: "names", lead: leftOut, units: nameUnits }, said];
   }
@@ -831,6 +853,16 @@
     >
       <Skeleton height={item.tall ? "reason-row" : "control"} />
     </div>
+  {:else if item.t === "more"}
+    {@const page = finder.morePage[item.source]}
+    <button
+      data-slot="more-row"
+      class="mark-line select-none flex items-center flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-link-ink active:bg-surface-fill disabled:text-ink-muted group-data-phone/finder:h-c-find-phone-h"
+      data-flip
+      disabled={page === "asking"}
+      onclick={() => finder.loadMore(item.source)}
+      type="button">{moreWords[page ?? "idle"]}</button
+    >
   {:else if item.t === "nothing"}
     <div
       data-slot="nothing"

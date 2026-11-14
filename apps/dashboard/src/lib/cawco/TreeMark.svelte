@@ -113,8 +113,8 @@
   );
   /** Rows hang under it: it draws the chevron its face gives way to. */
   const parent = $derived(has || rowToggles || switches);
-  /** The tile has room for two figures. */
-  const shown = $derived(count >= 100 ? "99" : String(count));
+  /** The tile has room for two figures; a count past them says so ("99+"). */
+  const shown = $derived(count >= 100 ? "99+" : String(count));
   const label = $derived(
     switchLabel ??
       `${open ? "Hide" : "Show"} ${count} ${noun}${count === 1 ? "" : "s"}`
@@ -223,8 +223,8 @@
              is laid out as the figure changes, and 9 to 10 stays centred. -->
         <span
           data-slot="num"
-          class="num inline-grid place-items-center w-c-tree-mark-num-w h-lh type-meta leading-none contain-layout contain-size"
-          ><MorphText text={shown} /></span
+          class="num inline-grid place-items-center w-c-tree-mark-num-w h-lh type-meta leading-none contain-layout contain-size data-past:scale-75"
+          data-past={count >= 100 || undefined}><MorphText text={shown} /></span
         >
       {:else}
         {@render face()}

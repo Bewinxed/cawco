@@ -13,6 +13,12 @@ export const searchWords = {
   /** A find's coverage, when a machine's index could not read some transcripts: its part is short by them. */
   unreadTranscripts: (count: number, machine: string) =>
     `${count === 1 ? "1 transcript" : `${count} transcripts`} on ${machine} could not be read`,
+  /** The finder's list ends at one page of results while the hub has more: the row that loads the next page. */
+  showMore: "Show more",
+  /** That row while the next page is on its way. */
+  loadingMore: "Loading more…",
+  /** That row when the next page could not be read; pressing it asks again. */
+  moreFailed: "Could not load more. Try again",
   /** The log's line for a process stopped, after why. */
   stopped: (why: string) => `[search] ${why}: its search process was stopped`,
 };
