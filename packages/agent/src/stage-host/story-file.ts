@@ -48,6 +48,12 @@ export interface StaticSheet {
     component: string | null;
     title: string | null;
   };
+  /**
+   * Each story's own modules, by its export's name: the modules its
+   * `beforeEach` (and the meta's) imports with `import("…")`, as the file
+   * writes them. A story with none shares the page's modules.
+   */
+  standIns: Map<string, string[]>;
   /** Each story, its `component` its local name when it names its own. */
   stories: Story[];
   /** Stories that differ in nothing but their `parameters.viewport`, each group by export name, in the file's order ({@link drawnApartFromWidth}). */
@@ -860,6 +866,58 @@ const presetOf = (width: number): Form => ({
   width,
 });
 
+/** The string `node` imports when it is an `import("…")` of one: Babel 7 writes it as a call of `Import`, with `createImportExpressions` as an `ImportExpression`. */
+function importedBy(node: Node): string | undefined {
+  let source: Node | null = null;
+  if (node.type === "ImportExpression") {
+    source = child(node, "source");
+  } else if (
+    node.type === "CallExpression" &&
+    child(node, "callee")?.type === "Import"
+  ) {
+    source = children(node, "arguments")[0] ?? null;
+  }
+  return source?.type === "StringLiteral" ? textOf(source, "value") : undefined;
+}
+
+/** The fields of a node of Babel's tree that hold no syntax under it. */
+const NOT_SYNTAX = new Set(["loc", "leadingComments", "trailingComments"]);
+
+/** A node's children in Babel's tree, every field's. */
+const nodesUnder = (node: Node): Node[] =>
+  Object.entries(node).flatMap(([field, value]) => {
+    if (NOT_SYNTAX.has(field)) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value.filter(isNode);
+    }
+    return isNode(value) ? [value] : [];
+  });
+
+/** Every `import("…")` of a string literal anywhere under `node`, as it is written: a `beforeEach`'s stand-ins. */
+function dynamicImportsIn(node: Node | null | undefined): string[] {
+  const found: string[] = [];
+  const queue = node ? [node] : [];
+  for (let at = queue.pop(); at; at = queue.pop()) {
+    const source = importedBy(at);
+    if (source) {
+      found.push(source);
+    }
+    queue.push(...nodesUnder(at));
+  }
+  return found;
+}
+
+/** An object literal's `beforeEach`, as a property (`beforeEach: () => …`) or a method (`beforeEach() { … }`). */
+const beforeEachOf = (object: Node | null): Node | undefined =>
+  children(object ?? { type: "" }, "properties").find(
+    (property) =>
+      (property.type === "ObjectProperty" ||
+        property.type === "ObjectMethod") &&
+      keyOf(property) === "beforeEach"
+  );
+
 /** `Story.play = …` and `Story.from = …` assignments at the top of the file, by story. */
 function assignedOf(body: Node[]): Map<string, Map<string, Node>> {
   const found = new Map<string, Map<string, Node>>();
@@ -956,9 +1014,20 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       apart.set(key, [...(apart.get(key) ?? []), one.name]);
     }
   }
+  const metaStandIns = dynamicImportsIn(beforeEachOf(meta));
+  const standIns = new Map(
+    exports.flatMap((one): [string, string[]][] => {
+      const own = dynamicImportsIn(
+        assigned.get(one.name)?.get("beforeEach") ?? beforeEachOf(one.object)
+      );
+      const all = [...new Set([...metaStandIns, ...own])];
+      return all.length > 0 ? [[one.name, all]] : [];
+    })
+  );
   return {
     widthOnly: [...apart.values()].filter((names) => names.length > 1),
     imports: reading.imports,
+    standIns,
     meta: {
       ...("why" in metaRead
         ? {

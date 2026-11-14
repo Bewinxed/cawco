@@ -53,3 +53,7 @@ reply-composer-no-fleet/cawco/transcript/planted.ts:5:1 reply-composer-no-fleet
 reply-composer-no-fleet/cawco/transcript/planted.ts:7:1 reply-composer-no-fleet
 no-whole-seconds/planted.ts:5:27 no-whole-seconds
 no-whole-seconds/planted.ts:6:27 no-whole-seconds
+stories-store-in-before-each/apps/dashboard/src/lib/cawco/Planted.stories.ts:3:1 stories-store-in-before-each
+stories-store-in-before-each/apps/dashboard/src/lib/cawco/Planted.stories.ts:4:1 stories-store-in-before-each
+stories-store-in-before-each/apps/dashboard/src/lib/cawco/Planted.stories.ts:5:1 stories-store-in-before-each
+stories-store-in-before-each/apps/dashboard/src/lib/cawco/Planted.stories.ts:9:1 stories-store-in-before-each

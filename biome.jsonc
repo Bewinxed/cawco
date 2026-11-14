@@ -602,15 +602,12 @@
       "plugins": ["./scripts/lint/reply-composer-no-fleet.grit"],
     },
     {
-      // A sheet mounts the piece, not the app around it (design-explore
-      // skill): a story, a sheet's fixture folder (`<piece>/preview/`) and a
-      // folder preview's source import none of the live shell. The
-      // dashboard's own preview pane (lib/cawco/preview) is the shell, and
-      // only its stories are held to this.
+      // A sheet's fixture folder (`<piece>/preview/`) and a folder
+      // preview's source import none of the live shell. The dashboard's own
+      // preview pane (lib/cawco/preview) is the shell.
       "includes": [
         "apps/dashboard/src/**/preview/**",
         "!apps/dashboard/src/lib/cawco/preview/**",
-        "apps/dashboard/src/**/*.stories.ts",
         "scripts/**/preview/**",
       ],
       "linter": {
@@ -638,6 +635,48 @@
                     ],
                     "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
                   },
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                ],
+                "paths": {
+                  "$app/navigation": "The stage stubs $app/navigation; a story never needs it.",
+                  "$app/state": "The stage stubs $app/state; a story never needs it.",
+                  "$app/stores": "The stage stubs $app/stores; a story never needs it.",
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // A states file takes a store inside a story's `beforeEach`
+      // (`await import(…)`), so that story's frame holds its own copy of it
+      // (stage-host host.ts `cawcoStandIns`); the plugin refuses a static
+      // import of one, its types free.
+      "includes": ["apps/dashboard/src/**/*.stories.ts"],
+      "plugins": ["./scripts/lint/stories-store-in-before-each.grit"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
                   {
                     // A member imports another member's file through its
                     // manifest (@cawco/<name>/…), never by a path into its
@@ -879,23 +918,6 @@
                       "../../features/**",
                     ],
                     "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
-                  },
-                  {
-                    "group": [
-                      "**/cawco/client.svelte",
-                      "**/cawco/client.svelte.js",
-                      "./client.svelte",
-                      "./client.svelte.js",
-                      "../client.svelte",
-                      "../client.svelte.js",
-                      "**/cawco/stores/*",
-                      "**/cawco/hub/*",
-                      "./stores/*",
-                      "../stores/*",
-                      "./hub/*",
-                      "../hub/*",
-                    ],
-                    "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
                   },
                 ],
                 "paths": {

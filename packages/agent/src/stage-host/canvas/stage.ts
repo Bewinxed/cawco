@@ -138,6 +138,7 @@ import {
   frameTick,
   type Mode,
   type Mounted,
+  moduleOf,
   type Page,
   type PlayFn,
   type Probe,
@@ -1352,7 +1353,10 @@ export function bootStage(page: Page): Mode {
 
   /** The play that moves the drawing into `target`, when the panel asked for the move and its story has one. */
   function playOf(asking: StageReach, target: Target): PlayFn | null {
-    const csf = page.csfOf(target.section.mod?.module ?? {}, target.ref.story);
+    const csf = page.csfOf(
+      moduleOf(target.section.mod, target.ref.story),
+      target.ref.story
+    );
     return asking.play && asking.from !== null ? (csf?.play ?? null) : null;
   }
 

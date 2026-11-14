@@ -91,6 +91,7 @@ import {
   type Mode,
   type Mounted,
   type MountSpec,
+  moduleOf,
   nextTask,
   objectOf,
   type Page,
@@ -728,7 +729,7 @@ export function boot(options: BootOptions): void {
     section: Section,
     name: string
   ): Record<string, unknown> => {
-    const mod = section.mod?.module ?? {};
+    const mod = moduleOf(section.mod, name);
     return {
       ...readCsf(mod.default)?.args,
       ...csfOf(mod, name)?.args,
@@ -750,7 +751,7 @@ export function boot(options: BootOptions): void {
     name: string,
     args: Record<string, unknown>
   ): MountSpec {
-    const mod = section.mod?.module ?? {};
+    const mod = moduleOf(section.mod, name);
     const meta = readCsf(mod.default) ?? {};
     const csf = csfOf(mod, name) ?? {};
     return {
@@ -958,6 +959,7 @@ export function boot(options: BootOptions): void {
       try {
         loaded = await options.load(section.file, !!section.failure);
         section.mod = loaded;
+        await seeded(section);
       } catch (error) {
         heard(error);
         section.failure = await loadFailure(error, since);
@@ -969,6 +971,30 @@ export function boot(options: BootOptions): void {
       show(section, loaded);
     })();
     return section.loading;
+  }
+
+  /**
+   * Each story's `beforeEach` run, the meta's first, as Storybook runs them
+   * before a story renders: once as its section loads, before any of its
+   * frames mount, with the story's context. A story that imports a module
+   * in it writes into its own copy (host.ts `cawcoStandIns`), which every
+   * frame of that story then reads.
+   */
+  async function seeded(section: Section): Promise<void> {
+    for (const story of section.mod?.SHEET.stories ?? []) {
+      const mod = moduleOf(section.mod, story.name);
+      const { context } = specFor(
+        section,
+        story.name,
+        argsOf(section, story.name)
+      );
+      for (const hook of [
+        readCsf(mod.default)?.beforeEach,
+        csfOf(mod, story.name)?.beforeEach,
+      ]) {
+        await hook?.(context);
+      }
+    }
   }
 
   /** A section's module, loaded: what every mode reads of it, then the mode's drawing. */
@@ -1143,8 +1169,7 @@ export function boot(options: BootOptions): void {
     to: string,
     body: HTMLElement
   ): Promise<{ mounted: Mounted | undefined; move: MoveRender }> {
-    const mod = section.mod?.module ?? {};
-    const csf = csfOf(mod, to) ?? {};
+    const csf = csfOf(moduleOf(section.mod, to), to) ?? {};
     const { play } = csf;
     const from = String(
       csf.from ??
@@ -1507,8 +1532,21 @@ export function boot(options: BootOptions): void {
     section.mod = mod;
     section.interactions.clear();
     section.probes.clear();
-    show(section, mod);
-    dispatchEvent(new CustomEvent("cawco:hmr"));
+    const since = performance.now();
+    quietly(
+      seeded(section).then(
+        () => {
+          show(section, mod);
+          dispatchEvent(new CustomEvent("cawco:hmr"));
+        },
+        async (error: unknown) => {
+          heard(error);
+          section.failure = await loadFailure(error, since);
+          mode?.failed(section, section.failure);
+          later();
+        }
+      )
+    );
   });
   // A states file it found missing is written: its section loads again, with no reload of the canvas.
   window.addEventListener(SECTION_WRITTEN, (event) => {

@@ -591,8 +591,9 @@ async function mountedFiles(abs: string, text: string): Promise<string[]> {
   return files.filter((file): file is string => !!file);
 }
 
-/** A source file's imports of other files, as it writes them: `import … from "…"` and `import "…"`, never a dynamic `import()`. Ours: no parser, a module's imports are its first lines. */
-const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/gu;
+/** A source file's imports of other files, as it writes them: `import … from "…"`, `import "…"` and a barrel's `export … from "…"`, never a dynamic `import()` nor an `import type`, which loads nothing. Ours: no parser, a module's imports are its first lines. */
+const IMPORT_FROM =
+  /\b(?:import|export)\s+(?!type\s)(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/gu;
 /** A file whose imports the stage reads: a component or a script. */
 const SOURCE_FILE = /\.(?:svelte|vue|[cm]?[jt]sx?)$/u;
 /**
@@ -868,8 +869,11 @@ function globalStyles(): string[] {
  * nests them: what it sets in Svelte's context (`setContext`, a stand-in a
  * states file provides) is the context the story inside it mounts with
  * (`getAllContexts` where its children render, `mount`'s `context`), so
- * each frame's component reads its own decorator's, never a store the
- * frames on one page share. Svelte's props are a `$state` object
+ * each frame's component reads its own decorator's. A module the component
+ * imports is the page's one, save where a story's `beforeEach` imports it:
+ * that story mounts from its own copy ({@link cawcoStandIns}), its
+ * component and its spec read off it (canvas runtime.ts `moduleOf`).
+ * Svelte's props are a `$state` object
  * (`cawco:stage/svelte-props.js`, compiled by the project's own Svelte),
  * as its docs pass reactive props to `mount`; React's and Preact's render
  * again on the same root; Vue's and Solid's are their own reactive objects.
@@ -1063,13 +1067,27 @@ if (import.meta.hot) {
  * ({@link keepReport}). It accepts itself: an edit to any file its frames
  * are drawn from (the plugin's `hotUpdate`) loads it again, with its sheet
  * read anew, and the runtime remounts that section alone (`cawco:section`)
- * and hands the inspector the new sheet.
+ * and hands the inspector the new sheet. `FRAMES` holds, by story, the copy
+ * of the states file each story that holds modules of its own mounts from
+ * ({@link framesOf}).
  */
 async function sectionModule(file: string): Promise<string> {
   const abs = resolve(root, file);
   const sheet: SectionSheet = { ...(await sheetOf(file)).sheet, file };
+  const frames = framesOf(file);
+  const imports = frames
+    .map(
+      (one, at) =>
+        `import * as frame${at} from ${JSON.stringify(`${abs}?${FRAME_QUERY}=${one.token}`)};`
+    )
+    .join("\n");
+  const named = frames
+    .map((one, at) => `${JSON.stringify(one.story)}: frame${at}`)
+    .join(", ");
   return `import * as module from ${JSON.stringify(abs)};
+${imports}
 export const SHEET = ${JSON.stringify(sheet)};
+export const FRAMES = { ${named} };
 export { module };
 if (import.meta.hot) {
   import.meta.hot.accept((next) => {
@@ -2576,9 +2594,11 @@ const VIA_DEPTH = 6;
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of Vite's graph gives the totals, each import's share, its via, and what it brings
 async function weightOf(file: string): Promise<SheetWeight | null> {
   const abs = resolve(root, file);
-  const story = [
+  // The states file's own module, and each story's own copy of it (`cawco-frame`): a page loads them all.
+  const served = [
     ...(server?.environments.client.moduleGraph.getModulesByFile(abs) ?? []),
-  ].find((one) => one.transformResult);
+  ].filter((one) => one.transformResult);
+  const story = served.find((one) => !(one.id && frameOf(one.id)));
   if (!story) {
     return null;
   }
@@ -2594,7 +2614,9 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
     })
   );
   // Each module under the story's import that reached it first, and the module that did.
-  const under = new Map<ModuleNode, ModuleNode>([[story, story]]);
+  const under = new Map<ModuleNode, ModuleNode>(
+    served.map((one) => [one, story] as const)
+  );
   /** A module reached, with the top import it is under and the module that reached it. */
   interface Reached {
     by: ModuleNode;
@@ -2608,8 +2630,14 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
       queue.push({ mod, by, from });
     }
   };
-  for (const top of story.importedModules) {
-    reach(top, top, story);
+  for (const copy of served) {
+    for (const top of copy.importedModules) {
+      // A copy's import is counted under the shared import of its file, where the states file writes it.
+      const shared = [...story.importedModules].find(
+        (one) => one.file === top.file
+      );
+      reach(top, shared ?? top, copy);
+    }
   }
   // Breadth first: an array's iterator reaches what is pushed while it runs.
   for (const { mod, by } of queue) {
@@ -3327,6 +3355,8 @@ function cawcoStage() {
       if (type !== "update" || isManifest(file)) {
         drawnKept.clear();
       }
+      // An edit may add or drop an import a frame's copies run through.
+      copiesKept.clear();
       if (isManifest(file)) {
         if (type !== "create") {
           return;
@@ -3464,7 +3494,9 @@ function stamp() {
 }
 
 /** One module stamped by code-inspector's transform; null when it is none the stage stamps. */
-async function stampTransform(code: string, id: string) {
+async function stampTransform(code: string, served: string) {
+  // A story's own copy of a file is stamped as the file.
+  const id = unframed(served);
   if (id.includes("?") || id.includes(`${sep}node_modules${sep}`)) {
     return null;
   }
@@ -3558,29 +3590,187 @@ export const applyAction = () => Promise.resolve();
 export const deserialize = (result) => JSON.parse(result);`,
 };
 
+/** The query a story's own copy of a module is served under: `?cawco-frame=<token>`, the token naming its states file and story ({@link framesOf}). */
+const FRAME_QUERY = "cawco-frame";
+const FRAME_PARAM = /[?&]cawco-frame=([\w-]+)/u;
+const FRAME_PART = /([?&])cawco-frame=[\w-]+&?/u;
+
+/** One story that holds modules of its own: its states file (from the root), its export's name, the modules its `beforeEach` imports as the file writes them, and its token. */
+interface Frame {
+  file: string;
+  modules: string[];
+  story: string;
+  token: string;
+}
+
+/** Each frame by its token, written as its section's module is ({@link framesOf}): what a copy's import is resolved by. */
+const framesKept = new Map<string, Frame>();
+
 /**
- * The Kit stubs: `$app/<name>` aliased to `cawco:kit/<name>`, loaded from
- * {@link KIT_STUBS}. The alias goes in a config hook ordered after Kit's
- * own, whose `$app` alias would match first otherwise (Vite merges a later
- * hook's aliases ahead of the earlier ones').
+ * The stories of states file `file` that hold modules of their own: each
+ * whose `beforeEach` (or the meta's) imports a module with `import("…")`
+ * (story-file.ts `standIns`). Each such story's frame draws from its own
+ * copy of the states file, and of every file between it and those modules,
+ * so what its `beforeEach` writes into them is that frame's alone.
  */
-function cawcoKit() {
+function framesOf(file: string): Frame[] {
+  const abs = resolve(root, file);
+  const { standIns } = readStoryFile(abs, readFileSync(abs, "utf8"));
+  return [...standIns].map(([story, modules]) => {
+    const token = createHash("sha256")
+      .update(`${file}\0${story}`)
+      .digest("base64url")
+      .slice(0, 12);
+    const frame = { file, story, modules, token };
+    framesKept.set(token, frame);
+    copiesKept.delete(token);
+    return frame;
+  });
+}
+
+/** The frame token module id `id` is a copy for; null for the shared module. */
+const frameOf = (id: string): string | null =>
+  id.match(FRAME_PARAM)?.[1] ?? null;
+
+/** `id` as its shared module: the frame's query taken out. */
+const unframed = (id: string): string =>
+  id.replace(FRAME_PART, "$1").replace(TRAILING_SEPARATOR, "");
+
+/** `id` as frame `token`'s copy. */
+const framed = (id: string, token: string): string =>
+  withQuery(id, `${FRAME_QUERY}=${token}`, false);
+
+/** Each frame's copied files, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
+const copiesKept = new Map<string, Promise<Set<string>>>();
+
+/**
+ * The files frame `token` serves copies of (absolute): its states file, the
+ * modules it names, and each of the project's own files a static import
+ * chain from the states file reaches them through. The rest of the page's
+ * graph (the framework, the kit, a module that never reaches a named one)
+ * is the one every frame shares. Walked over the files' own imports
+ * ({@link sourceImports}), kept by their times.
+ */
+function copiesOf(token: string): Promise<Set<string>> {
+  const kept = copiesKept.get(token);
+  if (kept) {
+    return kept;
+  }
+  const frame = framesKept.get(token);
+  const walk = frame ? copiedFiles(frame) : Promise.resolve(new Set<string>());
+  // A walk that failed (a file gone mid-read) is walked again after the next edit, which clears them all.
+  copiesKept.set(token, walk);
+  return walk;
+}
+
+/** Frame `frame`'s copied files, walked now ({@link copiesOf}). */
+async function copiedFiles(frame: Frame): Promise<Set<string>> {
+  const abs = resolve(root, frame.file);
+  const named = (
+    await Promise.all(frame.modules.map((source) => resolved(source, abs)))
+  ).filter((one): one is string => !!one);
+  // Each of the project's own files the states file reaches, with what imports it.
+  const importers = new Map<string, string[]>();
+  const seen = new Set<string>([abs]);
+  let level = [abs];
+  while (level.length > 0) {
+    const next: string[] = [];
+    await Promise.all(
+      level.map(async (file) => {
+        for (const to of await sourceImports(file)) {
+          importers.set(to, [...(importers.get(to) ?? []), file]);
+          if (!seen.has(to) && ownFile(to) && existsSync(to)) {
+            seen.add(to);
+            next.push(to);
+          }
+        }
+      })
+    );
+    level = next;
+  }
+  // Up from the named modules: every file a chain to one of them runs through.
+  const copies = new Set<string>([abs, ...named]);
+  const queue = [...named];
+  for (let file = queue.shift(); file; file = queue.shift()) {
+    for (const up of importers.get(file) ?? []) {
+      if (!copies.has(up)) {
+        copies.add(up);
+        queue.push(up);
+      }
+    }
+  }
+  return copies;
+}
+
+/**
+ * The stage's stand-ins for modules a component imports, as Storybook
+ * stands in for them (its SvelteKit framework's mocks; its module mocking,
+ * storybook.js.org/docs/writing-stories/mocking-data-and-modules/mocking-modules,
+ * a story's `beforeEach` setting what a mocked module holds):
+ *
+ * - SvelteKit's client modules, for every frame: `$app/<name>` aliased to
+ *   `cawco:kit/<name>`, loaded from {@link KIT_STUBS}. The alias goes in a
+ *   config hook ordered after Kit's own, whose `$app` alias would match
+ *   first otherwise (Vite merges a later hook's aliases ahead of the
+ *   earlier ones').
+ * - A story's own modules, for its frame alone: a story whose `beforeEach`
+ *   imports a module (`await import("…")`) mounts
+ *   from its own copy of its states file (`?cawco-frame=<token>`, imported
+ *   by the section's module, {@link sectionModule}), and each import a copy
+ *   makes of a file between the states file and that module
+ *   ({@link copiesOf}) resolves to that file's copy for the same frame. The
+ *   copy is the real module, its writers and derived views its own, so the
+ *   `beforeEach` seeds it through its own writers and every story of one
+ *   states file holds its own value on one page.
+ */
+function cawcoStandIns() {
   return {
-    name: "cawco:stage-kit",
+    name: "cawco:stage-stand-ins",
     enforce: "pre" as const,
     config: {
       order: "post" as const,
-      handler: () => ({
-        resolve: {
-          alias: Object.keys(KIT_STUBS).map((name) => ({
-            find: new RegExp(`^\\$app/${name}$`, "u"),
-            replacement: `${KIT_STUB}${name}`,
-          })),
-        },
-      }),
+      handler: () =>
+        kit
+          ? {
+              resolve: {
+                alias: Object.keys(KIT_STUBS).map((name) => ({
+                  find: new RegExp(`^\\$app/${name}$`, "u"),
+                  replacement: `${KIT_STUB}${name}`,
+                })),
+              },
+            }
+          : {},
     },
-    resolveId(id: string) {
-      return id.startsWith(KIT_STUB) ? `\0${id}` : null;
+    async resolveId(
+      this: {
+        resolve: (
+          source: string,
+          importer: string,
+          options: object
+        ) => Promise<{ external?: unknown; id: string } | null>;
+      },
+      id: string,
+      importer: string | undefined,
+      options: object
+    ) {
+      if (id.startsWith(KIT_STUB)) {
+        return `\0${id}`;
+      }
+      const token = importer ? frameOf(importer) : null;
+      if (!(importer && token) || id.startsWith("\0")) {
+        return null;
+      }
+      const found = await this.resolve(id, importer, {
+        ...options,
+        skipSelf: true,
+      });
+      if (!found || found.external || frameOf(found.id)) {
+        return found;
+      }
+      const copies = await copiesOf(token);
+      return copies.has(pathOfId(found.id))
+        ? { ...found, id: framed(found.id, token) }
+        : found;
     },
     load(id: string) {
       return id.startsWith(`\0${KIT_STUB}`)
@@ -3594,12 +3784,12 @@ const CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
   (ext) => `vite.config.${ext}`
 );
 
-/** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already; SvelteKit's client modules are stubs. */
+/** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already; the stand-ins serve SvelteKit's client modules and each story's own. */
 const plugins = () => [
   cawcoStage(),
   linkedRebundle(),
   ...(framework === "svelte" ? [] : [stamp()]),
-  ...(kit ? [cawcoKit()] : []),
+  cawcoStandIns(),
 ];
 
 /**

@@ -26,7 +26,7 @@ A sheet exists for one of two things:
 
 A change with one right answer gets no sheet. Build it, prove it with its check, and say what changed. A decision that isn't visual, such as a name, a policy or a scope, goes on a decision page (decision-page skill).
 
-A sheet mounts the piece, never the surface around it: the row, the card, the dialog, not the panel or page that holds it. A piece whose props cannot show the state gets a fixture component beside it (`preview/<Component>Fixture.svelte`, in the project's framework) that feeds it the state, never the live shell.
+A sheet mounts the piece, never the surface around it: the row, the card, the dialog, not the panel or page that holds it. A piece that reads a store gets that store's state from its story's `beforeEach` (the `component-canvas` skill's step 3), the piece itself untouched.
 
 ## Variants
 
@@ -57,7 +57,7 @@ A direction that only works by breaking the floor is dropped, with the reason gi
 
 The states are the branches the component already has: data (loading, empty, error, one item, a typical set, a set long enough to scroll, partly resolved, stale and refetching), account (plan, role, permission), feature (flags, limits, locked). **A state the code cannot reach is not a state.** List a state the design shows but the code lacks as missing, and leave it out. Each state is a situation the person meets, and its story draws a picture no other story draws: keep the few that help him judge, and two that draw alike are one. Name each story the way the product talks about the state (`Empty`, `MemberNoAccess`), and label it with the sentence he would say about it (the `component-canvas` skill's step 3). Combine kinds only where the code branches on the combination, never as a cross product. A width is no kind: the canvas draws every state at the widths he picks, so a state is one story.
 
-Feed each state through the component's props, as its story's `args`, with fixture data shaped like the product: real-looking names, times, amounts, and as many items as users really have. A component that needs a provider (a theme, a query cache) names it in the sheet's `decorators`. When the only way in is editing the component, ask before adding a seam. A sheet may carry both axes: variant stories and state stories, grouped by their names.
+Feed each state through the component's props, as its story's `args`, with fixture data shaped like the product: real-looking names, times, amounts, and as many items as users really have. A component that needs a provider (a theme, a query cache) names it in the sheet's `decorators`. A component that reads a store module takes each state's value from its story's `beforeEach`, which writes that story's own copy of the store through its writers (the `component-canvas` skill's step 3). A sheet may carry both axes: variant stories and state stories, grouped by their names.
 
 ## Steps
 
@@ -74,7 +74,7 @@ Feed each state through the component's props, as its story's `args`, with fixtu
 | Mistake | Fix |
 | --- | --- |
 | A static page, a copied component, or the whole app on a dev server | A sheet beside the real component |
-| Live data, a request, a story that dies with a server | Fixtures as `args`, providers as `decorators` |
+| Live data, a request, a story that dies with a server | Fixtures as `args`, providers as `decorators`, a store's state written in the story's `beforeEach` |
 | Mounting the panel to show one row in it | Mount the row; feed the state as args or through a fixture |
 | Variants that look the same, or differ only in tint | A different position on the one axis, or cut it |
 | Every axis varies at once | Vary one; the rest follows from it |

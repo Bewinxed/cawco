@@ -59,6 +59,8 @@ export type PlayFn = (context: object) => Promise<void> | void;
 /** A story's or a meta's CSF object as the page reads it (Storybook's CSF 3): each field kept as the page can use it, any other dropped. */
 export interface Csf {
   args?: object;
+  /** Run once before the story's frames draw, as its section loads: what it writes into the modules it imports is its frame's own (host.ts `cawcoStandIns`). */
+  beforeEach?: (context: object) => unknown;
   component?: unknown;
   decorators?: unknown[];
   from?: unknown;
@@ -86,9 +88,14 @@ export function readCsf(value: unknown): Csf | null {
     ...(typeof value === "function" ? { render: value } : {}),
     ...Object.fromEntries(Object.entries(value)),
   };
-  const { decorators, name, play, title } = fields;
+  const { beforeEach, decorators, name, play, title } = fields;
   return {
     args: objectOf(fields.args),
+    // The project's function, called on the export it is written on.
+    beforeEach:
+      typeof beforeEach === "function"
+        ? (context) => Reflect.apply(beforeEach, value, [context])
+        : undefined,
     component: fields.component,
     decorators: Array.isArray(decorators) ? decorators : undefined,
     from: fields.from,
@@ -115,9 +122,17 @@ export function canvasOf(): HTMLElement {
 
 /** A states file's module as the stage serves it (`cawco:sheet/<file>.js`). */
 export interface SectionModule {
+  /** Each story that holds modules of its own, its own copy of the states file, by its export's name: what it mounts from. */
+  FRAMES?: Record<string, Record<string, unknown>>;
   module: Record<string, unknown>;
   SHEET: SectionSheet;
 }
+
+/** The states file story `name` of `mod` mounts from: its own copy where it holds modules of its own, else the page's. */
+export const moduleOf = (
+  mod: SectionModule | undefined,
+  name: string
+): Record<string, unknown> => mod?.FRAMES?.[name] ?? mod?.module ?? {};
 
 /**
  * Why a section didn't load: its states file isn't there (`missing`), the
