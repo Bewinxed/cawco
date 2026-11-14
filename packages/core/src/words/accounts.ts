@@ -378,6 +378,13 @@ export const accountsWords = {
   // ── At the limit (AtLimitBlock) ───────────────────────────────────────
   atLimit: {
     head: "When a session hits its limit and another account is free",
+    /**
+     * The block's notice while the provider's saved policy can't be read
+     * (core `ProviderRouting.atLimitUnread`: its fields that don't, as the
+     * code): the settings shown are the restrictive policy the hub acts on.
+     */
+    unread: (fields: string) =>
+      `The saved at-limit policy can’t be read (${fields}). CawCo moves, compacts and files nothing by itself until you save it here.`,
     move: "Move running sessions between accounts",
     wait: "Wait if the window resets within",
     minutes: "minutes",

@@ -88,7 +88,7 @@ export interface StrandedSession {
 }
 
 export interface AccountsDb {
-  /** The provider's saved at-limit policy as it was stored, when it does not read whole (migration 0399); null when it reads or none is saved. */
+  /** Why the provider's saved at-limit policy does not read whole (migration 0399): its fields that don't, as a short reason; null when it reads or none is saved. */
   readonly atLimitUnread: (provider: AccountProvider) => string | null;
   readonly bench: (now?: number) => AccountBench[];
   /**
@@ -287,6 +287,34 @@ const savedPolicy = (row: RoutingRow): AtLimit | undefined => {
         },
       }
     : undefined;
+};
+
+/** Each column of the policy, by the field of core `AtLimit` it holds. */
+const POLICY_COLUMNS = [
+  ["move", "atLimitMove"],
+  ["waitMinutes", "atLimitWaitMinutes"],
+  ["moveWholeUnderK", "atLimitMoveWholeUnderK"],
+  ["staleAfterHours", "atLimitStaleAfterHours"],
+  ["compaction.atLimit", "compactionAtLimit"],
+  ["compaction.beforeMove", "compactionBeforeMove"],
+  ["compaction.fileRoom", "compactionFileRoom"],
+  ["compaction.summarizer.harness", "compactionSummarizerHarness"],
+  ["compaction.summarizer.model", "compactionSummarizerModel"],
+] as const;
+
+/**
+ * Why a routing row's policy does not read, short: the fields left empty
+ * (0399 placed none it could not read), or "no field" when none read (a
+ * policy that was not JSON, or not an object). Null when it reads.
+ */
+const unreadReason = (row: RoutingRow): string | null => {
+  if (savedPolicy(row)) {
+    return null;
+  }
+  const empty = POLICY_COLUMNS.filter(([, column]) => row[column] === null);
+  return empty.length === POLICY_COLUMNS.length
+    ? "no field"
+    : empty.map(([field]) => field).join(", ");
 };
 
 const toAccount = (row: AccountRow): Account => ({
@@ -834,6 +862,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .from(accountRouting)
         .where(eq(accountRouting.provider, provider))
         .get();
+      const unread = row ? unreadReason(row) : null;
       return row
         ? {
             provider: row.provider,
@@ -848,6 +877,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
                 : {}),
             },
             atLimit: savedPolicy(row) ?? RESTRICTIVE_AT_LIMIT,
+            ...(unread === null ? {} : { atLimitUnread: unread }),
           }
         : defaultRouting(provider);
     },
@@ -857,10 +887,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .from(accountRouting)
         .where(eq(accountRouting.provider, provider))
         .get();
-      if (!row || savedPolicy(row)) {
-        return null;
-      }
-      return row.atLimitUnread ?? "a saved policy with a field left empty";
+      return row ? unreadReason(row) : null;
     },
     // A pin names an account the hub keeps, or none: a strategy other than
     // `pinned` may carry one the routes never checked.

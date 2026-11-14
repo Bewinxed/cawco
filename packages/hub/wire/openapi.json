@@ -52335,6 +52335,10 @@
           "atLimit": {
             "$ref": "#/components/schemas/AtLimit"
           },
+          "atLimitUnread": {
+            "description": "Set while the provider's saved at-limit policy can't be read (hub\nmigration 0399): the policy's fields that don't read, as a short\nreason (\"staleAfterHours, compaction.fileRoom\"), never the stored text.\n`atLimit` is then core `RESTRICTIVE_AT_LIMIT`. A save clears it.",
+            "type": "string"
+          },
           "delegates": {
             "$ref": "#/components/schemas/StrategyChoice"
           },
