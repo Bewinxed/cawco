@@ -279,7 +279,12 @@ const savedPolicy = (row: RoutingRow): AtLimit | undefined => {
         waitMinutes,
         moveWholeUnderK,
         staleAfterHours,
-        compaction: { atLimit, beforeMove, fileRoom, summarizer: { harness, model } },
+        compaction: {
+          atLimit,
+          beforeMove,
+          fileRoom,
+          summarizer: { harness, model },
+        },
       }
     : undefined;
 };
@@ -873,7 +878,8 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         compactionAtLimit: routing.atLimit.compaction.atLimit,
         compactionBeforeMove: routing.atLimit.compaction.beforeMove,
         compactionFileRoom: routing.atLimit.compaction.fileRoom,
-        compactionSummarizerHarness: routing.atLimit.compaction.summarizer.harness,
+        compactionSummarizerHarness:
+          routing.atLimit.compaction.summarizer.harness,
         compactionSummarizerModel: routing.atLimit.compaction.summarizer.model,
         atLimitUnread: null,
       };
