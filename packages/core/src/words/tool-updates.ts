@@ -37,8 +37,9 @@ export const toolUpdateWords = {
   /** The group's tool cell, after the tool's name. */
   runs: (wants: ToolWants) => `CawCo runs ${wanted(wants)}`,
 
-  /** `runs`, put there by CawCo's own install: how long ago. */
-  updated: (ago: string) => `Updated ${ago} ago`,
+  /** `runs`, put there by CawCo's own install: how long ago, or within the minute (`null`). */
+  updated: (ago: string | null) =>
+    ago === null ? "Updated just now" : `Updated ${ago} ago`,
   /** `runs` with no record of who put it there: the quiet tick's name. */
   current: "Current",
   /**
@@ -111,6 +112,9 @@ export const toolUpdateWords = {
     asked: null,
   },
 
+  /** A session page's conversation while CawCo's own install of its CLI runs: the wait, said as one. */
+  readWaits: (name: string) =>
+    `This conversation shows once ${name} is updated`,
   /** A refused harness whose CLI CawCo updates with no press, on a machine its owner paused. */
   autoPaused: (name: string, machine: string) =>
     `CawCo updates ${name} on ${machine} once its pause ends.`,
