@@ -320,12 +320,20 @@ import type { TailnetServing } from "./tailnet-https";
  *    and not enumerated (any JSON values, and plain strings). A page built
  *    for 65 reads them as closed sets the hub may now send values outside,
  *    so it reloads first.
+ * 67: a machine that is away is answered 503 `machine-away`, its headers
+ *    naming it, where the fleet pushes and sync, an account's sign-out
+ *    and a spawn answered 404 or 409 with their own codes, and a
+ *    machine's media and a session's image 503 with theirs;
+ *    the project's conversation that does not start answers the spawn's own
+ *    problem where it answered 502 `caw-failed`, and an attempt whose clone's
+ *    design/ is unread 502 `design-clone-unread` where it answered 500. A
+ *    page built for 66 reads those answers closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 66;
+export const WIRE_PROTOCOL = 67;
 
 /**
  * What a session's stream carries: the changes each frame made to its
