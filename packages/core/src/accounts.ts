@@ -403,8 +403,9 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
  * allowed. It moves no session to another account at its limit or ahead
  * of a run-out (`move` off: the hub's rule 3 waits, `off`); a move it still
  * makes (a person's, a refused sign-in's) goes whole, compacted and
- * summarised by none, and announced first however small its context
- * (`moveWholeUnderK` 0), so a person can stop it; no session is sent a
+ * summarised by none, and one made where a session stopped is announced
+ * first however small its context (`moveWholeUnderK` 0), so a person can
+ * stop it; no session is sent a
  * filing turn (`fileRoom` 0); a hold an hour past its reset, the shortest
  * cutoff a person can save, waits for a person or its parent; and a hold
  * with no reset to wait for is looked at again after an hour, not sooner.
