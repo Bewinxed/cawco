@@ -115,15 +115,18 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
 
   /**
    * An install control's arguments (agent session.ts `installTool`): the
-   * tool, its pin, the release to reach, and whether the hub sends it to
-   * keep the tool current rather than a press (a machine whose owner turned
-   * the tool's automatic updates off declines that one).
+   * tool, its pin, the release to reach, whether the hub sends it to keep
+   * the tool current rather than a press (a machine whose owner turned the
+   * tool's automatic updates off declines that one), and who started it
+   * (core `ToolStatus.startedBy`), which the machine says on the tool's row
+   * while it runs.
    */
   const installArgs = (
     toolId: string,
     ask: { newest?: string; pin?: string },
-    automatic: boolean
-  ): unknown[] => [toolId, ask.pin, ask.newest, automatic];
+    automatic: boolean,
+    startedBy: "cawco" | "person"
+  ): unknown[] => [toolId, ask.pin, ask.newest, automatic, startedBy];
 
   /**
    * Sends the machine one install: the hub's own (a required tool it is
@@ -144,7 +147,8 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       toolId: string;
       version?: string;
     },
-    automatic: boolean
+    automatic: boolean,
+    startedBy: "cawco" | "person" = automatic ? "cawco" : "person"
   ): void => {
     const requestId = crypto.randomUUID();
     ctx.pendingInstalls.set(requestId, {
@@ -158,7 +162,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       payload: {
         requestId,
         method: "installTool",
-        args: installArgs(install.toolId, install, automatic),
+        args: installArgs(install.toolId, install, automatic, startedBy),
       },
     } satisfies Envelope<ControlPayload>);
     ctx.db.setAgentToolCell(machineId, {
@@ -166,6 +170,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       state: "installing",
       ...(install.version ? { version: install.version } : {}),
       ...(install.to ? { to: install.to } : {}),
+      startedBy,
       at: Date.now(),
     });
   };
@@ -367,9 +372,15 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       toolId,
       ...(ask.newest ? { newest: ask.newest } : {}),
     });
+    // Adding a machine is the person's act, but what it puts on is CawCo's
+    // choice under the fleet's rule, so the row says CawCo put it on.
+    const cell = ctx.db.agentTools(machineId)[toolId];
     ctx.db.setAgentToolCell(machineId, {
       id: toolId,
       state: "installing",
+      ...(cell?.version ? { version: cell.version } : {}),
+      ...(cell?.wants ? targetOf(cell.wants, ask) : {}),
+      startedBy: "cawco",
       at: Date.now(),
     });
     ctx.publishInstances(machineId);
@@ -380,7 +391,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         payload: {
           requestId,
           method: "installTool",
-          args: installArgs(toolId, ask, false),
+          args: installArgs(toolId, ask, false, "cawco"),
         },
       } satisfies Envelope<ControlPayload>;
       ctx.sendFrame(agent, frame);

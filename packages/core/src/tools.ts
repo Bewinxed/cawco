@@ -267,9 +267,12 @@ type ToolState =
  * and one of the catalog's install methods holds it. `person`: any other
  * copy, which CawCo updates only when a person presses Update (the owner,
  * 2026-11-14: a copy he installed himself is "Never touched; notice and
- * button only").
+ * button only"). `takenOver`: a copy CawCo was keeping current before its
+ * daemon kept that record, recorded as CawCo's once (`at`: then), which no
+ * install of CawCo's has moved since (agent tools.ts `takeOverKept`).
  */
-export type ToolCopy = { at?: number; by: "cawco" } | { by: "person" };
+export type ToolCopy =
+  { at?: number; by: "cawco"; takenOver?: boolean } | { by: "person" };
 
 /** The version a machine's CawCo runs of a tool: `version` exactly, or `version` or newer (`orNewer`). */
 export interface ToolWants {
@@ -322,6 +325,13 @@ export interface ToolStatus {
   method?: string;
   /** For a tool with its own sign-in ({@link ToolSpec.signin}), installed here: whether it is signed in. */
   signin?: ToolSignin;
+  /**
+   * On `installing`: who started the install. `cawco`: the hub's own (an
+   * update of CawCo's copy, a required tool, adding a machine); `person`: a
+   * press of Install, Update, Retry or Update all. Absent from a machine or
+   * hub too old to say.
+   */
+  startedBy?: "cawco" | "person";
   state: ToolState;
   /** On `installing`: the version being put on, when the one asking knows it. */
   to?: string;

@@ -269,6 +269,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     ...(row.wants === null ? {} : { wants: row.wants }),
     ...(row.triedAt === null ? {} : { triedAt: row.triedAt.getTime() }),
     ...(row.goingTo === null ? {} : { to: row.goingTo }),
+    ...(row.startedBy === null ? {} : { startedBy: row.startedBy }),
   });
 
   /** Each machine's tool statuses by catalog id; one machine's with `machineId`. */
@@ -315,6 +316,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           triedAt:
             status.triedAt === undefined ? null : new Date(status.triedAt),
           goingTo: status.to ?? null,
+          startedBy: status.startedBy ?? null,
           at: new Date(status.at),
         };
         tx.insert(agentTools)
