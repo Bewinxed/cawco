@@ -85,6 +85,22 @@ export type ToolUpdateState =
   | { found?: string; kind: "due"; wants: ToolWants };
 
 /**
+ * Whether what CawCo puts on with `cell`'s install is a first copy (an
+ * install) rather than another version of one there (an update): an
+ * installing cell keeps the version its copy said as the install began
+ * (none: there was no copy), and any other cell is a first copy when it
+ * says nothing is there. The one choice every surface words it by: the
+ * session page's wait (words/tool-updates.ts `readWaits`) and a refused
+ * harness's block.
+ */
+export const firstCopy = (
+  cell: Pick<ToolStatus, "state" | "version"> | undefined
+): boolean =>
+  cell?.state === "installing"
+    ? cell.version === undefined
+    : cell === undefined || cell.state === "missing";
+
+/**
  * Where `cell` stands ({@link ToolUpdateState}) under the fleet's choice
  * `updates`, with the newest release of each CLI CawCo keeps current
  * (`releases`, by tool id); undefined for a tool that is not there, or not
