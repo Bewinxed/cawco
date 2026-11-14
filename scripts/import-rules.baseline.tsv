@@ -26,8 +26,6 @@ cycle	@cawco/hub	packages/hub/src/relay.ts	4
 cycle	@cawco/hub	packages/hub/src/roles.ts	1
 cycle	@cawco/hub	packages/hub/src/routines.ts	6
 cycle	@cawco/hub	packages/hub/src/task-tools.ts	2
-cycle	@cawco/hub	packages/hub/src/tasks.ts	1
 cycle	@cawco/hub	packages/hub/src/views.ts	2
-cycle	@cawco/hub	packages/hub/src/work-items.ts	1
 cycle	@cawco/preview	packages/preview/src/overlay/ink.ts	1
 cycle	@cawco/preview	packages/preview/src/overlay/pins.ts	1

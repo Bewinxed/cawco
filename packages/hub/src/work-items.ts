@@ -158,8 +158,8 @@ import { folderPath } from "./project-folder";
 import type { AnyProblem, ProblemStatus } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
-import type { Todo } from "./task-file";
-import type { TodoChanges } from "./tasks";
+import type { Todo, TodoChanges } from "./task-file";
+
 import { unwatchedMode } from "./unwatched-mode";
 import { CAWCO_TOOL } from "./web-reads";
 import {

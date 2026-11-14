@@ -1604,3 +1604,12 @@ export class TaskDoc {
     return at;
   }
 }
+
+/** To-do changes made together, in one commit. A to-do is named by id (`td-3`) or position (`2.1`). */
+export interface TodoChanges {
+  /** `proposed`: offered by an attempt's plan, not agreed (a `(proposed)` line). */
+  add?: { text: string; under?: string; proposed?: boolean }[];
+  edit?: { todo: string; text: string }[];
+  tick?: string[];
+  untick?: string[];
+}

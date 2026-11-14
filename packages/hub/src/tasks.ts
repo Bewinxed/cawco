@@ -178,6 +178,7 @@ import {
   type TaskField,
   type TaskFields,
   type Todo,
+  type TodoChanges,
   taskId,
   taskNumber,
   taskPath,
@@ -663,15 +664,6 @@ export interface TaskFilter {
   stage?: string;
   /** Its delegate type. */
   type?: string;
-}
-
-/** To-do changes made together, in one commit. A to-do is named by id (`td-3`) or position (`2.1`). */
-export interface TodoChanges {
-  /** `proposed`: offered by an attempt's plan, not agreed (a `(proposed)` line). */
-  add?: { text: string; under?: string; proposed?: boolean }[];
-  edit?: { todo: string; text: string }[];
-  tick?: string[];
-  untick?: string[];
 }
 
 const TITLE_LIMIT = 200;
