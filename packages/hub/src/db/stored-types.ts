@@ -297,8 +297,8 @@ export interface ItemBlock {
 /**
  * A landing gate command that passed on a tree, with the stage it ran in
  * (`at finish_item`, `while gating on top of main`, `in its turn to land on
- * main`), for the line of a step its pass lets skip ({@link workItems}
- * `gatePasses`, keyed by what it passed on: gate.ts `passKey`).
+ * main`), for the line of a step its pass lets skip: a row of
+ * `work_item_gate_passes` under what it passed on (gate.ts `passKey`).
  */
 export interface GatePass {
   command: string;

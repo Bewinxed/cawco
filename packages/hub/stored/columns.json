@@ -13968,30 +13968,6 @@
       "since"
     ]
   },
-  "work_items.gate_passes": {
-    "type": "object",
-    "propertyNames": {
-      "type": "string"
-    },
-    "additionalProperties": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string"
-          },
-          "stage": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "command",
-          "stage"
-        ]
-      }
-    }
-  },
   "work_items.outputs": {
     "type": "array",
     "items": {

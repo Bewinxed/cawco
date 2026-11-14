@@ -17,8 +17,9 @@
  * commit, against its hub; the seed below must fit that commit's Db.
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
- * budgets, at-limit policies and landings besides ({@link seedLists},
- * {@link seedBudgets}, {@link seedAtLimit}, {@link seedLanded}), written to
+ * budgets, at-limit policies, landings and gate passes besides
+ * ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
+ * {@link seedLanded}, {@link seedGatePasses}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -41,8 +42,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * lists took before migration 0397 (what it may start, its starting set, a
  * trashed type, a continued work item), every shape a budget took before
  * migration 0398, every shape a provider's at-limit policy took before
- * migration 0399, and every shape a work item's landing took before
- * migration 0400, written here.
+ * migration 0399, every shape a work item's landing took before migration
+ * 0400, and every shape a work item's gate passes took before migration
+ * 0401, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -515,6 +517,13 @@ function seedAtLimit(dbPath: string): void {
   sqlite.close();
 }
 
+/** Every work item's id, oldest first. */
+const workItemIds = (sqlite: Database): string[] =>
+  sqlite
+    .query<{ id: string }, []>("SELECT id FROM work_items ORDER BY rowid")
+    .all()
+    .map((row) => row.id);
+
 /** A commit's or a tree's name, made up: the same for the same words. */
 const gitName = (words: string): string =>
   new Bun.CryptoHasher("sha1").update(words).digest("hex");
@@ -532,10 +541,7 @@ const gitName = (words: string): string =>
  */
 function seedLanded(dbPath: string): void {
   const sqlite = new Database(dbPath);
-  const items = sqlite
-    .query<{ id: string }, []>("SELECT id FROM work_items ORDER BY rowid")
-    .all()
-    .map((row) => row.id);
+  const items = workItemIds(sqlite);
   const tree = gitName("tree of the release");
   const gate = (passed: string[]) => ({ tree, passed });
   const at = Date.UTC(2026, 9, 21, 14, 5);
@@ -615,6 +621,80 @@ function seedLanded(dbPath: string): void {
   sqlite.close();
 }
 
+/** Where gate passes are seeded: past the items {@link seedLanded} lands. */
+const FIRST_GATED = 14;
+
+/**
+ * Every shape migration 0401 reads a work item's gate passes in, as the
+ * hub's writers stored them (gate.ts `keepPass` adds a pass under its key,
+ * `dropPasses` leaves a key's list empty, work-items.ts `finish` writes
+ * null) and as a hand edit could: no passes (null, an empty record, a key
+ * whose passes were let go), passes on one tree, passes on two trees and
+ * on a step's input paths, a command that passed in two stages and one pass
+ * kept twice, a pass with a key nothing reads; a record that is not JSON,
+ * JSON `null`, an array; and two that read in part: a pass with no stage
+ * beside one that reads, and a key whose passes are words.
+ */
+function seedGatePasses(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const items = workItemIds(sqlite).slice(FIRST_GATED);
+  const finished = gitName("tree at finish_item");
+  const rebased = gitName("tree on top of main");
+  const apple = `inputs apps/apple=${gitName("apps/apple tree")}`;
+  const check = "bun run check --all";
+  const binary = "bun run test:binary";
+  const atFinish = "at finish_item";
+  const onMain = "while gating on top of main";
+  const inTurn = "in its turn to land on main";
+  const pass = (command: string, stage: string) => ({ command, stage });
+  const records: (string | null)[] = [
+    null,
+    JSON.stringify({}),
+    JSON.stringify({ [finished]: [] }),
+    JSON.stringify({
+      [finished]: [pass(check, atFinish), pass(binary, atFinish)],
+    }),
+    JSON.stringify({
+      [finished]: [pass(check, atFinish)],
+      [rebased]: [pass(check, onMain), pass(binary, onMain)],
+      [apple]: [pass("swift build", atFinish)],
+    }),
+    JSON.stringify({
+      [rebased]: [
+        pass(check, onMain),
+        pass(check, inTurn),
+        pass(check, onMain),
+      ],
+    }),
+    JSON.stringify({
+      [finished]: [{ command: check, stage: atFinish, ms: 412_000 }],
+    }),
+    `passed ${check} on ${finished}`,
+    "null",
+    JSON.stringify([pass(check, atFinish)]),
+    JSON.stringify({
+      [finished]: [pass(check, atFinish), { command: binary }],
+    }),
+    JSON.stringify({
+      [finished]: [pass(check, atFinish)],
+      [rebased]: check,
+    }),
+  ];
+  for (const [n, record] of records.entries()) {
+    const item = items[n];
+    if (!item) {
+      throw new Error(
+        `The fixture has no work item ${FIRST_GATED + n} to keep passes on.`
+      );
+    }
+    sqlite.run("UPDATE work_items SET gate_passes = ? WHERE id = ?", [
+      record,
+      item,
+    ]);
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -635,6 +715,7 @@ async function seed(
     seedBudgets(dbPath);
     seedAtLimit(dbPath);
     seedLanded(dbPath);
+    seedGatePasses(dbPath);
   }
 }
 

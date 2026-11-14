@@ -6144,10 +6144,15 @@ export const createWorkItems = ({
           continue;
         }
         // Its gate goes on from the step it was on: what passed is kept
-        // on its row (gate.ts `gateOnce`).
+        // in its rows (gate.ts `gateOnce`). Passes stored before they were
+        // rows that did not read vouch for no tree: every step runs again.
         const kept = [...landingRun.passesOf(item.id).values()].flat().length;
+        const unread =
+          item.gatePassesUnread === null
+            ? ""
+            : ", its passes from before migration 0401 unread so none of them kept";
         console.log(
-          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept`
+          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept${unread}`
         );
         landStored(item, submission);
       }
