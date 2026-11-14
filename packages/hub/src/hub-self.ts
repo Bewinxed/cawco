@@ -1,13 +1,6 @@
 /**
- * The hub calling its own routes (a tool's handler reading or writing through
- * the REST door, delegation-actions.ts and admin-tools.ts): the hub, not the
- * session the tool runs for, and never anyone else. Each such call carries a
- * secret this process made at start and keeps in memory (hub-auth.ts reads
- * it as the hub itself). The calling session's own `Authorization`, when a
- * call passes it on, still names who the hub acts for.
- *
- * Only to this hub's own origin: a call anywhere else is refused before it
- * goes, so no URL a caller hands the hub can carry the secret out.
+ * Where the hub answers (`hubHttpUrl`), and the secret this process made at
+ * start and keeps in memory, which hub-auth.ts reads as the hub itself.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -50,21 +43,3 @@ const secret = processSecret();
 
 /** Whether `value` is this process's own secret. */
 export const isHubSelf = secret.is;
-
-/** `fetch`, to this hub's own origin only, as the hub. */
-export const selfFetch = (
-  url: string | URL,
-  init: BunFetchRequestInit = {}
-): Promise<Response> => {
-  const target = new URL(url);
-  if (target.origin !== new URL(hubHttpUrl()).origin) {
-    return Promise.reject(
-      new Error(
-        `The hub calls only its own routes as itself; ${target.origin} is not ${hubHttpUrl()}.`
-      )
-    );
-  }
-  const headers = new Headers(init.headers);
-  headers.set(HUB_SELF_HEADER, secret.value);
-  return fetch(target, { ...init, headers });
-};

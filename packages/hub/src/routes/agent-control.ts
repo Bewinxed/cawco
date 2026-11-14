@@ -14,6 +14,7 @@ import { CONTROL_FOLDER_COMMANDS } from "@cawco/core/session/controls";
 import type { SupportedCommands } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { Elysia, problem, t } from "elysia";
+import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
@@ -33,6 +34,59 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
  */
 const FOLDER_COMMANDS_TIMEOUT_MS = 30_000;
 
+/** What an update is asked with. */
+export const agentUpdateBody = t.Object({
+  restartAgent: t.Optional(t.Boolean()),
+  force: t.Optional(t.Boolean()),
+  // One per press of Install now: the machine acts on a command once.
+  commandId: t.Optional(t.String()),
+  // The build the person was shown; the machine applies that one only.
+  version: t.Optional(t.String()),
+});
+
+/**
+ * A machine's update, what its route answers: the machine pulls, installs,
+ * rebuilds and restarts what it serves, then says what it actually did.
+ */
+export const agentUpdate =
+  ({
+    callAgent,
+    machineFault,
+    machineName,
+  }: Pick<HubContext, "callAgent" | "machineFault" | "machineName">) =>
+  async (machineId: string, body: Static<typeof agentUpdateBody>) => {
+    const answer = await callAgent(
+      machineId,
+      UPDATE_CAWCO,
+      [body],
+      UPDATE_TIMEOUT_MS
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        // A machine that restarts the hub as part of its update answers
+        // into a socket that no longer exists, so this is not proof that
+        // nothing happened — only that the hub stopped hearing about it.
+        return answer.reason === "dead"
+          ? problem(404, {
+              code: "machine-offline",
+              detail: machineFault(machineId, "offline"),
+            })
+          : problem(504, {
+              code: "didnt-finish-update-within",
+              detail: `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
+            });
+      case "answered":
+        return answer.value.ok
+          ? (answer.value.result as UpdateReport)
+          : problem(500, {
+              code: "update-failed",
+              detail: answer.value.error ?? "the update failed",
+            });
+      default:
+        throw unreachable(answer);
+    }
+  };
+
 export const agentControlRoutes = (
   ctx: Pick<
     HubContext,
@@ -44,7 +98,8 @@ export const agentControlRoutes = (
     | keyof MachineReadsContext
   >
 ) => {
-  const { callAgent, db, machineFault, machineName, readAgent } = ctx;
+  const { db, machineName, readAgent } = ctx;
+  const update = agentUpdate(ctx);
   return (
     new Elysia()
       .get("/api/agents/:machineId/busy", async ({ params, set }) => {
@@ -72,48 +127,8 @@ export const agentControlRoutes = (
       // what it serves, then says what it actually did.
       .post(
         "/api/agents/:machineId/update",
-        {
-          body: t.Object({
-            restartAgent: t.Optional(t.Boolean()),
-            force: t.Optional(t.Boolean()),
-            // One per press of Install now: the machine acts on a command once.
-            commandId: t.Optional(t.String()),
-            // The build the person was shown; the machine applies that one only.
-            version: t.Optional(t.String()),
-          }),
-        },
-        async ({ params, body }) => {
-          const answer = await callAgent(
-            params.machineId,
-            UPDATE_CAWCO,
-            [body],
-            UPDATE_TIMEOUT_MS
-          );
-          switch (answer.kind) {
-            case "unanswered":
-              // A machine that restarts the hub as part of its update answers
-              // into a socket that no longer exists, so this is not proof that
-              // nothing happened — only that the hub stopped hearing about it.
-              return answer.reason === "dead"
-                ? problem(404, {
-                    code: "machine-offline",
-                    detail: machineFault(params.machineId, "offline"),
-                  })
-                : problem(504, {
-                    code: "didnt-finish-update-within",
-                    detail: `${machineName(params.machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
-                  });
-            case "answered":
-              return answer.value.ok
-                ? (answer.value.result as UpdateReport)
-                : problem(500, {
-                    code: "update-failed",
-                    detail: answer.value.error ?? "the update failed",
-                  });
-            default:
-              throw unreachable(answer);
-          }
-        }
+        { body: agentUpdateBody },
+        ({ params, body }) => update(params.machineId, body)
       )
       // What a machine really has, fleet or not (NEW.md §11) — and what a session
       // in `cwd` would see. Nothing is stored: this is the machine's own word at

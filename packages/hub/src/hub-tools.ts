@@ -29,6 +29,7 @@
  */
 import type { InstanceRow } from "@cawco/core/protocol";
 import { z } from "zod";
+import type { createBinaryUpdates } from "./binary-updates";
 import {
   CALLS_DEFAULT_DAYS,
   CALLS_MAX_DAYS,
@@ -46,8 +47,7 @@ import {
   findListed,
   findToolDefinition,
 } from "./find-tool";
-import { hubHttpUrl, selfFetch } from "./hub-self";
-import { defineTool, sentence } from "./mcp-tool";
+import { answered, defineTool, sentence } from "./mcp-tool";
 import {
   capabilityCallsWords,
   designVerdictWords,
@@ -56,6 +56,7 @@ import {
 } from "./presenters/hub";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 import type { AnyProblem } from "./refusal";
+import type { agentUpdate } from "./routes/agent-control";
 import { TRIM_PROPOSE } from "./unused-trim";
 
 /** One `find` for a session: its input, and the form it asked. */
@@ -86,56 +87,28 @@ export interface DesignVerdict {
   summary: string;
 }
 
-/** A hub route's answer, read as JSON; its own words when it refuses. */
-const said = async (response: Response): Promise<unknown> => {
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(text || `the hub answered ${response.status}`);
-  }
-  return JSON.parse(text) as unknown;
-};
-
-/** The newest CawCo build, looked for and told to every machine. */
-const lookForBuild = async () =>
-  (await said(
-    await selfFetch(`${hubHttpUrl()}/api/binary-updates/check`, {
-      method: "POST",
-    })
-  )) as { version: string };
-
 /**
  * The newest build installed on `machines`, each answering for itself: what
  * `update_machines` runs, at once or once the person approved it
  * (asks.ts `carryOut`).
  */
-export const installBuild = async (machines: readonly string[]) => {
-  const found = await lookForBuild();
+export const installBuild = async (
+  deps: Pick<HubToolsDeps, "checkBuild" | "updateAgent">,
+  machines: readonly string[]
+) => {
+  const found = await deps.checkBuild();
+  if (!answered(found)) {
+    return found;
+  }
   const updates = await Promise.all(
     machines.map(async (id) => {
-      try {
-        return {
-          machine: id,
-          report: await said(
-            await selfFetch(
-              `${hubHttpUrl()}/api/agents/${encodeURIComponent(id)}/update`,
-              {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  version: found.version,
-                  commandId: crypto.randomUUID(),
-                }),
-                timeout: false,
-              }
-            )
-          ),
-        };
-      } catch (error) {
-        return {
-          machine: id,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
+      const report = await deps.updateAgent(id, {
+        version: found.version,
+        commandId: crypto.randomUUID(),
+      });
+      return answered(report)
+        ? { machine: id, report }
+        : { machine: id, error: report.response.detail };
     })
   );
   return { found, updates };
@@ -156,6 +129,8 @@ export interface HubToolsDeps {
     days?: number;
     projectId?: string;
   }) => CapabilityCallsReport;
+  /** The newest CawCo build, looked for and told to every machine (binary-updates.ts `check`). */
+  checkBuild: ReturnType<typeof createBinaryUpdates>["check"];
   /** A design check's verdict from its verifier (design-verify.ts `verdict`). */
   designVerdict: (
     actor: InstanceRow,
@@ -185,6 +160,8 @@ export interface HubToolsDeps {
     actor: InstanceRow,
     toolUseId: string | undefined
   ) => Promise<string>;
+  /** A machine's update, as its route answers it (routes/agent-control.ts `agentUpdate`). */
+  updateAgent: ReturnType<typeof agentUpdate>;
 }
 
 /** The project `asked` names, by id or name; undefined for every project. */
@@ -220,10 +197,11 @@ export const createHubTools =
       return actor;
     };
     return [
-      UPDATE_MACHINES_DEFINITION().run(async (input) => {
+      UPDATE_MACHINES_DEFINITION.run(async (input) => {
         const caller = me();
         if (input.check_only) {
-          return { found: await lookForBuild() };
+          const found = await deps.checkBuild();
+          return answered(found) ? { found } : found;
         }
         const machines = input.machine ? [input.machine] : deps.machineIds();
         // The person first, before anything runs: installing the newest
@@ -234,16 +212,16 @@ export const createHubTools =
               machines,
             })
           : undefined;
-        return recorded ?? (await installBuild(machines));
+        return recorded ?? (await installBuild(deps, machines));
       }),
-      DESIGN_WRITE_DEFINITION().run(({ files, why }) =>
+      DESIGN_WRITE_DEFINITION.run(({ files, why }) =>
         deps.designWrite(me(), files, why, toolUseId)
       ),
-      DESIGN_VERDICT_DEFINITION().run((verdict) =>
+      DESIGN_VERDICT_DEFINITION.run((verdict) =>
         deps.designVerdict(me(), verdict)
       ),
       findToolDefinition((input, format) => deps.find(me(), input, format)),
-      CALLS_BY_ROLE_DEFINITION().run(({ project, days, role }) => {
+      CALLS_BY_ROLE_DEFINITION.run(({ project, days, role }) => {
         const projectId =
           project === undefined
             ? (me().projectId ?? undefined)
@@ -258,131 +236,126 @@ export const createHubTools =
               }
         );
       }),
-      TRIM_PROPOSE_DEFINITION().run(() => deps.trimPropose(me(), toolUseId)),
+      TRIM_PROPOSE_DEFINITION.run(() => deps.trimPropose(me(), toolUseId)),
     ];
   };
 
-const UPDATE_MACHINES_DEFINITION = () =>
-  defineTool(
-    "update_machines",
-    "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
-    {
-      machine: z
-        .string()
-        .optional()
-        .describe("A machine id; every online machine when left out."),
-      check_only: z.boolean().optional(),
-      reason: z
-        .string()
-        .max(300)
-        .optional()
-        .describe("One sentence on why: the person reads it on the ask."),
-    },
-    (answer: string | Parameters<typeof machinesUpdatedWords>[0]) =>
-      typeof answer === "string" ? answer : machinesUpdatedWords(answer)
-  );
+const UPDATE_MACHINES_DEFINITION = defineTool(
+  "update_machines",
+  "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
+  {
+    machine: z
+      .string()
+      .optional()
+      .describe("A machine id; every online machine when left out."),
+    check_only: z.boolean().optional(),
+    reason: z
+      .string()
+      .max(300)
+      .optional()
+      .describe("One sentence on why: the person reads it on the ask."),
+  },
+  (answer: string | Parameters<typeof machinesUpdatedWords>[0]) =>
+    typeof answer === "string" ? answer : machinesUpdatedWords(answer)
+);
 
-const DESIGN_WRITE_DEFINITION = () =>
-  defineTool(
-    "design_write",
-    "Write design/ files per the design-system skill: content, or from a file where you work. Changing an existing system is a proposal (why).",
-    {
-      files: z
-        .array(
-          z.object({
-            path: z.string().min(1),
-            content: z.string().max(FOLDER_CONTENT_LIMIT).optional(),
-            encoding: z.enum(FOLDER_ENCODINGS).optional(),
-            from: z.string().min(1).optional(),
-          })
-        )
-        .min(1)
-        .max(DESIGN_WRITE_FILES),
-      why: z.string().max(500).optional(),
-    },
-    designWrittenWords
-  );
-
-const DESIGN_VERDICT_DEFINITION = () =>
-  defineTool(
-    DESIGN_VERDICT,
-    "Your verdict as this design check's verifier, once: every must-fix finding tied to one element (its file and line, its CSS selector, what is wrong and what the system says instead), or no findings for a pass. It finishes your item.",
-    {
-      findings: z
-        .array(
-          z.object({
-            file: z.string().min(1),
-            line: z.number().int().min(1),
-            selector: z.string().min(1),
-            problem: z.string().min(1).max(1000),
-          })
-        )
-        .max(50),
-      pick: z
-        .object({
-          variant: z.string().min(1),
-          why: z.string().min(1).max(500),
+const DESIGN_WRITE_DEFINITION = defineTool(
+  "design_write",
+  "Write design/ files per the design-system skill: content, or from a file where you work. Changing an existing system is a proposal (why).",
+  {
+    files: z
+      .array(
+        z.object({
+          path: z.string().min(1),
+          content: z.string().max(FOLDER_CONTENT_LIMIT).optional(),
+          encoding: z.enum(FOLDER_ENCODINGS).optional(),
+          from: z.string().min(1).optional(),
         })
-        .optional()
-        .describe(
-          "When the result offers variants: the one that holds to the system best, and why."
-        ),
-      summary: z.string().min(1).max(2000),
+      )
+      .min(1)
+      .max(DESIGN_WRITE_FILES),
+    why: z.string().max(500).optional(),
+  },
+  designWrittenWords
+);
+
+const DESIGN_VERDICT_DEFINITION = defineTool(
+  DESIGN_VERDICT,
+  "Your verdict as this design check's verifier, once: every must-fix finding tied to one element (its file and line, its CSS selector, what is wrong and what the system says instead), or no findings for a pass. It finishes your item.",
+  {
+    findings: z
+      .array(
+        z.object({
+          file: z.string().min(1),
+          line: z.number().int().min(1),
+          selector: z.string().min(1),
+          problem: z.string().min(1).max(1000),
+        })
+      )
+      .max(50),
+    pick: z
+      .object({
+        variant: z.string().min(1),
+        why: z.string().min(1).max(500),
+      })
+      .optional()
+      .describe(
+        "When the result offers variants: the one that holds to the system best, and why."
+      ),
+    summary: z.string().min(1).max(2000),
+  },
+  designVerdictWords
+);
+
+const CALLS_BY_ROLE_DEFINITION = defineTool(
+  "calls_by_role",
+  `Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. A role is a delegate type, or person for the sessions the person started. Project "all" also lists what sessions had installed and none called.`,
+  {
+    project: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'A name or id; "all" for every project. Default: your own project, else all.'
+      ),
+    days: z
+      .number()
+      .int()
+      .min(1)
+      .max(CALLS_MAX_DAYS)
+      .optional()
+      .describe(`Default ${CALLS_DEFAULT_DAYS}.`),
+    role: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Only this role's rows, like build or person."),
+  },
+  (report: Parameters<typeof capabilityCallsWords>[0]) =>
+    capabilityCallsWords(report),
+  {
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
-    designVerdictWords
-  );
+  }
+);
 
-const CALLS_BY_ROLE_DEFINITION = () =>
-  defineTool(
-    "calls_by_role",
-    `Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. A role is a delegate type, or person for the sessions the person started. Project "all" also lists what sessions had installed and none called.`,
-    {
-      project: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          'A name or id; "all" for every project. Default: your own project, else all.'
-        ),
-      days: z
-        .number()
-        .int()
-        .min(1)
-        .max(CALLS_MAX_DAYS)
-        .optional()
-        .describe(`Default ${CALLS_DEFAULT_DAYS}.`),
-      role: z
-        .string()
-        .min(1)
-        .optional()
-        .describe("Only this role's rows, like build or person."),
-    },
-    (report: Parameters<typeof capabilityCallsWords>[0]) =>
-      capabilityCallsWords(report),
-    {
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    }
-  );
+const TRIM_PROPOSE_DEFINITION = defineTool(
+  TRIM_PROPOSE,
+  "Put this run's trimmed starting sets to the person, each through its set's own approval; nothing changes until they approve. Call once; it answers the headline to finish with.",
+  {},
+  sentence
+);
 
-const TRIM_PROPOSE_DEFINITION = () =>
-  defineTool(
-    TRIM_PROPOSE,
-    "Put this run's trimmed starting sets to the person, each through its set's own approval; nothing changes until they approve. Call once; it answers the headline to finish with.",
-    {},
-    sentence
-  );
-
-/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
-export const HUB_DEFINITIONS = () => [
-  UPDATE_MACHINES_DEFINITION().listed(),
-  DESIGN_WRITE_DEFINITION().listed(),
-  DESIGN_VERDICT_DEFINITION().listed(),
-  findListed(),
-  CALLS_BY_ROLE_DEFINITION().listed(),
-  TRIM_PROPOSE_DEFINITION().listed(),
+/** The tools as a listing reads them, before any session's handlers are bound. */
+export const HUB_DEFINITIONS = [
+  UPDATE_MACHINES_DEFINITION.listed(),
+  DESIGN_WRITE_DEFINITION.listed(),
+  DESIGN_VERDICT_DEFINITION.listed(),
+  findListed,
+  CALLS_BY_ROLE_DEFINITION.listed(),
+  TRIM_PROPOSE_DEFINITION.listed(),
 ];
