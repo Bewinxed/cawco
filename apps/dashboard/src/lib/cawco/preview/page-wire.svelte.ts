@@ -398,6 +398,7 @@ export class PageWire {
       }
       case STAGE_FAULT: {
         // The component threw as it mounted: the page says so in the stage.
+        this.#sayLeftOut(message);
         const said = stageFaultOf(message);
         if (said && paneSheet.link) {
           paneSheet.link.fault = said;

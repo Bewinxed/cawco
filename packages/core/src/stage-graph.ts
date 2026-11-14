@@ -718,69 +718,143 @@ export function stageRevealOf(value: unknown): StageReveal | null {
   return what?.move === true ? { what: { move: true } } : null;
 }
 
-/** What the readers above leave out of what crossed the frame, said by what {@link stageLeftOut} finds. */
-export interface LeftOut {
-  /** A difference's line past {@link LINE_MAX}: that difference is not read. */
-  lines: number;
-  /** A state's file or story name, a clip's property, or a dial's name past {@link NAME_MAX}: the state or the dial is not read. */
-  names: number;
-  /** A CSS value or a dial's string past {@link VALUE_MAX}: its clip's frame or its dial is not read. */
-  values: number;
+/** One thing a reader leaves out of what crossed the frame for being past its bound. */
+export interface LeftOutOne {
+  /** Its start, cut short: enough to know which one. */
+  head: string;
+  /** A name or id past {@link NAME_MAX}; a CSS value or a dial's string past {@link VALUE_MAX}; a difference's line past {@link LINE_MAX}. */
+  kind: "line" | "name" | "value";
 }
 
-const longer = (value: unknown, most: number): boolean =>
-  typeof value === "string" && value.length > most;
+const HEAD_MAX = 40;
+const headOf = (value: string): string =>
+  value.length > HEAD_MAX ? `${value.slice(0, HEAD_MAX)}…` : value;
 const recordsOf = (of: unknown): Record<string, unknown>[] =>
   Array.isArray(of) ? of.filter(isRecord) : [];
 
-/** What a reach's message leaves out: its state's names, and its clips' properties and CSS values. */
-function reachLeftOut(said: Record<string, unknown> | null): LeftOut {
-  const left: LeftOut = { lines: 0, names: 0, values: 0 };
-  const on = isRecord(said?.on) ? said.on : null;
-  left.names += [on?.file, on?.story].filter((n) => longer(n, NAME_MAX)).length;
-  const move = isRecord(said?.move) ? said.move : null;
-  for (const clip of recordsOf(move?.clips)) {
-    for (const one of recordsOf(clip.values)) {
-      left.names += longer(one.property, NAME_MAX) ? 1 : 0;
-      left.values += [one.from, one.to].filter((v) =>
-        longer(v, VALUE_MAX)
-      ).length;
+/** Collects what is past `most` as `kind`. */
+const collect = (
+  left: LeftOutOne[],
+  kind: LeftOutOne["kind"],
+  most: number,
+  ...values: unknown[]
+): void => {
+  for (const one of values) {
+    if (typeof one === "string" && one.length > most) {
+      left.push({ kind, head: headOf(one) });
     }
   }
-  return left;
-}
+};
 
-/** What a dials message leaves out: the dials' names and string values. */
-function dialsLeftOut(said: Record<string, unknown> | null): LeftOut {
-  const left: LeftOut = { lines: 0, names: 0, values: 0 };
-  const values = isRecord(said?.values) ? said.values : {};
-  for (const [name, one] of Object.entries(values)) {
-    left.names += longer(name, NAME_MAX) ? 1 : 0;
-    left.values += longer(one, VALUE_MAX) ? 1 : 0;
+/** A state's file, story and variant story: names ({@link stateRefOf}). */
+const refLeftOut = (left: LeftOutOne[], ref: unknown): void => {
+  const one = isRecord(ref) ? ref : null;
+  const variant = isRecord(one?.variant) ? one.variant : null;
+  collect(left, "name", NAME_MAX, one?.file, one?.story, variant?.story);
+};
+
+/** A clip's or a tuning's CSS values: each property a name, each end a value ({@link clipValueOf}). */
+const valuesLeftOut = (left: LeftOutOne[], values: unknown): void => {
+  for (const one of recordsOf(values)) {
+    collect(left, "name", NAME_MAX, one.property);
+    collect(left, "value", VALUE_MAX, one.from, one.to);
   }
-  return left;
-}
+};
+
+/** A tuning's id and values ({@link tuningOneOf}). */
+const tuningLeftOut = (left: LeftOutOne[], tuning: unknown): void => {
+  for (const one of recordsOf(tuning)) {
+    collect(left, "name", NAME_MAX, one.id);
+    valuesLeftOut(left, one.values);
+  }
+};
+
+/** A reach's answer: its state, and its move's clips ({@link clipReadOf}). */
+const reachedLeftOut = (left: LeftOutOne[], said: Record<string, unknown>) => {
+  refLeftOut(left, said.on);
+  const move = isRecord(said.move) ? said.move : null;
+  for (const clip of recordsOf(move?.clips)) {
+    collect(
+      left,
+      "name",
+      NAME_MAX,
+      clip.id,
+      clip.element,
+      clip.property,
+      clip.group,
+      clip.target,
+      clip.thing
+    );
+    valuesLeftOut(left, clip.values);
+  }
+};
+
+/** A dials message: each name, and each string value ({@link dialValuesOf}). */
+const dialsLeftOut = (left: LeftOutOne[], said: Record<string, unknown>) => {
+  const values = isRecord(said.values) ? said.values : {};
+  for (const [name, one] of Object.entries(values)) {
+    collect(left, "name", NAME_MAX, name);
+    collect(left, "value", VALUE_MAX, one);
+  }
+};
 
 /**
- * What {@link stageReachedOf}, {@link stageDifferencesOf} and
- * {@link stageDialsWrittenOf} drop from `value` for being past their bounds,
- * counted, so the pane can say it: a long gradient or a data URL would else
- * lose its frame, and a long state name its state, without a word. Null
- * when none is dropped.
+ * What the readers above drop from `value`, a message of `type`, for being
+ * past {@link NAME_MAX}, {@link VALUE_MAX} or {@link LINE_MAX}: each one, with
+ * its head, so the pane can say which (a long gradient or a data URL would
+ * else lose its frame, and a long state name its state, without a word).
+ * Null when none is dropped.
  */
-export function stageLeftOut(type: string, value: unknown): LeftOut | null {
+export function stageLeftOut(
+  type: string,
+  value: unknown
+): LeftOutOne[] | null {
   const said = isRecord(value) ? value : null;
-  let left: LeftOut = { lines: 0, names: 0, values: 0 };
-  if (type === STAGE_REACHED) {
-    left = reachLeftOut(said);
-  } else if (type === STAGE_DIALS_WRITTEN) {
-    left = dialsLeftOut(said);
-  } else if (type === STAGE_DIFFERENCES) {
-    left.lines = recordsOf(said?.found).filter((one) =>
-      longer(one.line, LINE_MAX)
-    ).length;
+  const left: LeftOutOne[] = [];
+  if (!said) {
+    return null;
   }
-  return left.values + left.lines + left.names > 0 ? left : null;
+  switch (type) {
+    case STAGE_REACH:
+      refLeftOut(left, said.to);
+      refLeftOut(left, said.from);
+      break;
+    case STAGE_COMPARE:
+      refLeftOut(left, said.against);
+      break;
+    case STAGE_FAULT:
+      refLeftOut(left, said.on);
+      break;
+    case STAGE_REACHED:
+      reachedLeftOut(left, said);
+      break;
+    case STAGE_REVEAL: {
+      const what = isRecord(said.what) ? said.what : null;
+      collect(left, "name", NAME_MAX, what?.thing);
+      break;
+    }
+    case STAGE_RING:
+      collect(left, "name", NAME_MAX, said.thing);
+      break;
+    case STAGE_PLAY:
+    case STAGE_SEEK:
+    case STAGE_RETIME:
+      tuningLeftOut(left, said.tuning);
+      break;
+    case STAGE_DIALS:
+    case STAGE_DIALS_WRITTEN:
+      dialsLeftOut(left, said);
+      break;
+    case STAGE_DIFFERENCES:
+      for (const one of recordsOf(said.found)) {
+        collect(left, "line", LINE_MAX, one.line);
+        collect(left, "name", NAME_MAX, one.radius);
+      }
+      break;
+    default:
+      break;
+  }
+  return left.length > 0 ? left : null;
 }
 
 /** The most differences one read says: far past what the panel names (its `LINES_SHOWN`), so its count stays true. Ours. */

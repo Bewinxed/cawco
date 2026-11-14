@@ -3,7 +3,8 @@
  */
 
 import { canvasOf } from "@cawco/core/stage";
-import { stageDialsOf } from "@cawco/core/stage-graph";
+import { stageDialsOf, stageLeftOut } from "@cawco/core/stage-graph";
+import { graphWords } from "@cawco/core/words/graph";
 import { untrack } from "svelte";
 import { writeSheet } from "../artifact-api";
 import type { GraphHead } from "../graph/graph-head";
@@ -86,7 +87,20 @@ export class PaneSheet {
   readonly link = $derived.by(() => {
     const session = this.#deps.instanceId();
     return this.#deps.paneSubject.isSheet && session
-      ? untrack(() => new StageLink(this.#deps.previewFrame.post))
+      ? untrack(
+          () =>
+            new StageLink((message) => {
+              // What the page's readers will drop from it for its length: said on the pane's line.
+              const left = stageLeftOut(message.type, message);
+              if (left) {
+                this.#deps.paneNotice.say({
+                  again: null,
+                  message: graphWords.leftOut(left),
+                });
+              }
+              this.#deps.previewFrame.post(message);
+            })
+        )
       : null;
   });
 
