@@ -285,7 +285,7 @@ export interface ToolWants {
  * version CawCo does not run, one choice for the whole fleet (the owner,
  * 2026-11-14, default "Update it"). `update`: the hub sends that machine the
  * install its Update button sends, once, for a copy CawCo put there (hub
- * tool-installs.ts `keepRunnable`); `ask`: nothing installs, and the
+ * tool-installs.ts `keepCopies`); `ask`: nothing installs, and the
  * machine's copy stands behind until a person presses Update. A person's own
  * copy ({@link ToolCopy}) is never updated unasked under either.
  */
@@ -347,7 +347,10 @@ export interface ToolStatus {
    * The version the copy here says: on `installed`; on `failed`, a copy
    * CawCo does not run (older than its floor, or not its one version), or
    * the copy an attempt that failed left there; on `installing`, the copy
-   * being updated. An attempt that failed with no copy there carries none.
+   * being updated, as it said when the install began: its method may take
+   * the old binary away before the new one is there, and the copy is still
+   * the one being updated (agent tools.ts `installingAs`). An attempt that
+   * failed with no copy there carries none.
    */
   version?: string;
   /**

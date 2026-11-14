@@ -59160,7 +59160,7 @@
             "type": "string"
           },
           "needsYou": {
-            "description": "The copy waits on the person (`failed`, `own`, `asked`): Needs you\nlists it, with Update. The rest CawCo is updating, or will once the\nmachine is connected (`due`).",
+            "description": "The copy can't run and waits on the person (`failed`, `own`, `asked`):\nNeeds you lists it, with Update. A copy that runs is never waiting on\nthe person, whatever its state. The rest CawCo is updating, or will\nonce the machine is connected and not paused (`due`).",
             "type": "boolean"
           },
           "online": {
@@ -59741,7 +59741,7 @@
             "type": "number"
           },
           "version": {
-            "description": "The version the copy here says: on `installed`; on `failed`, a copy\nCawCo does not run (older than its floor, or not its one version), or\nthe copy an attempt that failed left there; on `installing`, the copy\nbeing updated. An attempt that failed with no copy there carries none.",
+            "description": "The version the copy here says: on `installed`; on `failed`, a copy\nCawCo does not run (older than its floor, or not its one version), or\nthe copy an attempt that failed left there; on `installing`, the copy\nbeing updated, as it said when the install began: its method may take\nthe old binary away before the new one is there, and the copy is still\nthe one being updated (agent tools.ts `installingAs`). An attempt that\nfailed with no copy there carries none.",
             "type": "string"
           },
           "wants": {
@@ -59857,7 +59857,7 @@
         ]
       },
       "ToolUpdates": {
-        "description": "What the fleet does when a machine's copy of a tool CawCo manages is at a\nversion CawCo does not run, one choice for the whole fleet (the owner,\n2026-11-14, default \"Update it\"). `update`: the hub sends that machine the\ninstall its Update button sends, once, for a copy CawCo put there (hub\ntool-installs.ts `keepRunnable`); `ask`: nothing installs, and the\nmachine's copy stands behind until a person presses Update. A person's own\ncopy ({@link ToolCopy}) is never updated unasked under either.",
+        "description": "What the fleet does when a machine's copy of a tool CawCo manages is at a\nversion CawCo does not run, one choice for the whole fleet (the owner,\n2026-11-14, default \"Update it\"). `update`: the hub sends that machine the\ninstall its Update button sends, once, for a copy CawCo put there (hub\ntool-installs.ts `keepCopies`); `ask`: nothing installs, and the\nmachine's copy stands behind until a person presses Update. A person's own\ncopy ({@link ToolCopy}) is never updated unasked under either.",
         "type": "string",
         "enum": [
           "ask",
@@ -59876,7 +59876,7 @@
           },
           "releases": {
             "type": "object",
-            "description": "The newest release of each CLI CawCo keeps current (core\n`ToolSpec.release`: Claude Code), by tool id, as the hub last read it;\nnone for one not read yet. What a copy CawCo put there is updated to\n({@link toolUpdateOf}'s `releases`)."
+            "description": "The newest release of each CLI CawCo keeps current (core\n`ToolSpec.release`: Claude Code), by tool id, as the hub last read it;\nnone for one not read yet, or one the fleet pins a version of (held at\nits pin). What a copy CawCo put there is updated to\n({@link toolUpdateOf}'s `releases`): the same releases the hub's pass\nacts on (hub tool-releases.ts `keptReleases`), so a copy this calls\n`due` is one the hub sends."
           },
           "updates": {
             "$ref": "#/components/schemas/ToolUpdates"
