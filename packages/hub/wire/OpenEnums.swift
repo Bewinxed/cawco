@@ -9118,6 +9118,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ToolBehindMachineStartedBy`.
+    public enum ToolBehindMachineStartedBy: OpenEnum {
+        case cawco
+        case person
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "cawco": self = .cawco
+            case "person": self = .person
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .cawco: "cawco"
+            case .person: "person"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.cawco, .person]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ToolPlatform`.
     public enum ToolPlatform: OpenEnum {
         case darwin
