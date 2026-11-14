@@ -60,6 +60,7 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { ElysiaStatus } from "elysia";
+import type { AskedArtifact } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
@@ -130,17 +131,6 @@ const RESTORE = (head: string, branch: string): string =>
     'if [ -f "$p" ] && git apply -R --check --binary "$p" 2>/dev/null; then git apply -R --binary "$p"; fi',
     `git checkout --quiet ${shellQuote(branch)}`,
   ].join("\n");
-
-/** An artifact a chat asks a round of: what it is, and the workspace its stage runs in. */
-export interface AskedArtifact {
-  /** Its states files, from the clone's root: what the verifier opens. */
-  files: string[];
-  id: string;
-  kind: string;
-  name: string;
-  projectId: string | null;
-  workspaceId: string;
-}
 
 export interface DesignVerifyDeps {
   /** A hub artifact a result names: its kind and name, and a page's HTML. */

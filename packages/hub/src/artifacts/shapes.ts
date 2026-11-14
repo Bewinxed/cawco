@@ -726,3 +726,14 @@ export type PageHearer =
         trigger: string;
       };
     };
+
+/** An artifact a chat asks a round of: what it is, and the workspace its stage runs in. */
+export interface AskedArtifact {
+  /** Its states files, from the clone's root: what the verifier opens. */
+  files: string[];
+  id: string;
+  kind: string;
+  name: string;
+  projectId: string | null;
+  workspaceId: string;
+}

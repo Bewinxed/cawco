@@ -21,7 +21,7 @@ import type { problem } from "elysia";
 import type { TellProblem } from "../caw-problems";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import type { ArtifactNamed, BuiltProgram } from "../decision-program";
-import type { AskedArtifact } from "../design-verify";
+
 import type { HubLifetimeShape } from "../lifetime";
 import type { PreviewListeners } from "../preview";
 import type { ProblemStatus } from "../refusal";
@@ -29,6 +29,7 @@ import type { SentPage } from "../setup";
 import type { StateAsk } from "./component";
 import type { ArtifactDocs } from "./docs";
 import type {
+  AskedArtifact,
   Browsed,
   CanvasScreen,
   MarksDelivery,
