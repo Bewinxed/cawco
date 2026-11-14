@@ -235,11 +235,19 @@ export const valueAt = (value: unknown, path: string): unknown =>
       value
     );
 
-/** A scalar as a key part; anything else is no id. */
-const keyPart = (value: unknown): string | undefined =>
-  typeof value === "string" || typeof value === "number"
-    ? String(value).slice(0, KEY_PART_MAX)
-    : undefined;
+/** A scalar as a key part; anything else is no id; one over its bound is refused, never cut. */
+const keyPart = (value: unknown): string | undefined => {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return undefined;
+  }
+  const part = String(value);
+  if (part.length > KEY_PART_MAX) {
+    throw new Error(
+      `an item's id or version is over ${KEY_PART_MAX} characters, the most a key part holds`
+    );
+  }
+  return part;
+};
 
 /**
  * Route patterns run on RE2 (re2js, "the JavaScript port of RE2, a regular
