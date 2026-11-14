@@ -33,12 +33,11 @@ interface Restored {
   row: unknown;
 }
 
-/** Whether the hub answered with the kind that was asked for, and with its row. */
+/** Whether the hub answered with the kind that was asked for; its row is null when it could not read the item back. */
 const isRestored = <K extends TrashKind>(
   answer: Restored,
   kind: K
-): answer is { kind: K; row: RowOf<K> } =>
-  answer.kind === kind && answer.row !== null;
+): answer is { kind: K; row: RowOf<K> | null } => answer.kind === kind;
 
 /** Every kind, each named once: a kind the hub adds does not compile until it is here. */
 const KINDS = {
@@ -75,11 +74,11 @@ const keyOf = (section: string, id: string): string =>
  */
 const landings = new Map<string, () => Promise<void>>();
 
-/** Asks the hub's trash to put the item back, answering its row. */
+/** Asks the hub's trash to put the item back, answering its row; null when it was put back but could not be read back. */
 async function restoreDeleted<K extends TrashKind>(
   kind: K,
   deleted: Deleted
-): Promise<RowOf<K>> {
+): Promise<RowOf<K> | null> {
   // The hub says why in a sentence when it refuses: its window ran out, or its name is taken.
   const answer: Restored = await hubData(
     hub.api.trash({ id: deleted.restore }).restore.post()
@@ -90,18 +89,28 @@ async function restoreDeleted<K extends TrashKind>(
   return answer.row;
 }
 
-/** Puts it back; a refusal is kept for its section to say, with Try again. */
+/**
+ * Puts it back; a refusal is kept for its section to say, with Try again.
+ * An item put back that the hub could not read back is `reread` from the
+ * hub's own lists instead of landed.
+ */
 export async function restore<K extends TrashKind>(
   kind: K,
   id: string,
   deleted: Deleted,
   where: { section: string; name: string },
-  land: (row: RowOf<K>) => void
+  land: (row: RowOf<K>) => void,
+  reread: () => void
 ): Promise<void> {
   const key = keyOf(where.section, id);
-  landings.set(key, () => restore(kind, id, deleted, where, land));
+  landings.set(key, () => restore(kind, id, deleted, where, land, reread));
   try {
-    land(await restoreDeleted(kind, deleted));
+    const row = await restoreDeleted(kind, deleted);
+    if (row === null) {
+      reread();
+    } else {
+      land(row);
+    }
     refusals.delete(key);
     landings.delete(key);
   } catch (error) {
@@ -145,6 +154,9 @@ export function unrestoredOn(
             key.slice(key.indexOf("\u0000") + 1),
             asked.deleted,
             asked,
+            () => {
+              reread();
+            },
             () => {
               reread();
             }

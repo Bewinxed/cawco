@@ -23,7 +23,8 @@ export function offerUndo<K extends TrashKind>(
   words: string,
   deleted: Deleted,
   land: (row: RowOf<K>) => void,
-  where: { section: string; name: string }
+  where: { section: string; name: string },
+  reread: () => void
 ): void {
   const runsOut = setTimeout(() => toast.dismiss(id), deleted.restorableForMs);
   const settled = () => clearTimeout(runsOut);
@@ -36,7 +37,7 @@ export function offerUndo<K extends TrashKind>(
       label: configureWords.undo,
       onClick: () => {
         settled();
-        detach(restore(kind, id, deleted, where, land), "restore");
+        detach(restore(kind, id, deleted, where, land, reread), "restore");
       },
     },
     onDismiss: settled,

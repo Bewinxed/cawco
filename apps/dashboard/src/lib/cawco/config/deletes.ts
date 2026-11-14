@@ -1,3 +1,4 @@
+import { detach } from "@cawco/core/detach";
 import type {
   FleetAgent,
   FleetMarketplace,
@@ -69,7 +70,8 @@ async function deleteRow<K extends TrashKind>(
       item.land(row);
       store.mark(item.mark);
     },
-    { section: item.section, name: item.name }
+    { section: item.section, name: item.name },
+    () => detach(store.loadAll(), "loadAll")
   );
 }
 

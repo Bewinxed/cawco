@@ -700,7 +700,8 @@
         configureWords.removed(labelOf(row)),
         deleted,
         () => read(),
-        { section: "/config/connections", name: labelOf(row) }
+        { section: "/config/connections", name: labelOf(row) },
+        () => read()
       );
     } catch (error) {
       problems[row.name] = failureWords(error);
