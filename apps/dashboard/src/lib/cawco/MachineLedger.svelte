@@ -78,17 +78,23 @@
               os={machine.os}
             />
             <span class="flex min-w-0 flex-col">
-              <span class="mark-line flex min-w-0 items-center gap-space-2">
+              <span class="mark-line flex min-w-0 items-start gap-space-2">
+                <!-- The row's title: it wraps whole, never cut, at a
+                     hostname's own breaks (its hyphens), past them only
+                     where one part is wider than the column. -->
                 <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
+                  class="min-w-0 type-label whitespace-normal wrap-break-word text-ink-row"
                   >{machineLabel(machine.hostname)}</span
                 >
-                <span
-                  data-box
-                  class="size-(--status-dot-size) shrink-0 rounded-pill {on
-                    ? 'bg-presence-online'
-                    : 'bg-presence-off'}"
-                ></span>
+                <!-- On the name's first line when it wraps (mark-cell). -->
+                <span class="mark-cell type-label">
+                  <span
+                    data-box
+                    class="size-(--status-dot-size) shrink-0 rounded-pill {on
+                      ? 'bg-presence-online'
+                      : 'bg-presence-off'}"
+                  ></span>
+                </span>
               </span>
               <span class="truncate type-meta text-ink-muted"
                 >{os.label}{on ? "" : " · offline"}</span
