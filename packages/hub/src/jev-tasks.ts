@@ -50,6 +50,7 @@ import {
   sameFilesAndChecks,
   TRIAGE_FIELD,
 } from "./jev-placement";
+import { grepScore, wordsOf } from "./memory-facts";
 
 import {
   hubActor,
@@ -110,8 +111,16 @@ export type DuplicateOutcome =
       candidates: { id: string; title: string }[];
       /** What the filing session reads. */
       ask: string;
+      /** Open tasks left out of the comparison: past the nearest {@link DUPLICATE_CANDIDATES_MAX}. */
+      notCompared?: number;
     }
-  | { by: "jev" | "rule" | "session"; duplicateOf: null; note?: string };
+  | {
+      by: "jev" | "rule" | "session";
+      duplicateOf: null;
+      note?: string;
+      /** Open tasks left out of the comparison: past the nearest {@link DUPLICATE_CANDIDATES_MAX}. */
+      notCompared?: number;
+    };
 
 const words = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -154,8 +163,9 @@ export const createJevTasks = ({
   const key = () => jevAccess(db);
 
   /**
-   * The open tasks filed before `newTask`, newest changed first, as their
-   * files read: a task is a duplicate of one that was there first, never of
+   * The open tasks filed before `newTask`, the {@link DUPLICATE_CANDIDATES_MAX}
+   * whose titles share the most words with it (the newest changed first among
+   * equals), as their files read, and how many more were not taken: a task is a duplicate of one that was there first, never of
    * one filed after it (two filed together are each judged once, the later
    * against the earlier).
    */
@@ -164,7 +174,8 @@ export const createJevTasks = ({
     if (list instanceof ElysiaStatus) {
       return list;
     }
-    const open = list.tasks
+    const wanted = wordsOf(`${newTask.title}\n${newTask.description}`);
+    const eligible = list.tasks
       .filter(
         (task) =>
           task.number < newTask.number &&
@@ -172,8 +183,11 @@ export const createJevTasks = ({
           task.kind !== "dropped" &&
           task.duplicateOf === null
       )
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, DUPLICATE_CANDIDATES_MAX);
+      .map((task) => ({ task, score: grepScore(wanted, task.title) }))
+      .sort((a, b) => b.score - a.score || b.task.updatedAt - a.task.updatedAt);
+    const open = eligible
+      .slice(0, DUPLICATE_CANDIDATES_MAX)
+      .map(({ task }) => task);
     const read = await Promise.all(
       open.map((task) => tasks.get(projectId, task.id))
     );
@@ -184,7 +198,7 @@ export const createJevTasks = ({
       }
       candidates.push(task);
     }
-    return candidates;
+    return { candidates, notCompared: eligible.length - open.length };
   };
 
   /** Drops `task` as a duplicate of `of`, as the hub, saying why; the words of its refusal when it was not dropped. */
@@ -268,10 +282,11 @@ export const createJevTasks = ({
     filer: "session" | "none"
   ) => {
     const jev = key();
-    const candidates = await openTasks(projectId, task);
-    if (candidates instanceof ElysiaStatus) {
-      return candidates;
+    const opened = await openTasks(projectId, task);
+    if (opened instanceof ElysiaStatus) {
+      return opened;
     }
+    const { candidates, notCompared } = opened;
     if (candidates.length === 0) {
       const none: DuplicateOutcome = {
         by: jev ? "jev" : "rule",
@@ -279,12 +294,18 @@ export const createJevTasks = ({
       };
       return none;
     }
+    let outcome: DuplicateOutcome;
     if (jev) {
-      return await duplicateByJev(jev, projectId, task, candidates);
+      outcome = await duplicateByJev(jev, projectId, task, candidates);
+    } else if (filer === "session") {
+      outcome = duplicateBySession(projectId, task, candidates);
+    } else {
+      outcome = await duplicateByRule(projectId, task, candidates);
     }
-    return filer === "session"
-      ? duplicateBySession(projectId, task, candidates)
-      : await duplicateByRule(projectId, task, candidates);
+    return notCompared > 0 &&
+      (!("duplicateOf" in outcome) || outcome.duplicateOf === null)
+      ? { ...outcome, notCompared }
+      : outcome;
   };
 
   /** Duplicates with Jev off, filed by no session: an open task with exactly its files and checks. */

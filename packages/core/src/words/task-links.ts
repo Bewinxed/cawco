@@ -5,6 +5,9 @@
  * built on that moved since.
  */
 export const taskLinkWords = {
+  /** A duplicates check that left open tasks out: only the nearest were compared. */
+  notCompared: (count: number): string =>
+    `${count} open ${count === 1 ? "task was" : "tasks were"} not compared: only the nearest by title words were.`,
   /** The head of a task's waits: every one, unsettled first. */
   waitsOn: "Waits on:",
   /** The head of the tasks that wait on it. */

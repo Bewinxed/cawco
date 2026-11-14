@@ -400,7 +400,7 @@ export async function jevTriage(
 
 /** A noul at or above this marks a duplicate. Our own call: dropping a task needs confidence. */
 const DUPLICATE_THRESHOLD = 0.8;
-/** The most open tasks a new one is compared with: the newest changed. */
+/** The most open tasks a new one is compared with: the nearest by title words (jev-tasks.ts `openTasks`). */
 export const DUPLICATE_CANDIDATES_MAX = 30;
 
 /** A task as Duplicates compares it. */

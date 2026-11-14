@@ -433,13 +433,20 @@ const duplicateWords = (
   links: LinkScope
 ): string | false => {
   if ("candidates" in outcome) {
-    return `Possible duplicates, to act on: ${listed(outcome.candidates.map((one) => taskName(links, one.id, one.title, 120)))}. ${outcome.ask}`;
+    return `Possible duplicates, to act on: ${listed(outcome.candidates.map((one) => taskName(links, one.id, one.title, 120)))}. ${outcome.ask}${notComparedWords(outcome.notCompared)}`;
   }
   if (outcome.duplicateOf !== null) {
     return `Judged a duplicate of ${edgeName(links, outcome.duplicateOf)} (${outcome.by}): it is dropped.`;
   }
-  return outcome.note ?? false;
+  const said = [outcome.note, notComparedWords(outcome.notCompared).trim()]
+    .filter(Boolean)
+    .join(" ");
+  return said || false;
 };
+
+/** What a duplicates check says of the open tasks it left out, with a space before it; nothing when it left none. */
+const notComparedWords = (left: number | undefined): string =>
+  left ? ` ${taskLinkWords.notCompared(left)}` : "";
 
 /** Where a task stands on a filing's first line: its stage, its whole, where it was found. */
 const filedWhere = (task: TaskAnswer, links: LinkScope): string =>
