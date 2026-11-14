@@ -20,6 +20,7 @@ import {
   hubClient,
   hubPath,
   reached,
+  succeeded,
 } from "@cawco/agent/hub-client";
 import { machineFetch } from "@cawco/agent/machine-fetch";
 import type { BinaryInstallation } from "@cawco/core/binary-installation";
@@ -144,7 +145,7 @@ const askHub = <A extends HubAnswer>(
           )
         )
       );
-      if (answer.error !== null) {
+      if (!succeeded(answer)) {
         return { status: answer.status };
       }
       try {

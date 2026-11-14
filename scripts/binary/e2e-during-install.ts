@@ -13,7 +13,11 @@
  * `installing` (three answers in a row), or after 900 s.
  */
 
-import { dataOf, hubClient } from "../../packages/agent/src/hub-client";
+import {
+  hubClient,
+  refusalText,
+  unwrap,
+} from "../../packages/agent/src/hub-client";
 import {
   type Bounded,
   Gone,
@@ -26,14 +30,21 @@ const POLL_MS = 20;
 const ANSWER_MS = 150;
 const DEADLINE = Date.now() + 900_000;
 
-/** The machine's update phase as the hub says it; a hub down mid-restart is unanswered "dead". */
+/**
+ * The machine's update phase as the hub says it. A hub down mid-restart, or
+ * one that refused to say, is unanswered "dead": Eden hands a request that got
+ * no answer back as a 503 with no response rather than rejecting, so `unwrap`
+ * is what turns it, and a refusal, into a throw this read can catch.
+ */
 function phase(): Promise<Bounded<string | undefined>> {
   return readWithin(1000, async (signal) => {
     const body = await hubClient(hub, (url, init) =>
       fetch(url, { ...init, signal })
     )
       .api["binary-updates"].machines.get()
-      .then(dataOf)
+      .then((answer) =>
+        unwrap(answer, (refusal) => new Error(refusalText(refusal)))
+      )
       .catch((error: unknown) => {
         throw new Gone(`the hub: ${error}`);
       });

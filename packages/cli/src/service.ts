@@ -10,6 +10,7 @@ import {
   hubClient,
   hubPath,
   refusalText,
+  succeeded,
 } from "@cawco/agent/hub-client";
 import {
   bindSockets,
@@ -469,7 +470,7 @@ const askedHub = <A extends HubAnswer>(
             `${url}: ${refusalText({ status: 0, value: answer.error.value })}`
           );
     }
-    if (answer.error !== null) {
+    if (!succeeded(answer)) {
       return {
         ok: false,
         status: answer.status,

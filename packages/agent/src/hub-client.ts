@@ -138,10 +138,28 @@ export function unwrap(
   throw refused({ status: answer.status, value: answer.error?.value });
 }
 
-/** `answer`'s data, read by the rule {@link unwrap} reads it: for one already known to have no error (`reached` first, then `answer.error` checked). */
-export function dataOf<A extends HubAnswer>(answer: A): HubData<A>;
-export function dataOf(answer: HubAnswer): unknown {
-  return answer.error === null ? successBody(answer) : answer.data;
+/**
+ * Whether `answer` has no error: a guard, so a caller generic over its answer
+ * (`A extends HubAnswer`) narrows to one {@link dataOf} takes.
+ */
+export const succeeded = <A extends HubAnswer>(
+  answer: A
+): answer is A & { error: null } => answer.error === null;
+
+/**
+ * `answer`'s data, read by the rule {@link unwrap} reads it, for an answer its
+ * caller has narrowed to no error (`answer.error` checked first, or
+ * {@link succeeded}). The type takes no other: an answer with an error has no
+ * data (`null`), and Eden hands a request that got no answer back as such an
+ * answer rather than rejecting, so reading one as data read `null` as the
+ * route's body (the binary rig's install watcher read `null.machines` while
+ * its hub restarted, and died without the line its rig waits for).
+ */
+export function dataOf<A extends HubAnswer>(
+  answer: A & { error: null }
+): HubData<A>;
+export function dataOf(answer: HubAnswer & { error: null }): unknown {
+  return successBody(answer);
 }
 
 /**
