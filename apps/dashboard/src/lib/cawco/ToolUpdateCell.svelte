@@ -20,7 +20,10 @@
    * - `due`: CawCo sends it as soon as it can: offline, paused, or queued.
    *
    * Offline, a press can't reach the machine: the update stands and its press
-   * is off (the machine's own column says offline). A refused press is said
+   * is off (the machine's own column says offline). Paused, a row with a
+   * press says "Machine paused" after its words: Update all leaves the
+   * machine (hub tool-installs.ts `updateAll`), and the row's own press,
+   * forwarded as the person's (hub relay-control.ts), runs now, so it stays. A refused press is said
    * under the row by its host, and this row's press is the way on.
    */
   import type { ToolUpdateState } from "@cawco/core/tool-updates";
@@ -76,6 +79,10 @@
   } = $props();
 
   const pending = $derived(pressPending(machineId, spec.id));
+  /** The row offers its press: a failed update's Retry, an own copy's or an asked one's Update. */
+  const presses = $derived(
+    update.kind === "failed" || update.kind === "own" || update.kind === "asked"
+  );
   const failed = $derived(pressRefused(machineId, spec.id) !== undefined);
   const press = () => pressInstall(machineId, spec.id);
   /** The failed layer's whole output, unfolded. */
@@ -263,6 +270,11 @@
       <span>{words.duePaused}</span>
     {:else}
       <span>{words.dueNow}</span>
+    {/if}
+    {#if paused && presses}
+      <span aria-hidden="true" class="text-ink-subtle">·</span><span
+        data-slot="paused">{words.machinePaused}</span
+      >
     {/if}
   </span>
   {#if update.kind === "failed"}

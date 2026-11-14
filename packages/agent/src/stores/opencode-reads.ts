@@ -72,13 +72,20 @@ const connection = async (path: string): Promise<Database | undefined> => {
   return db;
 };
 
+/** A database that is there and could not be read, and why ({@link readDbOrFail}). */
+class DbUnread extends Error {}
+
 /**
  * `read` against `path`'s kept connection, or `absent` when there is no
- * database there or it cannot be read (one 2.0 has not finished making, a
- * lock held past {@link BUSY_MS}): a read that fails lets the connection
- * go, so the next one opens afresh.
+ * database there: a database that is there and could not be read (a lock
+ * held past {@link BUSY_MS}, a file that is no database) fails with why
+ * ({@link DbUnread}), and lets the connection go, so the next read opens
+ * afresh. For a read of the person's conversations, where "none" is an
+ * answer the hub acts on (a catalog that proves a session gone, a
+ * transcript shown empty), so a database that did not answer is never read
+ * as one that holds none.
  */
-const readDb = async <T>(
+const readDbOrFail = async <T>(
   path: string,
   absent: T,
   read: (db: Database) => T
@@ -89,11 +96,32 @@ const readDb = async <T>(
   }
   try {
     return read(db);
-  } catch {
+  } catch (error) {
     forget(path);
-    return absent;
+    throw new DbUnread(
+      `OpenCode's database ${path} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
   }
 };
+
+/**
+ * {@link readDbOrFail}, with a database that could not be read answered as
+ * `absent` too (one 2.0 has not finished making, a lock held past
+ * {@link BUSY_MS}): for OpenCode's own sign-ins, which the next tick reads
+ * again.
+ */
+const readDb = <T>(
+  path: string,
+  absent: T,
+  read: (db: Database) => T
+): Promise<T> =>
+  readDbOrFail(path, absent, read).catch((error: unknown) => {
+    if (error instanceof DbUnread) {
+      return absent;
+    }
+    throw error;
+  });
 
 /** The database of the machine's OpenCode server, where OpenCode's own sign-ins are. */
 const machineDb = (): string => join(opencodeDataDir(), "opencode.db");
@@ -119,7 +147,8 @@ export interface SessionQuery {
  * The root sessions in the database at `path`, `query` narrowing them, each
  * with its last `user` message's time, in the one query. A database 2.0 is
  * still making (an account server's first start) has no sessions table yet,
- * and so no session.
+ * and so no session; one that is there and could not be read fails
+ * ({@link readDbOrFail}).
  *
  * The last user message is read through 2.0's index on `session_message`
  * (`session_id`, `time_created`, `id`: OpenCode's
@@ -132,7 +161,7 @@ const sessionsIn = (
   path: string,
   query: SessionQuery
 ): Promise<StoredSession[]> =>
-  readDb<StoredSession[]>(path, [], (db) => {
+  readDbOrFail<StoredSession[]>(path, [], (db) => {
     if (
       !db
         .query(
