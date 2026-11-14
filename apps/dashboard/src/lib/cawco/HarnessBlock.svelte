@@ -3,10 +3,10 @@
    * A machine's harness CLI refused (Claude Code, OpenCode or pi), in place
    * of what it blocks (Claude Code's sign-in, a session's start): why, in the
    * machine's own sentence, and its one fix as a press, Update pi, Install
-   * OpenCode 2.0.29 (Install, with none there). Claude Code there takes no
-   * press: CawCo updates it to its newest release by itself, and the block
-   * shows that update running; only an update that failed offers Retry
-   * (`offersPress`). The fix is the hub's tool cell
+   * OpenCode 2.0.29 (Install, with none there). A copy CawCo updates by
+   * itself (CawCo's own, while the fleet updates such copies: the block's
+   * `auto`) takes no press, and the block shows that update running; only
+   * an update that failed offers Retry (`offersPress`). The fix is the hub's tool cell
    * (harness-block.svelte.ts), so its progress and its outcome come back
    * after a reload, on every dashboard, and go on when this is closed. A
    * failed one says why in the machine's words, and the press reads Retry.
@@ -48,7 +48,7 @@
 
   const running = $derived(block.fix.phase === "running");
 
-  // A CLI CawCo updates by itself takes no press, so the block itself
+  // A copy CawCo updates by itself takes no press, so the block itself
   // follows it: once the update lands, the surface says so and the session
   // waiting on it starts again, as after a press. Written untracked: the
   // follow reads the list it writes.
