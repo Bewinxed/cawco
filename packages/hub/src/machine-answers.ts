@@ -11,12 +11,24 @@ import { received } from "./stored-json";
 export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
 
 /**
- * The 503 a machine away is answered with, in `detail`'s words. What answers
- * no route itself (a spawn, a delegate's control, a tool) says it so; a
- * route answers machine-reads.ts `awayStatus`, which names the machine too.
+ * The answer to a machine that is away (not connected): 503, `machine-away`,
+ * in `detail`'s words, naming the machine. Wherever it is answered from, the
+ * hub's one hook (machine-reads.ts `nameAwayMachine`) reads `machineId` off
+ * it and sets the `X-Cawco-Machine` headers a dashboard reads it by; a tool's
+ * call, which answers no headers, says its words.
  */
-export const awayProblem = (detail: string) =>
-  problem(503, { code: "machine-away", detail });
+export const awayProblem = (machineId: string, detail: string) =>
+  problem(503, { code: "machine-away", detail, machineId });
+
+/** The answer to a machine that did not answer in time: 504, `machine-silent`, in `detail`'s words. */
+export const silentProblem = (detail: string) =>
+  problem(504, { code: "machine-silent", detail });
+
+/** {@link awayProblem}'s answer. */
+export type AwayProblem = ReturnType<typeof awayProblem>;
+
+/** {@link silentProblem}'s answer. */
+export type SilentProblem = ReturnType<typeof silentProblem>;
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 export type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
@@ -24,7 +36,7 @@ export type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
 /** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
 export type MachineMemory = MachineMemorySet | null;
 
-/** A route's `set`, on which a read whose machine is away names it (`awayStatus`). */
+/** A route's `set`: the headers it answers with. */
 export interface RouteSet {
   headers: Record<string, string | number | string[]>;
 }

@@ -1,9 +1,8 @@
 import { Elysia, problem, t, ValidationError } from "elysia";
 import type { HubContext } from "../hub-context";
 import { MachineAway } from "../hub-shapes";
+import { awayProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
-import { awayStatus } from "../machine-reads";
-
 import { continuationCalls } from "../session-calls";
 import { firstValidationIssue } from "../validation-issue";
 import { continueBody } from "./session-bodies";
@@ -46,7 +45,7 @@ export const continuationRoutes = (
             asks: t.Optional(t.Boolean()),
           }),
         },
-        async ({ params, query, set }) => {
+        async ({ params, query }) => {
           try {
             const prepared = await prepareContinuation(
               params.id,
@@ -63,7 +62,7 @@ export const continuationRoutes = (
             };
           } catch (error) {
             if (error instanceof MachineAway) {
-              return awayStatus(ctx, set, error.machineId, error.message);
+              return awayProblem(error.machineId, error.message);
             }
             return problem(422, {
               code: "thrown-words",
@@ -102,10 +101,7 @@ export const continuationRoutes = (
             }
           },
         },
-        ({ params, body, set }) =>
-          continueFrom(params.id, body, (machineId, words) =>
-            awayStatus(ctx, set, machineId, words)
-          )
+        ({ params, body }) => continueFrom(params.id, body)
       )
       // The continuations the hub is carrying: what a dashboard that connects
       // late reads before the next publish reaches it.

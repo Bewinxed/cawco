@@ -162,12 +162,12 @@ export const adminCalls = (deps: AdminCallsDeps, extra: AdminCallsExtra) => {
       remove: connections.remove,
     },
     skills: {
-      /** Installed from `body.source`, from a machine's folder, or adopted off a machine: no response to carry a machine's away headers on. */
+      /** Installed from `body.source`, from a machine's folder, or adopted off a machine */
       put: (name: string, asked: unknown) => {
         const body = shaped(skillBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : skills.put(name, body, { headers: {} });
+          : skills.put(name, body);
       },
       setEnabled: skills.setEnabled,
       remove: skills.remove,
@@ -179,9 +179,7 @@ export const adminCalls = (deps: AdminCallsDeps, extra: AdminCallsExtra) => {
         const body = shaped(mcpBody, asked);
         return body instanceof ElysiaStatus
           ? Promise.resolve(body)
-          : within("put an MCP server", () =>
-              mcp.put(name, body, { headers: {} })
-            );
+          : within("put an MCP server", () => mcp.put(name, body));
       },
       remove: mcp.remove,
     },

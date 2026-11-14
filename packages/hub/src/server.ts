@@ -497,7 +497,7 @@ import {
   type PauseCaller,
 } from "./machine-pause";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { reconnectingFor } from "./machine-reads";
+import { nameAwayMachine, reconnectingFor } from "./machine-reads";
 import { createMachineRuntime } from "./machine-runtime";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
@@ -10690,7 +10690,7 @@ export const createServer = (
   ) => {
     const agent = registry.agent(row.machineId);
     if (!agent) {
-      return awayProblem(machineFault(row.machineId, "offline"));
+      return awayProblem(row.machineId, machineFault(row.machineId, "offline"));
     }
     sendFrame(agent, {
       ...envelope,
@@ -12772,6 +12772,10 @@ export const createServer = (
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
       .onRequest(async ({ request }) => await bodyLimitRefusal(request))
+      // A machine that is away named on whatever answer says so, however
+      // deep it was made (machine-answers.ts `awayProblem`): its headers'
+      // one setter, before every route.
+      .mapResponse("global", nameAwayMachine(ctx))
       .use(
         previewRoutes({
           deviceOf: (request) => {

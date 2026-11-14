@@ -14,9 +14,8 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import type { RouteSet } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
-import { type MachineReadsContext, unansweredStatus } from "../machine-reads";
+import { type MachineReadsContext, unansweredProblem } from "../machine-reads";
 import { boundFields } from "./bound-fields";
 
 /**
@@ -120,8 +119,7 @@ export const fleetMcpCalls = (
   const machineMcpConfig = async (
     machineId: string,
     name: string,
-    cwd: string | undefined,
-    set: RouteSet
+    cwd: string | undefined
   ) => {
     const asked = await readAgent(
       machineId,
@@ -130,7 +128,7 @@ export const fleetMcpCalls = (
       READ_TIMEOUT_MS
     );
     if (asked.kind === "unanswered") {
-      return unansweredStatus(ctx, set, machineId, asked);
+      return unansweredProblem(ctx, machineId, asked);
     }
     if (!asked.value.ok) {
       return problem(400, {
@@ -169,15 +167,11 @@ export const fleetMcpCalls = (
     );
   };
   return {
-    /** A put, an adoption from a machine when `fromMachine` names one (answered with `set`'s headers when the machine is away). */
-    put: async (
-      name: string,
-      body: Static<typeof mcpBody>,
-      set: Pick<RouteSet, "headers">
-    ) => {
+    /** A put, an adoption from a machine when `fromMachine` names one. */
+    put: async (name: string, body: Static<typeof mcpBody>) => {
       const held = db.getMcpServer(name)?.config;
       const read = body.fromMachine
-        ? await machineMcpConfig(body.fromMachine, name, body.cwd, set)
+        ? await machineMcpConfig(body.fromMachine, name, body.cwd)
         : { config: body.config };
       if (read instanceof ElysiaStatus) {
         return read;
@@ -259,8 +253,8 @@ export const fleetMcpRoutes = (ctx: Parameters<typeof fleetMcpCalls>[0]) => {
   const calls = fleetMcpCalls(ctx);
   return (
     new Elysia()
-      .put("/api/fleet/mcp/:name", { body: mcpBody }, ({ params, body, set }) =>
-        calls.put(params.name, body, set)
+      .put("/api/fleet/mcp/:name", { body: mcpBody }, ({ params, body }) =>
+        calls.put(params.name, body)
       )
       // Into the trash with its sign-in, off every machine at once.
       .delete("/api/fleet/mcp/:name", ({ params }) => calls.remove(params.name))

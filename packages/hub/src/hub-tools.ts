@@ -102,12 +102,10 @@ export const installBuild = async (
   }
   const updates = await Promise.all(
     machines.map(async (id) => {
-      // A tool's answer is its words: the headers naming a machine away go nowhere.
-      const report = await deps.updateAgent(
-        id,
-        { version: found.version, commandId: crypto.randomUUID() },
-        { headers: {} }
-      );
+      const report = await deps.updateAgent(id, {
+        version: found.version,
+        commandId: crypto.randomUUID(),
+      });
       return answered(report)
         ? { machine: id, report }
         : { machine: id, error: report.response.detail };

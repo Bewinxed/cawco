@@ -17,11 +17,10 @@ import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
-import type { RouteSet } from "../machine-answers";
+import { awayProblem } from "../machine-answers";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
-import { awayStatus, unansweredStatus } from "../machine-reads";
-
+import { unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
 
@@ -48,15 +47,11 @@ export const agentUpdateBody = t.Object({
 /**
  * A machine's update, what its route answers: the machine pulls, installs,
  * rebuilds and restarts what it serves, then says what it actually did; a
- * machine not connected is {@link awayStatus}, named on `set`.
+ * machine not connected is `awayProblem`.
  */
 export const agentUpdate =
   (ctx: Pick<HubContext, "callAgent" | "machineName"> & MachineReadsContext) =>
-  async (
-    machineId: string,
-    body: Static<typeof agentUpdateBody>,
-    set: RouteSet
-  ) => {
+  async (machineId: string, body: Static<typeof agentUpdateBody>) => {
     const { callAgent, machineName } = ctx;
     const answer = await callAgent(
       machineId,
@@ -70,7 +65,7 @@ export const agentUpdate =
         // into a socket that no longer exists, so this is not proof that
         // nothing happened — only that the hub stopped hearing about it.
         return answer.reason === "dead"
-          ? awayStatus(ctx, set, machineId)
+          ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
           : problem(504, {
               code: "didnt-finish-update-within",
               detail: `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
@@ -102,7 +97,7 @@ export const agentControlRoutes = (
   const update = agentUpdate(ctx);
   return (
     new Elysia()
-      .get("/api/agents/:machineId/busy", async ({ params, set }) => {
+      .get("/api/agents/:machineId/busy", async ({ params }) => {
         const answer = await readAgent(
           params.machineId,
           AGENT_BUSY,
@@ -111,7 +106,7 @@ export const agentControlRoutes = (
         );
         switch (answer.kind) {
           case "unanswered":
-            return unansweredStatus(ctx, set, params.machineId, answer);
+            return unansweredProblem(ctx, params.machineId, answer);
           case "answered":
             return answer.value.ok
               ? (answer.value.result as { busy: number; instances: string[] })
@@ -128,7 +123,7 @@ export const agentControlRoutes = (
       .post(
         "/api/agents/:machineId/update",
         { body: agentUpdateBody },
-        ({ params, body, set }) => update(params.machineId, body, set)
+        ({ params, body }) => update(params.machineId, body)
       )
       // What a machine really has, fleet or not (NEW.md §11) — and what a session
       // in `cwd` would see. Nothing is stored: this is the machine's own word at
@@ -136,7 +131,7 @@ export const agentControlRoutes = (
       .post(
         "/api/agents/:machineId/inspect",
         { body: t.Object({ cwd: t.Optional(t.String()) }) },
-        async ({ params, body, set }) => {
+        async ({ params, body }) => {
           const answer = await readAgent(
             params.machineId,
             INSPECT_CONFIG,
@@ -145,7 +140,7 @@ export const agentControlRoutes = (
           );
           switch (answer.kind) {
             case "unanswered":
-              return unansweredStatus(ctx, set, params.machineId, answer);
+              return unansweredProblem(ctx, params.machineId, answer);
             case "answered":
               return answer.value.ok
                 ? // A machine's own connectors carry their keys: said as set.
@@ -180,7 +175,7 @@ export const agentControlRoutes = (
             model: t.Optional(t.String()),
           }),
         },
-        async ({ params, query, set }) => {
+        async ({ params, query }) => {
           const account = traitsOf(query.harness).accountDir
             ? (query.account ?? machineAccount(db, params.machineId))
             : undefined;
@@ -193,7 +188,7 @@ export const agentControlRoutes = (
           );
           switch (answer.kind) {
             case "unanswered":
-              return unansweredStatus(ctx, set, params.machineId, answer);
+              return unansweredProblem(ctx, params.machineId, answer);
             case "answered":
               return answer.value.ok
                 ? (answer.value.result as SupportedCommands)

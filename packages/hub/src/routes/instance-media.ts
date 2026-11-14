@@ -2,7 +2,7 @@ import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { awayStatus, type MachineReadsContext } from "../machine-reads";
+import type { MachineReadsContext } from "../machine-reads";
 import { mediaCalls } from "../session-calls";
 
 export const instanceMediaRoutes = (
@@ -51,11 +51,9 @@ export const instanceMediaRoutes = (
             model: t.Optional(t.String()),
           }),
         },
-        ({ params, body, request, server, set }) => {
+        ({ params, body, request, server }) => {
           server?.timeout(request, 0);
-          return generateImage(params.id, body, (machineId, words) =>
-            awayStatus(ctx, set, machineId, words)
-          );
+          return generateImage(params.id, body);
         }
       )
   );

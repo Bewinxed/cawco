@@ -6,9 +6,8 @@ import { harnessWords } from "@cawco/core/words/harness";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { instanceTimes } from "../instance-out";
+import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
-import { awayStatus } from "../machine-reads";
-
 import { attachmentsOfPages } from "../session-attachments";
 
 /** Why keep-alive is refused a session: its harness's prompt cache is one nothing times. */
@@ -73,7 +72,7 @@ export const instanceEditRoutes = (
             before: t.Optional(t.String()),
           }),
         },
-        async ({ params, query, set }) => {
+        async ({ params, query }) => {
           const limit =
             Number(query.limit) > 0
               ? Math.floor(Number(query.limit))
@@ -101,17 +100,14 @@ export const instanceEditRoutes = (
           }
           switch (page.fault) {
             case "offline":
-              return awayStatus(ctx, set, page.machineId ?? "", page.message);
+              return awayProblem(page.machineId ?? "", page.message);
             case "missing":
               return problem(404, {
                 code: "no-transcript",
                 detail: page.message,
               });
             case "timeout":
-              return problem(504, {
-                code: "machine-silent",
-                detail: page.message,
-              });
+              return silentProblem(page.message);
             // Its machine refuses the CLI the conversation is read
             // through: the read depends on a CLI the machine does not run
             // yet (424 Failed Dependency, RFC 4918 §11.4), never the hub
@@ -134,7 +130,7 @@ export const instanceEditRoutes = (
       // conversation carried, read off its whole transcript here, newest
       // first, so the list never depends on the pages a reader has loaded.
       // A transcript that can't be read answers as its page would.
-      .get("/api/instances/:id/attachments", async ({ params, set }) => {
+      .get("/api/instances/:id/attachments", async ({ params }) => {
         const read = await everyPage(params.id);
         if ("gone" in read) {
           return problem(409, {
@@ -145,17 +141,14 @@ export const instanceEditRoutes = (
         if ("fault" in read) {
           switch (read.fault) {
             case "offline":
-              return awayStatus(ctx, set, read.machineId ?? "", read.message);
+              return awayProblem(read.machineId ?? "", read.message);
             case "missing":
               return problem(404, {
                 code: "no-transcript",
                 detail: read.message,
               });
             case "timeout":
-              return problem(504, {
-                code: "machine-silent",
-                detail: read.message,
-              });
+              return silentProblem(read.message);
             case "refused":
               return problem(424, {
                 code: "harness-refused",

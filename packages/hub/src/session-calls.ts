@@ -48,6 +48,7 @@ import type { createForgePosts } from "./forge-posts";
 import { type ContinueOutcome, MachineAway } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import type { ControlResult, Unanswered } from "./machine-answers";
+import { awayProblem } from "./machine-answers";
 import { machineOut } from "./machine-out";
 import type { MachinePause, PauseCaller } from "./machine-pause";
 import type { createOpenItems } from "./open-items";
@@ -277,14 +278,9 @@ export const continuationCalls = ({
    * starts the job and answers with its ids at once. The job's stages reach
    * every dashboard on the `instances` frames (`continuations`); nothing about
    * the request that started it can stop it, only its Cancel. A machine
-   * that is away is answered by `away`: a route's carries the headers that
-   * tell a dashboard how long, a tool's has no response to put them on.
+   * that is away is answered `awayProblem`.
    */
-  continueFrom: async (
-    sourceId: string,
-    body: ContinueAsk,
-    away: (machineId: string, words: string) => AwayProblem
-  ) => {
+  continueFrom: async (sourceId: string, body: ContinueAsk) => {
     const { askedBy, ...request } = body;
     const asker: ContinuationAsker = askedBy
       ? { kind: "session", id: askedBy }
@@ -299,7 +295,7 @@ export const continuationCalls = ({
     } catch (error) {
       release();
       if (error instanceof MachineAway) {
-        return away(error.machineId, error.message);
+        return awayProblem(error.machineId, error.message);
       }
       return problem(422, {
         code: "thrown-words",
@@ -406,13 +402,9 @@ export const mediaCalls = ({
 
   /**
    * A session's `generate_image`, made on its machine with the sign-in
-   * there. Its machine away is answered by `away` ({@link continueFrom}'s).
+   * there.
    */
-  generateImage: async (
-    id: string,
-    body: ImageGenerationRequest,
-    away: (machineId: string, words: string) => AwayProblem
-  ) => {
+  generateImage: async (id: string, body: ImageGenerationRequest) => {
     const [row] = db.listedInstancesByIds([id]);
     if (!row) {
       return problem(404, {
@@ -449,7 +441,7 @@ export const mediaCalls = ({
     switch (answer.kind) {
       case "unanswered":
         return answer.reason === "dead"
-          ? away(
+          ? awayProblem(
               row.machineId,
               "The session's machine is offline; image generation was not started."
             )
@@ -584,14 +576,6 @@ export const sessionCalls = (deps: SessionCallsDeps) => ({
   /** The artifact tools of session `instanceId` (artifacts/calls.ts). */
   artifacts: (instanceId: string) => artifactTools(deps.artifacts, instanceId),
 });
-
-/** What a continue answers a machine that is away with: its `503`. */
-export type AwayProblem = ReturnType<
-  typeof problem<
-    503,
-    { readonly code: "machine-away"; readonly detail: string }
-  >
->;
 
 /** What a session's tools call directly. */
 export type SessionCalls = ReturnType<typeof sessionCalls>;

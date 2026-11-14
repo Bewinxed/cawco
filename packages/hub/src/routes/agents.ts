@@ -5,8 +5,9 @@
 import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { awayProblem, silentProblem } from "../machine-answers";
 import { machineOut } from "../machine-out";
-import { awayStatus, type MachineReadsContext } from "../machine-reads";
+import type { MachineReadsContext } from "../machine-reads";
 
 export const agentListRoutes = ({
   db,
@@ -36,9 +37,7 @@ export const agentMediaRoutes = ({
   hubAuth,
   machineCredentials,
   machineFault,
-  machinePresence,
   publishInstances,
-  readAgent,
   readMachineMedia,
   registry,
   sshTunnels,
@@ -67,17 +66,13 @@ export const agentMediaRoutes = ({
       async ({ params, query, set }) => {
         const answer = await readMachineMedia(params.machineId, query.path);
         if (answer === "offline") {
-          return awayStatus(
-            { db, machineFault, machinePresence, readAgent, registry },
-            set,
-            params.machineId
+          return awayProblem(
+            params.machineId,
+            machineFault(params.machineId, "offline")
           );
         }
         if (answer === "timeout") {
-          return problem(504, {
-            code: "machine-silent",
-            detail: machineFault(params.machineId, "silent"),
-          });
+          return silentProblem(machineFault(params.machineId, "silent"));
         }
         if ("refused" in answer) {
           return problem(404, {

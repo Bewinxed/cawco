@@ -57,7 +57,7 @@ export function deadlineIn(ms: number | null): number | null {
 
 /**
  * A read refused because the machine it reads off is away: the hub's 503
- * naming it ({@link machineAway}; hub server.ts `awayStatus`). Every reader of
+ * naming it ({@link machineAway}; hub machine-reads.ts `nameAwayMachine`). Every reader of
  * a route that reads off a machine throws it, so the surface that asked says
  * so in place and asks again once the machine is back (machine-wait.svelte.ts
  * `MachineWait`), never as a refusal.

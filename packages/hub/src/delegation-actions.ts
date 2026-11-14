@@ -63,7 +63,6 @@ import { cursorAt } from "./find";
 import { byId, handleId, isHandle, mentioned } from "./handles";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
-import { awayProblem } from "./machine-answers";
 import { handle as idHandle } from "./presenters/words";
 import type { AnyProblem, ProblemsOf } from "./refusal";
 import type { SessionCalls } from "./session-calls";
@@ -1142,13 +1141,6 @@ const asRouteReadsIt = <T extends object>(request: T): T =>
     Object.entries(request).filter(([, value]) => value !== undefined)
   ) as T;
 
-/**
- * A machine that is away, as a tool answers it: its words alone, a tool's
- * call having no response to carry the headers a dashboard reads (hub
- * machine-reads.ts `awayStatus`).
- */
-const awayInWords = (_machineId: string, words: string) => awayProblem(words);
-
 const coldRefusals = new Map<string, string>();
 
 /** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
@@ -1577,22 +1569,18 @@ export const handoffActions = ({
       // The new session answers permissions as the caller does as it starts
       // (`askedBy`), where its harness has modes; the hub settles it, never
       // the machine's default.
-      const started = await calls.continueFrom(
-        source,
-        {
-          ...continuedFrom(input),
-          target: {
-            harness: input.target_harness,
-            model: input.target_model,
-            ...(input.target_permission_mode
-              ? { permissionMode: input.target_permission_mode }
-              : {}),
-          },
-          askedBy: instanceId,
-          ...(input.note ? { note: input.note } : {}),
+      const started = await calls.continueFrom(source, {
+        ...continuedFrom(input),
+        target: {
+          harness: input.target_harness,
+          model: input.target_model,
+          ...(input.target_permission_mode
+            ? { permissionMode: input.target_permission_mode }
+            : {}),
         },
-        awayInWords
-      );
+        askedBy: instanceId,
+        ...(input.note ? { note: input.note } : {}),
+      });
       if (started instanceof ElysiaStatus) {
         return started;
       }
@@ -1624,7 +1612,7 @@ export const handoffActions = ({
     },
     async generateImage(request) {
       const read = await readWithin(IMAGE_GENERATION_TIMEOUT_MS + 60_000, () =>
-        calls.generateImage(instanceId, request, awayInWords)
+        calls.generateImage(instanceId, request)
       );
       switch (read.kind) {
         case "answered":

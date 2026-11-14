@@ -3,7 +3,8 @@
  */
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { awayStatus, type MachineReadsContext } from "../machine-reads";
+import { awayProblem } from "../machine-answers";
+import type { MachineReadsContext } from "../machine-reads";
 
 export const fleetSyncRoutes = (
   ctx: Pick<HubContext, "fleetSyncs"> & MachineReadsContext
@@ -14,9 +15,12 @@ export const fleetSyncRoutes = (
     .post(
       "/api/fleet/sync",
       { body: t.Object({ machineId: t.Optional(t.String()) }) },
-      ({ body, set }) => {
+      ({ body }) => {
         if (body.machineId && !ctx.registry.agent(body.machineId)) {
-          return awayStatus(ctx, set, body.machineId);
+          return awayProblem(
+            body.machineId,
+            ctx.machineFault(body.machineId, "offline")
+          );
         }
         ctx.fleetSyncs.changed("asked for", {
           reconverge: true,
@@ -36,9 +40,12 @@ export const fleetSyncRoutes = (
           ids: t.Array(t.String(), { minItems: 1 }),
         }),
       },
-      ({ body, set }) => {
+      ({ body }) => {
         if (!ctx.registry.agent(body.machineId)) {
-          return awayStatus(ctx, set, body.machineId);
+          return awayProblem(
+            body.machineId,
+            ctx.machineFault(body.machineId, "offline")
+          );
         }
         ctx.fleetSyncs.retry(body.machineId, body.ids);
         return { ok: true };

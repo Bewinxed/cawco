@@ -1265,7 +1265,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       !ctx.registry.agent(machineId) &&
       ctx.startHold(machineId)?.kind !== "away"
     ) {
-      return awayProblem(ctx.machineFault(machineId, "offline"));
+      return awayProblem(machineId, ctx.machineFault(machineId, "offline"));
     }
     const { parentInstanceId } = peekParent(named);
     const relayed = await relaySpawn(

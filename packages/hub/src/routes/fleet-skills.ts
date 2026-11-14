@@ -9,12 +9,10 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import type { RouteSet } from "../machine-answers";
 import { machineSkillFiles } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
-import { pushTarget, skillFilesOff, unansweredStatus } from "../machine-reads";
-
+import { pushTarget, skillFilesOff, unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
 import { boundFields } from "./bound-fields";
 
@@ -79,11 +77,7 @@ export const fleetSkillCalls = (
     skillRow,
   } = ctx;
   return {
-    put: async (
-      name: string,
-      body: Static<typeof skillBody>,
-      set: Pick<RouteSet, "headers">
-    ) => {
+    put: async (name: string, body: Static<typeof skillBody>) => {
       if (!SKILL_NAME.test(name)) {
         return problem(400, {
           code: "not-usable-skill-name",
@@ -96,12 +90,10 @@ export const fleetSkillCalls = (
       }
 
       if (body.fromMachine) {
-        const read = await skillFilesOff(
-          ctx,
-          body.fromMachine,
-          [name, body.cwd],
-          set
-        );
+        const read = await skillFilesOff(ctx, body.fromMachine, [
+          name,
+          body.cwd,
+        ]);
         if (read instanceof ElysiaStatus) {
           return read;
         }
@@ -220,10 +212,8 @@ export const fleetSkillRoutes = (
   } = ctx;
   return (
     new Elysia()
-      .put(
-        "/api/fleet/skills/:name",
-        { body: skillBody },
-        ({ params, body, set }) => calls.put(params.name, body, set)
+      .put("/api/fleet/skills/:name", { body: skillBody }, ({ params, body }) =>
+        calls.put(params.name, body)
       )
       .patch(
         "/api/fleet/skills/:name",
@@ -240,7 +230,7 @@ export const fleetSkillRoutes = (
       })
       // The same source, fetched again — for a skill whose repo has moved on.
       // Answers at once, the row marked `fetching`, as the PUT does.
-      .post("/api/fleet/skills/:name/refresh", async ({ params, set }) => {
+      .post("/api/fleet/skills/:name/refresh", async ({ params }) => {
         const stored = db
           .listSkills()
           .find((entry) => entry.name === params.name);
@@ -255,7 +245,7 @@ export const fleetSkillRoutes = (
         // "the same source, again" reads from.
         if (stored.source.startsWith("machine:")) {
           const machineId = stored.source.slice("machine:".length);
-          const read = await skillFilesOff(ctx, machineId, [stored.name], set);
+          const read = await skillFilesOff(ctx, machineId, [stored.name]);
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -346,8 +336,8 @@ export const fleetSkillRoutes = (
       .post(
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ params, body, set }) => {
-          const target = pushTarget(ctx, body, set);
+        async ({ params, body }) => {
+          const target = pushTarget(ctx, body);
           if (target instanceof ElysiaStatus) {
             return target;
           }
@@ -370,7 +360,7 @@ export const fleetSkillRoutes = (
           );
           switch (asked.kind) {
             case "unanswered": {
-              return unansweredStatus(ctx, set, body.machineId, asked);
+              return unansweredProblem(ctx, body.machineId, asked);
             }
             case "answered":
               break;

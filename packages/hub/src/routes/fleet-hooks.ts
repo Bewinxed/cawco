@@ -216,8 +216,8 @@ export const fleetHookRoutes = (
       .post(
         "/api/fleet/hooks/peek",
         { body: HOOK_ON_MACHINE },
-        async ({ body, set }) => {
-          const read = await hookCopyOff(ctx, body, set);
+        async ({ body }) => {
+          const read = await hookCopyOff(ctx, body);
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -232,8 +232,8 @@ export const fleetHookRoutes = (
       .post(
         "/api/fleet/hooks/adopt",
         { body: HOOK_ON_MACHINE },
-        async ({ body, set }) => {
-          const read = await hookCopyOff(ctx, body, set);
+        async ({ body }) => {
+          const read = await hookCopyOff(ctx, body);
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -279,8 +279,8 @@ export const fleetHookRoutes = (
         {
           body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }),
         },
-        async ({ body, set }) => {
-          const target = pushTarget(ctx, body, set);
+        async ({ body }) => {
+          const target = pushTarget(ctx, body);
           if (target instanceof ElysiaStatus) {
             return target;
           }
@@ -313,8 +313,7 @@ export const fleetHookRoutes = (
             const read = await readMachineHookScript(
               ctx,
               body.machineId,
-              hook.id,
-              set
+              hook.id
             );
             if (read instanceof ElysiaStatus) {
               return read;

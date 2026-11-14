@@ -262,8 +262,8 @@ export const fleetMemoryRoutes = (
       .post(
         "/api/fleet/memory/peek",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ body, set }) => {
-          const read = await readMachineMemory(ctx, body.machineId, set);
+        async ({ body }) => {
+          const read = await readMachineMemory(ctx, body.machineId);
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -289,8 +289,8 @@ export const fleetMemoryRoutes = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and merges every field of an adopted memory doc in one place; splitting it would scatter the validation order this route depends on.
-        async ({ body, set }) => {
-          const read = await readMachineMemory(ctx, body.machineId, set);
+        async ({ body }) => {
+          const read = await readMachineMemory(ctx, body.machineId);
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -369,8 +369,8 @@ export const fleetMemoryRoutes = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and pushes every field of a memory write in one place; splitting it would scatter the validation order this route depends on.
-        async ({ body, set }) => {
-          const target = pushTarget(ctx, body, set);
+        async ({ body }) => {
+          const target = pushTarget(ctx, body);
           if (target instanceof ElysiaStatus) {
             return target;
           }
@@ -382,7 +382,7 @@ export const fleetMemoryRoutes = (
             });
           }
 
-          const read = await readMachineMemory(ctx, body.machineId, set);
+          const read = await readMachineMemory(ctx, body.machineId);
           if (read instanceof ElysiaStatus) {
             return read;
           }

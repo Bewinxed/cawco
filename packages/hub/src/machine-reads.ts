@@ -14,8 +14,12 @@ import {
 } from "@cawco/core/fleet";
 import { ElysiaStatus, problem } from "elysia";
 import type { HubContext } from "./hub-context";
-import type { MachineMemory, RouteSet, Unanswered } from "./machine-answers";
-import { awayProblem, machineSkillFiles } from "./machine-answers";
+import type { MachineMemory, Unanswered } from "./machine-answers";
+import {
+  awayProblem,
+  machineSkillFiles,
+  silentProblem,
+} from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 
 import { unreachable } from "./unreachable";
@@ -75,10 +79,10 @@ export const reconnectingFor = (
 };
 
 /**
- * A read's machine is away, as every route that reads off a machine
- * answers it: 503, the machine named (`X-Cawco-Machine`), so a reader can
- * say which one is away and hear it come back, and whether it is on its
- * way back: then `Retry-After` is when this hub stops reading it so (whole
+ * The headers that name an away machine on any answer the hub sends
+ * (machine-answers.ts `awayProblem`): `X-Cawco-Machine`, so a reader can say
+ * which one is away and hear it come back, and whether it is on its way
+ * back: then `Retry-After` is when this hub stops reading it so (whole
  * seconds, rounded up, so a read then finds it offline).
  */
 const awayHeaders = (
@@ -98,44 +102,57 @@ const awayHeaders = (
 };
 
 /**
- * {@link awayHeaders} put on a route's `set`, and the 503 the route
- * answers with (machine-answers.ts `awayProblem`): `words`, the read's own
- * sentence, else the machine's offline fault.
+ * The hub's one setter of {@link awayHeaders}: Elysia's `mapResponse`, run on
+ * every answer a route sends (a returned problem, and a thrown one the hub's
+ * error hook answers as returned). An answer that is `awayProblem`'s, from
+ * however deep, names its machine on its headers; any other is left as it is.
  */
-export const awayStatus = (
-  ctx: MachineReadsContext,
-  set: RouteSet,
-  machineId: string,
-  words?: string
-) => {
-  Object.assign(set.headers, awayHeaders(ctx, machineId));
-  return awayProblem(words ?? ctx.machineFault(machineId, "offline"));
-};
+export const nameAwayMachine =
+  (ctx: MachineReadsContext) =>
+  ({
+    responseValue,
+    set,
+  }: {
+    responseValue: unknown;
+    set: { headers: Record<string, unknown> };
+  }): undefined => {
+    if (!(
+      responseValue instanceof ElysiaStatus && responseValue.status === 503
+    )) {
+      return;
+    }
+    const body: unknown = responseValue.response;
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "code" in body &&
+      body.code === "machine-away" &&
+      "machineId" in body &&
+      typeof body.machineId === "string"
+    ) {
+      Object.assign(set.headers, awayHeaders(ctx, body.machineId));
+    }
+  };
 
 /**
  * A read its machine left unanswered, as a route answers it: not
  * connected (or away past the read's deadline, {@link asRead}) is
- * {@link awayStatus}; silent, 504.
+ * `awayProblem`; silent, `silentProblem`.
  */
-export const unansweredStatus = (
+export const unansweredProblem = (
   ctx: MachineReadsContext,
-  set: RouteSet,
   machineId: string,
   answer: Unanswered
 ) =>
   answer.reason === "dead"
-    ? awayStatus(ctx, set, machineId)
-    : problem(504, {
-        code: "machine-silent",
-        detail: ctx.machineFault(machineId, "silent"),
-      });
+    ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
+    : silentProblem(ctx.machineFault(machineId, "silent"));
 
 /** A skill's files read off `machineId`, or what the route answers when it could not read them. */
 export const skillFilesOff = async (
   ctx: MachineReadsContext,
   machineId: string,
-  args: unknown[],
-  set: RouteSet
+  args: unknown[]
 ) => {
   const asked = await ctx.readAgent(
     machineId,
@@ -145,7 +162,7 @@ export const skillFilesOff = async (
   );
   switch (asked.kind) {
     case "unanswered":
-      return unansweredStatus(ctx, set, machineId, asked);
+      return unansweredProblem(ctx, machineId, asked);
     case "answered":
       break;
     default:
@@ -164,8 +181,7 @@ export const skillFilesOff = async (
 /** A fleet hook and the copy of its script `machineId` holds, or what the route answers when either is missing. */
 export const hookCopyOff = async (
   ctx: MachineReadsContext,
-  body: { id: string; machineId: string },
-  set: RouteSet
+  body: { id: string; machineId: string }
 ) => {
   const current = ctx.db.getFleetHook(body.id);
   if (!current) {
@@ -174,28 +190,26 @@ export const hookCopyOff = async (
       detail: `the fleet keeps no hook ${body.id}`,
     });
   }
-  const read = await readMachineHookScript(ctx, body.machineId, body.id, set);
+  const read = await readMachineHookScript(ctx, body.machineId, body.id);
   if (read instanceof ElysiaStatus) {
     return read;
   }
   return { current, copy: read.copy };
 };
 
-/** The fleet to push to `body.machineId`, or what the route answers when that machine is not connected ({@link awayStatus}). */
+/** The fleet to push to `body.machineId`, or what the route answers when that machine is not connected (`awayProblem`). */
 export const pushTarget = (
   ctx: MachineReadsContext,
-  body: { machineId: string },
-  set: RouteSet
+  body: { machineId: string }
 ) =>
   ctx.registry.agent(body.machineId)
     ? { config: ctx.db.fleetConfig() }
-    : awayStatus(ctx, set, body.machineId);
+    : awayProblem(body.machineId, ctx.machineFault(body.machineId, "offline"));
 
 /**
  * One machine's own user CLAUDE.md, whoever wrote it. A peek is this alone,
  * adopting is this and a store, and an overwrite is this so the copy it is
- * about to destroy is kept before it goes. `set`: the asking route's, which
- * names the machine when it is away ({@link awayStatus}).
+ * about to destroy is kept before it goes.
  */
 /** A file a machine's agent reads for `method`, or why it could not be read. */
 const readOffMachine = async <Copy>(
@@ -203,14 +217,13 @@ const readOffMachine = async <Copy>(
   machineId: string,
   method: string,
   args: unknown[],
-  set: RouteSet,
   copyOf: (result: unknown) => Copy,
   failed: string
 ) => {
   const answer = await ctx.readAgent(machineId, method, args, READ_TIMEOUT_MS);
   switch (answer.kind) {
     case "unanswered":
-      return unansweredStatus(ctx, set, machineId, answer);
+      return unansweredProblem(ctx, machineId, answer);
     case "answered":
       return answer.value.ok
         ? { copy: copyOf(answer.value.result) }
@@ -225,35 +238,31 @@ const readOffMachine = async <Copy>(
 
 export const readMachineMemory = (
   ctx: MachineReadsContext,
-  machineId: string,
-  set: RouteSet
+  machineId: string
 ) =>
   readOffMachine(
     ctx,
     machineId,
     READ_MEMORY_FILE,
     [],
-    set,
     peekMemoryFile,
     "the machine could not read its memory"
   );
 
 /**
  * One fleet hook's script as one machine has it on disk. A compare is this
- * alone; adopting is this and a store. `set` as {@link readMachineMemory}'s.
+ * alone; adopting is this and a store.
  */
 export const readMachineHookScript = (
   ctx: MachineReadsContext,
   machineId: string,
-  id: string,
-  set: RouteSet
+  id: string
 ) =>
   readOffMachine(
     ctx,
     machineId,
     READ_HOOK_SCRIPT,
     [id],
-    set,
     (result) => result as MachineHookScript | null,
     "the machine could not read the hook's script"
   );

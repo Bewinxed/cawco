@@ -13,7 +13,7 @@ import type { HubSocket } from "./wire-socket";
 /**
  * A step or a read that could not finish because its machine went away. Not
  * a failure: a continuation waits, and the machine's next register carries it
- * on; a route answers it as the machine away (`awayStatus`: 503 naming it),
+ * on; a route answers it as the machine away (`awayProblem`: 503 naming it),
  * which a reader reads again once the machine is back.
  */
 export class MachineAway extends Error {
