@@ -42513,6 +42513,9 @@
             "$ref": "#/components/schemas/MovesFrame"
           },
           {
+            "$ref": "#/components/schemas/PasskeyQrFrame"
+          },
+          {
             "$ref": "#/components/schemas/PermissionRequestFrame"
           },
           {
@@ -42627,6 +42630,7 @@
             "laws.broken": "#/components/schemas/LawsBrokenFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "moves": "#/components/schemas/MovesFrame",
+            "passkey_qr": "#/components/schemas/PasskeyQrFrame",
             "permission_request": "#/components/schemas/PermissionRequestFrame",
             "permission_settled": "#/components/schemas/PermissionSettledFrame",
             "person": "#/components/schemas/PersonFrame",
@@ -49723,6 +49727,40 @@
           "machineId",
           "payload",
           "verb"
+        ]
+      },
+      "PasskeyQrFrame": {
+        "description": "Hub-originated, to every dashboard socket: a FIDO URI extracted from a\nbrowser's page during a take-over, for the person to scan with their\nphone's camera. The hub broadcasts it as it arrives, and a dashboard\nrenders the QR; a Chrome extension, when present, shows it as a popup.\nExpires after {@link PASSKEY_QR_TTL_MS}.",
+        "type": "object",
+        "properties": {
+          "fidoUri": {
+            "description": "The FIDO CTAP URI the QR encodes (`FIDO:/`).",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey",
+            "description": "The browser the passkey prompt appeared in."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passkey_qr"
+            ]
+          },
+          "raisedAt": {
+            "description": "ms epoch when the QR was read from the page; it expires at `raisedAt + PASSKEY_QR_TTL_MS`.",
+            "type": "number"
+          },
+          "rpOrigin": {
+            "description": "The relying party's origin, when the hub could read it (`https://github.com`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fidoUri",
+          "key",
+          "kind",
+          "raisedAt"
         ]
       },
       "PendingAccountSignin": {
