@@ -1,5 +1,7 @@
 import { ElysiaStatus, problem } from "elysia";
 import { PICKED_TAKEN_BACK } from "./db/migration-names";
+import { answered } from "./mcp-tool";
+import type { AnyProblem } from "./refusal";
 /**
  * Who decides, at the hub (PRD §5.8, core decides.ts): each card a session
  * writes goes to the member the project's table names for its kind
@@ -76,12 +78,12 @@ export interface SettlingDeps {
   readonly db: DecidesDb;
   /** The fleet delegate type `name`. */
   readonly delegateType: (name: string) => DelegateType | undefined;
-  /** Hands `message` to session `to` as `from` would: the one handoff path (delegation-actions.ts). */
+  /** Hands `message` to session `to` as `from` would: the one handoff path (delegation-actions.ts), its words or why it did not go. */
   readonly handoff: (
     from: InstanceRow,
     to: string,
     message: string
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   /** A harness's name: "Claude Code". */
   readonly harnessName: (harness: string) => string;
   /** Whether `harness` runs on a machine that is online now. */
@@ -446,17 +448,20 @@ export const createSettling = (deps: SettlingDeps) => {
     session: InstanceRow,
     asker: InstanceRow,
     page: PageCards
-  ): Promise<RouteState> => {
+  ): Promise<RouteState | AnyProblem> => {
     const from =
       (session.parentInstanceId
         ? deps.instance(session.parentInstanceId)
         : undefined) ?? asker;
     const type = deps.delegateType(member.delegateType as string);
-    await deps.handoff(
+    const handed = await deps.handoff(
       from,
       session.id,
       briefOf(fleet, member, type?.description ?? null, asker, [page], false)
     );
+    if (handed instanceof ElysiaStatus) {
+      return handed;
+    }
     deps.db.putSettlings(
       page.cards.map((card) =>
         rowOf(page.row, card, asker, member.id, {
@@ -570,9 +575,7 @@ export const createSettling = (deps: SettlingDeps) => {
       const routed = session
         ? await handTo(fleet, member, session, asker, page)
         : await startRun(fleet, member, asker, [page, ...stranded(page, kept)]);
-      return routed instanceof ElysiaStatus
-        ? notStarted(routed.response.detail)
-        : routed;
+      return answered(routed) ? routed : notStarted(routed.response.detail);
     } catch (error) {
       return notStarted(error instanceof Error ? error.message : String(error));
     }
