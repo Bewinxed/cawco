@@ -4,6 +4,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, Envelope } from "@cawco/core/protocol";
+import { toolUpdateOf } from "@cawco/core/tool-updates";
 import type { ToolSpec, ToolStatus, ToolWants } from "@cawco/core/tools";
 import { isToolStatus, TOOL_CATALOG, toolSpec } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
@@ -11,7 +12,7 @@ import type { HubContext } from "./hub-context";
 import type { ControlResult } from "./machine-answers";
 import { peekToolStatus } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { releaseTarget, updatesOwed } from "./tool-releases";
+import { keptReleases, releaseTarget } from "./tool-releases";
 import type { HubSocket } from "./wire-socket";
 
 /**
@@ -87,10 +88,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       );
       sent = true;
     }
-    if (keepRunnable(machineId, agent, cells)) {
-      sent = true;
-    }
-    if (keepCurrent(machineId, agent, cells)) {
+    if (keepCopies(machineId, agent, cells)) {
       sent = true;
     }
     if (sent) {
@@ -197,33 +195,55 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   };
 
   /**
-   * THE ONE RULE for a copy CawCo does not run, whatever asks it (the hub's
-   * own pass, {@link keepRunnable}; adding a machine, {@link readyHarness}):
-   * CawCo updates it unasked only while the fleet is set to update, when
-   * the machine says CawCo put it there (`copy`), and when no attempt of
-   * this agent's boot failed on it (`triedAt`). Anything else waits on the
-   * person's Update.
+   * The newest release of each CLI CawCo keeps current that the fleet pins
+   * no version of (tool-releases.ts `keptReleases`): what a copy CawCo put
+   * there is kept at, by tool id, for the pass and for `/api/tool-updates`
+   * alike, so the screens judge a copy by the releases the hub acts on.
    */
-  const updatesUnasked = (cell: ToolStatus): boolean =>
-    ctx.db.toolUpdates() === "update" &&
-    cell.wants !== undefined &&
-    cell.state === "failed" &&
-    cell.copy?.by === "cawco" &&
-    cell.triedAt === undefined;
+  const releases = (): Record<string, string> =>
+    keptReleases({
+      catalog: TOOL_CATALOG,
+      newest: (toolId) => ctx.toolReleases.newest(toolId),
+      policies: ctx.db.listToolPolicies(),
+    });
 
   /**
-   * A COPY CAWCO DOES NOT RUN IS UPDATED, OR THE PERSON IS TOLD (the owner,
-   * 2026-11-14; core `ToolUpdates`). With the fleet set to update, each tool
-   * whose cell says the machine's copy is one its CawCo does not run
-   * (`wants`, the machine's own judgement by its own build's catalog), that
-   * CawCo put there (`copy`), with no attempt standing since (`triedAt`: an
-   * install that failed is not sent again on this boot of the machine's
-   * agent, and its row says why) and none in flight, is sent the install its
-   * Update button sends, as an automatic one. Anything else stands behind on
-   * its row and in Needs you (core tool-updates.ts) until a press. A paused
-   * machine is sent none until its pause ends. Answers whether any was sent.
+   * THE ONE RULE for whether CawCo updates a copy unasked, whatever asks it
+   * (the hub's own pass, {@link keepCopies}; adding a machine,
+   * {@link readyHarness}): the state core `toolUpdateOf` calls `due`, by the
+   * fleet's choice and the releases the hub acts on ({@link releases}). So
+   * a copy the screens call due is one this pass sends, and the pass sends
+   * nothing they call anything else: CawCo's own copy (`copy`), with the
+   * fleet set to update, that its CawCo can't run (`wants`) or that is
+   * behind the newest release of a CLI CawCo keeps current, with no attempt
+   * standing on it (`triedAt`, or an update's words on a copy it left
+   * behind, `detail`).
    */
-  const keepRunnable = (
+  const dueOf = (
+    cell: ToolStatus
+  ): Extract<ReturnType<typeof toolUpdateOf>, { kind: "due" }> | undefined => {
+    const state = toolUpdateOf(cell, ctx.db.toolUpdates(), releases());
+    return state?.kind === "due" ? state : undefined;
+  };
+
+  /**
+   * A COPY CAWCO DOES NOT RUN IS UPDATED, OR THE PERSON IS TOLD; CAWCO'S
+   * OWN COPY OF A CLI IT KEEPS CURRENT RUNS ITS NEWEST RELEASE (the owner,
+   * 2026-11-04 and 2026-11-14; core `ToolUpdates`). Each copy on the
+   * machine that is due ({@link dueOf}) and has no install in flight is
+   * sent the install its Update button sends, as an automatic one, with the
+   * version it is to reach (`to`) when the hub can say it. A paused machine
+   * is sent none until its pause ends; a machine not connected, none until
+   * it is. Answers whether any was sent.
+   *
+   * Every event that can move whether a copy is due runs it for the
+   * machines it touches ({@link keepCopiesOn}), so no copy is called due
+   * with nothing on its way: a machine's tools report (its first one on a
+   * connection is the register's: the cells it holds from before are a
+   * past connection's facts), a fleet choice or a tool policy set, a
+   * release read, a pause ending, and an install's answer.
+   */
+  const keepCopies = (
     machineId: string,
     agent: HubSocket,
     cells: Record<string, ToolStatus>
@@ -233,17 +253,14 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
     }
     let sent = false;
     for (const [toolId, cell] of Object.entries(cells)) {
-      const spec = toolSpec(toolId);
-      if (
-        !(spec && cell.wants && updatesUnasked(cell)) ||
-        awaitingInstall(machineId, toolId)
-      ) {
+      const due = dueOf(cell);
+      if (!due || awaitingInstall(machineId, toolId)) {
         continue;
       }
       const ask = installAsk(toolId);
-      const target = targetOf(cell.wants, ask);
+      const target = targetOf(due.wants, ask);
       console.info(
-        `[hub] updating ${spec.name} ${cell.version ?? "(no version said)"} on ${ctx.machineName(machineId)}${target.to ? ` to ${target.to}` : ""}: CawCo put that copy there, and the fleet updates a copy it doesn't run`
+        `[hub] updating ${toolSpec(toolId)?.name ?? toolId} ${cell.version ?? "(no version said)"} on ${ctx.machineName(machineId)}${target.to ? ` to ${target.to}` : ""}: CawCo put that copy there, and the fleet updates its own copies`
       );
       sendInstall(
         machineId,
@@ -354,45 +371,6 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   };
 
   /**
-   * Sends the machine an update of each CLI CawCo keeps current whose copy
-   * there CawCo put there and says a version older than its newest release,
-   * while the fleet is set to update (tool-releases.ts `updatesOwed`): the
-   * catalog's install, which runs the copy's own updater there, with no
-   * press. A machine the owner paused is sent none: nothing
-   * CawCo starts runs there until the pause ends, and the first read or
-   * report after it sends it. Answers whether any was sent.
-   */
-  const keepCurrent = (
-    machineId: string,
-    agent: HubSocket,
-    cells: Record<string, ToolStatus>
-  ): boolean => {
-    if (ctx.machinePause.until(machineId) !== undefined) {
-      return false;
-    }
-    const owed = updatesOwed(
-      {
-        cells,
-        inFlight: (toolId) => awaitingInstall(machineId, toolId),
-        tried: (toolId) => ctx.toolReleases.tried(machineId, toolId),
-      },
-      {
-        catalog: TOOL_CATALOG,
-        newest: (toolId) => ctx.toolReleases.newest(toolId),
-        policies: ctx.db.listToolPolicies(),
-        updates: ctx.db.toolUpdates(),
-      }
-    );
-    for (const update of owed) {
-      console.info(
-        `[hub] updating ${toolSpec(update.toolId)?.name ?? update.toolId} ${update.version} on ${ctx.machineName(machineId)} to ${update.newest}`
-      );
-      sendInstall(machineId, agent, { ...update, to: update.newest }, true);
-    }
-    return owed.length > 0;
-  };
-
-  /**
    * Puts a catalog tool on a machine and waits for its answer, as a press
    * on the dashboard does: the machine's cell reads `installing` for every
    * dashboard until the machine answers, and its answer is the cell (the
@@ -447,8 +425,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
    * (`installAwaited`): Claude Code installed when missing (what adding a
    * machine is for); a copy of any of them there at a version CawCo doesn't
    * run updated by the rule every update unasked follows
-   * ({@link updatesUnasked}: CawCo's own copy, while the fleet is set to
-   * update), and otherwise left, said, and listed as waiting on the person
+   * ({@link dueOf}: CawCo's own copy, while the fleet is set to update), and otherwise left, said, and listed as waiting on the person
    * (core tool-updates.ts). So it joins able to start sessions and sign
    * accounts in, or says what waits on the person. Answers what runs there
    * now, what was left and why, and what could not be brought up and why,
@@ -493,7 +470,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
 
   /**
    * Why adding a machine left its copy of `spec` at a version CawCo doesn't
-   * run ({@link updatesUnasked} said no), and where the person updates it.
+   * run ({@link dueOf} said no), and where the person updates it.
    */
   const leftWords = (
     machineId: string,
@@ -556,7 +533,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         ? bringTool(machineId, spec, has, say)
         : Promise.resolve({ skipped: true });
     }
-    return updatesUnasked(has)
+    return dueOf(has)
       ? bringTool(machineId, spec, has, say)
       : Promise.resolve({ left: leftWords(machineId, spec, has) });
   };
@@ -627,11 +604,36 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       : [];
   };
 
+  /**
+   * THE PASS ON EVERY EVENT THAT CAN MOVE WHETHER A COPY IS DUE: the
+   * required installs and {@link keepCopies} for `machineId`, or for every
+   * machine with none, each one connected now (one that is not is sent its
+   * due as its next connection's first tools report lands). Its callers are
+   * the whole list (core `ToolUpdateState`'s `due`): a machine's tools
+   * report (server.ts `toolsReported`, its first on a connection standing
+   * for the register), the fleet's choice set and a tool's policy set
+   * (routes/tools.ts), a tool's sign-in finished (routes/tools.ts, which
+   * writes its cell), each release read (server.ts `toolReleases`), a pause
+   * ending (server.ts `pauseEnded`), and an install's answer
+   * (control-replies.ts `installAnswered`).
+   */
+  const keepCopiesOn = (machineId?: string): void => {
+    const machines =
+      machineId === undefined ? ctx.registry.machineIds() : [machineId];
+    for (const id of machines) {
+      const agent = ctx.registry.agent(id);
+      if (agent) {
+        autoInstall(id, agent);
+      }
+    }
+  };
+
   return {
-    autoInstall,
+    keepCopiesOn,
     installAsk,
     installArgs,
     readyHarnesses,
+    releases,
     updateAll,
   };
 };

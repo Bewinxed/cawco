@@ -350,7 +350,13 @@ import {
 } from "./stage";
 import type { RenderAsk } from "./stage-render";
 import { endToolSignins } from "./tool-signin";
-import { onNeedsAnswered, onToolsMoved, probeTools } from "./tools";
+import {
+  COPY_LOOK_MS,
+  lookAtCopies,
+  onNeedsAnswered,
+  onToolsMoved,
+  probeTools,
+} from "./tools";
 import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
 import { UsageScans } from "./usage/scans";
 import {
@@ -2368,6 +2374,18 @@ const attach = (
           }
         }),
         Schedule.spaced(Duration.millis(CLAUDE_LOGIN_CHECK_INTERVAL_MS))
+      )
+    );
+    // Each tool's copy looked at against its last probe (tools.ts
+    // `lookAtCopies`): one the person put on by hand is probed and reported
+    // within a minute, so the hub never sends CawCo's update to a copy on a
+    // fact about whose it is that has gone stale.
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        Effect.promise(() =>
+          announced ? lookAtCopies().catch(() => undefined) : Promise.resolve()
+        ),
+        Schedule.spaced(Duration.millis(COPY_LOOK_MS))
       )
     );
     // A `claude --version` that ran past a read's wait answers: Claude's
