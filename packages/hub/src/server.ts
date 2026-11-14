@@ -1258,7 +1258,9 @@ export const createServer = (
     hubPreviewOrigins: () => hubPreviewOrigins,
     interruptedTurns: () => interruptedTurns,
     isHubMachine: () => isHubMachine,
+    keepCopiesOn: () => keepCopiesOn,
     keepCustody: () => keepCustody,
+    keptReleases: () => keptReleases,
     keepFleetReport: () => keepFleetReport,
     keepTasks: () => keepTasks,
     landSessionDir: () => landSessionDir,
@@ -1323,7 +1325,6 @@ export const createServer = (
     announceSkill: () => announceSkill,
     archiveView: () => archiveView,
     artifactLane: () => artifactLane,
-    autoInstall: () => autoInstall,
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
     callAgent: () => callAgent,
@@ -2182,8 +2183,14 @@ export const createServer = (
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
     createMachineCommands(ctx);
-  const { autoInstall, installArgs, installAsk, readyHarnesses, updateAll } =
-    createToolInstalls(ctx);
+  const {
+    installArgs,
+    installAsk,
+    keepCopiesOn,
+    readyHarnesses,
+    releases: keptReleases,
+    updateAll,
+  } = createToolInstalls(ctx);
 
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
@@ -7266,20 +7273,13 @@ export const createServer = (
    * The newest release of each CLI CawCo keeps current on every machine
    * (core `ToolSpec.release`: Claude Code), read as the hub starts and every
    * 30 minutes (tool-releases.ts); after each read, every online machine is
-   * sent what it is owed (`keepCurrent`, through `autoInstall`).
+   * sent what it is owed (tool-installs.ts `keepCopiesOn`).
    */
   const toolReleases = new ToolReleases({
     urls: TOOL_RELEASES,
     lifetime,
     name: (toolId) => toolSpec(toolId)?.name ?? toolId,
-    read: () => {
-      for (const machineId of registry.machineIds()) {
-        const agent = registry.agent(machineId);
-        if (agent) {
-          autoInstall(machineId, agent);
-        }
-      }
-    },
+    read: () => keepCopiesOn(),
   });
 
   /**
@@ -8714,6 +8714,9 @@ export const createServer = (
     releaseOwed({ machineId });
     workItems.resumeQueued();
     workItems.pauseChanged(machineId);
+    // A copy due an update was held by the pause alone: it goes now
+    // (tool-installs.ts `keepCopiesOn`).
+    keepCopiesOn(machineId);
     publishInstances(machineId);
   };
   // Each project's conversation: a session its events reach (caw.ts).
@@ -12438,16 +12441,12 @@ export const createServer = (
    * one its register's `os` named (core `machinePlatform`) moves which
    * platform-scoped servers it runs: what moved goes.
    */
-  const toolsReported = (
-    ws: AgentSocket,
-    machineId: string,
-    agentFrame: AgentFrame
-  ): void => {
+  const toolsReported = (machineId: string, agentFrame: AgentFrame): void => {
     const tools = agentFrame.tools.map(keptToolStatus);
     if (tools.length > 0) {
       sayTakenOver(machineId, tools);
       db.mergeAgentTools(machineId, tools);
-      autoInstall(machineId, ws);
+      keepCopiesOn(machineId);
     }
     const capabilities = keptCapabilities(agentFrame.machineCapabilities);
     if (!capabilities) {
@@ -12536,7 +12535,7 @@ export const createServer = (
     if (reported) {
       harnessesReported(machineId, reported);
     }
-    toolsReported(ws, machineId, agentFrame);
+    toolsReported(machineId, agentFrame);
     accountsReported(machineId, agentFrame);
     const dated = beatDated(machineId, agentFrame);
     if (
