@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { encode } from "uqr";
   /**
    * The phone step's object on a desk: a QR of the address the phone opens
    * once (the given name, slash and all), and beside it the three things in
    * order, numbered as they are done. The QR is drawn from its modules in
    * the ink of the page, on the raised surface, with its quiet zone.
    */
+  import { qrPath } from "../qr-path";
   import Words from "./Words.svelte";
 
   let {
@@ -24,19 +24,7 @@
     network: string;
   } = $props();
 
-  /** Its modules as one path of unit squares, with a 2-module quiet zone. */
-  const code = $derived.by(() => {
-    const { data, size } = encode(address, { ecc: "M", border: 2 });
-    let path = "";
-    data.forEach((row, y) => {
-      row.forEach((on, x) => {
-        if (on) {
-          path += `M${x} ${y}h1v1h-1z`;
-        }
-      });
-    });
-    return { path, size };
-  });
+  const code = $derived(qrPath(address));
 
   const steps = $derived([
     `${network} on, signed in to ${domain}`,
