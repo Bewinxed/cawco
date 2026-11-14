@@ -16,15 +16,17 @@
  * call on a session's name alone.
  */
 
-import { hubClient, refusalText, unwrap } from "@cawco/agent/hub-client";
+import {
+  type HubConfig,
+  hubClient,
+  refusalText,
+  unwrap,
+} from "@cawco/agent/hub-client";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { refusalWords } from "@cawco/core/hub-refusal";
-import { type HubRequest, hubAt, hubRequest } from "@cawco/core/hub-request";
 import {
   envelopeText,
   NotARecord,
   recordOf,
-  type ToolEnvelope,
   type ToolForm,
   toolArguments,
 } from "@cawco/core/tool-answer";
@@ -45,21 +47,25 @@ class ToolError extends Error {}
 export const toolDoor = (): string | undefined =>
   process.env[CAWCO_ENV.toolSocket]?.trim() || undefined;
 
-/** One of the two tool routes, through the workspace's tool door when there is one, else at `hub`. */
-const toolRoute = (
+/**
+ * The hub's typed client for the two tool routes: through the workspace's tool
+ * door when there is one, else at `hub`, `sent` beside every request.
+ */
+const toolClient = (
   hub: string | undefined,
-  request: HubRequest,
-  init: BunFetchRequestInit = {}
-): Promise<Response> => {
+  config: HubConfig = {},
+  sent: BunFetchRequestInit = {}
+) => {
   const door = toolDoor();
-  if (door) {
-    const [url, sent] = hubAt("http://cawco", request, init);
-    return fetch(url, { ...sent, unix: door });
-  }
-  if (!hub) {
+  if (!(door || hub)) {
     throw new ToolError("no hub to call the tools of");
   }
-  return fetch(...hubAt(hub, request, init));
+  return hubClient(
+    door ? "http://cawco" : (hub ?? ""),
+    (url, init) =>
+      fetch(url, { ...init, ...sent, ...(door ? { unix: door } : {}) }),
+    config
+  );
 };
 
 const credentialHeader = (): Record<string, string> => {
@@ -88,14 +94,8 @@ export const listTools = async (
   hub: string | undefined,
   instanceId: string
 ): Promise<string> => {
-  const door = toolDoor();
-  if (!(door || hub)) {
-    throw new ToolError("no hub to call the tools of");
-  }
   const { tools } = unwrap(
-    await hubClient(door ? "http://cawco" : (hub ?? ""), (url, init) =>
-      fetch(url, door ? { ...init, unix: door } : init)
-    ).api.delegation.tools.get({ query: { instanceId } }),
+    await toolClient(hub).api.delegation.tools.get({ query: { instanceId } }),
     (refusal) => new ToolError(`${refusal.status}: ${refusalText(refusal)}`)
   );
   return tools
@@ -133,28 +133,21 @@ export const callTool = async (
   if (typeof args !== "object" || args === null || Array.isArray(args)) {
     throw new ToolError("the arguments are a JSON object, like {}");
   }
-  const response = await toolRoute(
-    hub,
-    hubRequest("POST /api/delegation/call/:instanceId", {
-      path: { instanceId },
-      body: {
-        name,
-        arguments: toolArguments(args as Record<string, unknown>, form),
-      },
-    }),
-    {
-      headers: credentialHeader(),
+  const result = unwrap(
+    await toolClient(
+      hub,
+      { headers: credentialHeader() },
       // An admin write waits for the person to approve it; Bun's fetch would
       // otherwise drop a response silent for five minutes.
-      timeout: false,
-    }
+      { timeout: false }
+    )
+      .api.delegation.call({ instanceId })
+      .post({
+        name,
+        arguments: toolArguments(args as Record<string, unknown>, form),
+      }),
+    (refusal) => new ToolError(`${refusal.status}: ${refusalText(refusal)}`)
   );
-  if (!response.ok) {
-    throw new ToolError(
-      `${response.status}: ${refusalWords(await response.text(), response.status)}`
-    );
-  }
-  const result = (await response.json()) as ToolEnvelope;
   const text = envelopeText(result);
   if (result.isError) {
     throw new ToolError(text);

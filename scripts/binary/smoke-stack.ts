@@ -2,11 +2,14 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+  dataOf,
   type HubAnswer,
   type HubClient,
+  type HubData,
   hubClient,
   hubPath,
   refusalText,
+  succeeded,
   unwrap,
 } from "../../packages/agent/src/hub-client";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
@@ -214,27 +217,26 @@ const READY_DEADLINE_MS = 120_000;
 /** The test's hub, on its own port. */
 const HUB = "http://127.0.0.1:43456";
 /**
- * Polls `url` every 100 ms until it answers OK with `predicate` true, the
- * process it waits on exits, or the safety deadline passes.
+ * Polls every 100 ms until `attempt` answers a value, the process it waits on
+ * exits, or the safety deadline passes.
  */
-async function wait(
-  url: string,
+async function poll<T>(
+  what: string,
   on: Watched,
-  predicate: (s: string) => boolean = () => true
-) {
+  attempt: () => Promise<T | undefined>
+): Promise<T> {
   let unanswered = "nothing yet";
   for (const end = Date.now() + READY_DEADLINE_MS; Date.now() < end;) {
     const exited = await on.exited();
     if (exited !== undefined) {
       throw new Error(
-        `${on.name} exited (${exited}) before ${url} was ready; its last stderr lines:\n${await on.stderrTail()}`
+        `${on.name} exited (${exited}) before ${what} was ready; its last stderr lines:\n${await on.stderrTail()}`
       );
     }
     try {
-      const res = await fetch(url);
-      const body = await res.text();
-      if (res.ok && predicate(body)) {
-        return body;
+      const found = await attempt();
+      if (found !== undefined) {
+        return found;
       }
     } catch (error) {
       // The service has not answered yet; the bounded poll continues, and
@@ -244,8 +246,36 @@ async function wait(
     await Bun.sleep(100);
   }
   throw new Error(
-    `Did not become ready within 120 s: ${url} (last answer: ${unanswered}); ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
+    `Did not become ready within 120 s: ${what} (last answer: ${unanswered}); ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
   );
+}
+/** Polls a hub route until it answers OK with `predicate` true of what it answers. */
+async function wait<A extends HubAnswer>(
+  what: string,
+  on: Watched,
+  ask: (hub: HubClient) => Promise<A>,
+  predicate: (data: HubData<A>) => boolean = () => true
+): Promise<HubData<A>> {
+  return await poll(what, on, async () => {
+    const answer = await ask(hubClient(HUB, fetch));
+    if (!succeeded(answer)) {
+      return;
+    }
+    const data = dataOf(answer);
+    return predicate(data) ? { data } : undefined;
+  }).then(({ data }) => data);
+}
+/** Polls a page until it answers OK with `predicate` true of its text. */
+async function waitPage(
+  url: string,
+  on: Watched,
+  predicate: (s: string) => boolean
+) {
+  return await poll(url, on, async () => {
+    const res = await fetch(url);
+    const body = await res.text();
+    return res.ok && predicate(body) ? body : undefined;
+  });
 }
 async function openDashboard() {
   const opened = await readWithin(
@@ -354,9 +384,11 @@ async function stopStarted(): Promise<string | undefined> {
   );
   try {
     for (const end = Date.now() + 10_000; Date.now() < end;) {
-      const rows = (await (
-        await fetch(`${HUB}${hubPath.api.instances["~path"]}`)
-      ).json()) as { id: string; status: string }[];
+      const rows = unwrap(
+        await hubClient(HUB, fetch).api.instances.get(),
+        (denial) =>
+          new Error(`Hub API: ${denial.status} ${refusalText(denial)}`)
+      );
       if (
         !rows.some((row) => row.id === sessionId && row.status === "running")
       ) {
@@ -376,7 +408,9 @@ try {
   await exec("smoke-fixture");
   spawn("sessiond");
   const hub = watchChild("the hub", "hub", spawn("hub"));
-  console.log(`health ${await wait(`${HUB}${hubPath.health["~path"]}`, hub)}`);
+  console.log(
+    `health ${JSON.stringify(await wait(hubPath.health["~path"], hub, (client) => client.health.get()))}`
+  );
   // The machine joined this hub as an install joins it (cli joined-hub.ts,
   // binary-install's own step): `up --hub` names a hub for its run and saves
   // none (discover.ts `settle`), so without this the agent is not the
@@ -387,15 +421,16 @@ try {
   const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const registered = await wait(
-    `${HUB}${hubPath.api.agents["~path"]}`,
+    hubPath.api.agents["~path"],
     watchChild("the agent", "up", agent),
-    (s) => JSON.parse(s).some((a: { status: string }) => a.status === "online")
+    (client) => client.api.agents.get(),
+    (rows) => rows.some((row) => row.status === "online")
   );
-  writeFileSync(join(home, "registered.json"), registered);
-  console.log(`machine registered with capabilities ${registered}`);
-  const machine = (
-    JSON.parse(registered) as { machineId: string; status: string }[]
-  ).find((row) => row.status === "online");
+  writeFileSync(join(home, "registered.json"), JSON.stringify(registered));
+  console.log(
+    `machine registered with capabilities ${JSON.stringify(registered)}`
+  );
+  const machine = registered.find((row) => row.status === "online");
   if (!machine) {
     throw new Error("No online test machine");
   }
@@ -408,7 +443,7 @@ try {
     );
   }
   await command(["systemctl", "start", "cawco-binary-dashboard.socket"]);
-  const page = await wait("http://127.0.0.1:43458/", watchUnit, (s) =>
+  const page = await waitPage("http://127.0.0.1:43458/", watchUnit, (s) =>
     s.includes("_app/immutable")
   );
   console.log(`embedded dashboard served ${page.length} characters`);
@@ -471,16 +506,21 @@ try {
   await agent.exited;
   agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const restarted = watchChild("the agent", "up", agent);
-  await wait(`${HUB}${hubPath.api.agents["~path"]}`, restarted, (s) =>
-    JSON.parse(s).some((a: { status: string }) => a.status === "online")
+  await wait(
+    hubPath.api.agents["~path"],
+    restarted,
+    (client) => client.api.agents.get(),
+    (rows) => rows.some((row) => row.status === "online")
   );
   await exec("smoke-custody-check");
-  await wait(`${HUB}${hubPath.api.accounts["~path"]}`, restarted, (s) =>
-    (
-      JSON.parse(s) as { signins: { accountId: string; state: string }[] }
-    ).signins.some(
-      (row) => row.accountId === account.id && row.state === "signed-in"
-    )
+  await wait(
+    hubPath.api.accounts["~path"],
+    restarted,
+    (client) => client.api.accounts.get({ query: {} }),
+    (listed) =>
+      listed.signins.some(
+        (row) => row.accountId === account.id && row.state === "signed-in"
+      )
   );
   // Started at once, not after the machine's tools read: the restarted
   // agent's Claude report says Claude Code is installed (test-harnesses.ts
@@ -517,13 +557,12 @@ try {
     );
   // A first start materializes the harness's runtime: as long as end-to-end test gives one.
   await wait(
-    `${HUB}${hubPath.api.instances["~path"]}`,
+    hubPath.api.instances["~path"],
     restarted,
-    (s) =>
+    (client) => client.api.instances.get(),
+    (rows) =>
       refusal() !== undefined ||
-      (JSON.parse(s) as { id: string; status: string }[]).some(
-        (row) => row.id === sessionId && row.status === "running"
-      )
+      rows.some((row) => row.id === sessionId && row.status === "running")
   );
   const refused = refusal();
   if (refused) {

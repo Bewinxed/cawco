@@ -147,7 +147,7 @@ const hubInit = (request: HubRequest, init: RequestInit = {}): RequestInit => {
  * init (`init`'s own fields beside it): spread into any sender that takes
  * them (`fetch`, a machine's proven fetch, a deadline's).
  */
-export const hubAt = (
+const hubAt = (
   base: string,
   request: HubRequest,
   init: RequestInit = {}

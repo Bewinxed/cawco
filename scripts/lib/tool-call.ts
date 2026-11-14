@@ -8,8 +8,13 @@
  * every caller on this client, so a tool whose words change fails the
  * program that read its old shape, by name, never silently.
  */
+import {
+  dataOf,
+  hubClient,
+  reached,
+  succeeded,
+} from "../../packages/agent/src/hub-client";
 import { readWithin } from "../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import type { Sending } from "../../packages/core/src/sending";
 import {
   envelopeText,
@@ -68,42 +73,52 @@ const rpcResult = (raw: string): ToolEnvelope & { error?: unknown } => {
   return data?.error ? { ...result, isError: true, error: data.error } : result;
 };
 
-const request = (
+/** What a call got back: the door's envelope as the hub's route typed it, or the text of what refused (or the MCP endpoint's body). */
+type Answered =
+  { envelope: ToolEnvelope; status: number } | { raw: string; status: number };
+
+const request = async (
   session: ToolSession,
   name: string,
   args: Record<string, unknown>,
   via: "door" | "mcp",
   signal: AbortSignal,
   meta?: Record<string, unknown>
-): Promise<Response> =>
-  via === "door"
-    ? fetchHub(
-        fetch,
+): Promise<Answered> => {
+  if (via === "door") {
+    const answer = reached(
+      await hubClient(
         session.base,
-        hubRequest("POST /api/delegation/call/:instanceId", {
-          path: { instanceId: session.id },
-          body: { name, arguments: args },
-        }),
-        { signal, headers: { Authorization: `Bearer ${session.credential}` } }
+        (url, init) => fetch(url, { ...init, signal }),
+        { headers: { Authorization: `Bearer ${session.credential}` } }
       )
-    : fetch(
-        `${session.base}/mcp/cawco?instanceId=${encodeURIComponent(session.id)}`,
-        {
-          method: "POST",
-          signal,
-          headers: {
-            authorization: `Bearer ${session.credential}`,
-            "content-type": "application/json",
-            accept: "application/json, text/event-stream",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) },
-          }),
-        }
-      );
+        .api.delegation.call({ instanceId: session.id })
+        .post({ name, arguments: args })
+    );
+    return succeeded(answer)
+      ? { status: answer.status, envelope: dataOf(answer) }
+      : { status: answer.status, raw: JSON.stringify(answer.error?.value) };
+  }
+  const response = await fetch(
+    `${session.base}/mcp/cawco?instanceId=${encodeURIComponent(session.id)}`,
+    {
+      method: "POST",
+      signal,
+      headers: {
+        authorization: `Bearer ${session.credential}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: args, ...(meta ? { _meta: meta } : {}) },
+      }),
+    }
+  );
+  return { status: response.status, raw: await response.text() };
+};
 
 const call = async (
   session: ToolSession,
@@ -114,28 +129,28 @@ const call = async (
 ): Promise<ToolWords> => {
   const via = options.via ?? "door";
   const timeout = options.timeoutMs ?? 300_000;
-  const read = await readWithin(timeout, async (signal) => {
-    const response = await request(
-      session,
-      name,
-      toolArguments(args, form),
-      via,
-      signal,
-      options.meta
-    );
-    return { status: response.status, raw: await response.text() };
-  });
+  const read = await readWithin(timeout, (signal) =>
+    request(session, name, toolArguments(args, form), via, signal, options.meta)
+  );
   if (read.kind !== "answered") {
     throw new Error(`${name} did not answer within ${timeout / 1000} s`);
   }
-  const { status, raw } = read.value;
+  const answered = read.value;
+  const { status } = answered;
+  if ("envelope" in answered) {
+    return {
+      refused: !!answered.envelope.isError,
+      status,
+      text: envelopeText(answered.envelope),
+    };
+  }
+  const { raw } = answered;
   if (status !== 200) {
     return { refused: true, status, text: `${status} ${raw}` };
   }
   let envelope: ToolEnvelope;
   try {
-    envelope =
-      via === "door" ? (JSON.parse(raw) as ToolEnvelope) : rpcResult(raw);
+    envelope = rpcResult(raw);
   } catch {
     return { refused: true, status, text: raw };
   }
