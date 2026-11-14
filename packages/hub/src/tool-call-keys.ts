@@ -28,7 +28,9 @@ import {
   type CallToolResult,
   CallToolResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
+import { z } from "zod";
 import type { ToolCallKeysDb } from "./db/tool-call-keys";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -62,6 +64,9 @@ export const mcpRefused = (body: unknown, words: string): Response => {
     result: { isError: true, content: [{ type: "text", text: words }] },
   });
 };
+
+/** What `once` keeps of a call that failed: the 500 problem it answered with. */
+const KEPT_FAILURE = z.object({ code: z.string(), detail: z.string() });
 
 /** A call running in this process under its key: its answer so far, for every asker. */
 interface Running {
@@ -256,28 +261,36 @@ export const createToolCallKeys = ({
   };
 
   /**
-   * {@link once} for the REST door's tool call: `run`'s result, or the one
-   * kept with its key, read back through the SDK's own `CallToolResult`
-   * shape. A keyed call that failed (the hub's own fault, kept as the
-   * problem it was answered with) fails here the same way.
+   * {@link once} for the REST door's tool call, answering the typed result.
+   * A call run here answers its own result as it is. An answer kept with the
+   * key (a replay, or a duplicate following the call still running) is data
+   * entering: an ok one is read through the SDK's `CallToolResultSchema`,
+   * and a kept failure is answered as the problem it was, its code and
+   * words intact.
    */
   const onceResult = async (
     request: Request,
     run: () => Promise<CallToolResult>
-  ): Promise<CallToolResult> => {
+  ) => {
+    const ran: { result?: CallToolResult } = {};
     const response = await once(
       request,
-      async () => Response.json(await run()),
+      async () => {
+        ran.result = await run();
+        return Response.json(ran.result);
+      },
       toolResultRefused
     );
-    const text = await response.text();
-    const parsed = response.ok
-      ? CallToolResultSchema.safeParse(JSON.parse(text))
-      : undefined;
-    if (!parsed?.success) {
-      throw new Error(`The tool call failed (${response.status}): ${text}`);
+    if (ran.result) {
+      await response.body?.cancel();
+      return ran.result;
     }
-    return parsed.data;
+    const text = await response.text();
+    if (response.ok) {
+      return CallToolResultSchema.parse(JSON.parse(text));
+    }
+    const failure = KEPT_FAILURE.parse(JSON.parse(text));
+    return problem(500, { code: failure.code, detail: failure.detail });
   };
 
   return { once, onceResult };
