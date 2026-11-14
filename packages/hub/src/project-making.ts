@@ -1,5 +1,6 @@
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { StagesTemplate } from "@cawco/core/views";
+import type { problem } from "elysia";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 
 export interface ProjectAsk {
@@ -22,3 +23,20 @@ export interface ProjectMade {
   placeAdded: boolean;
   project: ProjectRow;
 }
+
+/** Why a project is not made or joined: a folder that is no absolute path on its machine, or a paused machine's (project-joining.ts `createOrJoinProject`). */
+export type ProjectMakeProblem =
+  | ReturnType<
+      typeof problem<
+        400,
+        { code: "project-checkout-path-unfit"; detail: string }
+      >
+    >
+  | ReturnType<
+      typeof problem<409, { code: "project-machine-paused"; detail: string }>
+    >;
+
+/** Makes the project asked for, or joins the one that has the folder's remote (project-joining.ts `createOrJoinProject`). */
+export type CreateOrJoinProject = (
+  asked: ProjectAsk
+) => Promise<ProjectMade | ProjectMakeProblem>;

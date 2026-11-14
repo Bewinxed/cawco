@@ -27,7 +27,13 @@ import { causeOf, previewFailed } from "@cawco/preview/proxy";
 import { type PassLock, passOf, sessionTicketScope } from "./preview-access";
 import { HOP } from "./preview-listeners";
 import { CANVAS_PATH, PAGE_PATH } from "./preview-paths";
-import type { AnyProblem } from "./refusal";
+import type { createPreviewPorts } from "./preview-ports";
+
+/** Why origin `key` has no port to stand at: preview-ports.ts `open`'s refusal. */
+type PortRefused = Exclude<
+  ReturnType<ReturnType<typeof createPreviewPorts>["open"]>,
+  number
+>;
 
 /** What the stale addresses need of the hub around them. */
 export interface StaleAddressesEnv {
@@ -40,7 +46,7 @@ export interface StaleAddressesEnv {
   /** Whether origin `key` serves an artifact by its id. */
   servedOn: (artifactId: string, key: string) => boolean;
   /** Where origin `key` stands now as a browser that reached `at` reaches it, its listener opened when it has none; or why it opens none. */
-  standsAt: (key: string, at: URL, lock: PassLock) => string | AnyProblem;
+  standsAt: (key: string, at: URL, lock: PassLock) => string | PortRefused;
 }
 
 export function createStaleAddresses({
@@ -117,7 +123,7 @@ export function createStaleAddresses({
     request: Request,
     lock: PassLock,
     key: string | undefined
-  ): Response | null | AnyProblem => {
+  ): Response | null | PortRefused => {
     const url = new URL(request.url);
     try {
       if (url.pathname === PREVIEW_ENTER_PATH) {

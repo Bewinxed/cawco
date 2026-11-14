@@ -35,10 +35,11 @@ import { Elysia, ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
-import type { ProjectOfferRow, ProjectRow } from "./db/projects";
+import type { ProjectOfferRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
+import type { CreateOrJoinProject } from "./project-making";
 import { normaliseRemote } from "./projects";
 import type { AnyProblem } from "./refusal";
 import type { TaskActor, Tasks } from "./tasks";
@@ -58,16 +59,8 @@ export interface ProjectOffersDeps {
   /**
    * Makes the project with Caw, or joins the one that has the folder's
    * remote (project-joining.ts `createOrJoinProject`), or its refusal.
-   * Plain-typed: typing it from there closes project-offers →
-   * project-joining → hub-context → closure-context → project-offers.
    */
-  createProject: (asked: {
-    name: string;
-    checkout: { machineId: string; cwd: string };
-    caw: true;
-  }) => Promise<
-    { project: ProjectRow; placeAdded: boolean; joined: boolean } | AnyProblem
-  >;
+  createProject: CreateOrJoinProject;
   db: DbShape;
   /** Sessions moved into a project: their machines' rails are published again. */
   moved: (machineIds: string[]) => void;

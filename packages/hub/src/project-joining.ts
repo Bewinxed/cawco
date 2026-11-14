@@ -3,12 +3,18 @@ import { detach } from "@cawco/core/detach";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { projectWords } from "@cawco/core/words/project";
 import { ElysiaStatus, problem } from "elysia";
+import type { LeadHomeProblem } from "./caw-problems";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { HubContext } from "./hub-context";
 import { onAccountMachines } from "./placement";
 import { listFolder, projectRoot } from "./project-folder";
-import type { ProjectAsk, ProjectMade } from "./project-making";
+import type {
+  CreateOrJoinProject,
+  ProjectAsk,
+  ProjectMade,
+  ProjectMakeProblem,
+} from "./project-making";
 import { placesChanged } from "./project-placements";
 import { NOTHING_READ, readCheckout } from "./projects";
 
@@ -44,7 +50,11 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * `onAccountMachines`). The folder's problem for the hub's folder, and a
    * machine that does not say where its home is.
    */
-  const leadHome = async (projectId: string) => {
+  const leadHome = async (
+    projectId: string
+  ): Promise<
+    { machineId: string; cwd: string } | LeadHomeProblem | undefined
+  > => {
     const machines = onAccountMachines(
       ctx.onlineMachines().map((id) => ({ machineId: id })),
       ctx.db.project(projectId)?.inEffect.account.value,
@@ -156,7 +166,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * is made twice. Refused in the hub's words: a folder that is no
    * absolute path on its machine, or a paused machine's.
    */
-  const createOrJoinProject = (asked: ProjectAsk) => {
+  const createOrJoinProject: CreateOrJoinProject = (asked) => {
     const promptId = asked.setup?.promptId;
     if (!promptId) {
       return makeOrJoinProject(asked);
@@ -197,7 +207,9 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     };
   };
 
-  const makeOrJoinProject = async (asked: ProjectAsk) => {
+  const makeOrJoinProject = async (
+    asked: ProjectAsk
+  ): Promise<ProjectMade | ProjectMakeProblem> => {
     const path =
       asked.checkout &&
       ctx.db.machinePathOn(asked.checkout.machineId, asked.checkout.cwd);
