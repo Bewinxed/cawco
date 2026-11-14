@@ -21,10 +21,10 @@ import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments/model";
-import { hubRequest } from "@cawco/core/hub-request";
 import { pinReference } from "@cawco/core/references";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { hubFetch } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubAsk } from "#lib/platform/hub-read.js";
 import { browser } from "$app/env";
 import { ArtifactRefused, findArtifact } from "./artifact-api";
 
@@ -93,22 +93,18 @@ function askPins(id: string, instanceId: string): void {
     return;
   }
   asking.add(key);
-  hubFetch(
-    hubRequest("GET /api/instances/:id/artifacts/comments", {
-      path: { id: instanceId },
-      query: { artifact: id, filter: "all" },
-    })
+  hubAsk(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts.comments.get({ query: { artifact: id, filter: "all" } })
   )
-    .then(async (response) => {
-      if (!response.ok) {
+    .then((got) => {
+      if (!got.ok) {
         return;
       }
-      const answer = (await response.json()) as {
-        artifacts: { id: string; pins: Pin[] }[];
-      };
       read.set(id, {
         choices: {},
-        pins: answer.artifacts.find((one) => one.id === id)?.pins ?? [],
+        pins: got.value.artifacts.find((one) => one.id === id)?.pins ?? [],
       });
     })
     .catch((error: unknown) => {

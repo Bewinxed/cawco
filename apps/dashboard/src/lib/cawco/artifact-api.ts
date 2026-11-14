@@ -7,7 +7,6 @@
 
 import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { ShownFailure } from "@cawco/core/preview/protocol";
 import type {
   ArtifactHit,
@@ -18,12 +17,7 @@ import type {
 import { type PageLinks, pageLinksOf } from "@cawco/core/reference-faces";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
 import { hub, hubPath } from "#lib/platform/hub.js";
-import {
-  hubData,
-  hubDone,
-  hubJson,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { hubData, hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
 
@@ -36,10 +30,8 @@ import { currentClientId } from "./client-id";
 export async function listFiles(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
-  return await hubJson(
-    hubRequest("GET /api/instances/:id/artifacts/files", {
-      path: { id: instanceId },
-    })
+  return await hubData(
+    hub.api.instances({ id: instanceId }).artifacts.files.get()
   );
 }
 
@@ -50,11 +42,7 @@ export async function listFiles(
 export async function listAttachments(
   instanceId: string
 ): Promise<SessionAttachments> {
-  return await hubJson(
-    hubRequest("GET /api/instances/:id/attachments", {
-      path: { id: instanceId },
-    })
-  );
+  return await hubData(hub.api.instances({ id: instanceId }).attachments.get());
 }
 
 /**
@@ -66,12 +54,10 @@ export async function searchArtifacts(
   q: string,
   signal?: AbortSignal
 ): Promise<ArtifactHit[]> {
-  return await hubJson(
-    hubRequest("GET /api/instances/:id/artifacts/search", {
-      path: { id: instanceId },
-      query: { q },
-    }),
-    { init: { signal } }
+  return await hubData(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts.search.get({ query: { q }, fetch: { signal } })
   );
 }
 
@@ -185,11 +171,10 @@ export async function artifactShown(
 export async function createDraftCanvas(
   instanceId: string
 ): Promise<{ id: string; name: string }> {
-  const made = await hubJson<{ id: string; name: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: instanceId },
-      body: { kind: "canvas", name: "canvas", draft: true },
-    })
+  const made = await hubData(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts.post({ kind: "canvas", name: "canvas", draft: true })
   );
   return { id: made.id, name: made.name };
 }
@@ -204,28 +189,27 @@ export async function keepBlock(
   instanceId: string,
   block: { ask: string; name: string; program: string; title: string }
 ): Promise<{ id: string; name: string }> {
-  return await hubJson<{ id: string; name: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: instanceId },
-      body: { kind: "page", does: "judge", ...block },
-    })
+  const made = await hubData(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts.post({ kind: "page", does: "judge", ...block })
   );
+  return { id: made.id, name: made.name };
 }
 
 /** A canvas as a send carries it: its `.excalidraw` file, its outline, its picture (base64 PNG, null until drawn). */
 export interface CanvasExport {
-  file: { elements: { isDeleted?: boolean }[] } & Record<string, unknown>;
+  file: { elements: readonly { isDeleted?: boolean }[] } & Record<
+    string,
+    unknown
+  >;
   outline: string;
   png: string | null;
 }
 
 /** A canvas's export, waited on for as long as the hub takes. */
 export async function exportCanvas(id: string): Promise<CanvasExport> {
-  return await hubJson(
-    hubRequest("GET /api/artifacts/:artifact/export", {
-      path: { artifact: id },
-    })
-  );
+  return await hubData(hub.api.artifacts({ artifact: id }).export.get());
 }
 
 /**
@@ -238,11 +222,8 @@ export function exportCanvasWithin(
   withinMs: number
 ): Promise<Bounded<CanvasExport>> {
   return readWithin(withinMs, async (signal): Promise<CanvasExport> =>
-    hubJson(
-      hubRequest("GET /api/artifacts/:artifact/export", {
-        path: { artifact: id },
-      }),
-      { init: { signal } }
+    hubData(
+      hub.api.artifacts({ artifact: id }).export.get({ fetch: { signal } })
     )
   );
 }
@@ -271,11 +252,11 @@ export async function writeSheet(
   edit?: { file: string; lines: { from: number; to: number } };
   sheet?: SheetRead;
 }> {
-  return await hubJson(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
-      path: { id: instanceId, artifact: id },
-      body: change,
-    })
+  return await hubData(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts({ artifact: id })
+      .sheet.post(change)
   );
 }
 
@@ -296,15 +277,10 @@ export async function canvasSent(
 export async function findArtifact(
   id: string
 ): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
-  return await hubJson(
-    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } }),
-    {
-      failure: (refused) =>
-        new ArtifactRefused(
-          refused.response.status,
-          hubRefusal(refused).message
-        ),
-    }
+  return await hubData(
+    hub.api.artifacts({ artifact: id }).get(),
+    (refused) =>
+      new ArtifactRefused(refused.response.status, hubRefusal(refused).message)
   );
 }
 
@@ -316,17 +292,10 @@ export async function findArtifact(
  * for an artifact that keeps no program.
  */
 export async function artifactLinks(id: string): Promise<PageLinks> {
-  const links = await hubJson<unknown>(
-    hubRequest("GET /api/artifacts/:artifact/links", {
-      path: { artifact: id },
-    }),
-    {
-      failure: (refused) =>
-        new ArtifactRefused(
-          refused.response.status,
-          hubRefusal(refused).message
-        ),
-    }
+  const links = await hubData(
+    hub.api.artifacts({ artifact: id }).links.get(),
+    (refused) =>
+      new ArtifactRefused(refused.response.status, hubRefusal(refused).message)
   );
   return pageLinksOf(links);
 }

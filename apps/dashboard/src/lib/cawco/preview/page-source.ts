@@ -10,7 +10,6 @@
  * away.
  */
 
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import {
   PREVIEW_PING_PATH,
   type PreviewAddress,
@@ -18,15 +17,12 @@ import {
 } from "@cawco/core/preview/routes";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubFetch, hubRefusal, refusedOf } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { type HubAsked, hubAsk, hubRefusal } from "#lib/platform/hub-read.js";
 import { enterPreviews } from "./pass";
 
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
 export type PageOrigin = { project: string } | { instance: string };
-
-/** The hub's sentence for a refused request, or the fallback words. */
-const said = async (answer: Response | null, otherwise: string) =>
-  answer ? hubRefusal(await refusedOf(answer)).message : otherwise;
 
 /**
  * Where `origin`'s pages are served and the page at `wanted` there, with
@@ -76,30 +72,32 @@ export async function pageSource(
  * preview-ports.ts `preview-ports-taken`), wherever a frame of it stands.
  */
 async function addressAt(
-  request: HubRequest
+  call: Promise<HubAsked<PreviewAddress>>
 ): Promise<{ address: PreviewAddress } | { problem: string }> {
-  const answer = await hubFetch(request).catch(() => null);
-  if (!answer?.ok) {
-    return {
-      problem: await said(answer, previewWords.notOpenedLine),
-    };
+  const asked = await call.catch(() => null);
+  if (!asked) {
+    return { problem: previewWords.notOpenedLine };
   }
-  return { address: await answer.json() };
+  return asked.ok
+    ? { address: asked.value }
+    : { problem: hubRefusal(asked.refused).message };
 }
 
 /** Where `origin` (a project's, a session's) is served now, its listener started when it has none; or the hub's refusal. */
 export const originAddress = (
   origin: PageOrigin
 ): Promise<{ address: PreviewAddress } | { problem: string }> =>
-  addressAt(
-    "project" in origin
-      ? hubRequest("POST /api/projects/:id/preview-address", {
-          path: { id: origin.project },
-        })
-      : hubRequest("POST /api/instances/:id/preview-address", {
-          path: { id: origin.instance },
-        })
-  );
+  "project" in origin
+    ? addressAt(
+        hubAsk(
+          hub.api.projects({ id: origin.project })["preview-address"].post()
+        )
+      )
+    : addressAt(
+        hubAsk(
+          hub.api.instances({ id: origin.instance })["preview-address"].post()
+        )
+      );
 
 /**
  * Where artifact `id` is served now (hub preview-routes.ts
@@ -111,7 +109,5 @@ export const artifactAddress = (
   id: string
 ): Promise<{ address: PreviewAddress } | { problem: string }> =>
   addressAt(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: id },
-    })
+    hubAsk(hub.api.artifacts({ artifact: id })["preview-address"].post())
   );

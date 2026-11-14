@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fileHash } from "@cawco/core/attachments";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; the artifact panel's surface brief,
    * A thread beside its pin). It has no head band (The Title Bars Follow
@@ -71,6 +72,8 @@
   } from "#lib/icons.js";
   import { copyRefused, copyToClipboard } from "#lib/platform/copy.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { hub } from "#lib/platform/hub.js";
+  import { hubAsk } from "#lib/platform/hub-read.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
@@ -318,8 +321,8 @@
       for (const one of entry.attachments ?? []) {
         if (one.kind === "text" && !(one.ref in texts)) {
           texts[one.ref] = "";
-          fetch(one.ref)
-            .then((response) => (response.ok ? response.text() : ""))
+          hubAsk(hub.api.files({ hash: fileHash(one.ref) }).get())
+            .then((got) => (got.ok ? new Response(got.value).text() : ""))
             .then((read) => {
               texts[one.ref] = read;
             })
