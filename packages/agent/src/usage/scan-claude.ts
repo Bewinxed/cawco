@@ -12,7 +12,10 @@ import type { ScannedRecord } from "./types";
  * 828 MB corpus scannable in well under a second.
  */
 
-/** A transcript line, as written by Claude Code. */
+/**
+ * A transcript line, as written by Claude Code: its usage nullable where the
+ * Messages API's `BetaUsage` is (core usage/types.ts `RawClaudeUsage`).
+ */
 const TranscriptLine = z.object({
   isSidechain: z.boolean().optional(),
   message: z
@@ -26,13 +29,14 @@ const TranscriptLine = z.object({
               ephemeral_5m_input_tokens: z.number().optional(),
               ephemeral_1h_input_tokens: z.number().optional(),
             })
+            .nullable()
             .optional(),
-          cache_creation_input_tokens: z.number().optional(),
-          cache_read_input_tokens: z.number().optional(),
+          cache_creation_input_tokens: z.number().nullable().optional(),
+          cache_read_input_tokens: z.number().nullable().optional(),
           input_tokens: z.number(),
           output_tokens: z.number(),
-          service_tier: z.string().optional(),
-          speed: z.string().optional(),
+          service_tier: z.string().nullable().optional(),
+          speed: z.string().nullable().optional(),
         })
         .optional(),
     })
