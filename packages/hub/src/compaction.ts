@@ -18,9 +18,9 @@ import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus } from "elysia";
-import { fileDue } from "./at-limit";
 import type { LimitCompaction } from "./db/at-limit";
 import type { HubContext } from "./hub-context";
+import { fileDue } from "./limit-decision";
 import {
   COMPACT_FOCUS,
   filingPrompt,

@@ -11,8 +11,8 @@ import {
   windowOpen,
   windowUsed,
 } from "@cawco/core/usage/windows";
-import type { LimitRow } from "./at-limit";
 import type { DbShape } from "./db";
+import type { PublicInstanceRow } from "./db/instances";
 import { historyPoints, usdPerPercent } from "./forecast";
 
 /**
@@ -443,7 +443,7 @@ export const createAdmission = (db: DbShape) => {
    * decision (at-limit.ts `decideStop`).
    */
   const check = (
-    session: Pick<LimitRow, "id" | "model">,
+    session: Pick<PublicInstanceRow, "id" | "model">,
     targetId: string,
     projected: Projected,
     now: number
@@ -465,7 +465,7 @@ export const createAdmission = (db: DbShape) => {
      * on its model.
      */
     charge(
-      session: Pick<LimitRow, "id" | "model">,
+      session: Pick<PublicInstanceRow, "id" | "model">,
       accountId: string,
       usd: number | null
     ): void {
@@ -518,7 +518,7 @@ export const createAdmission = (db: DbShape) => {
      * `moved` line lands there): it stays, and no other account freeing
      * moves it again. On a verified Ultra account that is its week.
      */
-    admittedHere(row: LimitRow, now = Date.now()): boolean {
+    admittedHere(row: PublicInstanceRow, now = Date.now()): boolean {
       if (!row.accountId) {
         return false;
       }

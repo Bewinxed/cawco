@@ -26,20 +26,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { relaunchWords } from "@cawco/core/words/relaunch";
 import { machineAccount } from "./accounts";
 import { pricedTokens, projectedMove, usdWords } from "./admission";
-import type {
-  AccountsRead,
-  CompactionPlan,
-  Kept,
-  MoveHow,
-  Stall,
-} from "./at-limit";
-import {
-  accountsRead,
-  cacheCarries,
-  compactedLine,
-  compactionPlan,
-  refusedUntil,
-} from "./at-limit";
+import { accountsRead } from "./at-limit";
 import type { DbShape } from "./db";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { PublicInstanceRow } from "./db/instances";
@@ -48,6 +35,17 @@ import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
 import type { MoveOffWhy, StoredRow } from "./hub-shapes";
 import { cacheWarmNow, promptCacheExpiresAt } from "./keep-alive";
+import {
+  type AccountsRead,
+  type CompactionPlan,
+  cacheCarries,
+  compactedLine,
+  compactionPlan,
+  type Kept,
+  type MoveHow,
+  refusedUntil,
+  type Stall,
+} from "./limit-decision";
 import type { PlacementInput } from "./placement";
 import {
   accountFacts,

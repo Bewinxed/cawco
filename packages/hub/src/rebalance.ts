@@ -21,18 +21,6 @@ import {
   tokenWords,
 } from "@cawco/core/words/account-lines";
 import { NEXT_TURN_ALLOWANCE_USD, usdWords } from "./admission";
-import {
-  type AtLimitPorts,
-  compactedLine,
-  costOf,
-  decideStop,
-  type LimitRow,
-  moveSideWords,
-  type StopDecision,
-  type StopTarget,
-  stopInputOf,
-  WHOLE_MOVE_NOTICE_MS,
-} from "./at-limit";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
@@ -46,6 +34,18 @@ import {
   weightedTokens,
 } from "./forecast";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import {
+  type AtLimitPorts,
+  compactedLine,
+  costOf,
+  decideStop,
+  type LimitRow,
+  moveSideWords,
+  type StopDecision,
+  type StopTarget,
+  stopInputOf,
+  WHOLE_MOVE_NOTICE_MS,
+} from "./limit-decision";
 import type { Arrival } from "./placement";
 import type { AccountPaces } from "./window-paces";
 

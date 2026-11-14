@@ -22,10 +22,10 @@ import {
 import { noticeWords } from "@cawco/core/words/notices";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus } from "elysia";
-import type { Kept } from "./at-limit";
 import type { AccountLeave } from "./db/accounts";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
+import type { Kept } from "./limit-decision";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { LIMIT_ORIGIN } from "./sends";

@@ -56817,7 +56817,7 @@
         "type": "object",
         "properties": {
           "stale": {
-            "description": "Held past the cutoff: nothing carries it on until a person or its parent writes ({@link goneStale}).",
+            "description": "Held past the cutoff: nothing carries it on until a person or its parent writes (at-limit.ts `goneStale`).",
             "const": true,
             "type": "boolean"
           },
