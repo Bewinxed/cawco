@@ -1088,12 +1088,12 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (placed instanceof ElysiaStatus) {
       return placed;
     }
-    // What it starts with is the start's to settle: a project file that
-    // does not read refuses it, in the file's words.
+    // A project starting-set file that does not read refuses it, in the
+    // file's words, as an unread stages.md refuses a dispatch.
     const begins = ctx.startingSetOf(payload);
     if ("refusal" in begins) {
-      return problem(400, {
-        code: "spawn-not-settled",
+      return problem(409, {
+        code: "starting-set-unread",
         detail: begins.refusal,
       });
     }

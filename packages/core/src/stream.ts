@@ -340,12 +340,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    and agent update answered theirs; a machine's failure is 502, where a
  *    spawn's start answered 422 and a placement 503. A page built for 68
  *    reads those codes and members closed, so it reloads first.
+ * 70: a start whose project's starting-set.md does not read is refused
+ *    409 `starting-set-unread`, where its session started with everything
+ *    installed: a project's requests, an attempt and its retry, a view's
+ *    requests and asks may answer it. A page built for 69 does not know the
+ *    new code, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 69;
+export const WIRE_PROTOCOL = 70;
 
 /**
  * What a session's stream carries: the changes each frame made to its

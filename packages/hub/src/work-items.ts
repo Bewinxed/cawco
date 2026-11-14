@@ -915,6 +915,9 @@ interface WorkItemDeps extends Pick<
         typeof problem<400, { code: "spawn-not-placed"; detail: string }>
       >
     | ReturnType<
+        typeof problem<409, { code: "starting-set-unread"; detail: string }>
+      >
+    | ReturnType<
         typeof problem<
           409,
           { code: "launch-account-unavailable"; detail: string }
