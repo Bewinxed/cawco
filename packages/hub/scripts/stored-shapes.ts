@@ -74,6 +74,7 @@ const PROOF_IMPORT = /from\s*"[^"]*stored-shapes\.proof(?:\.js)?"/u;
 const PROOF_FILE = /\/stored-shapes\.proof\.ts$/u;
 const TEST_FILE = /\.test\.ts$/u;
 const ZOD_OUTPUT = /^z\.(?:infer|output)$/u;
+const LEADING_BAR = /^\|\s*/u;
 
 /** Types whose schema is written here, not made from the type: a brand only a predicate can check. */
 const WRITTEN: Record<string, { schema: string; values: [string, string][] }> =
@@ -314,11 +315,36 @@ const refuseOutsideDb = (declaration: Declaration): void => {
   }
 };
 
+/** The type declaration a node sits in, and the property names from it down to the node (`suggestions.behavior`). */
+const placeOf = (
+  node: ts.Node
+): { declaration: Declaration | undefined; path: string[] } => {
+  const path: string[] = [];
+  let at: ts.Node | undefined = node;
+  while (
+    at &&
+    !(ts.isInterfaceDeclaration(at) || ts.isTypeAliasDeclaration(at))
+  ) {
+    if (ts.isPropertySignature(at)) {
+      path.unshift(at.name.getText());
+    }
+    at = at.parent;
+  }
+  return { declaration: at, path };
+};
+
+/** How each declaration was first reached: its stored type, then the property path to it. */
+const reachedBy = new Map<Declaration, string[]>();
+
 /** Each declaration after every one it reads (a schema's const reads its parts'). */
-const reach = (declaration: Declaration): void => {
+const reach = (
+  declaration: Declaration,
+  trail: string[] = [declaration.name.text]
+): void => {
   if (order.includes(declaration)) {
     return;
   }
+  reachedBy.set(declaration, trail);
   if (visiting.has(declaration)) {
     throw new Error(
       `stored-shapes: ${declaration.name.text} reaches itself; a recursive stored type needs a hand-written schema`
@@ -334,7 +360,7 @@ const reach = (declaration: Declaration): void => {
         for (const found of declarationsOf(name)) {
           // TypeScript's own (Record, Partial, Omit) are read as zod's.
           if (!program.isSourceFileDefaultLibrary(found.getSourceFile())) {
-            reach(found);
+            reach(found, [...trail, ...placeOf(node).path]);
           }
         }
       }
@@ -441,6 +467,30 @@ const PRIMITIVE: Partial<Record<ts.SyntaxKind, string>> = {
 const refuse = (node: ts.Node, what: string): never => {
   throw new Error(
     `stored-shapes: ${where(node)}: no schema is made from ${what} (${node.getText().slice(0, 80)})`
+  );
+};
+
+/**
+ * A closed set (an enum, a literal union, a union told apart by a literal
+ * key) is made only from a type we declare. One copied from a provider's
+ * package fails each read the day the provider adds a value: the hub
+ * refused Claude's permission suggestions and its effort words that way.
+ * `node` is the set as written, `provider` the declaration that writes it.
+ */
+const ownClosedSet = (node: ts.Node, provider: ts.Node): void => {
+  if (!provider.getSourceFile().fileName.includes(NODE_MODULES)) {
+    return;
+  }
+  const { declaration, path } = placeOf(node);
+  const [stored, ...trail] = (declaration && reachedBy.get(declaration)) ?? [
+    declaration?.name.text ?? "?",
+  ];
+  const name =
+    ts.isVariableDeclaration(provider) || ts.isTypeAliasDeclaration(provider)
+      ? provider.name.getText()
+      : (declaration?.name.text ?? "?");
+  throw new Error(
+    `stored-shapes: the stored type ${stored}, at ${[...trail, ...path].join(".") || "its root"}, holds ${name} from the package ${declaredInOf(provider)} as a closed set (${node.getText().replace(LEADING_BAR, "").slice(0, 80)}), which refuses the provider's next value. Hold the provider's value as \`unknown\` or \`string\` and narrow where it is read.`
   );
 };
 
@@ -570,6 +620,12 @@ const unionOf = (node: ts.UnionTypeNode, scope: Scope): string => {
   let schema: string;
   if (
     options.length > 1 &&
+    (options.every(ts.isLiteralTypeNode) || discriminated(options))
+  ) {
+    ownClosedSet(node, node);
+  }
+  if (
+    options.length > 1 &&
     options.every(
       (t) => ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal)
     )
@@ -680,6 +736,10 @@ const indexedOf = (node: ts.IndexedAccessTypeNode, scope: Scope): string => {
     ts.isTypeQueryNode(object) &&
     node.indexType.kind === ts.SyntaxKind.NumberKeyword
   ) {
+    const list = symbolOf(object.exprName)?.valueDeclaration;
+    if (list) {
+      ownClosedSet(node, list);
+    }
     return `z.enum(${importedValue(object.exprName)})`;
   }
   if (
@@ -840,7 +900,7 @@ const DECLARED = join(CORE_SRC, "stored-types.ts");
  * checkout differs on each machine and workspace
  * (`../../.cawco/workspace-cache/bun/links/@types+node@…/node_modules/@types/node/process.d.ts`).
  */
-const declaredInOf = (declaration: Declaration): string => {
+const declaredInOf = (declaration: ts.Node): string => {
   const file = declaration.getSourceFile().fileName;
   const sdk = SDK.exec(file);
   if (sdk) {
