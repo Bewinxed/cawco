@@ -82,7 +82,7 @@ scripts/lint/fixtures/hub-path.ts:8:13 house/hub-path-by-hand
 scripts/lint/fixtures/hub-path.ts:9:20 house/hub-path-by-hand
 scripts/lint/fixtures/hub-path.ts:10:16 house/hub-path-by-hand
 scripts/lint/fixtures/fetch-alias-const.ts:5:9 house/no-fetch-alias
-scripts/lint/fixtures/fetch-alias.ts:2:22 house/no-fetch-alias
+scripts/lint/fixtures/fetch-alias.ts:2:24 house/no-fetch-alias
 scripts/lint/fixtures/design/planted-bar-menu.svelte:20:5 house/no-detached-bar-menu
 scripts/lint/fixtures/design/planted-bar-menu.svelte:33:3 house/no-detached-bar-menu
 scripts/lint/fixtures/design/planted-bar-symbol.svelte:25:16 house/bar-symbol-linear

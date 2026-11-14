@@ -2,7 +2,7 @@ import { detach } from "@cawco/core/detach";
 import type { Deleted } from "@cawco/core/fleet";
 import { configureWords } from "@cawco/core/words/configure";
 import { toast } from "#lib/platform/toasts.js";
-import { restore } from "./unrestored.svelte";
+import { type RowOf, restore, type TrashKind } from "./unrestored.svelte";
 
 export type { Deleted } from "@cawco/core/fleet";
 
@@ -17,11 +17,12 @@ export type { Deleted } from "@cawco/core/fleet";
  * a toast: it is said on `where.section`, the list the row stood in
  * (SectionFrame, unrestored.svelte.ts), with Try again, through a reload.
  */
-export function offerUndo<T>(
+export function offerUndo<K extends TrashKind>(
+  kind: K,
   id: string,
   words: string,
   deleted: Deleted,
-  land: (row: T) => void,
+  land: (row: RowOf<K>) => void,
   where: { section: string; name: string }
 ): void {
   const runsOut = setTimeout(() => toast.dismiss(id), deleted.restorableForMs);
@@ -35,7 +36,7 @@ export function offerUndo<T>(
       label: configureWords.undo,
       onClick: () => {
         settled();
-        detach(restore(id, deleted, where, land), "restore");
+        detach(restore(kind, id, deleted, where, land), "restore");
       },
     },
     onDismiss: settled,

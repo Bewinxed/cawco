@@ -1,12 +1,9 @@
 import type { Deleted } from "@cawco/core/fleet";
-import { hubRequest } from "@cawco/core/hub-request";
+import { configureWords } from "@cawco/core/words/configure";
+import type { Treaty } from "@elysia/eden";
 import { z } from "zod";
-import {
-  failureClause,
-  hubFetch,
-  hubRefusal,
-  refusedOf,
-} from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { failureClause, hubData } from "#lib/platform/hub-read.js";
 import { refusals } from "../refusals.svelte";
 
 /**
@@ -19,8 +16,49 @@ import { refusals } from "../refusals.svelte";
  */
 const KEY = "undo:";
 
+/** What the hub's restore answers: the item back, under the kind it was deleted as. */
+type Answer = Treaty.Data<ReturnType<typeof hub.api.trash>["restore"]["post"]>;
+
+/** The kinds of trash entry a config delete leaves, as the hub's restore names them. */
+export type TrashKind = Answer["kind"];
+
+/** The row the hub restores for `K`, as its list reads it. */
+export type RowOf<K extends TrashKind> = NonNullable<
+  Extract<Answer, { kind: K }>["row"]
+>;
+
+/** The hub's answer as {@link isRestored} reads it. */
+interface Restored {
+  kind: TrashKind;
+  row: unknown;
+}
+
+/** Whether the hub answered with the kind that was asked for, and with its row. */
+const isRestored = <K extends TrashKind>(
+  answer: Restored,
+  kind: K
+): answer is { kind: K; row: RowOf<K> } =>
+  answer.kind === kind && answer.row !== null;
+
+/** Every kind, each named once: a kind the hub adds does not compile until it is here. */
+const KINDS = {
+  rule: "rule",
+  hook: "hook",
+  skill: "skill",
+  plugin: "plugin",
+  marketplace: "marketplace",
+  agent: "agent",
+  mcp: "mcp",
+  delegateType: "delegateType",
+  memory: "memory",
+  memoryDoc: "memoryDoc",
+  connection: "connection",
+  harnessConfig: "harnessConfig",
+} satisfies { [K in TrashKind]: K };
+
 /** What a kept refused Undo holds: the trash entry to ask for again. */
 const AskedSchema = z.object({
+  kind: z.enum(KINDS),
   deleted: z.object({ restorableForMs: z.number(), restore: z.number() }),
   name: z.string(),
   section: z.string(),
@@ -32,40 +70,44 @@ const keyOf = (section: string, id: string): string =>
   `${KEY}${section}\u0000${id}`;
 
 /**
- * Where a restored row lands while this tab still holds the list it left
- * (by key); after a reload the section reads its list again instead.
+ * The Try again of a refused Undo while this tab still holds the list it
+ * left (by key); after a reload the section reads its list again instead.
  */
-const landings = new Map<string, (row: unknown) => void>();
+const landings = new Map<string, () => Promise<void>>();
 
 /** Asks the hub's trash to put the item back, answering its row. */
-async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
-  const response = await hubFetch(
-    hubRequest("POST /api/trash/:id/restore", { path: { id: deleted.restore } })
+async function restoreDeleted<K extends TrashKind>(
+  kind: K,
+  deleted: Deleted
+): Promise<RowOf<K>> {
+  // The hub says why in a sentence when it refuses: its window ran out, or its name is taken.
+  const answer: Restored = await hubData(
+    hub.api.trash({ id: deleted.restore }).restore.post()
   );
-  if (!response.ok) {
-    // The hub says why in a sentence: its window ran out, or its name is taken.
-    throw hubRefusal(await refusedOf(response));
+  if (!isRestored(answer, kind)) {
+    throw new Error(`${configureWords.restoredNothing}.`);
   }
-  return ((await response.json()) as { row: T }).row;
+  return answer.row;
 }
 
 /** Puts it back; a refusal is kept for its section to say, with Try again. */
-export async function restore<T>(
+export async function restore<K extends TrashKind>(
+  kind: K,
   id: string,
   deleted: Deleted,
   where: { section: string; name: string },
-  land: (row: T) => void
+  land: (row: RowOf<K>) => void
 ): Promise<void> {
   const key = keyOf(where.section, id);
-  landings.set(key, land as (row: unknown) => void);
+  landings.set(key, () => restore(kind, id, deleted, where, land));
   try {
-    land(await restoreDeleted<T>(deleted));
+    land(await restoreDeleted(kind, deleted));
     refusals.delete(key);
     landings.delete(key);
   } catch (error) {
     refusals.set(key, {
       reason: `${where.name} was not put back: ${failureClause(error)}. It stays deleted.`,
-      asked: { deleted, ...where } satisfies Asked,
+      asked: { kind, deleted, ...where } satisfies Asked,
     });
   }
 }
@@ -85,21 +127,29 @@ export function unrestoredOn(
   section: string,
   reread: () => unknown
 ): Unrestored[] {
-  return refusals.under(`${KEY}${section}\u0000`).map(([key, said]) => {
-    const asked = AskedSchema.parse(said.asked);
-    return {
-      key,
-      reason: said.reason,
-      again: () =>
-        restore(
-          key.slice(key.indexOf("\u0000") + 1),
-          asked.deleted,
-          asked,
-          landings.get(key) ??
-            (() => {
+  return refusals.under(`${KEY}${section}\u0000`).flatMap(([key, said]) => {
+    const read = AskedSchema.safeParse(said.asked);
+    // A refusal this tab kept before Undo named its kind asks for nothing it can send again.
+    if (!read.success) {
+      return [];
+    }
+    const asked = read.data;
+    return [
+      {
+        key,
+        reason: said.reason,
+        again: () =>
+          landings.get(key)?.() ??
+          restore(
+            asked.kind,
+            key.slice(key.indexOf("\u0000") + 1),
+            asked.deleted,
+            asked,
+            () => {
               reread();
-            })
-        ),
-    };
+            }
+          ),
+      },
+    ];
   });
 }

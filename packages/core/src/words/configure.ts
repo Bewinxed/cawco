@@ -311,6 +311,8 @@ export const configureWords = {
   /** A write refused because the row changed since the page read it; the latest now shows in its place. */
   changedSince: (what: string) =>
     `${what} changed elsewhere since this page read it. The latest is shown now`,
+  /** An Undo the hub answered without the item it was asked for: said as the clause of a refused Undo. */
+  restoredNothing: "The hub answered without the item",
 };
 
 /** A Configure page as a sentence names it, by its slug: `configurePage("accounts")` is "Configure › Accounts". */

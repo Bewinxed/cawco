@@ -1,4 +1,3 @@
-import { fetchHub, type HubRequest } from "@cawco/core/hub-request";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { streamResponse } from "@elysia/eden/treaty2";
 import { z } from "zod";
@@ -496,18 +495,6 @@ export function couldNot(attempt: string, refused: Refused): Error {
     `Couldn't ${attempt}. ${failureSentence(hubFailure(refused))}`
   );
 }
-
-/**
- * A hub request sent from this page: `request` as core's door built it
- * (`hubRequest`, held to what its route takes), with `init`'s own signal,
- * keepalive or other headers beside it, through `through`: the page's
- * `fetch`, or a load's own, for the callers still waiting on the hub's types.
- */
-export const hubFetch = (
-  request: HubRequest,
-  init: RequestInit = {},
-  through: typeof globalThis.fetch = fetch
-): Promise<Response> => fetchHub(through, "", request, init);
 
 /**
  * A refused read as a clause without its stop: the hub's words with their

@@ -11,7 +11,6 @@ import { failureClause } from "#lib/platform/hub-read.js";
 import { type DelegateType, removeDelegateType } from "../delegate-types";
 import {
   type FleetMemoryDocRow,
-  type FleetMemoryRow,
   removeAgent,
   removeMarketplace,
   removeMcpServer,
@@ -25,6 +24,7 @@ import { removeRule } from "../rules";
 import { MAIN } from "./memory";
 import { type ConfigStore, upsert } from "./store.svelte";
 import { type Deleted, offerUndo } from "./undo";
+import type { RowOf, TrashKind } from "./unrestored.svelte";
 
 /**
  * Every config section's delete (JOURNEY.md Flow 5: "an undo affordance
@@ -38,7 +38,8 @@ import { type Deleted, offerUndo } from "./undo";
  * goes back to its list there, so the row is seen leaving it. A refused
  * delete throws the hub's sentence and leaves the row standing.
  */
-async function deleteRow<T>(
+async function deleteRow<K extends TrashKind>(
+  kind: K,
   store: ConfigStore,
   item: {
     /** Asks the hub to trash it. */
@@ -46,7 +47,7 @@ async function deleteRow<T>(
     /** Takes its row off the list. */
     drop: () => void;
     /** Puts the row the hub restored back. */
-    land: (row: T) => void;
+    land: (row: RowOf<K>) => void;
     /** What the toast says, and what its Undo marks. */
     words: string;
     mark: string;
@@ -59,7 +60,8 @@ async function deleteRow<T>(
   const deleted = await item.remove();
   await leave?.();
   item.drop();
-  offerUndo<T>(
+  offerUndo(
+    kind,
     `deleted:${item.mark}`,
     item.words,
     deleted,
@@ -94,7 +96,8 @@ export function deleteRule(
 ): Promise<void> {
   const at = (store.rules.value ?? []).findIndex((row) => row.id === rule.id);
   const same = (row: RuleRow) => row.id === rule.id;
-  return deleteRow<RuleRow>(
+  return deleteRow(
+    "rule",
     store,
     {
       remove: () => removeRule(rule.id, rule.name),
@@ -121,7 +124,8 @@ export function deleteHook(
 ): Promise<void> {
   const at = (store.hooks.value ?? []).findIndex((row) => row.id === hook.id);
   const same = (row: FleetHook) => row.id === hook.id;
-  return deleteRow<FleetHook>(
+  return deleteRow(
+    "hook",
     store,
     {
       remove: () => removeHook(hook.id, hook.name),
@@ -148,7 +152,8 @@ export function deleteDelegateType(
 ): Promise<void> {
   const at = (store.types.value ?? []).findIndex((row) => row.name === name);
   const same = (row: DelegateType) => row.name === name;
-  return deleteRow<DelegateType>(
+  return deleteRow(
+    "delegateType",
     store,
     {
       remove: () => removeDelegateType(name),
@@ -183,7 +188,8 @@ export function deleteAgent(
     (row) => row.name === name
   );
   const same = (row: FleetAgent) => row.name === name;
-  return deleteRow<FleetAgent>(
+  return deleteRow(
+    "agent",
     store,
     {
       remove: async () => {
@@ -228,7 +234,8 @@ export function deleteMcpServer(
     (row) => row.name === name
   );
   const same = (row: FleetMcpServerView) => row.name === name;
-  return deleteRow<FleetMcpServerView>(
+  return deleteRow(
+    "mcp",
     store,
     {
       remove: () => removeMcpServer(name),
@@ -258,7 +265,7 @@ export function deleteSkill(store: ConfigStore, name: string): Promise<void> {
     (row) => row.name === name
   );
   const same = (row: FleetSkillMeta) => row.name === name;
-  return deleteRow<FleetSkillMeta>(store, {
+  return deleteRow("skill", store, {
     remove: () => removeSkill(name),
     drop: () => {
       const fleet = store.fleet.value;
@@ -284,7 +291,7 @@ export function deletePlugin(store: ConfigStore, id: string): Promise<void> {
     (row) => row.id === id
   );
   const same = (row: FleetPlugin) => row.id === id;
-  return deleteRow<FleetPlugin>(store, {
+  return deleteRow("plugin", store, {
     remove: () => removePlugin(id),
     drop: () => {
       const fleet = store.fleet.value;
@@ -314,7 +321,7 @@ export function deleteMarketplace(
     (row) => row.name === name
   );
   const same = (row: FleetMarketplace) => row.name === name;
-  return deleteRow<FleetMarketplace>(store, {
+  return deleteRow("marketplace", store, {
     remove: () => removeMarketplace(name),
     drop: () => {
       const fleet = store.fleet.value;
@@ -352,10 +359,8 @@ export function deleteMemory(
   leave?: () => Promise<unknown>
 ): Promise<void> {
   if (path === MAIN) {
-    return deleteRow<{
-      memory: FleetMemoryRow | null;
-      docs: FleetMemoryDocRow[];
-    }>(
+    return deleteRow(
+      "memory",
       store,
       {
         remove: () => removeMemory(),
@@ -383,7 +388,8 @@ export function deleteMemory(
     );
   }
   const same = (row: FleetMemoryDocRow) => row.path === path;
-  return deleteRow<FleetMemoryDocRow>(
+  return deleteRow(
+    "memoryDoc",
     store,
     {
       remove: () => removeMemoryDoc(path),

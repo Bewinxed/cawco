@@ -695,6 +695,7 @@
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
       offerUndo(
+        "connection",
         `deleted:${row.name}`,
         configureWords.removed(labelOf(row)),
         deleted,
