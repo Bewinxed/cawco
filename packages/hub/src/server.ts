@@ -1182,6 +1182,15 @@ type AgentVerb = (
   agentFrame: AgentFrame
 ) => void | Promise<void>;
 
+/** A dashboard's (or the app's) socket: its upgrade's headers, from an address. */
+type DashboardSocket = HubSocket & {
+  headers: Record<string, string | undefined>;
+  remoteAddress: string;
+};
+
+/** One verb of a dashboard's socket, handled once its message is an envelope (server.ts `dashboardMessage`). */
+type DashboardVerb = (ws: DashboardSocket, message: Envelope) => void;
+
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
@@ -12555,6 +12564,147 @@ export const createServer = (
     await handle(ws, message, agentFrame);
   };
 
+  // ── The dashboard socket ────────────────────────────────────────────────
+
+  /**
+   * A verb no dashboard sends: a machine's, or one no build sends any more,
+   * from a page or app still running an older one. The client is named.
+   */
+  const refuseDashboardVerb: DashboardVerb = (ws, message) => {
+    const fault = `unknown verb "${message.verb}": a dashboard sends spawn, stop, control or fs`;
+    console.warn(
+      `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
+    );
+    sendFrame(ws, refusalFrame(message, fault));
+  };
+
+  /**
+   * A dashboard's spawn, in this order: a resume by a former id resumes its
+   * session by its id now; a start names its harness; one launch at a time
+   * ({@link launches}); then the row's key, not the client's (see
+   * `enforceRowSessionKey`). Then it starts, from the dashboard.
+   */
+  const spawnFromDashboard: DashboardVerb = (ws, message) => {
+    if (resumeFormer(ws, message)) {
+      return;
+    }
+    const start = namedSpawn(message.payload as SpawnPayload);
+    if ("refusal" in start) {
+      console.warn(spawnWords.refusedLine(start.refusal));
+      sendFrame(ws, failure(message, start.refusal));
+      return;
+    }
+    const [known] = message.instanceId
+      ? db.getInstancesByIds([message.instanceId])
+      : [];
+    const why =
+      (message.instanceId ? inFlightRefusal(message.instanceId) : undefined) ??
+      enforceRowSessionKey(known, start);
+    if (why) {
+      console.warn(spawnWords.refusedLine(why));
+      sendFrame(ws, failure(message, why));
+      return;
+    }
+    // A spawn that names no model runs on its harness's own default
+    // (Claude Code's, for its account): "no model picked" is the
+    // field's absence, never an empty string. Its permission mode is
+    // the one rule's (`settleMode`): one the person chose for a
+    // harness with modes, refused when omitted, and none for one
+    // that has none.
+    // What it may start is never the client's to say: only
+    // `delegate` makes a leaf, and a leaf stays one whatever brings
+    // it back, so its row's word goes to its machine (as `restore`
+    // sends it). A relaunch without it gave an OpenCode or pi leaf
+    // its spawning tools back while its row stayed a leaf.
+    const { model: named, mayStart: _asked, ...rest } = start;
+    const spawning: NamedSpawn = {
+      ...rest,
+      ...(named ? { model: named } : {}),
+      ...(known?.mayStart ? { mayStart: known.mayStart } : {}),
+    };
+    // pi's `default` is first named by what pi picks in the
+    // session's directory, which its machine answers; every other
+    // start goes on in this same step.
+    if (asksPiDefault(spawning)) {
+      piDefaultFor(message.machineId, spawning)
+        .then((asked) => startFromDashboard(ws, message, asked))
+        .catch((error: unknown) => dashboardThrew(ws, message, error));
+    } else {
+      startFromDashboard(ws, message, spawning);
+    }
+  };
+
+  /**
+   * A dashboard's Stop: the operator's decision, filed here the moment it is
+   * made rather than when the machine confirms it. Waiting for the machine
+   * lost it: a Stop sent while the agent was restarting reached no agent (or
+   * one already detaching), the process lived on under sessiond, and the
+   * register after the restart restored it as a session the user had left
+   * running. Filed `stopped`, the row is no orphan to restore, no beat
+   * promotes it, and the first beat that still lists a process for it ends
+   * that process (`endStopped`, in the heartbeat). Only a send brings it
+   * back (`wakeForSend`). Both Stop and Discard wait for the machine's
+   * teardown receipt: persisting intent is not proof that the runner has
+   * ended. Then it cuts the turn it lands in, as an interrupt does, and
+   * what it cut says it was the person's Stop.
+   */
+  const stopAskedByDashboard: DashboardVerb = (ws, message) => {
+    stopFromDashboard(ws, message);
+    if (message.instanceId) {
+      noteInterrupt(message.instanceId);
+      cutTurn(message.instanceId, turnCutWords.stop);
+    }
+  };
+
+  /**
+   * Each verb a dashboard's socket takes, and its handler; a machine's verb
+   * is refused here as one no dashboard sends. Every verb has its entry: a
+   * new one does not compile until it is handled here.
+   */
+  const dashboardVerbs: Record<Verb, DashboardVerb> = {
+    spawn: spawnFromDashboard,
+    stop: stopAskedByDashboard,
+    control: (ws, message) =>
+      relayControl(message as Envelope<ControlPayload>, ws),
+    // Answered on `control_result` too, so the same requester map routes it.
+    fs: (ws, message) => {
+      forward(message, ws);
+    },
+    // A machine's verbs on a dashboard's socket.
+    admission: refuseDashboardVerb,
+    frames: refuseDashboardVerb,
+    heartbeat: refuseDashboardVerb,
+    launch: refuseDashboardVerb,
+    register: refuseDashboardVerb,
+    send: refuseDashboardVerb,
+    usage: refuseDashboardVerb,
+  };
+
+  /**
+   * EVERY MESSAGE ON A DASHBOARD'S SOCKET, in this order: the Ledger
+   * Protocol's own shapes, which are not envelopes, read before the
+   * envelope check, which would otherwise log them as junk; one that is no
+   * envelope refused; then its verb's handler ({@link dashboardVerbs}), or
+   * a verb outside the union (an older or newer client's: the wire's `verb`
+   * is checked only to be a string, `envelopeFault`) refused. What any of
+   * it throws is answered by {@link dashboardThrew}.
+   */
+  const dashboardMessage = (ws: DashboardSocket, message: unknown): void => {
+    if (streams.handleClientMessage(ws, message)) {
+      return;
+    }
+    if (!isEnvelope(message)) {
+      const fault = envelopeFault(message);
+      console.warn(`[hub] dashboard ${fault}`, message);
+      sendFrame(ws, refusalFrame(message, fault));
+      return;
+    }
+    const handle = Object.hasOwn(dashboardVerbs, message.verb)
+      ? dashboardVerbs[message.verb]
+      : refuseDashboardVerb;
+    handle(ws, message);
+  };
+
   return Object.assign(
     // Every body, query and params schema closed (Elysia's
     // `nonAdditionalProperties`): a field a route doesn't take is refused,
@@ -13024,137 +13174,7 @@ export const createServer = (
             "fleet snapshot"
           );
         },
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
-        message: guardedDashboardMessage((ws, message) => {
-          // The Ledger Protocol's own shapes are not envelopes and must be read
-          // before the envelope check, which would otherwise log them as junk.
-          if (streams.handleClientMessage(ws, message)) {
-            return;
-          }
-          if (!isEnvelope(message)) {
-            const fault = envelopeFault(message);
-            console.warn(`[hub] dashboard ${fault}`, message);
-            sendFrame(ws, refusalFrame(message, fault));
-            return;
-          }
-
-          // The client is named: a verb no build sends any more comes
-          // from a page or app still running an older one.
-          const refuseVerb = () => {
-            const fault = `unknown verb "${message.verb}": a dashboard sends spawn, stop, control or fs`;
-            console.warn(
-              `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
-            );
-            sendFrame(ws, refusalFrame(message, fault));
-          };
-          switch (message.verb) {
-            case "spawn": {
-              // A resume by a former id resumes its session by its id now.
-              if (resumeFormer(ws, message)) {
-                break;
-              }
-              // A start names its harness; one launch at a time
-              // ({@link launches}); then the row's key, not the client's —
-              // see `enforceRowSessionKey`.
-              const start = namedSpawn(message.payload as SpawnPayload);
-              if ("refusal" in start) {
-                console.warn(spawnWords.refusedLine(start.refusal));
-                sendFrame(ws, failure(message, start.refusal));
-                break;
-              }
-              const why =
-                (message.instanceId
-                  ? inFlightRefusal(message.instanceId)
-                  : undefined) ??
-                enforceRowSessionKey(
-                  message.instanceId
-                    ? db.getInstancesByIds([message.instanceId])[0]
-                    : undefined,
-                  start
-                );
-              if (why) {
-                console.warn(spawnWords.refusedLine(why));
-                sendFrame(ws, failure(message, why));
-                break;
-              }
-              // A spawn that names no model runs on its harness's own default
-              // (Claude Code's, for its account): "no model picked" is the
-              // field's absence, never an empty string. Its permission mode is
-              // the one rule's (`settleMode`): one the person chose for a
-              // harness with modes, refused when omitted, and none for one
-              // that has none.
-              // What it may start is never the client's to say: only
-              // `delegate` makes a leaf, and a leaf stays one whatever brings
-              // it back, so its row's word goes to its machine (as `restore`
-              // sends it). A relaunch without it gave an OpenCode or pi leaf
-              // its spawning tools back while its row stayed a leaf.
-              const { model: named, mayStart: _asked, ...rest } = start;
-              const [known] = message.instanceId
-                ? db.getInstancesByIds([message.instanceId])
-                : [];
-              const spawning: NamedSpawn = {
-                ...rest,
-                ...(named ? { model: named } : {}),
-                ...(known?.mayStart ? { mayStart: known.mayStart } : {}),
-              };
-              // pi's `default` is first named by what pi picks in the
-              // session's directory, which its machine answers; every other
-              // start goes on in this same step.
-              if (asksPiDefault(spawning)) {
-                piDefaultFor(message.machineId, spawning)
-                  .then((asked) => startFromDashboard(ws, message, asked))
-                  .catch((error: unknown) =>
-                    dashboardThrew(ws, message, error)
-                  );
-              } else {
-                startFromDashboard(ws, message, spawning);
-              }
-              break;
-            }
-            case "stop":
-              // A Stop is the operator's decision, and it is filed here the
-              // moment it is made rather than when the machine confirms it.
-              // Waiting for the machine lost it: a Stop sent while the agent
-              // was restarting reached no agent (or one already detaching),
-              // the process lived on under sessiond, and the register after
-              // the restart restored it as a session the user had left
-              // running. Filed `stopped`, the row is no orphan to restore,
-              // no beat promotes it, and the first beat that still lists a
-              // process for it ends that process (`endStopped`, in the
-              // heartbeat case). Only a send brings it back (`wakeForSend`).
-              // Both Stop and Discard wait for the machine's teardown receipt.
-              // Persisting intent is not proof that the runner has ended.
-              stopFromDashboard(ws, message);
-              // A stop cuts the turn it lands in, as an interrupt does, and
-              // what it cut says it was the person's Stop.
-              if (message.instanceId) {
-                noteInterrupt(message.instanceId);
-                cutTurn(message.instanceId, turnCutWords.stop);
-              }
-              break;
-            case "control":
-              relayControl(message as Envelope<ControlPayload>, ws);
-              break;
-            case "fs":
-              // Answered on `control_result` too, so the same requester map routes it.
-              forward(message, ws);
-              break;
-            // A machine's verbs on a dashboard's socket.
-            case "admission":
-            case "frames":
-            case "heartbeat":
-            case "launch":
-            case "register":
-            case "send":
-            case "usage":
-              refuseVerb();
-              break;
-            // A verb outside the union: an older or newer client's. The wire's
-            // `verb` is checked only to be a string (`envelopeFault`).
-            default:
-              refuseVerb();
-          }
-        }),
+        message: guardedDashboardMessage(dashboardMessage),
         close(ws) {
           closeLine(ws);
           dashboardDevices.delete(ws);
