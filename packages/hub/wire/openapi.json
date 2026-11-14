@@ -3475,6 +3475,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "getApiBinaryUpdatesArtifactsByVersionByArchive 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiBinaryUpdatesArtifactsByVersionByArchive503"
+                }
+              }
+            }
           }
         }
       }
@@ -78593,6 +78603,42 @@
             "type": "number",
             "enum": [
               502
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiBinaryUpdatesArtifactsByVersionByArchive503": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "refused"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
           },
           "title": {
