@@ -4,6 +4,7 @@
  * the pending FIDO URI, and shows a badge. Clears when the QR is
  * consumed (the popup reads it) or when it expires.
  */
+import { defineBackground } from "wxt/utils/define-background";
 
 export default defineBackground(() => {
   /** How long a passkey QR lives, ms: the CTAP spec's 5 minutes. */
