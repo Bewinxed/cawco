@@ -1509,7 +1509,8 @@ export const createWorkItems = ({
 
   /**
    * The hand-in, then brief, of each new item whose session's start is
-   * kept on its row ({@link spawnIn}), by its session: run once its launch
+   * kept on its row while its machine cannot take inputs ({@link
+   * handInWhenStarted}), by its session: run once its launch
    * has gone ({@link startSent}), dropped when its item ends first
    * ({@link update}). Held in memory only: one this hub lost to a restart
    * is found at its release by the brief that never went.
@@ -4355,12 +4356,14 @@ export const createWorkItems = ({
   /**
    * `inputs` put into `item`'s workspace for its new session, then `brief`
    * sent; inputs that cannot go fail the item in their words
-   * ({@link inputsNotIn}). A start its machine takes not now (start-holds.ts
-   * `startHold`: a pause, an install, an older build, a link coming back,
-   * or its turn among the hub's paced launches) is kept on its row: its
-   * inputs go once its launch has gone ({@link startSent}), whatever held
-   * it, as its brief would have; the item waits, it does not fail on the
-   * hold.
+   * ({@link inputsNotIn}). They go as soon as the machine can take them:
+   * at once while its agent is connected and speaks this hub's contract,
+   * whatever holds the start (start-holds.ts `startHold`: a pause, an
+   * install, its turn among the hub's paced launches), the brief then
+   * owed behind the start as any send is. A start kept on its row on a
+   * machine that cannot take them now (not connected, or an older build:
+   * {@link WorkItemDeps.olderBuild}) keeps them until its launch has gone
+   * ({@link startSent}); the item waits, it does not fail on the hold.
    */
   const handInWhenStarted = (
     item: WorkItemRow,
@@ -4390,7 +4393,11 @@ export const createWorkItems = ({
           )
         );
     };
-    if (db.owesSpawn(instanceId)) {
+    const { machineId } = workspace;
+    if (
+      db.owesSpawn(instanceId) &&
+      (!online(machineId) || olderBuild(machineId) !== undefined)
+    ) {
       handInsHeld.set(instanceId, { itemId: item.id, go: handAndBrief });
     } else {
       handAndBrief();
@@ -6083,8 +6090,9 @@ export const createWorkItems = ({
      * `sendNextStart`, the one path a kept start takes): the inputs its
      * item held for it go in now, then its brief ({@link handInsHeld}). A
      * live item's session with no send at all never had its brief, which
-     * waited on inputs this hub lost to a restart: the item fails in their
-     * words, as inputs that cannot go fail it.
+     * waited on inputs this hub lost to a restart (held for a machine that
+     * could not take them, or on their way when it stopped): the item fails
+     * in their words, as inputs that cannot go fail it.
      */
     startSent(instanceId: string): void {
       const held = handInsHeld.get(instanceId);
