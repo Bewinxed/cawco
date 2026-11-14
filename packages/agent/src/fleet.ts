@@ -80,6 +80,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { versionSaid } from "@cawco/core/version-said";
+import { lastLines } from "@cawco/core/words/helpers";
 import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { claudeExecutable } from "./auth";
@@ -202,7 +203,7 @@ const CLI_TIMEOUT_MS = 120_000;
 const TAIL_LINES = 4;
 
 const tail = (output: string): string =>
-  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
+  lastLines(output.trim().split("\n"), TAIL_LINES, "\n");
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

@@ -597,11 +597,14 @@ const heaviest = (plan: Plan): string => {
     const top = slash === -1 ? path : path.slice(0, slash + 1);
     byTop.set(top, (byTop.get(top) ?? 0) + bytes);
   }
-  return [...byTop]
+  const named = [...byTop]
     .sort((a, b) => b[1] - a[1])
     .slice(0, HEAVIEST)
     .map(([top, bytes]) => `${top} (${mb(bytes)})`)
     .join(", ");
+  return byTop.size > HEAVIEST
+    ? `${named}, and ${byTop.size - HEAVIEST} more`
+    : named;
 };
 
 /** The place's `.gitignore` as the first commit has it: the folder's own, then CawCo's block. */

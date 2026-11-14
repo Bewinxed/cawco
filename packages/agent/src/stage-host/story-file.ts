@@ -16,6 +16,7 @@
  * one statement a write printed into ({@link storyStatement}) with the
  * project's own formatter (host.ts `inProjectStyle`).
  */
+
 import { parse } from "@babel/parser";
 import {
   FORMS,
@@ -27,6 +28,7 @@ import {
   type StoryOp,
 } from "@cawco/core/stage";
 import { type NamedStory, shownName } from "@cawco/core/stage-graph";
+import { cutShort } from "@cawco/core/words/helpers";
 import { storyReadWords as reasons } from "@cawco/core/words/story-read";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
@@ -703,7 +705,7 @@ function labelOf(text: string, statement: Node): string | null {
     next = comment.start ?? 0;
   }
   const words = run.map(commentWords).filter(Boolean).join(" ");
-  return words ? words.slice(0, LABEL_LIMIT) : null;
+  return words ? cutShort(words, LABEL_LIMIT) : null;
 }
 const BLANK_BETWEEN = /\n[ \t]*\n/u;
 /** A label's longest. Ours: a frame's caption, one line. */

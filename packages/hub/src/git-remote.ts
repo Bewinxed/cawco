@@ -31,6 +31,7 @@ import {
 } from "@cawco/core/hub-repo";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
+import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { startedPath } from "@cawco/core/workspace-needs";
 import { Elysia } from "elysia";
 import { problemResponse } from "elysia/error";
@@ -329,18 +330,18 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       stdout: "pipe",
       stderr: "pipe",
     });
-    let stderr = "";
+    const stderr = newTail();
     const decoder = new TextDecoder();
     // What the backend says on stderr goes to the log once it ends.
     detach(
       (async () => {
         for await (const chunk of child.stderr) {
-          stderr = (stderr + decoder.decode(chunk)).slice(-STDERR_KEPT);
+          writeTail(stderr, decoder.decode(chunk), STDERR_KEPT);
         }
         const code = await child.exited;
-        if (code !== 0 || stderr.trim()) {
+        if (code !== 0 || stderr.text.trim()) {
           console.warn(
-            `[git] ${service} for ${hubRepoSegment(key)} by ${user} exited ${code}: ${stderr.trim()}`
+            `[git] ${service} for ${hubRepoSegment(key)} by ${user} exited ${code}: ${saidTail(stderr).trim()}`
           );
         }
         if (service === "git-receive-pack" && code === 0) {
@@ -356,7 +357,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       return problemResponse({
         status: 502,
         code: "git-http-backend-answered",
-        detail: `git http-backend answered nothing: ${stderr.trim()}\n`,
+        detail: `git http-backend answered nothing: ${saidTail(stderr).trim()}\n`,
       });
     }
     const { status, headers, rest } = head;

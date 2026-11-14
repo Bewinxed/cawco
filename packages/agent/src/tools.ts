@@ -32,6 +32,7 @@ import {
   toolSpec,
 } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
+import { lastLines } from "@cawco/core/words/helpers";
 import { toolWords } from "@cawco/core/words/tools";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
@@ -131,7 +132,7 @@ export const bunOnlyNpm = (): string | undefined => {
 const TAIL_LINES = 4;
 
 const tail = (output: string): string =>
-  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
+  lastLines(output.trim().split("\n"), TAIL_LINES, "\n");
 
 /** An installer's tail, as one line for a sentence. */
 const oneLine = (said: string | undefined): string =>

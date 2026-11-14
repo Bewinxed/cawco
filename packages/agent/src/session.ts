@@ -153,6 +153,7 @@ import {
   limitSentence,
   roomHeldSentence,
 } from "@cawco/core/words/harness-lines";
+import { lastLines } from "@cawco/core/words/helpers";
 import { processLimitSentence } from "@cawco/core/words/sessiond";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
@@ -436,7 +437,7 @@ const LET_GO_KEPT = 256;
 const TAIL_LINES = 4;
 
 const tail = (output: string): string =>
-  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
+  lastLines(output.trim().split("\n"), TAIL_LINES, "\n");
 
 /**
  * How long a session stays at rest before its processes are stopped: no turn

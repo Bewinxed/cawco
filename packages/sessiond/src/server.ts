@@ -267,6 +267,8 @@ interface Proc {
   sizes: number[];
   /** The last {@link STDERR_TAIL_BYTES} the child wrote on stderr, unread: handed on with its exit. */
   stderr: Buffer;
+  /** How many bytes of its stderr came before {@link Proc.stderr}'s and were cut. */
+  stderrCut: number;
   /**
    * Every process this child was seen to have started, by pid, with its start
    * time: read when the child is asked to end or signalled, while it is still
@@ -871,6 +873,7 @@ export class SessiondServer {
       exitCode: null,
       signal: null,
       stderr: Buffer.alloc(0),
+      stderrCut: 0,
       ...(spec.cwd === undefined ? {} : { cwd: spec.cwd }),
       ...(group ? { group: group.path } : {}),
       ...this.#startsIn(group),
@@ -884,7 +887,9 @@ export class SessiondServer {
     // agent to a blocked child"), and its last bytes are kept, unread, to go
     // with the child's exit ({@link STDERR_TAIL_BYTES}).
     child.stderr.on("data", (chunk: Buffer) => {
-      proc.stderr = keepTail(proc.stderr, chunk);
+      const kept = keepTail(proc.stderr, chunk);
+      proc.stderrCut += proc.stderr.length + chunk.length - kept.length;
+      proc.stderr = kept;
     });
     child.stdin.on("error", () => {
       /* a write to a stdin whose child already died is not an event */
@@ -1528,7 +1533,14 @@ const keepTail = (kept: Buffer, chunk: Buffer): Buffer => {
  * wrote nothing there.
  */
 const stderrOf = (proc: Proc): { stderr?: string } =>
-  proc.stderr.length === 0 ? {} : { stderr: proc.stderr.toString("utf8") };
+  proc.stderr.length === 0
+    ? {}
+    : {
+        stderr:
+          proc.stderrCut > 0
+            ? `… (${proc.stderrCut} bytes cut)\n${proc.stderr.toString("utf8")}`
+            : proc.stderr.toString("utf8"),
+      };
 
 const toLine = (event: {
   seq: number;

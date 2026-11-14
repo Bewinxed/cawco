@@ -5,6 +5,7 @@
 
 import { appendFile, readdir, readFile, readlink } from "node:fs/promises";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { cutShort } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
@@ -315,7 +316,7 @@ export const workIn = async (
       .filter((one) => !pids.has(one.ppid))
       .map(async (one) => ({
         pid: level > 0 ? ((await nsPids(one.pid))[level] ?? one.pid) : one.pid,
-        command: one.command.slice(0, COMMAND_SAID),
+        command: cutShort(one.command, COMMAND_SAID),
       }))
   );
 };

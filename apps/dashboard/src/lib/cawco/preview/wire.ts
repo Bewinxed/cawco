@@ -34,6 +34,7 @@ import {
   STAGE_SCROLLED,
   STAGE_TIME,
 } from "@cawco/core/stage-graph";
+import { cutShort } from "@cawco/core/words/helpers";
 
 const ERROR_MAX = 300;
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
@@ -111,7 +112,7 @@ export function previewThumbnail(
 }
 
 export function previewError(value: unknown): string | null {
-  return text(value, ERROR_MAX);
+  return typeof value === "string" ? cutShort(value, ERROR_MAX) : null;
 }
 
 export function previewTitle(value: unknown): string | null {

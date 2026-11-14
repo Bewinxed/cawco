@@ -47,6 +47,7 @@
  * the hub's URLs (git-credential.ts `useHubCredentialHelper`); outside a session that
  * helper asks the agent's credential socket ({@link serveHubCredential}).
  */
+
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
@@ -70,6 +71,7 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { gitDoorWords } from "@cawco/core/words/git-door";
+import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { hubGitLogin, withoutCredential } from "./git/hub-credential";
@@ -446,7 +448,7 @@ const runOnHost = (
     child.stdin.on("error", () => undefined);
     child.stdin.end(input);
     let out = "";
-    let err = "";
+    const err = newTail();
     let silent = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const stop = () => {
@@ -472,11 +474,11 @@ const runOnHost = (
       heard();
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      err = (err + chunk.toString()).slice(-HOST_RUN_ERR_KEPT);
+      writeTail(err, chunk.toString(), HOST_RUN_ERR_KEPT);
       heard();
     });
     child.on("error", (error) => {
-      err += `\n${error.message}`;
+      writeTail(err, `\n${error.message}`, HOST_RUN_ERR_KEPT);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
@@ -485,8 +487,8 @@ const runOnHost = (
         code: silent ? 128 : (code ?? 128),
         out,
         err: silent
-          ? `${err}\ncawco: ${what} said nothing on stdout or stderr for ${silenceMs / 1000} s, so it was stopped, with every process it had started.`
-          : err,
+          ? `${saidTail(err)}\ncawco: ${what} said nothing on stdout or stderr for ${silenceMs / 1000} s, so it was stopped, with every process it had started.`
+          : saidTail(err),
         silent,
       });
     });

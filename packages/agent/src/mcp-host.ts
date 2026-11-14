@@ -290,6 +290,8 @@ class Child {
     }
   >();
   readonly #stderr: string[] = [];
+  /** How many of its stderr lines were dropped from the front of {@link #stderr}. */
+  #stderrCut = 0;
   readonly #changed: (method: string) => void;
   #next = 1;
   #ended: string | undefined;
@@ -324,12 +326,17 @@ class Child {
       this.#stderr.push(line);
       if (this.#stderr.length > STDERR_KEPT) {
         this.#stderr.shift();
+        this.#stderrCut += 1;
       }
     });
     this.exited = this.#proc.exited.then((code) => {
       started.delete(pid);
       recordStarted();
-      const said = this.#stderr.join("\n").trim();
+      const said = (
+        this.#stderrCut > 0
+          ? `… (${this.#stderrCut} earlier lines cut)\n${this.#stderr.join("\n")}`
+          : this.#stderr.join("\n")
+      ).trim();
       this.#ended = `The ${name} MCP server exited (code ${code})${said ? `: ${cutShortTail(said, 400)}` : ""}. Its next call starts it again.`;
       console.warn(`[mcp-host] ${this.#ended}`);
       for (const { reject } of this.#pending.values()) {

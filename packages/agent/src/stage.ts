@@ -106,7 +106,13 @@ import {
   StageErrorSchema,
 } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
-import { cutShort, lastLines } from "@cawco/core/words/helpers";
+import {
+  cutShort,
+  lastLines,
+  newTail,
+  saidTail,
+  writeTail,
+} from "@cawco/core/words/helpers";
 import { sheetWords } from "@cawco/core/words/sheet";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
@@ -1329,13 +1335,13 @@ async function start(stage: Stage): Promise<void> {
     child.once("exit", release);
     child.once("error", release);
   }
-  let said = "";
+  const said = newTail();
   let fatal: string | undefined;
   // Whether this start served: only a stage that served and then ended is
   // started again; one that never served fails the same way again.
   let served = false;
   const keep = (chunk: Buffer) => {
-    said = (said + chunk.toString("utf8")).slice(-STDERR_KEPT);
+    writeTail(said, chunk.toString("utf8"), STDERR_KEPT);
   };
   child.stderr?.on("data", keep);
   const ready = await readWithin(
@@ -1408,7 +1414,9 @@ async function start(stage: Stage): Promise<void> {
             fatal ??
             (cutShort(
               lastLines(
-                said.split("\n").filter((line) => line.trim()),
+                saidTail(said)
+                  .split("\n")
+                  .filter((line) => line.trim()),
                 3,
                 " "
               ),

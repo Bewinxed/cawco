@@ -24,6 +24,7 @@
  * never a keeper's answer (`sandboxes` in boundary/); a port named for a
  * workspace is reached there, never on the host.
  */
+
 import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -33,6 +34,7 @@ import { socketPathProblem } from "@cawco/core/paths/workspace";
 import { PreviewStartDown } from "@cawco/core/preview/protocol";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
+import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
@@ -304,13 +306,11 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   );
   // Read always, so what the relay says never fills the pipe; the last of it
   // says why a bridge did not start.
-  let said = "";
+  const said = newTail();
   const draining = (async () => {
     const decoder = new TextDecoder();
     for await (const chunk of proc.stderr) {
-      said = (said + decoder.decode(chunk, { stream: true })).slice(
-        -STDERR_KEPT
-      );
+      writeTail(said, decoder.decode(chunk, { stream: true }), STDERR_KEPT);
     }
   })();
   const exited = () => proc.exitCode !== null || proc.signalCode !== null;
@@ -321,7 +321,7 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   if (exited()) {
     await draining;
     throw new Error(
-      `The way into workspace ${workspace}'s network did not open: ${said.trim() || `status ${proc.exitCode ?? proc.signalCode}`}`
+      `The way into workspace ${workspace}'s network did not open: ${saidTail(said).trim() || `status ${proc.exitCode ?? proc.signalCode}`}`
     );
   }
   if (!existsSync(socket)) {

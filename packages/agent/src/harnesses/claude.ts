@@ -348,7 +348,11 @@ const stderrSaid = (stderr: string | undefined): string | undefined => {
     length += line.length + 1;
   }
   const said = kept.join(" ").slice(-STDERR_QUOTED_CHARS);
-  return said ? redactText(said) : undefined;
+  const cut = lines.join(" ").length - said.length;
+  if (!said) {
+    return undefined;
+  }
+  return redactText(cut > 0 ? `… (${cut} chars cut) ${said}` : said);
 };
 
 /**
@@ -1179,7 +1183,7 @@ const spooledOutput = async (
     const said = await readFile(file, "utf8").catch(() => undefined);
     if (said !== undefined) {
       return said.length > CUT_OUTPUT_CHARS
-        ? said.slice(-CUT_OUTPUT_CHARS)
+        ? `… (${said.length - CUT_OUTPUT_CHARS} chars cut) ${said.slice(-CUT_OUTPUT_CHARS)}`
         : said;
     }
   }

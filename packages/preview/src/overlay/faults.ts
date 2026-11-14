@@ -22,6 +22,7 @@ import {
   sameFault,
 } from "@cawco/core/page-faults";
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
+import { cutShort } from "@cawco/core/words/helpers";
 
 /** The first frame of a stack that names its place: V8's `at … (url:line:col)` or `at url:line:col`, WebKit's and Gecko's `…@url:line:col`. */
 const FRAME_PLACE = /(?:\(|@|at )((?:https?|blob):[^\s()]+):(\d+):(\d+)\)?/u;
@@ -32,7 +33,8 @@ let to: { artifact: string; revision: number } | null = null;
 const met: PageFault[] = [];
 let sent = 0;
 
-const clip = (text: string): string => text.slice(0, PAGE_FAULT_TEXT_MAX);
+/** `text` kept to the hub's bound, ending in "…" where it was cut (the "…" is within the bound). */
+const clip = (text: string): string => cutShort(text, PAGE_FAULT_TEXT_MAX - 1);
 
 /** An address as the fault names it: a path on the page's own origin, else the whole address; null for the page's own document. */
 function placeOf(address: string): string | null {

@@ -23,6 +23,7 @@
  *   failure thrown with the installer's last lines, which the stage shows as
  *   its error.
  */
+
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, rm, stat } from "node:fs/promises";
@@ -36,6 +37,7 @@ import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { STAGE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { lastLines } from "@cawco/core/words/helpers";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 import { runHubCommand } from "./hub-command";
@@ -304,12 +306,14 @@ const runInstall = async (
     );
   }
   if (result.exitCode !== 0) {
-    const last = (result.stderr || result.stdout)
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(-LAST_LINES)
-      .join("\n");
+    const last = lastLines(
+      (result.stderr || result.stdout)
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+      LAST_LINES,
+      "\n"
+    );
     throw new Error(
       `${where} did not install: \`${command}\` (${install.named}) exited ${result.exitCode}:\n${last}`
     );

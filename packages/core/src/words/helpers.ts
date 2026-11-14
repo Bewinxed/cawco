@@ -36,3 +36,27 @@ export const lastLines = (
   between: string
 ): string =>
   `${lines.length > count ? `…${between}` : ""}${lines.slice(-count).join(between)}`;
+
+/** The last `max` characters of what a process wrote, and how many characters came before them. */
+export interface Tail {
+  cut: number;
+  text: string;
+}
+
+/** A tail with nothing written yet. */
+export const newTail = (): Tail => ({ cut: 0, text: "" });
+
+/** `chunk` written after `tail`, which keeps only its last `max` characters and counts the rest as cut. */
+export const writeTail = (tail: Tail, chunk: string, max: number): void => {
+  const both = tail.text + chunk;
+  if (both.length > max) {
+    tail.cut += both.length - max;
+    tail.text = both.slice(-max);
+  } else {
+    tail.text = both;
+  }
+};
+
+/** A tail as a person reads it: opening in "… (N chars cut)" where the start of it was left out. */
+export const saidTail = (tail: Tail): string =>
+  tail.cut > 0 ? `… (${tail.cut} chars cut) ${tail.text}` : tail.text;

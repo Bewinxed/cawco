@@ -49,8 +49,10 @@
  * pending, and a landing gate waited on its "iOS build compiles" step until
  * someone woke it.
  */
+
 import { spawn } from "node:child_process";
 import { type Pid, spawnedPid } from "@cawco/core/signal";
+import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { endGroup, holdCommand } from "./awake-hold";
 import { updateRunning } from "./binary-update";
 import { workspacesWithCommands } from "./boundary/processes";
@@ -135,9 +137,9 @@ export const keepAwakeWhileWorking = (
       env: toolEnv(),
       stdio: ["ignore", "ignore", "pipe"],
     });
-    let stderr = "";
+    const stderr = newTail();
     child.stderr?.on("data", (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString("utf8")).slice(-STDERR_KEPT);
+      writeTail(stderr, chunk.toString("utf8"), STDERR_KEPT);
     });
     const leader = spawnedPid(child);
     const mine: Hold | undefined = leader
@@ -162,7 +164,7 @@ export const keepAwakeWhileWorking = (
         );
         return;
       }
-      refused = `${file} ${how}${stderr.trim() ? `: ${stderr.trim()}` : ""}`;
+      refused = `${file} ${how}${stderr.text.trim() ? `: ${saidTail(stderr).trim()}` : ""}`;
       console.warn(
         `[awake] this computer is not kept awake while it works: ${refused}`
       );

@@ -31,6 +31,7 @@ import {
 import { unhandled } from "@cawco/core/unhandled";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
+import { cutShort, lastLines as lastLinesOf } from "@cawco/core/words/helpers";
 import type { Subprocess } from "bun";
 import type { z } from "zod";
 import {
@@ -246,13 +247,10 @@ const lastLines = (signIn: SignIn, from = 0): string => {
     .split(LINE_BREAKS)
     .map((line) => line.trim())
     .filter(Boolean)
-    .slice(-SCREEN_LINES)
-    .map((line) =>
-      line.length > SCREEN_LINE_CHARS
-        ? `${line.slice(0, SCREEN_LINE_CHARS)}…`
-        : line
-    );
-  return lines.length > 0 ? lines.join("\n") : "(nothing)";
+    .map((line) => cutShort(line, SCREEN_LINE_CHARS));
+  return lines.length > 0
+    ? lastLinesOf(lines, SCREEN_LINES, "\n")
+    : "(nothing)";
 };
 
 /** Whether the CLI has ended, by its exit or a signal. */

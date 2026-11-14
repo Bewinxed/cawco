@@ -31,6 +31,7 @@ import type {
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
+import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import {
   judgeCall,
   readPolicy,
@@ -183,7 +184,7 @@ class PiShells {
       const own = new AbortController();
       const parent = options.signal;
       let moved = false;
-      let tail = "";
+      const tail = newTail();
       const abort = () => own.abort();
       if (parent?.aborted) {
         own.abort();
@@ -194,7 +195,7 @@ class PiShells {
         signal: own.signal,
         onData: (data) => {
           if (moved) {
-            tail = (tail + data.toString()).slice(-MOVED_OUTPUT_TAIL);
+            writeTail(tail, data.toString(), MOVED_OUTPUT_TAIL);
           } else {
             options.onData(data);
           }
@@ -225,7 +226,7 @@ class PiShells {
             if (moved) {
               this.report.ended(
                 shellEnd(taskId, command, { exitCode }),
-                tail,
+                saidTail(tail),
                 this.#stopped.delete(taskId)
               );
             } else {
@@ -237,7 +238,7 @@ class PiShells {
             if (moved) {
               this.report.ended(
                 shellEnd(taskId, command, { error }),
-                tail,
+                saidTail(tail),
                 this.#stopped.delete(taskId)
               );
             } else {
