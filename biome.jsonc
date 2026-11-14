@@ -53,6 +53,9 @@
     // The dashboard and the agent import the hub's types alone, for their
     // Eden clients (packages/hub/src/app.ts).
     "./scripts/lint/hub-types-only.grit",
+    // A problem's status is never a plain `number`: Eden reads it as a
+    // possible success (ProblemStatus, packages/hub/src/refusal.ts).
+    "./scripts/lint/problem-status-number.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

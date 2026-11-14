@@ -1,0 +1,14 @@
+language js
+
+// A problem passed on at status `number` is filed by Elysia under its
+// `default` response, which Eden's typed client reads as a possible success:
+// 348 type errors once came of it, fixed by `ProblemStatus`
+// (packages/hub/src/refusal.ts). `ElysiaStatus<number, …>` is that same type.
+or {
+  `problem<number, $_>` as $hit,
+  `problem<number, $_>($args)` as $hit,
+  `typeof problem<number, $_>` as $hit,
+  `ElysiaStatus<number, $_>` as $hit
+} where {
+  register_diagnostic(span=$hit, message="Never write `number` as a problem's status: Elysia files it under `default`, which Eden's client reads as a possible success. Write `ProblemStatus` (packages/hub/src/refusal.ts) or the literal status.")
+}
