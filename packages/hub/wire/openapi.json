@@ -13862,10 +13862,39 @@
           "200": {
             "description": "postApiInstancesByIdArtifactsByArtifactSend 200",
             "content": {
-              "application/octet-stream": {
+              "application/json": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend400"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend401"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend403"
                 }
               }
             }
@@ -13880,12 +13909,92 @@
               }
             }
           },
+          "409": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend409"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 410",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend410"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 413",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend413"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 415",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend415"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiInstancesByIdArtifactsByArtifactSend 422",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend422"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend500"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend502"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend503"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 504",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend504"
                 }
               }
             }
@@ -32228,6 +32337,26 @@
             "type": "boolean"
           }
         }
+      },
+      "ArtifactChoices": {
+        "description": "An artifact's choices as the page reads them through the bridge (`cawco.on(\"picks\")`).",
+        "type": "object",
+        "properties": {
+          "choices": {
+            "type": "object"
+          },
+          "pageHash": {
+            "description": "The page's hash when the hub last built it; null for a preview.",
+            "type": "string"
+          },
+          "sentAt": {
+            "description": "When the person last sent their picks to the session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choices"
+        ]
       },
       "ArtifactDoes": {
         "type": "string",
@@ -135497,14 +135626,102 @@
           "type"
         ]
       },
-      "postApiInstancesByIdArtifactsByArtifactSend404": {
+      "postApiInstancesByIdArtifactsByArtifactSend200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactChoices"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sent": {
+                "type": "string",
+                "enum": [
+                  "already"
+                ]
+              }
+            },
+            "required": [
+              "sent"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "refused"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProblemStatus"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend401": {
         "type": "object",
         "properties": {
           "code": {
-            "type": "string",
-            "enum": [
-              "no-such-artifact"
-            ]
+            "type": "string"
           },
           "detail": {
             "type": "string"
@@ -135513,10 +135730,267 @@
             "type": "string"
           },
           "status": {
-            "type": "number",
-            "enum": [
-              404
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend403": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend404": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "no-such-artifact"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProblemStatus"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend410": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend413": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "send-carries-most-pictures"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  413
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProblemStatus"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend415": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
           },
           "title": {
             "type": "string"
@@ -135535,6 +136009,42 @@
       },
       "postApiInstancesByIdArtifactsByArtifactSend422": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "refused"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
           {
             "type": "object",
             "properties": {
@@ -135630,7 +136140,157 @@
               "title",
               "type"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProblemStatus"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend500": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend502": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend503": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSend504": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProblemStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiInstancesByIdArtifactsByArtifactSent200": {
