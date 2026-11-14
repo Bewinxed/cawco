@@ -771,9 +771,12 @@ const recordInstall = (id: string, record: ToolInstallRecord): Promise<void> =>
  * What the earlier pass acted on, and so what is taken: a copy that says
  * its version (one saying none was never sent an update), older than the
  * floor or not (the earlier pass sent those too), unless the owner turned
- * the tool's automatic updates off where the tool reads its settings, or
- * those settings could not be read (either declined every automatic update,
- * `install`'s `switchedOff`). A fleet pin held it at its version but left
+ * the tool's automatic updates off where the tool reads its settings
+ * (`install`'s `switchedOff` declined every automatic update then): that
+ * copy stays the person's. A copy whose settings could not be read is not
+ * taken, and the pass is not marked done, so the next start asks again: a
+ * read that failed is no word that its updates are off, and marking it
+ * done would leave that copy out of CawCo's care for good. A fleet pin held it at its version but left
  * it CawCo's to install (the pin is CawCo's policy, not a hand install), so
  * it is taken too, and stays held by the pin (`updatesOwed` sends no
  * update to a pinned tool). A read that fails leaves the pass unmarked, for
@@ -786,6 +789,7 @@ const takeOverKept = async (): Promise<void> => {
   }
   const at = Date.now();
   const taken: Record<string, ToolInstallRecord> = {};
+  let unread = false;
   for (const spec of TOOL_CATALOG.filter((one) => one.release)) {
     if (file.installs[spec.id]) {
       continue;
@@ -798,6 +802,13 @@ const takeOverKept = async (): Promise<void> => {
     const off = spec.updatesOff
       ? await switchedOff(spec.updatesOff, true)
       : undefined;
+    if (off && "unread" in off) {
+      unread = true;
+      console.info(
+        `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} is not taken into CawCo's care yet: its settings could not be read (${off.unread ?? "it said nothing"}), so whether its automatic updates are off isn't known; the next start asks again`
+      );
+      continue;
+    }
     if (off) {
       console.info(
         `[tools] ${spec.name} ${version} at ${shownPath(copy.path)} stays the person's: its automatic updates were off, so CawCo was not keeping it current`
@@ -817,7 +828,7 @@ const takeOverKept = async (): Promise<void> => {
   }
   await writeInstalls("the copies CawCo was keeping current", (now) => ({
     installs: { ...taken, ...now.installs },
-    tookOverAt: at,
+    ...(unread ? {} : { tookOverAt: at }),
   }));
 };
 
