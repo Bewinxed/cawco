@@ -62,22 +62,20 @@ import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
 
 // ── The store ────────────────────────────────────────────────────────────
 
-/** What an account's store holds: its provider and its one credential. */
-export interface Held {
-  credential: Credential;
-  provider: string;
-}
-
 /**
- * A pi credential as its auth file stores it (pi-ai auth/types.ts
- * `Credential`): an API key, or OAuth tokens with whatever else the
- * provider's flow kept beside them.
+ * An account's credential as its store keeps it: pi-ai's `Credential`
+ * (auth/types.ts), an API key or OAuth tokens with whatever else the
+ * provider's flow kept beside them, and a key moved from OpenCode's own
+ * store keeps OpenCode's `metadata` beside it (an Azure resource, a
+ * Cloudflare account), which its account's OpenCode server is given back
+ * ({@link opencodeCredentialsOf}).
  */
 export const CredentialSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("api_key"),
     key: z.string().optional(),
     env: z.record(z.string(), z.string()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   }),
   z.looseObject({
     type: z.literal("oauth"),
@@ -86,6 +84,14 @@ export const CredentialSchema = z.discriminatedUnion("type", [
     expires: z.number(),
   }),
 ]);
+
+type HeldCredential = z.infer<typeof CredentialSchema>;
+
+/** What an account's store holds: its provider and its one credential. */
+export interface Held {
+  credential: HeldCredential;
+  provider: string;
+}
 
 /** The account's credential as it is on disk now; undefined when it holds none. */
 export const readHeld = (accountId: string): Held | undefined => {
@@ -352,7 +358,9 @@ const IDENTITY = "cawcoIdentity";
 
 const KEPT_IDENTITY = z.object({ email: z.string(), organization: z.string() });
 
-const keptIdentity = (credential: Credential): AccountIdentity | undefined => {
+const keptIdentity = (
+  credential: HeldCredential
+): AccountIdentity | undefined => {
   const kept = KEPT_IDENTITY.safeParse(
     credential.type === "oauth" ? credential[IDENTITY] : undefined
   );
@@ -434,8 +442,8 @@ const githubIdentity = async (
  */
 const withIdentity = async (
   provider: string,
-  credential: Credential
-): Promise<Credential> =>
+  credential: HeldCredential
+): Promise<HeldCredential> =>
   provider === "github-copilot" &&
   credential.type === "oauth" &&
   !keptIdentity(credential)
@@ -445,7 +453,7 @@ const withIdentity = async (
 /** Who a credential is, as far as it says. */
 const identityOf = (
   provider: string,
-  credential: Credential
+  credential: HeldCredential
 ): AccountIdentity | undefined => {
   const kept = keptIdentity(credential);
   if (kept) {
@@ -522,7 +530,7 @@ const planOf = async (held: Held): Promise<string | null> => {
 const LENDER = "cawcoLender";
 
 /** The machine that lent `credential`, when it is borrowed ({@link BORROWED_REFRESH}). */
-const lenderOf = (credential: Credential): string | undefined => {
+const lenderOf = (credential: HeldCredential): string | undefined => {
   if (credential.type !== "oauth" || credential.refresh !== BORROWED_REFRESH) {
     return undefined;
   }
@@ -1101,7 +1109,7 @@ const writeJson = async (path: string, value: Json): Promise<void> => {
 /** pi's entry as pi-ai's credential, or undefined for one CawCo does not hold. */
 const piCredentialOf = (
   entry: Record<string, unknown>
-): Credential | undefined => {
+): HeldCredential | undefined => {
   if (entry.type === "api_key" && typeof entry.key === "string") {
     // A `!command` or `$VAR` key is resolved by pi at request time: not a key to move.
     return RESOLVED_KEY.test(entry.key)
@@ -1125,7 +1133,7 @@ const piCredentialOf = (
  */
 const opencodeCredentialFrom = (
   value: Record<string, unknown>
-): Credential | undefined => {
+): HeldCredential | undefined => {
   const metadata = isRecord(value.metadata) ? value.metadata : undefined;
   if (
     value.key === OPENCODE_MARKER ||
@@ -1161,14 +1169,14 @@ const opencodeCredentialFrom = (
 };
 
 /** Whether two credentials are the same grant: the same refresh token, or the same key. */
-const sameGrant = (a: Credential, b: Credential): boolean =>
+const sameGrant = (a: HeldCredential, b: HeldCredential): boolean =>
   a.type === "oauth"
     ? b.type === "oauth" && a.refresh === b.refresh
     : b.type === "api_key" && (a.key ?? null) === (b.key ?? null);
 
 /** An entry of a machine's own store as read now, and how to take it out while it is still the one read. */
 interface StoreEntry {
-  credential: Credential;
+  credential: HeldCredential;
   /** Removes the entry when it is still the same grant; false when its store changed it meanwhile, and it stays. */
   drop: () => Promise<boolean>;
 }
@@ -1244,7 +1252,7 @@ const STORE_OAUTH_PROVIDER: Record<
 const providerOfEntry = (
   store: HomeCredential["store"],
   storeProvider: string,
-  credential: Credential
+  credential: HeldCredential
 ): string =>
   credential.type === "oauth"
     ? (STORE_OAUTH_PROVIDER[store][storeProvider] ?? storeProvider)
@@ -1472,7 +1480,7 @@ export const moveHomeCredential = async (
 const dropPiEntry = async (
   path: string,
   storeProvider: string,
-  taken: Credential
+  taken: HeldCredential
 ): Promise<boolean> => {
   const now = await readJson(path);
   const entry = now[storeProvider];
@@ -1698,15 +1706,11 @@ const opencodeCredentialUnder = (
 ): OpencodeCredential | undefined => {
   const { credential } = held;
   if (credential.type === "api_key") {
-    const metadata = "metadata" in credential ? credential.metadata : undefined;
-    return credential.key
+    const { key, metadata } = credential;
+    return key
       ? {
           integrationID,
-          value: {
-            type: "key",
-            key: credential.key,
-            ...(isRecord(metadata) ? { metadata } : {}),
-          },
+          value: { type: "key", key, ...(metadata ? { metadata } : {}) },
         }
       : undefined;
   }
