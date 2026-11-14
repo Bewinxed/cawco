@@ -299,7 +299,7 @@ const KINDS: readonly PropKind[] = [
   "array",
   "other",
 ];
-const SHEET_BOUNDS = {
+export const SHEET_BOUNDS = {
   stories: 100,
   components: 20,
   props: 200,
@@ -320,6 +320,8 @@ export interface SheetCut {
 
 /** The cuts of the sheet being read now (`previewSheet` reads one at a time, synchronously). */
 let cuts: Map<string, SheetCut> = new Map();
+/** How many names of the sheet being read were over {@link SHEET_BOUNDS.name} (cut, or the entry dropped). */
+let longNames = 0;
 
 function cutAt(what: string, kept: number, of: number) {
   const so_far = cuts.get(what);
@@ -340,10 +342,10 @@ const list = (value: unknown, max: number, what: string): unknown[] => {
   return value.slice(0, max);
 };
 
-/** A name, bounded: what is longer than {@link SHEET_BOUNDS.name} is cut and counted. */
+/** A name, bounded: what is longer than {@link SHEET_BOUNDS.name} is cut (or its entry dropped) and counted. */
 const nameText = (value: unknown): string | null => {
   if (typeof value === "string" && value.length > SHEET_BOUNDS.name) {
-    cutAt("names", SHEET_BOUNDS.name, value.length);
+    longNames += 1;
   }
   return text(value, SHEET_BOUNDS.name);
 };
@@ -388,11 +390,15 @@ function propOf(value: unknown): PropMeta | null {
     raw.options,
     token ? SHEET_BOUNDS.tokens : SHEET_BOUNDS.options,
     token ? "tokens" : "options"
-  ).filter(
-    (one): one is string | number =>
+  ).filter((one): one is string | number => {
+    if (typeof one === "string" && one.length > SHEET_BOUNDS.name) {
+      longNames += 1;
+    }
+    return (
       (typeof one === "number" && !token) ||
       (typeof one === "string" && one.length <= SHEET_BOUNDS.name)
-  );
+    );
+  });
   return {
     name,
     type: { name: kind, raw: text(type.raw, SHEET_BOUNDS.text) ?? "" },
@@ -491,8 +497,9 @@ function formOf(value: unknown): Form | null {
 /** A sheet as its page says it, checked and bounded, with what the bounds cut; null when it is no sheet. */
 export function previewSheet(
   value: unknown
-): { cut: SheetCut[]; sheet: SheetOnPage } | null {
+): { cut: SheetCut[]; longNames: number; sheet: SheetOnPage } | null {
   cuts = new Map();
+  longNames = 0;
   const raw = record(value);
   const meta = record(raw?.meta);
   const file = text(raw?.file, SHEET_BOUNDS.text);
@@ -516,7 +523,7 @@ export function previewSheet(
       "components"
     ).flatMap((one) => componentOf(one) ?? []),
   };
-  return { sheet, cut: [...cuts.values()] };
+  return { sheet, cut: [...cuts.values()], longNames };
 }
 
 /** One of the pane's keys (core `PANE_KEYS`) pressed while the page had the keyboard. */

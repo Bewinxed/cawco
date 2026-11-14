@@ -11,6 +11,9 @@ export const sheetWords = {
   /** The notice when a page's sheet was longer than the pane takes: `what` lists each cut, like "100 of 150 stories". */
   sheetCut: (what: string) =>
     `This page's sheet was longer than the pane takes, so it shows ${what}.`,
+  /** The notice's second sentence when names were over the bound: how many, and the bound. */
+  namesCut: (count: number, max: number) =>
+    `${count} ${count === 1 ? "name" : "names"} over ${max} characters ${count === 1 ? "was" : "were"} cut.`,
   /** One cut in that list. */
   sheetCutOf: (kept: number, of: number, what: string) =>
     `${kept} of ${of} ${what}`,

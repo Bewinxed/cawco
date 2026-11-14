@@ -52,6 +52,7 @@ import {
   previewShortcut,
   previewTitle,
   previewUrl,
+  SHEET_BOUNDS,
   SHORTCUT_MESSAGE,
 } from "./wire";
 
@@ -335,17 +336,24 @@ export class PageWire {
         const said = previewSheet(message.sheet);
         if (said) {
           paneSheet.link?.heardSheet(said.sheet);
-          if (said.cut.length > 0) {
-            paneNotice.say({
-              message: sheetWords.sheetCut(
-                said.cut
-                  .map((one) =>
-                    sheetWords.sheetCutOf(one.kept, one.of, one.what)
-                  )
-                  .join(", ")
-              ),
-              again: null,
-            });
+          const told = [
+            ...(said.cut.length > 0
+              ? [
+                  sheetWords.sheetCut(
+                    said.cut
+                      .map((one) =>
+                        sheetWords.sheetCutOf(one.kept, one.of, one.what)
+                      )
+                      .join(", ")
+                  ),
+                ]
+              : []),
+            ...(said.longNames > 0
+              ? [sheetWords.namesCut(said.longNames, SHEET_BOUNDS.name)]
+              : []),
+          ];
+          if (told.length > 0) {
+            paneNotice.say({ message: told.join(" "), again: null });
           }
         }
         break;
