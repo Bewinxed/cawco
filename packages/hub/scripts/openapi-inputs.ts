@@ -34,7 +34,6 @@ const INPUT_DIRS = [
   "packages/jsonl-parser/src",
   "packages/hub",
   "packages/agent/src",
-  "apps/apple/Packages/CawCoKit/Sources/CawCoAPI",
 ];
 const INPUT_FILES = ["bun.lock", "tsconfig.base.json", "package.json"];
 const STAMP = join(REPO, "node_modules/.cache/cawco/openapi-check.key");

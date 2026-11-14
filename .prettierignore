@@ -14,6 +14,7 @@ design-previews/comment-sizing/house.css
 design-previews/address/assets/
 design-previews/address/index.html
 packages/hub/skills/decision-page/kit/page.html
+packages/hub/wire/openapi.json
 apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json
 apps/apple/targets.json
 apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Resources/Icons.xcassets/

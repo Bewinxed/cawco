@@ -6,9 +6,11 @@
  * newer than its app is the normal case. The app's Swift client is generated
  * from openapi.json; a change to it the old app cannot read cost 0.1.11 its
  * whole board (PreviewFrame's required `path`, dropped with preview ports
- * under the same protocol 6). This compares the openapi.json at the base the
- * change grows from with the one generated now, and names each place a
- * shipped app would break. Direction decides what breaks:
+ * under the same protocol 6). This compares the wire a reader was built
+ * against (an app's copy of openapi.json at its commit, `appWireAt`; the
+ * hub's record at a hub's, a tab's or an agent's, `hubWireAt`) with the one
+ * generated now, and names each place a shipped app would break. Direction
+ * decides what breaks:
  *
  * - what the app receives (responses, frames other than its own): a property
  *   the hub no longer sends at all (optional ones too: a rename leaves the
@@ -29,12 +31,31 @@
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { z } from "zod";
 
-/** Where the app's schema and its generator's config sit, from the repository's root. */
-export const APP_SCHEMA =
-  "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json";
-export const GENERATOR_CONFIG =
+/**
+ * The app's copies of the schema and its generator's config, from the
+ * repository's root: what an app built at a commit decodes. They change only
+ * when the app takes the hub's record (WIRE_RECORD) into its build.
+ */
+const APP_SCHEMA = "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json";
+const GENERATOR_CONFIG =
   "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi-generator-config.yaml";
+/**
+ * The hub's own record of its wire, from the repository's root: what
+ * `bun run openapi` writes and openapi:check holds to the code at every
+ * commit, so the record at a commit is the wire a hub, a dashboard and an
+ * agent built there speak.
+ */
+export const WIRE_RECORD = "packages/hub/wire/openapi.json";
+const WIRE_RECORD_CONFIG = "packages/hub/wire/openapi-generator-config.yaml";
+/**
+ * The commit from which the app's copies stood as the app last took them
+ * while the hub moved on ("apps/apple and apps/mac-helper stand as origin/main
+ * has them"). Before it, openapi:check held the app's copy to the code at
+ * every commit, so that copy is the record there.
+ */
+const APP_COPY_STOOD_STILL = "f28ef72f475e7d8a274928ba1004236e5a491439";
 const STREAM = "packages/core/src/stream.ts";
 const WIRE_PROTOCOL_LINE = /export const WIRE_PROTOCOL = (\d+);/u;
 
@@ -308,6 +329,84 @@ export const withoutBridge = (
     }
   }
   return out;
+};
+
+/** One reader's wire: the schema it was built against and the enums it reads open. */
+export interface Wire {
+  openBefore: Set<string>;
+  schema: Record<string, unknown>;
+}
+
+const gitRun = (args: string[]) =>
+  Bun.spawnSync(["git", ...args], {
+    env: process.env,
+    cwd: REPO,
+    stderr: "pipe",
+  });
+/** git in this repository: its output, or a throw naming the command and git's words. */
+export const git = (...args: string[]): string => {
+  const run = gitRun(args);
+  if (run.exitCode !== 0) {
+    throw new Error(`git ${args.join(" ")}: ${run.stderr.toString().trim()}`);
+  }
+  return run.stdout.toString();
+};
+const wireFrom = (commit: string, schema: string, config: string): Wire => ({
+  schema: z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(git("show", `${commit}:${schema}`))),
+  openBefore: openEnumNames(git("show", `${commit}:${config}`)),
+});
+
+/** What an app built at `commit` decodes: the app's own copies there. */
+export const appWireAt = (commit: string): Wire =>
+  wireFrom(commit, APP_SCHEMA, GENERATOR_CONFIG);
+
+/**
+ * The wire a hub, a dashboard tab and an agent built at `commit` speak: the
+ * hub's record there. A commit made before the hub kept one reads the app's
+ * copy, which openapi:check held to the code until APP_COPY_STOOD_STILL.
+ * From that commit until the record began, the hub's wire was recorded
+ * nowhere; a commit there that any reader is built from (main's tip since
+ * then) sits where openapi:check refused every change to what the wire is
+ * made from, and the commit that began the record changed none of it, so its
+ * wire is the one that commit records.
+ */
+export const hubWireAt = (commit: string): Wire => {
+  if (gitRun(["cat-file", "-e", `${commit}:${WIRE_RECORD}`]).exitCode === 0) {
+    return wireFrom(commit, WIRE_RECORD, WIRE_RECORD_CONFIG);
+  }
+  const after = gitRun([
+    "merge-base",
+    "--is-ancestor",
+    APP_COPY_STOOD_STILL,
+    commit,
+  ]);
+  if (after.exitCode === 1) {
+    return wireFrom(commit, APP_SCHEMA, GENERATOR_CONFIG);
+  }
+  if (after.exitCode !== 0) {
+    throw new Error(
+      `git merge-base --is-ancestor ${APP_COPY_STOOD_STILL} ${commit}: ${after.stderr.toString().trim()}`
+    );
+  }
+  const began = git(
+    "log",
+    "--diff-filter=A",
+    "--format=%H",
+    "HEAD",
+    "--",
+    WIRE_RECORD
+  )
+    .trim()
+    .split("\n")
+    .at(-1);
+  if (!began) {
+    throw new Error(
+      `${commit.slice(0, 12)} was made after the app's copy stood still and before the hub recorded its wire, which it reads from the commit that began ${WIRE_RECORD}; no commit in HEAD's history adds it yet: commit it first.`
+    );
+  }
+  return wireFrom(began, WIRE_RECORD, WIRE_RECORD_CONFIG);
 };
 
 /** The WIRE_PROTOCOL a commit's core declares, read through `show` (a path from the root). */
@@ -879,32 +978,28 @@ export const wireBreaks = (
 };
 
 /** The typeOverrides names in an openapi-generator-config.yaml: the enums its app reads open. */
-export const openEnumNames = (config: string): Set<string> =>
+const openEnumNames = (config: string): Set<string> =>
   new Set([...config.matchAll(OPEN_ENUM)].map((match) => match[1] as string));
 
 /**
- * An app built at one commit against a hub built at another, both as
- * committed (each commit's typecheck holds its openapi.json to its code):
- * the breaks, and whether WIRE_PROTOCOL allows them (the hub's is above the
- * app's, so the hub speaks the app's older wire to it).
+ * An app built at one commit against a hub built at another: the app's copy
+ * at its commit against the hub's record at its own (hubWireAt), the breaks,
+ * and whether WIRE_PROTOCOL allows them (the hub's is above the app's, so the
+ * hub speaks the app's older wire to it).
  */
 const commitBreaks = (
-  show: (commit: string, path: string) => string,
   app: string,
   hub: string
 ): { allowed: boolean; breaks: string[]; app: number; hub: number } => {
-  const appProtocol = wireProtocolAt((path) => show(app, path));
-  const hubProtocol = wireProtocolAt((path) => show(hub, path));
+  const appProtocol = wireProtocolAt((path) => git("show", `${app}:${path}`));
+  const hubProtocol = wireProtocolAt((path) => git("show", `${hub}:${path}`));
   const socket = socketFrames();
-  const breaks = wireBreaks(
-    JSON.parse(show(app, APP_SCHEMA)),
-    JSON.parse(show(hub, APP_SCHEMA)),
-    {
-      frames: socket.frames,
-      sent: socket.sent,
-      openBefore: openEnumNames(show(app, GENERATOR_CONFIG)),
-    }
-  );
+  const reader = appWireAt(app);
+  const breaks = wireBreaks(reader.schema, hubWireAt(hub).schema, {
+    frames: socket.frames,
+    sent: socket.sent,
+    openBefore: reader.openBefore,
+  });
   return {
     breaks,
     allowed: hubProtocol > appProtocol,
@@ -924,18 +1019,9 @@ if (import.meta.main) {
     }
     return value;
   };
-  const show = (commit: string, path: string): string => {
-    const run = Bun.spawnSync(["git", "show", `${commit}:${path}`], {
-      env: process.env,
-    });
-    if (run.exitCode !== 0) {
-      throw new Error(`git show ${commit}:${path}: ${run.stderr.toString()}`);
-    }
-    return run.stdout.toString();
-  };
   const app = flag("--app");
   const hub = flag("--hub");
-  const result = commitBreaks(show, app, hub);
+  const result = commitBreaks(app, hub);
   const what = `the app at ${app.slice(0, 12)} (WIRE_PROTOCOL ${result.app}) against the hub at ${hub.slice(0, 12)} (WIRE_PROTOCOL ${result.hub})`;
   if (result.breaks.length && !result.allowed) {
     console.error(

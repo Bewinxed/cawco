@@ -1,7 +1,11 @@
 /**
- * `bun run openapi`: the OpenAPI document the native apps' Swift client is
- * generated from (apple/swift-openapi-generator), written to
- * apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json.
+ * `bun run openapi`: the hub's record of its wire (wire-compat.ts
+ * WIRE_RECORD), the OpenAPI document the native apps' Swift client is
+ * generated from (apple/swift-openapi-generator), with its open enums and the
+ * generator's config, written to packages/hub/wire/. The app takes these into
+ * its build (apps/apple/Packages/CawCoKit/Sources/CawCoAPI/) when its own
+ * work does; `--check` holds the record to the code at every commit, so a
+ * later check reads any commit's wire from it.
  *
  * Every part of it comes from the hub's and core's own code:
  * - paths, parameters and request bodies: the routes' runtime schemas, read by
@@ -35,7 +39,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, parse, resolve } from "node:path";
+import { dirname, join, parse, relative, resolve } from "node:path";
 import { z } from "zod";
 import {
   AGENT_SOURCE,
@@ -49,26 +53,23 @@ import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
 import { inOneOrder, unionsOrderDecides } from "./openapi-order";
 import { type Baseline, publishedNightlies, shippedBaselines } from "./shipped";
 import {
-  APP_SCHEMA,
+  appWireAt,
   asSent,
   BRIDGES,
   type DeclaredBridge,
   declares,
-  GENERATOR_CONFIG,
-  openEnumNames,
+  git,
+  hubWireAt,
   type SentBridge,
   socketFrames,
+  WIRE_RECORD,
   wireBreaks,
   wireProtocolAt,
   withoutBridge,
 } from "./wire-compat";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
-export const checkReads = [
-  "packages/",
-  "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/",
-  "tsconfig.base.json",
-];
+export const checkReads = ["packages/", "tsconfig.base.json"];
 
 const check = process.argv.includes("--check");
 // Before the hub and the program are built: a check whose inputs are the
@@ -82,7 +83,7 @@ if (gate?.fresh) {
 }
 
 const HUB = resolve(import.meta.dir, "..");
-const OUT = resolve(HUB, "../..", APP_SCHEMA);
+const OUT = resolve(HUB, "../..", WIRE_RECORD);
 
 const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
 
@@ -1502,7 +1503,11 @@ if (leftNulls.length) {
  * base this change grows from (`git merge-base HEAD origin/main`, or
  * `--base <ref>`), and what is in people's hands now (shipped.ts): the newest
  * published nightly, whose dashboard tabs and joined agents meet this hub
- * after an update, and every TestFlight build still installable. What would
+ * after an update, and every TestFlight build still installable. Main's tip
+ * is where the next nightly is cut, so the base holds each change to the
+ * tabs built one commit back, beside the nightly already out. A hub's or a
+ * tab's wire at a commit is the hub's record there (`hubWireAt`); an app's
+ * is the app's own copy at its build's commit (`appWireAt`). What would
  * break a reader built at any of them is refused, named by schema and
  * property; nothing is written then.
  *
@@ -1515,13 +1520,6 @@ if (leftNulls.length) {
  * installable build reads it, a BRIDGE), or the app that reads the new shape
  * ships first and the old build's record ends once the hub moves past it.
  */
-const git = (...args: string[]): string => {
-  const run = Bun.spawnSync(["git", ...args], { env: process.env, cwd: HUB });
-  if (run.exitCode !== 0) {
-    throw new Error(`git ${args.join(" ")}: ${run.stderr.toString().trim()}`);
-  }
-  return run.stdout.toString();
-};
 const baseRef = baseRefOf(process.argv);
 // One compare per commit: a shipped build can be the base itself. An app
 // built there is the reader that counts: it has no protocol way through.
@@ -1536,19 +1534,13 @@ for (const base of [
 }
 const bases = [...byCommit.values()];
 const readers = bases.map((base) => {
-  const atBase = (path: string): string =>
-    git("show", `${base.commit}:${path}`);
-  const schema = z
-    .record(z.string(), z.unknown())
-    .parse(JSON.parse(atBase(APP_SCHEMA)));
-  const roots = {
-    frames: socket.frames,
-    sent: socket.sent,
-    openBefore: openEnumNames(atBase(GENERATOR_CONFIG)),
-  };
+  const { schema, openBefore } = base.app
+    ? appWireAt(base.commit)
+    : hubWireAt(base.commit);
+  const roots = { frames: socket.frames, sent: socket.sent, openBefore };
   return {
     ...base,
-    protocol: wireProtocolAt(atBase),
+    protocol: wireProtocolAt((path) => git("show", `${base.commit}:${path}`)),
     breaks: (next: unknown, reader: unknown = schema) =>
       wireBreaks(reader as object, next as object, roots),
     schema,
@@ -1636,7 +1628,7 @@ for (const { app, label, protocol, breaks: against } of readers) {
  * route leaves it on 4670 for good. Each agent's hub calls are read off its
  * source at its tag (agent-calls.ts); every one must find a route here,
  * hidden routes included, and every response it reads that its commit's
- * openapi.json describes must still read (the app's compare, every enum
+ * wire describes (`hubWireAt`) must still read (the app's compare, every enum
  * read open: the agent's TypeScript reads a value it does not know).
  *
  * The way through is the hub ↔ agent contract itself: an agent whose
@@ -1686,7 +1678,7 @@ for (const nightly of agents) {
         .optional(),
       paths: z.record(z.string(), z.unknown()).optional(),
     })
-    .parse(JSON.parse(show(APP_SCHEMA)));
+    .parse(hubWireAt(nightly.commit).schema);
   const asked = Object.fromEntries(
     Object.entries(read.paths ?? {}).filter(([path]) =>
       [...calls.keys()].some(
@@ -1754,11 +1746,28 @@ if (!check) {
   }
 }
 rmSync(scratch, { recursive: true, force: true });
-// The check holds the wire alone: the Apple app's copies (openapi.json,
-// OpenEnums.swift, the generator config) stay as the app last took them, which
-// the owner keeps out of this work ("do not touch any ios code").
+// The record is the wire every later check reads this commit by, so it is
+// held to the code here. The Apple app's copies are not: they stay as the app
+// last took them until its own work takes these.
 if (check) {
+  const current = await Promise.all(
+    outputs.map(async ([path]) =>
+      (await Bun.file(path).exists()) ? Bun.file(path).text() : undefined
+    )
+  );
+  const stale = outputs.filter(([, text], index) => current[index] !== text);
+  if (stale.length) {
+    for (const [path] of stale) {
+      console.error(
+        `${relative(resolve(HUB, "../.."), path)} is out of date: run \`bun run openapi\` in packages/hub`
+      );
+    }
+    process.exit(1);
+  }
   await gate?.record();
+  console.log(
+    `${relative(resolve(HUB, "../.."), dirname(OUT))}: the wire record is up to date`
+  );
   process.exit(0);
 }
 console.log(
