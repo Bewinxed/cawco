@@ -212,9 +212,16 @@ function sayMoves(): void {
   }
 }
 
-$effect.root(() => {
-  $effect(() => {
-    settleAsks();
-    sayMoves();
+/**
+ * The moves, followed: an ask settled as its move lands, and each row's move
+ * said on the row as it goes. The app starts it once (start.ts `startApp`);
+ * importing this module starts nothing, and until the start no move is said
+ * and no ask settled. Returns its stop.
+ */
+export const startSwitch = (): (() => void) =>
+  $effect.root(() => {
+    $effect(() => {
+      settleAsks();
+      sayMoves();
+    });
   });
-});

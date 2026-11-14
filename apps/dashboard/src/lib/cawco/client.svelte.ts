@@ -5,7 +5,8 @@
  * store that takes it, what the stores do as the hub is reached or lost is
  * listed in order, the ledger's ports are plugged into the stores, and the
  * fleet's read on connect is made and made again until the board's reads
- * land. Nothing reads this module but the app's layout (`ensureConnected`).
+ * land. Nothing reads this module but the app's start (`startClient`) and its
+ * layout (`ensureConnected`).
  */
 
 import { detach } from "@cawco/core/detach";
@@ -145,31 +146,6 @@ import {
 } from "./stream";
 import { errorMessage } from "./transcript/local";
 import { updates } from "./updates/updates.svelte";
-
-// Lets the store be asserted from the console while developing, and a
-// bench stand its conversation in as one the hub holds running
-// (`adoptInstances`, as a snapshot does) and at work (`frame`, a hub frame
-// taken as the socket takes it: a session's pulse lives in the store's own
-// `Pulse`s, which no bench can write into `state`).
-if (import.meta.env.DEV) {
-  devDebug({
-    connectionState,
-    boardState,
-    accountsState,
-    projectsState,
-    previewsState,
-    sessionsState,
-    plansState,
-    workItemsState,
-    usageState,
-    inflight,
-    adoptInstances,
-    frame: takeFrame,
-    standHub,
-    leaveHub,
-    standStored: holdStored,
-  });
-}
 
 /** Stands the page on a bench's hub: the socket closed, the hub said reached (dev only). */
 function standHub(
@@ -437,132 +413,6 @@ function takeControlResult(frame: FrameOf<"control_result">): void {
   }
 }
 
-/** Every kind of frame the socket delivers, routed to what takes it. */
-routeFrames([
-  onFrame("fleet_mcp", takeFleetMcp),
-  onFrame("permission_settled", takePermissionSettled),
-  onFrame("preview", takePreview),
-  onFrame("instances", takeBoard),
-  onFrame("instances_delta", takeBoard),
-  onFrame("usage", takeUsage),
-  onFrame("work_item", takeWorkItem),
-  onFrame("project.cap", takeProjectCap),
-  onFrame("actions", takeActions),
-  onFrame("hub_auth", takeAuthFrame),
-  onFrame("installs", takeInstallsFrame),
-  onFrame("fleet_watch.notices", takeWatchNotices),
-  onFrame("artifact.needs", takeArtifactNeeds),
-  onFrame("laws.broken", takeLawsBroken),
-  onFrame("hub.restart", takeHubRestart),
-  onFrame("project.stop", takeProjectStop),
-  onFrame("projects.changed", rereadProjects),
-  // The person's presence, and the machines that count toward it.
-  onFrame("person", (frame) => takePerson(frame.person)),
-  // Something that needs the person, shown on the desk tab they use.
-  onFrame("desk_alert", (frame) => showDeskAlert(frame, instanceIndex)),
-  onFrame("browser_list", takeBrowsers),
-  // The stream relay's journey moved: every place that draws it follows.
-  onFrame("stream_relay.journey", (frame) => keepRelayJourney(frame.journey)),
-  onFrame("tailnet.https", takeTailnet),
-  onFrame("fleet.fetch", takeFleetFetch),
-  onFrame("questions.moved", takeQuestionsMoved),
-  onFrame("tasks.changed", takeTasksChanged),
-  onFrame("decisions.changed", takeDecisionsChanged),
-  onFrame("blocks.changed", takeBlocksChanged),
-  onFrame("starters.changed", takeStarters),
-  onFrame("project_offer", takeProjectOffer),
-  onFrame("pulse", takePulseFrame),
-  onFrame("error", takeError),
-  onFrame("control_result", takeControlResult),
-  // The hub's own record of what a delegate asked and was answered: the reader
-  // of this traffic is the parent's delegate card.
-  onFrame("delegate_event", (frame) => hearDelegateEvent(frame.event)),
-  onFrame("permission_request", takePermissionRequest),
-  ...TOUCH_KINDS.map((kind) => onFrame(kind, touchSession)),
-  onFrame("moves", takeMoves),
-  // A move's progress travels machine → hub only, never as its own frame.
-  ...hubOnly("move_progress"),
-  // A command's slot wait travels machine → hub only; its item's status carries it.
-  ...hubOnly("command_queue"),
-  // A borrower's ask for a fresh sign-in travels machine → hub only.
-  ...hubOnly("account_borrow"),
-  // A stage's change travels machine → hub only; a sheet's pane reads it in the sheet's doc.
-  ...hubOnly("stage"),
-  // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
-  ...hubOnly("browsers"),
-  // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
-  ...hubOnly("browser_handback"),
-  // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
-  ...hubOnly("stream_relay"),
-  // A place's stage clone travels machine → hub only; the hub files it as a workspace.
-  ...hubOnly("stage-clone"),
-  // A machine's fleet report and its items' converge travel machine → hub
-  // only; screens read the hub's row.
-  ...hubOnly("fleet_report", "fleet_converge"),
-  // Recent's stored transcripts, whole, as the hub keeps them.
-  onFrame("stored", takeStored),
-  // A machine's word that its transcripts moved travels machine → hub only.
-  ...hubOnly("catalog_moved"),
-]);
-
-wireHub({
-  take: takeHubMessage,
-  onConnect: [
-    presenceAgain,
-    forgetStarters,
-    readFleet,
-    () => detach(readInstalls(), "readInstalls"),
-    rereadFollowed,
-    () => {
-      if (connectionCount() > 1) {
-        rereadTrays();
-        rereadDelegates();
-      }
-    },
-    () => resumePendingSends(streamState, streamHost),
-    () => detach(checkServedBuild(), "checkServedBuild"),
-    () => detach(updates.loadPolicy(), "loadPolicy"),
-  ],
-  onClose: [
-    cancelFleetRead,
-    dropFleetFetches,
-    // Subscriptions, resumes and unanswered commands all died with the socket,
-    // and the next one reads every followed transcript again (`rereadFollowed`).
-    // With the host, for the same reason the traffic sweep passes it: a socket
-    // that dies mid-command must SAY so, not merely record it.
-    () => noteDisconnect(streamState, Date.now(), streamHost),
-  ],
-  onTeardown: [
-    // The ledger's ack timer is the one thing here that outlives the socket by
-    // design, so it is the one thing a teardown has to cancel by hand — an HMR
-    // reload that left it armed would fire a sweep into a module nobody renders.
-    () => disarmCommandSweep(streamState, streamHost),
-    cancelFleetRead,
-  ],
-  reread: refresh,
-});
-
-plugLedger({
-  // A session's own changes arrive only here, sequenced: what the hub's builder
-  // made of each frame, and its preview's state. Everything broadcast (the
-  // board, pulses, permissions, replies) comes as an envelope (`bind`).
-  applyFrame: (sessionId, payload) => {
-    if (payload.kind !== "transcript") {
-      takeFrame(payload);
-      return;
-    }
-    const target = session(sessionId);
-    applyTranscript(target, payload.events);
-    trackWorking(target);
-    target.lastActivityAt = new Date();
-  },
-  // The newest page again, which resumes the stream from the `seq` it carries.
-  rereadHistory: (sessionId, cause) => {
-    detach(readTranscript(sessionId, cause), "readTranscript");
-  },
-  noteFailure: noteCommandFailure,
-});
-
 /** One message off the hub's socket, taken into the stores. */
 function takeHubMessage(message: unknown): void {
   // A session's own frames are sequenced; everything else — the board,
@@ -593,6 +443,173 @@ function takeHubMessage(message: unknown): void {
       : payload
   );
   sweepOnTraffic();
+}
+
+/**
+ * The client, started: every frame kind routed to the store that takes it,
+ * the stores wired to the socket (what each does as the hub is reached,
+ * lost or torn down), the ledger's ports plugged into them, and, under
+ * `vite dev`, the console's handle on them. Importing this module starts
+ * none of it; the app starts it once before it opens the hub (start.ts
+ * `startApp`, then `ensureConnected`). Returns its stop: unrouted, unwired
+ * and unplugged, each port then failing by name as before the start.
+ */
+export function startClient(): () => void {
+  // Lets the store be asserted from the console while developing, and a
+  // bench stand its conversation in as one the hub holds running
+  // (`adoptInstances`, as a snapshot does) and at work (`frame`, a hub frame
+  // taken as the socket takes it: a session's pulse lives in the store's own
+  // `Pulse`s, which no bench can write into `state`).
+  const unexpose = import.meta.env.DEV
+    ? devDebug({
+        connectionState,
+        boardState,
+        accountsState,
+        projectsState,
+        previewsState,
+        sessionsState,
+        plansState,
+        workItemsState,
+        usageState,
+        inflight,
+        adoptInstances,
+        frame: takeFrame,
+        standHub,
+        leaveHub,
+        standStored: holdStored,
+      })
+    : () => undefined;
+  // Every kind of frame the socket delivers, routed to what takes it.
+  const unroute = routeFrames([
+    onFrame("fleet_mcp", takeFleetMcp),
+    onFrame("permission_settled", takePermissionSettled),
+    onFrame("preview", takePreview),
+    onFrame("instances", takeBoard),
+    onFrame("instances_delta", takeBoard),
+    onFrame("usage", takeUsage),
+    onFrame("work_item", takeWorkItem),
+    onFrame("project.cap", takeProjectCap),
+    onFrame("actions", takeActions),
+    onFrame("hub_auth", takeAuthFrame),
+    onFrame("installs", takeInstallsFrame),
+    onFrame("fleet_watch.notices", takeWatchNotices),
+    onFrame("artifact.needs", takeArtifactNeeds),
+    onFrame("laws.broken", takeLawsBroken),
+    onFrame("hub.restart", takeHubRestart),
+    onFrame("project.stop", takeProjectStop),
+    onFrame("projects.changed", rereadProjects),
+    // The person's presence, and the machines that count toward it.
+    onFrame("person", (frame) => takePerson(frame.person)),
+    // Something that needs the person, shown on the desk tab they use.
+    onFrame("desk_alert", (frame) => showDeskAlert(frame, instanceIndex)),
+    onFrame("browser_list", takeBrowsers),
+    // The stream relay's journey moved: every place that draws it follows.
+    onFrame("stream_relay.journey", (frame) => keepRelayJourney(frame.journey)),
+    onFrame("tailnet.https", takeTailnet),
+    onFrame("fleet.fetch", takeFleetFetch),
+    onFrame("questions.moved", takeQuestionsMoved),
+    onFrame("tasks.changed", takeTasksChanged),
+    onFrame("decisions.changed", takeDecisionsChanged),
+    onFrame("blocks.changed", takeBlocksChanged),
+    onFrame("starters.changed", takeStarters),
+    onFrame("project_offer", takeProjectOffer),
+    onFrame("pulse", takePulseFrame),
+    onFrame("error", takeError),
+    onFrame("control_result", takeControlResult),
+    // The hub's own record of what a delegate asked and was answered: the reader
+    // of this traffic is the parent's delegate card.
+    onFrame("delegate_event", (frame) => hearDelegateEvent(frame.event)),
+    onFrame("permission_request", takePermissionRequest),
+    ...TOUCH_KINDS.map((kind) => onFrame(kind, touchSession)),
+    onFrame("moves", takeMoves),
+    // A move's progress travels machine → hub only, never as its own frame.
+    ...hubOnly("move_progress"),
+    // A command's slot wait travels machine → hub only; its item's status carries it.
+    ...hubOnly("command_queue"),
+    // A borrower's ask for a fresh sign-in travels machine → hub only.
+    ...hubOnly("account_borrow"),
+    // A stage's change travels machine → hub only; a sheet's pane reads it in the sheet's doc.
+    ...hubOnly("stage"),
+    // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
+    ...hubOnly("browsers"),
+    // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
+    ...hubOnly("browser_handback"),
+    // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
+    ...hubOnly("stream_relay"),
+    // A place's stage clone travels machine → hub only; the hub files it as a workspace.
+    ...hubOnly("stage-clone"),
+    // A machine's fleet report and its items' converge travel machine → hub
+    // only; screens read the hub's row.
+    ...hubOnly("fleet_report", "fleet_converge"),
+    // Recent's stored transcripts, whole, as the hub keeps them.
+    onFrame("stored", takeStored),
+    // A machine's word that its transcripts moved travels machine → hub only.
+    ...hubOnly("catalog_moved"),
+  ]);
+
+  const unwire = wireHub({
+    take: takeHubMessage,
+    onConnect: [
+      presenceAgain,
+      forgetStarters,
+      readFleet,
+      () => detach(readInstalls(), "readInstalls"),
+      rereadFollowed,
+      () => {
+        if (connectionCount() > 1) {
+          rereadTrays();
+          rereadDelegates();
+        }
+      },
+      () => resumePendingSends(streamState, streamHost),
+      () => detach(checkServedBuild(), "checkServedBuild"),
+      () => detach(updates.loadPolicy(), "loadPolicy"),
+    ],
+    onClose: [
+      cancelFleetRead,
+      dropFleetFetches,
+      // Subscriptions, resumes and unanswered commands all died with the socket,
+      // and the next one reads every followed transcript again (`rereadFollowed`).
+      // With the host, for the same reason the traffic sweep passes it: a socket
+      // that dies mid-command must SAY so, not merely record it.
+      () => noteDisconnect(streamState, Date.now(), streamHost),
+    ],
+    onTeardown: [
+      // The ledger's ack timer is the one thing here that outlives the socket by
+      // design, so it is the one thing a teardown has to cancel by hand — an HMR
+      // reload that left it armed would fire a sweep into a module nobody renders.
+      () => disarmCommandSweep(streamState, streamHost),
+      cancelFleetRead,
+    ],
+    reread: refresh,
+  });
+
+  const unplug = plugLedger({
+    // A session's own changes arrive only here, sequenced: what the hub's builder
+    // made of each frame, and its preview's state. Everything broadcast (the
+    // board, pulses, permissions, replies) comes as an envelope (`bind`).
+    applyFrame: (sessionId, payload) => {
+      if (payload.kind !== "transcript") {
+        takeFrame(payload);
+        return;
+      }
+      const target = session(sessionId);
+      applyTranscript(target, payload.events);
+      trackWorking(target);
+      target.lastActivityAt = new Date();
+    },
+    // The newest page again, which resumes the stream from the `seq` it carries.
+    rereadHistory: (sessionId, cause) => {
+      detach(readTranscript(sessionId, cause), "readTranscript");
+    },
+    noteFailure: noteCommandFailure,
+  });
+  return () => {
+    unplug();
+    unwire();
+    unroute();
+    unexpose();
+  };
 }
 
 /** The sends an earlier load kept were sent again: once per load of the page. */

@@ -156,6 +156,7 @@
     z.object({ byName: z.record(z.string(), z.string()) }),
     () => ({ byName: {} })
   );
+  onMount(() => kept.keep());
   const problems = kept.value.byName;
 
   async function read() {
@@ -489,6 +490,7 @@
       problem: null,
     })
   );
+  onMount(() => addDraft.keep());
   const typed = addDraft.value;
   const adding = $derived(
     SERVICES.find((each) => each.service === typed.service) ?? null

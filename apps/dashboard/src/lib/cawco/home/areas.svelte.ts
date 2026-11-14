@@ -18,10 +18,13 @@ const state = $state<{ areas: Area[]; read: boolean }>({
   areas: [],
   read: false,
 });
-// A bench stands its own areas in (the /motion benches, dev only).
-if (import.meta.env.DEV) {
-  devDebug({ areas: state });
-}
+/**
+ * A bench stands its own areas in (the /motion benches, dev only), through
+ * `__cawcoDebug.areas`, which the app's start exposes (start.ts `startApp`).
+ * Returns its withdrawal.
+ */
+export const startAreas = (): (() => void) =>
+  import.meta.env.DEV ? devDebug({ areas: state }) : () => undefined;
 /** The projects list the areas were last read for. */
 let readFor: unknown;
 let asked = 0;

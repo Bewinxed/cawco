@@ -93,19 +93,25 @@ export function placeOf(
   return where;
 }
 
-$effect.root(() => {
-  $effect(() => {
-    writeJson(
-      KEY,
-      {
-        open: spawning.open,
-        prefill: $state.snapshot(placeOf(spawning.prefill)),
-        shown: spawning.shown,
-      } satisfies KeptForm,
-      "session"
-    );
+/**
+ * The form's place, written to the tab's storage as it changes from now on.
+ * The app starts it once (start.ts `startApp`); importing this module only
+ * reads what the tab kept. Returns its stop.
+ */
+export const startNewSession = (): (() => void) =>
+  $effect.root(() => {
+    $effect(() => {
+      writeJson(
+        KEY,
+        {
+          open: spawning.open,
+          prefill: $state.snapshot(placeOf(spawning.prefill)),
+          shown: spawning.shown,
+        } satisfies KeptForm,
+        "session"
+      );
+    });
   });
-});
 
 /** The project whose page is open, when one is. */
 function projectHere(): string | undefined {

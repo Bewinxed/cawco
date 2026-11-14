@@ -257,9 +257,23 @@ class StopWork {
       job.phase = job.phase === "armed" ? "list" : job.phase;
     }
     this.jobs = kept;
-    for (const key of Object.keys(kept)) {
+  }
+
+  /**
+   * Each job the page held as it went, resumed: what still runs is read from
+   * the hub. The app starts it once (start.ts `startApp`); making the store
+   * only reads what the tab kept, and until then a kept job's tray stands as
+   * the page left it. Returns its stop: the `project.stop` listener a resume
+   * took up released.
+   */
+  start(): () => void {
+    for (const key of Object.keys(this.jobs)) {
       detach(this.resume(key), "resume");
     }
+    return () => {
+      this.unhear?.();
+      this.unhear = null;
+    };
   }
 
   /** Writes every job to the tab's storage. */

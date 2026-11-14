@@ -313,24 +313,33 @@ export function unarchive(rows: BoardRow[]): void {
 /* ── One clock for every age on the home ──────────────────────────── */
 
 let tick = $state(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
+/** Whether the app started the clock ({@link startHome}). */
+let ticking = $state(false);
 
-/** The minute-grained now every wait and elapsed time reads. */
+/**
+ * The minute-grained now every wait and elapsed time reads. Until the app
+ * starts it, and on the server, it is the time as it is read, never the
+ * module's load: a canvas's frame and a server render read their own moment,
+ * and a reader in an effect reads it again once the clock starts.
+ */
 export const clock = {
   get now(): number {
-    // The server renders each page at its own moment, never at the
-    // module's load.
-    if (typeof window === "undefined") {
-      return Date.now();
-    }
-    if (ticker === undefined) {
-      ticker = setInterval(() => {
-        tick = Date.now();
-      }, 15_000);
-    }
-    return tick;
+    return ticking ? tick : Date.now();
   },
 };
+
+/** Ticks {@link clock} every 15 s from now on. Returns its stop. */
+function startClock(): () => void {
+  tick = Date.now();
+  ticking = true;
+  const ticker = setInterval(() => {
+    tick = Date.now();
+  }, 15_000);
+  return () => {
+    clearInterval(ticker);
+    ticking = false;
+  };
+}
 
 /* ── Shapes ────────────────────────────────────────────────────────── */
 
@@ -1016,8 +1025,15 @@ class Home {
   /** Each project's reads of its waiting tasks so far, by project id. */
   readonly #waitingAsked = new Map<string, number>();
 
-  constructor() {
-    $effect.root(() => {
+  /**
+   * The home's upkeep, which making it starts none of: the waiting tasks
+   * read as the hub is reached and as a project's tasks change, a mark's
+   * echo settled, and the looks the hub did not take sent again on a
+   * connection. Until it starts, `waiting` holds nothing and no look is
+   * sent again. Returns its stop.
+   */
+  start(): () => void {
+    return $effect.root(() => {
       $effect(() => {
         if (connectionStore.hub !== "connected") {
           this.#waitingRead.clear();
@@ -1463,3 +1479,17 @@ function workingNow(): BoardRow[] {
 }
 
 export const home = new Home();
+
+/**
+ * The home, started: its clock and its upkeep ({@link Home.start}). The app
+ * starts it once (start.ts `startApp`); importing this module starts
+ * neither. Returns its stop.
+ */
+export function startHome(): () => void {
+  const stopClock = startClock();
+  const stopHome = home.start();
+  return () => {
+    stopHome();
+    stopClock();
+  };
+}

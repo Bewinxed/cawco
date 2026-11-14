@@ -220,6 +220,14 @@ const followed = new TabDraft(
   () => ({ brought: [], relaunch: {}, refused: {} })
 );
 
+/**
+ * What this tab follows, written to its storage as it changes from now on.
+ * The app starts it once (start.ts `startApp`); importing this module only
+ * reads what the tab kept, and a change before the start stands in the page
+ * alone until it. Returns its stop.
+ */
+export const startHarnessBlock = (): (() => void) => followed.keep();
+
 const keyOf = (machineId: string, harness: HarnessKind): string =>
   `${machineId}:${harness}`;
 

@@ -14,12 +14,15 @@ import { reportErrorsTo } from "../../error-report.js";
 import { relayAway } from "./away";
 import Host from "./Host.svelte";
 import { bridge, picks, sent, takeServed } from "./page.svelte.js";
+import { startReferenceFaces } from "./references.svelte.js";
 import { darkOn } from "./scheme.svelte.js";
 
 /** The commit the host was built from (hub decision-host.ts `define`): its reports name it. */
 declare const CAWCO_HOST_BUILD: string;
 
 reportErrorsTo("preview", CAWCO_HOST_BUILD);
+// The faces of the page's references, heard from now on.
+startReferenceFaces();
 takeServed(document);
 bridge()?.on("picks", (next) => {
   picks.now = next;

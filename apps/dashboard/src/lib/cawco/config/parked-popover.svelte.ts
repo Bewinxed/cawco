@@ -35,8 +35,26 @@ export class ParkedPopover<S extends Held> {
   /** The row it is reopened from, which it opens beside and closes into. */
   fromRow = $state<HTMLElement | null>(null);
 
+  /** The seats mounted, any place: the draft is kept while there is one. */
+  #seats = 0;
+  #release = (): void => undefined;
+
   constructor(key: string, shape: S, blank: () => z.output<S>) {
     this.draft = new TabDraft(key, shape, blank);
+  }
+
+  /** A seat is mounted: the draft is kept until the last one goes. Returns its leaving. */
+  seated(): () => void {
+    if (this.#seats === 0) {
+      this.#release = this.draft.keep();
+    }
+    this.#seats += 1;
+    return () => {
+      this.#seats -= 1;
+      if (this.#seats === 0) {
+        this.#release();
+      }
+    };
   }
 
   /** One press on its row: the popover again, where it was, beside that row. */
@@ -70,8 +88,10 @@ export class PopoverSeat<S extends Held> {
     onMount(() => {
       const at = where();
       parked.mounted[at] = (parked.mounted[at] ?? 0) + 1;
+      const leave = parked.seated();
       return () => {
         parked.mounted[at] = (parked.mounted[at] ?? 1) - 1;
+        leave();
       };
     });
     // Opened again while its flight still runs (its trigger, or the row's

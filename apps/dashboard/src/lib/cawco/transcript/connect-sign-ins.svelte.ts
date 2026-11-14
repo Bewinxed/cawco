@@ -94,11 +94,29 @@ const expireAt = (requestId: string, expiresAt: number): (() => void) => {
   return () => clearTimeout(expiry);
 };
 
-// What a reload found waiting: its page's expiry still runs.
-for (const [requestId, one] of signIns) {
-  if (one.stage === "waiting" && one.expiresAt !== undefined) {
-    watches.set(requestId, expireAt(requestId, one.expiresAt));
+/**
+ * What a reload found waiting: its page's expiry runs again from now on.
+ * The app starts it once (start.ts `startApp`); importing this module only
+ * reads what the tab kept, and until the start a kept sign-in waits with no
+ * expiry. Returns its stop: those expiries cleared.
+ */
+export function startConnectSignIns(): () => void {
+  const resumed: string[] = [];
+  for (const [requestId, one] of signIns) {
+    if (
+      one.stage === "waiting" &&
+      one.expiresAt !== undefined &&
+      !watches.has(requestId)
+    ) {
+      watches.set(requestId, expireAt(requestId, one.expiresAt));
+      resumed.push(requestId);
+    }
   }
+  return () => {
+    for (const requestId of resumed) {
+      stop(requestId);
+    }
+  };
 }
 
 export const connectSignIns = {

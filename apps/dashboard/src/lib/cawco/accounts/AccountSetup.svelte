@@ -42,7 +42,7 @@
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { configureWords } from "@cawco/core/words/configure";
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { z } from "zod";
 
@@ -378,6 +378,7 @@
       dragged: null,
     })
   );
+  onMount(() => kept.keep());
 
   // A setup taken up again stands where it was left: its row, its account's
   // colour and name, the routing it was given, at the step the hub kept.

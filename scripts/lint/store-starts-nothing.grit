@@ -1,0 +1,91 @@
+language js
+
+// Importing a dashboard store module starts nothing: no timer, listener,
+// effect root, socket, request or write into another module. The module
+// exports a start that returns its stop, and the app starts each once
+// (apps/dashboard/src/lib/cawco/start.ts `startApp`, from the app's layout).
+// A module started on import starts again in every copy of it a component
+// canvas makes, and nothing stops it (task tsk-375).
+//
+// So a store module's top level only declares. Refused there: a statement
+// that runs on import (a call, an assignment, an `if`, a loop), and a
+// declaration whose value starts something as it is made, a class made in
+// the same file whose constructor or fields start one included. A function,
+// a method or a getter declared there starts nothing until it is called.
+// Left alone: the entries a page loads to run (the decision host's
+// host.ts and dials.ts, the address flow's main.ts, the tab icon's worker),
+// a states file, a type proof, and Vite's `if (import.meta.hot)`, whose
+// handlers are the module's own by design.
+
+pattern starts() {
+  or {
+    `setTimeout($...)`,
+    `setInterval($...)`,
+    `requestAnimationFrame($...)`,
+    `requestIdleCallback($...)`,
+    `queueMicrotask($...)`,
+    `addEventListener($...)`,
+    `$_.addEventListener($...)`,
+    `on($...)`,
+    `$_.on($...)`,
+    `$_.observe($...)`,
+    `$effect.root($...)`,
+    `fetch($...)`,
+    `new WebSocket($...)`,
+    `new EventSource($...)`,
+    `new BroadcastChannel($...)`,
+    `new MessageChannel($...)`,
+    `new Worker($...)`
+  }
+}
+
+predicate store_module() {
+  $filename <: r".*apps/dashboard/src/lib/cawco/.*\.ts$",
+  $filename <: not r".*\.(?:stories|proof)\.ts$",
+  $filename <: not r".*/lib/cawco/(?:decisions/host/(?:host|dials)|address/flow/main|tab-icon/ticker)\.ts$"
+}
+
+pattern made_later() {
+  or {
+    JsArrowFunctionExpression(),
+    JsFunctionExpression(),
+    JsMethodObjectMember(),
+    JsGetterObjectMember(),
+    JsSetterObjectMember(),
+    JsClassExpression()
+  }
+}
+
+or {
+  or {
+    JsExpressionStatement(),
+    JsIfStatement(),
+    JsForStatement(),
+    JsForOfStatement(),
+    JsForInStatement(),
+    JsWhileStatement(),
+    JsDoWhileStatement(),
+    JsTryStatement(),
+    JsSwitchStatement()
+  } as $hit where {
+    store_module(),
+    $hit <: not within or { JsFunctionBody(), JsBlockStatement(), JsSwitchStatement() },
+    $hit <: not r"^if\s*\(\s*import\.meta\.hot\s*\)[\s\S]*",
+    register_diagnostic(span=$hit, message="A store module's top level only declares: this runs on import. Put it in a start the module exports, which returns its stop, and start it from the app (lib/cawco/start.ts `startApp`).")
+  },
+  JsVariableDeclarator() as $declared where {
+    store_module(),
+    $declared <: not within or { JsFunctionBody(), JsBlockStatement() },
+    $declared <: contains starts() as $hit until made_later(),
+    register_diagnostic(span=$hit, message="This starts a timer, a listener, an effect root, a socket or a request as the module is imported. Make it in a start the module exports, which returns its stop, and start it from the app (lib/cawco/start.ts `startApp`).")
+  },
+  JsVariableDeclarator() as $declared where {
+    store_module(),
+    $declared <: not within or { JsFunctionBody(), JsBlockStatement() },
+    $declared <: contains `new $class($...)` as $hit until made_later(),
+    $program <: contains `class $class { $body }` where {
+      $body <: contains starts() until or { JsMethodClassMember(), JsGetterClassMember(), JsSetterClassMember() }
+    },
+    register_diagnostic(span=$hit, message="Made as the module is imported, this class starts a timer, a listener, an effect root, a socket or a request in its constructor or fields. Move that into a method its module's start calls, and start it from the app (lib/cawco/start.ts `startApp`).")
+  }
+}

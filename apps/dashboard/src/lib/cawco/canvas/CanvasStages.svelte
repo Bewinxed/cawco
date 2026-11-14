@@ -19,14 +19,17 @@
   } from "@cawco/core/preview/routes";
   import { commonWords } from "@cawco/core/words/common";
   import { Portal } from "bits-ui";
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { theme } from "#lib/theme.svelte.js";
   import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
   import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import CanvasGrip from "./CanvasGrip.svelte";
-  import { type Handle, slotSizes, stages } from "./stage.svelte";
+  import { type Handle, slotSizes, stages, startStages } from "./stage.svelte";
+
+  // The page moving under a stage keeps placing it, while this layer stands.
+  onMount(startStages);
 
   /** The handles over the composer: the top grab, then each top corner's grip. */
   const HANDLES: Handle[] = ["top", "top-left", "top-right"];

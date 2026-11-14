@@ -17,6 +17,7 @@
  * comes back after it, save words no draft keeps ({@link unsavedWords}).
  */
 import { PERSONS_INPUT, personsInput } from "@cawco/core/preview/routes";
+import { on } from "svelte/events";
 import { store, stored } from "#lib/platform/storage.js";
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
@@ -97,25 +98,41 @@ export function heardInput(): void {
   }
 }
 
-if (typeof window !== "undefined") {
+/**
+ * The person's hand on this page, heard from now on, and each field's words
+ * as the person first focused it (what a reload would lose is what they
+ * typed since). The app starts it once (start.ts `startApp`); importing this
+ * module starts nothing, and until the start the page hears no input but
+ * what a preview frame tells it, and a reload finds no field changed.
+ * Returns its stop.
+ */
+export function startReload(): () => void {
   const touched = (event: Event) => {
     if (personsInput(event)) {
       heardInput();
     }
   };
-  for (const kind of PERSONS_INPUT) {
-    window.addEventListener(kind, touched, { capture: true, passive: true });
-  }
-  window.addEventListener(
-    "focusin",
-    (event) => {
-      const field = event.target instanceof Element ? event.target : null;
-      if (typed(field) && !started.has(field)) {
-        started.set(field, textOf(field));
-      }
-    },
-    { capture: true }
+  const offs = PERSONS_INPUT.map((kind) =>
+    on(window, kind, touched, { capture: true, passive: true })
   );
+  offs.push(
+    on(
+      window,
+      "focusin",
+      (event) => {
+        const field = event.target instanceof Element ? event.target : null;
+        if (typed(field) && !started.has(field)) {
+          started.set(field, textOf(field));
+        }
+      },
+      { capture: true }
+    )
+  );
+  return () => {
+    for (const off of offs) {
+      off();
+    }
+  };
 }
 
 /**

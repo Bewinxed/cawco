@@ -9,21 +9,34 @@
  * (the checkbox's fill) holds on the page too. An HTML page's dials put it
  * on their own root, never the page's (DialsRoot.svelte).
  */
-import { MediaQuery } from "svelte/reactivity";
+import { createSubscriber, MediaQuery } from "svelte/reactivity";
 
-const root = document.documentElement;
 const reader = new MediaQuery("prefers-color-scheme: dark");
-const named = $state<{ theme: string | undefined }>({
-  theme: root.dataset.theme,
+
+/**
+ * The root's `data-theme` followed while an effect reads the scheme
+ * (`createSubscriber`, as `MediaQuery` follows the reader's): importing
+ * this module starts nothing and reads no document, and the last reader
+ * gone stops the watch. Every page that draws by it (a decision page, a
+ * canvas frame, the dashboard) reads its own root with no start of its own.
+ */
+const subscribe = createSubscriber((update) => {
+  const watcher = new MutationObserver(update);
+  watcher.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+  return () => watcher.disconnect();
 });
-new MutationObserver(() => {
-  named.theme = root.dataset.theme;
-}).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
 export const scheme = {
   get now(): "light" | "dark" {
-    if (named.theme === "dark" || named.theme === "light") {
-      return named.theme;
+    if (typeof document !== "undefined") {
+      subscribe();
+      const named = document.documentElement.dataset.theme;
+      if (named === "dark" || named === "light") {
+        return named;
+      }
     }
     return reader.current ? "dark" : "light";
   },

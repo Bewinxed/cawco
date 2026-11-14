@@ -670,6 +670,14 @@
       },
     },
     {
+      // Importing a dashboard store module starts nothing: its top level
+      // only declares, and the app starts each store once
+      // (lib/cawco/start.ts `startApp`). The plugin reads the path itself,
+      // its entries and states files left alone.
+      "includes": ["apps/dashboard/src/lib/cawco/**/*.ts"],
+      "plugins": ["./scripts/lint/store-starts-nothing.grit"],
+    },
+    {
       // A states file takes a store inside a story's `beforeEach`
       // (`await import(…)`), so that story's frame holds its own copy of it
       // (stage-host host.ts `cawcoStandIns`); the plugin refuses a static

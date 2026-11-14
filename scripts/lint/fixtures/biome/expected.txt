@@ -67,3 +67,9 @@ hub-types-only/packages/cli/src/planted.ts:8:28 hub-types-only
 hub-types-only/packages/hub/src/client.ts:2:1 hub-types-only
 hub-types-only/packages/hub/src/client.ts:3:1 hub-types-only
 hub-types-only/packages/hub/src/client.ts:4:1 hub-types-only
+store-starts-nothing/apps/dashboard/src/lib/cawco/planted.svelte.ts:6:1 store-starts-nothing
+store-starts-nothing/apps/dashboard/src/lib/cawco/planted.svelte.ts:10:1 store-starts-nothing
+store-starts-nothing/apps/dashboard/src/lib/cawco/planted.svelte.ts:14:1 store-starts-nothing
+store-starts-nothing/apps/dashboard/src/lib/cawco/planted.svelte.ts:18:16 store-starts-nothing
+store-starts-nothing/apps/dashboard/src/lib/cawco/planted.svelte.ts:20:19 store-starts-nothing
+store-starts-nothing/apps/dashboard/src/lib/cawco/planted.svelte.ts:28:21 store-starts-nothing

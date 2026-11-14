@@ -75,19 +75,27 @@ const save = () => {
 };
 
 /** The sessions the workspace's tabs hold open, as the workspace says it ({@link workingSet.holdOpen}). */
-let openIds = (): readonly string[] => {
+const unregistered = (): readonly string[] => {
   throw new Error(
     "workingSet.visit was called before the workspace registered its open tabs (workingSet.holdOpen)"
   );
 };
 
+let openIds = unregistered;
+
 export const workingSet = {
   /**
-   * The workspace's tabs, registered once: none of the sessions they hold
-   * open is forgotten to make room for another visit.
+   * The workspace's tabs, registered once (workspace.svelte.ts
+   * `startWorkspace`): none of the sessions they hold open is forgotten to
+   * make room for another visit. Returns its release.
    */
-  holdOpen(source: () => readonly string[]): void {
+  holdOpen(source: () => readonly string[]): () => void {
     openIds = source;
+    return () => {
+      if (openIds === source) {
+        openIds = unregistered;
+      }
+    };
   },
 
   /** Where a stored session's tab last knew it to live, or null for a live

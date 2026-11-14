@@ -24,6 +24,7 @@ import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { TAB_NAMES_PER_ASK, type TabNamed } from "@cawco/core/protocol";
 import { untrack } from "svelte";
+import { on } from "svelte/events";
 import { SvelteSet } from "svelte/reactivity";
 import { hub } from "#lib/platform/hub.js";
 import { hubData } from "#lib/platform/hub-read.js";
@@ -513,13 +514,6 @@ export function contextOf(sessionId: string): SessionContext | null {
  * waiting on a frame when the page was hidden, which no frame will come for.
  */
 const unwritten: { url: string; mode: "push" | "replace" }[] = [];
-if (browser) {
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      writeUrls();
-    }
-  });
-}
 
 function writeUrls(): void {
   for (const { url, mode } of unwritten.splice(0)) {
@@ -1120,12 +1114,31 @@ export const workspace = {
   restore,
 };
 
-workingSet.holdOpen(() => workspace.openIds);
-
-followTabs({
-  get openIds() {
-    return workspace.openIds;
-  },
-  named: (id) => workspace.named(id),
-  machineOf: (id) => contextOf(id)?.machine,
-});
+/**
+ * The workspace, started: its open tabs held open in the working set and
+ * followed for frames (follows.svelte.ts), and the URLs a hidden page will
+ * draw no frame for written at once. The app starts it once (start.ts
+ * `startApp`); importing this module starts none of it. Until then the
+ * working set refuses a visit by name, no tab is followed, and a URL waits
+ * for its frame. Returns its stop.
+ */
+export function startWorkspace(): () => void {
+  const release = workingSet.holdOpen(() => workspace.openIds);
+  const unfollow = followTabs({
+    get openIds() {
+      return workspace.openIds;
+    },
+    named: (id) => workspace.named(id),
+    machineOf: (id) => contextOf(id)?.machine,
+  });
+  const offHidden = on(document, "visibilitychange", () => {
+    if (document.hidden) {
+      writeUrls();
+    }
+  });
+  return () => {
+    offHidden();
+    unfollow();
+    release();
+  };
+}

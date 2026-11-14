@@ -130,17 +130,20 @@ export const artifactsOf = (
 export const readArtifacts = (instanceId: string): Promise<void> =>
   artifactReads.read(instanceId);
 
-/*
+/**
  * An artifact a view of this tab had on screen has reached the person
  * (files/reached.ts): Files, once it read the session, reads it again when
- * it doesn't list it.
+ * it doesn't list it. The app starts it once (start.ts `startApp`);
+ * importing this module starts nothing, and an artifact reached before the
+ * start is listed on Files' next read. Returns its stop.
  */
-onArtifactReached((instanceId, id) => {
-  const list = artifactReads.of(instanceId)?.list;
-  if (list && !list.some((artifact) => artifact.id === id)) {
-    readArtifacts(instanceId);
-  }
-});
+export const startFiles = (): (() => void) =>
+  onArtifactReached((instanceId, id) => {
+    const list = artifactReads.of(instanceId)?.list;
+    if (list && !list.some((artifact) => artifact.id === id)) {
+      readArtifacts(instanceId);
+    }
+  });
 
 /**
  * Reads the session's attachments again; its promise settles once the hub

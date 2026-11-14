@@ -5,7 +5,7 @@
    * upkeep, and the toasts. Every route but the bare ones (an artifact in its
    * own tab, a custom view) is in this group, so a bare route opens none of it.
    */
-  import { onMount, type Snippet } from "svelte";
+  import { onDestroy, onMount, type Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
@@ -20,6 +20,7 @@
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
   import Shell from "#lib/cawco/Shell.svelte";
+  import { startApp } from "#lib/cawco/start.js";
   import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
   import { startUpdateWatch } from "#lib/cawco/updates/update-notice.svelte.js";
@@ -30,11 +31,20 @@
   import { leaving, plan, route } from "#lib/platform/motion/route.svelte.js";
   import { departAll } from "#lib/platform/motion/share.svelte.js";
   import { enableLongPressMenus } from "#lib/utils/longpress.js";
+  import { browser } from "$app/env";
   import { onNavigate } from "$app/navigation";
   import type { LayoutServerData } from "./$types";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
     $props();
+
+  // The stores' timers, listeners, effects and registrations (start.ts),
+  // started once in the browser as the app starts, before any page under it
+  // draws or the socket opens below; none runs on the server. Importing a
+  // store starts none of them.
+  if (browser) {
+    onDestroy(startApp());
+  }
 
   // Every artifact pane under the app (the session panel beside a
   // conversation) reads the fleet store (preview/pane-fleet.ts).

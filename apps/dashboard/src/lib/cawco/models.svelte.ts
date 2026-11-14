@@ -64,17 +64,13 @@ const store = $state<{
    * claude's own catalog carries none. Keyed by wire id.
    */
   claudeWindows: {},
-  /** Typed-in ids by the harness they were typed for, newest first. */
-  recent: {},
+  /**
+   * Typed-in ids by the harness they were typed for, newest first. Read
+   * once as the module loads rather than from a getter — a read that writes
+   * is a render that mutates. Nothing to read on the server.
+   */
+  recent: readJson(RECENT_KEY, z.record(z.string(), z.array(z.string())), {}),
 });
-
-// Read once as the module loads rather than from a getter — a read that
-// writes is a render that mutates. Nothing to read on the server.
-store.recent = readJson(
-  RECENT_KEY,
-  z.record(z.string(), z.array(z.string())),
-  {}
-);
 
 /**
  * What the machines themselves report they can run. A harness whose catalog

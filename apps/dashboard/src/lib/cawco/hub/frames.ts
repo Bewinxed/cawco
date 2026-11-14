@@ -48,14 +48,15 @@ type Unrouted<R extends readonly AnyRoute[]> = Exclude<
 let routes = new Map<FrameKind, AnyRoute["take"]>();
 
 /**
- * Every kind's route, replacing the routes before (a module reload routes
- * again). A kind none of them names is a compile error naming it; a kind two
- * of them name is refused.
+ * Every kind's route, replacing the routes before (the app starts the
+ * client's once, client.svelte.ts `startClient`). A kind none of them names
+ * is a compile error naming it; a kind two of them name is refused. Returns
+ * the unrouting: a frame is then taken by nothing, as before any route.
  */
 export function routeFrames<const R extends readonly AnyRoute[]>(
   table: R,
   ..._unrouted: [Unrouted<R>] extends [never] ? [] : [missing: Unrouted<R>]
-): void {
+): () => void {
   const next = new Map<FrameKind, AnyRoute["take"]>();
   for (const route of table) {
     if (next.has(route.kind)) {
@@ -64,6 +65,11 @@ export function routeFrames<const R extends readonly AnyRoute[]>(
     next.set(route.kind, route.take);
   }
   routes = next;
+  return () => {
+    if (routes === next) {
+      routes = new Map();
+    }
+  };
 }
 
 /** One frame, to the route its kind has. */

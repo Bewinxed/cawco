@@ -8,7 +8,8 @@
  * made here takes up what the hub kept of a sign-in already under way
  * (`AccountsView.pending`), so a reload shows the same link or code again;
  * an idle one already made takes it up as the accounts read that carries it
- * lands (`takeAccounts`), never from an effect of the surface that draws it.
+ * lands (`takeAccounts`, which the app's start hands it: {@link startFlows}),
+ * never from an effect of the surface that draws it.
  *
  * A setup that has not made its account yet keys its flows by `new:…`, and
  * hands them to the account's key once it is made (`adoptFlows`).
@@ -25,13 +26,20 @@ const flows = new SvelteMap<string, SigninFlow | DeviceFlow>();
 export const flowKey = (accountId: string, machineId: string): string =>
   `${accountId}:${machineId}`;
 
-// Each accounts read: the flow under each sign-in the hub says is under way
-// takes up its link or code (a flow already under way keeps its own).
-takeAccounts((view) => {
-  for (const pending of view.pending) {
-    flows.get(flowKey(pending.accountId, pending.machineId))?.resume(pending);
-  }
-});
+/**
+ * Each accounts read from now on: the flow under each sign-in the hub says
+ * is under way takes up its link or code (a flow already under way keeps
+ * its own). The app starts it once (start.ts `startApp`); importing this
+ * module starts nothing, and a read that lands before the start is taken up
+ * by the flow made after it (a flow takes up what the hub kept as it is
+ * made). Returns its stop.
+ */
+export const startFlows = (): (() => void) =>
+  takeAccounts((view) => {
+    for (const pending of view.pending) {
+      flows.get(flowKey(pending.accountId, pending.machineId))?.resume(pending);
+    }
+  });
 
 /** What the hub kept of a sign-in under way for the account on the machine. */
 export const pendingOf = (

@@ -17,9 +17,9 @@
 
 import { transcriptWords } from "@cawco/core/words/transcript";
 import { untrack } from "svelte";
+import { on } from "svelte/events";
 import { SvelteSet } from "svelte/reactivity";
 import { toast } from "#lib/platform/toasts.js";
-import { browser } from "$app/env";
 import { result } from "../idb";
 import { keepsDrafts } from "../reload.svelte";
 import { accountsStore } from "../stores/accounts.svelte";
@@ -71,10 +71,15 @@ class EditorDrafts {
   /** The write in flight, settled once its transaction has committed. */
   #writing: Promise<void> = Promise.resolve();
 
-  constructor() {
-    if (!browser) {
-      return;
-    }
+  /**
+   * The drafts, started: the stored ones read back, a page hidden writing
+   * every change waiting, and a reload this tab does itself waiting for
+   * them (reload.svelte.ts `keepsDrafts`). The app starts it once
+   * (start.ts `startApp`); making the store starts none of it, and until
+   * then nothing is read back and an edit is held in the page alone, not
+   * written (`ready` is false). Returns its stop.
+   */
+  start(): () => void {
     database()
       .then((db) =>
         result<DraftRecord[]>(db.transaction(STORE).objectStore(STORE).getAll())
@@ -100,9 +105,13 @@ class EditorDrafts {
           );
         }
       );
-    window.addEventListener("pagehide", () => this.flush());
+    const offHide = on(window, "pagehide", () => this.flush());
     // A reload this tab does itself waits for every edit to be written.
-    keepsDrafts(() => this.settled());
+    const release = keepsDrafts(() => this.settled());
+    return () => {
+      offHide();
+      release();
+    };
   }
 
   /** Writes every change waiting; resolves once the write has committed. */

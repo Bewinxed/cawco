@@ -20,6 +20,7 @@
  */
 import type { FrameSays } from "@cawco/core/page-wire";
 import { previewRoute } from "@cawco/core/preview/routes";
+import { on } from "svelte/events";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
@@ -559,37 +560,45 @@ function slotObserver() {
   return new ResizeObserver(() => watch());
 }
 
-if (typeof document !== "undefined") {
+/**
+ * The page moving under a stage, followed: a transition or an animation
+ * starting, a scroll, the pointer moving, pressed or let go, the window
+ * resized. Each keeps placing every stage for a while. The stages' layer
+ * starts it as it mounts (CanvasStages.svelte), once a page; importing this
+ * module starts nothing, and until then a stage is placed only as it is
+ * held and as its slot changes size. Returns its stop.
+ */
+export function startStages(): () => void {
   const moved = () => {
     if (stages.size > 0) {
       watch();
     }
   };
-  for (const type of [
-    "transitionrun",
-    "animationstart",
-    "scroll",
-    "pointermove",
-  ]) {
-    document.addEventListener(type, moved, { capture: true, passive: true });
-  }
-  document.addEventListener(
-    "pointerdown",
-    () => {
-      pressed = true;
-      moved();
-    },
-    { capture: true }
-  );
-  for (const type of ["pointerup", "pointercancel"]) {
-    document.addEventListener(
-      type,
+  const released = () => {
+    pressed = false;
+    moved();
+  };
+  const offs = [
+    ...["transitionrun", "animationstart", "scroll", "pointermove"].map(
+      (type) => on(document, type, moved, { capture: true, passive: true })
+    ),
+    on(
+      document,
+      "pointerdown",
       () => {
-        pressed = false;
+        pressed = true;
         moved();
       },
       { capture: true }
-    );
-  }
-  window.addEventListener("resize", moved);
+    ),
+    on(document, "pointerup", released, { capture: true }),
+    on(document, "pointercancel", released, { capture: true }),
+    on(window, "resize", moved),
+  ];
+  return () => {
+    for (const off of offs) {
+      off();
+    }
+    pressed = false;
+  };
 }

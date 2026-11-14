@@ -29,12 +29,12 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { flushSync } from "svelte";
+import { on } from "svelte/events";
 import {
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
 } from "#lib/config.js";
-import { browser } from "$app/env";
 import { mustPair, readAuth } from "../hub-auth.svelte";
 import { checkServedBuild, newerBuild } from "../served-build.svelte";
 import { ahead } from "../stores/clock.svelte";
@@ -183,8 +183,6 @@ interface HubHeld {
   reconnectAttempts: number;
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
   socket: WebSocket | null;
-  /** The wake listeners are document-wide; bound once across reloads. */
-  wakeBound: boolean;
 }
 
 declare global {
@@ -192,16 +190,18 @@ declare global {
   var __cawcoHub: HubHeld | undefined;
 }
 
-globalThis.__cawcoHub ??= {
+/**
+ * What the module before handed on, else a fresh hold. {@link startSocket}
+ * puts it on `globalThis`, so a module reload in a started app finds it; a
+ * document that never starts the socket hands nothing on.
+ */
+const hubHeld: HubHeld = globalThis.__cawcoHub ?? {
   socket: null,
   reconnectTimeout: null,
   reconnectAttempts: 0,
   disposing: false,
-  wakeBound: false,
   asked: false,
 };
-
-const hubHeld: HubHeld = globalThis.__cawcoHub;
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
@@ -219,7 +219,7 @@ function abandonInflight(reason: string): void {
 
 /**
  * What the stores do as the connection moves, and what takes the messages it
- * reads: the client wires it once every store has loaded ({@link wireHub}).
+ * reads: the client wires it once the app starts it ({@link wireHub}).
  */
 interface HubWiring {
   /** The socket closed, by either side or dropped as dead. */
@@ -241,7 +241,7 @@ const unwired = (port: string) => () => {
   );
 };
 
-let wiring: HubWiring = {
+const UNWIRED: HubWiring = {
   take: unwired("take"),
   onConnect: [],
   onClose: [],
@@ -249,14 +249,23 @@ let wiring: HubWiring = {
   reread: unwired("reread"),
 };
 
+let wiring: HubWiring = UNWIRED;
+
 /**
- * The stores, wired to the connection. A module reload wires them again,
- * and the socket the module before opened is then replaced on the next
- * {@link openHub}: its board went to the stores before.
+ * The stores, wired to the connection (client.svelte.ts `startClient`, which
+ * the app starts once). A start after a module reload wires them again, and
+ * the socket the module before opened is then replaced on the next
+ * {@link openHub}: its board went to the stores before. Returns the
+ * unwiring: a message taken then fails by name, as before any wiring.
  */
-export function wireHub(next: HubWiring): void {
+export function wireHub(next: HubWiring): () => void {
   wiring = next;
   claimed = false;
+  return () => {
+    if (wiring === next) {
+      wiring = UNWIRED;
+    }
+  };
 }
 
 /** Whether the socket is open now. */
@@ -571,8 +580,11 @@ let pressedAt = Number.NEGATIVE_INFINITY;
  */
 const PRESS_HOLD_MS = 250;
 
-/** Posts the take as a task of its own, behind the frame that asked for it. */
-const takeChannel = browser ? new MessageChannel() : null;
+/**
+ * Posts the take as a task of its own, behind the frame that asked for it;
+ * made by {@link startSocket}. Until then a message is taken as it is held.
+ */
+let takeChannel: MessageChannel | null = null;
 
 /** The take, posted from the next frame: it runs once that frame is drawn. */
 function takeAfterFrame(): void {
@@ -582,37 +594,12 @@ function takeAfterFrame(): void {
   });
 }
 
-if (takeChannel) {
-  takeChannel.port1.onmessage = () => {
-    // A press that came in after the take was posted runs before it, and
-    // its frame is drawn before the take: it waits for the next frame.
-    if (
-      pressedAt > taking.postedAt &&
-      !document.hidden &&
-      performance.now() - taking.askedAt < PRESS_HOLD_MS
-    ) {
-      takeAfterFrame();
-      return;
-    }
-    takeHeld();
-  };
-  const pressed = () => {
-    pressedAt = performance.now();
-  };
-  for (const type of ["pointerdown", "keydown"] as const) {
-    addEventListener(type, pressed, { capture: true, passive: true });
-  }
-  // A page put away draws no frames: what waits is taken at once, and so is
-  // everything after, until it is shown again.
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      takeHeld();
-    }
-  });
-}
-
 function holdMessage(message: unknown): void {
   heldMessages.push(message);
+  if (!takeChannel) {
+    takeHeld();
+    return;
+  }
   if (takeAsked) {
     return;
   }
@@ -803,26 +790,74 @@ export function openHub(): void {
   connect();
 }
 
+/** A page put away draws no frames: what waits is taken at once, and so is everything after, until it is shown again. */
+function takeWhenHidden(): void {
+  if (document.hidden) {
+    takeHeld();
+  }
+}
+
 /**
  * The three moments worth more than the backoff schedule: the machine says its
  * network is back, the tab comes to the foreground after a sleep, and the
  * window regains focus. Each means the outage may be over right now, and the
- * timer was set when none of that was known. Registered once per document,
- * and only for a document that asked for the hub (`openHub`): one
- * that only imports this module (a component canvas on a stage, which talks
- * to no hub) never dials one when it takes the focus.
+ * timer was set when none of that was known. Only for a document that asked
+ * for the hub (`openHub`).
  */
-if (typeof window !== "undefined" && !hubHeld.wakeBound) {
-  hubHeld.wakeBound = true;
-  const wake = () => {
-    if (!hubHeld.asked || document.visibilityState === "hidden") {
+function wake(): void {
+  if (!hubHeld.asked || document.visibilityState === "hidden") {
+    return;
+  }
+  reconnectNow();
+}
+
+/**
+ * The socket's upkeep in this document, which importing the module never
+ * starts: the take's channel, the presses that hold a take back a frame, the
+ * hidden page's take at once, the wake listeners that reconnect, and the
+ * hold a module reload hands on (`globalThis.__cawcoHub`). The app
+ * starts it once before it opens the hub (start.ts `startApp`); a document
+ * that never starts it (a component canvas, a worker) still takes what a
+ * socket reads, at once rather than paced. Returns its stop.
+ */
+export function startSocket(): () => void {
+  // Kept on past the stop: a module reload's next instance takes it up.
+  globalThis.__cawcoHub = hubHeld;
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => {
+    // A press that came in after the take was posted runs before it, and
+    // its frame is drawn before the take: it waits for the next frame.
+    if (
+      pressedAt > taking.postedAt &&
+      !document.hidden &&
+      performance.now() - taking.askedAt < PRESS_HOLD_MS
+    ) {
+      takeAfterFrame();
       return;
     }
-    reconnectNow();
+    takeHeld();
   };
-  window.addEventListener("online", wake);
-  window.addEventListener("focus", wake);
-  document.addEventListener("visibilitychange", wake);
+  takeChannel = channel;
+  const pressed = () => {
+    pressedAt = performance.now();
+  };
+  const offs = [
+    on(window, "pointerdown", pressed, { capture: true, passive: true }),
+    on(window, "keydown", pressed, { capture: true, passive: true }),
+    on(document, "visibilitychange", takeWhenHidden),
+    on(window, "online", wake),
+    on(window, "focus", wake),
+    on(document, "visibilitychange", wake),
+  ];
+  return () => {
+    for (const off of offs) {
+      off();
+    }
+    if (takeChannel === channel) {
+      takeChannel = null;
+    }
+    channel.port1.close();
+  };
 }
 
 /**

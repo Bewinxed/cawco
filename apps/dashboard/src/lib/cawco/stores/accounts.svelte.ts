@@ -95,10 +95,16 @@ let accountsTaker: ((view: AccountsView) => void) | null = null;
 /**
  * Calls `taker` with each accounts read that changed what the hub said, as
  * it is kept: the sign-ins under way in this tab take up the link or code
- * the hub kept for them (accounts/flows.svelte.ts). One taker.
+ * the hub kept for them (accounts/flows.svelte.ts `startFlows`). One taker.
+ * Returns its release: a read then lands with no one taking it.
  */
-export function takeAccounts(taker: (view: AccountsView) => void): void {
+export function takeAccounts(taker: (view: AccountsView) => void): () => void {
   accountsTaker = taker;
+  return () => {
+    if (accountsTaker === taker) {
+      accountsTaker = null;
+    }
+  };
 }
 
 /**

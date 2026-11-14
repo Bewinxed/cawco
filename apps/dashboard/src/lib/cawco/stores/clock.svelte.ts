@@ -10,10 +10,18 @@ import { browser } from "$app/env";
  */
 export const minute = $state({ now: Date.now() });
 
-if (browser) {
-  setInterval(() => {
+/**
+ * Turns {@link minute} every 30 s from now on. The app starts it once
+ * (start.ts `startApp`); importing this module starts nothing, and until the
+ * start, and on the server, the minute stays the module's load. Returns its
+ * stop.
+ */
+export function startMinute(): () => void {
+  minute.now = Date.now();
+  const ticker = setInterval(() => {
     minute.now = Date.now();
   }, 30_000);
+  return () => clearInterval(ticker);
 }
 
 /**

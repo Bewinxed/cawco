@@ -8,7 +8,9 @@
  *
  * sessionStorage, as the minimized question bar (`minimized-asks.svelte.ts`):
  * it survives a reload in this tab and is told to no other, whose reader did
- * not start the work there. Every change is written as it happens.
+ * not start the work there. Every change is written as it happens, once its
+ * holder keeps it ({@link TabDraft.keep}): making one only reads what the tab
+ * kept.
  */
 
 import type { z } from "zod";
@@ -28,7 +30,16 @@ export class TabDraft<S extends z.ZodObject> {
       ...blank(),
       ...readJson(key, shape.partial().catch({}), {}, "session"),
     });
-    $effect.root(() => {
+  }
+
+  /**
+   * Writes every change to the tab's storage as it happens, from now until
+   * the returned stop: a component keeps its draft while it is mounted
+   * (`onMount(() => draft.keep())`), a store's module from the app's start.
+   * Until kept, a change stands in the page alone.
+   */
+  keep(): () => void {
+    return $effect.root(() => {
       $effect(() => {
         writeJson(this.#key, $state.snapshot(this.value), "session");
       });

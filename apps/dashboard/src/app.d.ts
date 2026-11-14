@@ -74,7 +74,7 @@ declare global {
   interface Window {
     /** The /motion/button-pending bench's work: `start`, then `stop` ends it well. */
     __buttonBench: { start: () => void; stop: () => void };
-    /** Dev only: the client's stores and handles, set once client.svelte.ts has loaded. */
+    /** Dev only: the client's stores and handles, set once the app has started the client (client.svelte.ts `startClient`). */
     __cawcoDebug: CawcoDebug;
     /** The /motion/find bench's finder. */
     __find: ReturnType<
