@@ -892,12 +892,6 @@ const todoTexts = (list: readonly string[]) => {
 };
 
 const items = (what: string, list: string[]) => {
-  if (list.length > LIST_LIMIT) {
-    return problem(400, {
-      code: "task-list-too-long",
-      detail: `${what} holds ${list.length} items; it stops at ${LIST_LIMIT}.`,
-    });
-  }
   const kept = new Set<string>();
   for (const item of list) {
     const line = oneLine(`${what} item`, item, ITEM_LIMIT);
