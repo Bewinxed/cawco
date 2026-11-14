@@ -881,7 +881,7 @@ export type FramePayload =
   | PasskeyRelayFrame
   /** Daemon-originated: a FIDO BLE advertisement captured on this machine, for the hub to relay. */
   | PasskeyAdvertFrame
-  /** Daemon-originated: a FIDO URI extracted from a browser's passkey QR code. */
+  /** Daemon-originated: a FIDO URI extracted from a browser's passkey QR code, which the hub broadcasts to every dashboard. */
   | PasskeyQrFrame
   /** Hub-originated: every browser of the fleet, whole, on each change. */
   | BrowserListFrame

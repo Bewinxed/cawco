@@ -82,6 +82,7 @@
   import FaultDetails from "../fault/FaultDetails.svelte";
   import ShowDetails from "../fault/ShowDetails.svelte";
   import { animatedCaw } from "../home/FaultCaw.svelte";
+  import { activePasskeyQr } from "../stores/passkey-qr.svelte";
   import BrowserAddress from "./BrowserAddress.svelte";
   import { startFromPanel } from "./browser-acts";
   import {
@@ -100,6 +101,7 @@
     sinkKeyRole,
     typedBetween,
   } from "./keyboard-sink";
+  import PasskeyQr from "./PasskeyQr.svelte";
 
   /** The layout a take-over's page is in: a phone's or the desktop's. */
   type Form = TakeoverLayout["form"];
@@ -1296,6 +1298,9 @@
       }
     }
   );
+
+  /** The active passkey QR for this browser, while the person holds it. */
+  const passkeyQr = $derived(mine ? activePasskeyQr(browser?.key) : null);
 </script>
 
 <!-- Show keyboard, a bare symbol in a glass: held off the focus, so a press
@@ -1571,6 +1576,11 @@
       >
         {refusal}
       </p>
+    {/if}
+    {#if passkeyQr && browser?.key}
+      <!-- A passkey QR from the browser's page: a card over the stream for
+           the person to scan with their phone. -->
+      <PasskeyQr frame={passkeyQr} browserKey={browser.key} />
     {/if}
   </div>
   <!-- A failure is the panel's own words, not the browser's page: it runs

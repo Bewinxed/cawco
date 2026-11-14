@@ -16,6 +16,7 @@
     "**/build",
     "**/.svelte-kit",
     "apps/cawrier",
+    "apps/chrome-extension",
     "apps/dashboard",
     "packages",
     "scripts",

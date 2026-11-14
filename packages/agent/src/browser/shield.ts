@@ -869,7 +869,7 @@ const pollPasskeyQr = async (
         machineId,
         key,
         fidoUri: uri,
-        extractedAt: Date.now(),
+        raisedAt: Date.now(),
       });
       console.info(`[browser] ${key}: passkey QR extracted`);
     }

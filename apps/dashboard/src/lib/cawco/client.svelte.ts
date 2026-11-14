@@ -86,6 +86,7 @@ import {
   takeWatchNotices,
 } from "./stores/needs.svelte";
 import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
+import { takePasskeyQr } from "./stores/passkey-qr.svelte";
 import { plansState } from "./stores/plans.svelte";
 import {
   previewsState,
@@ -461,6 +462,7 @@ routeFrames([
   // Something that needs the person, shown on the desk tab they use.
   onFrame("desk_alert", (frame) => showDeskAlert(frame, instanceIndex)),
   onFrame("browser_list", takeBrowsers),
+  onFrame("passkey_qr", takePasskeyQr),
   // The stream relay's journey moved: every place that draws it follows.
   onFrame("stream_relay.journey", (frame) => keepRelayJourney(frame.journey)),
   onFrame("tailnet.https", takeTailnet),
@@ -492,8 +494,6 @@ routeFrames([
   ...hubOnly("browsers"),
   // A machine's passkey relay capability travels machine → hub only.
   ...hubOnly("passkey_relay"),
-  // A passkey QR travels machine → hub → dashboard; the takeover view reads it, not session state.
-  ...hubOnly("passkey_qr"),
   // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
   ...hubOnly("browser_handback"),
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
