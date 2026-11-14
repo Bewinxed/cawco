@@ -25,6 +25,7 @@ import type {
   BrowserKey as BrowserKeyType,
   BrowserState as BrowserStateType,
   ListedBrowser as ListedBrowserType,
+  PasskeyRelayCapability as PasskeyRelayCapabilityType,
 } from "@cawco/core/browser";
 import type {
   CommentAttachment as CommentAttachmentType,
@@ -170,6 +171,7 @@ import type {
   PairingStageOutput,
   ParkedAskOutput,
   ParkedStartOutput,
+  PasskeyRelayCapabilityOutput,
   PendingFileOutput,
   PendingTextOutput,
   PermissionModeOutput,
@@ -262,6 +264,7 @@ prove<
     Same<BrowserKeyOutput, BrowserKeyType>,
     Same<BrowserAskFrameOutput, BrowserAskFrameType>,
     Same<BrowserHostKindOutput, BrowserHostKindType>,
+    Same<PasskeyRelayCapabilityOutput, PasskeyRelayCapabilityType>,
     Same<BrowserStateOutput, BrowserStateType>,
     Same<ListedBrowserOutput, ListedBrowserType>,
     Same<ArtifactKindOutput, ArtifactKindType>,
