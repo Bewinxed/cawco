@@ -85,14 +85,10 @@ const HUB_PATH_USERS: Record<string, string> = {
     "a view's own Query arguments, which no type holds and Eden types per tool",
   "apps/dashboard/src/lib/cawco/stores/projects.svelte.ts":
     "the delete for good, whose `delete` segment Eden's types fold into DELETE /api/projects/:id",
-  "apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte":
-    "a machine's picture or video, an element's src",
-  "apps/dashboard/src/lib/cawco/transcript/block-sources.ts":
-    "a block's picture, clip or sound from its machine, an element's src",
   "apps/dashboard/src/lib/cawco/artifact-api.ts":
     "an artifact's thumbnail, an element's src",
-  "apps/dashboard/src/lib/cawco/project-tasks.ts":
-    "a folder file's and an output's address, an element's src or a link",
+  "apps/dashboard/src/lib/platform/hub-file.ts":
+    "a file route's address, an element's src or a link, made beside the route's own read",
   "apps/dashboard/src/routes/dev/artifact-panel/+page.svelte":
     "the stand-in recognises the requests it answers by their path",
   "apps/dashboard/src/lib/cawco/views/routines-fixture.ts":

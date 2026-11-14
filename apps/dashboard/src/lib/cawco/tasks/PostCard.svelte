@@ -23,7 +23,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { folderRawHref } from "../project-tasks";
+  import { folderRawFile } from "../project-tasks";
 
   let {
     post,
@@ -146,7 +146,7 @@
                 <img
                   alt=""
                   class="max-h-64 max-w-full rounded-sm"
-                  src={folderRawHref(projectId, file)}
+                  src={folderRawFile(projectId, file).href}
                 />
               {:else if kind === "video"}
                 <!-- svelte-ignore a11y_media_has_caption: a post's media file carries no caption track -->
@@ -155,10 +155,10 @@
                   class="max-h-64 max-w-full rounded-sm"
                   controls
                   preload="metadata"
-                  src={folderRawHref(projectId, file)}
+                  src={folderRawFile(projectId, file).href}
                 ></video>
               {:else}
-                <a href={folderRawHref(projectId, file)} target="_blank"
+                <a href={folderRawFile(projectId, file).href} target="_blank"
                   >{file}</a
                 >
               {/if}

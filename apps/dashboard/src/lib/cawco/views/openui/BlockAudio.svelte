@@ -20,13 +20,13 @@
     $props();
 
   const media = blockMediaHere();
-  const { file, name, caption, src } = $derived(
+  const { file, name, caption, source } = $derived(
     namedFile(media, props.file, props.caption)
   );
 </script>
 
 <figure class={["m-0 min-w-0", MEASURE_ROOM]} data-slot="block-audio">
-  {#if !src}
+  {#if !source}
     <p
       class="m-0 type-meta text-ink-muted wrap-anywhere"
       data-slot="media-gone"
@@ -45,7 +45,7 @@
       </span>
     </p>
   {:else}
-    <MediaPlayer kind="audio" {name} {src} />
+    <MediaPlayer kind="audio" {name} {source} />
     {#if caption}
       <figcaption class="mt-space-2 type-meta text-ink-muted wrap-anywhere">
         {caption}

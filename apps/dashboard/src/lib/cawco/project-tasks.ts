@@ -32,11 +32,11 @@ import type {
 import type { IssueTracker } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
+import { type HubFile, hubFile } from "#lib/platform/hub-file.js";
 import {
   hubData,
   hubDone,
-  refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 
@@ -476,8 +476,8 @@ export const retryTask = (
   );
 
 /** A file of the project's folder as its bytes, for an image, video or audio output. */
-export const folderRawHref = (projectId: string, path: string): string =>
-  hubPath(hub.api.projects({ id: projectId }).folder.raw, { path });
+export const folderRawFile = (projectId: string, path: string): HubFile =>
+  hubFile(hub.api.projects({ id: projectId }).folder.raw, { path });
 
 /**
  * A file of the project's folder as the project page shows it (`?file=`,
@@ -574,27 +574,22 @@ export function flagsOf(task: TaskSummary | TaskView): {
  * (`outputs: [post.md]`): the hub serves it from where it copied it
  * (`assets/<task>/`), a picture as itself and anything else as text.
  */
-export const outputUrl = (
+export const outputFile = (
   projectId: string,
   taskId: string,
   name: string
-): string =>
-  hubPath(hub.api.projects({ id: projectId }).tasks({ taskId }).outputs.file, {
+): HubFile =>
+  hubFile(hub.api.projects({ id: projectId }).tasks({ taskId }).outputs.file, {
     name,
   });
 
 /**
- * An output's words, whole, as the hub served them from `src` (a task's
- * `outputUrl` or the folder's `folderRawHref`); throws the hub's sentence
+ * An output's words, whole, as the hub serves `file` (a task's
+ * `outputFile` or the folder's `folderRawFile`); throws the hub's sentence
  * when it refuses.
  */
-export async function readOutputText(src: string): Promise<string> {
-  const response = await fetch(src);
-  if (!response.ok) {
-    throw refusedOrUnreached(await refusedOf(response));
-  }
-  return response.text();
-}
+export const readOutputText = async (file: HubFile): Promise<string> =>
+  await (await hubData(file.ask(), refusedOrUnreached)).text();
 
 /** A session's state on a task as a status word (working / done / failed). */
 export const attemptWord = (state: WorkItemState): string =>

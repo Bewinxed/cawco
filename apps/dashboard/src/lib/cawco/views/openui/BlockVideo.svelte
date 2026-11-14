@@ -28,11 +28,11 @@
   }> = $props();
 
   const media = blockMediaHere();
-  const { file, name, caption, src } = $derived(
+  const { file, name, caption, source } = $derived(
     namedFile(media, props.file, props.caption)
   );
   const size = $derived(blockSize(props.size) ?? "medium");
-  const still = $derived(src ? clipStills.get(src) : undefined);
+  const still = $derived(source ? clipStills.get(source.href) : undefined);
 
   /** Keeps the frame its player shows as a picture, for its still once replaced. */
   const keepsStills = (box: HTMLElement) => {
@@ -81,7 +81,7 @@
   class={["m-0 min-w-0 max-w-full", BLOCK_ROOM[size]]}
   data-slot="block-video"
 >
-  {#if !src}
+  {#if !source}
     <p
       class="m-0 type-meta text-ink-muted wrap-anywhere"
       data-slot="media-gone"
@@ -108,7 +108,7 @@
     {/if}
   {:else}
     <div {@attach keepsStills}>
-      <MediaPlayer kind="video" {name} {src} />
+      <MediaPlayer kind="video" {name} {source} />
     </div>
   {/if}
   {#if caption}

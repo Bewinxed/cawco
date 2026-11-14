@@ -1,7 +1,7 @@
 <script lang="ts">
   import { madeWords } from "@cawco/core/words/made";
   /**
-   * A clip or a sound, read from `src`, in CawCo's one player: a task's
+   * A clip or a sound, read from `source`, in CawCo's one player: a task's
    * output, a report's file (TaskOutput), a block's Video or Audio
    * (BlockVideo, BlockAudio). Its metadata alone loads until it is played.
    *
@@ -42,6 +42,7 @@
     IconSoundLinear,
     IconSoundOffLinear,
   } from "#lib/icons.js";
+  import type { ServedFile } from "#lib/platform/hub-file.js";
   import { reveal } from "#lib/platform/motion/curves.svelte.js";
   import { track } from "#lib/platform/track.js";
   import MediaButton from "./MediaButton.svelte";
@@ -50,12 +51,13 @@
   import { mediaProblem } from "./media-problem";
 
   let {
-    src,
+    source,
     name,
     kind,
     capped = false,
   }: {
-    src: string;
+    /** Its address, and the read that asks why it failed. */
+    source: ServedFile;
     /** What it is called where it fails: its file's name. */
     name: string;
     kind: "video" | "audio";
@@ -63,10 +65,13 @@
     capped?: boolean;
   } = $props();
 
+  /** Its address: a source made again for the same file is the same file. */
+  const href = $derived(source.href);
+
   /** The clip's own size, once its metadata says it. */
   let shape = $state<{ w: number; h: number } | null>(null);
   $effect(() => {
-    track(src);
+    track(href);
     shape = null;
   });
   /** Reads the clip's own size off its metadata. */
@@ -95,16 +100,16 @@
   let problem = $state<string | null>(null);
   $effect(() => {
     // A new file is tried fresh.
-    track(src);
+    track(href);
     problem = null;
   });
 
   /** The element's own error event, held as an attachment: no press on it. */
   const whenFailed: Attachment<HTMLMediaElement> = (node) =>
     on(node, "error", async () => {
-      const at = src;
-      const words = await mediaProblem(at, name);
-      if (at === src) {
+      const at = href;
+      const words = await mediaProblem(source, name);
+      if (at === href) {
         problem = words;
       }
     });
@@ -230,7 +235,7 @@
         class="block size-full object-cover"
         playsinline
         preload="metadata"
-        {src}
+        src={href}
         {@attach whenFailed}
         {@attach readsShape}
       ></video>
@@ -270,7 +275,7 @@
       in:reveal
     >
       <!-- biome-ignore lint/a11y/useMediaCaption: a file carries no caption track; the file is what there is -->
-      <audio preload="metadata" {src} {@attach whenFailed}></audio>
+      <audio preload="metadata" src={href} {@attach whenFailed}></audio>
       {@render controls()}
     </media-container>
   </audio-player>

@@ -53,8 +53,8 @@
     IconUser,
     IconWindow,
   } from "#lib/icons.js";
-  import { hubPath } from "#lib/platform/hub.js";
-  import { failureWords } from "#lib/platform/hub-read.js";
+  import { type HubFile, hubFile } from "#lib/platform/hub-file.js";
+  import { failureWords, hubData } from "#lib/platform/hub-read.js";
   import {
     dur,
     easeOut,
@@ -86,32 +86,32 @@
   const hub = hubSeam();
 
   /** A picture or video on the session's machine, read through the hub when looked at. */
-  const machineMedia = (machineId: string, path: string): string =>
-    hubPath(hub.client.api.agents({ machineId }).media, { path });
+  const machineMedia = (machineId: string, path: string): HubFile =>
+    hubFile(hub.client.api.agents({ machineId }).media, { path });
 
   const isVideo = (path: string): boolean => VIDEO_FILE.test(path);
   /** Where a video's captions would be served from; nothing for a picture. */
-  const captionsOf = (machineId: string, path: string): string | undefined =>
+  const captionsOf = (machineId: string, path: string): HubFile | undefined =>
     isVideo(path) ? machineMedia(machineId, sidecarOf(path)) : undefined;
   /** A captions file sent with no video of its own: a file, not a picture. */
   const CAPTIONS_FILE = /\.vtt$/iu;
   /**
-   * A lone captions file's text, read once per URL, for its file row. The
-   * browser reads it, from its own origin: the server's render has no origin
-   * to read a relative URL from, so it draws the row waiting, and hydration
-   * reads.
+   * A lone captions file's text, read once per address, for its file row.
+   * The browser reads it, from its own origin: the server's render has no
+   * origin to read a relative address from, so it draws the row waiting, and
+   * hydration reads.
    */
   const captionTexts = new Map<string, Promise<string>>();
-  const captionText = (url: string): Promise<string> => {
+  const captionText = (file: HubFile): Promise<string> => {
     if (!browser) {
       return new Promise<string>(() => undefined);
     }
-    let text = captionTexts.get(url);
+    let text = captionTexts.get(file.href);
     if (!text) {
-      text = fetch(url).then((answer) =>
-        answer.ok ? answer.text() : Promise.reject(new Error(answer.statusText))
+      text = hubData(file.ask()).then(
+        async (captions) => await captions.text()
       );
-      captionTexts.set(url, text);
+      captionTexts.set(file.href, text);
     }
     return text;
   };
@@ -921,7 +921,7 @@
                   caption={shown}
                   {path}
                   size="card"
-                  src={machineMedia(machine(), path)}
+                  src={machineMedia(machine(), path).href}
                   video={isVideo(path)}
                 />
               </div>
@@ -943,7 +943,7 @@
                       missing="Captions file"
                       {path}
                       size="card"
-                      src={machineMedia(machine(), path)}
+                      src={machineMedia(machine(), path).href}
                     />
                   {/await}
                 {:else}
@@ -952,7 +952,7 @@
                     captions={captionsOf(machine(), path)}
                     {path}
                     size="card"
-                    src={machineMedia(machine(), path)}
+                    src={machineMedia(machine(), path).href}
                     video={isVideo(path)}
                   />
                 {/if}

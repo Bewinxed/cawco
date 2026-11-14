@@ -1,4 +1,7 @@
 <script lang="ts" module>
+  import type { HubFile } from "#lib/platform/hub-file.js";
+  import { hubData } from "#lib/platform/hub-read.js";
+
   /** Bytes from the front of a base64 payload: enough for any header read below. */
   const HEAD = 65_536;
 
@@ -90,25 +93,25 @@
   }
 
   /**
-   * A video's captions file, looked up once per URL for the page's life: its
-   * text as a blob URL the `<track>` reads, or null when there is none.
+   * A video's captions file, looked up once per address for the page's
+   * life: its text as a blob URL the `<track>` reads, or null when there is
+   * none.
    */
   const sidecars = new Map<string, Promise<string | null>>();
-  function sidecarCaptions(url: string): Promise<string | null> {
-    let found = sidecars.get(url);
+  function sidecarCaptions(file: HubFile): Promise<string | null> {
+    let found = sidecars.get(file.href);
     if (!found) {
-      found = fetch(url)
-        .then(async (answer) =>
-          answer.ok ? URL.createObjectURL(await answer.blob()) : null
-        )
+      found = hubData(file.ask())
+        .then((captions) => URL.createObjectURL(captions))
         .catch(() => null);
-      sidecars.set(url, found);
+      sidecars.set(file.href, found);
     }
     return found;
   }
 </script>
 
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { reveal, revealHere } from "#lib/platform/motion/curves.svelte.js";
@@ -131,7 +134,7 @@
     alt: string;
     caption?: string;
     /** Where a video's sidecar `.vtt` would be served from. */
-    captions?: string;
+    captions?: HubFile;
     /** What the box says it is when the file can't be read. */
     missing?: string;
     path?: string;
@@ -145,22 +148,25 @@
    * video goes in with its `default` track already inside it.
    */
   let track = $state<{ for: string; url: string | null }>();
+  /** Its captions' address: a source made again for the same file is the same file. */
+  const captionsAt = $derived(captions?.href);
   $effect(() => {
-    const url = captions;
-    if (!(video && url)) {
+    const at = captionsAt;
+    const file = untrack(() => captions);
+    if (!(video && at && file)) {
       return;
     }
     let live = true;
-    sidecarCaptions(url).then((found) => {
+    sidecarCaptions(file).then((found) => {
       if (live) {
-        track = { for: url, url: found };
+        track = { for: at, url: found };
       }
     });
     return () => {
       live = false;
     };
   });
-  const captionsReady = $derived(!captions || track?.for === captions);
+  const captionsReady = $derived(!captionsAt || track?.for === captionsAt);
 
   let image = $state<HTMLImageElement>();
   let loaded = $state<string>();

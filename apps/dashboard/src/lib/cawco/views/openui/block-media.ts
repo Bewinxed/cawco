@@ -14,6 +14,8 @@
  */
 import type { ArtifactSummary } from "@cawco/core/protocol";
 import { getContext, setContext } from "svelte";
+import type { ServedFile } from "#lib/platform/hub-file.js";
+import { answerOf } from "#lib/platform/hub-read.js";
 
 /** A drawn picture, as it opens full size: out of and back into its box. */
 interface BlockShot {
@@ -43,8 +45,8 @@ export interface BlockSources {
   open: (shots: BlockShot[], index: number) => void;
   /** A reply's pages: none where a Preview is the host's own (a kept block). */
   pages?: BlockPages;
-  /** Where `file` is served; null when it names none a block may show. */
-  src: (file: string) => string | null;
+  /** Where `file` is served, and its read; null when it names none a block may show. */
+  src: (file: string) => ServedFile | null;
 }
 
 /** A block's media sources, with whether the block was replaced. */
@@ -79,18 +81,33 @@ const NONE: BlockMedia = {
 export const blockMediaHere = (): BlockMedia =>
   getContext<BlockMedia | undefined>(MEDIA) ?? NONE;
 
+/**
+ * A file served at an address the page was handed rather than built from a
+ * hub route (a kept page's file beside it, a story's stage), read as Eden's
+ * client would hand its answer back (hub-read `answerOf`).
+ */
+export const fileAt = (href: string): ServedFile => ({
+  href,
+  ask: async () => await answerOf(await fetch(href)),
+});
+
 /** A file a block's piece names, as it draws it: its name, its caption, and where it is served (null: none it may show). */
 export const namedFile = (
   media: BlockMedia,
   file: unknown,
   caption: unknown
-): { caption: string; file: string; name: string; src: string | null } => {
+): {
+  caption: string;
+  file: string;
+  name: string;
+  source: ServedFile | null;
+} => {
   const named = String(file ?? "");
   return {
     file: named,
     name: named.split("/").at(-1) ?? named,
     caption: caption ? String(caption) : "",
-    src: media.src(named),
+    source: media.src(named),
   };
 };
 

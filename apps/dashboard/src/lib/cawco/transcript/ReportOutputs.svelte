@@ -7,11 +7,11 @@
    * - video and audio in the platform's player (TaskOutput);
    * - markdown, a post and any other file a chip to its file card on the
    *   project page (FolderFiles, `?file=`).
-   * Every one is read from the folder's bytes (folderRawHref).
+   * Every one is read from the folder's bytes (folderRawFile).
    */
   import { deliverableKind } from "@cawco/core/deliverables";
   import FolderFiles from "../project/FolderFiles.svelte";
-  import { folderRawHref } from "../project-tasks";
+  import { folderRawFile } from "../project-tasks";
   import TaskOutput from "../tasks/TaskOutput.svelte";
   import Shot from "./Shot.svelte";
 
@@ -56,14 +56,14 @@
         alt={path.split("/").at(-1) ?? path}
         {path}
         size="card"
-        src={folderRawHref(projectId, path)}
+        src={folderRawFile(projectId, path).href}
       />
     {/each}
   </div>
 {/if}
 {#each drawn.played as path (path)}
   <div class="mt-space-3">
-    <TaskOutput {path} {projectId} src={folderRawHref(projectId, path)} />
+    <TaskOutput {path} {projectId} source={folderRawFile(projectId, path)} />
   </div>
 {/each}
 {#if drawn.chips.length > 0}

@@ -30,9 +30,10 @@
   }> = $props();
 
   const media = blockMediaHere();
-  const { file, caption, src } = $derived(
+  const { file, caption, source } = $derived(
     namedFile(media, props.file, props.caption)
   );
+  const src = $derived(source?.href ?? null);
   const alt = $derived(String(props.alt ?? "") || file);
   const size = $derived(blockSize(props.size));
   /** The address that didn't load: a new one is tried fresh. */

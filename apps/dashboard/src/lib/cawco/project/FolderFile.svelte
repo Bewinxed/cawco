@@ -4,7 +4,7 @@
    * project page (`?file=<path>`, folderFileHref), drawn as what it is
    * (@cawco/core deliverables): a picture as itself, opening in the
    * lightbox, video and audio in the platform's player (TaskOutput, from
-   * the folder's bytes, folderRawHref); markdown drawn, anything else as
+   * the folder's bytes, folderRawFile); markdown drawn, anything else as
    * text. A Caw reply's chips, a report's file chips, Configure's project
    * delegate types and a task's attached files link to it. It opens
    * in the page (The Open Page Rule): the card beside the view on a desk
@@ -25,7 +25,7 @@
   import { hub } from "#lib/platform/hub.js";
   import { failureWords, hubData, hubRefusal } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
-  import { folderRawHref } from "../project-tasks";
+  import { folderRawFile } from "../project-tasks";
   import PageSurface from "../side/PageSurface.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import TaskOutput from "../tasks/TaskOutput.svelte";
@@ -104,7 +104,7 @@
           bare
           {path}
           {projectId}
-          src={folderRawHref(projectId, path)}
+          source={folderRawFile(projectId, path)}
         />
       {:else if problem}
         <!-- Plain, not alarmed (DESIGN.md, Voice: no alarm inflation): the path

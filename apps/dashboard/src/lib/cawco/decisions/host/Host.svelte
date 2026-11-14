@@ -20,7 +20,7 @@
   import { onMount, tick } from "svelte";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import { loadPhotoSwipe } from "../../lightbox/photoswipe";
-  import { provideBlockMedia } from "../../views/openui/block-media";
+  import { fileAt, provideBlockMedia } from "../../views/openui/block-media";
   import OpenUiRenderer from "../../views/openui/OpenUiRenderer.svelte";
   import { decisionCardOf } from "./card-fault";
   import { DECISION_LIBRARY, HOST_BLOCK_LIBRARY } from "./library.js";
@@ -31,7 +31,10 @@
   // A kept block's pictures, clips and sounds are the files the hub copied
   // beside the page; its pictures open full size in the house's PhotoSwipe.
   provideBlockMedia({
-    src: (file) => served.files[file] ?? null,
+    src: (file) => {
+      const href = served.files[file];
+      return href ? fileAt(href) : null;
+    },
     open: async (shots, index) => {
       const photoSwipe = await loadPhotoSwipe();
       photoSwipe({

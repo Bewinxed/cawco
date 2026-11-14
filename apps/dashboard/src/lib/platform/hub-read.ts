@@ -292,22 +292,26 @@ const DATA_TYPES = new Set([
 ]);
 
 /**
- * Whether a 2xx answer is a file: it names a content type and that type is
- * none of the data types ({@link DATA_TYPES}). Eden reads such a body by its
- * type (images and video through `text()`, which corrupts them, an
+ * Whether a 2xx answer is a file: the hub's framework says it sent one
+ * (`Accept-Ranges: bytes`, which Elysia's `handleFile` sets on every Blob or
+ * file a route answers, a task's text output and a folder's JSON among
+ * them), or it names a content type that is none of the data types
+ * ({@link DATA_TYPES}). Eden reads such a body by its type (images and
+ * video through `text()`, which corrupts them, an
  * `application/octet-stream` as an ArrayBuffer, text that looks like JSON as
- * a value), where the route's type says Blob: so it is read as the Blob it
- * is, bytes and type unchanged ({@link fileOf}). A refusal is never a file:
- * it is read as before, whatever its type (a proxy's HTML page).
+ * a value, text as a string no reader takes), where the route's type says
+ * Blob: so it is read as the Blob it is, bytes and type unchanged
+ * ({@link fileOf}). A refusal is never a file: it is read as before,
+ * whatever its type (a proxy's HTML page).
  */
 function isFile(response: Response): boolean {
+  if (response.status < 200 || response.status >= 300) {
+    return false;
+  }
   const type = response.headers.get("content-type")?.split(";")[0].trim();
   return (
-    type !== undefined &&
-    type !== "" &&
-    response.status >= 200 &&
-    response.status < 300 &&
-    !DATA_TYPES.has(type)
+    response.headers.get("accept-ranges") === "bytes" ||
+    (type !== undefined && type !== "" && !DATA_TYPES.has(type))
   );
 }
 

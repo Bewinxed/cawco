@@ -58,9 +58,9 @@
     approveTarget,
     decisionWait,
     folderFileHref,
-    folderRawHref,
+    folderRawFile,
     landedOf,
-    outputUrl,
+    outputFile,
     readTask,
     retryTask,
     reviewOf,
@@ -275,10 +275,10 @@
     // file is its address in the project's folder (`?file=`), and a
     // picture, video or sound there is its bytes.
     if (task.outputs.includes(one.path)) {
-      return outputUrl(projectId, task.id, one.path);
+      return outputFile(projectId, task.id, one.path).href;
     }
     return ["image", "video", "audio"].includes(deliverableKind(one.path))
-      ? folderRawHref(projectId, one.path)
+      ? folderRawFile(projectId, one.path).href
       : folderFileHref(projectId, one.path);
   };
   /** An artifact handed in with no name of its own is named by its title, never its id. */

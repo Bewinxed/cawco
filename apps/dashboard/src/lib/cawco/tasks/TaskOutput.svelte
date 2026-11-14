@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * A file a delegate handed in, read from `src`: a task's output as its
-   * attempt handed it in (`outputUrl`, ViewMade) or any file of the
-   * project's folder as its bytes (`folderRawHref`: a report's video or
+   * A file a delegate handed in, read from `source`: a task's output as its
+   * attempt handed it in (`outputFile`, ViewMade) or any file of the
+   * project's folder as its bytes (`folderRawFile`: a report's video or
    * audio, the file card's picture). Drawn as what it is (@cawco/core
    * deliverables):
    * - a post (`*.post.json`): the post card (PostCard);
@@ -24,10 +24,12 @@
     parsePost,
   } from "@cawco/core/deliverables";
   import { madeWords } from "@cawco/core/words/made";
+  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { on } from "svelte/events";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
+  import type { HubFile } from "#lib/platform/hub-file.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { failureWords } from "../../platform/hub-read";
@@ -41,7 +43,7 @@
   let {
     projectId,
     path,
-    src,
+    source,
     version = 0,
     compact = false,
     bare = false,
@@ -49,8 +51,8 @@
     projectId: string;
     /** Its path, as the task's `outputs` or the folder names it. */
     path: string;
-    /** Where the hub serves its bytes: `outputUrl` or `folderRawHref`. */
-    src: string;
+    /** Where the hub serves its bytes: `outputFile` or `folderRawFile`. */
+    source: HubFile;
     /** Changes when the task was written again: the file is read again. */
     version?: number;
     compact?: boolean;
@@ -58,6 +60,8 @@
     bare?: boolean;
   } = $props();
 
+  /** Its address: a source made again for the same file is the same file. */
+  const href = $derived(source.href);
   const kind = $derived(deliverableKind(path));
   /** Read as text here: a post and markdown. */
   const read = $derived(kind === "post" || kind === "markdown");
@@ -85,9 +89,11 @@
     }
     // Read again whenever the task is written again.
     track(version);
+    track(href);
+    const file = untrack(() => source);
     let gone = false;
     problem = null;
-    readOutputText(src)
+    readOutputText(file)
       .then((text) => {
         if (!gone) {
           content = text;
@@ -104,7 +110,7 @@
   });
 
   /**
-   * A picture is drawn by the platform from `src`, and the platform says
+   * A picture is drawn by the platform from `source`, and the platform says
    * nothing of why it could not be: on its error the hub is asked why
    * (media-problem.ts). Video and audio say their own (MediaPlayer).
    */
@@ -113,16 +119,16 @@
       return;
     }
     // A new file is tried fresh.
-    track(src);
+    track(href);
     problem = null;
   });
 
   /** The picture's own error event, held as an attachment: no press on it. */
   const whenFailed: Attachment<HTMLImageElement> = (node) =>
     on(node, "error", async () => {
-      const at = src;
-      const words = await mediaProblem(at, name);
-      if (at === src) {
+      const at = href;
+      const words = await mediaProblem(source, name);
+      if (at === href) {
         problem = words;
       }
     });
@@ -143,7 +149,7 @@
           element: image,
           height: image.naturalHeight,
           path,
-          src,
+          src: href,
           width: image.naturalWidth,
         },
       ],
@@ -172,7 +178,7 @@
         <a
           class="inline-flex flex-none items-center gap-space-1 h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
           data-box
-          href={src}
+          {href}
           rel="noopener"
           target="_blank"
         >
@@ -228,13 +234,13 @@
           <img
             alt={name}
             class="block max-w-full max-h-80 group-data-compact:max-h-24 rounded-sm"
-            {src}
+            src={href}
             bind:this={image}
             {@attach whenFailed}
           />
         </button>
       {:else if kind === "video" || kind === "audio"}
-        <MediaPlayer capped {kind} {name} {src} />
+        <MediaPlayer capped {kind} {name} {source} />
       {/if}
     </div>
   {/if}

@@ -1,12 +1,12 @@
 /**
  * One file a delegate handed in, drawn as what it is (Component Story
- * Format 3, live components), from where the hub serves its bytes (`src`):
- * here the cawco project's folder on the hub (folderRawHref), the route a
+ * Format 3, live components), from where the hub serves its bytes (`source`):
+ * here the cawco project's folder on the hub (folderRawFile), the route a
  * report's outputs and the file card read; a task's Made list reads its
- * task's own outputs route (outputUrl) the same way. A picture opens in
+ * task's own outputs route (outputFile) the same way. A picture opens in
  * the lightbox; a plain file keeps its row with Open.
  */
-import { folderRawHref } from "../project-tasks";
+import { folderRawFile } from "../project-tasks";
 import TaskOutput from "./TaskOutput.svelte";
 
 /** The cawco project, whose folder holds these files. */
@@ -21,7 +21,7 @@ export default {
   args: {
     projectId: PROJECT,
     path: PICTURE,
-    src: folderRawHref(PROJECT, PICTURE),
+    source: folderRawFile(PROJECT, PICTURE),
   },
 };
 
@@ -36,10 +36,10 @@ export const PictureBare = { args: { bare: true } };
 
 /** A plain file: its row and Open, even bare. */
 export const File = {
-  args: { path: LOG, src: folderRawHref(PROJECT, LOG), bare: true },
+  args: { path: LOG, source: folderRawFile(PROJECT, LOG), bare: true },
 };
 
 /** A picture the hub does not hold: the hub's words where it would be. */
 export const PictureRefused = {
-  args: { path: MISSING, src: folderRawHref(PROJECT, MISSING) },
+  args: { path: MISSING, source: folderRawFile(PROJECT, MISSING) },
 };

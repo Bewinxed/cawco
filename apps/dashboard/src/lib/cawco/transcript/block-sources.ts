@@ -4,7 +4,7 @@
  * - a file by its absolute path from the session's machine, through the
  *   route `show_image` and a tool row's gallery read it by (`GET
  *   /api/agents/:machineId/media`); a relative path from the session's
- *   project's folder (`GET /api/projects/:id/folder/raw`, `folderRawHref`,
+ *   project's folder (`GET /api/projects/:id/folder/raw`, `folderRawFile`,
  *   as a report's outputs are drawn); anything else none (core
  *   `blockFile`);
  * - a picture full size in the dashboard's Lightbox;
@@ -15,13 +15,14 @@
 
 import { blockFile } from "@cawco/core/inline-blocks";
 import { projectPagePlace } from "@cawco/core/preview/routes";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubFile } from "#lib/platform/hub-file.js";
 import { theme } from "#lib/theme.svelte.js";
 import { thumbnailUrl } from "../artifact-api";
 import { artifactsOf, readArtifacts } from "../files/files.svelte";
 import { lightbox } from "../lightbox/lightbox-state.svelte";
 import { pageSource } from "../preview/page-source";
-import { folderRawHref } from "../project-tasks";
+import { folderRawFile } from "../project-tasks";
 import type { BlockSources } from "../views/openui/block-media";
 
 /** The session a reply's blocks stand in: its id, its machine and its project. */
@@ -43,9 +44,9 @@ export const transcriptSources = (
       }
       const { machineId, projectId } = session();
       if (named.on === "folder") {
-        return projectId ? folderRawHref(projectId, named.path) : null;
+        return projectId ? folderRawFile(projectId, named.path) : null;
       }
-      return hubPath(hub.api.agents({ machineId }).media, {
+      return hubFile(hub.api.agents({ machineId }).media, {
         path: named.path,
       });
     },

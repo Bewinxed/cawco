@@ -7,7 +7,7 @@
  */
 import type { ArtifactSummary } from "@cawco/core/protocol";
 import { lightbox } from "../lightbox/lightbox-state.svelte";
-import type { BlockSources } from "../views/openui/block-media";
+import { type BlockSources, fileAt } from "../views/openui/block-media";
 
 /** A page artifact a story's conversation made: its name, its title, and where its HTML is served. */
 export interface FixturePage {
@@ -44,7 +44,10 @@ export const fixtureSources = (
   const named = (page: ArtifactSummary) =>
     pages().find((one) => one.name === page.name);
   return {
-    src: (file) => files()[file] ?? null,
+    src: (file) => {
+      const href = files()[file];
+      return href ? fileAt(href) : null;
+    },
     open: (shots, index) => {
       lightbox.open({ kind: "image", shots, index });
     },
