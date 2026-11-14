@@ -61,6 +61,15 @@
  *   as that session, its notes archived as applied, and is noted in its
  *   project's conversation. With `ask: true` it is a proposal instead,
  *   parked in the session that asked.
+ * - **A card's pick carried out** (`memory_propose` with `card`, the owner's
+ *   "A card's pick settles notes" on card `note-settle`, 2026-11-14): when
+ *   the person picked on a decision card himself (its page's `record.json`
+ *   in the caller's project, no `settled` on it), the session that asked
+ *   writes his pick with no second ask: it may cite notes an open proposal
+ *   holds, its `drop` notes are withdrawn at once as a withdrawal is, and
+ *   every proposal holding a note it cites or drops is closed naming the
+ *   card, its other notes back in the inbox. Taint and the archive still
+ *   refuse a note.
  * - **Proposals** (`memory_propose` from the curator, or Caw's `ask`; Jev's
  *   sort; the hub's archive and a withdrawal; and Caw's `folder_write` of a
  *   `delegates/` type file, §5.1's "a file diff you approve", which cites no
@@ -95,6 +104,12 @@
  *   Find, over every machine's transcripts: no store of its own here.
  */
 
+import {
+  cardRef,
+  decidedOf,
+  recordOf,
+  recordPath,
+} from "@cawco/core/decisions";
 import { frontMatterBlock } from "@cawco/core/fleet";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import {
@@ -110,6 +125,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
+import { memoryCardWords } from "@cawco/core/words/memory-card";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
@@ -910,6 +926,48 @@ const candidate = (note: Note, cited: ReadonlySet<string>): boolean =>
   note.taint.length === 0 &&
   (note.verdict === null || note.verdict === "lasting") &&
   !cited.has(note.id);
+
+/**
+ * `card` and `drop` as asked, refused when they do not go together: `drop`
+ * needs a card, a card's pick is neither an ask nor the curator's, and a
+ * write gives files, or with a card notes to drop and nothing cited.
+ */
+const cardAskUnfit = (
+  asked: {
+    ask: boolean;
+    card?: string;
+    drop: string[];
+    files: unknown[];
+    notes: string[];
+  },
+  curatorRun: boolean
+) => {
+  if (asked.card === undefined) {
+    if (asked.drop.length > 0) {
+      return problem(400, {
+        code: "memory-drop-without-card",
+        detail: memoryCardWords.dropWithoutCard,
+      });
+    }
+  } else if (curatorRun) {
+    return problem(403, {
+      code: "memory-card-curator",
+      detail: memoryCardWords.curator,
+    });
+  } else if (asked.ask) {
+    return problem(400, {
+      code: "memory-card-ask",
+      detail: memoryCardWords.withAsk,
+    });
+  }
+  const dropsOnly = asked.card !== undefined && asked.drop.length > 0;
+  if (asked.files.length === 0 && !(dropsOnly && asked.notes.length === 0)) {
+    return problem(400, {
+      code: "memory-files-none",
+      detail: memoryCardWords.nothing,
+    });
+  }
+};
 
 /**
  * A project file a proposal may change: AGENTS.md, or a markdown file under
@@ -2808,13 +2866,16 @@ export const createMemory = ({
    * (no taint, not sorted out, in no other proposal). The curator cites at
    * least one, unless its change only reworks fact files (a fold, a
    * reshape: `checkFacts` holds it to the sources already there); Caw may
-   * cite none (setup's AGENTS.md is the person's words).
+   * cite none (setup's AGENTS.md is the person's words). With the person's
+   * pick on a card (`picked`), a note an open proposal holds is citable too:
+   * that proposal closes with the write.
    */
   const citable = async (
     projectId: string,
     asked: string[],
     curatorRun: boolean,
-    paths: string[]
+    paths: string[],
+    picked: boolean
   ) => {
     const notes = [...new Set(asked)];
     if (
@@ -2830,11 +2891,14 @@ export const createMemory = ({
     if (notes.length === 0) {
       return notes;
     }
-    const inbox = await candidates(projectId);
-    if (inbox instanceof ElysiaStatus) {
-      return inbox;
+    const read = await inboxCited(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
     }
-    const waiting = new Set(inbox.map((each) => each.id));
+    const held = picked ? new Set<string>() : read.cited;
+    const waiting = new Set(
+      read.inbox.filter((each) => candidate(each, held)).map((each) => each.id)
+    );
     const missing = notes.filter((id) => !waiting.has(id));
     if (missing.length > 0) {
       return problem(409, {
@@ -2920,7 +2984,12 @@ export const createMemory = ({
     return stamped;
   };
 
-  /** A proposal's paths, reason, cited notes and files, each checked; or the first refusal. */
+  /**
+   * A proposal's paths, reason, cited notes and files, each checked; or the
+   * first refusal. With the person's pick on a card (`picked`), notes held by
+   * an open proposal are citable, and a write that only drops notes gives no
+   * files.
+   */
   const askedChange = async (
     projectId: string,
     asked: {
@@ -2928,7 +2997,8 @@ export const createMemory = ({
       notes: string[];
       why: string;
     },
-    curatorRun: boolean
+    curatorRun: boolean,
+    picked: boolean
   ) => {
     const paths: string[] = [];
     for (const file of asked.files) {
@@ -2942,9 +3012,19 @@ export const createMemory = ({
     if (why instanceof ElysiaStatus) {
       return why;
     }
-    const notes = await citable(projectId, asked.notes, curatorRun, paths);
+    const notes = await citable(
+      projectId,
+      asked.notes,
+      curatorRun,
+      paths,
+      picked
+    );
     if (notes instanceof ElysiaStatus) {
       return notes;
+    }
+    if (picked && paths.length === 0) {
+      const none: ProposalFile[] = [];
+      return { paths, why, notes, files: none };
     }
     const files = await proposedFiles(
       projectId,
@@ -2982,6 +3062,8 @@ export const createMemory = ({
     actor: InstanceRow,
     asked: {
       ask: boolean;
+      card?: string;
+      drop: string[];
       files: { content: string; path: string }[];
       notes: string[];
       why: string;
@@ -2999,8 +3081,12 @@ export const createMemory = ({
     if (project instanceof ElysiaStatus) {
       return project;
     }
+    const viaCard = await throughCard(actor, projectId, asked);
+    if (viaCard) {
+      return viaCard;
+    }
     const curatorRun = actor.role === "curator";
-    const change = await askedChange(projectId, asked, curatorRun);
+    const change = await askedChange(projectId, asked, curatorRun, false);
     if (change instanceof ElysiaStatus) {
       return change;
     }
@@ -3545,8 +3631,8 @@ export const createMemory = ({
    * note leaves for the archive `withdrawn`, all in one card. A note no fact
    * rests on is archived at once: nothing curated changes.
    */
-  /** The note the person withdraws, refused when it is no note, gone already, or waiting in a proposal. */
-  const withdrawable = async (projectId: string, id: string) => {
+  /** A note to withdraw, refused when it is no note or withdrawn already. */
+  const noteToWithdraw = async (projectId: string, id: string) => {
     if (!NOTE_ID.test(id)) {
       return problem(400, {
         code: "memory-note-id-unfit",
@@ -3568,6 +3654,15 @@ export const createMemory = ({
         code: "memory-note-withdrawn",
         detail: `${id} is withdrawn already.`,
       });
+    }
+    return gone;
+  };
+
+  /** The note the person withdraws, refused when it is no note, gone already, or waiting in a proposal. */
+  const withdrawable = async (projectId: string, id: string) => {
+    const gone = await noteToWithdraw(projectId, id);
+    if (gone instanceof ElysiaStatus) {
+      return gone;
     }
     const proposals = await proposalsOf(projectId);
     if (proposals instanceof ElysiaStatus) {
@@ -3690,6 +3785,400 @@ export const createMemory = ({
       `[memory] ${projectId}: session ${instanceId} purged; ${done.length} of its ${notes.length} note${notes.length === 1 ? "" : "s"} withdrawn or proposed withdrawn`
     );
     return { withdrawn: done };
+  };
+
+  // --- a card's pick carried out ------------------------------------------------------
+
+  /**
+   * The card `ref` names, as `page#card`, when the person picked on it
+   * himself: read from its page's record in the project's folder, so a page
+   * of another project is none. A card left open, or settled by a member of
+   * Who decides (the advisor, an agent with `settle`), is refused saying so.
+   */
+  const pickedCard = async (projectId: string, ref: string) => {
+    const named = decidedOf(ref);
+    if (!named) {
+      return problem(400, {
+        code: "memory-card-unfit",
+        detail: memoryCardWords.unfit(ref),
+      });
+    }
+    const text = await fileOr(projectId, recordPath(named.page));
+    if (text instanceof ElysiaStatus) {
+      return text;
+    }
+    const record = text ? recordOf(text) : null;
+    if (!record) {
+      return problem(404, {
+        code: "memory-card-no-record",
+        detail: memoryCardWords.noRecord(named.page),
+      });
+    }
+    const card = record.cards.find((each) => each.id === named.card);
+    const at = cardRef(named.page, named.card);
+    if (!card) {
+      return problem(404, {
+        code: "memory-card-unknown",
+        detail: memoryCardWords.notOnPage(named.card, named.page),
+      });
+    }
+    if (card.settled) {
+      return problem(403, {
+        code: "memory-card-not-his",
+        detail: memoryCardWords.settled(at, card.settled.name),
+      });
+    }
+    if (card.chosen.length === 0) {
+      return problem(409, {
+        code: "memory-card-open",
+        detail: memoryCardWords.open(at),
+      });
+    }
+    return at;
+  };
+
+  /** The notes a pick drops, each once, refused as {@link noteToWithdraw} refuses one, or when the write also cites it. */
+  const droppable = async (
+    projectId: string,
+    ids: string[],
+    cites: string[]
+  ) => {
+    const unique = [...new Set(ids)];
+    const both = unique.filter((id) => cites.includes(id));
+    if (both.length > 0) {
+      return problem(400, {
+        code: "memory-note-cited-and-dropped",
+        detail: memoryCardWords.citedAndDropped(both.join(", ")),
+      });
+    }
+    const notes: Note[] = [];
+    for (const id of unique) {
+      const gone = await noteToWithdraw(projectId, id);
+      if (gone instanceof ElysiaStatus) {
+        return gone;
+      }
+      notes.push(gone);
+    }
+    return notes;
+  };
+
+  /** Every proposal that cites or withdraws one of `ids`: what a pick on them closes; refused while the person is answering one. */
+  const heldBy = async (projectId: string, ids: string[]) => {
+    const proposals = await proposalsOf(projectId);
+    if (proposals instanceof ElysiaStatus) {
+      return proposals;
+    }
+    const held = new Set(ids);
+    const holding = proposals.filter(
+      (proposal) =>
+        proposal.notes.some((id) => held.has(id)) ||
+        (proposal.withdraws !== undefined && held.has(proposal.withdraws))
+    );
+    const busy = holding.find(
+      (proposal) => answering.has(proposal.id) || closing.has(proposal.id)
+    );
+    if (busy) {
+      return problem(409, {
+        code: "memory-proposal-answering",
+        detail: memoryCardWords.answering(busy.id),
+      });
+    }
+    return holding;
+  };
+
+  /**
+   * `changed` (the write's files, by path) with note `id` withdrawn from
+   * the fact file at `path` as {@link withoutNote} does: a line resting on
+   * it alone moves to the file's archive, a line with other sources keeps
+   * them. Read over the write's own text where it changes the file.
+   */
+  const dropFrom = async (
+    projectId: string,
+    changed: Map<string, ProposalFile>,
+    path: string,
+    id: string,
+    card: string
+  ) => {
+    const textOf = async (at: string) =>
+      changed.get(at)?.content ?? (await fileOr(projectId, at));
+    const put = (at: string, before: string, text: string) => {
+      changed.set(at, {
+        path: at,
+        before: changed.get(at)?.before ?? before,
+        content: text,
+      });
+    };
+    const content = await textOf(path);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
+    const after = withoutSource(path, content, id);
+    if (after.retired.length === 0 && after.trimmed === 0) {
+      return;
+    }
+    put(path, content, after.content);
+    if (after.retired.length === 0) {
+      return;
+    }
+    const archiveFile = archivePath(path);
+    const was = await textOf(archiveFile);
+    if (was instanceof ElysiaStatus) {
+      return was;
+    }
+    put(
+      archiveFile,
+      was,
+      archivedLines(
+        path,
+        was,
+        after.retired,
+        memoryCardWords.archived(dayOf(new Date()), id, card)
+      )
+    );
+  };
+
+  /** The write's files with each dropped note withdrawn from every fact file ({@link dropFrom}). */
+  const withDrops = async (
+    projectId: string,
+    files: ProposalFile[],
+    drops: Note[],
+    card: string
+  ) => {
+    if (drops.length === 0) {
+      return files;
+    }
+    const factFiles = await factFilesOf(projectId);
+    if (factFiles instanceof ElysiaStatus) {
+      return factFiles;
+    }
+    const changed = new Map(files.map((file) => [file.path, file]));
+    const paths = [
+      ...new Set([
+        ...factFiles.map((file) => file.path),
+        ...files.map((file) => file.path),
+      ]),
+    ].filter(isFactFile);
+    for (const dropped of drops) {
+      for (const path of paths) {
+        const failed = await dropFrom(
+          projectId,
+          changed,
+          path,
+          dropped.id,
+          card
+        );
+        if (failed) {
+          return failed;
+        }
+      }
+    }
+    return [...changed.values()];
+  };
+
+  /** A pick's commit message: the files and why, then the card, each note applied and withdrawn, and each proposal closed. */
+  const pickMessage = (
+    proposal: Proposal,
+    card: string,
+    drops: Note[],
+    closes: Proposal[]
+  ): string => {
+    const trailers = [
+      `Card: ${card}`,
+      ...(proposal.notes.length > 0
+        ? [`Applies: ${proposal.notes.join(", ")}`]
+        : []),
+      ...(drops.length > 0
+        ? [`Withdraws: ${drops.map((each) => each.id).join(", ")}`]
+        : []),
+      ...(closes.length > 0
+        ? [`Closes: ${closes.map((each) => each.id).join(", ")}`]
+        : []),
+    ];
+    return `${pathsOf(proposal) || MEMORY_DIR}: ${proposal.why}\n\n${trailers.join("\n")}`;
+  };
+
+  /** A proposal the pick closed, off every screen with why; the session that proposed it told. */
+  const closedByPick = (proposal: Proposal, card: string) => {
+    open.delete(proposal.id);
+    settle(proposal.id, memoryCardWords.closed(card));
+    const told = proposal.session
+      ? tell(
+          proposal.session,
+          memoryCardWords.closedTold(proposal.id, card),
+          memoryCardWords.closedLine(card)
+        )
+      : false;
+    console.log(
+      `[memory] ${proposal.projectId}: ${proposal.id} closed by the pick on ${card}; ${told ? `${proposal.session} told` : "no session to tell"}`
+    );
+  };
+
+  /**
+   * A pick's one commit, as the session: its files, each dropped note to
+   * the archive `withdrawn`, each proposal it closes gone. No other path
+   * closes those proposals meanwhile.
+   */
+  const commitPick = async (
+    proposal: Proposal,
+    card: string,
+    drops: Note[],
+    closes: Proposal[]
+  ) => {
+    for (const each of closes) {
+      closing.add(each.id);
+    }
+    try {
+      return await changeFolderFiles(
+        proposal.projectId,
+        {
+          writes: [
+            ...proposal.files.map(({ path, content }) => ({ path, content })),
+            ...drops.map((each) => ({
+              path: archived(each),
+              content: renderNote({ ...each, outcome: "withdrawn" }),
+            })),
+          ],
+          deletes: [
+            ...drops
+              .filter((each) => each.path !== archived(each))
+              .map((each) => each.path),
+            ...closes.map((each) => `${PROPOSALS_DIR}/${each.id}.json`),
+          ],
+        },
+        {
+          author: { name: proposal.by },
+          message: pickMessage(proposal, card, drops, closes),
+        }
+      );
+    } finally {
+      for (const each of closes) {
+        closing.delete(each.id);
+      }
+    }
+  };
+
+  /** What a carried-out pick did, noted in its project's conversation and the log, and answered to the session. */
+  const pickDone = (
+    proposal: Proposal,
+    card: string,
+    sha: string,
+    drops: Note[],
+    closes: Proposal[]
+  ) => {
+    const { projectId, by, why, notes } = proposal;
+    const paths = proposal.files.map((file) => file.path);
+    const withdrawn = drops.map((each) => each.id);
+    const closed = closes.map((each) => each.id);
+    notice(projectId, {
+      title: memoryCardWords.noticeTitle(by, card),
+      body: `Committed as ${by} ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
+      event: {
+        kind: "file",
+        what: "wrote",
+        path: paths[0] ?? `${ARCHIVE_DIR}/${withdrawn[0] ?? ""}.md`,
+        sha,
+      },
+    });
+    console.log(
+      `[memory] ${projectId}: ${by} carried out ${card} at ${sha.slice(0, 9)}: applies ${notes.length}, withdraws ${withdrawn.length}, closes ${closed.length}`
+    );
+    return { card, paths, sha, notes, withdrawn, closed, committed: true };
+  };
+
+  /**
+   * The person's pick on a card carried out by the session that asked it
+   * (`memory_propose` with `card`), with no second ask of him: the write's
+   * notes may be held by open proposals, each note in `drop` is withdrawn
+   * as {@link withdraw} does, and every proposal holding a note it cites or
+   * drops closes naming the card, its other notes back in the inbox. One
+   * commit as the session; its cited notes then archived as applied.
+   */
+  const carryOutPick = async (
+    actor: InstanceRow,
+    projectId: string,
+    ref: string,
+    asked: {
+      drop: string[];
+      files: { content: string; path: string }[];
+      notes: string[];
+      why: string;
+    }
+  ) => {
+    const card = await pickedCard(projectId, ref);
+    if (card instanceof ElysiaStatus) {
+      return card;
+    }
+    const change = await askedChange(projectId, asked, false, true);
+    if (change instanceof ElysiaStatus) {
+      return change;
+    }
+    const { why, notes } = change;
+    const drops = await droppable(projectId, asked.drop, notes);
+    if (drops instanceof ElysiaStatus) {
+      return drops;
+    }
+    const closes = await heldBy(projectId, [
+      ...notes,
+      ...drops.map((each) => each.id),
+    ]);
+    if (closes instanceof ElysiaStatus) {
+      return closes;
+    }
+    const files = await withDrops(projectId, change.files, drops, card);
+    if (files instanceof ElysiaStatus) {
+      return files;
+    }
+    const at = new Date();
+    const proposal: Proposal = {
+      id: idAt("p", at),
+      projectId,
+      files,
+      base: "",
+      notes,
+      why,
+      by: boardTitle(actor),
+      session: actor.id,
+      time: at.toISOString(),
+    };
+    const written = await commitPick(proposal, card, drops, closes);
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    for (const each of closes) {
+      closedByPick(each, card);
+    }
+    const applied = await archiveApplied(proposal, written.sha, false);
+    if (applied instanceof ElysiaStatus) {
+      return applied;
+    }
+    folderChanged(projectId);
+    return pickDone(proposal, card, written.sha, drops, closes);
+  };
+
+  /**
+   * A write naming `card` or `drop`: refused when they do not go together
+   * ({@link cardAskUnfit}), the pick carried out when it names a card;
+   * undefined for a plain write.
+   */
+  const throughCard = async (
+    actor: InstanceRow,
+    projectId: string,
+    asked: {
+      ask: boolean;
+      card?: string;
+      drop: string[];
+      files: { content: string; path: string }[];
+      notes: string[];
+      why: string;
+    }
+  ) => {
+    const unfit = cardAskUnfit(asked, actor.role === "curator");
+    if (unfit) {
+      return unfit;
+    }
+    return asked.card === undefined
+      ? undefined
+      : await carryOutPick(actor, projectId, asked.card, asked);
   };
 
   // --- what the curator sorts out -------------------------------------------------------
@@ -4309,12 +4798,20 @@ export const createMemory = ({
         MEMORY_NOTE_DEFINITION.run(({ text, since }) =>
           note(me(), text, since)
         ),
-        MEMORY_PROPOSE_DEFINITION.run(({ files, notes, why, ask }) =>
-          propose(
-            me(),
-            { files, notes: notes ?? [], why, ask: ask ?? false },
-            toolUseId
-          )
+        MEMORY_PROPOSE_DEFINITION.run(
+          ({ files, notes, why, ask, card, drop }) =>
+            propose(
+              me(),
+              {
+                files,
+                notes: notes ?? [],
+                why,
+                ask: ask ?? false,
+                ...(card === undefined ? {} : { card }),
+                drop: drop ?? [],
+              },
+              toolUseId
+            )
         ),
         MEMORY_CLASSIFY_DEFINITION.run(({ notes }) => classify(me(), notes)),
         MEMORY_READ_DEFINITION.run(({ path }) => read(me(), path)),
@@ -4369,15 +4866,16 @@ const MEMORY_NOTE_DEFINITION = defineTool(
 
 const MEMORY_PROPOSE_DEFINITION = defineTool(
   "memory_propose",
-  "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes, as one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. Caw's commits now (ask: true asks first); the curator's waits for the person.",
+  "AGENTS.md or knowledge/ files' whole new text, citing its inbox notes, as one change. A fact is one line: `- <fact> (since <date>, from <note ids>, used <date>)`. A session's commits now (ask: true asks first); the curator's waits for the person. `card` carries out his own pick on a card of this project's (not one an advisor or agent settled; never with ask) without asking him: `notes` may be held by open proposals, which close; `drop` withdraws notes and the facts resting on them alone.",
   {
     files: z
       .array(z.object({ path: z.string(), content: z.string() }))
-      .min(1)
-      .describe("Each path and whole text."),
+      .describe("Each path and whole text; none when card only drops."),
     notes: z.array(z.string()).optional(),
     why: z.string().describe("One line."),
     ask: z.boolean().optional(),
+    card: z.string().optional().describe("<page>#<card>"),
+    drop: z.array(z.string()).optional(),
   },
   memoryProposedWords
 );

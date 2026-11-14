@@ -168,6 +168,27 @@ export interface DecisionRecord {
   title: string;
 }
 
+/** A decided page's record in its project's folder. */
+export const recordPath = (page: string): string =>
+  `decisions/${page}/record.json`;
+
+/** A record file's text read back: null when it does not read as a record (its name and its cards). */
+export const recordOf = (raw: string): DecisionRecord | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const record = parsed as DecisionRecord | null;
+  return record &&
+    typeof record === "object" &&
+    Array.isArray(record.cards) &&
+    typeof record.name === "string"
+    ? record
+    : null;
+};
+
 /** A page opened in the Decisions tab: its summary, its record and its last send. */
 export interface DecisionPageRead extends DecisionPageFacts {
   record: DecisionRecord | null;

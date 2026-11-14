@@ -124,13 +124,18 @@ import {
  * ship notes tell the person updating what changed, delegate_list shows
  * which session is warm, find reaches unlanded work (worker 30,692, delegate
  * 11,331, curator 1,209 measured).
+ * 2026-11-14: memory_propose takes `card` and `drop`, so a session carries
+ * out the person's own pick on a card about memory notes without a second
+ * ask (tsk-369, the owner's "A card's pick settles notes" on card
+ * `note-settle`); its description says what they do and when they are
+ * accepted (worker 30,799, curator 1,316 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_700,
+  worker: 30_800,
   delegate: 11_340,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1210,
+  curator: 1320,
   trimmer: 1400,
 };
 

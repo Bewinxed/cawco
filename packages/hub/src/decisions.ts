@@ -64,6 +64,8 @@ import {
   pickRecord,
   picksMade,
   type RecordCard,
+  recordOf,
+  recordPath,
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -414,7 +416,6 @@ interface StoredRecord extends DecisionRecord {
   askedSend?: string;
 }
 
-const recordPath = (name: string) => `decisions/${name}/record.json`;
 const logPath = (name: string) => `decisions/${name}/log.md`;
 const builtPath = (name: string) => `decisions/${name}/index.html`;
 const programPath = (name: string) => `decisions/${name}/${PROGRAM_FILE}`;
@@ -425,12 +426,6 @@ const PROGRAM_READS = 512;
 /** A page's picks and notes. */
 const responses = (state: Record<string, ChoiceEntry>): ChoiceEntry[] =>
   Object.values(state);
-
-const isRecord = (value: unknown): value is StoredRecord =>
-  !!value &&
-  typeof value === "object" &&
-  Array.isArray((value as StoredRecord).cards) &&
-  typeof (value as StoredRecord).name === "string";
 
 /** The record file's text: two-space JSON on a final newline, as a repository keeps it. */
 const recordText = (record: StoredRecord): string =>
@@ -671,12 +666,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     if (text instanceof ElysiaStatus) {
       return text;
     }
-    try {
-      const parsed = JSON.parse(text) as unknown;
-      return isRecord(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
+    return recordOf(text);
   };
 
   /** The session that wrote `artifact`, and who hears the person on it ({@link DecisionsDeps.taker}). */

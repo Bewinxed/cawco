@@ -33,6 +33,8 @@ A choice reaches the person only as a decision card on a page, so every pick is 
 
 **Settled fixes from the person's pins** are one compact card, a `look` Decision with id `pins`: the question "Fixed from your pins: does it look right now?", its `why` saying in plain words what each pin asked for, never quoting the person, the fixed state live in its media, and two options, "Looks right" (recommended) and "Not yet". Answer each pin in its own thread too (`comment_reply`).
 
+**Which memory notes to keep** is a card whose media lists each note it asks about by its id and its words, one `Text` each (`Text("n-20261108-080333-43f163: The hub restarts nightly at 04:00.", "body")`), and whose options name by id the notes each keeps and drops, so the record shows what was picked. Once the person picks, carry it out in one `memory_propose`: `card: "<page>#<card>"`, the notes he kept cited in `notes` and written into the files, the notes he dropped in `drop`. The hub takes his own pick as his approval and asks him nothing more; a card the advisor or an agent settled is refused.
+
 ## Who decides
 
 A choice that is not yours to make is a decision card with its kind, which the hub settles by the project's Who decides: the work that depends on it waits on the card, and the rest goes on.

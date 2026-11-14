@@ -84,14 +84,17 @@ export const memoryNotedWords = (noted: {
 
 /** `memory_propose`: committed, or waiting for the person. */
 export const memoryProposedWords = (proposed: {
+  card?: string;
+  closed?: string[];
   committed?: boolean;
   paths?: string[];
   path?: string;
   sha?: string;
   waiting?: string;
+  withdrawn?: string[];
 }): string =>
   proposed.committed
-    ? `Committed ${listed(proposed.paths ?? [])} (commit ${proposed.sha?.slice(0, 8)}).`
+    ? `Committed ${listed(proposed.paths ?? [])} (commit ${proposed.sha?.slice(0, 8)}).${proposed.card ? ` Carried out ${proposed.card}: withdrew ${listed(proposed.withdrawn ?? []) || "none"}; closed ${listed(proposed.closed ?? []) || "none"}.` : ""}`
     : `Proposed ${listed(proposed.paths ?? (proposed.path ? [proposed.path] : []))}: ${proposed.waiting ?? "waiting for the person"}.`;
 
 /** `memory_classify`. */
