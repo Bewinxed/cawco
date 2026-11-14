@@ -426,6 +426,40 @@
       }
     ]
   },
+  "agent_tools.copy": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "by": {
+            "type": "string",
+            "const": "cawco"
+          },
+          "takenOver": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "by"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": "string",
+            "const": "person"
+          }
+        },
+        "required": [
+          "by"
+        ]
+      }
+    ]
+  },
   "agent_tools.signin": {
     "type": "object",
     "properties": {
