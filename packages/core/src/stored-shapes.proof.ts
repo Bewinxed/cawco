@@ -11,8 +11,6 @@ import type {
   AccountOverage as AccountOverageType,
   AccountProvider as AccountProviderType,
   AccountReport as AccountReportType,
-  AtLimit as AtLimitType,
-  Compaction as CompactionType,
   CompactStage as CompactStageType,
   ContinueStep as ContinueStepType,
   EndedBy as EndedByType,
@@ -22,10 +20,7 @@ import type {
   NamedAccount as NamedAccountType,
   WaitReason as WaitReasonType,
 } from "./accounts";
-import type {
-  AccountHue as AccountHueType,
-  CompactMethod as CompactMethodType,
-} from "./accounts/kinds";
+import type { AccountHue as AccountHueType } from "./accounts/kinds";
 import type { SourceFacts as SourceFactsType } from "./asks";
 import type {
   FileAttachment as FileAttachmentType,
@@ -276,7 +271,6 @@ import type {
   AnimationReadOutput,
   ArchiveFetchingOutput,
   ArtifactThumbnailOutput,
-  AtLimitOutput,
   AttemptResultOutput,
   AuthStateOutput,
   BinaryUpdatePhaseOutput,
@@ -297,8 +291,6 @@ import type {
   ClaudeModelUsageOutput,
   CliInstallOutput,
   CommandAckStageOutput,
-  CompactionOutput,
-  CompactMethodOutput,
   CompactStageOutput,
   ComponentDocOutput,
   ConnectAccessOutput,
@@ -564,9 +556,6 @@ prove<
     Same<DownloadProgressOutput, DownloadProgressType>,
     Same<ArchiveFetchingOutput, ArchiveFetchingType>,
     Same<ArtifactThumbnailOutput, ArtifactThumbnailType>,
-    Same<CompactMethodOutput, CompactMethodType>,
-    Same<CompactionOutput, CompactionType>,
-    Same<AtLimitOutput, AtLimitType>,
     Same<ResultArtifactOutput, ResultArtifactType>,
     Same<AttemptResultOutput, AttemptResultType>,
     Same<BinaryUpdatePolicyOutput, BinaryUpdatePolicyType>,

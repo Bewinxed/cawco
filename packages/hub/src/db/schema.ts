@@ -9,7 +9,7 @@ import type {
   SigninState,
   StrategyChoice,
 } from "@cawco/core/accounts";
-import type { AccountHue } from "@cawco/core/accounts/kinds";
+import type { AccountHue, CompactMethod } from "@cawco/core/accounts/kinds";
 import type { CapPeriod, OnCap } from "@cawco/core/areas";
 import { ASK_STORED, type AskState } from "@cawco/core/asks";
 import type { BlockPage, BlockWidth } from "@cawco/core/blocks";
@@ -65,7 +65,6 @@ import type {
 import {
   AccountMoveSchema,
   AccountOverageSchema,
-  AtLimitSchema,
   AttemptResultSchema,
   BuildInfoSchema,
   CheckoutMoveSchema,
@@ -2778,7 +2777,31 @@ export const accountRouting = sqliteTable("account_routing", {
   delegatesPinned: text("delegates_pinned").references(() => accounts.id, {
     onDelete: "set null",
   }),
-  atLimit: storedJson(AtLimitSchema)("at_limit").notNull(),
+  /**
+   * The provider's at-limit policy (core `AtLimit`), one column a field. A
+   * provider never saved has no row and reads the default policy (core
+   * `defaultRouting`); every save writes all nine fields and clears
+   * `atLimitUnread`. Each is null only on a row whose policy did not read
+   * when migration 0399 moved it out of JSON, where a field that did not
+   * read stays null.
+   */
+  atLimitMove: integer("at_limit_move", { mode: "boolean" }),
+  atLimitWaitMinutes: integer("at_limit_wait_minutes"),
+  atLimitMoveWholeUnderK: integer("at_limit_move_whole_under_k"),
+  atLimitStaleAfterHours: integer("at_limit_stale_after_hours"),
+  compactionAtLimit: text("compaction_at_limit").$type<CompactMethod>(),
+  compactionBeforeMove: text("compaction_before_move").$type<CompactMethod>(),
+  compactionFileRoom: integer("compaction_file_room"),
+  compactionSummarizerHarness: text(
+    "compaction_summarizer_harness"
+  ).$type<HarnessKind>(),
+  compactionSummarizerModel: text("compaction_summarizer_model"),
+  /**
+   * The policy as it was stored, when it did not read whole (migration 0399):
+   * the hub acts on core `RESTRICTIVE_AT_LIMIT` while it is set, and names
+   * it. Null when the policy reads. A save clears it.
+   */
+  atLimitUnread: text("at_limit_unread"),
 });
 
 /**
