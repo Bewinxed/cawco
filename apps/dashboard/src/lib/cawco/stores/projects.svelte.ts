@@ -23,9 +23,8 @@ import {
 import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
 import {
-  answerOf,
   hubData,
   hubDone,
   hubRefusal,
@@ -344,24 +343,20 @@ export async function forgetProject(id: string): Promise<void> {
  * Deletes a project for good, live or forgotten (hub project-delete.ts);
  * `fromDisk`: its checkouts on every machine and its sessions' transcripts
  * too. A refusal (a session running, a machine away, a place shared) is
- * thrown in the hub's words. Sent by `fetch` at its route's path: its
- * last segment, `delete`, is the key Eden's types give `DELETE
- * /api/projects/:id`, which hides this route from them.
+ * thrown in the hub's words.
  */
 export async function deleteProjectForGood(
   id: string,
   fromDisk: boolean
 ): Promise<void> {
-  const response = await fetch(hubPath(hub.api.projects({ id }).delete), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      [PRESENCE_HEADER]: presenceClientId(),
-    },
-    body: JSON.stringify({ fromDisk }),
-  });
-  await hubDone(answerOf(response), (refused) =>
-    hubRefusal(refused, projectEndWords.notDeletedThen)
+  await hubDone(
+    hub.api
+      .projects({ id })
+      .discard.post(
+        { fromDisk },
+        { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+      ),
+    (refused) => hubRefusal(refused, projectEndWords.notDeletedThen)
   );
 }
 

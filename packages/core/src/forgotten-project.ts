@@ -49,7 +49,7 @@ export interface ForgottenBrings {
 
 /**
  * A place of a forgotten project on disk that deleting it with its files
- * (`POST /api/projects/:id/delete`, `fromDisk`) removes: a checkout on a
+ * (`POST /api/projects/:id/discard`, `fromDisk`) removes: a checkout on a
  * machine, or its folder in the hub's trash.
  */
 export interface ForgottenPlace {

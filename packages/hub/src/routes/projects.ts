@@ -292,7 +292,7 @@ export const projectRoutes = ({
     // while a session of it runs, a place it would remove from disk is
     // another live project's, or a machine holding part of it is away.
     .post(
-      "/api/projects/:id/delete",
+      "/api/projects/:id/discard",
       {
         body: t.Optional(t.Object({ fromDisk: t.Optional(t.Boolean()) })),
       },

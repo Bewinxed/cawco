@@ -1,5 +1,5 @@
 /**
- * A project deleted for good (`POST /api/projects/:id/delete`): after it,
+ * A project deleted for good (`POST /api/projects/:id/discard`): after it,
  * nothing CawCo holds of the project remains. A live project and one in the
  * trash (project-trash.ts) are deleted alike, from what the hub and the
  * trash's records hold of it.

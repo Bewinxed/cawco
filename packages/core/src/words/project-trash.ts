@@ -1,7 +1,7 @@
 /**
  * A forgotten project brought back (hub project-trash.ts,
  * `POST /api/projects/:id/restore`), or a project deleted for good (hub
- * project-delete.ts, `POST /api/projects/:id/delete`): the hub's refusals,
+ * project-delete.ts, `POST /api/projects/:id/discard`): the hub's refusals,
  * said to whoever asked, and the head of the journal line each forget,
  * restore and delete writes.
  */

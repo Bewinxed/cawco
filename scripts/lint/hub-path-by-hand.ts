@@ -83,8 +83,6 @@ const HUB_PATH_USERS: Record<string, string> = {
     "an upload that says how far it has gone: only an XHR does",
   "apps/dashboard/src/lib/cawco/views-api.ts":
     "a view's own Query arguments, which no type holds and Eden types per tool",
-  "apps/dashboard/src/lib/cawco/stores/projects.svelte.ts":
-    "the delete for good, whose `delete` segment Eden's types fold into DELETE /api/projects/:id",
   "apps/dashboard/src/lib/cawco/artifact-api.ts":
     "an artifact's thumbnail, an element's src",
   "apps/dashboard/src/lib/platform/hub-file.ts":

@@ -2528,20 +2528,20 @@ export interface components {
         name: string | number;
       };
     };
-    "POST /api/projects/:id/delete": {
-      body?: {
-        fromDisk?: boolean;
-      };
-      path: {
-        id: string | number;
-      };
-    };
     "POST /api/projects/:id/design-offer/build": {
       path: {
         id: string | number;
       };
     };
     "POST /api/projects/:id/design-offer/dismiss": {
+      path: {
+        id: string | number;
+      };
+    };
+    "POST /api/projects/:id/discard": {
+      body?: {
+        fromDisk?: boolean;
+      };
       path: {
         id: string | number;
       };
