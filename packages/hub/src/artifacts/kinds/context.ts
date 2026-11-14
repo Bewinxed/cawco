@@ -25,7 +25,6 @@ import type {
   PageBroken,
 } from "../shapes";
 import type { createVersions } from "../versions";
-import type { createPreviewKind } from "./preview";
 
 export interface KindContext {
   above: ReturnType<typeof createAccess>["above"];
@@ -142,6 +141,5 @@ export interface KindContext {
   stampMeta: (row: ArtifactRow, given: string | null) => void;
   store: ReturnType<typeof createPageStore>;
   waitsOnPerson: (row: ArtifactRow) => boolean;
-  warmPreviews: ReturnType<typeof createPreviewKind>["warmPreviews"];
   whole: ReturnType<typeof createAccess>["whole"];
 }

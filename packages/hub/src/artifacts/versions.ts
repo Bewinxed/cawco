@@ -10,10 +10,10 @@ import { readKept } from "../decision-program";
 import { boardOf } from "./access";
 import type { ArtifactServiceDeps } from "./deps";
 import { stateOf } from "./facts";
-import { servedOf } from "./kinds/preview";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
+import { servedOf } from "./served";
 import type { Making } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */

@@ -159,9 +159,9 @@ import {
 import type { ArtifactServiceDeps } from "./deps";
 import { createFacts, metaOf, stateOf } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
-import { createComponentKind, sheetOf } from "./kinds/component";
+import { createComponentKind } from "./kinds/component";
 import { createPageKind, newestHash } from "./kinds/page";
-import { createPreviewKind, servedOf } from "./kinds/preview";
+import { createPreviewKind } from "./kinds/preview";
 import { createMarks, labelOf, linkOfPin } from "./marks";
 import {
   answeredWhole,
@@ -180,6 +180,7 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
+import { servedOf, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,

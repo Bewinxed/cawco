@@ -8,21 +8,9 @@ import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-
+import { servedOf, sheetOf } from "../served";
 import type { ArtifactInput, Making, Placed } from "../shapes";
-import { sheetOf } from "./component";
 import type { KindContext } from "./context";
-
-/** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
-export const servedOf = (
-  row: Pick<ArtifactRow, "kind" | "source">
-): { port: number; workspace: string } | null =>
-  row.kind === "preview" &&
-  "port" in row.source &&
-  row.source.serve &&
-  row.source.workspace
-    ? { port: row.source.port, workspace: row.source.workspace }
-    : null;
 
 /** Why a preview's fields do not go together, or nothing. */
 const previewProblem = (input: ArtifactInput): string | null => {

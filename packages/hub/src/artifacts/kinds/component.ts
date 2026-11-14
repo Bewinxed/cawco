@@ -5,7 +5,6 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import {
   type CanvasShapes,
   type CanvasSpec,
-  canvasOf,
   canvasPath,
   type RenderReport,
   type SectionUndrawn,
@@ -37,6 +36,7 @@ import {
   unseen,
   weightSaid,
 } from "../component";
+import { sheetOf } from "../served";
 import type {
   ArtifactInput,
   ArtifactRead,
@@ -66,37 +66,6 @@ const storyOfOp = (op: StoryOp): string | null => {
 const PANEL_DRAW_MS = 4000;
 
 const PANEL_DRAW_POLL_MS = 500;
-
-/** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
-export const sheetOf = (
-  row: ArtifactRow
-): {
-  dir: string;
-  file: string;
-  /** Every states file of the canvas, from the clone's root: a section each. */
-  files: string[];
-  spec: CanvasSpec;
-  workspace: string;
-} | null => {
-  if (!(
-    row.kind === "component" &&
-    "port" in row.source &&
-    row.source.stage &&
-    row.source.workspace
-  )) {
-    return null;
-  }
-  const { stage } = row.source;
-  const { files, spec } = canvasOf(row.source.path ?? "");
-  return {
-    ...stage,
-    files: (files.length > 0 ? files : [stage.file]).map((one) =>
-      join(stage.dir, one)
-    ),
-    spec,
-    workspace: row.source.workspace,
-  };
-};
 
 /** What ComponentKind reads of the artifact service ({@link KindContext}). */
 export type ComponentKindContext = Pick<

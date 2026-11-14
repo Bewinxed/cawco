@@ -11,10 +11,6 @@ cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/dialog/dialog-conten
 cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/dialog/index.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/machine-row/index.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte	1
-cycle	@cawco/hub	packages/hub/src/artifacts/kinds/component.ts	1
-cycle	@cawco/hub	packages/hub/src/artifacts/kinds/context.ts	2
-cycle	@cawco/hub	packages/hub/src/artifacts/kinds/preview.ts	2
-cycle	@cawco/hub	packages/hub/src/artifacts/versions.ts	1
 cycle	@cawco/hub	packages/hub/src/caw.ts	4
 cycle	@cawco/hub	packages/hub/src/connections.ts	1
 cycle	@cawco/hub	packages/hub/src/dispatch.ts	1

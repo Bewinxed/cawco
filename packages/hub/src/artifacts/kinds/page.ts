@@ -58,6 +58,7 @@ import type {
   Revised,
 } from "../shapes";
 import type { KindContext } from "./context";
+import type { createPreviewKind } from "./preview";
 
 /** How the person answered one choice a page asks ({@link DecisionAnswer}), from its entry in the doc's state. */
 const answerOf = (
@@ -167,9 +168,9 @@ export type PageKindContext = Pick<
   | "routedOn"
   | "stampMeta"
   | "store"
-  | "warmPreviews"
   | "whole"
->;
+> &
+  Pick<ReturnType<typeof createPreviewKind>, "warmPreviews">;
 
 /** A page: HTML a session writes, or a decision page built from its program, each revision written to its folder, what it changed marked for the person until he has looked, and the pictures its Images show kept by the machine they were read on. */
 export const createPageKind = (ctx: PageKindContext) => {
