@@ -58745,7 +58745,7 @@
           },
           "wants": {
             "$ref": "#/components/schemas/ToolWants",
-            "description": "What CawCo runs, as the first machine listed says it (its build's catalog)."
+            "description": "What CawCo wants of it, as the first machine listed with one says it ({@link ToolUpdateState}'s `wants`)."
           }
         },
         "required": [
@@ -58754,7 +58754,7 @@
         ]
       },
       "ToolBehindMachine": {
-        "description": "One machine whose copy of a tool CawCo does not run, or is updating.",
+        "description": "One machine whose copy of a tool is short of what CawCo wants of it, or is updating.",
         "type": "object",
         "properties": {
           "machineId": {
@@ -59454,12 +59454,17 @@
               "$ref": "#/components/schemas/ToolBehind"
             }
           },
+          "releases": {
+            "type": "object",
+            "description": "The newest release of each CLI CawCo keeps current (core\n`ToolSpec.release`: Claude Code), by tool id, as the hub last read it;\nnone for one not read yet. What a copy CawCo put there is updated to\n({@link toolUpdateOf}'s `releases`)."
+          },
           "updates": {
             "$ref": "#/components/schemas/ToolUpdates"
           }
         },
         "required": [
           "behind",
+          "releases",
           "updates"
         ]
       },

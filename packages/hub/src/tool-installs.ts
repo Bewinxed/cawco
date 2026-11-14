@@ -300,9 +300,10 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
 
   /**
    * Sends the machine an update of each CLI CawCo keeps current whose copy
-   * there says a version older than its newest release (tool-releases.ts
-   * `updatesOwed`): the catalog's install, which runs the copy's own updater
-   * there, with no press. A machine the owner paused is sent none: nothing
+   * there CawCo put there and says a version older than its newest release,
+   * while the fleet is set to update (tool-releases.ts `updatesOwed`): the
+   * catalog's install, which runs the copy's own updater there, with no
+   * press. A machine the owner paused is sent none: nothing
    * CawCo starts runs there until the pause ends, and the first read or
    * report after it sends it. Answers whether any was sent.
    */
@@ -324,6 +325,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
         catalog: TOOL_CATALOG,
         newest: (toolId) => ctx.toolReleases.newest(toolId),
         policies: ctx.db.listToolPolicies(),
+        updates: ctx.db.toolUpdates(),
       }
     );
     for (const update of owed) {
