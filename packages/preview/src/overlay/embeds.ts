@@ -37,6 +37,7 @@ import type {
 import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/preview/routes";
 import { EMBED_ARRIVING, EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
 import { cutShort } from "@cawco/core/words/helpers";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { thrownBeforeLoad } from "./faults";
 import {
   contentBox,
@@ -782,8 +783,12 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     bridge.drawing.delete(asked);
     const failed = failures.get(asked);
     failures.delete(asked);
-    for (const message of Array.isArray(errors) ? errors.slice(0, 4) : []) {
+    const told = Array.isArray(errors) ? errors : [];
+    for (const message of told.slice(0, 4)) {
       failed?.(cutShort(String(message), 300));
+    }
+    if (told.length > 4) {
+      failed?.(stageRenderWords.andMore(told.length - 4, "errors"));
     }
     // Base64 PNG, as picture.ts `cropPicture` answers it.
     drawn(typeof png === "string" && png.length > 0 ? png : null);

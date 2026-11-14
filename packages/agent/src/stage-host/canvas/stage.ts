@@ -122,6 +122,7 @@ import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import {
   drew,
+  elementsUnread,
   firstWords,
   keyframeEffectOf,
   lookOf,
@@ -587,6 +588,7 @@ function drawingRender(
   // Read at rest only: a forced state's frame is its rest's, the state put on.
   const look =
     drawnAs === "drawn" && column.interaction === "rest" ? lookOf(body) : null;
+  const unread = elementsUnread(body);
   return {
     story: story.name,
     label: story.label,
@@ -598,6 +600,7 @@ function drawingRender(
     box,
     text: firstWords(body),
     parts: partsOf(body, page.root),
+    ...(unread ? { elements: unread } : {}),
     ...(look ? { look } : {}),
     ...(said ? { error: said } : {}),
   };

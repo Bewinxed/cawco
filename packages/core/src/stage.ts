@@ -492,7 +492,14 @@ export interface FrameRender {
   /** Its box on the canvas, unscaled. */
   box: { h: number; w: number; x: number; y: number };
   /** The forced state's computed-style delta from rest, the transitions it fired with it; rest has none. */
-  delta?: { animations: AnimationRead[]; changed: StyleDelta[] };
+  delta?: {
+    animations: AnimationRead[];
+    changed: StyleDelta[];
+    /** How many more elements changed than `changed` lists; absent when none. */
+    more?: number;
+  };
+  /** The elements its body held and the first of them its reading walked, when it held more than a reading walks (agent canvas measure.ts `ELEMENTS_READ`); absent when it read them all. */
+  elements?: { of: number; read: number };
   error?: PageError;
   form: string;
   interaction: Interaction;

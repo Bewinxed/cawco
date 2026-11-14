@@ -82,6 +82,14 @@ const ELEMENTS_READ = 600;
 const elementsOf = (body: Element): Element[] =>
   [...body.querySelectorAll("*")].slice(0, ELEMENTS_READ);
 
+/** How many elements the body held and how many a reading walks of them, when it holds more than it walks. */
+export const elementsUnread = (
+  body: Element
+): { of: number; read: number } | null => {
+  const of = body.querySelectorAll("*").length;
+  return of > ELEMENTS_READ ? { of, read: ELEMENTS_READ } : null;
+};
+
 /**
  * The components whose elements a frame drew, each once: Svelte's dev
  * stack gives each element's own file and, up its parents, where each
@@ -329,8 +337,9 @@ export function deltaOf(
   before: Snapshot,
   after: Snapshot,
   root: string
-): StyleDelta[] {
+): { changed: StyleDelta[]; more: number } {
   const deltas: StyleDelta[] = [];
+  let more = 0;
   for (const [el, was] of before) {
     const now = after.get(el);
     if (!now) {
@@ -345,17 +354,18 @@ export function deltaOf(
       }
     });
     if (Object.keys(changed).length > 0) {
+      if (deltas.length >= DELTAS_KEPT) {
+        more += 1;
+        continue;
+      }
       deltas.push({
         selector: describe(el),
         source: sourceOf(el, root),
         changed,
       });
-      if (deltas.length >= DELTAS_KEPT) {
-        break;
-      }
     }
   }
-  return deltas;
+  return { changed: deltas, more };
 }
 
 /** A computed list property split at its top-level commas (`cubic-bezier(…)` keeps its own). */

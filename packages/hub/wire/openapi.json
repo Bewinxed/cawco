@@ -37269,52 +37269,109 @@
                   "frames": {
                     "type": "array",
                     "items": {
-                      "type": "object",
-                      "properties": {
-                        "box": {
+                      "anyOf": [
+                        {
                           "type": "object",
                           "properties": {
-                            "h": {
-                              "type": "number"
+                            "box": {
+                              "type": "object",
+                              "properties": {
+                                "h": {
+                                  "type": "number"
+                                },
+                                "w": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "h",
+                                "w"
+                              ]
                             },
-                            "w": {
-                              "type": "number"
+                            "elements": {
+                              "type": "string"
+                            },
+                            "error": {
+                              "$ref": "#/components/schemas/PageError"
+                            },
+                            "form": {
+                              "type": "string"
+                            },
+                            "interaction": {
+                              "$ref": "#/components/schemas/Interaction"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "scheme": {
+                              "const": "dark",
+                              "type": "string"
+                            },
+                            "state": {
+                              "$ref": "#/components/schemas/FrameState"
+                            },
+                            "story": {
+                              "type": "string"
                             }
                           },
                           "required": [
-                            "h",
-                            "w"
+                            "box",
+                            "elements",
+                            "form",
+                            "interaction",
+                            "state",
+                            "story"
                           ]
                         },
-                        "error": {
-                          "$ref": "#/components/schemas/PageError"
-                        },
-                        "form": {
-                          "type": "string"
-                        },
-                        "interaction": {
-                          "$ref": "#/components/schemas/Interaction"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "scheme": {
-                          "const": "dark",
-                          "type": "string"
-                        },
-                        "state": {
-                          "$ref": "#/components/schemas/FrameState"
-                        },
-                        "story": {
-                          "type": "string"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "box": {
+                              "type": "object",
+                              "properties": {
+                                "h": {
+                                  "type": "number"
+                                },
+                                "w": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "h",
+                                "w"
+                              ]
+                            },
+                            "error": {
+                              "$ref": "#/components/schemas/PageError"
+                            },
+                            "form": {
+                              "type": "string"
+                            },
+                            "interaction": {
+                              "$ref": "#/components/schemas/Interaction"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "scheme": {
+                              "const": "dark",
+                              "type": "string"
+                            },
+                            "state": {
+                              "$ref": "#/components/schemas/FrameState"
+                            },
+                            "story": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "box",
+                            "form",
+                            "interaction",
+                            "state",
+                            "story"
+                          ]
                         }
-                      },
-                      "required": [
-                        "box",
-                        "form",
-                        "interaction",
-                        "state",
-                        "story"
                       ]
                     }
                   },

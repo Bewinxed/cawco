@@ -80,6 +80,17 @@ export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({
 const FRAMES_LISTED = 60;
 
 /** One frame as an answer lists it: never its args, its delta or its chain. */
+/** How much of a frame's body a reading walked, when it was not all. */
+const elementsSaid = (frame: FrameRender) =>
+  frame.elements
+    ? {
+        elements: stageRenderWords.elementsRead(
+          frame.elements.read,
+          frame.elements.of
+        ),
+      }
+    : {};
+
 const frameLine = (frame: FrameRender) => ({
   story: frame.story,
   label: frame.label,
@@ -88,6 +99,7 @@ const frameLine = (frame: FrameRender) => ({
   ...(frame.scheme === "light" ? {} : { scheme: frame.scheme }),
   state: frame.state,
   box: { w: frame.box.w, h: frame.box.h },
+  ...elementsSaid(frame),
   ...(frame.error ? { error: frame.error } : {}),
 });
 
@@ -280,11 +292,20 @@ export function stateSaid(report: RenderReport, ask: StateAsk) {
     box: frame.box,
     text: frame.text,
     parts: frame.parts,
+    ...elementsSaid(frame),
     ...(frame.error ? { error: frame.error } : {}),
     ...(frame.interaction === "rest"
       ? {}
       : {
           delta: frame.delta?.changed ?? [],
+          ...(frame.delta?.more
+            ? {
+                moreDeltas: stageRenderWords.andMore(
+                  frame.delta.more,
+                  "deltas"
+                ),
+              }
+            : {}),
           animations: frame.delta?.animations ?? [],
           ...(frame.delta && frame.delta.changed.length === 0
             ? {

@@ -2787,8 +2787,10 @@ const FrameRenderShape = declared(
       .object({
         animations: z.array(AnimationReadShape),
         changed: z.array(StyleDeltaShape),
+        more: z.number().optional(),
       })
       .optional(),
+    elements: z.object({ of: z.number(), read: z.number() }).optional(),
     error: PageErrorShape.optional(),
     form: z.string(),
     interaction: InteractionShape,

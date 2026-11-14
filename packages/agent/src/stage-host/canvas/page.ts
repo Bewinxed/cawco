@@ -225,7 +225,7 @@ export interface Column {
 export interface Probe {
   delta: Map<
     Interaction,
-    { animations: AnimationRead[]; changed: ReturnType<typeof deltaOf> }
+    { animations: AnimationRead[] } & ReturnType<typeof deltaOf>
   >;
 }
 

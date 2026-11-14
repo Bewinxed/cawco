@@ -64,6 +64,7 @@ import {
   STAGE_SEEK,
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { holdFocusInFrame } from "./held-focus";
 import {
   deltaOf,
@@ -213,6 +214,17 @@ const planOfPage = (): Record<string, SectionPlan> => {
   }
 };
 
+/** What the canvas could not force, the first 20 and a notice of how many more there were. */
+const notForcedSaid = (refused: ReadonlySet<string>): string[] => {
+  const all = [...refused];
+  return all.length > 20
+    ? [
+        ...all.slice(0, 20),
+        stageRenderWords.andMore(all.length - 20, "not forced"),
+      ]
+    : all;
+};
+
 const specOf = (params: URLSearchParams): CanvasSpec => {
   try {
     return canvasSpecOf(JSON.parse(params.get("spec") ?? "{}"));
@@ -346,6 +358,8 @@ export function boot(options: BootOptions): void {
   );
   const rewrite: Rewrite = { reach: emptyReach(), refused: new Set() };
   const pageErrors: PageError[] = [];
+  /** How many of the page's errors were dropped, oldest first, past the 20 kept. */
+  let errorsDropped = 0;
   const sections: Section[] = [];
   const overrides = new Map<string, Record<string, unknown>>();
   let reportTimer: ReturnType<typeof setTimeout> | undefined;
@@ -368,6 +382,7 @@ export function boot(options: BootOptions): void {
     pageErrors.push(pageError(error, root, base));
     if (pageErrors.length > 20) {
       pageErrors.shift();
+      errorsDropped += 1;
     }
     later();
   };
@@ -1141,7 +1156,7 @@ export function boot(options: BootOptions): void {
                 before.moved,
                 valuesOf(motion)
               ),
-              changed: deltaOf(before.watched, snapshot(body), root),
+              ...deltaOf(before.watched, snapshot(body), root),
             });
             atState(interaction);
           } finally {
@@ -1353,7 +1368,7 @@ export function boot(options: BootOptions): void {
               title: section.mod.SHEET.meta.title ?? section.file,
               frames,
               moves: section.moves,
-              notForced: [...rewrite.refused].slice(0, 20),
+              notForced: notForcedSaid(rewrite.refused),
             },
           ]
         : [];
@@ -1366,7 +1381,20 @@ export function boot(options: BootOptions): void {
     return {
       by: by === "stage" ? "stage" : "panel",
       at: new Date().toISOString(),
-      page: { errors: [...pageErrors] },
+      page: {
+        errors:
+          errorsDropped > 0
+            ? [
+                ...pageErrors,
+                {
+                  message: stageRenderWords.andMore(errorsDropped, "errors"),
+                  file: null,
+                  line: null,
+                  column: null,
+                },
+              ]
+            : [...pageErrors],
+      },
       sections: drawn,
       unnamed,
       drawing,

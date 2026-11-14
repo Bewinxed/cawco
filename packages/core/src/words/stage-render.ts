@@ -66,6 +66,10 @@ export const stageRenderWords = {
   /** Frames that draw the same picture (core `framesAlike`). */
   alike: (one: FramesAlike) =>
     `${one.stories.join(", ")} draw the same picture at ${one.width} px: keep the one that helps the person judge, or make what tells them apart show.`,
+  /** A list cut where more stood past it: the notice that ends it, naming what the rest are ("deltas", "errors", "interactions it could not force"). */
+  andMore: (more: number, what: string) => `and ${more} more ${what}`,
+  /** A frame whose body held more elements than a reading walks (agent canvas measure.ts `ELEMENTS_READ`): its parts, its look and its states' deltas are of the first `read` only. */
+  elementsRead: (read: number, of: number) => `${read} of ${of} elements read`,
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
     `The canvas page did not load within ${seconds} s: its stage is up but did not serve it. Read the canvas without render to see its stage's state and errors.`,
