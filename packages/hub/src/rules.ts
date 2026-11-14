@@ -9,6 +9,7 @@ import {
 } from "@cawco/core/rules";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
+import { rulesWords } from "@cawco/core/words/rules";
 import type { DbShape } from "./db";
 import { jevUnanswered } from "./jev";
 import type { MeaningJudge } from "./meaning";
@@ -151,6 +152,8 @@ export class RuleEngine {
   readonly #buffers = new Map<string, Buffer>();
   readonly #facts = new Map<string, Facts>();
   readonly #meaning: MeaningJudge;
+  /** `${ruleId}:${instanceId}` of each rule already said to have gone quiet, so it is said once. */
+  readonly #toldQuiet = new Set<string>();
 
   constructor({ db, agent, meaning }: RuleEngineDeps) {
     this.#db = db;
@@ -188,6 +191,11 @@ export class RuleEngine {
   forget(instanceId: string): void {
     this.#buffers.delete(instanceId);
     this.#facts.delete(instanceId);
+    for (const key of this.#toldQuiet) {
+      if (key.endsWith(`:${instanceId}`)) {
+        this.#toldQuiet.delete(key);
+      }
+    }
   }
 
   /**
@@ -500,9 +508,32 @@ export class RuleEngine {
     if (!rule.repeat && standing && standing.totalFires > 0) {
       return false;
     }
+    const quietKey = `${rule.id}:${instanceId}`;
     if (standing && standing.fireCount >= RULE_FIRE_CEILING) {
+      if (!this.#toldQuiet.has(quietKey)) {
+        this.#toldQuiet.add(quietKey);
+        this.#agent(facts.machineId, instanceId)?.send({
+          verb: "send",
+          machineId: facts.machineId,
+          instanceId,
+          payload: {
+            instanceId,
+            message: {
+              type: "user",
+              uuid: crypto.randomUUID(),
+              message: {
+                role: "user",
+                content: rulesWords.wentQuiet(rule.name, RULE_FIRE_CEILING),
+              },
+              parent_tool_use_id: null,
+              origin: { kind: "system", name: `rule:${rule.name}` },
+            },
+          },
+        });
+      }
       return false;
     }
+    this.#toldQuiet.delete(quietKey);
 
     // Asked again here: a meaning rule's answer lands after its frame, and
     // the session may have stopped taking input in between. Unsent is uncounted.

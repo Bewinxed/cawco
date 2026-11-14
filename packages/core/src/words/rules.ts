@@ -11,6 +11,9 @@ export const rulesWords = {
   noneWaiting: "No rule is waiting on an answer",
   /** A rule's ⋯. */
   deleteRule: "Delete rule",
+  /** Said once in a session when a rule has fired its ceiling in a row and goes quiet. */
+  wentQuiet: (name: string, ceiling: number) =>
+    `The rule “${name}” has fired ${ceiling} times in a row in this session, so it stays quiet here until a turn ends without matching it.`,
   /** The editor's name field. */
   ruleName: "Rule name",
 };

@@ -659,9 +659,12 @@ class Hosted {
       all.push(...(Array.isArray(found) ? found : []));
       cursor = listed.result.nextCursor;
       if (!cursor) {
-        break;
+        return all;
       }
     }
+    console.warn(
+      `[mcp-host] ${this.name}: ${method} stopped at ${MOST_PAGES} pages; the rest is not listed`
+    );
     return all;
   }
 
