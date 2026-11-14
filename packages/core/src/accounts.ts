@@ -498,6 +498,13 @@ export const hasRouting = (accounts: number): boolean =>
  */
 export interface ProviderRouting {
   atLimit: AtLimit;
+  /**
+   * Set while the provider's saved at-limit policy can't be read (hub
+   * migration 0399): the policy's fields that don't read, as a short
+   * reason ("staleAfterHours, compaction.fileRoom"), never the stored text.
+   * `atLimit` is then core `RESTRICTIVE_AT_LIMIT`. A save clears it.
+   */
+  atLimitUnread?: string;
   delegates: StrategyChoice;
   provider: AccountProvider;
   yours: StrategyChoice;

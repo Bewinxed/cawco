@@ -11,7 +11,9 @@
    * thousands of tokens, short of where its harness compacts a session at
    * which it files its open items (core `Compaction.fileRoom`), and how long
    * past its reset a stopped session is still carried on by itself (core
-   * `AtLimit.staleAfterHours`).
+   * `AtLimit.staleAfterHours`). While the provider's saved policy can't be
+   * read (`unread`), a warning heads the block: the settings shown are the
+   * restrictive policy the hub acts on, and a save here clears it.
    */
   import type { Account, AtLimit } from "@cawco/core/accounts";
   import {
@@ -22,11 +24,12 @@
   import { accountsWords } from "@cawco/core/words/accounts";
 
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
-  import { IconArrowUpRight } from "#lib/icons.js";
+  import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { hueVar, nameOf, TERMS_URL } from "./model.svelte";
   import StrategyFigure from "./StrategyFigure.svelte";
@@ -35,8 +38,11 @@
     atLimit = $bindable(),
     accounts,
     terms,
+    unread,
   }: {
     atLimit: AtLimit;
+    /** The saved policy's fields that can't be read (core `ProviderRouting.atLimitUnread`); undefined when it reads. */
+    unread?: string;
     /** The account that runs out, then the one that is free. */
     accounts: [Account, Account];
     /** Claude subscriptions: Anthropic's terms cover the move, so they are linked. */
@@ -96,6 +102,12 @@
   >
     {words.head}
   </h3>
+  {#if unread !== undefined}
+    <Alert class="mb-space-3" role="status" variant="warning">
+      <IconWarningTriangle />
+      <AlertDescription>{words.unread(unread)}</AlertDescription>
+    </Alert>
+  {/if}
   <div
     class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
   >

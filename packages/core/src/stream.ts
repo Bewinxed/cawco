@@ -358,12 +358,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    409 `dispatch-budget-unread`, where it started with no task limit: a
  *    project's requests, an attempt and its retry may answer it. A page
  *    built for 71 does not know the new code, so it reloads first.
+ * 73: a provider's routing gains `atLimitUnread` while its saved at-limit
+ *    policy can't be read (the fields that don't, short), its `atLimit`
+ *    then the restrictive policy. A page built for 72 would show those
+ *    values with no reason, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 72;
+export const WIRE_PROTOCOL = 73;
 
 /**
  * What a session's stream carries: the changes each frame made to its
