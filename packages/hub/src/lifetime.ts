@@ -86,7 +86,7 @@ export const soon = (run: () => void): void => {
   queueMicrotask(guarded(run));
 };
 
-export const makeLifetime = (): HubLifetimeShape => {
+const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
   const releases: (() => void)[] = [];
   const closing = new AbortController();

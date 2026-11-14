@@ -75,7 +75,7 @@ import { type GitHubKind, githubReposOf, normalizeGitHub } from "./github";
 import { byHandle } from "./handles";
 import { type Ingress, valueAt } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { tool } from "./mcp-tool";
+import { defineTool } from "./mcp-tool";
 import { octokitAnswer } from "./octokit-answer";
 import {
   relayCreatedWords,
@@ -1297,67 +1297,38 @@ export const createRelay = ({
         detail: "This session is in no project, so it has no relays.",
       });
     return [
-      tool(
-        "relay_create",
-        "Open a public webhook path for your project (Tailscale Funnel) once the owner approves; GitHub's webhook is registered for you.",
-        {
-          provider: z.enum(RELAY_PROVIDERS).optional(),
-          repo: z
-            .string()
-            .optional()
-            .describe("github: owner/name, when the project links several"),
-          connection: z.string().optional().describe("github"),
-          signature_header: z.string().optional().describe("generic"),
-          timestamp_header: z.string().optional().describe("generic"),
-          id_path: z.string().optional().describe("generic: event id path"),
-        },
-        async (input) => {
-          const projectId = projectOfMe();
-          return projectId instanceof ElysiaStatus
-            ? projectId
-            : await askThenCreate(me(), inputOf(projectId, input));
-        },
-        (answer) =>
-          typeof answer === "string" ? answer : relayCreatedWords(answer)
-      ),
-      tool(
-        "relay_list",
-        "Your project's relays: URL, state, the owner's step.",
-        {},
-        () => {
-          const projectId = projectOfMe();
-          return Promise.resolve(
-            projectId instanceof ElysiaStatus ? projectId : list(projectId)
-          );
-        },
-        relayListWords
-      ),
-      tool(
-        "relay_remove",
-        "Turn a relay off; the GitHub webhook the hub made goes with it.",
-        { id: z.string().trim().min(1) },
-        async ({ id }) => {
-          const projectId = projectOfMe();
-          if (projectId instanceof ElysiaStatus) {
-            return projectId;
-          }
-          const relays = list(projectId);
-          if (relays instanceof ElysiaStatus) {
-            return relays;
-          }
-          const named = byHandle(
-            id,
-            relays,
-            {
-              id: (relay) => relay.id,
-              said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
-            },
-            "relay"
-          );
-          return await remove(named.id, me());
-        },
-        relayRemovedWords
-      ),
+      RELAY_CREATE_DEFINITION().run(async (input) => {
+        const projectId = projectOfMe();
+        return projectId instanceof ElysiaStatus
+          ? projectId
+          : await askThenCreate(me(), inputOf(projectId, input));
+      }),
+      RELAY_LIST_DEFINITION().run(() => {
+        const projectId = projectOfMe();
+        return Promise.resolve(
+          projectId instanceof ElysiaStatus ? projectId : list(projectId)
+        );
+      }),
+      RELAY_REMOVE_DEFINITION().run(async ({ id }) => {
+        const projectId = projectOfMe();
+        if (projectId instanceof ElysiaStatus) {
+          return projectId;
+        }
+        const relays = list(projectId);
+        if (relays instanceof ElysiaStatus) {
+          return relays;
+        }
+        const named = byHandle(
+          id,
+          relays,
+          {
+            id: (relay) => relay.id,
+            said: (relay) => `${relay.provider} ${relay.id.slice(0, 8)}`,
+          },
+          "relay"
+        );
+        return await remove(named.id, me());
+      }),
     ];
   };
 
@@ -1437,3 +1408,45 @@ export const relayRoutes = (relay: Relay) =>
       { body: t.Object({ secret: t.String() }) },
       ({ params, body }) => relay.setSecret(params.id, body.secret)
     );
+
+const RELAY_CREATE_DEFINITION = () =>
+  defineTool(
+    "relay_create",
+    "Open a public webhook path for your project (Tailscale Funnel) once the owner approves; GitHub's webhook is registered for you.",
+    {
+      provider: z.enum(RELAY_PROVIDERS).optional(),
+      repo: z
+        .string()
+        .optional()
+        .describe("github: owner/name, when the project links several"),
+      connection: z.string().optional().describe("github"),
+      signature_header: z.string().optional().describe("generic"),
+      timestamp_header: z.string().optional().describe("generic"),
+      id_path: z.string().optional().describe("generic: event id path"),
+    },
+    (answer: string | RelayCreated) =>
+      typeof answer === "string" ? answer : relayCreatedWords(answer)
+  );
+
+const RELAY_LIST_DEFINITION = () =>
+  defineTool(
+    "relay_list",
+    "Your project's relays: URL, state, the owner's step.",
+    {},
+    relayListWords
+  );
+
+const RELAY_REMOVE_DEFINITION = () =>
+  defineTool(
+    "relay_remove",
+    "Turn a relay off; the GitHub webhook the hub made goes with it.",
+    { id: z.string().trim().min(1) },
+    relayRemovedWords
+  );
+
+/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
+export const RELAY_DEFINITIONS = () => [
+  RELAY_CREATE_DEFINITION().listed(),
+  RELAY_LIST_DEFINITION().listed(),
+  RELAY_REMOVE_DEFINITION().listed(),
+];

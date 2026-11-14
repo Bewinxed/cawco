@@ -109,7 +109,7 @@ import {
   dispatchProblem,
 } from "./dispatch";
 import { boardTitle } from "./labels";
-import { sentence, tool } from "./mcp-tool";
+import { defineTool, sentence } from "./mcp-tool";
 import type { createProjectEdits } from "./project-edit";
 import { accountChange, projectName } from "./project-edit";
 
@@ -210,6 +210,15 @@ const DESCRIPTION =
 
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;
+
+const PROJECT_SETTINGS_DEFINITION = () =>
+  defineTool(PROJECT_SETTINGS, DESCRIPTION, definition.shape, sentence, {
+    inputHelp: INPUT_HELP,
+  });
+
+/** The tool as a listing reads it, before any session's call is bound. */
+export const projectSettingsListed = () =>
+  PROJECT_SETTINGS_DEFINITION().listed();
 
 /** A stored change as the tool takes it: an ask approved after a restart is checked again from it. */
 const askedOf = (change: ProjectSettingChange): AskedChange => {
@@ -1188,19 +1197,12 @@ export const createProjectSettings = ({
 
   /** `project_settings`, bound to the calling session and its call; with none, its listing. */
   const definitionFor = (actor: InstanceRow | undefined, toolUseId?: string) =>
-    tool(
-      PROJECT_SETTINGS,
-      DESCRIPTION,
-      definition.shape,
-      (input) => {
-        if (!actor) {
-          return Promise.reject(new Error("Discovery cannot execute tools"));
-        }
-        return changeSettings(actor, input, toolUseId);
-      },
-      sentence,
-      { inputHelp: INPUT_HELP }
-    );
+    PROJECT_SETTINGS_DEFINITION().run((input) => {
+      if (!actor) {
+        return Promise.reject(new Error("Discovery cannot execute tools"));
+      }
+      return changeSettings(actor, input, toolUseId);
+    });
 
   /** The card's changes, as the ask's input holds them, checked then. */
   const cardOf = (input: Record<string, unknown>): ProjectSettingChange[] =>
@@ -1253,7 +1255,7 @@ export const createProjectSettings = ({
     tool: definitionFor,
     runApproved,
     runDeclined,
-    definition: definitionFor(undefined),
+    definition: projectSettingsListed(),
   };
 };
 

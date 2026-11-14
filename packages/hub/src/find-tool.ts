@@ -74,7 +74,7 @@ import {
 } from "./find";
 import { byId, handleId, isHandle } from "./handles";
 import { boardTitle } from "./labels";
-import { tool } from "./mcp-tool";
+import { defineTool } from "./mcp-tool";
 import { findWords } from "./presenters/find";
 import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
@@ -1261,14 +1261,8 @@ export type FindTool = ReturnType<typeof createFindTool>;
 /** What a malformed `find` is told, after what it got wrong. */
 const INPUT_HELP = `Kinds: ${FIND_KINDS.join(", ")}. Example: ${EXAMPLE}`;
 
-/** `find`'s definition, as a session is listed it; `call` runs it for the calling session. */
-export const findToolDefinition = (
-  call: (
-    input: z.infer<typeof SCHEMA>,
-    format: "concise" | "detailed"
-  ) => Promise<Parameters<typeof findWords>[0] | AnyProblem>
-) =>
-  tool(FIND_TOOL, DESCRIPTION, INPUT, call, findWords, {
+const FIND_DEFINITION = () =>
+  defineTool(FIND_TOOL, DESCRIPTION, INPUT, findWords, {
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -1277,3 +1271,14 @@ export const findToolDefinition = (
     },
     inputHelp: INPUT_HELP,
   });
+
+/** `find`'s definition, as a session is listed it; `call` runs it for the calling session. */
+export const findToolDefinition = (
+  call: (
+    input: z.infer<typeof SCHEMA>,
+    format: "concise" | "detailed"
+  ) => Promise<Parameters<typeof findWords>[0] | AnyProblem>
+) => FIND_DEFINITION().run(call);
+
+/** `find` as a listing reads it, before any session's call is bound. */
+export const findListed = () => FIND_DEFINITION().listed();

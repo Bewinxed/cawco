@@ -4,7 +4,6 @@ import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
 import { parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
@@ -18,16 +17,24 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
-import { ACTION_TOOLS, type Actions } from "./actions";
+import { ACTION_DEFINITIONS, ACTION_TOOLS, type Actions } from "./actions";
 import type { AdminCalls } from "./admin-calls";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
 import type { Artifacts } from "./artifacts/service";
 import { ASK_TOOLS, type Asks } from "./asks";
-import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
+import {
+  BROWSER_DEFINITIONS,
+  BROWSER_TOOLS,
+  type BrowserAsks,
+} from "./browser-tools";
 import { createCallCuts, type Started, whenCut } from "./call-cuts";
 import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
-import type { Caw } from "./caw";
-import { CONNECT_TOOLS, type ConnectAsks } from "./connect-asks";
+import { CAW_DEFINITIONS, type Caw } from "./caw";
+import {
+  CONNECT_DEFINITIONS,
+  CONNECT_TOOLS,
+  type ConnectAsks,
+} from "./connect-asks";
 import type { Connections } from "./connections";
 import {
   type Fleet,
@@ -51,21 +58,29 @@ import type {
   DelegatePeek,
 } from "./delegation-tree";
 import type { Dispatcher } from "./dispatch";
-import type { FleetWatch } from "./fleet-watch";
-import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
-import { INGRESS_TOOLS, type Ingress } from "./ingress";
+import { type FleetWatch, TRIAGE_DEFINITIONS } from "./fleet-watch";
+import {
+  type createHubTools,
+  DESIGN_VERDICT,
+  HUB_DEFINITIONS,
+  HUB_TOOLS,
+} from "./hub-tools";
+import { INGRESS_DEFINITIONS, INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { bindTool } from "./mcp-tool";
-import { MEMORY_TOOLS, type Memory } from "./memory";
+import { bindTool, type ToolDefinition } from "./mcp-tool";
+import { MEMORY_DEFINITIONS, MEMORY_TOOLS, type Memory } from "./memory";
 import {
   mayMakeProject,
   PROJECT_FROM_SESSION,
   type ProjectOffers,
   projectFromSessionTool,
 } from "./project-offers";
-import type { ProjectSettings } from "./project-settings";
+import {
+  type ProjectSettings,
+  projectSettingsListed,
+} from "./project-settings";
 import type { AnyProblem, ProblemStatus } from "./refusal";
-import { RELAY_TOOLS, type Relay } from "./relay";
+import { RELAY_DEFINITIONS, RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
   allows,
@@ -75,7 +90,7 @@ import {
   refusal,
   TRIAGE_TOOLS,
 } from "./roles";
-import { ROUTINE_TOOLS, type Routines } from "./routines";
+import { ROUTINE_DEFINITIONS, ROUTINE_TOOLS, type Routines } from "./routines";
 import type { SessionCalls } from "./session-calls";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
@@ -144,7 +159,7 @@ const filesTasks = (row: InstanceRow | undefined): boolean =>
  * config sets no `alwaysLoad` (agent delegation.ts), so every other tool
  * stays deferred.
  */
-const listedFor =
+export const listedFor =
   (row: InstanceRow | undefined) =>
   ({
     name,
@@ -217,6 +232,123 @@ const PROJECT_ONLY: ReadonlySet<string> = new Set([
   "artifact_promote",
   "design_write",
 ]);
+
+/**
+ * What listing `actor`'s tools reads of it ({@link ToolView}), the item's end
+ * it lands at being `lands`. With no session, OpenCode's shared discovery:
+ * every tool a session may be listed.
+ */
+export const toolViewOf = (
+  actor: InstanceRow | undefined,
+  lands: ItemEnd | undefined
+): ToolView => ({
+  // A connection with no session is OpenCode's shared discovery
+  // ({@link requestBinding}).
+  harness: actor?.harness ?? "opencode",
+  mayStart: actor?.mayStart ?? undefined,
+  hasParent: !actor || !!actor.parentInstanceId,
+  lands,
+  workItem: !actor || !!actor.workItemId,
+});
+
+/**
+ * Each group of tools a module defines, by the names the hub routes to it: a
+ * call goes to the group whose names hold it, so a tool a group lists and its
+ * names leave out is listed to a session and refused at its call
+ * ({@link unroutedTools}, `roles:check`).
+ */
+const groupsDefined = (): readonly [
+  ReadonlySet<string>,
+  readonly { name: string }[],
+][] => [
+  [new Set(CAW_TOOLS), CAW_DEFINITIONS()],
+  [new Set(TRIAGE_TOOLS), TRIAGE_DEFINITIONS()],
+  [BROWSER_TOOLS, BROWSER_DEFINITIONS()],
+  [CONNECT_TOOLS, CONNECT_DEFINITIONS()],
+  [HUB_TOOLS, HUB_DEFINITIONS()],
+  [MEMORY_TOOLS, MEMORY_DEFINITIONS()],
+  [RELAY_TOOLS, RELAY_DEFINITIONS()],
+  [ROUTINE_TOOLS, ROUTINE_DEFINITIONS()],
+  [INGRESS_TOOLS, INGRESS_DEFINITIONS()],
+  [ACTION_TOOLS, ACTION_DEFINITIONS()],
+];
+
+/**
+ * The tools a group lists whose names route elsewhere: each would be listed to
+ * a session and refused at its call as unavailable (caw.ts's `project_name`
+ * and `view_guide`, missing from roles.ts's list). Empty when every group's
+ * tools reach it; `roles:check` fails otherwise.
+ */
+export const unroutedTools = (): string[] => [
+  ...groupsDefined().flatMap(([names, listed]) =>
+    listed.map((tool) => tool.name).filter((name) => !names.has(name))
+  ),
+  ...taskTools(undefined)
+    .map((tool) => tool.name)
+    .filter((name) => !TASK_TOOLS.has(name)),
+];
+
+/**
+ * Every tool a session may be listed, before its role and its scope narrow it
+ * ({@link listedTools}): the hand-off tools in `view`'s harness's words, the
+ * admin tools, and each module's own tools as their definitions alone, which
+ * need nothing the module acts through. The asks' and the connections' tools
+ * come to a listing from the server's own modules.
+ */
+export const definedTools = (
+  view: ToolView,
+  handoff: ToolFactory = handoffTools,
+  admin: ReturnType<typeof adminTools> = adminTools()
+): ToolDefinition[] => [
+  ...handoff(view),
+  ...admin,
+  ...taskTools(undefined),
+  projectFromSessionTool(),
+  projectSettingsListed(),
+  ...CAW_DEFINITIONS(),
+  ...ROUTINE_DEFINITIONS(),
+  ...INGRESS_DEFINITIONS(),
+  ...ACTION_DEFINITIONS(),
+  ...RELAY_DEFINITIONS(),
+  ...MEMORY_DEFINITIONS(),
+  ...TRIAGE_DEFINITIONS(),
+  ...HUB_DEFINITIONS(),
+  ...BROWSER_DEFINITIONS(),
+  ...CONNECT_DEFINITIONS(),
+];
+
+/**
+ * The tools of `all` a session is listed: its role's and its scope's
+ * (roles.ts), narrowed by its own context (a leaf gets no spawning tools,
+ * only a work item `finish_item`, only a session in a project the project's
+ * tools, only one that may be made a project `project_from_session`, only a
+ * design check's verifier `design_verdict`), then those `granted` it by a
+ * delegate type or a project. Without a session, OpenCode's shared
+ * discovery: every role's, the superset; the call enforces.
+ */
+export const listedTools = <T extends { name: string }>(
+  actor: InstanceRow | undefined,
+  all: readonly T[],
+  granted: readonly T[]
+): T[] => {
+  if (!actor) {
+    return [...all, ...granted];
+  }
+  return [
+    ...all.filter(
+      (tool) =>
+        allows(actor, tool.name) &&
+        (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
+        (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
+        // Only a work item hands in a result on its task.
+        (tool.name !== "task_result" || !!actor.workItemId) &&
+        // Only a design check's verifier gives a verdict (design-verify.ts).
+        (tool.name !== DESIGN_VERDICT ||
+          isVerifierParent(actor.parentInstanceId))
+    ),
+    ...granted,
+  ];
+};
 
 export function createDelegationMcp(options: {
   /** Runs the tool-list sweeps and each long call's heartbeat, and stops the source watchers, with the hub. */
@@ -470,24 +602,12 @@ export function createDelegationMcp(options: {
     actor?.workItemId ? options.workItemLands?.(actor.workItemId) : undefined;
 
   /**
-   * The harness a listing is for: its session's. A connection with no
-   * session is OpenCode's shared discovery ({@link requestBinding}).
-   */
-  const harnessOf = (actor: InstanceRow | undefined): HarnessKind =>
-    actor?.harness ?? "opencode";
-
-  /**
    * What listing `actor`'s tools reads of it (delegation-tools.ts
    * {@link ToolView}). With no session, OpenCode's shared discovery: every
    * tool a session may be listed.
    */
-  const viewOf = (actor: InstanceRow | undefined): ToolView => ({
-    harness: harnessOf(actor),
-    mayStart: actor?.mayStart ?? undefined,
-    hasParent: !actor || !!actor.parentInstanceId,
-    lands: landsOf(actor),
-    workItem: !actor || !!actor.workItemId,
-  });
+  const viewOf = (actor: InstanceRow | undefined): ToolView =>
+    toolViewOf(actor, landsOf(actor));
 
   /**
    * The tools a session is listed: its role's and its scope's (roles.ts),
@@ -495,56 +615,20 @@ export function createDelegationMcp(options: {
    * item `finish_item`, only a session in a project the project's tools,
    * only one that may be made a project `project_from_session`, only a
    * design check's verifier `design_verdict`), in its harness's words
-   * ({@link harnessOf}). Without a session — OpenCode's shared discovery —
+   * ({@link toolViewOf}). Without a session — OpenCode's shared discovery —
    * every role's, the superset; the call enforces.
    */
-  const toolsFor = (actor: InstanceRow | undefined) => {
-    const all = [
-      ...tools(viewOf(actor)),
-      ...admin,
-      ...(options.tasks ? taskTools(undefined) : []),
-      ...(options.projectFromSession ? [projectFromSessionTool()] : []),
-      ...(options.projectSettings ? [options.projectSettings.definition] : []),
-      ...(
-        [
-          options.cawTools,
-          options.routineTools,
-          options.ingressTools,
-          options.actionTools,
-          options.relayTools,
-          options.memoryTools,
-          options.triageTools,
-          options.hubTools,
-          options.browserTools,
-          options.connectTools,
-          options.askTools,
-        ] as (
-          | ((actor: undefined) => (ProjectTool | CawTool | TriageTool)[])
-          | undefined
-        )[]
-      ).flatMap((group) => group?.(undefined) ?? []),
-    ];
-    // Granted by a delegate type or a project, not a role's list: the
-    // connections module answers which, the role's say included.
-    const connections = options.connections?.sessionTools(actor) ?? [];
-    if (!actor) {
-      return [...all, ...connections];
-    }
-    return [
-      ...all.filter(
-        (tool: { name: string }) =>
-          allows(actor, tool.name) &&
-          (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
-          (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
-          // Only a work item hands in a result on its task.
-          (tool.name !== "task_result" || !!actor.workItemId) &&
-          // Only a design check's verifier gives a verdict (design-verify.ts).
-          (tool.name !== DESIGN_VERDICT ||
-            isVerifierParent(actor.parentInstanceId))
-      ),
-      ...connections,
-    ];
-  };
+  const toolsFor = (actor: InstanceRow | undefined) =>
+    listedTools<ToolDefinition>(
+      actor,
+      [
+        ...definedTools(viewOf(actor), tools, admin),
+        ...(options.askTools?.(undefined) ?? []),
+      ],
+      // Granted by a delegate type or a project, not a role's list: the
+      // connections module answers which, the role's say included.
+      options.connections?.sessionTools(actor) ?? []
+    );
 
   /**
    * The credential OpenCode's plugin stamps into a call: OpenCode sends one
@@ -830,7 +914,7 @@ export function createDelegationMcp(options: {
    * Each group of tools a module answers, by the names the hub routes to
    * it: a call goes to the group whose names hold it ({@link groupCall}),
    * so a tool a group lists and its names leave out is listed to a session
-   * and refused at its call ({@link unrouted}, `roles:check`). Each one
+   * and refused at its call ({@link unroutedTools}, `roles:check`). Each one
    * that parks an ask, a design proposal or a routine is handed the call's
    * id, which it is drawn at or reads its why off.
    */
@@ -863,23 +947,6 @@ export function createDelegationMcp(options: {
     [ROUTINE_TOOLS, options.routineTools],
     [INGRESS_TOOLS, options.ingressTools],
     [ACTION_TOOLS, options.actionTools],
-  ];
-
-  /**
-   * The tools a group lists whose names route elsewhere: each would be
-   * listed to a session and refused at its call as unavailable (caw.ts's
-   * `project_name` and `view_guide`, missing from roles.ts's list). Empty
-   * when every group's tools reach it; `roles:check` fails otherwise.
-   */
-  const unrouted = (): string[] => [
-    ...groups.flatMap(([names, toolsOf]) =>
-      (toolsOf?.(undefined) ?? [])
-        .map((tool) => tool.name)
-        .filter((listed) => !names.has(listed))
-    ),
-    ...(options.tasks ? taskTools(undefined) : [])
-      .map((tool) => tool.name)
-      .filter((listed) => !TASK_TOOLS.has(listed)),
   ];
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */
@@ -1475,5 +1542,5 @@ export function createDelegationMcp(options: {
     return said;
   };
 
-  return { handle, call, list, toolsMayHaveChanged, handoffAs, unrouted };
+  return { handle, call, list, toolsMayHaveChanged, handoffAs };
 }

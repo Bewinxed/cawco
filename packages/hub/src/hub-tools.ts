@@ -40,9 +40,14 @@ import {
   type DesignFileIn,
   type DesignWritten,
 } from "./design-system";
-import { FIND_TOOL, type FindTool, findToolDefinition } from "./find-tool";
+import {
+  FIND_TOOL,
+  type FindTool,
+  findListed,
+  findToolDefinition,
+} from "./find-tool";
 import { hubHttpUrl, selfFetch } from "./hub-self";
-import { sentence, tool } from "./mcp-tool";
+import { defineTool, sentence } from "./mcp-tool";
 import {
   capabilityCallsWords,
   designVerdictWords,
@@ -215,144 +220,169 @@ export const createHubTools =
       return actor;
     };
     return [
-      tool(
-        "update_machines",
-        "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
-        {
-          machine: z
-            .string()
-            .optional()
-            .describe("A machine id; every online machine when left out."),
-          check_only: z.boolean().optional(),
-          reason: z
-            .string()
-            .max(300)
-            .optional()
-            .describe("One sentence on why: the person reads it on the ask."),
-        },
-        async (input) => {
-          const caller = me();
-          if (input.check_only) {
-            return { found: await lookForBuild() };
-          }
-          const machines = input.machine ? [input.machine] : deps.machineIds();
-          // The person first, before anything runs: installing the newest
-          // build on these machines.
-          const recorded = deps.pairing()
-            ? await deps.askPerson(caller, "update_machines", {
-                ...input,
-                machines,
-              })
-            : undefined;
-          return recorded ?? (await installBuild(machines));
-        },
-        (answer) =>
-          typeof answer === "string" ? answer : machinesUpdatedWords(answer)
-      ),
-      tool(
-        "design_write",
-        "Write design/ files per the design-system skill: content, or from a file where you work. Changing an existing system is a proposal (why).",
-        {
-          files: z
-            .array(
-              z.object({
-                path: z.string().min(1),
-                content: z.string().max(FOLDER_CONTENT_LIMIT).optional(),
-                encoding: z.enum(FOLDER_ENCODINGS).optional(),
-                from: z.string().min(1).optional(),
-              })
-            )
-            .min(1)
-            .max(DESIGN_WRITE_FILES),
-          why: z.string().max(500).optional(),
-        },
-        ({ files, why }) => deps.designWrite(me(), files, why, toolUseId),
-        designWrittenWords
-      ),
-      tool(
-        DESIGN_VERDICT,
-        "Your verdict as this design check's verifier, once: every must-fix finding tied to one element (its file and line, its CSS selector, what is wrong and what the system says instead), or no findings for a pass. It finishes your item.",
-        {
-          findings: z
-            .array(
-              z.object({
-                file: z.string().min(1),
-                line: z.number().int().min(1),
-                selector: z.string().min(1),
-                problem: z.string().min(1).max(1000),
-              })
-            )
-            .max(50),
-          pick: z
-            .object({
-              variant: z.string().min(1),
-              why: z.string().min(1).max(500),
+      UPDATE_MACHINES_DEFINITION().run(async (input) => {
+        const caller = me();
+        if (input.check_only) {
+          return { found: await lookForBuild() };
+        }
+        const machines = input.machine ? [input.machine] : deps.machineIds();
+        // The person first, before anything runs: installing the newest
+        // build on these machines.
+        const recorded = deps.pairing()
+          ? await deps.askPerson(caller, "update_machines", {
+              ...input,
+              machines,
             })
-            .optional()
-            .describe(
-              "When the result offers variants: the one that holds to the system best, and why."
-            ),
-          summary: z.string().min(1).max(2000),
-        },
-        (verdict) => deps.designVerdict(me(), verdict),
-        designVerdictWords
+          : undefined;
+        return recorded ?? (await installBuild(machines));
+      }),
+      DESIGN_WRITE_DEFINITION().run(({ files, why }) =>
+        deps.designWrite(me(), files, why, toolUseId)
+      ),
+      DESIGN_VERDICT_DEFINITION().run((verdict) =>
+        deps.designVerdict(me(), verdict)
       ),
       findToolDefinition((input, format) => deps.find(me(), input, format)),
-      tool(
-        "calls_by_role",
-        `Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. A role is a delegate type, or person for the sessions the person started. Project "all" also lists what sessions had installed and none called.`,
-        {
-          project: z
-            .string()
-            .min(1)
-            .optional()
-            .describe(
-              'A name or id; "all" for every project. Default: your own project, else all.'
-            ),
-          days: z
-            .number()
-            .int()
-            .min(1)
-            .max(CALLS_MAX_DAYS)
-            .optional()
-            .describe(`Default ${CALLS_DEFAULT_DAYS}.`),
-          role: z
-            .string()
-            .min(1)
-            .optional()
-            .describe("Only this role's rows, like build or person."),
-        },
-        ({ project, days, role }) => {
-          const projectId =
-            project === undefined
-              ? (me().projectId ?? undefined)
-              : projectNamed(project, deps.projects());
-          const report = deps.capabilityCalls({ days, projectId });
-          return Promise.resolve(
-            role === undefined
-              ? report
-              : {
-                  ...report,
-                  rows: report.rows.filter((row) => row.role === role),
-                }
-          );
-        },
-        (report) => capabilityCallsWords(report),
-        {
-          annotations: {
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        }
-      ),
-      tool(
-        TRIM_PROPOSE,
-        "Put this run's trimmed starting sets to the person, each through its set's own approval; nothing changes until they approve. Call once; it answers the headline to finish with.",
-        {},
-        () => deps.trimPropose(me(), toolUseId),
-        sentence
-      ),
+      CALLS_BY_ROLE_DEFINITION().run(({ project, days, role }) => {
+        const projectId =
+          project === undefined
+            ? (me().projectId ?? undefined)
+            : projectNamed(project, deps.projects());
+        const report = deps.capabilityCalls({ days, projectId });
+        return Promise.resolve(
+          role === undefined
+            ? report
+            : {
+                ...report,
+                rows: report.rows.filter((row) => row.role === role),
+              }
+        );
+      }),
+      TRIM_PROPOSE_DEFINITION().run(() => deps.trimPropose(me(), toolUseId)),
     ];
   };
+
+const UPDATE_MACHINES_DEFINITION = () =>
+  defineTool(
+    "update_machines",
+    "Look for a new CawCo build and tell every machine (check_only), or install it on one machine or every online machine. Installing asks the person first when the hub requires paired devices.",
+    {
+      machine: z
+        .string()
+        .optional()
+        .describe("A machine id; every online machine when left out."),
+      check_only: z.boolean().optional(),
+      reason: z
+        .string()
+        .max(300)
+        .optional()
+        .describe("One sentence on why: the person reads it on the ask."),
+    },
+    (answer: string | Parameters<typeof machinesUpdatedWords>[0]) =>
+      typeof answer === "string" ? answer : machinesUpdatedWords(answer)
+  );
+
+const DESIGN_WRITE_DEFINITION = () =>
+  defineTool(
+    "design_write",
+    "Write design/ files per the design-system skill: content, or from a file where you work. Changing an existing system is a proposal (why).",
+    {
+      files: z
+        .array(
+          z.object({
+            path: z.string().min(1),
+            content: z.string().max(FOLDER_CONTENT_LIMIT).optional(),
+            encoding: z.enum(FOLDER_ENCODINGS).optional(),
+            from: z.string().min(1).optional(),
+          })
+        )
+        .min(1)
+        .max(DESIGN_WRITE_FILES),
+      why: z.string().max(500).optional(),
+    },
+    designWrittenWords
+  );
+
+const DESIGN_VERDICT_DEFINITION = () =>
+  defineTool(
+    DESIGN_VERDICT,
+    "Your verdict as this design check's verifier, once: every must-fix finding tied to one element (its file and line, its CSS selector, what is wrong and what the system says instead), or no findings for a pass. It finishes your item.",
+    {
+      findings: z
+        .array(
+          z.object({
+            file: z.string().min(1),
+            line: z.number().int().min(1),
+            selector: z.string().min(1),
+            problem: z.string().min(1).max(1000),
+          })
+        )
+        .max(50),
+      pick: z
+        .object({
+          variant: z.string().min(1),
+          why: z.string().min(1).max(500),
+        })
+        .optional()
+        .describe(
+          "When the result offers variants: the one that holds to the system best, and why."
+        ),
+      summary: z.string().min(1).max(2000),
+    },
+    designVerdictWords
+  );
+
+const CALLS_BY_ROLE_DEFINITION = () =>
+  defineTool(
+    "calls_by_role",
+    `Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. A role is a delegate type, or person for the sessions the person started. Project "all" also lists what sessions had installed and none called.`,
+    {
+      project: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          'A name or id; "all" for every project. Default: your own project, else all.'
+        ),
+      days: z
+        .number()
+        .int()
+        .min(1)
+        .max(CALLS_MAX_DAYS)
+        .optional()
+        .describe(`Default ${CALLS_DEFAULT_DAYS}.`),
+      role: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Only this role's rows, like build or person."),
+    },
+    (report: Parameters<typeof capabilityCallsWords>[0]) =>
+      capabilityCallsWords(report),
+    {
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    }
+  );
+
+const TRIM_PROPOSE_DEFINITION = () =>
+  defineTool(
+    TRIM_PROPOSE,
+    "Put this run's trimmed starting sets to the person, each through its set's own approval; nothing changes until they approve. Call once; it answers the headline to finish with.",
+    {},
+    sentence
+  );
+
+/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
+export const HUB_DEFINITIONS = () => [
+  UPDATE_MACHINES_DEFINITION().listed(),
+  DESIGN_WRITE_DEFINITION().listed(),
+  DESIGN_VERDICT_DEFINITION().listed(),
+  findListed(),
+  CALLS_BY_ROLE_DEFINITION().listed(),
+  TRIM_PROPOSE_DEFINITION().listed(),
+];

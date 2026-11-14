@@ -49,7 +49,7 @@ import type { ActionRow } from "./db/actions";
 import type { ActionState } from "./db/schema";
 import { byHandle } from "./handles";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { tool } from "./mcp-tool";
+import { defineTool } from "./mcp-tool";
 import {
   actionListWords,
   actionProposedWords,
@@ -887,108 +887,55 @@ export const createActions = ({
       return actor;
     };
     return [
-      tool(
-        "action_propose",
-        "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
-        {
-          connection: z
-            .string()
-            .describe("A connection your delegate type or project lists."),
-          tool: z
-            .string()
-            .describe("The tool's own name on the connection's server."),
-          args: z
-            .record(z.string(), z.unknown())
-            .describe(
-              "The call's arguments, exactly as the owner approves them."
-            ),
-          run_at: z
-            .string()
-            .optional()
-            .describe(
-              "ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00. Left out: as soon as it is approved."
-            ),
-          reason: z
-            .string()
-            .describe("One sentence for the owner deciding: why this call."),
-          task: z
-            .string()
-            .optional()
-            .describe(
-              "The task it is for, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
-            ),
-          then_stage: z
-            .string()
-            .optional()
-            .describe(
-              "The stage the task moves to once the call is done; stages.md must let an action make that move."
-            ),
-        },
-        async (input) => {
-          const filed = await propose(me(), {
-            connection: input.connection,
-            tool: input.tool,
-            args: input.args,
-            reason: input.reason,
-            ...(input.run_at === undefined ? {} : { runAt: input.run_at }),
-            ...(input.task === undefined ? {} : { task: input.task }),
-            ...(input.then_stage === undefined
-              ? {}
-              : { thenStage: input.then_stage }),
-          });
-          if (filed instanceof ElysiaStatus) {
-            return filed;
-          }
-          return {
-            id: filed.id,
-            state: filed.state,
-            said: "Waiting for the owner's approval.",
-          };
-        },
-        actionProposedWords
-      ),
-      tool(
-        "action_list",
-        "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
-        {
-          state: z.enum(ACTION_STATES).optional(),
-        },
-        async ({ state }) => {
-          const projectId = projectOf(me());
-          if (projectId instanceof ElysiaStatus) {
-            return projectId;
-          }
-          await titlesOf(store.list(projectId, LISTED));
-          return list(projectId, state);
-        },
-        actionListWords
-      ),
-      tool(
-        "action_cancel",
-        "Cancel an approved action of your project before it runs.",
-        { id: z.string().trim().min(1).describe("Its id.") },
-        ({ id }) => {
-          const projectId = projectOf(me());
-          return Promise.resolve(
-            projectId instanceof ElysiaStatus
-              ? projectId
-              : cancel(
-                  byHandle(
-                    id,
-                    list(projectId),
-                    {
-                      id: (action) => action.id,
-                      said: (action) =>
-                        `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
-                    },
-                    "action"
-                  ).id,
-                  me()
-                )
-          );
-        },
-        actionWords
-      ),
+      ACTION_PROPOSE_DEFINITION().run(async (input) => {
+        const filed = await propose(me(), {
+          connection: input.connection,
+          tool: input.tool,
+          args: input.args,
+          reason: input.reason,
+          ...(input.run_at === undefined ? {} : { runAt: input.run_at }),
+          ...(input.task === undefined ? {} : { task: input.task }),
+          ...(input.then_stage === undefined
+            ? {}
+            : { thenStage: input.then_stage }),
+        });
+        if (filed instanceof ElysiaStatus) {
+          return filed;
+        }
+        return {
+          id: filed.id,
+          state: filed.state,
+          said: "Waiting for the owner's approval.",
+        };
+      }),
+      ACTION_LIST_DEFINITION().run(async ({ state }) => {
+        const projectId = projectOf(me());
+        if (projectId instanceof ElysiaStatus) {
+          return projectId;
+        }
+        await titlesOf(store.list(projectId, LISTED));
+        return list(projectId, state);
+      }),
+      ACTION_CANCEL_DEFINITION().run(({ id }) => {
+        const projectId = projectOf(me());
+        return Promise.resolve(
+          projectId instanceof ElysiaStatus
+            ? projectId
+            : cancel(
+                byHandle(
+                  id,
+                  list(projectId),
+                  {
+                    id: (action) => action.id,
+                    said: (action) =>
+                      `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
+                  },
+                  "action"
+                ).id,
+                me()
+              )
+        );
+      }),
     ];
   };
 
@@ -1066,3 +1013,67 @@ export const actionRoutes = (actions: Actions) =>
       actions.cancel(params.id, "owner")
     )
     .post("/api/actions/:id/checked", ({ params }) => actions.check(params.id));
+
+const ACTION_PROPOSE_DEFINITION = () =>
+  defineTool(
+    "action_propose",
+    "Propose one exact call of a connection's tool (a post, a send, a merge) for the owner to approve; the hub makes it once, at run_at or once approved. Go on working; action_list says how it went.",
+    {
+      connection: z
+        .string()
+        .describe("A connection your delegate type or project lists."),
+      tool: z
+        .string()
+        .describe("The tool's own name on the connection's server."),
+      args: z
+        .record(z.string(), z.unknown())
+        .describe("The call's arguments, exactly as the owner approves them."),
+      run_at: z
+        .string()
+        .optional()
+        .describe(
+          "ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00. Left out: as soon as it is approved."
+        ),
+      reason: z
+        .string()
+        .describe("One sentence for the owner deciding: why this call."),
+      task: z
+        .string()
+        .optional()
+        .describe(
+          "The task it is for, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
+        ),
+      then_stage: z
+        .string()
+        .optional()
+        .describe(
+          "The stage the task moves to once the call is done; stages.md must let an action make that move."
+        ),
+    },
+    actionProposedWords
+  );
+
+const ACTION_LIST_DEFINITION = () =>
+  defineTool(
+    "action_list",
+    "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
+    {
+      state: z.enum(ACTION_STATES).optional(),
+    },
+    actionListWords
+  );
+
+const ACTION_CANCEL_DEFINITION = () =>
+  defineTool(
+    "action_cancel",
+    "Cancel an approved action of your project before it runs.",
+    { id: z.string().trim().min(1).describe("Its id.") },
+    actionWords
+  );
+
+/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
+export const ACTION_DEFINITIONS = () => [
+  ACTION_PROPOSE_DEFINITION().listed(),
+  ACTION_LIST_DEFINITION().listed(),
+  ACTION_CANCEL_DEFINITION().listed(),
+];

@@ -7,26 +7,14 @@
  * prints each and fails over {@link ROLE_TOOL_BUDGET}.
  */
 import { estimateTokens } from "@cawco/core/continuation";
-import { KIND_SEED } from "@cawco/core/decides";
 import { SESSION_ROLES, type SessionRole } from "@cawco/core/delegate-types";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { createActions } from "./actions";
-import { createBrowserAsks } from "./browser-tools";
-import { createCaw } from "./caw";
-import { createConnectAsks } from "./connect-asks";
-import { createDelegationMcp } from "./delegation-mcp";
-import { createFleetWatch } from "./fleet-watch";
-import { createHubTools } from "./hub-tools";
-import { createIngress } from "./ingress";
-import { makeLifetime } from "./lifetime";
-import { createMemory, createTurnWatch } from "./memory";
-import { createProjectSettings } from "./project-settings";
-import { createRelay } from "./relay";
-import { createRoutines } from "./routines";
-import type { Tasks } from "./tasks";
-
-/** What the delegation MCP is made with. */
-type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
+import {
+  definedTools,
+  listedFor,
+  listedTools,
+  toolViewOf,
+} from "./delegation-mcp";
 
 /**
  * Tokens a role's listed tool definitions may take: each is its size as
@@ -214,271 +202,36 @@ export const measureRoles = (): RoleSize[] =>
       .toSorted((a, b) => b.tokens - a.tokens),
   }));
 
-/** Every role's tools as a session of it is listed them ({@link RoleTools}), from one stood-up delegation MCP whose tools are read, never called. */
-export const listRoleTools = (): RoleTools[] => standUp().roles;
-
 /**
- * The tools a group lists that the hub routes elsewhere (delegation-mcp.ts
- * `unrouted`): each is listed to a session and refused at its call.
+ * Every role's tools as a session of it is listed them ({@link RoleTools}),
+ * read from the tool definitions alone: the hub's own listing of a session
+ * (delegation-mcp.ts `listedTools`), none of its tools called.
  */
-export const unroutedTools = (): string[] => standUp().unrouted;
-
-/** One stood-up delegation MCP's listings and unrouted tools, read, never called. */
-const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
-  const { mcp, close } = standIn();
-  try {
-    const roles = SESSION_ROLES.map((role) => {
-      const listed = mcp.list(role);
-      if (!listed) {
-        throw new Error(`No measuring session for role ${role}.`);
-      }
-      // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
-      // Claude Code's to act on, never part of the definition it sends.
-      return {
-        role,
-        tools: listed.tools.map(({ _meta, ...tool }) => tool),
-      };
-    });
-    return { roles, unrouted: mcp.unrouted() };
-  } finally {
-    close();
-  }
-};
-
-/** What a stand-in's caller may set: who a credential names, and the person's ask. */
-export interface StandInCalls {
-  askPerson?: DelegationOptions["askPerson"];
-  credentialActor?: DelegationOptions["credentialActor"];
-}
-
-/**
- * A delegation MCP stood up on a session of each role (its id the role's
- * name, among `rows`), every dependency a stand-in that answers nothing. A
- * check may set who a credential names and the person's ask, and call it;
- * `close` ends its sweeps.
- */
-const standIn = (
-  calls: StandInCalls = {}
-): {
-  close: () => void;
-  mcp: ReturnType<typeof createDelegationMcp>;
-  rows: InstanceRow[];
-} => {
-  const rows = SESSION_ROLES.map((role): InstanceRow => ({
-    id: role,
-    machineId: "machine",
-    cwd: "/",
-    harness: "claude",
-    launchDir: "known",
-    sessionId: null,
-    status: "running",
-    kind: "mainline",
-    ...SAMPLES[role],
-  }));
-  // The server's sweeps start with it; closed below, through the one path.
-  const lifetime = makeLifetime();
-  const mcp = createDelegationMcp({
-    lifetime,
-    decidesKinds: () => KIND_SEED,
-    instancesByIds: (ids) => rows.filter((row) => ids.includes(row.id)),
-    runningOf: (harness) =>
-      rows.filter((row) => row.harness === harness && row.status === "running"),
-    instanceById: (id) => rows.find((row) => row.id === id),
-    instancesByShortId: () => [],
-    fleet: {
-      instances: () => rows,
-      machines: () => [],
-      limitStopped: () => [],
-      facts: () => Promise.resolve(new Map()),
-    },
-    formerIds: () => ({}),
-    forward: () => Promise.resolve(undefined),
-    callKeys: { once: (_actor, _name, _key, run) => run() },
-    projectAt: () => undefined,
-    spawn: () => Promise.reject(new Error("A budget read starts nothing")),
-    deliver: () => Promise.reject(new Error("measuring")),
-    handOff: () => Promise.reject(new Error("measuring")),
-    credentialActor: calls.credentialActor ?? (() => undefined),
-    knownCredential: () => false,
-    toolListing: () => undefined,
-    refreshTools: () => undefined,
-    putToolListing: () => undefined,
-    // Only the definitions are read: nothing is called.
-    tasks: {} as Tasks,
-    workItemCalls: {} as never,
-    sessionCalls: {} as never,
-    adminCalls: () => ({}) as never,
-    projectFromSession: () => Promise.reject(new Error("measuring")),
-    askPerson:
-      calls.askPerson ?? (() => Promise.reject(new Error("measuring"))),
-    personOwed: () => {
-      throw new Error("Listing the tools asks nothing");
-    },
-    sendToUser: () => {
-      throw new Error("measuring");
-    },
-    cawTools: (actor) =>
-      createCaw({
-        answered: () => undefined,
-        blocks: {} as never,
-        caps: {} as never,
-        db: {} as never,
-        proposeType: () => Promise.reject(new Error("measuring")),
-        end: () => undefined,
-        discard: () => undefined,
-        folderChanged: () => undefined,
-        leadHome: () => Promise.resolve(undefined),
-        machines: { name: (machineId) => machineId, online: () => [] },
-        rename: () => Promise.reject(new Error("measuring")),
-        noted: () => undefined,
-        online: () => false,
-        projectsChanged: () => undefined,
-        send: () => ({ reason: "measuring", state: "failed" }),
-        stops: { running: () => [], stop: () => undefined },
-        spawn: () => Promise.resolve(),
-        task: () => Promise.reject(new Error("measuring")),
-        conversationStarted: () => undefined,
-        turnEnded: () => undefined,
-        views: {} as never,
-        workPlace: () => ({ kind: "none", why: "measuring", fix: "" }),
-      }).tools(actor),
-    routineTools: (actor) =>
-      createRoutines({
-        anyOnline: () => false,
-        caw: {} as never,
-        curatorBrief: () => Promise.reject(new Error("measuring")),
-        trimBrief: () => {
-          throw new Error("measuring");
-        },
-        db: {} as never,
-        hubCheckout: () => Promise.reject(new Error("measuring")),
-        jevAccess: () => undefined,
-        lifetime,
-        pauses: () => undefined,
-        push: {} as never,
-        quiets: () => undefined,
-        types: () => [],
-        workItems: {} as never,
-        workPlace: () => ({ kind: "none", why: "measuring", fix: "" }),
-      }).tools(actor),
-    ingressTools: (actor) =>
-      createIngress({
-        connections: {} as never,
-        db: {} as never,
-        dispatcher: {} as never,
-        eventLanded: () => undefined,
-        externalItems: {} as never,
-        jevAccess: () => undefined,
-        lifetime,
-        routines: {} as never,
-        tell: () => Promise.reject(new Error("measuring")),
-      }).tools(actor),
-    actionTools: (actor) =>
-      createActions({
-        connections: {} as never,
-        db: {} as never,
-        lifetime,
-        publish: () => undefined,
-        push: {} as never,
-        tasks: {} as never,
-      }).tools(actor),
-    relayTools: (actor) =>
-      createRelay({
-        askPerson: () => Promise.reject(new Error("measuring")),
-        connections: {} as never,
-        db: {} as never,
-        funnel: {} as never,
-        ingest: () => undefined,
-        lifetime,
-      }).tools(actor),
-    memoryTools: (actor) =>
-      createMemory({
-        curator: () => ({
-          ensure: () => undefined,
-          inboxPassed: () => undefined,
-        }),
-        db: {} as never,
-        folderChanged: () => undefined,
-        notice: () => undefined,
-        park: () => undefined,
-        settle: () => undefined,
-        tell: () => false,
-        watch: createTurnWatch({
-          fleetHosts: () => [],
-          get: () => undefined,
-          mcpUrl: () => undefined,
-          put: () => undefined,
-        }),
-      }).tools(actor),
-    projectSettings: createProjectSettings({
-      accounts: () => [],
-      areas: {} as never,
-      inEffect: () => Promise.reject(new Error("measuring")),
-      ask: () => Promise.reject(new Error("measuring")),
-      caw: () => undefined,
-      connections: {} as never,
-      db: {} as never,
-      dispatch: {} as never,
-      edit: () => Promise.reject(new Error("measuring")),
-      note: () => undefined,
-      publish: {} as never,
-      writeStartingSet: () => Promise.reject(new Error("measuring")),
-    }),
-    triageTools: (actor) =>
-      createFleetWatch({
-        asking: () => false,
-        // Read once as it is made; nothing else is read while measuring.
-        db: { fleetWatchOn: () => false, watchNotices: () => [] } as never,
-        end: () => undefined,
-        interrupt: () => undefined,
-        lifetime,
-        line: () => undefined,
-        name: () => "",
-        notices: () => undefined,
-        online: () => false,
-        push: () => undefined,
-        send: () => undefined,
-        spawn: () => Promise.reject(new Error("measuring")),
-        stop: () => undefined,
-        tell: () => Promise.reject(new Error("measuring")),
-      }).tools(actor),
-    // The hub's own tools, from the one list the server gives sessions.
-    hubTools: createHubTools({
-      askPerson: () => Promise.reject(new Error("measuring")),
-      designVerdict: () => Promise.reject(new Error("measuring")),
-      designWrite: () => Promise.reject(new Error("measuring")),
-      find: () => Promise.reject(new Error("measuring")),
-      machineIds: () => [],
-      pairing: () => false,
-      capabilityCalls: () => {
-        throw new Error("measuring");
-      },
-      projects: () => [],
-      trimPropose: () => Promise.reject(new Error("measuring")),
-    }),
-    // The browser ask, from the one list the server gives sessions.
-    browserTools: (actor) =>
-      createBrowserAsks({
-        browserFor: () => {
-          throw new Error("measuring");
-        },
-        pageOf: () => Promise.reject(new Error("measuring")),
-        park: () => undefined,
-        settle: () => undefined,
-        handedBack: () => undefined,
-      }).tools(actor),
-    // The connect ask, from the one list the server gives sessions.
-    connectTools: (actor) =>
-      createConnectAsks({
-        denials: () => ({ fleet: [] }),
-        facts: () => {
-          throw new Error("measuring");
-        },
-        heal: () => Promise.resolve({ kind: "unanswered" }),
-        park: () => undefined,
-        servers: () => [],
-        settle: () => undefined,
-      }).tools(actor),
+export const listRoleTools = (): RoleTools[] =>
+  SESSION_ROLES.map((role) => {
+    const row = sampleOf(role);
+    const listed = listedTools(
+      row,
+      definedTools(toolViewOf(row, undefined)),
+      []
+    );
+    // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
+    // Claude Code's to act on, never part of the definition it sends.
+    return {
+      role,
+      tools: listed.map(listedFor(row)).map(({ _meta, ...tool }) => tool),
+    };
   });
-  return { mcp, rows, close: () => lifetime.close() };
-};
+
+/** The sample session of `role`: its id the role's name. */
+const sampleOf = (role: SessionRole): InstanceRow => ({
+  id: role,
+  machineId: "machine",
+  cwd: "/",
+  harness: "claude",
+  launchDir: "known",
+  sessionId: null,
+  status: "running",
+  kind: "mainline",
+  ...SAMPLES[role],
+});

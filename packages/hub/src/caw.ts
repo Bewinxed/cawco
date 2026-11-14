@@ -93,7 +93,7 @@ import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
 import { boardTitle } from "./labels";
-import { type McpTool, sentence, tool } from "./mcp-tool";
+import { defineTool, type McpTool, sentence } from "./mcp-tool";
 import {
   AGENTS_FILE,
   type Memory,
@@ -1898,156 +1898,94 @@ export const createCaw = ({
             });
       };
       return [
-        tool(
-          "folder_read",
-          "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
-          { path: z.string().optional() },
-          async ({ path }) => {
-            const calling = ours();
-            if (calling instanceof ElysiaStatus) {
-              return calling;
-            }
-            const projectId = calling.project.id;
-            const file = await readFolderFile(projectId, path ?? "");
-            // No path, or a folder: its listing.
-            return file instanceof ElysiaStatus &&
-              (file.status === 400 || file.status === 409)
-              ? await listFolder(projectId, path ?? "")
-              : file;
-          },
-          folderReadWords
-        ),
-        tool(
-          "folder_write",
-          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it.",
-          {
-            path: z.string().min(1),
-            content: z.string().max(FOLDER_CONTENT_LIMIT),
-            encoding: z.enum(FOLDER_ENCODINGS).optional(),
-          },
-          async ({ path, content, encoding }) => {
-            const calling = ours();
-            if (calling instanceof ElysiaStatus) {
-              return calling;
-            }
-            const projectId = calling.project.id;
-            const rel = folderPath(path);
-            if (rel instanceof ElysiaStatus) {
-              return rel;
-            }
-            // The setup page sent is the person's approval of AGENTS.md and
-            // the delegate types its writer writes from it.
-            const approved = setupsSent.get(projectId) === calling.actor.id;
-            const theirs = notWriters(rel, approved);
-            if (theirs) {
-              return problem(403, {
-                code: "caw-folder-write-barred",
-                detail: `${rel} was not written: ${theirs}`,
-              });
-            }
-            const body = folderContent(content, encoding);
-            if (body instanceof ElysiaStatus) {
-              return body;
-            }
-            return await fileWritten(calling, rel, body, approved, toolUseId);
-          },
-          folderWrittenWords
-        ),
-        tool(
-          "view_draft",
-          "Draft a view for the person to keep or discard, as they asked. Components outside CawCo's library are dropped and named in the answer.",
-          {
-            name: z.string().describe("Like weekly-review."),
-            source: z.string().min(1).describe("openui-lang, no fences."),
-            page: z
-              .enum(BLOCK_PAGES)
-              .optional()
-              .describe("Stands there as a block; else a tab."),
-            position: z.number().int().min(0).optional(),
-          },
-          async (input) => {
-            const calling = ours();
-            if (calling instanceof ElysiaStatus) {
-              return calling;
-            }
-            const by = boardTitle(calling.actor);
-            const drafted = await draftView(
-              calling.project.id,
-              calling.actor.id,
-              by,
-              input
-            );
-            if (drafted instanceof ElysiaStatus) {
-              return drafted;
-            }
-            noticeIn(calling.project, {
-              title: `View · ${by} drafted “${drafted.view}”`,
-              event: { kind: "view", name: drafted.view },
+        FOLDER_READ_DEFINITION().run(async ({ path }) => {
+          const calling = ours();
+          if (calling instanceof ElysiaStatus) {
+            return calling;
+          }
+          const projectId = calling.project.id;
+          const file = await readFolderFile(projectId, path ?? "");
+          // No path, or a folder: its listing.
+          return file instanceof ElysiaStatus &&
+            (file.status === 400 || file.status === 409)
+            ? await listFolder(projectId, path ?? "")
+            : file;
+        }),
+        FOLDER_WRITE_DEFINITION().run(async ({ path, content, encoding }) => {
+          const calling = ours();
+          if (calling instanceof ElysiaStatus) {
+            return calling;
+          }
+          const projectId = calling.project.id;
+          const rel = folderPath(path);
+          if (rel instanceof ElysiaStatus) {
+            return rel;
+          }
+          // The setup page sent is the person's approval of AGENTS.md and
+          // the delegate types its writer writes from it.
+          const approved = setupsSent.get(projectId) === calling.actor.id;
+          const theirs = notWriters(rel, approved);
+          if (theirs) {
+            return problem(403, {
+              code: "caw-folder-write-barred",
+              detail: `${rel} was not written: ${theirs}`,
             });
+          }
+          const body = folderContent(content, encoding);
+          if (body instanceof ElysiaStatus) {
+            return body;
+          }
+          return await fileWritten(calling, rel, body, approved, toolUseId);
+        }),
+        VIEW_DRAFT_DEFINITION().run(async (input) => {
+          const calling = ours();
+          if (calling instanceof ElysiaStatus) {
+            return calling;
+          }
+          const by = boardTitle(calling.actor);
+          const drafted = await draftView(
+            calling.project.id,
+            calling.actor.id,
+            by,
+            input
+          );
+          if (drafted instanceof ElysiaStatus) {
             return drafted;
-          },
-          viewDraftedWords
-        ),
-        tool(
-          "view_query",
-          "What a view's Query(tool, args) reads, for your project.",
-          {
-            tool: z.enum(VIEW_TOOLS),
-            args: z.record(z.string(), z.unknown()).optional(),
-          },
-          async ({ tool: name, args }) => {
-            const calling = ours();
-            return calling instanceof ElysiaStatus
-              ? calling
-              : await views.query(calling.project.id, name, args ?? {});
-          },
-          viewQueryWords
-        ),
-        tool(
-          "project_setup",
-          "Facts for the project's setup page (project-setup skill).",
-          {
-            change: z
-              .array(z.enum(SETUP_PARTS))
-              .optional()
-              .describe("Parts to ask again."),
-          },
-          async ({ change }) => {
-            const calling = ours();
-            return calling instanceof ElysiaStatus
-              ? calling
-              : await setupFacts(calling.project.id, change ?? []);
-          },
-          setupFactsWords
-        ),
-        tool(
-          "project_name",
-          "Name your project while it has its placeholder name.",
-          { name: z.string().min(1).max(200) },
-          async ({ name }) => {
-            const calling = ours();
-            if (calling instanceof ElysiaStatus) {
-              return calling;
-            }
-            const now = calling.project.name;
-            if (now !== projectWords.placeholderName) {
-              return problem(409, {
-                code: "caw-project-named",
-                detail: `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`,
-              });
-            }
-            const renamed = await rename(calling.project.id, name);
-            return typeof renamed === "string" ? { name: renamed } : renamed;
-          },
-          (named: { name: string }) => `Named the project “${named.name}”.`
-        ),
-        tool(
-          "view_guide",
-          "How a view's program is written.",
-          {},
-          async () => VIEW_PROMPT,
-          sentence
-        ),
+          }
+          noticeIn(calling.project, {
+            title: `View · ${by} drafted “${drafted.view}”`,
+            event: { kind: "view", name: drafted.view },
+          });
+          return drafted;
+        }),
+        VIEW_QUERY_DEFINITION().run(async ({ tool: name, args }) => {
+          const calling = ours();
+          return calling instanceof ElysiaStatus
+            ? calling
+            : await views.query(calling.project.id, name, args ?? {});
+        }),
+        PROJECT_SETUP_DEFINITION().run(async ({ change }) => {
+          const calling = ours();
+          return calling instanceof ElysiaStatus
+            ? calling
+            : await setupFacts(calling.project.id, change ?? []);
+        }),
+        PROJECT_NAME_DEFINITION().run(async ({ name }) => {
+          const calling = ours();
+          if (calling instanceof ElysiaStatus) {
+            return calling;
+          }
+          const now = calling.project.name;
+          if (now !== projectWords.placeholderName) {
+            return problem(409, {
+              code: "caw-project-named",
+              detail: `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`,
+            });
+          }
+          const renamed = await rename(calling.project.id, name);
+          return typeof renamed === "string" ? { name: renamed } : renamed;
+        }),
+        VIEW_GUIDE_DEFINITION().run(async () => VIEW_PROMPT),
         // Only names roles.ts lists: the hub routes those to this list and
         // scopes them to a project; any other is listed and never reached.
       ] satisfies (McpTool & { name: CawToolName })[];
@@ -2139,3 +2077,85 @@ export const cawRoutes = (caw: Caw) =>
         return await caw.askAboutView(params.id, params.name, body.text);
       }
     );
+
+const FOLDER_READ_DEFINITION = () =>
+  defineTool(
+    "folder_read",
+    "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
+    { path: z.string().optional() },
+    folderReadWords
+  );
+
+const FOLDER_WRITE_DEFINITION = () =>
+  defineTool(
+    "folder_write",
+    "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval unless their setup page's Send gave it.",
+    {
+      path: z.string().min(1),
+      content: z.string().max(FOLDER_CONTENT_LIMIT),
+      encoding: z.enum(FOLDER_ENCODINGS).optional(),
+    },
+    folderWrittenWords
+  );
+
+const VIEW_DRAFT_DEFINITION = () =>
+  defineTool(
+    "view_draft",
+    "Draft a view for the person to keep or discard, as they asked. Components outside CawCo's library are dropped and named in the answer.",
+    {
+      name: z.string().describe("Like weekly-review."),
+      source: z.string().min(1).describe("openui-lang, no fences."),
+      page: z
+        .enum(BLOCK_PAGES)
+        .optional()
+        .describe("Stands there as a block; else a tab."),
+      position: z.number().int().min(0).optional(),
+    },
+    viewDraftedWords
+  );
+
+const VIEW_QUERY_DEFINITION = () =>
+  defineTool(
+    "view_query",
+    "What a view's Query(tool, args) reads, for your project.",
+    {
+      tool: z.enum(VIEW_TOOLS),
+      args: z.record(z.string(), z.unknown()).optional(),
+    },
+    viewQueryWords
+  );
+
+const PROJECT_SETUP_DEFINITION = () =>
+  defineTool(
+    "project_setup",
+    "Facts for the project's setup page (project-setup skill).",
+    {
+      change: z
+        .array(z.enum(SETUP_PARTS))
+        .optional()
+        .describe("Parts to ask again."),
+    },
+    setupFactsWords
+  );
+
+const PROJECT_NAME_DEFINITION = () =>
+  defineTool(
+    "project_name",
+    "Name your project while it has its placeholder name.",
+    { name: z.string().min(1).max(200) },
+    (named: { name: string }) => `Named the project “${named.name}”.`
+  );
+
+const VIEW_GUIDE_DEFINITION = () =>
+  defineTool("view_guide", "How a view's program is written.", {}, sentence);
+
+/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
+export const CAW_DEFINITIONS = () => [
+  FOLDER_READ_DEFINITION().listed(),
+  FOLDER_WRITE_DEFINITION().listed(),
+  VIEW_DRAFT_DEFINITION().listed(),
+  VIEW_QUERY_DEFINITION().listed(),
+  PROJECT_SETUP_DEFINITION().listed(),
+  PROJECT_NAME_DEFINITION().listed(),
+  VIEW_GUIDE_DEFINITION().listed(),
+];

@@ -24,6 +24,7 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
+import type { AnyProblem } from "./refusal";
 
 /** A picture beside the words: a canvas's latest, as `artifact_read` answers it. */
 export interface Picture {
@@ -105,6 +106,9 @@ export interface McpTool {
   refusal: (args: unknown) => string | undefined;
 }
 
+/** A tool as a listing reads it: its name, words and schema, which need no call. */
+export type ToolDefinition = Omit<McpTool, "call" | "refusal">;
+
 /**
  * A tool's definition, whose call is handed what it acts through (`on`) as
  * it is called: its name, words and schema need nothing of it, so listing
@@ -166,6 +170,44 @@ export function tool<T extends z.ZodRawShape, R, N extends string = string>(
     options
   );
   return { ...defined, call: (args) => defined.call(args, undefined) };
+}
+
+/**
+ * A tool's definition apart from its handler: its name, words, input and
+ * presenter, which a listing reads and which need nothing the handler acts
+ * through. `run` makes the tool of a handler bound to what it closes over;
+ * `listed` is the definition alone, a call of which refuses. The answer's
+ * type is the presenter's: a handler answers it, or a problem.
+ */
+export function defineTool<
+  T extends z.ZodRawShape,
+  P,
+  N extends string = string,
+>(
+  name: N,
+  description: string,
+  input: T,
+  present: Presenter<P, z.infer<z.ZodObject<T>>>,
+  options: ToolOptions<P, z.infer<z.ZodObject<T>>> = {}
+) {
+  return {
+    run: (
+      run: (
+        args: z.infer<z.ZodObject<T>>,
+        format: ResponseFormat
+      ) => Promise<P | AnyProblem>
+    ) => tool(name, description, input, run, present, options),
+    listed: () =>
+      tool(
+        name,
+        description,
+        input,
+        (): Promise<P | AnyProblem> =>
+          Promise.reject(new Error(`${name} is listed here, not called`)),
+        present,
+        options
+      ),
+  };
 }
 
 /** A tool definition bound to what it acts through: a tool whose call takes its arguments alone. */

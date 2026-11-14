@@ -8,7 +8,8 @@
  * role's tools by their own tokens too, largest first: where a cut pays.
  */
 
-import { measureRoles, unroutedTools } from "../src/role-budgets";
+import { unroutedTools } from "../src/delegation-mcp";
+import { measureRoles } from "../src/role-budgets";
 import { missingRefusals, REFUSALS } from "../src/skill-refusals";
 
 // Read at run time beyond its imports; check.ts keys the check on them.

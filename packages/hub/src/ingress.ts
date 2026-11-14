@@ -102,7 +102,7 @@ import type {
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_CONVERSATION } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { tool } from "./mcp-tool";
+import { defineTool } from "./mcp-tool";
 import {
   deletedWords,
   ingressWords,
@@ -451,6 +451,35 @@ const eventView = (row: InboundEventRow): InboundEventView => ({
 
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+const conditions = {
+  source: z.string().describe("* globs: github:*, conn:<connection>:<tool>."),
+  kinds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, discussion.created, discussion_comment.created, item."
+    ),
+  author: z.string().optional(),
+  label: z.string().optional(),
+  branch: z.string().optional().describe("PR head branch."),
+  regex: z.string().optional().describe("Over title and body."),
+};
+
+const pollFields = {
+  args: z.record(z.string(), z.unknown()).optional(),
+  interval_s: z.number().int().min(CONNECTOR_MIN_S),
+  items_path: z
+    .string()
+    .optional()
+    .describe("Dot path to the list; default the answer."),
+  id_path: z.string().describe("Dot path to an item's id."),
+  version_path: z
+    .string()
+    .describe("Dot path to its version, like updated_at."),
+};
+
+const ref = () => z.string().trim().min(1).describe("Its id.");
 
 export const createIngress = ({
   connections,
@@ -1530,35 +1559,6 @@ export const createIngress = ({
 
   // --- tools -------------------------------------------------------------------------
 
-  const conditions = {
-    source: z.string().describe("* globs: github:*, conn:<connection>:<tool>."),
-    kinds: z
-      .array(z.string())
-      .optional()
-      .describe(
-        "pr.opened|merged|closed, issue.opened|closed|labeled, comment.created, discussion.created, discussion_comment.created, item."
-      ),
-    author: z.string().optional(),
-    label: z.string().optional(),
-    branch: z.string().optional().describe("PR head branch."),
-    regex: z.string().optional().describe("Over title and body."),
-  };
-
-  const pollFields = {
-    args: z.record(z.string(), z.unknown()).optional(),
-    interval_s: z.number().int().min(CONNECTOR_MIN_S),
-    items_path: z
-      .string()
-      .optional()
-      .describe("Dot path to the list; default the answer."),
-    id_path: z.string().describe("Dot path to an item's id."),
-    version_path: z
-      .string()
-      .describe("Dot path to its version, like updated_at."),
-  };
-
-  const ref = () => z.string().trim().min(1).describe("Its id.");
-
   /** The ingress tools, bound to the calling session; with none, the same definitions for discovery. */
   const tools = (actor: InstanceRow | undefined) => {
     const me = (): InstanceRow => {
@@ -1599,80 +1599,30 @@ export const createIngress = ({
           ).id;
     };
     return [
-      tool(
-        "event_route_create",
-        "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines as that run's input; the oldest matching route takes an event.",
-        {
-          ...conditions,
-          routine: z.string().describe("The routine's id."),
-          mode: z
-            .enum(SESSION_CHOSEN_MODES)
-            .optional()
-            .describe("Its run's start mode; the routine's when left out."),
-        },
-        ({ routine, ...rest }) =>
-          Promise.resolve(createRoute({ ...rest, routineId: routine }, me())),
-        routeWords
+      EVENT_ROUTE_CREATE_DEFINITION().run(({ routine, ...rest }) =>
+        Promise.resolve(createRoute({ ...rest, routineId: routine }, me()))
       ),
-      tool(
-        "event_route_list",
-        "Your project's event routes, whether its GitHub repo is polled (and why not), its connector polls and newest inbound events.",
-        {},
-        () => {
-          const projectId = scopeOf(me());
-          return Promise.resolve(
-            projectId instanceof ElysiaStatus ? projectId : view(projectId)
-          );
-        },
-        ingressWords
-      ),
-      tool(
-        "event_route_update",
-        "Change an event route, or pause it (enabled).",
-        {
-          id: ref(),
-          ...conditions,
-          source: conditions.source.optional(),
-          routine: z.string().optional(),
-          enabled: z.boolean().optional(),
-          mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
-        },
-        ({ id, routine, ...rest }) => {
-          const named = routeNamed(id);
-          return Promise.resolve(
-            named instanceof ElysiaStatus
-              ? named
-              : updateRoute(
-                  named,
-                  defined({ ...rest, routineId: routine }),
-                  me()
-                )
-          );
-        },
-        routeWords
-      ),
-      tool(
-        "event_route_delete",
-        "Delete an event route.",
-        { id: ref() },
-        ({ id }) => {
-          const named = routeNamed(id);
-          return Promise.resolve(
-            named instanceof ElysiaStatus ? named : deleteRoute(named, me())
-          );
-        },
-        deletedWords("event route")
-      ),
-      tool(
-        "connector_poll_create",
-        "Call a read-only tool of a connection your project grants every interval; each new or changed item becomes an inbound event for your routes.",
-        {
-          connection: z.string(),
-          tool: z
-            .string()
-            .describe("The tool's own name on the connection's server."),
-          ...pollFields,
-        },
+      EVENT_ROUTE_LIST_DEFINITION().run(() => {
+        const projectId = scopeOf(me());
+        return Promise.resolve(
+          projectId instanceof ElysiaStatus ? projectId : view(projectId)
+        );
+      }),
+      EVENT_ROUTE_UPDATE_DEFINITION().run(({ id, routine, ...rest }) => {
+        const named = routeNamed(id);
+        return Promise.resolve(
+          named instanceof ElysiaStatus
+            ? named
+            : updateRoute(named, defined({ ...rest, routineId: routine }), me())
+        );
+      }),
+      EVENT_ROUTE_DELETE_DEFINITION().run(({ id }) => {
+        const named = routeNamed(id);
+        return Promise.resolve(
+          named instanceof ElysiaStatus ? named : deleteRoute(named, me())
+        );
+      }),
+      CONNECTOR_POLL_CREATE_DEFINITION().run(
         async (input) =>
           await createPoll(
             {
@@ -1687,66 +1637,39 @@ export const createIngress = ({
                 : { itemsPath: input.items_path }),
             },
             me()
-          ),
-        pollWords
+          )
       ),
-      tool(
-        "connector_poll_list",
-        "Your project's connector polls, each with what its last call saw or why it failed.",
-        {},
-        () => {
-          const projectId = scopeOf(me());
-          return Promise.resolve(
-            projectId instanceof ElysiaStatus
-              ? projectId
-              : store.connectorPolls(projectId).map(pollView)
-          );
-        },
-        pollListWords
-      ),
-      tool(
-        "connector_poll_update",
-        "Change a connector poll, or pause it (enabled).",
-        {
-          id: ref(),
-          args: pollFields.args,
-          interval_s: pollFields.interval_s.optional(),
-          items_path: pollFields.items_path,
-          id_path: pollFields.id_path.optional(),
-          version_path: pollFields.version_path.optional(),
-          enabled: z.boolean().optional(),
-        },
-        async (input) => {
-          const named = pollNamed(input.id);
-          return named instanceof ElysiaStatus
-            ? named
-            : await updatePoll(
-                named,
-                defined({
-                  args: input.args,
-                  intervalS: input.interval_s,
-                  itemsPath: input.items_path,
-                  idPath: input.id_path,
-                  versionPath: input.version_path,
-                  enabled: input.enabled,
-                }),
-                me()
-              );
-        },
-        pollWords
-      ),
-      tool(
-        "connector_poll_delete",
-        "Delete a connector poll.",
-        { id: ref() },
-        ({ id }) => {
-          const named = pollNamed(id);
-          return Promise.resolve(
-            named instanceof ElysiaStatus ? named : deletePoll(named, me())
-          );
-        },
-        deletedWords("connector poll")
-      ),
+      CONNECTOR_POLL_LIST_DEFINITION().run(() => {
+        const projectId = scopeOf(me());
+        return Promise.resolve(
+          projectId instanceof ElysiaStatus
+            ? projectId
+            : store.connectorPolls(projectId).map(pollView)
+        );
+      }),
+      CONNECTOR_POLL_UPDATE_DEFINITION().run(async (input) => {
+        const named = pollNamed(input.id);
+        return named instanceof ElysiaStatus
+          ? named
+          : await updatePoll(
+              named,
+              defined({
+                args: input.args,
+                intervalS: input.interval_s,
+                itemsPath: input.items_path,
+                idPath: input.id_path,
+                versionPath: input.version_path,
+                enabled: input.enabled,
+              }),
+              me()
+            );
+      }),
+      CONNECTOR_POLL_DELETE_DEFINITION().run(({ id }) => {
+        const named = pollNamed(id);
+        return Promise.resolve(
+          named instanceof ElysiaStatus ? named : deletePoll(named, me())
+        );
+      }),
     ];
   };
 
@@ -1870,3 +1793,107 @@ export const ingressRoutes = (ingress: Ingress) =>
     .post("/api/connector-polls/:id/poll", ({ params }) =>
       ingress.pollConnectorNow(params.id)
     );
+
+const EVENT_ROUTE_CREATE_DEFINITION = () =>
+  defineTool(
+    "event_route_create",
+    "Send your project's matching inbound events (GitHub PRs, issues, comments; connector poll items) to one of its routines as that run's input; the oldest matching route takes an event.",
+    {
+      ...conditions,
+      routine: z.string().describe("The routine's id."),
+      mode: z
+        .enum(SESSION_CHOSEN_MODES)
+        .optional()
+        .describe("Its run's start mode; the routine's when left out."),
+    },
+    routeWords
+  );
+
+const EVENT_ROUTE_LIST_DEFINITION = () =>
+  defineTool(
+    "event_route_list",
+    "Your project's event routes, whether its GitHub repo is polled (and why not), its connector polls and newest inbound events.",
+    {},
+    ingressWords
+  );
+
+const EVENT_ROUTE_UPDATE_DEFINITION = () =>
+  defineTool(
+    "event_route_update",
+    "Change an event route, or pause it (enabled).",
+    {
+      id: ref(),
+      ...conditions,
+      source: conditions.source.optional(),
+      routine: z.string().optional(),
+      enabled: z.boolean().optional(),
+      mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
+    },
+    routeWords
+  );
+
+const EVENT_ROUTE_DELETE_DEFINITION = () =>
+  defineTool(
+    "event_route_delete",
+    "Delete an event route.",
+    { id: ref() },
+    deletedWords("event route")
+  );
+
+const CONNECTOR_POLL_CREATE_DEFINITION = () =>
+  defineTool(
+    "connector_poll_create",
+    "Call a read-only tool of a connection your project grants every interval; each new or changed item becomes an inbound event for your routes.",
+    {
+      connection: z.string(),
+      tool: z
+        .string()
+        .describe("The tool's own name on the connection's server."),
+      ...pollFields,
+    },
+    pollWords
+  );
+
+const CONNECTOR_POLL_LIST_DEFINITION = () =>
+  defineTool(
+    "connector_poll_list",
+    "Your project's connector polls, each with what its last call saw or why it failed.",
+    {},
+    pollListWords
+  );
+
+const CONNECTOR_POLL_UPDATE_DEFINITION = () =>
+  defineTool(
+    "connector_poll_update",
+    "Change a connector poll, or pause it (enabled).",
+    {
+      id: ref(),
+      args: pollFields.args,
+      interval_s: pollFields.interval_s.optional(),
+      items_path: pollFields.items_path,
+      id_path: pollFields.id_path.optional(),
+      version_path: pollFields.version_path.optional(),
+      enabled: z.boolean().optional(),
+    },
+    pollWords
+  );
+
+const CONNECTOR_POLL_DELETE_DEFINITION = () =>
+  defineTool(
+    "connector_poll_delete",
+    "Delete a connector poll.",
+    { id: ref() },
+    deletedWords("connector poll")
+  );
+
+/** The tools as a listing reads them, before any session's handlers are bound; made as called, for the modules that import this one are not all loaded before it. */
+export const INGRESS_DEFINITIONS = () => [
+  EVENT_ROUTE_CREATE_DEFINITION().listed(),
+  EVENT_ROUTE_LIST_DEFINITION().listed(),
+  EVENT_ROUTE_UPDATE_DEFINITION().listed(),
+  EVENT_ROUTE_DELETE_DEFINITION().listed(),
+  CONNECTOR_POLL_CREATE_DEFINITION().listed(),
+  CONNECTOR_POLL_LIST_DEFINITION().listed(),
+  CONNECTOR_POLL_UPDATE_DEFINITION().listed(),
+  CONNECTOR_POLL_DELETE_DEFINITION().listed(),
+];
