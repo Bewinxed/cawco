@@ -1121,19 +1121,55 @@ function canvasPage(): string {
     : "<!doctype html><html><head></head><body></body></html>";
   html = kit
     ? html.replace("%sveltekit.body%", main)
-    : html.replace(ENTRY_SCRIPT, "").replace(BODY, `$1${main}$2`);
+    : intoBody(html.replace(ENTRY_SCRIPT, "").replace(BODY, "$1$2"), main);
   // A phone draws the canvas at its own width, not a desktop's 980px, even where the app's page names no viewport.
   const viewport = VIEWPORT_META.test(html)
     ? ""
     : '<meta name="viewport" content="width=device-width, initial-scale=1" />';
-  return html
-    .replace(PLACEHOLDER, "")
-    .replace(INLINE_SCRIPT, "")
-    .replace("</head>", `${viewport}${COLLECTOR}</head>`)
-    .replace(
-      "</body>",
-      `<script type="module" src="${entry}"></script></body>`
-    );
+  html = html.replace(PLACEHOLDER, "").replace(INLINE_SCRIPT, "");
+  return intoBody(
+    intoHead(html, `${viewport}${COLLECTOR}`),
+    `<script type="module" src="${entry}"></script>`
+  );
+}
+
+/**
+ * A page's markup's places, by its tags: HTML lets a page leave out its
+ * `<html>`, `<head>` and `<body>` tags, start and end (the spec's
+ * "optional tags", html.spec.whatwg.org/multipage/syntax.html#optional-tags),
+ * a parser opening each element on its own.
+ */
+const HEAD_END = /<\/head\s*>/iu;
+const BODY_START = /<body\b[^>]*>/iu;
+const BODY_END = /<\/body\s*>/iu;
+const HTML_START = /<html\b[^>]*>/iu;
+const HTML_END = /<\/html\s*>/iu;
+const DOCTYPE = /<!doctype\b[^>]*>/iu;
+
+/**
+ * `html` with `markup` at the end of its head, as Vite puts a plugin's head
+ * tags (its `injectToHead`): before `</head>`; with none, before `<body>`;
+ * with neither, after `<html>`, then after the doctype, then first. Each is
+ * before any of the body's content, so a page with no head tags holds it
+ * in the head its parser opens.
+ */
+function intoHead(html: string, markup: string): string {
+  const before = [HEAD_END, BODY_START].find((tag) => tag.test(html));
+  if (before) {
+    return html.replace(before, (tag) => `${markup}${tag}`);
+  }
+  const after = [HTML_START, DOCTYPE].find((tag) => tag.test(html));
+  return after
+    ? html.replace(after, (tag) => `${tag}${markup}`)
+    : `${markup}${html}`;
+}
+
+/** `html` with `markup` at the end of its body, as Vite puts a plugin's body tags (its `injectToBody`): before `</body>`; with none, before `</html>`; with neither, last. */
+function intoBody(html: string, markup: string): string {
+  const before = [BODY_END, HTML_END].find((tag) => tag.test(html));
+  return before
+    ? html.replace(before, (tag) => `${markup}${tag}`)
+    : `${html}${markup}`;
 }
 
 /**
@@ -1526,9 +1562,9 @@ async function serveCanvas(
     const html = keyedPage(
       await dev.transformIndexHtml(
         req.url ?? CANVAS_PATH,
-        canvasPage().replace(
-          "</head>",
-          `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}</head>`
+        intoHead(
+          canvasPage(),
+          `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}`
         ),
         req.originalUrl
       ),
@@ -1941,7 +1977,7 @@ async function closureOf(dev: DevServer, files: string[]): Promise<string[]> {
   );
   // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
   return order.map((url) =>
-    sections.includes(url) ? withQuery(url, "import", true) : url
+    sections.includes(url) ? withQuery(url, "import") : url
   );
 }
 
@@ -1978,13 +2014,10 @@ async function settledClosureOf(
   return urls;
 }
 
-/** `url` with `query` added, at the start of its query (Vite's `injectQuery`) or its end. */
-const withQuery = (url: string, query: string, first: boolean): string => {
+/** `url` with `query` added at the start of its query, as Vite's `injectQuery` adds its own: the end of a query says what a sub-request is (`…&lang.css`). */
+const withQuery = (url: string, query: string): string => {
   const [path = url, search] = url.split("?");
-  if (!search) {
-    return `${path}?${query}`;
-  }
-  return first ? `${path}?${query}&${search}` : `${path}?${search}&${query}`;
+  return search ? `${path}?${query}&${search}` : `${path}?${query}`;
 };
 
 /** The canvas page's entry, and Vite's client, by the addresses the page asks for them. */
@@ -3680,9 +3713,23 @@ const frameOf = (id: string): string | null =>
 const unframed = (id: string): string =>
   id.replace(FRAME_PART, "$1").replace(TRAILING_SEPARATOR, "");
 
-/** `id` as frame `token`'s copy. */
+/**
+ * `id` as frame `token`'s copy: the frame first in its query, since Vite
+ * and a framework's plugin read what a sub-request is off its query's end
+ * (`…&lang.ts`, `…&lang.css`: Vite's `CSS_LANGS_RE` and its script
+ * transforms' `[jt]sx?$` filters).
+ */
 const framed = (id: string, token: string): string =>
-  withQuery(id, `${FRAME_QUERY}=${token}`, false);
+  withQuery(id, `${FRAME_QUERY}=${token}`);
+
+/**
+ * A stylesheet request, as Vite's `isCSSRequest` tells one (its
+ * `CSS_LANGS_RE`, Vite 8.3): a `.css` file, or a framework's style block
+ * of a component (`X.svelte?svelte&type=style&lang.css`,
+ * `X.vue?vue&type=style&index=0&scoped=…&lang.css`).
+ */
+const CSS_REQUEST =
+  /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:$|\?)/u;
 
 /** Each frame's copied files, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
 const copiesKept = new Map<string, Promise<Set<string>>>();
@@ -3766,6 +3813,19 @@ async function copiedFiles(frame: Frame): Promise<Set<string>> {
  *   copy is the real module, its writers and derived views its own, so the
  *   `beforeEach` seeds it through its own writers and every story of one
  *   states file holds its own value on one page.
+ * - A copied file's sub-requests, the parts a framework's plugin splits a
+ *   component into, each by a query on the file's path: a style block
+ *   (vite-plugin-svelte `?svelte&type=style&lang.css`; plugin-vue
+ *   `?vue&type=style&index=<n>[&scoped=<id>]&lang.<lang>`), a template
+ *   or script block served apart (plugin-vue `?vue&type=template…`, and
+ *   `?vue&type=script…&lang.<lang>` for a `src` or a lang Vite compiles
+ *   apart, `tsx` say) and a custom block (`?vue&type=<block>&index=<n>`).
+ *   A script, template or custom block is code, which may import a
+ *   module or hold state: it takes the frame. A style block is the shared
+ *   one: CSS holds no module state, a copy compiles to the same CSS (its
+ *   scope hash is the file's), and a plugin's cache and hot update
+ *   address it by the file's own id. The frame goes first in the query
+ *   ({@link framed}), whose end names what the sub-request is.
  */
 function cawcoStandIns() {
   return {
@@ -3787,6 +3847,7 @@ function cawcoStandIns() {
     },
     async resolveId(
       this: {
+        environment: { warmupRequest: (url: string) => Promise<void> };
         resolve: (
           source: string,
           importer: string,
@@ -3811,10 +3872,20 @@ function cawcoStandIns() {
       if (!found || found.external || frameOf(found.id)) {
         return found;
       }
-      const copies = await copiesOf(token);
-      return copies.has(pathOfId(found.id))
-        ? { ...found, id: framed(found.id, token) }
-        : found;
+      const file = pathOfId(found.id);
+      if (!(await copiesOf(token)).has(file)) {
+        return found;
+      }
+      if (!CSS_REQUEST.test(found.id)) {
+        return { ...found, id: framed(found.id, token) };
+      }
+      // A copied component's stylesheet is the shared one: CSS holds no
+      // module state, and the copy compiles to the same CSS (its scope
+      // hash is the file's). Its plugin serves it from the shared file's
+      // compile (vite-plugin-svelte's load-compiled-css reads it off
+      // `getModuleInfo(<file>)`), so that file is compiled first.
+      await this.environment.warmupRequest(file);
+      return found;
     },
     load(id: string) {
       return id.startsWith(`\0${KIT_STUB}`)
