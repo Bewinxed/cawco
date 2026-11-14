@@ -28,10 +28,8 @@ import type { StoredSendRefusal } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
 import type { AccountUse, SettledSpawn } from "./hub-shapes";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
+import { peekResume } from "./payload-peeks";
 import { makesRoutines } from "./roles";
-import { UNREAD } from "./sends";
-import { peekResume } from "./spawns";
-import { blockWords } from "./work-items";
 
 /** Settings reported by the harness, including a live mode change's receipt. */
 const peekSessionSettings = (
@@ -72,7 +70,6 @@ const peekSessionSettings = (
 export type LaunchesContext = Pick<
   HubContext,
   | "db"
-  | "forgetPending"
   | "harnessReportOf"
   | "hubAsks"
   | "identities"
@@ -80,21 +77,14 @@ export type LaunchesContext = Pick<
   | "launchRefusal"
   | "machineName"
   | "modelRefusal"
-  | "noteFreshStart"
   | "owedOn"
   | "processEvent"
   | "processGeneration"
-  | "publishInstances"
-  | "registry"
   | "releaseOwed"
-  | "replaceAtWake"
-  | "sendSpawn"
   | "sessionName"
   | "takeOwedMove"
-  | "tellEndedByMove"
   | "typeSettingsOf"
   | "unstrand"
-  | "wakesForSend"
   | "workItems"
 >;
 
@@ -805,36 +795,6 @@ export const createLaunches = (ctx: LaunchesContext) => {
   };
 
   /**
-   * Wakes the session a message is for when its process is gone: sleeping,
-   * failed, or stopped with a conversation on record. The resume spawn goes
-   * out first, and the machine runs one instance's envelopes in order, so the
-   * message that follows lands in the process this starts. It comes back on
-   * the settings it last ran with, as a revive always has.
-   */
-  const wakeForSend = (
-    agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
-    machineId: string,
-    instanceId: string,
-    /** The hub's own wake of many at once (the person back, `tellBack`): it goes in its turn (`paceSpawn`). */
-    paced = false
-  ): void => {
-    const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!(row && ctx.wakesForSend(row))) {
-      return;
-    }
-    // Moving a session whose cache is cold is free: it is re-placed first.
-    ctx.replaceAtWake(row);
-    resumeSpawn(agent, machineId, row, false, paced);
-  };
-
-  /**
-   * Launches a session's process again on its own conversation, on the
-   * settings it last ran with and the account its row names: a wake for a
-   * send, or a move to another account at its limit. A spawn for a session
-   * still running replaces its process, as the machine settles the old one
-   * first.
-   */
-  /**
    * Whether `row`'s process can be started again for a wake (a send, a move
    * to another account): the one rule both the send's gate
    * ({@link inputRefusal}) and the launch ({@link resumeSpawn}) ask. Its
@@ -925,84 +885,6 @@ export const createLaunches = (ctx: LaunchesContext) => {
     ...ctx.typeSettingsOf(row),
   });
 
-  const resumeSpawn = (
-    agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
-    machineId: string,
-    row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
-    /** The process is replaced even if the machine still runs one: a move to another account. */
-    relaunch = false,
-    /** The hub's own launch: it goes in its turn (`paceSpawn`). A relaunch is one. */
-    paced = relaunch
-  ): void => {
-    const instanceId = row.id;
-    // Its item is blocked: nothing starts it without what is missing, and
-    // nothing it was sent fails for it (work-items.ts `blockIfMissing`).
-    const block = ctx.workItems.blockIfMissing(row);
-    if (block) {
-      console.info(
-        `[hub] not launching ${instanceId}, its work item is blocked: ${blockWords(block)}`
-      );
-      return;
-    }
-    // Its launch on the way is the one: what it is sent goes behind that.
-    const inFlight = inFlightRefusal(instanceId);
-    if (inFlight) {
-      console.info(`[hub] not launching ${instanceId} again: ${inFlight}`);
-      return;
-    }
-    // On its conversation, or fresh when its harness never began one; one
-    // that can't start fails what it was sent, saying why, with what its
-    // row offers back (a mode to pick among them), by the same rule as a
-    // send's gate ({@link wakeOf}).
-    const wake = wakeOf(machineId, row, relaunch, "claim");
-    if ("refused" in wake) {
-      ctx.forgetPending(
-        instanceId,
-        wake.refused.reason,
-        false,
-        "none",
-        wake.refused.refusal
-      );
-      return;
-    }
-    const { plan, settled } = wake;
-    const revive = settled.payload;
-    // A relaunch replaces the process; what the old one had parked is over.
-    // What it was handed and never read its machine hands back once it has
-    // stopped it, for this one ({@link takeBack}).
-    ctx.forgetPending(instanceId, UNREAD.restarted, false, "all");
-    if (plan.kind === "fresh") {
-      ctx.noteFreshStart(row);
-    }
-    openInstance({
-      id: instanceId,
-      machineId,
-      // Its own launch directory (revivePayloadOf): a revive never moves it.
-      cwd: row.cwd,
-      sessionId: row.sessionId ?? undefined,
-      harness: row.harness,
-      origin: row.origin,
-      kind: row.kind ?? undefined,
-      permissionMode: settled.permissionMode,
-      model: row.model ?? undefined,
-    });
-    // A relaunch is the hub's own launch: it goes in its turn.
-    const sent = ctx.sendSpawn(
-      agent,
-      machineId,
-      { verb: "spawn", machineId, instanceId, payload: revive },
-      paced
-    );
-    // It may run on no account: what it was sent fails, saying why, as a wake no account can take does.
-    if (sent instanceof ElysiaStatus) {
-      ctx.forgetPending(instanceId, sent.response.detail, false, "none");
-      return;
-    }
-    // What a move ended with its old process, said to this one first.
-    ctx.tellEndedByMove(row);
-    ctx.publishInstances(machineId);
-  };
-
   return {
     launches,
     launchInFlight,
@@ -1025,8 +907,6 @@ export const createLaunches = (ctx: LaunchesContext) => {
     sessionModeRefusal,
     noteSessionSettings,
     openInstance,
-    wakeForSend,
     wakeOf,
-    resumeSpawn,
   };
 };

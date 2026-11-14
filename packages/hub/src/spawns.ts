@@ -20,7 +20,6 @@ import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { ElysiaStatus, problem } from "elysia";
 import { StartsHeld } from "./continuations";
-import { peek } from "./cut-turns";
 import type { DbShape } from "./db/index";
 import type { InstanceKind } from "./db/instances";
 import { handleId, isHandle } from "./handles";
@@ -29,6 +28,7 @@ import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
 import { sessionLabel } from "./labels";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { peek, peekResume } from "./payload-peeks";
 import type { PlacementInput } from "./placement";
 import {
   accountFacts,
@@ -52,28 +52,6 @@ import { unreachable } from "./unreachable";
  */
 export const MACHINE_DISCONNECTED =
   "The machine was away when this request's deadline passed: the hub held the request and sent it again each time the machine came back, and no answer came in time, so whether it ran is not known. Check what it does before asking again.";
-
-/**
- * The session a `spawn` resumes, so the instance row records what it re-opened.
- * A fork is the exception: it *reads* the origin conversation but creates a new
- * one, so claiming the origin's id here would trip openInstance's
- * one-conversation-one-row guard. Left blank, the fork's own init frame stamps
- * the real id via noteInstanceSession.
- */
-export const peekResume = (payload: unknown): string | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { resume } = payload as { resume?: unknown };
-  if (typeof resume !== "object" || resume === null) {
-    return undefined;
-  }
-  if ((resume as { fork?: unknown }).fork) {
-    return undefined;
-  }
-  const key = (resume as { sessionKey?: unknown }).sessionKey;
-  return typeof key === "string" ? key : undefined;
-};
 
 /**
  * Whether a start's first turn names its session: a fresh one its start

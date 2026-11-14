@@ -1,7 +1,10 @@
 import type { Envelope, SpawnPayload } from "@cawco/core/protocol";
 import { ElysiaStatus } from "elysia";
 import type { HubContext } from "./hub-context";
+import type { createLaunches } from "./launches";
 import type { HubTimer } from "./lifetime";
+import { UNREAD } from "./sends";
+import { blockWords } from "./work-items";
 
 /** Each machine's paced launches: when the last went, those waiting their turn (each kept on its row, `db.oweSpawn`), and the timer that sends the next. */
 interface Pacing {
@@ -15,23 +18,37 @@ export type StartHoldsContext = Pick<
   | "accountStartRefusal"
   | "agentProtocols"
   | "binaryUpdateStates"
-  | "bounded"
   | "db"
-  | "launches"
+  | "forgetPending"
   | "lifetime"
   | "machineName"
   | "machinePause"
   | "machinePresence"
+  | "noteFreshStart"
   | "processFailed"
+  | "publishInstances"
   | "registry"
   | "releaseOwed"
+  | "replaceAtWake"
   | "sendFrame"
   | "sessionName"
   | "speaksContract"
   | "startsFreed"
+  | "tellEndedByMove"
+  | "wakesForSend"
+  | "workItems"
 >;
 
-export const createStartHolds = (ctx: StartHoldsContext) => {
+/** What a start's send takes of the launches (launches.ts), made before it. */
+type StartHoldsLaunches = Pick<
+  ReturnType<typeof createLaunches>,
+  "bounded" | "inFlightRefusal" | "launches" | "openInstance" | "wakeOf"
+>;
+
+export const createStartHolds = (
+  ctx: StartHoldsContext,
+  launches: StartHoldsLaunches
+) => {
   /**
    * Why a machine takes no new session start now, or nothing when it does.
    * One the owner paused: nothing starts there until its pause ends
@@ -124,7 +141,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
       queueStart(machineId, envelope.instanceId);
       return;
     }
-    const bound = ctx.bounded(envelope.payload);
+    const bound = launches.bounded(envelope.payload);
     if (bound instanceof ElysiaStatus) {
       return bound;
     }
@@ -223,7 +240,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
       return;
     }
     // Taken off its row: it is in flight below only if it goes.
-    ctx.launches.delete(owed.id);
+    launches.launches.delete(owed.id);
     const row = ctx.db.ownedInstance(owed.id, machineId);
     if (
       !row ||
@@ -285,7 +302,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
         return notStarted(refused);
       }
       // In flight from here (`launchGoes`).
-      const bound = ctx.bounded(asked);
+      const bound = launches.bounded(asked);
       return bound instanceof ElysiaStatus
         ? notStarted(bound.response.detail)
         : bound;
@@ -294,11 +311,121 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
     }
   };
 
+  /**
+   * Wakes the session a message is for when its process is gone: sleeping,
+   * failed, or stopped with a conversation on record. The resume spawn goes
+   * out first, and the machine runs one instance's envelopes in order, so the
+   * message that follows lands in the process this starts. It comes back on
+   * the settings it last ran with, as a revive always has.
+   */
+  const wakeForSend = (
+    agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
+    machineId: string,
+    instanceId: string,
+    /** The hub's own wake of many at once (the person back, `tellBack`): it goes in its turn (`paceSpawn`). */
+    paced = false
+  ): void => {
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (!(row && ctx.wakesForSend(row))) {
+      return;
+    }
+    // Moving a session whose cache is cold is free: it is re-placed first.
+    ctx.replaceAtWake(row);
+    resumeSpawn(agent, machineId, row, false, paced);
+  };
+
+  /**
+   * Launches a session's process again on its own conversation, on the
+   * settings it last ran with and the account its row names: a wake for a
+   * send, or a move to another account at its limit. A spawn for a session
+   * still running replaces its process, as the machine settles the old one
+   * first.
+   */
+  const resumeSpawn = (
+    agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
+    machineId: string,
+    row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
+    /** The process is replaced even if the machine still runs one: a move to another account. */
+    relaunch = false,
+    /** The hub's own launch: it goes in its turn (`paceSpawn`). A relaunch is one. */
+    paced = relaunch
+  ): void => {
+    const instanceId = row.id;
+    // Its item is blocked: nothing starts it without what is missing, and
+    // nothing it was sent fails for it (work-items.ts `blockIfMissing`).
+    const block = ctx.workItems.blockIfMissing(row);
+    if (block) {
+      console.info(
+        `[hub] not launching ${instanceId}, its work item is blocked: ${blockWords(block)}`
+      );
+      return;
+    }
+    // Its launch on the way is the one: what it is sent goes behind that.
+    const inFlight = launches.inFlightRefusal(instanceId);
+    if (inFlight) {
+      console.info(`[hub] not launching ${instanceId} again: ${inFlight}`);
+      return;
+    }
+    // On its conversation, or fresh when its harness never began one; one
+    // that can't start fails what it was sent, saying why, with what its
+    // row offers back (a mode to pick among them), by the same rule as a
+    // send's gate (launches.ts `wakeOf`).
+    const wake = launches.wakeOf(machineId, row, relaunch, "claim");
+    if ("refused" in wake) {
+      ctx.forgetPending(
+        instanceId,
+        wake.refused.reason,
+        false,
+        "none",
+        wake.refused.refusal
+      );
+      return;
+    }
+    const { plan, settled } = wake;
+    const revive = settled.payload;
+    // A relaunch replaces the process; what the old one had parked is over.
+    // What it was handed and never read its machine hands back once it has
+    // stopped it, for this one ({@link takeBack}).
+    ctx.forgetPending(instanceId, UNREAD.restarted, false, "all");
+    if (plan.kind === "fresh") {
+      ctx.noteFreshStart(row);
+    }
+    launches.openInstance({
+      id: instanceId,
+      machineId,
+      // Its own launch directory (revivePayloadOf): a revive never moves it.
+      cwd: row.cwd,
+      sessionId: row.sessionId ?? undefined,
+      harness: row.harness,
+      origin: row.origin,
+      kind: row.kind ?? undefined,
+      permissionMode: settled.permissionMode,
+      model: row.model ?? undefined,
+    });
+    // A relaunch is the hub's own launch: it goes in its turn.
+    const sent = sendSpawn(
+      agent,
+      machineId,
+      { verb: "spawn", machineId, instanceId, payload: revive },
+      paced
+    );
+    // It may run on no account: what it was sent fails, saying why, as a wake no account can take does.
+    if (sent instanceof ElysiaStatus) {
+      ctx.forgetPending(instanceId, sent.response.detail, false, "none");
+      return;
+    }
+    // What a move ended with its old process, said to this one first.
+    ctx.tellEndedByMove(row);
+    ctx.publishInstances(machineId);
+  };
+
   return {
     startHold,
     holdingStarts,
     startHeldWords,
     sendSpawn,
     flushOwedStarts,
+    resumeSpawn,
+    wakeForSend,
   };
 };

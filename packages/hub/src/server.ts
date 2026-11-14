@@ -367,7 +367,7 @@ import { createConnectAsks, type FleetMcpTook } from "./connect-asks";
 import { connectionRoutes, createConnections } from "./connections";
 import { createContextReads } from "./context-reads";
 import { CONTINUATION_CANCELLED, createContinuations } from "./continuations";
-import { createCutTurns, peek } from "./cut-turns";
+import { createCutTurns } from "./cut-turns";
 import { damagedRecordsOf } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import {
@@ -505,6 +505,7 @@ import {
 } from "./notifications";
 import { createOpenItems } from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
+import { peek, peekResume } from "./payload-peeks";
 import {
   type AnswerFrom,
   answerPermission,
@@ -664,7 +665,6 @@ import {
   namedSpawn,
   peekKind,
   peekParent,
-  peekResume,
 } from "./spawns";
 import {
   CLIENT_ADDRESS_HEADER,
@@ -1942,23 +1942,29 @@ export const createServer = (
     modeOf,
     noteSessionSettings,
     openInstance,
-    resumeSpawn,
     reviveMode,
     rowNamed,
     sessionModeRefusal,
     sessionWorkspace,
     settleLaunchesOn,
     settleMode,
-    wakeForSend,
     wakeOf,
   } = createLaunches(ctx);
   const {
     flushOwedStarts,
     holdingStarts,
+    resumeSpawn,
     sendSpawn,
     startHeldWords,
     startHold,
-  } = createStartHolds(ctx);
+    wakeForSend,
+  } = createStartHolds(ctx, {
+    bounded,
+    inFlightRefusal,
+    launches,
+    openInstance,
+    wakeOf,
+  });
   const {
     accountLaunch,
     accountProviderFor,

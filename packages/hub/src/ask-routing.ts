@@ -16,13 +16,13 @@ import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
 import { clientAsk } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
-import { peek } from "./cut-turns";
 import type { DbShape } from "./db";
 import type { SentMessageRow } from "./db/sends";
 import type { StoredSendRefusal } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
 import type { ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
+import { peek } from "./payload-peeks";
 import { outlivesSession } from "./pending";
 import { sessionWord } from "./session-word";
 

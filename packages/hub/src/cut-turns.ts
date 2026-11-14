@@ -23,6 +23,7 @@ import type { MachineLine } from "./db/session-lines";
 import type { HubContext } from "./hub-context";
 import { isKeepAlive } from "./keep-alive";
 import { uuidOf } from "./named-uuid";
+import { peek } from "./payload-peeks";
 import { unreachable } from "./unreachable";
 
 /** A clock time as a hand-back says it: `12:09 UTC`. */
@@ -54,21 +55,6 @@ export const cutCommandsWords = (
 
 const killedWords = (signal: string, killedAt: Date): string =>
   `Your process was killed (${signal}) at ${utcClock(killedAt)} while your turn was running, and CawCo started it again. ${CARRY_ON_CUT}`;
-
-/**
- * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
- * §6); `hostname`/`os`/`tools` on register, `cwd`/`options.resume`/`scratch`/
- * `projectId`/`title`/`permissionMode`/`model` on spawn, `discard` on stop,
- * `kind` on a frame, `method`/`args` on a control and a `control_result`'s
- * `result` are the sanctioned peeks.
- */
-export const peek = (payload: unknown, key: string): string | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const value = (payload as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : undefined;
-};
 
 /**
  * The hub's line where a session started again fresh (core `FRESH_START`,

@@ -35,12 +35,12 @@ import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker } from "./artifacts/taker";
 import type { Caw } from "./caw";
 import { stagePlaceRef } from "./caw";
-import { peek } from "./cut-turns";
 import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import { externalizeImages } from "./media";
+import { peek } from "./payload-peeks";
 import { handle as idHandle } from "./presenters/words";
 
 import { sendMode } from "./sends";

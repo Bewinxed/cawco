@@ -16,12 +16,12 @@ import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { problem } from "elysia";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
-import { peek } from "./cut-turns";
 import type { HubContext } from "./hub-context";
 import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
 import type { ControlResult } from "./machine-answers";
 import { machineSkillFiles } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { peek } from "./payload-peeks";
 
 import { sessionControl } from "./session-word";
 import type { CheckedFolder, SkillFolderReader } from "./skills";
