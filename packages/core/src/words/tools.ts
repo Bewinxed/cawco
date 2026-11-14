@@ -124,6 +124,28 @@ export const toolWords = {
    * `settingsAnswer`): CawCo can't tell whether its owner turned its updates
    * off, so it updates nothing; the read's last line when it said one.
    */
+  /**
+   * One of the tool's settings sources that is there and could not be read
+   * (agent claude-settings.ts `unreadSources`), where it is and why: what
+   * {@link toolWords.settingsUnread}'s `said` carries.
+   */
+  settingsSourceUnread: (where: string, why: string) =>
+    `${where} is there but couldn't be read: ${why}`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings path that is a folder, a pipe or anything else not a file. */
+  settingsNotAFile: "it isn't a file",
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file larger than any CawCo reads. */
+  settingsTooLarge: (bytes: number, limit: number) =>
+    `it is ${bytes} bytes, and CawCo reads a settings file of up to ${limit}`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file whose text is not one JSON object. */
+  settingsNotAnObject: "it doesn't hold one JSON object",
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file the tool's own engine left out of what it read. */
+  settingsSkipped: "Claude Code's own settings engine left it out",
+  /** {@link toolWords.settingsSourceUnread}'s `where` for the machine's managed policy, by the kinds of its sources that did not load. */
+  settingsPolicy: (kinds: readonly string[]) =>
+    `the machine's managed policy (${new Intl.ListFormat("en", { type: "conjunction" }).format(kinds)})`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a managed policy source Claude Code's engine says did not load. */
+  settingsPolicyUnloaded:
+    "Claude Code's own settings engine says it didn't load",
   settingsUnread: (name: string, said: string | undefined) =>
     `CawCo couldn't read ${name}'s settings${said ? ` (${said})` : ""}, so it can't tell whether its updates are off. Retry reads them again, and so does CawCo's next update.`,
   /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */

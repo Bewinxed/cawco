@@ -338,7 +338,6 @@ export interface ClosureContext {
   ) => boolean;
   asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
   atLimit: ReturnType<typeof createAtLimit>;
-  autoInstall: (machineId: string, agent: HubSocket) => void;
   awaitingFirstTurn: Set<string>;
   awaitReply: (
     machineId: string,
@@ -647,6 +646,8 @@ export interface ClosureContext {
     identity: AccountIdentity
   ) => Promise<AccountJoined | { error: string }>;
   keepAliveScheduler: ReturnType<typeof createKeepAliveScheduler>;
+  /** Runs the hub's tool pass for a machine, or every connected one (tool-installs.ts `keepCopiesOn`). */
+  keepCopiesOn: (machineId?: string) => void;
   keepCustody: (machineId: string, custody: SessionCustody) => void;
   keepFleetReport: (
     machineId: string,
@@ -679,6 +680,8 @@ export interface ClosureContext {
   ) => boolean;
   keptNextWords: (why: Kept, toName: string) => string;
   keptOn: Map<string, Set<string>>;
+  /** The release each kept CLI's copies are kept at, by tool id (tool-releases.ts `keptReleases`). */
+  keptReleases: () => Record<string, string>;
   keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
   lastRequestContext: Map<string, number>;
