@@ -117,7 +117,7 @@ import {
 } from "./fleet-place-set";
 import type { SetHarnessConfig, SetHook } from "./fleet-set-rows";
 import { expandHome } from "./fs";
-import { readJson, writeJson } from "./json-file";
+import { readJson, readOwnJson, UnreadJson, writeJson } from "./json-file";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
 import { markdownUnder } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
@@ -345,7 +345,7 @@ const scriptPathOf = (record: ManagedHook): string | undefined =>
  * and a machine that never synced manages nothing.
  */
 const readSidecar = async (): Promise<Sidecar> => {
-  const stored = await readJson<Partial<Sidecar>>(SIDECAR);
+  const stored = await readOwnJson<Partial<Sidecar>>(SIDECAR);
   return {
     ...(stored?.mcp ? { mcp: stored.mcp } : {}),
     mcpServers: stored?.mcpServers ?? [],
@@ -436,7 +436,7 @@ const dropWrittenMcp = async (
   managed: Sidecar,
   fleetNames: readonly string[]
 ): Promise<boolean> => {
-  const legacy = await readJson<{ mcp?: string[] }>(LEGACY_SIDECAR);
+  const legacy = await readOwnJson<{ mcp?: string[] }>(LEGACY_SIDECAR);
   if (!(managed.mcp || managed.placedMcp || legacy)) {
     return true;
   }
@@ -990,6 +990,44 @@ type PluginRecords = Pick<
   "marketplaces" | "hubOnlyMarketplaces" | "plugins" | "vendoredPlugins"
 >;
 
+/** Every marketplace and plugin the fleet wants said as `state`, and the sidecar's records kept as they are: a sync that acted on none. */
+const keptPlugins = (
+  config: PlacedFleetConfig,
+  managed: Sidecar,
+  report: FleetSyncReport,
+  state: FleetItemState
+): PluginRecords => {
+  for (const { name } of config.marketplaces) {
+    report.marketplaces[name] = state;
+  }
+  for (const { id, enabled } of config.plugins) {
+    if (enabled) {
+      report.plugins[id] = state;
+    }
+  }
+  return {
+    marketplaces: managed.marketplaces,
+    hubOnlyMarketplaces: managed.hubOnlyMarketplaces,
+    plugins: managed.plugins,
+    vendoredPlugins: managed.vendoredPlugins,
+  };
+};
+
+/** Why Claude Code's plugin registries can't be read (json-file.ts `UnreadJson`), when one is there and unread. */
+const pluginRegistriesUnread = async (): Promise<string | undefined> => {
+  try {
+    await Promise.all([
+      readJson(INSTALLED_PLUGINS),
+      readJson(KNOWN_MARKETPLACES),
+    ]);
+  } catch (error) {
+    if (error instanceof UnreadJson) {
+      return error.message;
+    }
+    throw error;
+  }
+};
+
 /**
  * Links the marketplaces and installs the plugins, in that order — a plugin
  * whose marketplace is not linked has nowhere to come from. Both commands are
@@ -1012,19 +1050,19 @@ const syncPlugins = async (
     if (!(error instanceof ClaudeRefused)) {
       throw error;
     }
-    const refused = error.itemState;
-    for (const { name } of config.marketplaces) {
-      report.marketplaces[name] = refused;
-    }
-    for (const { id } of wantedPlugins) {
-      report.plugins[id] = refused;
-    }
-    return {
-      marketplaces: managed.marketplaces,
-      hubOnlyMarketplaces: managed.hubOnlyMarketplaces,
-      plugins: managed.plugins,
-      vendoredPlugins: managed.vendoredPlugins,
-    };
+    return keptPlugins(config, managed, report, error.itemState);
+  }
+  // Claude Code's own plugin and marketplace registries, read before any is
+  // acted on: one there and unread is no word that nothing is installed or
+  // linked, so nothing is installed, linked or uninstalled on it; each row
+  // says why, and the next sync reads them again.
+  const unread = await pluginRegistriesUnread();
+  if (unread) {
+    return keptPlugins(config, managed, report, {
+      state: "failed",
+      cause: "unparsable",
+      detail: unread,
+    });
   }
 
   // One name for a marketplace everywhere: the fleet row's is its manifest's

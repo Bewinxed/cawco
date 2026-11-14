@@ -32,7 +32,7 @@ import {
   harnessMcpUrl,
   OPEN_ITEMS_TOOL,
 } from "../delegation";
-import { readJson, writeJson } from "../json-file";
+import { readJsonOrLeave, writeJson } from "../json-file";
 import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
 import { MCP_CONNECT_MS } from "../mcp-status";
@@ -212,7 +212,10 @@ export const retireV1Plugins = async (
     files.map((file) => rm(join(plugins, file), { force: true }))
   );
   const configPath = join(directory, "opencode.json");
-  const config = await readJson<Record<string, unknown>>(configPath);
+  const config = await readJsonOrLeave<Record<string, unknown>>(
+    configPath,
+    "taking OpenCode 1.x's CawCo plugin out of it"
+  );
   if (Array.isArray(config?.plugin)) {
     const kept = config.plugin.filter(
       (entry) =>
