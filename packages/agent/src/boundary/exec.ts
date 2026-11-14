@@ -4,9 +4,10 @@
  */
 
 import { constants } from "node:fs";
-import { lstat, mkdir, open as openFile } from "node:fs/promises";
+import { lstat, open as openFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { makeFolder } from "@cawco/core/folders";
 import {
   workspaceClaudeTmpDir,
   workspacePolicyFile,
@@ -492,11 +493,13 @@ exit "$status"
  */
 export const makeRuntimeDir = async (id: string): Promise<void> => {
   const dir = workspaceRuntimeDir();
-  await mkdir(dir).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "EEXIST") {
-      throw error;
+  await makeFolder(dir, { exclusive: true }).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") {
+        throw error;
+      }
     }
-  });
+  );
   const handle = await openFile(
     dir,
     // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set

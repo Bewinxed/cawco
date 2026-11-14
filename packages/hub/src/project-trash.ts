@@ -38,11 +38,12 @@
  * its record, whose rows are live again.
  */
 
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_NAME } from "@cawco/core/artifact-kinds";
 import type { BrowserKey } from "@cawco/core/browser";
+import { makeFolderSync } from "@cawco/core/folders";
 import type {
   ForgottenBrings,
   ForgottenFolderHints,
@@ -70,7 +71,6 @@ import {
   trashProjectFolder,
   untrashProjectFolder,
 } from "./project-folder";
-
 import { readStages } from "./stages";
 import {
   ARCHIVE_DIR,
@@ -939,7 +939,7 @@ export const projectTrash = (
           name,
           host,
         }));
-      mkdirSync(PROJECT_TRASH_DIR, { recursive: true });
+      makeFolderSync(PROJECT_TRASH_DIR);
       let rows: ProjectRows | undefined;
       try {
         rows = db.forgetProject(id, (kept) =>

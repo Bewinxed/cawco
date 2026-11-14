@@ -3,8 +3,9 @@
  * the quiet sweep that closes a boundary nothing holds.
  */
 
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import {
   workspaceProjectFile,
   workspacesDir,
@@ -110,7 +111,7 @@ export const setProject = async (
   if (kept === project) {
     return;
   }
-  await mkdir(stateDir(id), { recursive: true });
+  await makeFolder(stateDir(id));
   await writeWhole(file, `${JSON.stringify(project)}\n`, 0o644);
   // Another project's folder: the one before is no longer read, now.
   if (kept !== undefined) {

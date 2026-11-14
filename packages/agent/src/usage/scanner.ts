@@ -1,10 +1,11 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { cawcoDataDir } from "@cawco/core/paths/cawco";
+import { makeFolderSync } from "@cawco/core/folders";
 import { listClaudeFiles } from "@cawco/core/paths/claude";
 import { opencodeDatabases } from "@cawco/core/paths/harnesses";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { DAY_MS } from "@cawco/core/time";
 import { ratesFingerprint, refreshPricing } from "@cawco/core/usage/pricing";
 import { BUCKET_MS, bucketStart, totalTokens } from "@cawco/core/usage/tokens";
@@ -327,7 +328,7 @@ export class UsageScanner {
   readonly #untouch;
 
   constructor(dir = cawcoDataDir()) {
-    mkdirSync(dir, { recursive: true });
+    makeFolderSync(dir);
     // The JSON watermarks this store replaced (schema 1 of usage-index.json).
     rmSync(join(dir, "usage-index.json"), { force: true });
     this.#path = join(dir, "usage.db");

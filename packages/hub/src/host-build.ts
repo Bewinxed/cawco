@@ -9,8 +9,9 @@
  * binary serves both prebuilt and never starts the thread.
  */
 
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 
 /** Which host a build is of. */
 export type HostName = "decision" | "canvas";
@@ -102,7 +103,7 @@ export const writeHostFiles = async (
   files: Map<string, Blob>
 ): Promise<void> => {
   await rm(outdir, { recursive: true, force: true });
-  await mkdir(outdir, { recursive: true });
+  await makeFolder(outdir);
   await Promise.all(
     [...files].map(([name, file]) => Bun.write(join(outdir, name), file))
   );

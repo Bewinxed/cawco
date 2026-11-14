@@ -37,7 +37,6 @@ import { type Stats, watch } from "node:fs";
 import {
   chmod,
   lstat,
-  mkdir,
   readdir,
   readFile,
   realpath,
@@ -47,6 +46,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
+import { makeFolder } from "@cawco/core/folders";
 import { projectClaudeDir } from "@cawco/core/paths/claude";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
@@ -275,7 +275,7 @@ export const keepStandInsListed = async (
     return () => undefined;
   }
   const dir = dirname(exclude);
-  await mkdir(dir, { recursive: true });
+  await makeFolder(dir);
   let settle: ReturnType<typeof setTimeout> | undefined;
   const relist = (): void => {
     clearTimeout(settle);

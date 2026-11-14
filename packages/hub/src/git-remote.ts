@@ -20,9 +20,10 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
+import { makeFolder } from "@cawco/core/folders";
 import {
   type HubRepoKey,
   hubRepoSegment,
@@ -252,7 +253,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         () => false
       );
       if (!exists) {
-        await mkdir(deps.root, { recursive: true });
+        await makeFolder(deps.root);
         await run(["git", "init", "--quiet", "--bare", path]);
         await run(["git", "-C", path, "config", "http.receivepack", "true"]);
       }
@@ -477,7 +478,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   const upload = async (oid: string, request: Request): Promise<Response> => {
     const target = lfsObjectPath(deps.lfsRoot, oid);
     const temporary = join(deps.lfsRoot, "tmp", `${oid}.${randomUUID()}`);
-    await mkdir(dirname(temporary), { recursive: true });
+    await makeFolder(dirname(temporary));
     const writer = Bun.file(temporary).writer();
     const hash = createHash("sha256");
     let length = 0;

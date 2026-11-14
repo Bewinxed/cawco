@@ -94,9 +94,10 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { atMost } from "@cawco/core/at-most";
+import { makeFolder } from "@cawco/core/folders";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -694,7 +695,7 @@ const armHookNow = async (
   // The CLI makes its own `claude-<uid>` in it, 0700, and refuses a root it
   // does not own; inside the boundary it is read only, as the rest of `ro`.
   const claudeTmp = workspaceClaudeTmpDir(id);
-  await mkdir(claudeTmp, { recursive: true, mode: 0o700 });
+  await makeFolder(claudeTmp, { mode: 0o700 });
   await writeWhole(
     policy,
     `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
@@ -760,11 +761,13 @@ export const start = async (
       `[workspace] ${ref.id}: its node_modules could not be linked into the workspaces' cache, so bun copies what its global store cannot hold: ${error instanceof Error ? error.message : String(error)}`
     );
   });
-  await mkdir(join(stateDir(ref.id), "boundaries"), { recursive: true });
+  await makeFolder(join(stateDir(ref.id), "boundaries"));
   // Its generation's dir is made here and nowhere else, and only by this
   // start: one already there is another start's, whose files this one
   // neither uses nor cleans away as it fails.
-  const made = await mkdir(generationDir(ref.id, gen)).then(
+  const made = await makeFolder(generationDir(ref.id, gen), {
+    exclusive: true,
+  }).then(
     () => true,
     (error: NodeJS.ErrnoException) => {
       if (error.code === "EEXIST") {
@@ -815,7 +818,7 @@ const launch = async (
     }
     const srtTmp = srtTmpOf(ref.id, gen);
     await rm(srtTmp, { recursive: true, force: true });
-    await mkdir(srtTmp, { recursive: true, mode: 0o700 });
+    await makeFolder(srtTmp, { mode: 0o700 });
   }
   // Linux: the host makes each missing deny path in a clone before the
   // sandbox starts.

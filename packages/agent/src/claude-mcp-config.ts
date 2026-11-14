@@ -17,8 +17,9 @@
  * any left by children that are gone ({@link sweepMcpConfigs}).
  */
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { chmodSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { makeFolderSync } from "@cawco/core/folders";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   stateTemporaryTarget,
@@ -88,7 +89,7 @@ export const mcpConfigOffArgv = (
   const [config] = found;
   if (config) {
     const dir = claudeMcpConfigDir();
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    makeFolderSync(dir, { mode: 0o700 });
     chmodSync(dir, 0o700);
     file = join(dir, `${instanceId}.${randomUUID()}.json`);
     writeStateFileSync(file, config.json, { mode: 0o600, exclusive: true });

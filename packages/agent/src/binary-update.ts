@@ -17,7 +17,7 @@
  * stands, and goes ahead by itself once the hub runs a build that does,
  * whichever of the hub's machine and this one took the release first.
  */
-import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
+import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   archiveAnswered,
@@ -59,6 +59,7 @@ import {
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import { readWithin } from "@cawco/core/bounded";
 import { timerMs } from "@cawco/core/clock";
+import { makeFolder } from "@cawco/core/folders";
 import {
   answers,
   currentKeeper,
@@ -1647,7 +1648,8 @@ export class BinaryUpdater {
     const work = `${directory}.partial-${crypto.randomUUID()}`;
     try {
       // On macOS the signed CawCo Agent.app, exactly as the release signed it.
-      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`
+      await makeFolder(work);
+      await Bun.$`tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`
         .env(hostEnvironment())
         .quiet();
       const binary = join(work, EXECUTABLE_IN_VERSION);
@@ -1700,7 +1702,7 @@ export class BinaryUpdater {
   ): Promise<string> {
     const downloads = join(binaryRoot(), "downloads");
     const partial = join(downloads, `${artifact.archive}.partial`);
-    await mkdir(downloads, { recursive: true });
+    await makeFolder(downloads);
     await Promise.all(
       (await readdir(downloads))
         .filter((name) => name !== `${artifact.archive}.partial`)

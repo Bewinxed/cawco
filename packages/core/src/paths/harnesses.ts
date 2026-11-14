@@ -4,7 +4,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sessionIdentityDir, xdgDataHome } from "./cawco";
+import { sessionIdentityDir } from "./cawco";
+import { xdgDataHome } from "./roots";
 
 /**
  * pi's agent dir: its login, its settings, and what the fleet writes for it.

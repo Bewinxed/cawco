@@ -1,9 +1,10 @@
 /** Signed release discovery and immutable archive verification. */
-import { mkdir, rename, rm } from "node:fs/promises";
+import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Octokit } from "@octokit/rest";
 import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
+import { makeFolder } from "./folders";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import {
   type Answered,
@@ -376,7 +377,7 @@ export async function archiveFor(
   const source = new URL(artifact.archive, release.assetBaseUrl);
   const what = `${artifact.archive} from ${source.origin}`;
   (async () => {
-    await mkdir(dir, { recursive: true });
+    await makeFolder(dir);
     if (await fileMatches(path, artifact.size, artifact.sha256)) {
       return;
     }

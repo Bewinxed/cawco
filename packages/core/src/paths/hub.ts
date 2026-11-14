@@ -2,14 +2,7 @@
 
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { darwinSocketRoot } from "../socket-root";
-import { cawcoDataDir } from "./cawco";
-
-/** Where an installed hub keeps its database (`cawco.db`) and the backups beside it. */
-export const hubDataDir = (): string =>
-  process.platform === "darwin"
-    ? join(homedir(), "Library", "Application Support", "cawco")
-    : cawcoDataDir();
+import { darwinSocketRoot, hubDataDir } from "./roots";
 
 /**
  * The agent's socket that answers `cawco git-credential` outside a session:

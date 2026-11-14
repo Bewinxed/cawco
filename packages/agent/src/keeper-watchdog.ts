@@ -27,13 +27,14 @@
  * its restart goes ahead.
  */
 
-import { mkdir, readdir, readFile, readlink } from "node:fs/promises";
+import { readdir, readFile, readlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   BinaryUpdateState,
   KeptProcess,
 } from "@cawco/core/binary-updates";
+import { makeFolder } from "@cawco/core/folders";
 import {
   type FoundKeeper,
   keeperEndpoints,
@@ -162,7 +163,7 @@ const shown = (ran: Ran): string =>
  * the process table on both.
  */
 const saveDiagnostics = async (dir: string, pid: number): Promise<void> => {
-  await mkdir(dir, { recursive: true });
+  await makeFolder(dir);
   const saves: Promise<void>[] = [settled(join(dir, "ps.txt"), tableText)];
   if (process.platform === "darwin") {
     saves.push(

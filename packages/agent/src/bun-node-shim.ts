@@ -31,16 +31,9 @@
  * read as it stands. Where the host's dir cannot be Bun's (another user's, or
  * group-writable), there is no shim, as there is none for the host's own bun.
  */
-import {
-  lstat,
-  mkdir,
-  readlink,
-  realpath,
-  rm,
-  stat,
-  symlink,
-} from "node:fs/promises";
+import { lstat, readlink, realpath, rm, stat, symlink } from "node:fs/promises";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { userBun } from "./user-bun";
 
@@ -120,11 +113,13 @@ export const bunNodeShim = async (): Promise<string | undefined> => {
     return undefined;
   }
   try {
-    await mkdir(dir, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") {
-        throw error;
+    await makeFolder(dir, { mode: 0o700, exclusive: true }).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "EEXIST") {
+          throw error;
+        }
       }
-    });
+    );
     const held = await lstat(dir);
     // biome-ignore lint/suspicious/noBitwiseOperators: the group and other write bits, tested as a mask, as Bun tests them
     const othersWrite = (held.mode & 0o022) !== 0;

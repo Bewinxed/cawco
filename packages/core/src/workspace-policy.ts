@@ -56,7 +56,6 @@ import {
   PROTECTED_PARENTS,
   protectedFindTests,
 } from "./clone-denies";
-import { xdgDataHome } from "./paths/cawco";
 import {
   accountConfigDir,
   claudeConfigDirs,
@@ -75,6 +74,7 @@ import {
   workspaceCaches,
 } from "./paths/host-policy";
 import { hubProjectsDir } from "./paths/hub";
+import { xdgDataHome } from "./paths/roots";
 import {
   workspaceAccountsFile,
   workspaceDoorDir,

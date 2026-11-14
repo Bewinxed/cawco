@@ -16,13 +16,14 @@ import {
   existsSync,
   openSync,
 } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
+import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   BROWSER_SCREEN,
   type BrowserRelay,
   isBrowserKey,
 } from "@cawco/core/browser";
+import { makeFolder } from "@cawco/core/folders";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -152,7 +153,7 @@ const profileDir = (record: BrowserRecord): string =>
 /** Writes the profile's private preferences, into what Chromium kept there before. */
 const writePreferences = async (profile: string): Promise<void> => {
   const file = join(profile, "Default", "Preferences");
-  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(file), { mode: 0o700 });
   const kept = await readFile(file, "utf8")
     .then((text): Json =>
       z.record(z.string(), z.unknown()).parse(JSON.parse(text))
@@ -238,7 +239,7 @@ export class LocalHost implements BrowserHost {
     }
     await startHubProxy();
     const profile = profileDir(record);
-    await mkdir(profile, { recursive: true, mode: 0o700 });
+    await makeFolder(profile, { mode: 0o700 });
     await writePreferences(profile);
     // A Chromium that ended unasked leaves its lock behind.
     await Promise.all(
@@ -384,7 +385,7 @@ export class LocalHost implements BrowserHost {
         if (record) {
           await this.stop(record);
         }
-        await mkdir(to, { recursive: true, mode: 0o700 });
+        await makeFolder(to, { mode: 0o700 });
         for (const file of moving) {
           await rename(join(from, file), join(to, file));
         }

@@ -32,8 +32,8 @@
  * kept in the index's `meta`, under {@link WATERMARK} and its path, and
  * in the writer, written only by a sync that committed.
  */
-import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { transcriptIndexPath } from "@cawco/core/paths/cawco";
 import { listClaudeFiles, listPiFiles } from "@cawco/core/paths/claude";
 import { opencodeDatabases } from "@cawco/core/paths/harnesses";
@@ -191,7 +191,7 @@ const serve = async (): Promise<void> => {
   let ops: Handlers;
   let index: TranscriptIndex;
   if (role === "write") {
-    await mkdir(dirname(path), { recursive: true });
+    await makeFolder(dirname(path));
     index = new TranscriptIndex(path);
     const watermarks = new Map<string, number>();
     const rows = index.db

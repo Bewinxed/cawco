@@ -25,9 +25,10 @@
  * workspace is reached there, never on the host.
  */
 import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { socketPathProblem } from "@cawco/core/paths/workspace";
 import { PreviewStartDown } from "@cawco/core/preview/protocol";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
@@ -275,7 +276,7 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   if (problem) {
     throw new Error(problem);
   }
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await makeFolder(dir, { mode: 0o700 });
   await rm(socket, { force: true });
   // `setsid` execs in place (a child is no group leader), so the bridge's pid
   // leads a process group of its own.

@@ -53,10 +53,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
+import { makeFolder } from "@cawco/core/folders";
 import { stagesCarriedPath } from "@cawco/core/paths/cawco";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
@@ -905,7 +906,7 @@ async function writeHost(stage: Stage): Promise<void> {
   if ((await readFile(file, "utf8").catch(() => null)) === text) {
     return;
   }
-  await mkdir(join(stage.root, HOST_DIR), { recursive: true });
+  await makeFolder(join(stage.root, HOST_DIR));
   await writeFile(file, text);
   await excludeFromCheckout(join(stage.root, ".cawco"));
 }

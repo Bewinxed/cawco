@@ -3,6 +3,7 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { sessiondEndpoint } from "../sessiond";
+import { cawcoConfigDir, cawcoDataDir } from "./roots";
 
 /** The agent's index of its stored transcripts, each file's mtime and size and what a listing read of it (agent catalog-index.ts). */
 export const catalogIndexPath = (): string =>
@@ -22,17 +23,6 @@ export const sessionIdentityDir = (): string =>
     dirname(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()),
     "session-identity"
   );
-
-export const xdgConfigHome = (): string =>
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
-export const xdgDataHome = (): string =>
-  process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
-
-/** CawCo's config dir: the CLI's `config.json`, the hub's env file, the release signing key. */
-export const cawcoConfigDir = (): string => join(xdgConfigHome(), "cawco");
-
-/** CawCo's data dir: the binary install, its runtime trees, the transcript index; on Linux the hub's database too. */
-export const cawcoDataDir = (): string => join(xdgDataHome(), "cawco");
 
 /**
  * Each live Claude session's scheduled wake-ups as its last turn ended, one

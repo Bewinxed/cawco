@@ -29,7 +29,6 @@
 import type { Stats } from "node:fs";
 import {
   lstat,
-  mkdir,
   readdir,
   readFile,
   realpath,
@@ -42,6 +41,7 @@ import {
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -629,7 +629,7 @@ const prepare = async (projectId: string, root: string) => {
       detail: projectTrashWords.forgottenFolder(projectId),
     });
   }
-  await mkdir(root, { recursive: true });
+  await makeFolder(root);
   if (!(await exists(join(root, ".git")))) {
     const made = await git(root, ["init", "-q"]);
     if (made instanceof ElysiaStatus) {
@@ -1415,7 +1415,7 @@ const fileToDelete = async (root: string, rel: string) => {
 
 /** Makes the folder `rel` (at `abs`) is written in; refused when a file sits where it would be. */
 const parentFolder = (abs: string, rel: string) =>
-  mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
+  makeFolder(dirname(abs)).catch((error: unknown) => {
     const { code } = error as NodeJS.ErrnoException;
     if (code === "EEXIST" || code === "ENOTDIR") {
       return problem(409, {
@@ -2373,7 +2373,7 @@ export const trashProjectFolder = async (projectId: string, entry: string) => {
     if (!(await exists(root))) {
       return;
     }
-    await mkdir(PROJECT_TRASH_DIR, { recursive: true });
+    await makeFolder(PROJECT_TRASH_DIR);
     const target = join(PROJECT_TRASH_DIR, entry);
     await rename(root, target);
     return target;
@@ -2425,7 +2425,7 @@ export const untrashProjectFolder = async (
         detail: projectTrashWords.folderTaken(projectId, root),
       });
     }
-    await mkdir(PROJECTS_DIR, { recursive: true });
+    await makeFolder(PROJECTS_DIR);
     await rename(join(PROJECT_TRASH_DIR, entry), root);
     ready.delete(projectId);
     forgotten.delete(projectId);

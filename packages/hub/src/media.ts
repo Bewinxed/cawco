@@ -16,8 +16,9 @@
  * agent-facing tools) are not rewritten: they get what the machine sent.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { makeFolderSync } from "@cawco/core/folders";
 import { writeStateFile } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
 
@@ -64,7 +65,7 @@ function store(type: string, data: string): string {
   const name = nameOf(type, bytes);
   const path = join(MEDIA_DIR, name);
   if (!ready) {
-    mkdirSync(MEDIA_DIR, { recursive: true });
+    makeFolderSync(MEDIA_DIR);
     ready = true;
   }
   // Whole or not at all: a name that is there is its hash's bytes.
@@ -180,7 +181,7 @@ const FILE_HASH = /^[a-f0-9]{64}$/u;
 export async function storeFile(bytes: Uint8Array): Promise<string> {
   const hash = createHash("sha256").update(bytes).digest("hex");
   const path = join(FILES_DIR, hash);
-  mkdirSync(FILES_DIR, { recursive: true });
+  makeFolderSync(FILES_DIR);
   if (!existsSync(path)) {
     await writeStateFile(path, bytes);
   }

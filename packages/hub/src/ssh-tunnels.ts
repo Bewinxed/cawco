@@ -50,14 +50,15 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { makeFolderSync } from "@cawco/core/folders";
 import { LineSplitter } from "@cawco/core/lines";
+import { darwinSocketRoot } from "@cawco/core/paths/roots";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { darwinSocketRoot } from "@cawco/core/socket-root";
 import { spawnTethered, untether } from "@cawco/core/tether";
 import { unhandled } from "@cawco/core/unhandled";
 import { DB_PATH } from "./config";
@@ -858,7 +859,7 @@ export const createSshTunnels = ({
     }
     tunnel.running = true;
     tunnel.upAt = 0;
-    mkdirSync(controlDir(), { recursive: true, mode: 0o700 });
+    makeFolderSync(controlDir(), { mode: 0o700 });
     const path = controlPath(row.id);
     await clearControl(path, row.target);
     if (tunnel.stopped) {

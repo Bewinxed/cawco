@@ -12,7 +12,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import { MACHINE_PROOF_HEADER } from "./hub-auth";
-import { cawcoConfigDir } from "./paths/cawco";
+import { cawcoConfigDir } from "./paths/roots";
 import {
   readTextRecordSync,
   writeStateFile,

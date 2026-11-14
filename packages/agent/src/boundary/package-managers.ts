@@ -9,13 +9,13 @@ import {
   chmod,
   copyFile,
   lstat,
-  mkdir,
   rename,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   userGitConfigDir,
@@ -54,7 +54,7 @@ export const makeDirs = async (id: string): Promise<void> => {
   if (tooLong) {
     console.warn(`[workspace] ${id}: ${tooLong}`);
   }
-  await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(sessionIdentityDir(), { mode: 0o700 });
   const xdg = workspaceXdgDirs(id);
   const inScratch = [xdg.config, xdg.data, xdg.state, workspaceMaestroHome(id)];
   const own = await Promise.all(
@@ -74,7 +74,7 @@ export const makeDirs = async (id: string): Promise<void> => {
       scratchOf(id),
       ...inScratch.filter((path) => !planted.includes(path)),
       ...workspaceCaches(),
-    ].map((path) => mkdir(path, { recursive: true }))
+    ].map((path) => makeFolder(path))
   );
   await makeRuntimeDir(id);
   if (!planted.includes(xdg.config)) {
@@ -193,7 +193,7 @@ const writePnpmConfig = async (
     );
     return;
   }
-  await mkdir(dir, { recursive: true });
+  await makeFolder(dir);
   const store = pnpmStore();
   const said =
     "# CawCo: pnpm's global virtual store, in the workspaces' cache, so this workspace's\n# installs link from it. A project's own setting overrides it.\n";
@@ -239,8 +239,8 @@ const linkYarnFolder = async (id: string, dataHome: string): Promise<void> => {
     );
     return;
   }
-  await mkdir(dir, { recursive: true });
-  await mkdir(yarnGlobalFolder(), { recursive: true });
+  await makeFolder(dir);
+  await makeFolder(yarnGlobalFolder());
   try {
     await symlink(yarnGlobalFolder(), join(dir, "berry"));
   } catch (error) {

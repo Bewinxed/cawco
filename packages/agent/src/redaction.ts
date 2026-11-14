@@ -22,8 +22,9 @@
  * names each it revokes as it does. Never on a guess or a timer alone.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { makeFolderSync } from "@cawco/core/folders";
 import {
   encodeJson,
   type JsonPieces,
@@ -76,7 +77,7 @@ const saveStore = (values: Set<string>): void => {
   if (known) {
     known.version += 1;
   }
-  mkdirSync(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+  makeFolderSync(sessionIdentityDir(), { mode: 0o700 });
   writeStateFileSync(storeFile(), JSON.stringify([...values]), {
     mode: 0o600,
   });

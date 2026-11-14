@@ -87,16 +87,10 @@
  * return;" comes before cgroup_delegate_xattr_apply, so the keeper's user unit
  * never carries it, delegated or not.
  */
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rmdir,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { readdir, readFile, rmdir, stat, writeFile } from "node:fs/promises";
 import { availableParallelism, totalmem } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import type { ChildLimit } from "@cawco/core/harness";
 import type { SessionLimits } from "@cawco/core/protocol";
 import { TASK_RESERVE } from "./tasks";
@@ -357,7 +351,7 @@ export async function placeChildren(
   try {
     if (own === top) {
       // systemd before 254 has no DelegateSubgroup=: the keeper moves itself.
-      await mkdir(join(top, KEEPER_LEAF), { recursive: true });
+      await makeFolder(join(top, KEEPER_LEAF));
       await writeFile(
         join(top, KEEPER_LEAF, "cgroup.procs"),
         String(system.pid)
@@ -368,7 +362,7 @@ export async function placeChildren(
     const group = join(top, CHILDREN_GROUP);
     const max = limit === undefined ? undefined : limit - TASK_RESERVE;
     const workspaces = join(group, WORKSPACES_GROUP);
-    await mkdir(group, { recursive: true });
+    await makeFolder(group);
     await sweepGroups(workspaces);
     await sweepGroups(group);
     if (max !== undefined) {
@@ -378,7 +372,7 @@ export async function placeChildren(
     // and below `workspaces`, which therefore hold no process of their own:
     // only their groups.
     await writeFile(join(group, "cgroup.subtree_control"), "+pids");
-    await mkdir(workspaces, { recursive: true });
+    await makeFolder(workspaces);
     await writeFile(join(workspaces, "cgroup.subtree_control"), "+pids");
     const pool =
       max === undefined
@@ -496,7 +490,7 @@ export async function openChildGroup(
 ): Promise<ChildGroup> {
   const name = `${procId.replace(UNNAMEABLE, "_")}-${serial}`;
   const path = join(workspace ? children.workspaces : children.group, name);
-  await mkdir(path);
+  await makeFolder(path, { exclusive: true });
   const unapplied: string[] = [];
   try {
     await writeFile(join(path, "pids.max"), String(CHILD_TASKS));

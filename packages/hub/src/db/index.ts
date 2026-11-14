@@ -1,5 +1,5 @@
-import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { makeFolderSync } from "@cawco/core/folders";
 import { getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Context, Effect, Layer } from "effect";
@@ -215,7 +215,7 @@ export type DbShape = DataMigrationsDb &
 export class Db extends Context.Service<Db, DbShape>()("Db") {}
 
 const make = async (path: string): Promise<DbShape> => {
-  mkdirSync(dirname(path), { recursive: true });
+  makeFolderSync(dirname(path));
   const db = drizzle(path);
   // A stored JSON value that fails its schema names its row: the database
   // says which row holds that column's text (hub stored-json.ts).

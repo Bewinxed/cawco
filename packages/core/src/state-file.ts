@@ -29,17 +29,17 @@ import {
   fchmodSync,
   fsyncSync,
   linkSync,
-  mkdirSync,
   openSync,
   readFileSync,
   renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { link, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { isGone } from "./absent";
+import { makeFolder, makeFolderSync } from "./folders";
 import { isAlive, listedPid } from "./signal-wall";
 
 export interface StateWriteOptions {
@@ -131,7 +131,7 @@ export const writeStateFile = async (
   options: StateWriteOptions = {}
 ): Promise<void> => {
   if (!options.inPlace) {
-    await mkdir(dirname(path), { recursive: true });
+    await makeFolder(dirname(path));
   }
   const temporary = temporaryFor(path, options.scratchDir);
   const handle = await open(temporary, "wx", options.mode ?? DEFAULT_MODE);
@@ -173,7 +173,7 @@ export const placeStreamedFile = async (
   } finally {
     await handle.close();
   }
-  await mkdir(dirname(path), { recursive: true });
+  await makeFolder(dirname(path));
   await rename(temporary, path);
   await syncDir(dirname(path));
 };
@@ -185,7 +185,7 @@ export const writeStateFileSync = (
   options: StateWriteOptions = {}
 ): void => {
   if (!options.inPlace) {
-    mkdirSync(dirname(path), { recursive: true });
+    makeFolderSync(dirname(path));
   }
   const temporary = temporaryFor(path, options.scratchDir);
   const fd = openSync(temporary, "wx", options.mode ?? DEFAULT_MODE);

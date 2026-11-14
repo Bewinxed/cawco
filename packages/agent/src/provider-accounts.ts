@@ -17,7 +17,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountIdentity,
@@ -33,6 +33,7 @@ import {
   sameIdentity,
 } from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   accountCredentialPath,
@@ -137,7 +138,7 @@ const writeHeld = async (
   held: Held | undefined
 ): Promise<void> => {
   const path = accountCredentialPath(accountId);
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(path), { mode: 0o700 });
   await writeStateFile(
     path,
     JSON.stringify(held ? { [held.provider]: held.credential } : {}, null, 2),
@@ -1102,7 +1103,7 @@ const readJson = async (path: string): Promise<Json> => {
 };
 
 const writeJson = async (path: string, value: Json): Promise<void> => {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(path), { mode: 0o700 });
   await writeStateFile(path, JSON.stringify(value, null, 2), { mode: 0o600 });
 };
 

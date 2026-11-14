@@ -11,7 +11,7 @@
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
-import { cawcoConfigDir, cawcoDataDir } from "@cawco/core/paths/cawco";
+import { cawcoConfigDir, cawcoDataDir } from "@cawco/core/paths/roots";
 import { workspaceCarriesDir } from "@cawco/core/paths/workspace";
 import type {
   FolderRemoved,

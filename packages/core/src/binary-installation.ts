@@ -1,11 +1,12 @@
 /** Server-only install identity and durable update state of a binary install. */
 import type { Dirent } from "node:fs";
-import { mkdir, readdir, readlink, rm } from "node:fs/promises";
+import { readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
+import { makeFolder } from "./folders";
 import { versionsInUse } from "./live-processes";
 import { hubDbPath } from "./paths/hub";
 import { markerIsLive, ProcessMarkerSchema } from "./process-identity";
@@ -78,7 +79,7 @@ export async function writeJsonAtomic(
   path: string,
   value: unknown
 ): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(path), { mode: 0o700 });
   await writeStateFile(path, `${JSON.stringify(value)}\n`, { mode: 0o600 });
 }
 

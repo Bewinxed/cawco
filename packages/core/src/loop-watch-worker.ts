@@ -48,9 +48,10 @@
  * counts SIGTERM a clean end.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { readFile, readlink } from "node:fs/promises";
 import { dirname } from "node:path";
+import { makeFolderSync } from "./folders";
 import {
   BEAT,
   LEFT,
@@ -436,7 +437,7 @@ const endProcess = async (bound: LoopEnd, held: number): Promise<void> => {
   };
   await say("held", held);
   try {
-    mkdirSync(dirname(bound.record), { recursive: true });
+    makeFolderSync(dirname(bound.record));
     writeFileSync(bound.record, `${JSON.stringify(kept)}\n`);
   } catch (error) {
     console.warn(

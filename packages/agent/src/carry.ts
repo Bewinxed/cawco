@@ -35,7 +35,6 @@ import { constants } from "node:fs";
 import {
   copyFile,
   lstat,
-  mkdir,
   readdir,
   readFile,
   readlink,
@@ -44,6 +43,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
+import { makeFolder } from "@cawco/core/folders";
 import { workspaceCarriesDir } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -101,12 +101,12 @@ export const copyStrays = async (
       if (!names) {
         return;
       }
-      await mkdir(target, { recursive: true, mode: 0o700 });
+      await makeFolder(target, { mode: 0o700 });
       for (const name of names) {
         await copy(join(entry, name));
       }
     } else if (found.isFile()) {
-      await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+      await makeFolder(dirname(target), { mode: 0o700 });
       await copyFile(source, target, constants.COPYFILE_EXCL).catch(
         unlessGone(undefined)
       );
@@ -123,7 +123,7 @@ export const copyStrays = async (
   // workspace's `<carry>/changes`, workspace.ts `carryChanged`). Made one
   // level at a time, every folder workspace's carry failed on 2026-10-29
   // with ENOENT, and its workspace was tried again every minute.
-  await mkdir(folder, { recursive: true, mode: 0o700 });
+  await makeFolder(folder, { mode: 0o700 });
   for (const entry of entries) {
     await copy(entry);
   }
@@ -160,7 +160,7 @@ export const carrySteps = (
   const steps = [
     "set -e",
     `d=${folder}`,
-    'mkdir "$d"',
+    'mkdir -m 700 "$d"',
     'git rev-parse HEAD > "$d"/head',
     'git symbolic-ref -q --short HEAD > "$d"/branch || true',
   ];
@@ -180,7 +180,7 @@ export const carrySteps = (
   }
   if (held.stashes > 0) {
     steps.push(
-      'mkdir "$d"/stashes',
+      'mkdir -m 700 "$d"/stashes',
       'n=0; while git rev-parse -q --verify "stash@{$n}" > /dev/null; do git stash show --include-untracked -p --binary "stash@{$n}" > "$d"/stashes/$n.patch; n=$((n + 1)); done'
     );
   }
@@ -324,7 +324,7 @@ export const carryWorktree = async (
     return null;
   }
   const folder = carryFolder(sessionId);
-  await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(workspaceCarriesDir(), { mode: 0o700 });
   const ran =
     await Bun.$`sh -c ${`${SAFE_GIT_SHELL}${carrySteps(shellQuote(folder), held, [], "worktree")}`}`
       .cwd(path)

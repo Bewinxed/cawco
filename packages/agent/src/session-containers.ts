@@ -86,23 +86,16 @@
  * unlabelled; the agent's log says so, and so is the session, once, as it
  * starts (core `CONTAINERS_UNTRACKED`).
  */
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
-import { cawcoDataDir } from "@cawco/core/paths/cawco";
+import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths/roots";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { darwinSocketRoot } from "@cawco/core/socket-root";
 import { parseRecord } from "@cawco/core/state-file";
 import { containerWords } from "@cawco/core/words/containers";
 import { parseAllDocuments } from "yaml";
@@ -1164,7 +1157,7 @@ export const beginEnding = async (instanceId: string): Promise<void> => {
     record.pods.push(...pods.map((pod) => pod.Id));
     record.containers.push(...containers.map((container) => container.Id));
   }
-  await mkdir(ENDING_DIR(), { recursive: true, mode: 0o700 });
+  await makeFolder(ENDING_DIR(), { mode: 0o700 });
   await writeFile(endingFile(instanceId), `${JSON.stringify(record)}\n`, {
     mode: 0o600,
   });

@@ -5,7 +5,6 @@
  */
 
 import {
-  mkdir,
   readdir,
   readlink,
   realpath,
@@ -15,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { workspaceCacheDir } from "@cawco/core/paths/workspace";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -120,7 +120,7 @@ const xcodeLibraryCache = (): string =>
  */
 const writeXcodeHome = async (id: string): Promise<void> => {
   const library = join(xcodeHomeOf(id), "Library");
-  await mkdir(library, { recursive: true });
+  await makeFolder(library);
   const hostLibrary = join(homedir(), "Library");
   const names = await readdir(hostLibrary).catch(() => []);
   const links = new Map<string, string>([
@@ -152,7 +152,7 @@ const writeXcodeHome = async (id: string): Promise<void> => {
  */
 export const writeGitShim = async (id: string, path: string): Promise<void> => {
   const bin = gitHelperDirOf(id);
-  await mkdir(bin, { recursive: true });
+  await makeFolder(bin);
   const shim = gitShim(
     id,
     bin,
@@ -197,7 +197,7 @@ export const chromiumShimOf = (id: string): string =>
  */
 export const writeChromiumShim = async (id: string): Promise<void> => {
   const bin = gitHelperDirOf(id);
-  await mkdir(bin, { recursive: true });
+  await makeFolder(bin);
   const chromium = browserExecutable();
   await writeWhole(
     chromiumShimOf(id),
@@ -219,7 +219,7 @@ export const writeShims = async (
   runtime: string
 ): Promise<void> => {
   const bin = gitHelperDirOf(id);
-  await mkdir(bin, { recursive: true });
+  await makeFolder(bin);
   await writeXcodeHome(id);
   await writeScript(
     roOf(id),
@@ -330,7 +330,7 @@ const GH_PLACEHOLDER = "cawco-github-door";
 
 export const writeGuardedGhConfig = async (id: string): Promise<void> => {
   const dir = guardedGhConfigOf(id);
-  await mkdir(dir, { recursive: true });
+  await makeFolder(dir);
   await Promise.all([
     writeWhole(
       join(dir, "config.yml"),

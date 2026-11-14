@@ -15,7 +15,6 @@ import { constants, type Stats } from "node:fs";
 import {
   access,
   lstat,
-  mkdir,
   readdir,
   readFile,
   readlink,
@@ -32,6 +31,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import {
   sessionScratchDir,
   workspaceClaudeTmpDir,
@@ -562,7 +562,7 @@ const ownFolder = async (
     if (found) {
       await rm(at, { force: true });
     }
-    await mkdir(at, { mode: 0o700 });
+    await makeFolder(at, { mode: 0o700, exclusive: true });
   }
   return at;
 };
@@ -686,7 +686,7 @@ const writeInto = async (
   if (found && !found.isDirectory()) {
     await rm(dir, { force: true });
   }
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await makeFolder(dir, { mode: 0o700 });
   await writeUnder(
     {
       dir,

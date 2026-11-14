@@ -10,11 +10,8 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { GhAccount } from "@cawco/core/connections";
-import {
-  workspaceCacheDir,
-  workspaceScratchRoot,
-  workspacesDir,
-} from "@cawco/core/paths/workspace";
+import { workspaceScratchRoot } from "@cawco/core/paths/roots";
+import { workspaceCacheDir, workspacesDir } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { z } from "zod";
 

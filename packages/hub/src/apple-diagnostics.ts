@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
@@ -188,7 +189,7 @@ export const appleDiagnosticsRoutes = () =>
         }),
       },
       async ({ body }) => {
-        await mkdir(DIR, { recursive: true });
+        await makeFolder(DIR);
         const records = recordsOf(body);
         // The same diagnostic sent again (a retry, a past payload) is kept once.
         const written = await Promise.all(

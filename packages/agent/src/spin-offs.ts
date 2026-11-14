@@ -5,10 +5,11 @@
  * process ended still finds them.
  */
 
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
+import { makeFolder } from "@cawco/core/folders";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { SpinOffHeld } from "@cawco/core/session/controls";
@@ -263,7 +264,7 @@ export class SpinOffs {
       dir,
       ...(reused ? {} : { announce: { cwd: baseCwd, base } }),
     };
-    await mkdir(dirname(worktreeRecord(instanceId)), { recursive: true });
+    await makeFolder(dirname(worktreeRecord(instanceId)));
     await writeJson(worktreeRecord(instanceId), worktree);
     this.#worktrees.set(instanceId, worktree);
     this.#recordWorktree(instanceId, processGeneration, worktree);

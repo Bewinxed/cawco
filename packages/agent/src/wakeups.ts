@@ -1,5 +1,6 @@
-import { mkdir, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { sessionWakeupsDir } from "@cawco/core/paths/cawco";
 import {
   DamagedRecord,
@@ -34,7 +35,7 @@ export const keepWakeups = async (
   instanceId: string,
   wakeups: Wakeups
 ): Promise<void> => {
-  await mkdir(sessionWakeupsDir(), { recursive: true });
+  await makeFolder(sessionWakeupsDir());
   await writeStateFile(fileOf(instanceId), JSON.stringify(wakeups));
 };
 

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { cawcoConfigDir } from "@cawco/core/paths/cawco";
+import { cawcoConfigDir } from "@cawco/core/paths/roots";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** Machine configuration shared by the CLI and daemon. */

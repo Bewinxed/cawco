@@ -2,8 +2,8 @@
 
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { xdgDataHome } from "@cawco/core/paths/cawco";
 import { hostPlaywrightBrowsers } from "@cawco/core/paths/host-policy";
+import { xdgDataHome } from "@cawco/core/paths/roots";
 import {
   workspaceCacheDir,
   workspaceScratchDir,

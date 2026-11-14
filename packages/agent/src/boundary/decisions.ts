@@ -3,10 +3,11 @@
  * it holds one, and the decisions each start, handover or refusal records.
  */
 
-import { mkdir, readFile, rm, symlink } from "node:fs/promises";
+import { readFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
+import { makeFolder } from "@cawco/core/folders";
 import { currentKeeper } from "@cawco/core/keepers";
 import {
   workspaceAccountsFile,
@@ -48,7 +49,7 @@ const addListed = async (
   if (listed.includes(item)) {
     return;
   }
-  await mkdir(stateDir(id), { recursive: true });
+  await makeFolder(stateDir(id));
   await writeWhole(file, `${JSON.stringify([...listed, item])}\n`, 0o644);
 };
 
@@ -80,7 +81,7 @@ const SPILL_KEEP = ".cawco-keep";
 const keepSpill = async (dir: string): Promise<void> => {
   const keep = join(dir, SPILL_KEEP);
   for (;;) {
-    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await makeFolder(dir, { mode: 0o700 });
     const kept = await symlink("/dev/null", keep).then(
       () => true,
       (error: NodeJS.ErrnoException) => {

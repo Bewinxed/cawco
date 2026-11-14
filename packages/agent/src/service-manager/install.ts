@@ -5,10 +5,10 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import { platform } from "node:os";
 import type { ServiceId } from "@cawco/core/binary-installation";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { makeFolder } from "@cawco/core/folders";
 import {
   forgetLaunchdStart,
   launchdLog,
@@ -120,7 +120,7 @@ export const installLaunchAgents = async (
   note: (line: string) => void
 ): Promise<void> => {
   // launchd opens stdout/stderr before any process can create its log folder.
-  await mkdir(launchdLogsDir(), { recursive: true });
+  await makeFolder(launchdLogsDir());
 
   for (const [index, spec] of specs.entries()) {
     if (index > 0) {

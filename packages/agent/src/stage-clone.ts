@@ -43,7 +43,6 @@ import { constants, existsSync } from "node:fs";
 import {
   chmod,
   lstat,
-  mkdir,
   open,
   readFile,
   readlink,
@@ -57,6 +56,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
+import { makeFolder } from "@cawco/core/folders";
 import {
   workspaceScratchDir,
   workspaceStateDir,
@@ -232,7 +232,7 @@ const foldersOwn = async (clone: string, path: string): Promise<boolean> => {
     at = join(at, part);
     const found = await lstat(at).catch(() => undefined);
     if (!found) {
-      await mkdir(at);
+      await makeFolder(at, { exclusive: true });
     } else if (!found.isDirectory()) {
       return false;
     }
@@ -422,7 +422,7 @@ const cut = async (
   // A cut that never finished, one of an earlier form or of another repository: nothing of it runs on.
   await stopWorkspaceBoundary(boundary);
   await removeTree(boundary.path);
-  await mkdir(state, { recursive: true });
+  await makeFolder(state);
   await rm(join(state, KEPT), { force: true });
   await forgetInstalls(boundary.id);
   // Written before the clone: the boundary and every scan of this machine's clones find it by this record.
@@ -433,7 +433,7 @@ const cut = async (
   const started = Date.now();
   try {
     const git = gitUntil(Date.now() + STAGE_CLONE_GIT_MS);
-    await mkdir(dirname(boundary.path), { recursive: true });
+    await makeFolder(dirname(boundary.path));
     await git(dirname(boundary.path), "init", "--quiet", boundary.path);
     await git(boundary.path, "remote", "add", "origin", `file://${repo}`);
     const { head } = await statusOf(repo);
@@ -659,6 +659,6 @@ export const copyBack = async (
     await file.close();
   }
   const to = join(place.path, inFolder);
-  await mkdir(dirname(to), { recursive: true });
+  await makeFolder(dirname(to));
   await writeFile(to, bytes);
 };

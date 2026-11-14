@@ -25,10 +25,11 @@
  * KeepAlive) refuses to open the file until the helper lets it go.
  */
 
-import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { isGone } from "./absent";
+import { makeFolder } from "./folders";
 import { markerIsLive, ownIdentity } from "./process-identity";
 import { parseRecord } from "./state-file";
 
@@ -78,7 +79,7 @@ export const lockDatabase = async (path: string): Promise<void> => {
   const mine: Holder = { ...(await ownIdentity()), startedAt: Date.now() };
   const written = `${lock}.${process.pid}`;
   // A first start: the database's dir is made here, before anything opens it.
-  await mkdir(dirname(path), { recursive: true });
+  await makeFolder(dirname(path));
   await writeFile(written, `${JSON.stringify(mine)}\n`);
   try {
     for (let tries = 0; tries < TRIES; tries += 1) {

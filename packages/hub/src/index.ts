@@ -3,6 +3,7 @@ import { readBuildInfo } from "@cawco/core/build-info";
 import { DatabaseHeld, lockDatabase } from "@cawco/core/db-lock";
 import { detach } from "@cawco/core/detach";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
+import { keepFoldersPrivate } from "@cawco/core/folders";
 import { Effect, Layer } from "effect";
 import {
   BIND_HOST,
@@ -68,6 +69,9 @@ export const startHub = async (): Promise<void> => {
   // Started without the fetch cap (by hand): the streams it relays can hold
   // its other requests back, and it says so (core fetch-cap.ts).
   sayFetchCap("hub");
+  // CawCo's own folders, the hub's data dir among them, are this user's
+  // alone, an install made under a looser umask included (core folders.ts).
+  keepFoldersPrivate((line) => console.info(line));
   // Before anything opens or moves the database: one hub to it (db-lock.ts).
   try {
     await lockDatabase(DB_PATH);

@@ -58,7 +58,6 @@ import {
   chmodSync,
   type FSWatcher,
   lstatSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -84,6 +83,7 @@ import {
   CloneDenySchema,
   cloneDenies,
 } from "@cawco/core/clone-denies";
+import { makeFolderSync } from "@cawco/core/folders";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/preview/hub-previews";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -235,7 +235,7 @@ const { settingsFile, runnerFile, fifo, clone, readyLine, deniesFile, places } =
  */
 const makePlaces = (): void => {
   for (const place of places) {
-    mkdirSync(place, { recursive: true, mode: 0o700 });
+    makeFolderSync(place, { mode: 0o700 });
   }
 };
 const settings: SandboxRuntimeConfig = SandboxRuntimeConfigSchema.parse(
@@ -405,7 +405,7 @@ const makeStandIn = (
   for (const dir of above(path)) {
     const stat = lstatOf(dir);
     if (!stat) {
-      mkdirSync(dir);
+      makeFolderSync(dir, { exclusive: true });
     } else if (!stat.isDirectory()) {
       throw new Error(`${dir} is not a directory of the clone`);
     }
@@ -426,7 +426,7 @@ const makeStandIn = (
     rmSync(path);
   }
   if (empty.kind === "dir") {
-    mkdirSync(path);
+    makeFolderSync(path, { exclusive: true });
     if (empty.readOnly) {
       chmodSync(path, 0o555);
     }

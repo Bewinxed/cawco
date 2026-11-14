@@ -3,7 +3,8 @@
 import { readlinkSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { darwinSocketRoot, shortLink } from "../socket-root";
+import { shortLink } from "../socket-root";
+import { darwinSocketRoot, workspaceScratchRoot } from "./roots";
 
 /**
  * The one cache every workspace on this machine shares, and no host process
@@ -31,15 +32,6 @@ export const workspacesDir = (): string =>
 /** One workspace's state dir: its executor, hook, policy and boundary record. */
 export const workspaceStateDir = (id: string): string =>
   join(workspacesDir(), id);
-
-/**
- * Where every workspace's scratch dir is, one dir per workspace: under home,
- * so on disk (never tmpfs, which is RAM, and workspaces build large trees
- * there), and outside every clone (never in git status). Short, because
- * tools put unix sockets in `$TMPDIR` ({@link SCRATCH_SOCKET_SUFFIX}).
- */
-export const workspaceScratchRoot = (): string =>
-  join(homedir(), ".cawco", "tmp");
 
 /**
  * The longest name a tool puts a unix socket at under `$TMPDIR` that a

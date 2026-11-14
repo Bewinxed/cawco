@@ -13,7 +13,6 @@
 
 import {
   copyFile,
-  mkdir,
   readdir,
   readFile,
   rename,
@@ -23,6 +22,7 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
   FREE_SPACE_MARGIN,
@@ -39,8 +39,8 @@ import {
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
 } from "@cawco/core/move";
-import { cawcoDataDir } from "@cawco/core/paths/cawco";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -579,7 +579,7 @@ const inspectPlain = async (
     "moves",
     `inspect-${crypto.randomUUID()}`
   );
-  await mkdir(scratch, { recursive: true });
+  await makeFolder(scratch);
   try {
     await must(
       undefined,
@@ -1005,7 +1005,7 @@ export const moveSnapshot = (
   runStep(SNAPSHOT, request.jobId, async (run) => {
     const { path, branch } = request;
     const scratch = scratchOf(request.jobId);
-    await mkdir(scratch, { recursive: true });
+    await makeFolder(scratch);
     try {
       const [base, sourceBranch] = await Promise.all([
         maybe(path, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]),
@@ -1258,7 +1258,7 @@ const cloneStep = (
     }
     const scratch = cloneScratch(path, jobId);
     await rm(scratch, { recursive: true, force: true });
-    await mkdir(dirname(path), { recursive: true });
+    await makeFolder(dirname(path));
     await enoughSpace(dirname(path), request.bytes, request.machine);
     const fromHub = request.cloneUrl === undefined;
     const feed = throttled(moveProgress);
@@ -1479,7 +1479,7 @@ const lfsStep = (
     const before = await fetchedBytes(path, wanted);
     await enoughSpace(path, stage.bytes - before, request.machine);
     const scratch = scratchOf(jobId);
-    await mkdir(scratch, { recursive: true });
+    await makeFolder(scratch);
     const progressFile = join(scratch, "lfs-progress");
     await rm(progressFile, { force: true });
     const env = {

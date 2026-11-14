@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import {
   commandLines,
   listeningPorts,
@@ -354,7 +355,7 @@ const serverWords = (
 
 /** A record holds each generation's password: written whole, owner-only. */
 const writeRecord = async (path: string, record: unknown): Promise<void> => {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(path), { mode: 0o700 });
   await writeStateFile(path, JSON.stringify(record, null, 2), { mode: 0o600 });
 };
 

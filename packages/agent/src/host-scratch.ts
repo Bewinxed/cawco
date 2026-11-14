@@ -10,8 +10,9 @@
  * ({@link CONTROL_HOST_SCRATCH_REMOVE}).
  */
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir } from "node:fs/promises";
+import { lstat, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import {
   forgetWorkspaceTmp,
   linkWorkspaceTmp,
@@ -47,10 +48,7 @@ const hostId = (asked: unknown): string => {
  */
 export const hostScratchReady = async (asked: unknown): Promise<string> => {
   const id = hostId(asked);
-  await mkdir(join(workspaceScratchDir(id), OUTPUTS_DIR), {
-    recursive: true,
-    mode: 0o700,
-  });
+  await makeFolder(join(workspaceScratchDir(id), OUTPUTS_DIR), { mode: 0o700 });
   return linkWorkspaceTmp(id);
 };
 

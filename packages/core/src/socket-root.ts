@@ -4,31 +4,10 @@
  * sessiond's endpoint.
  */
 
-import {
-  lstatSync,
-  mkdirSync,
-  readlinkSync,
-  symlinkSync,
-  unlinkSync,
-} from "node:fs";
+import { lstatSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-
-/**
- * macOS's root for every workspace's sockets ({@link workspaceDoorDir}):
- * `/private/tmp/cawco-<uid>`, this user's own (0700, made and checked by the
- * agent before a socket goes in it, tool-door.ts `socketPlace`). A real path,
- * as the Seatbelt profile matches paths (`/tmp` is a link to it), and one
- * whose sockets a workspace reaches only by name: the profile denies every
- * socket under `/private/tmp` (boundary/runner.ts `LAUNCHD_SOCKETS`) but the doors
- * it names, and a workspace writes nothing there.
- */
-export const darwinSocketRoot = (): string => {
-  const uid = process.getuid?.();
-  if (uid === undefined) {
-    throw new Error("this process has no user id to name its socket dir by");
-  }
-  return join("/private/tmp", `cawco-${uid}`);
-};
+import { makeFolderSync } from "./folders";
+import { darwinSocketRoot } from "./paths/roots";
 
 /**
  * {@link darwinSocketRoot}, made if it is not there (a restart clears
@@ -41,7 +20,7 @@ export const darwinSocketRoot = (): string => {
 export const ownSocketRoot = (): string => {
   const root = darwinSocketRoot();
   try {
-    mkdirSync(root, { mode: 0o700 });
+    makeFolderSync(root, { mode: 0o700, exclusive: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;

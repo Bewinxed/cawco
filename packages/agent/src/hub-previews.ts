@@ -6,7 +6,7 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { cawcoDataDir } from "@cawco/core/paths/cawco";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import {
   HUB_PREVIEWS_FILE,
   hubPreviewOriginsOf,

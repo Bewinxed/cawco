@@ -4,8 +4,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, realpath } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { fleetHooksDir, fleetMcpInstallsDir } from "@cawco/core/paths/fleet";
 import { darwinUserDirs } from "@cawco/core/paths/host-policy";
 import { workspacesDir, workspaceTmpDir } from "@cawco/core/paths/workspace";
@@ -312,9 +313,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   // whole: made before any boundary starts, so none is made under one
   // running, and the form names them by nothing ({@link SYNCED_PART}).
   await Promise.all(
-    [fleetHooksDir(), fleetMcpInstallsDir()].map((dir) =>
-      mkdir(dir, { recursive: true })
-    )
+    [fleetHooksDir(), fleetMcpInstallsDir()].map((dir) => makeFolder(dir))
   );
   const srtTmp = srtTmpOf(id, gen);
   const bwrap = bwrapLauncherOf(id, gen);

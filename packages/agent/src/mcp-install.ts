@@ -25,9 +25,10 @@
  * answer fails its row in words, and the sync goes on. A dir no row names any more retires
  * once no session that could launch from it is left ({@link retireInstalls}).
  */
-import { mkdir, readdir, readlink, rename, rm, stat } from "node:fs/promises";
+import { readdir, readlink, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import { fleetMcpInstallsDir } from "@cawco/core/paths/fleet";
 import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
@@ -313,7 +314,7 @@ const install = async (
     root,
     `${STAGING}${process.pid}-${Date.now()}-${run.name.replace("/", "+")}`
   );
-  await mkdir(staging, { recursive: true });
+  await makeFolder(staging);
   const startedAt = Date.now();
   const ran = await npmWithin(
     NPM_INSTALL_MS,
@@ -377,7 +378,7 @@ export const installed = async (
     await ensureHeld(dir);
     return { bin: found, dir, version };
   }
-  await mkdir(fleetMcpInstallsDir(), { recursive: true });
+  await makeFolder(fleetMcpInstallsDir());
   const pending =
     inFlight.get(dir) ??
     install(npm, run, version, dir, env).finally(() => inFlight.delete(dir));

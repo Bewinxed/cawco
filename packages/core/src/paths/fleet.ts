@@ -1,7 +1,6 @@
 /** What the fleet sync writes and reads back on this machine. */
 
 import { join } from "node:path";
-import { cawcoDataDir } from "./cawco";
 import {
   claudeSkillsDir,
   treeStoreOf,
@@ -10,6 +9,7 @@ import {
   VENDOR_MARKETPLACES_DIR,
 } from "./claude";
 import { piMemoryFile, piSkillsDir } from "./harnesses";
+import { cawcoDataDir } from "./roots";
 
 /**
  * Where the fleet sync installs each fleet MCP server a row runs with npx,

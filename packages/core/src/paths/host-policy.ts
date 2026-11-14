@@ -5,16 +5,17 @@ import { dirname, join } from "node:path";
 import type { HarnessKind } from "../harness/kinds";
 import { hostEnvironment } from "../session-env";
 import { systemProgram } from "../workspace-needs";
+import { sessionIdentityDir } from "./cawco";
+import { accountsRoot, claudeConfigDirs, claudeHomeJson } from "./claude";
+import { piAgentDir } from "./harnesses";
+import { hubDbPath } from "./hub";
 import {
   cawcoConfigDir,
   cawcoDataDir,
-  sessionIdentityDir,
+  hubDataDir,
   xdgConfigHome,
   xdgDataHome,
-} from "./cawco";
-import { accountsRoot, claudeConfigDirs, claudeHomeJson } from "./claude";
-import { piAgentDir } from "./harnesses";
-import { hubDataDir, hubDbPath } from "./hub";
+} from "./roots";
 import { workspaceCacheDir } from "./workspace";
 
 /**

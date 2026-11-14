@@ -14,8 +14,8 @@
  * words, and nothing reads the damaged file as an empty list. Reset
  * (`POST /api/notices/reset`) writes a fresh record and turns them back on.
  */
-import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { makeFolderSync } from "@cawco/core/folders";
 import type { DamagedHubRecord } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
@@ -58,7 +58,7 @@ export function createNoticesSeen(options: {
   let record = load(path);
 
   const save = (seen: string[]) => {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    makeFolderSync(dirname(path), { mode: 0o700 });
     writeStateFileSync(path, `${JSON.stringify(seen)}\n`, { mode: 0o600 });
     record = { seen };
     options.changed();

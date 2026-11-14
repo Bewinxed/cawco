@@ -17,7 +17,6 @@ import {
   chmod,
   copyFile,
   lstat,
-  mkdir,
   open,
   readdir,
   readFile,
@@ -30,6 +29,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
+import { makeFolder } from "@cawco/core/folders";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
@@ -955,7 +955,7 @@ const cutClone = async (
     : null;
   await clearOwnCut(id, path, repoRoot, marked);
   try {
-    await mkdir(state, { recursive: true });
+    await makeFolder(state);
     // Before anything at the path: a cut this agent's end cuts short is
     // found its own and cleared, at its start or the next cut.
     await markCut(id, { path, source: repoRoot, at: marked });
@@ -1063,7 +1063,7 @@ const makeFolderLayer = async (
   const state = join(workspacesDir(), id);
   await clearStaleLayer(id, path, Boolean(cut));
   try {
-    await mkdir(state, { recursive: true });
+    await makeFolder(state);
     // Written before the layer: archive-by-id survives a lost reply or an agent restart.
     await writeStateFile(
       join(state, "create.json"),
@@ -1309,7 +1309,7 @@ export const copyOwnSecrets = async (
     if (!info?.isFile()) {
       continue;
     }
-    await mkdir(dirname(to), { recursive: true });
+    await makeFolder(dirname(to));
     await copyFile(from, to);
     // chmod(2) takes the permission bits of a whole st_mode.
     await chmod(to, info.mode);
@@ -2117,7 +2117,7 @@ const intoCarry = async (
   fill: (carry: string) => Promise<string[]>
 ): Promise<{ carry: string; left: string[] }> => {
   const carry = carryFolder(id);
-  await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(workspaceCarriesDir(), { mode: 0o700 });
   try {
     return { carry, left: await fill(carry) };
   } catch (error) {

@@ -22,15 +22,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import {
-  lstat,
-  mkdir,
-  readFile,
-  realpath,
-  rm,
-  stat,
-  symlink,
-} from "node:fs/promises";
+import { lstat, readFile, realpath, rm, stat, symlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { providersOpenedBy } from "@cawco/core/accounts";
@@ -48,6 +40,7 @@ import type {
   PlacedFleetConfig,
 } from "@cawco/core/fleet";
 import { mcpFleetState } from "@cawco/core/fleet";
+import { makeFolder } from "@cawco/core/folders";
 import type {
   HarnessCapabilities,
   HarnessReport,
@@ -62,7 +55,6 @@ import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
-import { xdgDataHome } from "@cawco/core/paths/cawco";
 import { credentialAccountIds } from "@cawco/core/paths/claude";
 import {
   opencodeAccountHome,
@@ -70,6 +62,7 @@ import {
   opencodeViewHome,
   opencodeViewsDir,
 } from "@cawco/core/paths/harnesses";
+import { xdgDataHome } from "@cawco/core/paths/roots";
 import {
   workspaceScratchDir,
   workspaceSpillDir,
@@ -415,13 +408,13 @@ const prepareAccountServer = (account: string): Promise<void> =>
  */
 const prepareHome = async (home: string, shared = true): Promise<void> => {
   const dir = join(home, "opencode");
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await makeFolder(dir, { mode: 0o700 });
   await rm(join(dir, "auth.json"), { force: true });
   if (!shared) {
     return;
   }
   const snapshots = join(opencodeDataDir(), "snapshot");
-  await mkdir(snapshots, { recursive: true });
+  await makeFolder(snapshots);
   const link = join(dir, "snapshot");
   const found = await lstat(link).catch(() => undefined);
   if (!found?.isSymbolicLink()) {
@@ -603,7 +596,7 @@ let quietMade: Promise<void> | null = null;
  * integrations) is asked in, which starts no MCP server.
  */
 const quietDir = async (): Promise<string> => {
-  quietMade ??= mkdir(OPENCODE_QUIET_DIR, { recursive: true }).then(
+  quietMade ??= makeFolder(OPENCODE_QUIET_DIR).then(
     () => undefined,
     (error: unknown) => {
       quietMade = null;

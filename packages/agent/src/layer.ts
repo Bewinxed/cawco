@@ -60,7 +60,6 @@ import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import {
   chmod,
   lstat,
-  mkdir,
   readdir,
   readFile,
   readlink,
@@ -73,6 +72,7 @@ import {
 import { constants, homedir, release } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { cloneDenies } from "@cawco/core/clone-denies";
+import { makeFolder } from "@cawco/core/folders";
 import { claudeHome } from "@cawco/core/paths/claude";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import { commandLine } from "@cawco/core/process-identity";
@@ -607,12 +607,12 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   const perl = systemProgram("perl");
   systemProgram("nsenter");
   for (const mount of layer.mounts ?? []) {
-    await mkdir(mount.upper, { recursive: true, mode: 0o700 });
-    await mkdir(mount.work, { recursive: true, mode: 0o700 });
+    await makeFolder(mount.upper, { mode: 0o700 });
+    await makeFolder(mount.work, { mode: 0o700 });
     // The stand-ins layer's mount point, empty: what an earlier agent made
     // there on the host goes.
     await removeTree(standInsDir(mount));
-    await mkdir(standInsDir(mount), { recursive: true, mode: 0o700 });
+    await makeFolder(standInsDir(mount), { mode: 0o700 });
   }
   const standIns = await standInsOf(layer);
   await rm(viewFile(id), { force: true });
@@ -1122,9 +1122,9 @@ const cloneFolder = async (
   // The folder the copies are cut in first (`~/.worktrees`, which a machine
   // that never had a workspace has not got), then the copy itself, which
   // must not be there already.
-  await mkdir(dirname(path), { recursive: true, mode: 0o755 });
-  await mkdir(path, { recursive: false, mode: 0o755 });
-  await mkdir(base, { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(path), { mode: 0o755 });
+  await makeFolder(path, { mode: 0o755, exclusive: true });
+  await makeFolder(base, { mode: 0o700 });
   await Promise.all([cloneInto(sources, path), cloneInto(sources, base)]);
   const modules = await lstat(join(folder, LINKED_MODULES)).catch(
     () => undefined
@@ -1157,7 +1157,7 @@ export const ownModules = (id: string): Promise<void> => {
     const linked = join(layer.path, LINKED_MODULES);
     const cloning = join(layer.path, `.${LINKED_MODULES}.cawco-cloning`);
     await removeTree(cloning);
-    await mkdir(cloning, { mode: 0o755 });
+    await makeFolder(cloning, { mode: 0o755, exclusive: true });
     const source = join(layer.folder, LINKED_MODULES);
     await cloneInto(
       (await readdir(source)).map((name) => join(source, name)),
@@ -1662,7 +1662,7 @@ const noteSeen = async (
     const into = join(base, each.path);
     await removeTree(into);
     if (await lstat(join(layer.folder, each.path)).catch(() => undefined)) {
-      await mkdir(dirname(into), { recursive: true });
+      await makeFolder(dirname(into));
       await cloneInto([join(layer.folder, each.path)], dirname(into));
     }
   }
@@ -1704,7 +1704,7 @@ const putOne = async (layer: Layer, rel: string): Promise<void> => {
   }
   const target = join(layer.folder, rel);
   const info = await lstat(from);
-  await mkdir(dirname(target), { recursive: true });
+  await makeFolder(dirname(target));
   const staging = stagingOf(target);
   try {
     if (info.isSymbolicLink()) {
@@ -1778,7 +1778,7 @@ const landedInBase = async (
     const into = join(base, each.path);
     await removeTree(into);
     if (each.change === "write") {
-      await mkdir(dirname(into), { recursive: true });
+      await makeFolder(dirname(into));
       await cloneInto([join(layer.path, each.path)], dirname(into));
     }
   }

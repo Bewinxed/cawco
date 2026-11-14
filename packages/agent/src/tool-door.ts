@@ -11,13 +11,15 @@
  * it does over MCP. Anything else is answered 403. The executor names the
  * socket to every command (`CAWCO_TOOL_SOCKET`).
  */
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
+import { darwinSocketRoot } from "@cawco/core/paths/roots";
 import {
   socketPathProblem,
   workspaceDoorDir,
 } from "@cawco/core/paths/workspace";
-import { darwinSocketRoot, ownSocketRoot } from "@cawco/core/socket-root";
+import { ownSocketRoot } from "@cawco/core/socket-root";
 import { harnessMcpUrl } from "./delegation";
 
 /** A workspace's door socket. */
@@ -44,7 +46,7 @@ export const socketPlace = async (
   ) {
     ownSocketRoot();
   }
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await makeFolder(dirname(path), { mode: 0o700 });
 };
 
 /** Bun's server option that lifts the idle limit; bun-types 1.4.2 declares `idleTimeout` for host:port servers alone, so a unix server takes it from an untyped object. */

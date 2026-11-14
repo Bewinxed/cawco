@@ -15,9 +15,10 @@
  */
 
 import type { Dirent } from "node:fs";
-import { cp, lstat, mkdir, readdir, rename, rm, rmdir } from "node:fs/promises";
+import { cp, lstat, readdir, rename, rm, rmdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { isGone } from "@cawco/core/absent";
+import { makeFolder } from "@cawco/core/folders";
 import {
   claudeConfigDirs,
   projectSlug,
@@ -168,7 +169,7 @@ const relocate = async (from: string, to: string): Promise<void> => {
 const moveEntry = async (from: string, to: string): Promise<void> => {
   const there = await lstat(to).catch(() => undefined);
   if (!there) {
-    await mkdir(dirname(to), { recursive: true });
+    await makeFolder(dirname(to));
     await relocate(from, to);
     return;
   }

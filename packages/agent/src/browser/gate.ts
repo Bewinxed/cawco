@@ -52,11 +52,12 @@
  * `RulesAt`); while another does, that waits for the last release.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { type BrowserKey, browserGatePort } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
+import { makeFolder } from "@cawco/core/folders";
 import { machineId } from "@cawco/core/machine-id";
 import {
   workspaceProjectFile,
@@ -286,7 +287,7 @@ export const ensureGateToken = async (id: string): Promise<string> => {
     return kept;
   }
   const token = randomBytes(32).toString("base64url");
-  await mkdir(workspaceStateDir(id), { recursive: true });
+  await makeFolder(workspaceStateDir(id));
   await writeStateFile(file, `${token}\n`, { mode: 0o600 });
   return token;
 };

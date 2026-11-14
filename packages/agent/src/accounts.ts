@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   lstat,
-  mkdir,
   readdir,
   realpath,
   rename,
@@ -21,6 +20,7 @@ import {
   identityOf,
 } from "@cawco/core/accounts";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import {
   accountClaudeJson,
@@ -842,7 +842,7 @@ export const folderCommands = async (
  */
 export const linkUserLayer = async (account: string): Promise<void> => {
   const dir = accountConfigDir(account);
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await makeFolder(dir, { mode: 0o700 });
   await Promise.all([
     ...USER_LAYER_DIRS.map((entry) =>
       shareDir(join(dir, entry), userLayerPath(entry), account)
@@ -995,7 +995,7 @@ const shareDirNow = async (
     console.warn(`[accounts] ${path} is a file, not a dir; left as it is`);
     return;
   }
-  await mkdir(target, { recursive: true });
+  await makeFolder(target);
   if (there) {
     const id8 = account.slice(0, 8);
     for (const name of await readdir(path)) {
@@ -1016,7 +1016,7 @@ const shareDirNow = async (
     await rmdir(path);
     console.info(`[accounts] ${path}'s own entries moved into ${target}`);
   }
-  await mkdir(dirname(path), { recursive: true });
+  await makeFolder(dirname(path));
   await symlink(target, path);
 };
 

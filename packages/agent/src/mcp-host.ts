@@ -78,17 +78,19 @@
  */
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import type { FleetMcpConfig } from "@cawco/core/fleet";
+import { makeFolderSync } from "@cawco/core/folders";
 import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
-import { cawcoDataDir, sessionIdentityDir } from "@cawco/core/paths/cawco";
+import { sessionIdentityDir } from "@cawco/core/paths/cawco";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { workspaceScratchDir } from "@cawco/core/paths/workspace";
 import { processStart } from "@cawco/core/process-identity";
 import { identifiedPid, signal as sendSignal } from "@cawco/core/signal";
@@ -227,7 +229,7 @@ const hostKey = (): string => {
   }
   if (!key) {
     key = randomBytes(32).toString("base64url");
-    mkdirSync(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+    makeFolderSync(sessionIdentityDir(), { mode: 0o700 });
     writeStateFileSync(file, key, { mode: 0o600 });
   }
   return key;
@@ -269,7 +271,7 @@ const rpcError = (
 const started = new Map<number, string>();
 
 const recordStarted = (): void => {
-  mkdirSync(hostDir(), { recursive: true });
+  makeFolderSync(hostDir());
   writeStateFileSync(
     startedFile(),
     JSON.stringify([...started].map(([pid, start]) => ({ pid, start })))
@@ -634,7 +636,7 @@ class Hosted {
         kept.lists[method] = await this.#pages(child, method, items);
       }
     }
-    mkdirSync(hostDir(), { recursive: true });
+    makeFolderSync(hostDir());
     writeStateFileSync(this.#keptFile, JSON.stringify(kept));
   }
 
@@ -796,7 +798,7 @@ class McpHost {
    */
   configure(servers: { name: string; config: HostedConfig }[]): void {
     this.#take(servers);
-    mkdirSync(hostDir(), { recursive: true });
+    makeFolderSync(hostDir());
     // Owner-only: a server's environment may carry its keys.
     writeStateFileSync(sharedFile(), JSON.stringify(servers), { mode: 0o600 });
   }

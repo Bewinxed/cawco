@@ -40,8 +40,9 @@
  * macOS, where bun clones files inside its boundary already (Seatbelt makes
  * no mounts).
  */
-import { lstat, mkdir, symlink } from "node:fs/promises";
+import { lstat, symlink } from "node:fs/promises";
 import { join } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { workspaceCacheDir } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -106,7 +107,7 @@ export const linkWorkspaceModules = async (
     return;
   }
   const target = join(workspaceModulesRoot(ref.id), "node_modules");
-  await mkdir(target, { recursive: true });
+  await makeFolder(target);
   await symlink(target, link).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "EEXIST") {
       throw error;

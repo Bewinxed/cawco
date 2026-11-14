@@ -4,9 +4,10 @@
  * before the clone is cut, the running boundary's `boundary.json`, and a
  * place's `place.json`, written once a stage runs there ({@link keepPlace}).
  */
-import { mkdir, readdir, realpath } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
+import { makeFolder } from "@cawco/core/folders";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import {
   type DamagedRecord,
@@ -34,7 +35,7 @@ interface Scan {
  */
 export const keepPlace = async (ref: WorkspaceRef): Promise<void> => {
   const dir = join(workspacesDir(), ref.id);
-  await mkdir(dir, { recursive: true });
+  await makeFolder(dir);
   await writeStateFile(
     join(dir, "place.json"),
     `${JSON.stringify({ path: ref.path })}\n`

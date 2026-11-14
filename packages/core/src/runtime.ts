@@ -1,9 +1,10 @@
 /** Server-only runtime layout: only a server imports it. */
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { atMost } from "./at-most";
 import { binaryAssets, publishedHashes } from "./binary-assets";
+import { makeFolderSync } from "./folders";
 import { writeStateFile } from "./state-file";
 
 declare const __CAWCO_VERSION__: string | undefined;
@@ -167,7 +168,7 @@ export async function publishRuntime(): Promise<void> {
     return;
   }
   for (const dir of new Set(stale.map(([name]) => dirname(join(base, name))))) {
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    makeFolderSync(dir, { mode: 0o700 });
   }
   const limit = atMost(PUBLISH_CONCURRENCY);
   await Promise.all(

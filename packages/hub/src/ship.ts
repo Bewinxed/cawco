@@ -10,9 +10,10 @@
  * refuses in its words), and what it said
  * is the finish_item answer's last paragraph.
  */
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import { hubDbPath } from "@cawco/core/paths/hub";
 import { shellQuote } from "@cawco/core/shell-quote";
 
@@ -27,7 +28,7 @@ export const shipLanded = async (options: {
   notes: string;
 }): Promise<string> => {
   const dir = join(hubDbPath(), "..", "ship");
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await makeFolder(dir, { mode: 0o700 });
   const notes = join(dir, `${options.commit.slice(0, 12)}-${Date.now()}.md`);
   await writeFile(notes, options.notes, { mode: 0o600 });
   try {

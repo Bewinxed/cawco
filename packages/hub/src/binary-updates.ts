@@ -15,7 +15,7 @@
  * among them (scripts/openapi.ts holds it to them).
  */
 import { Database } from "bun:sqlite";
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   ARCHIVE_ASK_AGAIN_S,
@@ -39,6 +39,7 @@ import type {
   BinaryUpdateState,
   ChannelRelease,
 } from "@cawco/core/binary-updates";
+import { makeFolderSync } from "@cawco/core/folders";
 import { hubUpdatePolicyPath } from "@cawco/core/paths/hub";
 import type { DamagedHubRecord } from "@cawco/core/protocol";
 import {
@@ -54,7 +55,6 @@ import { Elysia, problem, t } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { hidden } from "./hidden";
-
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
 
 /** How long a discovered release is served before the host is asked again. */
@@ -185,7 +185,7 @@ export function createBinaryUpdates(options: Options) {
     return held.policy;
   };
   const savePolicy = (policy: BinaryUpdatePolicy) => {
-    mkdirSync(dirname(policyPath), { recursive: true, mode: 0o700 });
+    makeFolderSync(dirname(policyPath), { mode: 0o700 });
     writeStateFileSync(policyPath, `${JSON.stringify(policy)}\n`, {
       mode: 0o600,
     });

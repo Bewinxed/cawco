@@ -22,10 +22,10 @@
  */
 
 import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { cawcoDataDir } from "@cawco/core/paths/cawco";
+import { makeFolder } from "@cawco/core/folders";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -92,7 +92,7 @@ export const setHubGitOrigins = (origins: unknown): void => {
   if (!(changed && file)) {
     return;
   }
-  mkdir(dirname(file), { recursive: true, mode: 0o700 })
+  makeFolder(dirname(file), { mode: 0o700 })
     .then(() => writeStateFile(file, JSON.stringify(next), { mode: 0o600 }))
     .catch((error: unknown) =>
       console.warn(

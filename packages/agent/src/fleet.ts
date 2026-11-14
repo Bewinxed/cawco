@@ -12,7 +12,6 @@
 import {
   chmod,
   lstat,
-  mkdir,
   readdir,
   realpath,
   rm,
@@ -53,6 +52,7 @@ import {
   skillDescription,
 } from "@cawco/core/fleet";
 import type { FleetScope } from "@cawco/core/fleet-placement";
+import { makeFolder } from "@cawco/core/folders";
 import type { FleetHarnessConfig } from "@cawco/core/harness-config";
 import type { FleetHook, HookEvent, HookHandler } from "@cawco/core/hooks";
 import {
@@ -2945,7 +2945,7 @@ const settleHooks = async (
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: checks every enabled hook, then writes each one's script by its drift plan and parse check
 ): Promise<SettledHooks> => {
-  await mkdir(HOOKS_DIR, { recursive: true });
+  await makeFolder(HOOKS_DIR);
   // The guard every fleet hook Claude Code runs goes through
   // (fleet-hook-guard.ts), written before anything names it.
   if ((await fileHashAt(hookGuardFile())) !== hashText(HOOK_GUARD_SOURCE)) {

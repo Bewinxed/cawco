@@ -27,7 +27,6 @@ import {
   chmod,
   copyFile,
   lstat,
-  mkdir,
   readdir,
   readlink,
   rename,
@@ -39,6 +38,7 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { hashFiles } from "@cawco/core/file-hash";
 import type { SkillFile } from "@cawco/core/fleet";
+import { makeFolder } from "@cawco/core/folders";
 import { treeStoreOf } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
@@ -166,7 +166,7 @@ const newerThan = async (written: string, replaced: string): Promise<void> => {
 
 /** One file or link of the current tree into the new one, as it is. */
 const carryOver = async (from: string, to: string): Promise<void> => {
-  await mkdir(dirname(to), { recursive: true });
+  await makeFolder(dirname(to));
   const found = await lstat(from);
   if (found.isSymbolicLink()) {
     await symlink(await readlink(from), to);
@@ -217,10 +217,7 @@ export const placeTree = async (
   const name = basename(path);
   const store = treeStoreOf(dir);
   const tree = join(store, treeName(name));
-  await Promise.all([
-    mkdir(tree, { recursive: true }),
-    mkdir(dir, { recursive: true }),
-  ]);
+  await Promise.all([makeFolder(tree), makeFolder(dir)]);
   try {
     for (const file of files) {
       await writeTreeFile(tree, file);

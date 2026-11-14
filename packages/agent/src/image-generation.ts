@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readFile, stat } from "node:fs/promises";
+import { lstat, readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { makeFolder } from "@cawco/core/folders";
 import {
   type GeneratedImage,
   IMAGE_EXTENSIONS,
@@ -318,7 +319,7 @@ export async function generateImage(
   const references = await referenceImages(cwd, asked, bound, project);
   if (!isWorkspaceRef(bound)) {
     // A workspace's clone and scratch dir are there; its folders under them are made one at a time as it is written.
-    await mkdir(kept.root, { recursive: true });
+    await makeFolder(kept.root);
   }
   await requireNewOutput(output);
   if (activeOutputs.has(output)) {

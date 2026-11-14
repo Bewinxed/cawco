@@ -49,7 +49,6 @@
 import {
   closeSync,
   ftruncateSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -62,6 +61,7 @@ import { cpus, getPriority, setPriority, totalmem } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { openLockFile, tryLock, unlock } from "./flock";
+import { makeFolderSync } from "./folders";
 import { workspaceCacheDir } from "./paths/workspace";
 import { parentPid } from "./process-identity";
 import { parseRecord } from "./state-file";
@@ -283,7 +283,7 @@ export function heldAbove(place: SlotPlace): string | null {
   if (said) {
     return said;
   }
-  mkdirSync(place.dir, { recursive: true });
+  makeFolderSync(place.dir);
   const above = new Set(ancestors());
   const ns = pidNamespace();
   for (const { index, holder } of lookAtSlots(place).held) {
@@ -365,7 +365,7 @@ function lookAtSlots(place: SlotPlace): {
  * run at once).
  */
 export function coresPerRun(place: SlotPlace): number {
-  mkdirSync(place.dir, { recursive: true });
+  makeFolderSync(place.dir);
   const runs = Math.max(1, lookAtSlots(place).held.length);
   return Math.max(1, Math.floor(cpus().length / runs));
 }
@@ -491,7 +491,7 @@ const holdersWords = (held: { holder: Holder | null }[]): string =>
 
 /** Puts a ticket for `who` in `queue`'s line: its name and its locked descriptor. */
 function joinLine(queue: string, who: string): { fd: number; name: string } {
-  mkdirSync(queue, { recursive: true });
+  makeFolderSync(queue);
   // Made and locked under a name no look counts, then renamed into line: no
   // other waiter ever sees it unlocked and deletes it.
   const nonce = `${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
@@ -552,7 +552,7 @@ export async function takeSlot(
   what: string,
   options: SlotOptions = {}
 ): Promise<SlotLease> {
-  mkdirSync(place.dir, { recursive: true });
+  makeFolderSync(place.dir);
   const say = options.say ?? ((line: string) => console.log(line));
   const waitMs = options.waitMs ?? WAIT_MS;
   const pollMs = options.pollMs ?? POLL_MS;

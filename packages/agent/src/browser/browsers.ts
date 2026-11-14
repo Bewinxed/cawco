@@ -34,7 +34,6 @@
  * booted in. Elsewhere nothing is read.
  */
 import { watch } from "node:fs";
-import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   BrowserFrame,
@@ -47,6 +46,7 @@ import type {
 } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
+import { makeFolder } from "@cawco/core/folders";
 import type { AgentPorts } from "../agent-ports";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
@@ -650,7 +650,7 @@ const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
   if (kept) {
     return kept;
   }
-  await mkdir(browserDir(key), { recursive: true, mode: 0o700 });
+  await makeFolder(browserDir(key), { mode: 0o700 });
   const fd = openLockFile(join(browserDir(key), "lock"), true);
   const until = Date.now() + RESERVE_MS;
   try {
@@ -1208,7 +1208,7 @@ export const watchBrowsers = async (
   ports: BrowserPorts
 ): Promise<() => void> => {
   servingGates = true;
-  await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(browsersDir(), { mode: 0o700 });
   // A local browser's profile an earlier agent kept beside its record moves
   // under `chromium/` before anything starts one (local-host.ts `moveKeptFiles`).
   await local.moveKeptFiles();

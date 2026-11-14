@@ -21,7 +21,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { chmod, mkdir, readFile, stat, unlink } from "node:fs/promises";
+import { chmod, readFile, stat, unlink } from "node:fs/promises";
 import {
   createConnection,
   createServer,
@@ -31,6 +31,7 @@ import {
 import { dirname, relative } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
+import { makeFolder } from "@cawco/core/folders";
 import type { ChildLimit } from "@cawco/core/harness";
 import { LineSplitter } from "@cawco/core/lines";
 import { listenOrEnd } from "@cawco/core/listeners";
@@ -378,7 +379,7 @@ export class SessiondServer {
    * state nothing downstream can recover from.
    */
   async listen(endpoint: string): Promise<void> {
-    await mkdir(dirname(endpoint), { recursive: true, mode: 0o700 });
+    await makeFolder(dirname(endpoint), { mode: 0o700 });
     await chmod(dirname(endpoint), 0o700);
     try {
       await this.#bind(endpoint);

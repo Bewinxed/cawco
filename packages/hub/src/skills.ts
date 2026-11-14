@@ -5,7 +5,7 @@
  * and sync carries the files to every machine.
  */
 
-import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -18,6 +18,7 @@ import {
   type SkillFile,
   skillDescription,
 } from "@cawco/core/fleet";
+import { makeFolder } from "@cawco/core/folders";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -352,7 +353,7 @@ const extract = async (
   name: string
 ): Promise<string> => {
   const into = join(work, "src");
-  await mkdir(into, { recursive: true });
+  await makeFolder(into);
   if (ZIP_NAME_RE.test(name)) {
     await $`unzip -q ${archive} -d ${into}`.env(hostEnvironment()).quiet();
   } else {

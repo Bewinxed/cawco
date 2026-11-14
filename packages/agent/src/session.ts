@@ -7,7 +7,6 @@
  * as neutral messages, with the harness's `raw` event riding along.
  */
 
-import { mkdir } from "node:fs/promises";
 import { hostname } from "node:os";
 import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
@@ -31,6 +30,7 @@ import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { FleetDelta } from "@cawco/core/fleet";
 import { FLEET_DELTA, FLEET_STATUS } from "@cawco/core/fleet";
+import { makeFolder } from "@cawco/core/folders";
 import type {
   AsleepFrame,
   CatalogMovedFrame,
@@ -113,7 +113,6 @@ import {
   CONTROL_WORK_IN_FLIGHT,
   unknownControlWords,
 } from "@cawco/core/session/controls";
-import { hostEnvironment } from "@cawco/core/session-env";
 import type {
   NeutralMessage,
   NeutralResultMessage,
@@ -5021,7 +5020,7 @@ async function workdirFor(payload: SpawnPayload): Promise<string | undefined> {
   // after its work landed, and an empty folder made in its place would be
   // a session resumed into nothing.
   if (!(bootstrap || reattachOnly || workspace)) {
-    await mkdir(workdir, { recursive: true });
+    await makeFolder(workdir);
   }
   if (await isDirectory(workdir)) {
     return workdir;
@@ -5129,7 +5128,7 @@ async function cloneRepo({
     return target;
   }
 
-  await Bun.$`mkdir -p ${parent}`.env(hostEnvironment()).quiet();
+  await makeFolder(parent);
   const cloned = await hostGit(parent, [
     "clone",
     "--single-branch",

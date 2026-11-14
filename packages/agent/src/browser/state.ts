@@ -18,7 +18,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { createSocket } from "node:dgram";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
@@ -37,7 +37,8 @@ import {
 } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
 import { lockBy, openLockFile, unlock } from "@cawco/core/flock";
-import { cawcoDataDir } from "@cawco/core/paths/cawco";
+import { makeFolder } from "@cawco/core/folders";
+import { cawcoDataDir } from "@cawco/core/paths/roots";
 import {
   isDamagedRecord,
   readRecord,
@@ -199,7 +200,7 @@ export const browserOwner = async (): Promise<string> => {
   if (kept) {
     return kept;
   }
-  await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(browsersDir(), { mode: 0o700 });
   const made = randomBytes(6).toString("hex");
   try {
     await writeFile(join(browsersDir(), OWNER_FILE), `${made}\n`, {
@@ -249,7 +250,7 @@ export const readBrowser = async (
 
 /** Writes `record` whole. */
 export const writeBrowser = async (record: BrowserRecord): Promise<void> => {
-  await mkdir(browserDir(record.key), { recursive: true, mode: 0o700 });
+  await makeFolder(browserDir(record.key), { mode: 0o700 });
   await writeStateFile(
     recordFile(record.key),
     `${JSON.stringify(record, null, 2)}\n`,
@@ -306,7 +307,7 @@ export const withBrowser = async <T>(
   key: BrowserKey,
   work: () => Promise<T>
 ): Promise<T> => {
-  await mkdir(browserDir(key), { recursive: true, mode: 0o700 });
+  await makeFolder(browserDir(key), { mode: 0o700 });
   return holding(join(browserDir(key), "lock"), `The browser ${key}`, work);
 };
 
@@ -383,7 +384,7 @@ export const slotted = async (
   if (kept !== undefined && !held.has(kept)) {
     return { ...record, slot: kept };
   }
-  await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(browsersDir(), { mode: 0o700 });
   return holding(
     join(browsersDir(), "slots.lock"),
     "The browser ports",

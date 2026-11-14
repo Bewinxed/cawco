@@ -59,6 +59,7 @@ import type {
   TranscriptTurnsQuery,
 } from "@cawco/core/find";
 import type { FleetHeld } from "@cawco/core/fleet";
+import { keepFoldersPrivate } from "@cawco/core/folders";
 import { CONTROL_FORGE_POST, readForgeAsk } from "@cawco/core/forge-post";
 import {
   CUSTODY_BOUND_MS,
@@ -4095,6 +4096,9 @@ const startDaemon = (rediscover = false) =>
 export const runDaemon = (rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
+  // CawCo's own folders are this user's alone, an install made under a
+  // looser umask included (core folders.ts).
+  keepFoldersPrivate((line) => console.info(line));
   // A stall of its loop names what held it (loop-watch.ts), the transcript
   // index's steps among what it can name.
   watchLoop((line) => console.warn(line));

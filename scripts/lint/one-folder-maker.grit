@@ -1,0 +1,16 @@
+language js
+
+// Every folder CawCo makes is made through makeFolder or makeFolderSync
+// (packages/core/src/folders.ts), which give each of CawCo's own folders its
+// mode whatever the umask: a bare mkdir made `~/.cawco` 0775 under Ubuntu's
+// umask 002. Refused in every package's source but that module.
+or {
+  `mkdir($...)` as $hit,
+  `mkdirSync($...)` as $hit,
+  `$fs.mkdir($...)` as $hit,
+  `$fs.mkdirSync($...)` as $hit
+} where {
+  $filename <: r".*packages/[^/]+/src/.*",
+  $filename <: not includes "packages/core/src/folders.ts",
+  register_diagnostic(span=$hit, message="Make a folder with makeFolder or makeFolderSync from @cawco/core/folders, which gives each of CawCo's own folders its mode whatever the umask; a bare mkdir takes the umask's.")
+}

@@ -23,8 +23,9 @@ import {
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import type { ChildLimit } from "./harness";
+import { darwinSocketRoot } from "./paths/roots";
 import type { BuildInfo, SessionLimits } from "./protocol";
-import { darwinSocketRoot, shortLink } from "./socket-root";
+import { shortLink } from "./socket-root";
 import type { CommandAckStage } from "./stream";
 
 /**

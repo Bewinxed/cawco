@@ -19,13 +19,14 @@
  * already found. Colima's facts below are from its source, abiosoft/colima.
  */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { connect } from "node:net";
 import { homedir, networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import { errnoCode, isGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { makeFolder } from "@cawco/core/folders";
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -225,7 +226,7 @@ export const recordMeasurement = async (
     socket,
     at: Date.now(),
   };
-  await mkdir(measurementsDir(), { recursive: true, mode: 0o700 });
+  await makeFolder(measurementsDir(), { mode: 0o700 });
   await writeStateFile(
     measurementFile(endpoint),
     `${JSON.stringify(measurement, null, 2)}\n`,
