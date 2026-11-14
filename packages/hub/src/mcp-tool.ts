@@ -38,7 +38,7 @@ export interface Picture {
 type Answered<R> = Exclude<R, { readonly "~status": true }>;
 
 /** Whether a run's answer is one, not a refusal. */
-const answered = <R>(answer: R): answer is Answered<R> =>
+export const answered = <R>(answer: R): answer is Answered<R> =>
   !(answer instanceof ElysiaStatus);
 
 /** A refusal's sentence: its problem's `detail`. */

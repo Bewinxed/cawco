@@ -307,6 +307,7 @@ const standIn = (
     tasks: {} as Tasks,
     workItemCalls: {} as never,
     sessionCalls: {} as never,
+    adminCalls: () => ({}) as never,
     projectFromSession: () => Promise.reject(new Error("measuring")),
     askPerson:
       calls.askPerson ?? (() => Promise.reject(new Error("measuring"))),

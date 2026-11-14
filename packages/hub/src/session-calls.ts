@@ -581,7 +581,10 @@ export const sessionCalls = (deps: SessionCallsDeps) => ({
 
 /** What a continue answers a machine that is away with: its `503`. */
 export type AwayProblem = ReturnType<
-  typeof problem<503, { readonly code: "machine-away"; readonly detail: string }>
+  typeof problem<
+    503,
+    { readonly code: "machine-away"; readonly detail: string }
+  >
 >;
 
 /** What a session's tools call directly. */

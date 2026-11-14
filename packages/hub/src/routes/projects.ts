@@ -12,6 +12,19 @@ import { placesChanged } from "../project-placements";
 import { schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
 
+/** The projects, each as the app's client types it: the routes answer it, and the admin tools list them directly. */
+export const projectsListed = ({
+  caps,
+  db,
+  projectOut,
+}: Pick<HubContext, "caps" | "db" | "projectOut">) => {
+  const live = db.listProjects();
+  return live.map((project) => ({
+    ...projectOut(project, live),
+    cap: caps.capOf(project),
+  }));
+};
+
 export const projectRoutes = ({
   addProjectPlace,
   askedProjectName,
@@ -52,13 +65,7 @@ export const projectRoutes = ({
     // Each row spread into a fresh object, not the named `ProjectRow`: the
     // native app's client types a project by this route's own schema
     // (`GetApiProjects200Payload`), which a named row would rename.
-    .get("/api/projects", () => {
-      const live = db.listProjects();
-      return live.map((project) => ({
-        ...projectOut(project, live),
-        cap: caps.capOf(project),
-      }));
-    })
+    .get("/api/projects", () => projectsListed({ caps, db, projectOut }))
     // One repository is one project: a folder whose remote a project
     // already has joins it as a checkout place (`placeAdded`), and the
     // answer is that project, not a second one. `place` is the folder asked

@@ -112,6 +112,7 @@ import {
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
+import type { Static } from "typebox";
 import { readsOnly } from "./connection-writes";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
 import type { ConnectionAppSecret, ConnectionSecret } from "./db/stored-types";
@@ -2894,278 +2895,303 @@ const refused = (error: unknown) => {
   throw error;
 };
 
+export const createConnectionBody = t.Object({
+  name: t.String({ minLength: 1 }),
+  ...INPUT,
+});
+export const updateConnectionBody = t.Partial(t.Object(INPUT));
+export const signInBody = t.Object({
+  origin: t.Optional(t.String()),
+  organization: t.Optional(t.String()),
+});
+
+/**
+ * What a connection is listed, created, changed, signed in and removed with:
+ * the routes answer them, and the admin tools call them directly. A
+ * connection's own refusal is a problem in its words; anything else is the
+ * hub's own failure.
+ */
+export const connectionCalls = (connections: Connections) => ({
+  list: () => ({ connections: connections.list() }),
+  create: async (body: Static<typeof createConnectionBody>) => {
+    try {
+      return await connections.create(body);
+    } catch (error) {
+      return refused(error);
+    }
+  },
+  update: async (name: string, body: Static<typeof updateConnectionBody>) => {
+    try {
+      return await connections.update(name, body);
+    } catch (error) {
+      return refused(error);
+    }
+  },
+  /** A sign-in: an MCP server's or a Linear app's OAuth, a GitHub App's registration (under `organization` when named), or a code sign-in. */
+  signIn: async (name: string, body: Static<typeof signInBody>) => {
+    try {
+      return await connections.startSignIn(
+        name,
+        body.origin,
+        body.organization
+      );
+    } catch (error) {
+      return refused(error);
+    }
+  },
+  remove: (name: string) => {
+    try {
+      return undoable(connections.remove(name));
+    } catch (error) {
+      return refused(error);
+    }
+  },
+});
+
 /**
  * `/api/connections`: list, create, change, set a key, start a sign-in,
  * remove, and list a connection's tools. No route answers a key, and none
  * calls a tool: tools are called through a session's grant or by hub code.
  */
-export const connectionRoutes = (connections: Connections) =>
-  new Elysia()
-    .get("/api/connections", () => ({ connections: connections.list() }))
-    .post(
-      "/api/connections",
-      { body: t.Object({ name: t.String({ minLength: 1 }), ...INPUT }) },
-      async ({ body }) => {
-        try {
-          return await connections.create(body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    )
-    .patch(
-      "/api/connections/:name",
-      { body: t.Partial(t.Object(INPUT)) },
-      async ({ params, body }) => {
-        try {
-          return await connections.update(params.name, body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    )
-    .put(
-      "/api/connections/:name/key",
-      { body: t.Object({ key: t.String({ minLength: 1 }) }) },
-      async ({ params, body }) => {
-        try {
-          return await connections.setKey(params.name, body.key);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    )
-    // A Linear app's client id and secret. Answered as the view, which
-    // names the app and never holds its secret. A GitHub App is registered
-    // by its sign-in instead: the GitHub App body TestFlight ios 20261018
-    // sends (installable until 2027-01-16) stays declared so that build
-    // reads the refusal in words; it goes once that build expires (bash
-    // apps/apple/scripts/testflight.sh --expire 20261018).
-    .put(
-      "/api/connections/:name/app",
-      {
-        body: t.Union([
-          t.Object({
-            appId: t.String({ minLength: 1 }),
-            installationId: t.String({ minLength: 1 }),
-            privateKey: t.String({ minLength: 1 }),
-          }),
-          t.Object({
-            clientId: t.String({ minLength: 1 }),
-            clientSecret: t.String({ minLength: 1 }),
-          }),
-        ]),
-      },
-      async ({ params, body }) => {
-        try {
-          if (!("clientId" in body)) {
-            return problem(400, {
-              code: "github-app-registers",
-              detail: connectionsWords.githubAppRegisters(params.name),
-            });
+export const connectionRoutes = (connections: Connections) => {
+  const calls = connectionCalls(connections);
+  return (
+    new Elysia()
+      .get("/api/connections", () => calls.list())
+      .post("/api/connections", { body: createConnectionBody }, ({ body }) =>
+        calls.create(body)
+      )
+      .patch(
+        "/api/connections/:name",
+        { body: updateConnectionBody },
+        ({ params, body }) => calls.update(params.name, body)
+      )
+      .put(
+        "/api/connections/:name/key",
+        { body: t.Object({ key: t.String({ minLength: 1 }) }) },
+        async ({ params, body }) => {
+          try {
+            return await connections.setKey(params.name, body.key);
+          } catch (error) {
+            return refused(error);
           }
-          return await connections.setApp(params.name, body);
+        }
+      )
+      // A Linear app's client id and secret. Answered as the view, which
+      // names the app and never holds its secret. A GitHub App is registered
+      // by its sign-in instead: the GitHub App body TestFlight ios 20261018
+      // sends (installable until 2027-01-16) stays declared so that build
+      // reads the refusal in words; it goes once that build expires (bash
+      // apps/apple/scripts/testflight.sh --expire 20261018).
+      .put(
+        "/api/connections/:name/app",
+        {
+          body: t.Union([
+            t.Object({
+              appId: t.String({ minLength: 1 }),
+              installationId: t.String({ minLength: 1 }),
+              privateKey: t.String({ minLength: 1 }),
+            }),
+            t.Object({
+              clientId: t.String({ minLength: 1 }),
+              clientSecret: t.String({ minLength: 1 }),
+            }),
+          ]),
+        },
+        async ({ params, body }) => {
+          try {
+            if (!("clientId" in body)) {
+              return problem(400, {
+                code: "github-app-registers",
+                detail: connectionsWords.githubAppRegisters(params.name),
+              });
+            }
+            return await connections.setApp(params.name, body);
+          } catch (error) {
+            return refused(error);
+          }
+        }
+      )
+      .post(
+        "/api/connections/:name/sign-in",
+        { body: signInBody },
+        ({ params, body }) => calls.signIn(params.name, body)
+      )
+      // Sign in to GitHub's first way: every account the fleet machines' gh
+      // is signed in to, and the machines that didn't say.
+      .get("/api/github-sign-in/gh", () => connections.ghSignIns())
+      .post(
+        "/api/github-sign-in/gh",
+        {
+          body: t.Object({
+            machineId: t.String({ minLength: 1 }),
+            host: t.String({ minLength: 1 }),
+            login: t.String({ minLength: 1 }),
+            projects: t.Optional(t.Array(t.String())),
+          }),
+        },
+        async ({ body }) => {
+          try {
+            return await connections.connectGh(body);
+          } catch (error) {
+            return refused(error);
+          }
+        }
+      )
+      // A GitHub App's registration, in the person's browser: the page that
+      // posts its manifest to GitHub, GitHub's redirect with the code, and the
+      // installation's setup redirect. Each answers a page or plain text,
+      // never JSON a script reads.
+      .get(
+        GITHUB_MANIFEST_PATH,
+        {
+          ...hidden,
+          query: t.Object({
+            state: t.Optional(t.String()),
+            org: t.Optional(t.String()),
+          }),
+        },
+        ({ query }) => {
+          try {
+            return new Response(connections.manifestPage(query.state), {
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+              },
+            });
+          } catch (error) {
+            return plainText(
+              error instanceof ConnectionProblem
+                ? error.message
+                : "The app's registration could not start. Sign in again from Connections.",
+              400
+            );
+          }
+        }
+      )
+      .get(
+        GITHUB_CREATED_PATH,
+        {
+          ...hidden,
+          query: t.Object({
+            code: t.Optional(t.String()),
+            state: t.Optional(t.String()),
+          }),
+        },
+        async ({ query }) => {
+          if (!query.code) {
+            return plainText(
+              "GitHub did not make the app. Sign in again from Connections.",
+              400
+            );
+          }
+          try {
+            const install = await connections.appCreated(
+              query.code,
+              query.state
+            );
+            return new Response(null, {
+              status: 302,
+              headers: { Location: install, "Cache-Control": "no-store" },
+            });
+          } catch (error) {
+            return plainText(
+              error instanceof ConnectionProblem
+                ? error.message
+                : "The app could not be handed over. Sign in again from Connections.",
+              400
+            );
+          }
+        }
+      )
+      .get(
+        GITHUB_INSTALLED_PATH,
+        {
+          ...hidden,
+          query: t.Object({
+            installation_id: t.Optional(t.String()),
+            setup_action: t.Optional(t.String()),
+            state: t.Optional(t.String()),
+          }),
+        },
+        async ({ query }) => {
+          try {
+            const installed = await connections.appInstalled(
+              query.installation_id,
+              query.setup_action,
+              query.state
+            );
+            return plainText(
+              installed === "requested"
+                ? "An owner of the organization was asked to approve the app. Connections signs it in once they do."
+                : `Installed ${installed.app?.service === "github" ? (installed.app.slug ?? "the app") : "the app"} for ${installed.name}. You can close this tab.`
+            );
+          } catch (error) {
+            return plainText(
+              error instanceof ConnectionProblem
+                ? error.message
+                : "The installation could not finish. Install the app again from its page on GitHub.",
+              400
+            );
+          }
+        }
+      )
+      .get("/api/connections/:name/tools", async ({ params }) => {
+        try {
+          const tools = await connections.listConnectionTools(params.name);
+          return {
+            tools: tools.map((tool) => ({
+              name: tool.name,
+              description: tool.description ?? "",
+              readOnly: readsOnly(tool),
+            })),
+          };
         } catch (error) {
           return refused(error);
         }
-      }
-    )
-    // A sign-in: an MCP server's or a Linear app's OAuth, a GitHub App's
-    // registration (under `organization` when named), or a code sign-in.
-    .post(
-      "/api/connections/:name/sign-in",
-      {
-        body: t.Object({
-          origin: t.Optional(t.String()),
-          organization: t.Optional(t.String()),
-        }),
-      },
-      async ({ params, body }) => {
-        try {
-          return await connections.startSignIn(
-            params.name,
-            body.origin,
-            body.organization
-          );
-        } catch (error) {
-          return refused(error);
+      })
+      .delete("/api/connections/:name", ({ params }) =>
+        calls.remove(params.name)
+      )
+      // The browser that signed in lands here, from the authorization server:
+      // plain text, so nothing it carries is ever read as a page.
+      .get(
+        CONNECTION_CALLBACK_PATH,
+        {
+          ...hidden,
+          query: t.Object({
+            code: t.Optional(t.String()),
+            state: t.Optional(t.String()),
+            iss: t.Optional(t.String()),
+            error: t.Optional(t.String()),
+          }),
+        },
+        async ({ query }) => {
+          if (!(query.code && query.state)) {
+            return plainText(
+              `The sign-in did not finish${query.error ? ` (${query.error.slice(0, 100)})` : ""}. Start it again.`,
+              400
+            );
+          }
+          try {
+            const signed = await connections.completeSignIn(
+              query.code,
+              query.state,
+              query.iss
+            );
+            return plainText(
+              `Signed in to ${signed.service} as ${signed.account} (${signed.name}). You can close this tab.`
+            );
+          } catch (error) {
+            return plainText(
+              error instanceof ConnectionProblem
+                ? error.message
+                : "The sign-in could not finish. Start it again.",
+              400
+            );
+          }
         }
-      }
-    )
-    // Sign in to GitHub's first way: every account the fleet machines' gh
-    // is signed in to, and the machines that didn't say.
-    .get("/api/github-sign-in/gh", () => connections.ghSignIns())
-    .post(
-      "/api/github-sign-in/gh",
-      {
-        body: t.Object({
-          machineId: t.String({ minLength: 1 }),
-          host: t.String({ minLength: 1 }),
-          login: t.String({ minLength: 1 }),
-          projects: t.Optional(t.Array(t.String())),
-        }),
-      },
-      async ({ body }) => {
-        try {
-          return await connections.connectGh(body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    )
-    // A GitHub App's registration, in the person's browser: the page that
-    // posts its manifest to GitHub, GitHub's redirect with the code, and the
-    // installation's setup redirect. Each answers a page or plain text,
-    // never JSON a script reads.
-    .get(
-      GITHUB_MANIFEST_PATH,
-      {
-        ...hidden,
-        query: t.Object({
-          state: t.Optional(t.String()),
-          org: t.Optional(t.String()),
-        }),
-      },
-      ({ query }) => {
-        try {
-          return new Response(connections.manifestPage(query.state), {
-            headers: {
-              "Content-Type": "text/html; charset=utf-8",
-              "X-Content-Type-Options": "nosniff",
-              "Cache-Control": "no-store",
-            },
-          });
-        } catch (error) {
-          return plainText(
-            error instanceof ConnectionProblem
-              ? error.message
-              : "The app's registration could not start. Sign in again from Connections.",
-            400
-          );
-        }
-      }
-    )
-    .get(
-      GITHUB_CREATED_PATH,
-      {
-        ...hidden,
-        query: t.Object({
-          code: t.Optional(t.String()),
-          state: t.Optional(t.String()),
-        }),
-      },
-      async ({ query }) => {
-        if (!query.code) {
-          return plainText(
-            "GitHub did not make the app. Sign in again from Connections.",
-            400
-          );
-        }
-        try {
-          const install = await connections.appCreated(query.code, query.state);
-          return new Response(null, {
-            status: 302,
-            headers: { Location: install, "Cache-Control": "no-store" },
-          });
-        } catch (error) {
-          return plainText(
-            error instanceof ConnectionProblem
-              ? error.message
-              : "The app could not be handed over. Sign in again from Connections.",
-            400
-          );
-        }
-      }
-    )
-    .get(
-      GITHUB_INSTALLED_PATH,
-      {
-        ...hidden,
-        query: t.Object({
-          installation_id: t.Optional(t.String()),
-          setup_action: t.Optional(t.String()),
-          state: t.Optional(t.String()),
-        }),
-      },
-      async ({ query }) => {
-        try {
-          const installed = await connections.appInstalled(
-            query.installation_id,
-            query.setup_action,
-            query.state
-          );
-          return plainText(
-            installed === "requested"
-              ? "An owner of the organization was asked to approve the app. Connections signs it in once they do."
-              : `Installed ${installed.app?.service === "github" ? (installed.app.slug ?? "the app") : "the app"} for ${installed.name}. You can close this tab.`
-          );
-        } catch (error) {
-          return plainText(
-            error instanceof ConnectionProblem
-              ? error.message
-              : "The installation could not finish. Install the app again from its page on GitHub.",
-            400
-          );
-        }
-      }
-    )
-    .get("/api/connections/:name/tools", async ({ params }) => {
-      try {
-        const tools = await connections.listConnectionTools(params.name);
-        return {
-          tools: tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description ?? "",
-            readOnly: readsOnly(tool),
-          })),
-        };
-      } catch (error) {
-        return refused(error);
-      }
-    })
-    .delete("/api/connections/:name", ({ params }) => {
-      try {
-        return undoable(connections.remove(params.name));
-      } catch (error) {
-        return refused(error);
-      }
-    })
-    // The browser that signed in lands here, from the authorization server:
-    // plain text, so nothing it carries is ever read as a page.
-    .get(
-      CONNECTION_CALLBACK_PATH,
-      {
-        ...hidden,
-        query: t.Object({
-          code: t.Optional(t.String()),
-          state: t.Optional(t.String()),
-          iss: t.Optional(t.String()),
-          error: t.Optional(t.String()),
-        }),
-      },
-      async ({ query }) => {
-        if (!(query.code && query.state)) {
-          return plainText(
-            `The sign-in did not finish${query.error ? ` (${query.error.slice(0, 100)})` : ""}. Start it again.`,
-            400
-          );
-        }
-        try {
-          const signed = await connections.completeSignIn(
-            query.code,
-            query.state,
-            query.iss
-          );
-          return plainText(
-            `Signed in to ${signed.service} as ${signed.account} (${signed.name}). You can close this tab.`
-          );
-        } catch (error) {
-          return plainText(
-            error instanceof ConnectionProblem
-              ? error.message
-              : "The sign-in could not finish. Start it again.",
-            400
-          );
-        }
-      }
-    );
+      )
+  );
+};

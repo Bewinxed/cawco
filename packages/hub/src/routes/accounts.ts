@@ -9,6 +9,7 @@ import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
 import { Elysia, problem, t } from "elysia";
+import type { Static } from "typebox";
 import type { HubContext } from "../hub-context";
 
 import { unreachable } from "../unreachable";
@@ -21,6 +22,60 @@ export const accountProvider = t.String({
   minLength: 1,
   pattern: "^[a-z0-9][a-z0-9._-]*$",
 });
+
+/**
+ * Several sign-ins per provider, where each is signed in for which harness,
+ * how new sessions choose among them, and what they read of their limits.
+ * `provider` narrows it to one provider's accounts. The route answers it, and
+ * the admin tools read it directly.
+ */
+export const accountsListed = (
+  {
+    catalogFaults,
+    db,
+    livePendingSignins,
+    rebalanceNotices,
+  }: Pick<
+    HubContext,
+    "catalogFaults" | "db" | "livePendingSignins" | "rebalanceNotices"
+  >,
+  provider: Static<typeof accountProvider> | undefined
+) => {
+  const accounts = db.accounts
+    .list()
+    .filter((account) => !provider || account.provider === provider);
+  const ids = new Set(accounts.map((account) => account.id));
+  const mine = <T extends { accountId: string }>(rows: T[]): T[] =>
+    rows.filter((row) => ids.has(row.accountId));
+  return {
+    accounts,
+    signins: mine(db.accounts.signins()),
+    // Sign-ins started and not finished: the link or code each
+    // showed, for a screen that reloads or reopens to show again.
+    pending: livePendingSignins().filter((one) => ids.has(one.accountId)),
+    routing: (provider
+      ? [provider]
+      : [
+          ...new Set([
+            CLAUDE_PROVIDER,
+            ...accounts.map((account) => account.provider),
+          ]),
+        ]
+    ).map((one) => db.accounts.routing(one)),
+    readings: mine(db.accounts.readings()),
+    bench: mine(db.accounts.bench()),
+    catalogs: mine(db.accounts.catalogs()),
+    catalogFaults: mine(
+      [...catalogFaults].map(([accountId, reason]): AccountCatalogFault => ({
+        accountId,
+        reason,
+      }))
+    ),
+    rebalances: rebalanceNotices.filter((notice) =>
+      notice.came.some((one) => ids.has(one.account.id))
+    ),
+  };
+};
 
 export const accountRoutes = ({
   accountKindRefusal,
@@ -62,46 +117,11 @@ export const accountRoutes = ({
     .get(
       "/api/accounts",
       { query: t.Object({ provider: t.Optional(accountProvider) }) },
-      ({ query }) => {
-        const accounts = db.accounts
-          .list()
-          .filter(
-            (account) => !query.provider || account.provider === query.provider
-          );
-        const ids = new Set(accounts.map((account) => account.id));
-        const mine = <T extends { accountId: string }>(rows: T[]): T[] =>
-          rows.filter((row) => ids.has(row.accountId));
-        return {
-          accounts,
-          signins: mine(db.accounts.signins()),
-          // Sign-ins started and not finished: the link or code each
-          // showed, for a screen that reloads or reopens to show again.
-          pending: livePendingSignins().filter((one) => ids.has(one.accountId)),
-          routing: (query.provider
-            ? [query.provider]
-            : [
-                ...new Set([
-                  CLAUDE_PROVIDER,
-                  ...accounts.map((account) => account.provider),
-                ]),
-              ]
-          ).map((provider) => db.accounts.routing(provider)),
-          readings: mine(db.accounts.readings()),
-          bench: mine(db.accounts.bench()),
-          catalogs: mine(db.accounts.catalogs()),
-          catalogFaults: mine(
-            [...catalogFaults].map(
-              ([accountId, reason]): AccountCatalogFault => ({
-                accountId,
-                reason,
-              })
-            )
-          ),
-          rebalances: rebalanceNotices.filter((notice) =>
-            notice.came.some((one) => ids.has(one.account.id))
-          ),
-        };
-      }
+      ({ query }) =>
+        accountsListed(
+          { catalogFaults, db, livePendingSignins, rebalanceNotices },
+          query.provider
+        )
     )
     // The account picker's rows: Claude's subscription and Console, then
     // every provider the fleet's machines know (pi-ai's joined with

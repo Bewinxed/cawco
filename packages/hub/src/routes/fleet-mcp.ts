@@ -11,6 +11,7 @@ import {
 import { mergeMcpSecrets } from "@cawco/core/fleet-secrets";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 import type { RouteSet } from "../machine-answers";
@@ -55,7 +56,40 @@ const RESERVED_MCP_NAMES = [
   "Claude Browser",
 ];
 
-export const fleetMcpRoutes = (
+export const mcpBody = t.Object({
+  // Stored as written once its secrets are settled (core
+  // fleet-secrets.ts `mergeMcpSecrets`), so the schema only asks that
+  // it be an object; `mcpProblem` checks the one field that makes it
+  // startable. Left out with `fromMachine`: the config that machine
+  // has under the name.
+  config: t.Optional(t.Record(t.String(), t.Unknown())),
+  /** Adopt the unmanaged server the machine has under this name (its config is read here, never sent to a screen). */
+  fromMachine: t.Optional(t.String()),
+  /** The checkout a project-scoped server was discovered in. */
+  cwd: t.Optional(t.String()),
+  enabled: t.Optional(t.Boolean()),
+  ...boundFields,
+  /**
+   * The machine platforms it runs on (`machine_capabilities.platform`):
+   * any other machine is never sent it. Null or empty: every
+   * machine. Left out: as it was.
+   */
+  platforms: t.Optional(
+    t.Union([t.Array(t.UnionEnum(MCP_PLATFORMS)), t.Null()])
+  ),
+  /**
+   * One instance on each machine for all its sessions, started at
+   * its first call (core `FleetMcpServer.shared`). Left out: as it
+   * was.
+   */
+  shared: t.Optional(t.Boolean()),
+});
+
+/**
+ * What the fleet's MCP servers are written and removed with: the routes
+ * answer them, and the admin tools call them directly.
+ */
+export const fleetMcpCalls = (
   ctx: Pick<
     HubContext,
     | "announceMcp"
@@ -134,126 +168,102 @@ export const fleetMcpRoutes = (
       )
     );
   };
+  return {
+    /** A put, an adoption from a machine when `fromMachine` names one (answered with `set`'s headers when the machine is away). */
+    put: async (
+      name: string,
+      body: Static<typeof mcpBody>,
+      set: Pick<RouteSet, "headers">
+    ) => {
+      const held = db.getMcpServer(name)?.config;
+      const read = body.fromMachine
+        ? await machineMcpConfig(body.fromMachine, name, body.cwd, set)
+        : { config: body.config };
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const written = read.config;
+      if (!written) {
+        return problem(400, {
+          code: "mcp-config-missing",
+          detail: "name a config, or the machine to adopt the server from",
+        });
+      }
+      // What the write does not name of a secret, the server keeps; an
+      // adoption is the machine's config whole.
+      const settled = mergeMcpSecrets(
+        written,
+        body.fromMachine ? undefined : held,
+        {
+          dropped: mcpWords.secretsLeft,
+          missing: mcpWords.secretNotHeld,
+          notText: mcpWords.secretNotText,
+        }
+      );
+      if (!settled.ok) {
+        return problem(400, {
+          code: "mcp-secrets-unsettled",
+          detail: settled.problem,
+        });
+      }
+      const { config } = settled;
+      const misfit = mcpWriteProblem(name, config, body);
+      if (misfit) {
+        return problem(400, { code: "mcp-server-invalid", detail: misfit });
+      }
+      if (!isFleetMcpConfig(config)) {
+        return problem(400, {
+          code: "mcp-server-invalid",
+          detail: "a remote MCP server's type is http or sse",
+        });
+      }
+
+      db.putMcpServer({
+        name,
+        config,
+        enabled: body.enabled,
+        projectId: body.projectId,
+        areaId: body.areaId,
+        platforms: body.platforms,
+        shared: body.shared,
+      });
+      await fleetMcp.probe(name);
+      announceMcp();
+      const saved = maskedMcp(name);
+      if (!saved) {
+        return problem(404, {
+          code: "mcp-server-was-removed",
+          detail: "MCP server was removed while probing.",
+        });
+      }
+      return saved;
+    },
+    /** Into the trash with its sign-in, off every machine at once. */
+    remove: (name: string) => {
+      const trashed = db.trash.put({ kind: "mcp", key: name }, Date.now());
+      if (trashed === undefined) {
+        return problem(404, {
+          code: "no-mcp",
+          detail: `the fleet keeps no MCP server ${name}`,
+        });
+      }
+      fleetMcp.forget(name);
+      announceMcp();
+      return undoable(trashed);
+    },
+  };
+};
+
+export const fleetMcpRoutes = (ctx: Parameters<typeof fleetMcpCalls>[0]) => {
+  const { fleetMcp } = ctx;
+  const calls = fleetMcpCalls(ctx);
   return (
     new Elysia()
-      .put(
-        "/api/fleet/mcp/:name",
-        {
-          body: t.Object({
-            // Stored as written once its secrets are settled (core
-            // fleet-secrets.ts `mergeMcpSecrets`), so the schema only asks that
-            // it be an object; `mcpProblem` checks the one field that makes it
-            // startable. Left out with `fromMachine`: the config that machine
-            // has under the name.
-            config: t.Optional(t.Record(t.String(), t.Unknown())),
-            /** Adopt the unmanaged server the machine has under this name (its config is read here, never sent to a screen). */
-            fromMachine: t.Optional(t.String()),
-            /** The checkout a project-scoped server was discovered in. */
-            cwd: t.Optional(t.String()),
-            enabled: t.Optional(t.Boolean()),
-            ...boundFields,
-            /**
-             * The machine platforms it runs on (`machine_capabilities.platform`):
-             * any other machine is never sent it. Null or empty: every
-             * machine. Left out: as it was.
-             */
-            platforms: t.Optional(
-              t.Union([t.Array(t.UnionEnum(MCP_PLATFORMS)), t.Null()])
-            ),
-            /**
-             * One instance on each machine for all its sessions, started at
-             * its first call (core `FleetMcpServer.shared`). Left out: as it
-             * was.
-             */
-            shared: t.Optional(t.Boolean()),
-          }),
-        },
-        async ({ params, body, set }) => {
-          const held = db.getMcpServer(params.name)?.config;
-          const read = body.fromMachine
-            ? await machineMcpConfig(
-                body.fromMachine,
-                params.name,
-                body.cwd,
-                set
-              )
-            : { config: body.config };
-          if (read instanceof ElysiaStatus) {
-            return read;
-          }
-          const written = read.config;
-          if (!written) {
-            return problem(400, {
-              code: "mcp-config-missing",
-              detail: "name a config, or the machine to adopt the server from",
-            });
-          }
-          // What the write does not name of a secret, the server keeps; an
-          // adoption is the machine's config whole.
-          const settled = mergeMcpSecrets(
-            written,
-            body.fromMachine ? undefined : held,
-            {
-              dropped: mcpWords.secretsLeft,
-              missing: mcpWords.secretNotHeld,
-              notText: mcpWords.secretNotText,
-            }
-          );
-          if (!settled.ok) {
-            return problem(400, {
-              code: "mcp-secrets-unsettled",
-              detail: settled.problem,
-            });
-          }
-          const { config } = settled;
-          const misfit = mcpWriteProblem(params.name, config, body);
-          if (misfit) {
-            return problem(400, { code: "mcp-server-invalid", detail: misfit });
-          }
-          if (!isFleetMcpConfig(config)) {
-            return problem(400, {
-              code: "mcp-server-invalid",
-              detail: "a remote MCP server's type is http or sse",
-            });
-          }
-
-          db.putMcpServer({
-            name: params.name,
-            config,
-            enabled: body.enabled,
-            projectId: body.projectId,
-            areaId: body.areaId,
-            platforms: body.platforms,
-            shared: body.shared,
-          });
-          await fleetMcp.probe(params.name);
-          announceMcp();
-          const saved = maskedMcp(params.name);
-          if (!saved) {
-            return problem(404, {
-              code: "mcp-server-was-removed",
-              detail: "MCP server was removed while probing.",
-            });
-          }
-          return saved;
-        }
+      .put("/api/fleet/mcp/:name", { body: mcpBody }, ({ params, body, set }) =>
+        calls.put(params.name, body, set)
       )
       // Into the trash with its sign-in, off every machine at once.
-      .delete("/api/fleet/mcp/:name", ({ params }) => {
-        const trashed = db.trash.put(
-          { kind: "mcp", key: params.name },
-          Date.now()
-        );
-        if (trashed === undefined) {
-          return problem(404, {
-            code: "no-mcp",
-            detail: `the fleet keeps no MCP server ${params.name}`,
-          });
-        }
-        fleetMcp.forget(params.name);
-        announceMcp();
-        return undoable(trashed);
-      })
+      .delete("/api/fleet/mcp/:name", ({ params }) => calls.remove(params.name))
       .post(
         "/api/fleet/mcp/:name/sign-in",
         {

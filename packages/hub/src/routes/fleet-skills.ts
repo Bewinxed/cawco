@@ -6,8 +6,10 @@ import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetSkillMeta, READ_SKILL_FILES } from "@cawco/core/fleet";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
+import type { RouteSet } from "../machine-answers";
 import { machineSkillFiles } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
@@ -19,7 +21,35 @@ import { boundFields } from "./bound-fields";
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
 const SKILL_NAME = /^[A-Za-z0-9._-]+$/u;
 
-export const fleetSkillRoutes = (
+export const skillBody = t.Object({
+  source: t.Optional(t.String()),
+  /** A folder install's approved files, by their hash (skills.ts `readCheckedFolder`). */
+  contentHash: t.Optional(t.String()),
+  enabled: t.Optional(t.Boolean()),
+  fromMachine: t.Optional(t.String()),
+  /** The checkout a project-scoped skill was discovered in. */
+  cwd: t.Optional(t.String()),
+  ...boundFields,
+});
+
+/**
+ * What the fleet's skills are installed, switched and removed with: the
+ * routes answer them, and the admin tools call them directly. A plain skill
+ * is resolved here, once for the whole fleet: the hub downloads it, and the
+ * machines are handed the files (NEW.md §11). `put` answers with the row
+ * marked `fetching` before the download starts; what came of it is a
+ * `fleet.fetch` frame (`fetchSkill`). A source that would not resolve is still
+ * stored — the row is where the dashboard reads why, and the ambiguous case
+ * carries what it could have meant (`choices`).
+ *
+ * `fromMachine` is the other way in: a skill somebody wrote on one machine,
+ * read off it and stored like any fetched one, so it reaches the rest. So is a
+ * skill folder on a machine (`file://<machine>/<path>`): read and checked here
+ * before anything is stored, refused in its words when it can't be, and
+ * refused when it no longer holds the files the person approved
+ * (`contentHash`, skills.ts `FOLDER_CHANGED`).
+ */
+export const fleetSkillCalls = (
   ctx: Pick<
     HubContext,
     | "announceSkill"
@@ -40,160 +70,165 @@ export const fleetSkillRoutes = (
   >
 ) => {
   const {
-    announceSkill,
     boundProblem,
+    db,
+    fetchSkill,
+    fleetChanged,
+    installFromFolder,
+    skillChoices,
+    skillRow,
+  } = ctx;
+  return {
+    put: async (
+      name: string,
+      body: Static<typeof skillBody>,
+      set: Pick<RouteSet, "headers">
+    ) => {
+      if (!SKILL_NAME.test(name)) {
+        return problem(400, {
+          code: "not-usable-skill-name",
+          detail: `${name} is not a usable skill name`,
+        });
+      }
+      const unbindable = boundProblem(body);
+      if (unbindable) {
+        return problem(400, { code: "unbindable", detail: unbindable });
+      }
+
+      if (body.fromMachine) {
+        const read = await skillFilesOff(
+          ctx,
+          body.fromMachine,
+          [name, body.cwd],
+          set
+        );
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
+        const { files } = read;
+        const skill = db.putSkill({
+          name,
+          source: `machine:${body.fromMachine}`,
+          enabled: body.enabled,
+          projectId: body.projectId,
+          areaId: body.areaId,
+          hash: hashFiles(files),
+          bytes: files.reduce(
+            (total, file) =>
+              total + Buffer.byteLength(file.contentBase64, "base64"),
+            0
+          ),
+          files,
+        });
+        fleetChanged();
+        return skill;
+      }
+
+      if (!body.source) {
+        return problem(400, {
+          code: "name-source-machine-adopt",
+          detail: "name a source, or the machine to adopt it from",
+        });
+      }
+
+      const fromFolder = await installFromFolder(name, {
+        ...body,
+        source: body.source,
+      });
+      if (fromFolder) {
+        return fromFolder;
+      }
+
+      db.stageSkill({
+        name,
+        source: body.source,
+        enabled: body.enabled,
+        projectId: body.projectId,
+        areaId: body.areaId,
+      });
+      // A fetch that found the files the fleet has tells the machines
+      // here instead: the row's switch or placement may have moved.
+      detach(
+        fetchSkill(name, body.source).then((fetched) => {
+          if (fetched === "same") {
+            fleetChanged();
+          }
+        }),
+        "skill fetch"
+      );
+      const staged = db.listSkills().find((entry) => entry.name === name);
+      return staged
+        ? skillRow(staged)
+        : problem(404, {
+            code: "no-skill",
+            detail: `no skill ${name}`,
+          });
+    },
+    /** On or off: the stored row's flag, its source and files as they are. Nothing is fetched; every machine is told, and a machine takes a disabled skill away and writes an enabled one from the stored files. */
+    setEnabled: (name: string, enabled: boolean) => {
+      let row: FleetSkillMeta | undefined;
+      try {
+        row = db.setSkillEnabled(name, enabled);
+      } catch (error) {
+        return problem(400, {
+          code: "skill-not-saved",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+      if (!row) {
+        return problem(404, {
+          code: "no-skill",
+          detail: `no skill ${name}`,
+        });
+      }
+      fleetChanged();
+      return skillRow(row);
+    },
+    /** Its files kept in its history, then into the trash, off every machine. */
+    remove: (name: string) => {
+      db.keepSkillVersion(name);
+      const trashed = db.trash.put({ kind: "skill", key: name }, Date.now());
+      if (trashed === undefined) {
+        return problem(404, {
+          code: "no-skill",
+          detail: `the fleet keeps no skill ${name}`,
+        });
+      }
+      skillChoices.delete(name);
+      fleetChanged();
+      return undoable(trashed);
+    },
+  };
+};
+
+export const fleetSkillRoutes = (
+  ctx: Parameters<typeof fleetSkillCalls>[0]
+) => {
+  const calls = fleetSkillCalls(ctx);
+  const {
+    announceSkill,
     checkSources,
     db,
     fanOutFetched,
     fetchSkill,
     fleetChanged,
-    fleetSyncs,
-    installFromFolder,
     noteFetch,
     publishInstances,
     readAgent,
-    skillChoices,
+    fleetSyncs,
     skillRow,
   } = ctx;
   return (
     new Elysia()
-      // A plain skill is resolved here, once for the whole fleet: the hub
-      // downloads it, and the machines are handed the files (NEW.md §11). The
-      // route answers with the row marked `fetching` before the download
-      // starts; what came of it is a `fleet.fetch` frame (`fetchSkill`). A
-      // source that would not resolve is still stored — the row is where the
-      // dashboard reads why, and the ambiguous case carries what it could have
-      // meant (`choices`).
-      //
-      // `fromMachine` is the other way in: a skill somebody wrote on one machine,
-      // read off it and stored like any fetched one, so it reaches the rest.
-      // So is a skill folder on a machine (`file://<machine>/<path>`): read
-      // and checked here before anything is stored, refused in its words
-      // when it can't be, and refused when it no longer holds the files the
-      // person approved (`contentHash`, skills.ts `FOLDER_CHANGED`).
       .put(
         "/api/fleet/skills/:name",
-        {
-          body: t.Object({
-            source: t.Optional(t.String()),
-            /** A folder install's approved files, by their hash (skills.ts `readCheckedFolder`). */
-            contentHash: t.Optional(t.String()),
-            enabled: t.Optional(t.Boolean()),
-            fromMachine: t.Optional(t.String()),
-            /** The checkout a project-scoped skill was discovered in. */
-            cwd: t.Optional(t.String()),
-            ...boundFields,
-          }),
-        },
-        async ({ params, body, set }) => {
-          if (!SKILL_NAME.test(params.name)) {
-            return problem(400, {
-              code: "not-usable-skill-name",
-              detail: `${params.name} is not a usable skill name`,
-            });
-          }
-          const unbindable = boundProblem(body);
-          if (unbindable) {
-            return problem(400, { code: "unbindable", detail: unbindable });
-          }
-
-          if (body.fromMachine) {
-            const read = await skillFilesOff(
-              ctx,
-              body.fromMachine,
-              [params.name, body.cwd],
-              set
-            );
-            if (read instanceof ElysiaStatus) {
-              return read;
-            }
-            const { files } = read;
-            const skill = db.putSkill({
-              name: params.name,
-              source: `machine:${body.fromMachine}`,
-              enabled: body.enabled,
-              projectId: body.projectId,
-              areaId: body.areaId,
-              hash: hashFiles(files),
-              bytes: files.reduce(
-                (total, file) =>
-                  total + Buffer.byteLength(file.contentBase64, "base64"),
-                0
-              ),
-              files,
-            });
-            fleetChanged();
-            return skill;
-          }
-
-          if (!body.source) {
-            return problem(400, {
-              code: "name-source-machine-adopt",
-              detail: "name a source, or the machine to adopt it from",
-            });
-          }
-
-          const fromFolder = await installFromFolder(params.name, {
-            ...body,
-            source: body.source,
-          });
-          if (fromFolder) {
-            return fromFolder;
-          }
-
-          db.stageSkill({
-            name: params.name,
-            source: body.source,
-            enabled: body.enabled,
-            projectId: body.projectId,
-            areaId: body.areaId,
-          });
-          // A fetch that found the files the fleet has tells the machines
-          // here instead: the row's switch or placement may have moved.
-          detach(
-            fetchSkill(params.name, body.source).then((fetched) => {
-              if (fetched === "same") {
-                fleetChanged();
-              }
-            }),
-            "skill fetch"
-          );
-          const staged = db
-            .listSkills()
-            .find((entry) => entry.name === params.name);
-          return staged
-            ? skillRow(staged)
-            : problem(404, {
-                code: "no-skill",
-                detail: `no skill ${params.name}`,
-              });
-        }
+        { body: skillBody },
+        ({ params, body, set }) => calls.put(params.name, body, set)
       )
-      // On or off: the stored row's flag, its source and files as they are.
-      // Nothing is fetched; every machine is told, and a machine takes a
-      // disabled skill away and writes an enabled one from the stored files.
       .patch(
         "/api/fleet/skills/:name",
         { body: t.Object({ enabled: t.Boolean() }) },
-        ({ params, body }) => {
-          let row: FleetSkillMeta | undefined;
-          try {
-            row = db.setSkillEnabled(params.name, body.enabled);
-          } catch (error) {
-            return problem(400, {
-              code: "skill-not-saved",
-              detail: error instanceof Error ? error.message : String(error),
-            });
-          }
-          if (!row) {
-            return problem(404, {
-              code: "no-skill",
-              detail: `no skill ${params.name}`,
-            });
-          }
-          fleetChanged();
-          return skillRow(row);
-        }
+        ({ params, body }) => calls.setEnabled(params.name, body.enabled)
       )
       // Reads every skill's and plugin's source for what it holds now, nothing
       // stored and no machine told (`checkSources`). Answers at once,
@@ -250,22 +285,9 @@ export const fleetSkillRoutes = (
         return skillRow(stored);
       })
       // Its files kept in its history, then into the trash, off every machine.
-      .delete("/api/fleet/skills/:name", ({ params }) => {
-        db.keepSkillVersion(params.name);
-        const trashed = db.trash.put(
-          { kind: "skill", key: params.name },
-          Date.now()
-        );
-        if (trashed === undefined) {
-          return problem(404, {
-            code: "no-skill",
-            detail: `the fleet keeps no skill ${params.name}`,
-          });
-        }
-        skillChoices.delete(params.name);
-        fleetChanged();
-        return undoable(trashed);
-      })
+      .delete("/api/fleet/skills/:name", ({ params }) =>
+        calls.remove(params.name)
+      )
       // What one skill used to be, newest first, without its files.
       .get(
         "/api/fleet/skills/history",

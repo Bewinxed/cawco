@@ -11,12 +11,13 @@ import {
 } from "@cawco/core/rules";
 import { areaWords } from "@cawco/core/words/areas";
 import { Elysia, problem, t } from "elysia";
+import type { Static } from "typebox";
 import type { DbShape } from "../db";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 import { sessionLabel } from "../labels";
 
-const ruleBody = t.Object({
+export const ruleBody = t.Object({
   name: t.String(),
   enabled: t.Boolean(),
   pattern: t.String(),
@@ -52,6 +53,22 @@ const firstRuleProblem = (draft: RuleDraft): string | undefined => {
   return first;
 };
 
+/** The 400 a rule that does not pass `ruleProblem` is refused with, or nothing. */
+const invalidRule = (draft: RuleDraft) => {
+  const first = firstRuleProblem(draft);
+  return first
+    ? problem(400, { code: "rule-invalid", detail: first })
+    : undefined;
+};
+
+/** The 400 a rule scoped to a project or area this hub does not keep is refused with, or nothing. */
+const misplacedRule = (db: DbShape, draft: RuleDraft) => {
+  const misplaced = ruleScopeProblem(db, draft);
+  return misplaced
+    ? problem(400, { code: "rule-misplaced", detail: misplaced })
+    : undefined;
+};
+
 /** What is wrong with where a rule is scoped: a project or area this hub doesn't keep. */
 const ruleScopeProblem = (
   db: DbShape,
@@ -66,85 +83,86 @@ const ruleScopeProblem = (
   return undefined;
 };
 
-export const ruleRoutes = ({
+/**
+ * Rules: standing instructions the hub enforces on the frame stream. The
+ * shape is validated loosely here and strictly by `ruleProblem`, which is
+ * the same validator the editor refuses with — one set of sentences, so the
+ * form and the hub never disagree about what is wrong. The routes answer
+ * these, and the admin tools call them directly.
+ */
+export const ruleCalls = ({
   db,
   ruleEngine,
   ruleRowsOf,
-}: Pick<HubContext, "db" | "ruleEngine" | "ruleRowsOf">) =>
-  new Elysia()
-    /**
-     * Rules: standing instructions the hub enforces on the frame stream. The
-     * shape is validated loosely here and strictly by `ruleProblem`, which is
-     * the same validator the editor refuses with — one set of sentences, so the
-     * form and the hub never disagree about what is wrong.
-     */
-    .get("/api/rules", () => ({
-      rules: ruleRowsOf(db.listRules()),
-      templates: RULE_TEMPLATES,
-    }))
-    .post("/api/rules", { body: ruleBody }, ({ body }) => {
-      const draft = body as unknown as RuleDraft;
-      const first = firstRuleProblem(draft);
-      if (first) {
-        return problem(400, { code: "rule-invalid", detail: first });
-      }
-      const misplaced = ruleScopeProblem(db, draft);
-      if (misplaced) {
-        return problem(400, { code: "rule-misplaced", detail: misplaced });
-      }
-      // The hub mints the id: the client never invents identity, it asks for it.
-      const rule: Rule = {
-        ...draft,
-        id: crypto.randomUUID(),
-        createdAt: Date.now(),
-      };
-      db.putRule(rule);
-      ruleEngine.reload();
-      return rule;
-    })
-    .put("/api/rules/:id", { body: ruleBody }, ({ params, body }) => {
-      const draft = body as unknown as RuleDraft;
-      const first = firstRuleProblem(draft);
-      if (first) {
-        return problem(400, { code: "rule-invalid", detail: first });
-      }
-      // Strictly an edit: an id this hub never minted is a caller's mistake,
-      // not an invitation to upsert.
-      const existing = db.getRule(params.id);
-      if (!existing) {
-        return problem(404, {
-          code: "no-rule-edit",
-          detail: `there is no rule ${params.id} to edit`,
-        });
-      }
-      const misplaced = ruleScopeProblem(db, draft);
-      if (misplaced) {
-        return problem(400, { code: "rule-misplaced", detail: misplaced });
-      }
-      const rule: Rule = {
-        ...draft,
-        id: params.id,
-        createdAt: existing.createdAt,
-      };
-      db.putRule(rule);
-      ruleEngine.reload();
-      return rule;
-    })
-    // The rule stops at once, into the trash with every session's standing.
-    .delete("/api/rules/:id", ({ params }) => {
-      const trashed = db.trash.put(
-        { kind: "rule", key: params.id },
-        Date.now()
-      );
-      if (trashed === undefined) {
-        return problem(404, {
-          code: "no-rule",
-          detail: `there is no rule ${params.id}`,
-        });
-      }
-      ruleEngine.reload();
-      return undoable(trashed);
-    });
+}: Pick<HubContext, "db" | "ruleEngine" | "ruleRowsOf">) => ({
+  list: () => ({
+    rules: ruleRowsOf(db.listRules()),
+    templates: RULE_TEMPLATES,
+  }),
+  create: (body: Static<typeof ruleBody>) => {
+    const draft = body as unknown as RuleDraft;
+    const invalid = invalidRule(draft) ?? misplacedRule(db, draft);
+    if (invalid) {
+      return invalid;
+    }
+    // The hub mints the id: the client never invents identity, it asks for it.
+    const rule: Rule = {
+      ...draft,
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+    };
+    db.putRule(rule);
+    ruleEngine.reload();
+    return rule;
+  },
+  update: (id: string, body: Static<typeof ruleBody>) => {
+    const draft = body as unknown as RuleDraft;
+    const invalid = invalidRule(draft);
+    if (invalid) {
+      return invalid;
+    }
+    // Strictly an edit: an id this hub never minted is a caller's mistake,
+    // not an invitation to upsert.
+    const existing = db.getRule(id);
+    if (!existing) {
+      return problem(404, {
+        code: "no-rule-edit",
+        detail: `there is no rule ${id} to edit`,
+      });
+    }
+    const misplaced = misplacedRule(db, draft);
+    if (misplaced) {
+      return misplaced;
+    }
+    const rule: Rule = { ...draft, id, createdAt: existing.createdAt };
+    db.putRule(rule);
+    ruleEngine.reload();
+    return rule;
+  },
+  /** The rule stops at once, into the trash with every session's standing. */
+  remove: (id: string) => {
+    const trashed = db.trash.put({ kind: "rule", key: id }, Date.now());
+    if (trashed === undefined) {
+      return problem(404, {
+        code: "no-rule",
+        detail: `there is no rule ${id}`,
+      });
+    }
+    ruleEngine.reload();
+    return undoable(trashed);
+  },
+});
+
+export const ruleRoutes = (ctx: Parameters<typeof ruleCalls>[0]) => {
+  const calls = ruleCalls(ctx);
+  return new Elysia()
+    .get("/api/rules", () => calls.list())
+    .post("/api/rules", { body: ruleBody }, ({ body }) => calls.create(body))
+    .put("/api/rules/:id", { body: ruleBody }, ({ params, body }) =>
+      calls.update(params.id, body)
+    )
+    .delete("/api/rules/:id", ({ params }) => calls.remove(params.id));
+};
 
 export const ruleActivityRoutes = ({ db }: Pick<HubContext, "db">) =>
   new Elysia()

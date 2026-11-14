@@ -3,7 +3,8 @@
  */
 
 import { HOOK_TEMPLATES, type HookDraft, hookProblem } from "@cawco/core/hooks";
-import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, status, t } from "elysia";
+import type { Static } from "typebox";
 import { hashHookMaterial } from "../db/fleet-catalog";
 import { undoable } from "../db/trash";
 import { hidden } from "../hidden";
@@ -17,6 +18,105 @@ import {
 
 /** A hook on one machine, as the routes that read or adopt its copy name it. */
 const HOOK_ON_MACHINE = t.Object({ machineId: t.String(), id: t.String() });
+
+// A partial update: every field is optional, a given one replaces the
+// stored value, `null` clears an optional one, and an absent one
+// keeps what is stored. The merged hook is what gets validated.
+export const hookBody = t.Object({
+  name: t.Optional(t.String()),
+  enabled: t.Optional(t.Boolean()),
+  event: t.Optional(t.String()),
+  matcher: t.Optional(t.Nullable(t.String())),
+  // Stored and written verbatim, so the schema only asks that it be an
+  // object; `hookProblem` checks the fields that make it runnable.
+  handler: t.Optional(t.Record(t.String(), t.Unknown())),
+  script: t.Optional(t.Nullable(t.String())),
+  scope: t.Optional(t.Nullable(t.String())),
+  projectId: t.Optional(t.Nullable(t.String())),
+  areaId: t.Optional(t.Nullable(t.String())),
+  expectedHash: t.Optional(t.String()),
+});
+
+/**
+ * Hooks (NEW.md §11): the one fleet row that is executable, so the gate
+ * here is `hookProblem` — the same validator the editor refuses a save
+ * with — rather than the loose shape checks a config blob gets elsewhere.
+ * A hook that passed the editor's own test box and still fails here would
+ * be a hub disagreeing with itself about what is safe to run. The routes
+ * answer these, and the admin tools call them directly.
+ */
+export const fleetHookCalls = ({
+  boundProblem,
+  db,
+  fleetChanged,
+  hookDraftOf,
+  keepHookVersion,
+}: Pick<
+  HubContext,
+  "boundProblem" | "db" | "fleetChanged" | "hookDraftOf" | "keepHookVersion"
+>) => ({
+  list: () => ({
+    hooks: db.listFleetHooks(),
+    templates: HOOK_TEMPLATES,
+  }),
+  put: (id: string, body: Static<typeof hookBody>) => {
+    const { expectedHash, ...patch } = body;
+    const current = db.getFleetHook(id);
+    // The same conflict a memory document's save answers with: what the
+    // writer had in front of them is stale, so the row really there comes
+    // back rather than one editor's version winning by being last.
+    if (
+      expectedHash !== undefined &&
+      current &&
+      current.hash !== expectedHash
+    ) {
+      return status(409, current);
+    }
+
+    const draft = hookDraftOf(current, patch);
+    if (typeof draft.enabled !== "boolean") {
+      return problem(400, {
+        code: "say-whether-hook-enabled",
+        detail: "Say whether the hook is enabled.",
+      });
+    }
+    const [first] = [
+      boundProblem(draft),
+      ...Object.values(hookProblem(draft)),
+    ].filter(Boolean);
+    if (first) {
+      return problem(400, { code: "hook-invalid", detail: first });
+    }
+
+    if (current) {
+      keepHookVersion(current);
+    }
+
+    const hook = db.putFleetHook({ ...draft, id });
+    fleetChanged();
+    return hook;
+  },
+  remove: (id: string) => {
+    const current = db.getFleetHook(id);
+    if (!current) {
+      return problem(404, {
+        code: "no-hook",
+        detail: `the fleet keeps no hook ${id}`,
+      });
+    }
+
+    keepHookVersion(current);
+    const trashed = db.trash.put({ kind: "hook", key: id }, Date.now());
+    if (trashed === undefined) {
+      return problem(404, {
+        code: "no-hook",
+        detail: `the fleet keeps no hook ${id}`,
+      });
+    }
+    fleetChanged();
+    return undoable(trashed);
+  },
+});
 
 export const fleetHookRoutes = (
   ctx: Pick<
@@ -34,16 +134,15 @@ export const fleetHookRoutes = (
   >
 ) => {
   const {
-    boundProblem,
     db,
     fleetChanged,
     fleetSyncs,
-    hookDraftOf,
     keepHookVersion,
     machineFleetItems,
     machineName,
     publishInstances,
   } = ctx;
+  const hookCalls = fleetHookCalls(ctx);
   return (
     new Elysia()
       /**
@@ -53,92 +152,13 @@ export const fleetHookRoutes = (
        * A hook that passed the editor's own test box and still fails here would
        * be a hub disagreeing with itself about what is safe to run.
        */
-      .get("/api/fleet/hooks", () => ({
-        hooks: db.listFleetHooks(),
-        templates: HOOK_TEMPLATES,
-      }))
-      .put(
-        "/api/fleet/hooks/:id",
-        {
-          // A partial update: every field is optional, a given one replaces the
-          // stored value, `null` clears an optional one, and an absent one
-          // keeps what is stored. The merged hook is what gets validated.
-          body: t.Object({
-            name: t.Optional(t.String()),
-            enabled: t.Optional(t.Boolean()),
-            event: t.Optional(t.String()),
-            matcher: t.Optional(t.Nullable(t.String())),
-            // Stored and written verbatim, so the schema only asks that it be an
-            // object; `hookProblem` checks the fields that make it runnable.
-            handler: t.Optional(t.Record(t.String(), t.Unknown())),
-            script: t.Optional(t.Nullable(t.String())),
-            scope: t.Optional(t.Nullable(t.String())),
-            projectId: t.Optional(t.Nullable(t.String())),
-            areaId: t.Optional(t.Nullable(t.String())),
-            expectedHash: t.Optional(t.String()),
-          }),
-        },
-        ({ params, body, status }) => {
-          const { expectedHash, ...patch } = body;
-          const current = db.getFleetHook(params.id);
-          // The same conflict a memory document's save answers with: what the
-          // writer had in front of them is stale, so the row really there comes
-          // back rather than one editor's version winning by being last.
-          if (
-            expectedHash !== undefined &&
-            current &&
-            current.hash !== expectedHash
-          ) {
-            return status(409, current);
-          }
-
-          const draft = hookDraftOf(current, patch);
-          if (typeof draft.enabled !== "boolean") {
-            return problem(400, {
-              code: "say-whether-hook-enabled",
-              detail: "Say whether the hook is enabled.",
-            });
-          }
-          const [first] = [
-            boundProblem(draft),
-            ...Object.values(hookProblem(draft)),
-          ].filter(Boolean);
-          if (first) {
-            return problem(400, { code: "hook-invalid", detail: first });
-          }
-
-          if (current) {
-            keepHookVersion(current);
-          }
-
-          const hook = db.putFleetHook({ ...draft, id: params.id });
-          fleetChanged();
-          return hook;
-        }
+      .get("/api/fleet/hooks", () => hookCalls.list())
+      .put("/api/fleet/hooks/:id", { body: hookBody }, ({ params, body }) =>
+        hookCalls.put(params.id, body)
       )
-      .delete("/api/fleet/hooks/:id", ({ params }) => {
-        const current = db.getFleetHook(params.id);
-        if (!current) {
-          return problem(404, {
-            code: "no-hook",
-            detail: `the fleet keeps no hook ${params.id}`,
-          });
-        }
-
-        keepHookVersion(current);
-        const trashed = db.trash.put(
-          { kind: "hook", key: params.id },
-          Date.now()
-        );
-        if (trashed === undefined) {
-          return problem(404, {
-            code: "no-hook",
-            detail: `the fleet keeps no hook ${params.id}`,
-          });
-        }
-        fleetChanged();
-        return undoable(trashed);
-      })
+      .delete("/api/fleet/hooks/:id", ({ params }) =>
+        hookCalls.remove(params.id)
+      )
       // What one hook used to be, newest first, without the material. `?hookId=`
       // narrows to that hook's own history; nothing named lists every hook's,
       // for a fleet-wide undo panel.
@@ -196,7 +216,7 @@ export const fleetHookRoutes = (
       .post(
         "/api/fleet/hooks/peek",
         { body: HOOK_ON_MACHINE },
-        async ({ body, set, status }) => {
+        async ({ body, set }) => {
           const read = await hookCopyOff(ctx, body, set);
           if (read instanceof ElysiaStatus) {
             return read;

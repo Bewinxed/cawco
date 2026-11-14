@@ -3,18 +3,16 @@
  * skills, plugins, MCP servers, rules, hooks, subagents, memory) through the same MCP server
  * the handoff tools ride.
  *
- * Every write goes through the hub's own REST API so it shares the same
- * validation, fan-out and persistence the dashboard uses. The tools are
- * read/write over fleet config — not session-scoped, not delegation-scoped.
+ * Every write calls the function its route calls (admin-calls.ts), so it
+ * shares the same validation, fan-out and persistence the dashboard uses. The
+ * tools are read/write over fleet config — not session-scoped, not
+ * delegation-scoped.
  */
-import { type Account, accountNames } from "@cawco/core/accounts";
-import { readWithin } from "@cawco/core/bounded";
+import { accountNames } from "@cawco/core/accounts";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import type { ConnectionAuth } from "@cawco/core/connections";
 import {
   type FleetAgent,
-  type FleetMemory,
-  type FleetMemoryDoc,
   type FleetPlugin,
   type FleetSkillMeta,
   type MarketplaceLink,
@@ -24,16 +22,14 @@ import {
   scoped,
 } from "@cawco/core/fleet";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
-import type { FleetHook } from "@cawco/core/hooks";
-import type { RuleRow } from "@cawco/core/rules";
-import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
+import type { HarnessConfigKind } from "@cawco/core/harness-config";
 import { mcpWords } from "@cawco/core/words/mcp";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
+import type { AdminCalls } from "./admin-calls";
 import { landedFetch } from "./fleet-fetches";
 import { byHandle } from "./handles";
-import { hubHttpUrl, selfFetch } from "./hub-self";
-import { type Presenter, tool } from "./mcp-tool";
+import { answered, type Presenter, toolOn } from "./mcp-tool";
 import {
   connectionSettingsWords,
   delegateTypeSettingsWords,
@@ -48,13 +44,7 @@ import {
   skillSettingsWords,
   subagentSettingsWords,
 } from "./presenters/fleet-settings";
-
-/**
- * API timeout for one admin call. A fetch from GitHub is not waited on in
- * the request: its route answers at once and the tool waits on the hub's own
- * announcement of the outcome (fleet-fetches.ts).
- */
-const TIMEOUT_MS = 30_000;
+import type { AnyProblem } from "./refusal";
 
 /** The connection auths the `connections` tool's `auth` field takes. */
 const MADE_AUTHS = [
@@ -64,73 +54,24 @@ const MADE_AUTHS = [
   "oauth",
 ] as const satisfies readonly ConnectionAuth[];
 
-/** A hub route's refusal the caller reads itself ({@link request}'s `statuses`). */
-interface Refused {
-  answer: unknown;
-  refused: number;
-}
-
 /**
- * Calls a hub route and returns the parsed response, or throws a sentence. A
- * status in `statuses` answers as {@link Refused} with its body instead: a
- * stale-hash refusal carries what is really there.
+ * A subagent write's answer, its two refusals as the presenter reads them
+ * (presenters/fleet-settings.ts `AgentRefused`): the file it named is gone
+ * (404, its words), or moved since its read (409, the stored file). Any other
+ * problem is the call's own.
  */
-const request = async (
-  method: string,
-  path: string,
-  body: unknown,
-  statuses: readonly number[]
-): Promise<unknown> => {
-  const url = `${hubHttpUrl()}${path}`;
-  const asked = await readWithin(TIMEOUT_MS, async (signal) => {
-    // The hub calling its own route, as itself (hub-self.ts).
-    const response = await selfFetch(url, {
-      method,
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-      signal,
-    });
-    const contentType = response.headers.get("content-type") ?? "";
-    const parsed = async (): Promise<unknown> =>
-      (await (contentType.includes("json")
-        ? response.json()
-        : response.text())) as unknown;
-    if (statuses.includes(response.status)) {
-      return { refused: response.status, answer: await parsed() } as Refused;
-    }
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `${method} ${path} → ${response.status}: ${text.slice(0, 500)}`
-      );
-    }
-    return await parsed();
-  });
-  switch (asked.kind) {
-    case "answered":
-      return asked.value;
-    case "unanswered":
-      throw new Error(
-        `${method} ${path}: the hub did not answer within ${secondsOf(asked.after)} s`
-      );
-    default:
-      unhandled("read", asked);
+const agentRefused = <A>(answer: A) => {
+  if (!(answer instanceof ElysiaStatus)) {
+    return answer;
   }
+  if (answer.status === 409) {
+    return { refused: answer.status, answer: answer.response };
+  }
+  if (answer.status === 404) {
+    return { refused: answer.status, answer: answer.response.detail };
+  }
+  return answer;
 };
-
-/** JSON helper — calls a hub route and returns the parsed response, or throws a sentence. */
-const api = (method: string, path: string, body?: unknown): Promise<unknown> =>
-  request(method, path, body, []);
-
-/**
- * The subagent routes' refusals a write answers with rather than throws: the
- * file it named is gone (404), or moved since its read (409, the stored file).
- */
-const AGENT_REFUSALS = [404, 409] as const;
 
 /** Every subagent's name, for a refusal that names what there is. */
 const listedNames = (agents: readonly FleetAgent[]): string =>
@@ -153,18 +94,16 @@ const fieldsGiven = (
  * what lets the tool's own handler stay about plugins.
  */
 const marketplaceAction = async (
+  on: AdminCalls,
   action: "link" | "unlink",
   name: string | undefined,
   source: string | undefined
-): Promise<unknown> => {
+) => {
   if (action === "unlink") {
     if (!name) {
       throw new Error("name is required to unlink a marketplace");
     }
-    return await api(
-      "DELETE",
-      `/api/fleet/marketplaces/${encodeURIComponent(name)}`
-    );
+    return on.marketplaces.unlink(name);
   }
   if (!source) {
     throw new Error("source is required to link a marketplace");
@@ -174,16 +113,18 @@ const marketplaceAction = async (
   const wanted = source.trim();
   const link = await landedFetch<MarketplaceLink>(
     (news) => (news.link?.source === wanted ? news.link : undefined),
-    async () =>
-      (await api("POST", "/api/fleet/marketplace-links", {
-        source: wanted,
-      })) as MarketplaceLink
+    () => Promise.resolve(on.marketplaces.link(wanted))
   );
+  if (!answered(link)) {
+    return link;
+  }
   if (!link.marketplace) {
     throw new Error(`could not link ${wanted}: ${link.error}`);
   }
   return link.marketplace;
 };
+
+const adminTool = toolOn<AdminCalls>();
 
 /** Every write's reason, which the person reads first on the approval (asks.ts `askRefusal`). */
 const reason = z
@@ -194,17 +135,14 @@ const reason = z
 
 /** What a memory write answers: the hash to write against next, when it landed, and the size kept; never the text back. */
 const keptMemory = (
-  saved: unknown,
+  saved: { hash: string; updatedAt: string },
   content: string
-): { bytes: number; hash: string; lines: number; updatedAt: string } => {
-  const row = saved as { hash: string; updatedAt: string };
-  return {
-    hash: row.hash,
-    updatedAt: row.updatedAt,
-    lines: content === "" ? 0 : content.split("\n").length,
-    bytes: Buffer.byteLength(content),
-  };
-};
+): { bytes: number; hash: string; lines: number; updatedAt: string } => ({
+  hash: saved.hash,
+  updatedAt: saved.updatedAt,
+  lines: content === "" ? 0 : content.split("\n").length,
+  bytes: Buffer.byteLength(content),
+});
 
 /**
  * The hash an `expectedHash` names: the whole one, or the handle the read
@@ -214,20 +152,18 @@ const keptMemory = (
  * refused as moved, with the current version.
  */
 const wholeHash = async (
+  on: AdminCalls,
   asked: string,
   path: string | undefined
 ): Promise<string> => {
   if (asked.length >= 64 || asked.length < HASH_HANDLE) {
     return asked;
   }
-  const fleet = (await api("GET", "/api/fleet")) as {
-    memory?: { hash: string } | null;
-    memoryDocs?: { hash: string; path: string }[];
-  };
+  const fleet = await on.fleet();
   const kept =
     path === undefined
       ? fleet.memory?.hash
-      : fleet.memoryDocs?.find((doc) => doc.path === path)?.hash;
+      : fleet.memoryDocs.find((doc) => doc.path === path)?.hash;
   return kept?.startsWith(asked) ? kept : asked;
 };
 
@@ -259,34 +195,34 @@ const listedNamed = <T extends Listed>(
   );
 
 /** The whole ids of the projects `asked` names, each by id, handle or name. */
-const projectIdsOf = async (asked: readonly string[]): Promise<string[]> => {
+const projectIdsOf = (on: AdminCalls, asked: readonly string[]): string[] => {
   if (asked.length === 0) {
     return [];
   }
-  const projects = (await api("GET", "/api/projects")) as Listed[];
+  const projects = on.projects();
   return asked.map((one) => listedNamed(one, projects, "project").id);
 };
 
 /** {@link projectIdsOf} for one project field: null, undefined and blank go on as given. */
-const projectIdOf = async <T extends string | null | undefined>(
+const projectIdOf = <T extends string | null | undefined>(
+  on: AdminCalls,
   asked: T
-): Promise<T | string> =>
-  asked ? ((await projectIdsOf([asked]))[0] ?? asked) : asked;
+): T | string => (asked ? (projectIdsOf(on, [asked])[0] ?? asked) : asked);
 
 /** The whole ids of the areas `asked` names, each by id, handle or name. */
-const areaIdsOf = async (asked: readonly string[]): Promise<string[]> => {
+const areaIdsOf = (on: AdminCalls, asked: readonly string[]): string[] => {
   if (asked.length === 0) {
     return [];
   }
-  const { areas } = (await api("GET", "/api/areas")) as { areas: Listed[] };
+  const { areas } = on.areas();
   return asked.map((one) => listedNamed(one, areas, "area").id);
 };
 
 /** {@link areaIdsOf} for one area field: null, undefined and blank go on as given. */
-const areaIdOf = async <T extends string | null | undefined>(
+const areaIdOf = <T extends string | null | undefined>(
+  on: AdminCalls,
   asked: T
-): Promise<T | string> =>
-  asked ? ((await areaIdsOf([asked]))[0] ?? asked) : asked;
+): T | string => (asked ? (areaIdsOf(on, [asked])[0] ?? asked) : asked);
 
 /** A fleet row's `areaId` parameter: bound to every project in an area instead of one. */
 const areaIdParameter = z
@@ -301,28 +237,30 @@ const areaIdParameter = z
  * A fleet row's binding as its route takes it: its project or its area by
  * whole id, each left out when not given.
  */
-const bindingAsked = async (asked: {
-  areaId?: string | null;
-  projectId?: string | null;
-}): Promise<{ areaId?: string | null; projectId?: string | null }> => ({
+const bindingAsked = (
+  on: AdminCalls,
+  asked: {
+    areaId?: string | null;
+    projectId?: string | null;
+  }
+): { areaId?: string | null; projectId?: string | null } => ({
   ...(asked.projectId === undefined
     ? {}
-    : { projectId: await projectIdOf(asked.projectId) }),
-  ...(asked.areaId === undefined
-    ? {}
-    : { areaId: await areaIdOf(asked.areaId) }),
+    : { projectId: projectIdOf(on, asked.projectId) }),
+  ...(asked.areaId === undefined ? {} : { areaId: areaIdOf(on, asked.areaId) }),
 });
 
 /** The memory scope `scope` names, its projects and areas by whole id. */
-const scopeWithProjects = async (
+const scopeWithProjects = (
+  on: AdminCalls,
   scope: MemoryScope | undefined
-): Promise<MemoryScope | undefined> =>
+): MemoryScope | undefined =>
   scope && {
     ...scope,
     ...(scope.projectIds
-      ? { projectIds: await projectIdsOf(scope.projectIds) }
+      ? { projectIds: projectIdsOf(on, scope.projectIds) }
       : {}),
-    ...(scope.areaIds ? { areaIds: await areaIdsOf(scope.areaIds) } : {}),
+    ...(scope.areaIds ? { areaIds: areaIdsOf(on, scope.areaIds) } : {}),
   };
 
 /**
@@ -387,7 +325,8 @@ function admin<G extends string, T extends z.ZodRawShape>(
   writes: readonly [string, ...string[]],
   input: T,
   handler: (
-    args: { action: string } & Partial<z.infer<z.ZodObject<T>>>
+    args: { action: string } & Partial<z.infer<z.ZodObject<T>>>,
+    on: AdminCalls
   ) => Promise<unknown>,
   /** How an agent reads the group's answers, knowing the action asked. */
   present: Presenter<unknown, { action: string } & Record<string, unknown>>,
@@ -395,7 +334,7 @@ function admin<G extends string, T extends z.ZodRawShape>(
   /** The fields of `input` a read takes too, by name; none by default. */
   readFields: readonly (keyof T & string)[] = []
 ) {
-  const read = tool(
+  const read = adminTool(
     `admin_${group}_read` as const,
     `Read ${about} \`action\`: ${reads.map((action) => `'${action}'`).join(", ")}.`,
     {
@@ -403,20 +342,24 @@ function admin<G extends string, T extends z.ZodRawShape>(
       ...Object.fromEntries(readFields.map((name) => [name, input[name]])),
     },
     // A read names its action and the fields it was given; every other field is the write's.
-    (args) =>
-      handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>),
+    (args, _format, on) =>
+      handler(
+        args as { action: string } & Partial<z.infer<z.ZodObject<T>>>,
+        on
+      ),
     (answer, asked) =>
       present(answer, asked as { action: string } & Record<string, unknown>)
   );
-  const write = tool(
+  const write = adminTool(
     `admin_${group}_write` as const,
     `Change what admin_${group}_read reads. \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The person approves it first, unless in Full Send; their answer arrives as a message.`,
     { action: z.enum(writes), reason, ...input },
     // The reason is the person's to read on the approval, not a setting.
-    (args) => {
+    (args, _format, on) => {
       const { reason: _reason, ...setting } = args as Record<string, unknown>;
       return handler(
-        setting as { action: string } & Partial<z.infer<z.ZodObject<T>>>
+        setting as { action: string } & Partial<z.infer<z.ZodObject<T>>>,
+        on
       );
     },
     (answer, asked) =>
@@ -451,47 +394,51 @@ const harnessConfigCode = (module: string) => ({
 });
 
 /**
- * The one handler of the three harness config groups, through their hub
- * routes (`/api/fleet/<route>`): a put sends only the fields given, and a
- * module or a package clears the other.
+ * The one handler of the three harness config groups, through their kind's
+ * calls: a put sends only the fields given, and a module or a package clears
+ * the other.
  */
 const harnessConfigHandler =
-  (route: "claude-settings" | "opencode-plugins" | "pi-extensions") =>
-  async ({
-    action,
-    name,
-    settings,
-    module,
-    package: pkg,
-    enabled,
-    projectId,
-    areaId,
-  }: {
-    action: string;
-    areaId?: string | null;
-    enabled?: boolean;
-    module?: string;
-    name?: string;
-    package?: string;
-    projectId?: string | null;
-    settings?: Record<string, unknown>;
-  }): Promise<unknown> => {
+  (kind: HarnessConfigKind) =>
+  async (
+    {
+      action,
+      name,
+      settings,
+      module,
+      package: pkg,
+      enabled,
+      projectId,
+      areaId,
+    }: {
+      action: string;
+      areaId?: string | null;
+      enabled?: boolean;
+      module?: string;
+      name?: string;
+      package?: string;
+      projectId?: string | null;
+      settings?: Record<string, unknown>;
+    },
+    on: AdminCalls
+  ): Promise<unknown> => {
     if (action === "list") {
-      return await api("GET", `/api/fleet/${route}`);
+      return await Promise.resolve(on.harnessConfigs.list(kind));
     }
     if (!name) {
       throw new Error("name is required for put and remove");
     }
-    const path = `/api/fleet/${route}/${encodeURIComponent(name)}`;
     if (action === "remove") {
-      return await api("DELETE", path);
+      return await Promise.resolve(on.harnessConfigs.remove(kind, name));
     }
-    return await api("PUT", path, {
-      ...fieldsGiven({ settings, enabled }),
-      ...(module === undefined ? {} : { module, package: null }),
-      ...(pkg === undefined ? {} : { package: pkg, module: null }),
-      ...(await bindingAsked({ projectId, areaId })),
-    });
+    return await Promise.resolve(
+      on.harnessConfigs.put(kind, name, {
+        ...fieldsGiven({ settings, enabled }),
+        ...(module === undefined ? {} : { module, package: null }),
+        ...(pkg === undefined ? {} : { package: pkg, module: null }),
+        ...bindingAsked(on, { projectId, areaId }),
+      })
+    );
   };
 
 /** The delegate type tool's `account` parameter, as the agent calling it reads it. */
@@ -507,13 +454,8 @@ const STARTING_SET_DESCRIPTION =
  * account names beside it, so a type's preferred account reads by the name
  * CawCo gives it (core `accountNames`).
  */
-const withAccountNames = async (answer: unknown): Promise<unknown> => {
-  if (!answer || typeof answer !== "object") {
-    return answer;
-  }
-  const { accounts } = (await api("GET", "/api/accounts")) as {
-    accounts: Account[];
-  };
+const withAccountNames = (on: AdminCalls, answer: object): object => {
+  const { accounts } = on.accounts();
   return {
     ...answer,
     accountNames: Object.fromEntries(accountNames(accounts)),
@@ -578,31 +520,31 @@ export function adminTools() {
           .optional()
           .describe(STARTING_SET_DESCRIPTION),
       },
-      async ({
-        action,
-        name,
-        description,
-        harness,
-        model,
-        effort,
-        skills,
-        denyTools,
-        mayStart,
-        connections,
-        account,
-        startingSet,
-      }) => {
+      async (
+        {
+          action,
+          name,
+          description,
+          harness,
+          model,
+          effort,
+          skills,
+          denyTools,
+          mayStart,
+          connections,
+          account,
+          startingSet,
+        },
+        on
+      ) => {
         if (action === "list") {
-          return withAccountNames(await api("GET", "/api/delegate-types"));
+          return withAccountNames(on, on.delegateTypes.list());
         }
         if (!name) {
           throw new Error("name is required for put and delete");
         }
         if (action === "delete") {
-          return await api(
-            "DELETE",
-            `/api/delegate-types/${encodeURIComponent(name)}`
-          );
+          return await Promise.resolve(on.delegateTypes.remove(name));
         }
         // put
         if (!(description && harness && model)) {
@@ -610,24 +552,23 @@ export function adminTools() {
             "description, harness, and model are required to create or update a delegate type"
           );
         }
-        return await api(
-          "PUT",
-          `/api/delegate-types/${encodeURIComponent(name)}`,
-          {
-            description,
-            harness,
-            model,
-            ...fieldsGiven({
-              effort,
-              skills,
-              denyTools,
-              mayStart,
-              connections,
-              account,
-              startingSet,
-            }),
-          }
-        ).then(withAccountNames);
+        const saved = on.delegateTypes.put(name, {
+          description,
+          harness,
+          model,
+          ...fieldsGiven({
+            effort,
+            skills,
+            denyTools,
+            mayStart,
+            connections,
+            account,
+            startingSet,
+          }),
+        });
+        return saved instanceof ElysiaStatus
+          ? saved
+          : withAccountNames(on, saved);
       },
       delegateTypeSettingsWords
     ),
@@ -670,22 +611,20 @@ export function adminTools() {
           .optional()
           .describe("sign_in: the hub address the browser reaches."),
       },
-      async (args) => {
+      async (args, on) => {
         const { action, name } = args;
         if (action === "list") {
-          return await api("GET", "/api/connections");
+          return on.connections.list();
         }
         if (!name) {
           throw new Error("name is required for every connection write");
         }
-        const path = `/api/connections/${encodeURIComponent(name)}`;
         if (action === "remove") {
-          return await api("DELETE", path);
+          return await Promise.resolve(on.connections.remove(name));
         }
         if (action === "sign_in") {
-          return await api(
-            "POST",
-            `${path}/sign-in`,
+          return await on.connections.signIn(
+            name,
             fieldsGiven({ origin: args.origin })
           );
         }
@@ -698,15 +637,12 @@ export function adminTools() {
         } = args;
         const fields = {
           ...rest,
-          ...(projects ? { projects: await projectIdsOf(projects) } : {}),
+          ...(projects ? { projects: projectIdsOf(on, projects) } : {}),
         };
         if (action === "create") {
-          return await api("POST", "/api/connections", {
-            name,
-            ...fieldsGiven(fields),
-          });
+          return await on.connections.create({ name, ...fieldsGiven(fields) });
         }
-        return await api("PATCH", path, fieldsGiven(fields));
+        return await on.connections.update(name, fieldsGiven(fields));
       },
       connectionSettingsWords,
       " A key never goes through a session: the owner runs `cawco connections set-key <name>` on a machine joined to the hub. Never ask for a key in chat. sign_in answers the URL to open. Changing where it points drops the key."
@@ -751,28 +687,21 @@ export function adminTools() {
             "Leave out: the hub sets it for a folder install, pinning the files the person approves."
           ),
       },
-      async ({ action, name, source, projectId, areaId, contentHash }) => {
+      async ({ action, name, source, projectId, areaId, contentHash }, on) => {
         if (action === "list") {
-          const fleet = (await api("GET", "/api/fleet")) as {
-            skills?: unknown[];
-          };
-          return { skills: fleet.skills ?? [] };
+          const { skills } = await on.fleet();
+          return { skills };
         }
         if (!name) {
           throw new Error("name is required");
         }
         if (action === "remove") {
-          return await api(
-            "DELETE",
-            `/api/fleet/skills/${encodeURIComponent(name)}`
-          );
+          return await Promise.resolve(on.skills.remove(name));
         }
         if (action === "enable" || action === "disable") {
           // The stored skill's flag; nothing is fetched.
-          return await api(
-            "PATCH",
-            `/api/fleet/skills/${encodeURIComponent(name)}`,
-            { enabled: action === "enable" }
+          return await Promise.resolve(
+            on.skills.setEnabled(name, action === "enable")
           );
         }
         // install
@@ -783,13 +712,13 @@ export function adminTools() {
         // fetch landed it (files, the sentence it failed with, or `choices`).
         return await landedFetch<FleetSkillMeta>(
           (news) => (news.skill?.name === name ? news.skill : undefined),
-          async () =>
-            (await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
+          () =>
+            on.skills.put(name, {
               source,
               ...(contentHash === undefined ? {} : { contentHash }),
               enabled: true,
-              ...(await bindingAsked({ projectId, areaId })),
-            })) as FleetSkillMeta
+              ...bindingAsked(on, { projectId, areaId }),
+            })
         );
       },
       skillSettingsWords,
@@ -832,43 +761,44 @@ export function adminTools() {
               "path. Required for link."
           ),
       },
-      async ({ action, id, name, source }) => {
+      async ({ action, id, name, source }, on) => {
         if (action === "list") {
-          const fleet = (await api("GET", "/api/fleet")) as {
-            config?: { marketplaces?: unknown[]; plugins?: unknown[] };
-          };
+          const { config } = await on.fleet();
           return {
-            marketplaces: fleet.config?.marketplaces ?? [],
-            plugins: fleet.config?.plugins ?? [],
+            marketplaces: config.marketplaces,
+            plugins: config.plugins,
           };
         }
 
         if (action === "link" || action === "unlink") {
-          return await marketplaceAction(action, name, source);
+          return await marketplaceAction(on, action, name, source);
         }
 
         if (!id) {
           throw new Error("id is required");
         }
-        const path = `/api/fleet/plugins/${encodeURIComponent(id)}`;
         if (action === "remove") {
-          return await api("DELETE", path);
+          return await Promise.resolve(on.plugins.remove(id));
         }
         if (action === "enable" || action === "disable") {
           // The stored plugin's flag; nothing is fetched.
-          return await api("PATCH", path, { enabled: action === "enable" });
+          return await Promise.resolve(
+            on.plugins.setEnabled(id, action === "enable")
+          );
         }
         // Install and refresh answer before the bytes are fetched; the row as
         // the fetch landed it.
-        const landed = (ask: () => Promise<unknown>) =>
+        const landed = (ask: () => Promise<FleetPlugin | AnyProblem>) =>
           landedFetch<FleetPlugin>(
             (news) => (news.plugin?.id === id ? news.plugin : undefined),
-            async () => (await ask()) as FleetPlugin
+            ask
           );
         if (action === "refresh") {
-          return await landed(() => api("POST", `${path}/refresh`));
+          return await landed(() => Promise.resolve(on.plugins.refresh(id)));
         }
-        return await landed(() => api("PUT", path, { enabled: true }));
+        return await landed(() =>
+          Promise.resolve(on.plugins.put(id, { enabled: true }))
+        );
       },
       pluginSettingsWords,
       " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id, with the name link answered; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
@@ -913,39 +843,28 @@ export function adminTools() {
           .optional()
           .describe("One process per machine; stdio, no per-session state."),
       },
-      async ({
-        action,
-        name,
-        config,
-        enabled,
-        projectId,
-        areaId,
-        platforms,
-        shared,
-      }) => {
+      async (
+        { action, name, config, enabled, projectId, areaId, platforms, shared },
+        on
+      ) => {
         if (action === "list") {
-          const fleet = (await api("GET", "/api/fleet")) as {
-            config?: { mcp?: unknown[] };
-          };
-          return { mcp: fleet.config?.mcp ?? [] };
+          const { config: fleet } = await on.fleet();
+          return { mcp: fleet.mcp };
         }
         if (!name) {
           throw new Error("name is required for put and remove");
         }
         if (action === "remove") {
-          return await api(
-            "DELETE",
-            `/api/fleet/mcp/${encodeURIComponent(name)}`
-          );
+          return await Promise.resolve(on.mcp.remove(name));
         }
         // put
         if (!config) {
           throw new Error("config is required to add or update an MCP server");
         }
-        return await api("PUT", `/api/fleet/mcp/${encodeURIComponent(name)}`, {
+        return await on.mcp.put(name, {
           config,
           ...(enabled === undefined ? {} : { enabled }),
-          ...(await bindingAsked({ projectId, areaId })),
+          ...bindingAsked(on, { projectId, areaId }),
           ...(platforms === undefined ? {} : { platforms }),
           ...(shared === undefined ? {} : { shared }),
         });
@@ -1035,32 +954,24 @@ export function adminTools() {
           .optional()
           .describe("Narrow the rule; every field given must match."),
       },
-      async (args) => {
+      async (args, on) => {
         const { action } = args;
         if (action === "list") {
-          return await api("GET", "/api/rules");
+          return on.rules.list();
         }
         if (action === "templates") {
-          const data = (await api("GET", "/api/rules")) as {
-            templates?: unknown;
-          };
-          return { templates: data.templates ?? [] };
+          return { templates: on.rules.list().templates };
         }
         // The rule an id names: whole, or the handle the list shows.
-        const ruleNamed = async (
-          asked: string | undefined
-        ): Promise<RuleRow> => {
+        const ruleNamed = (asked: string | undefined) => {
           if (!asked) {
             throw new Error(`id is required to ${action} a rule`);
           }
-          const { rules } = (await api("GET", "/api/rules")) as {
-            rules: RuleRow[];
-          };
-          return listedNamed(asked, rules, "rule");
+          return listedNamed(asked, on.rules.list().rules, "rule");
         };
         if (action === "remove") {
-          const { id } = await ruleNamed(args.id);
-          return await api("DELETE", `/api/rules/${encodeURIComponent(id)}`);
+          const { id } = ruleNamed(args.id);
+          return await Promise.resolve(on.rules.remove(id));
         }
 
         // Only the fields the call names; a project by its whole id.
@@ -1070,26 +981,28 @@ export function adminTools() {
             ...named,
             scope: scope && {
               ...scope,
-              projectId: await projectIdOf(scope.projectId),
+              projectId: projectIdOf(on, scope.projectId),
             },
           }).filter(([, value]) => value !== undefined)
         );
 
         if (action === "create") {
-          return await api("POST", "/api/rules", {
-            name: "",
-            enabled: true,
-            pattern: "",
-            matchKind: "phrase",
-            caseSensitive: false,
-            wholeWord: false,
-            watch: "text",
-            reply: "",
-            timing: "turn",
-            repeat: false,
-            scope: {},
-            ...given,
-          });
+          return await Promise.resolve(
+            on.rules.create({
+              name: "",
+              enabled: true,
+              pattern: "",
+              matchKind: "phrase",
+              caseSensitive: false,
+              wholeWord: false,
+              watch: "text",
+              reply: "",
+              timing: "turn",
+              repeat: false,
+              scope: {},
+              ...given,
+            })
+          );
         }
         // update: the route replaces the whole rule, so the given fields are
         // laid over the rule as it is stored; every other field stays.
@@ -1099,11 +1012,10 @@ export function adminTools() {
           stats: _stats,
           orphaned: _orphaned,
           ...current
-        } = (await ruleNamed(id)) as RuleRow & { orphaned?: unknown };
-        return await api("PUT", `/api/rules/${encodeURIComponent(storedId)}`, {
-          ...current,
-          ...given,
-        });
+        } = ruleNamed(id);
+        return await Promise.resolve(
+          on.rules.update(storedId, { ...current, ...given })
+        );
       },
       ruleSettingsWords
     ),
@@ -1168,32 +1080,24 @@ export function adminTools() {
           ),
         areaId: areaIdParameter,
       },
-      async (args) => {
+      async (args, on) => {
         const { action } = args;
         if (action === "list") {
-          return await api("GET", "/api/fleet/hooks");
+          return on.hooks.list();
         }
         // The hook an id names: whole, or the handle the list shows.
-        const hookNamed = async (
-          asked: string | undefined
-        ): Promise<string> => {
+        const hookNamed = (asked: string | undefined): string => {
           if (!asked) {
             throw new Error(`id is required to ${action} a hook`);
           }
-          const { hooks } = (await api("GET", "/api/fleet/hooks")) as {
-            hooks: FleetHook[];
-          };
-          return listedNamed(asked, hooks, "hook").id;
+          return listedNamed(asked, on.hooks.list().hooks, "hook").id;
         };
         if (action === "remove") {
-          return await api(
-            "DELETE",
-            `/api/fleet/hooks/${encodeURIComponent(await hookNamed(args.id))}`
-          );
+          return await Promise.resolve(on.hooks.remove(hookNamed(args.id)));
         }
 
         const id =
-          action === "create" ? crypto.randomUUID() : await hookNamed(args.id);
+          action === "create" ? crypto.randomUUID() : hookNamed(args.id);
 
         // Only the fields given: the hub merges an update over the stored hook
         // and validates the result, so `update {id, enabled: false}` touches
@@ -1201,7 +1105,7 @@ export function adminTools() {
         const { action: _action, id: _id, projectId, areaId, ...fields } = args;
         // A project's or an area's hook is bound by its scope as the hub
         // stores it; null for both makes it every machine's again.
-        const bound = await bindingAsked({ projectId, areaId });
+        const bound = bindingAsked(on, { projectId, areaId });
         const given = {
           ...fields,
           ...bound,
@@ -1214,11 +1118,7 @@ export function adminTools() {
             ? { ...given, enabled: given.enabled ?? true }
             : given;
 
-        return await api(
-          "PUT",
-          `/api/fleet/hooks/${encodeURIComponent(id)}`,
-          body
-        );
+        return await Promise.resolve(on.hooks.put(id, body));
       },
       hookSettingsWords,
       " 'create' adds one (the hub mints the id), 'update' edits by id, 'remove' deletes by id."
@@ -1249,10 +1149,8 @@ export function adminTools() {
             'Required: the hash get answered, "" for a new one. A moved file is refused with what it holds now.'
           ),
       },
-      async ({ action, name, content, expectedHash }) => {
-        const { agents = [] } = (await api("GET", "/api/fleet")) as {
-          agents?: FleetAgent[];
-        };
+      async ({ action, name, content, expectedHash }, on) => {
+        const { agents } = await on.fleet();
         if (action === "list") {
           return { agents };
         }
@@ -1279,23 +1177,14 @@ export function adminTools() {
           kept?.hash.startsWith(expectedHash)
             ? kept.hash
             : expectedHash;
-        const path = `/api/fleet/agents/${encodeURIComponent(name)}`;
         if (action === "remove") {
-          return await request(
-            "DELETE",
-            `${path}?expectedHash=${encodeURIComponent(hash)}`,
-            undefined,
-            AGENT_REFUSALS
-          );
+          return agentRefused(on.agents.remove(name, hash));
         }
         if (content === undefined) {
           throw new Error("content is required to put a subagent");
         }
-        return await request(
-          "PUT",
-          path,
-          { content, expectedHash: hash },
-          AGENT_REFUSALS
+        return agentRefused(
+          on.agents.put(name, { content, expectedHash: hash })
         );
       },
       subagentSettingsWords,
@@ -1324,7 +1213,7 @@ export function adminTools() {
           ),
         ...harnessConfigPlacement,
       },
-      harnessConfigHandler("claude-settings"),
+      harnessConfigHandler("claudeSettings"),
       harnessConfigSettingsWords("claudeSettings"),
       " A new session takes it as it starts; a running one keeps what it started with."
     ),
@@ -1342,7 +1231,7 @@ export function adminTools() {
         ),
         ...harnessConfigPlacement,
       },
-      harnessConfigHandler("opencode-plugins"),
+      harnessConfigHandler("opencodePlugins"),
       harnessConfigSettingsWords("opencodePlugins"),
       " Each machine writes the module, or installs the package with npm; a location booted after that sets it up."
     ),
@@ -1359,7 +1248,7 @@ export function adminTools() {
         ),
         ...harnessConfigPlacement,
       },
-      harnessConfigHandler("pi-extensions"),
+      harnessConfigHandler("piExtensions"),
       harnessConfigSettingsWords("piExtensions"),
       " Each machine writes the module, or installs the package with npm; a new session loads it."
     ),
@@ -1416,45 +1305,39 @@ export function adminTools() {
           ),
       },
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all five memory actions (get, set, list_docs, set_doc, remove_doc) with their validation in one handler; splitting would scatter the action enum's contract across several functions.
-      async ({ action, content, path, scope, expectedHash }) => {
+      async ({ action, content, path, scope, expectedHash }, on) => {
         if (action === "get") {
           // CLAUDE.md with its linked documents, as a machine is sent it
           // (FleetMemory): the hub's read keeps the two apart.
-          const fleet = (await api("GET", "/api/fleet")) as {
-            memory?: Omit<FleetMemory, "docs"> | null;
-            memoryDocs?: FleetMemoryDoc[];
-          };
+          const fleet = await on.fleet();
           return {
             memory: fleet.memory
-              ? { ...fleet.memory, docs: fleet.memoryDocs ?? [] }
+              ? { ...fleet.memory, docs: fleet.memoryDocs }
               : null,
           };
         }
         if (action === "list_docs") {
-          const fleet = (await api("GET", "/api/fleet")) as {
-            memoryDocs?: { scope?: MemoryScope }[];
-          };
-          const docs = fleet.memoryDocs ?? [];
-          const filter = await scopeWithProjects(scope);
+          const { memoryDocs } = await on.fleet();
+          const filter = scopeWithProjects(on, scope);
           return {
             docs: filter
-              ? docs.filter((doc) => scopeHas(doc.scope, filter))
-              : docs,
+              ? memoryDocs.filter((doc) => scopeHas(doc.scope, filter))
+              : memoryDocs,
           };
         }
         if (action === "set") {
           if (content === undefined) {
             throw new Error("content is required to set fleet memory");
           }
-          return keptMemory(
-            await api("PUT", "/api/fleet/memory", {
-              content,
-              ...(expectedHash
-                ? { expectedHash: await wholeHash(expectedHash, undefined) }
-                : {}),
-            }),
-            content
-          );
+          const saved = on.memory.set({
+            content,
+            ...(expectedHash
+              ? { expectedHash: await wholeHash(on, expectedHash, undefined) }
+              : {}),
+          });
+          return saved instanceof ElysiaStatus
+            ? saved
+            : keptMemory(saved, content);
         }
         if (action === "set_doc") {
           if (!(path && content !== undefined)) {
@@ -1462,26 +1345,23 @@ export function adminTools() {
               "path and content are required to set a memory document"
             );
           }
-          return {
+          const saved = on.memory.setDoc({
             path,
-            ...keptMemory(
-              await api("PUT", "/api/fleet/memory/docs", {
-                path,
-                content,
-                ...(scope ? { scope: await scopeWithProjects(scope) } : {}),
-                ...(expectedHash
-                  ? { expectedHash: await wholeHash(expectedHash, path) }
-                  : {}),
-              }),
-              content
-            ),
-          };
+            content,
+            ...(scope ? { scope: scopeWithProjects(on, scope) } : {}),
+            ...(expectedHash
+              ? { expectedHash: await wholeHash(on, expectedHash, path) }
+              : {}),
+          });
+          return saved instanceof ElysiaStatus
+            ? saved
+            : { path, ...keptMemory(saved, content) };
         }
         // remove_doc
         if (!path) {
           throw new Error("path is required to remove a memory document");
         }
-        return await api("DELETE", "/api/fleet/memory/docs", { path });
+        return await Promise.resolve(on.memory.removeDoc(path));
       },
       memorySettingsWords,
       "",
@@ -1513,18 +1393,14 @@ export function adminTools() {
               "its first name resolves."
           ),
       },
-      async ({ action, mode, pattern }) => {
+      async ({ action, mode, pattern }, on) => {
         if (action === "get") {
-          return await api("GET", "/api/preview-settings");
+          return on.previews.get();
         }
         if (!mode) {
           throw new Error("mode is required to set how previews are reached");
         }
-        return await api(
-          "PUT",
-          "/api/preview-settings",
-          fieldsGiven({ mode, pattern })
-        );
+        return await on.previews.set(fieldsGiven({ mode, pattern }));
       },
       previewSettingsWords,
       " It changes how every preview on the fleet is reached, so the person approves it first."

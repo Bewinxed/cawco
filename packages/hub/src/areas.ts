@@ -161,6 +161,8 @@ export const createAreas = ({
 
   /** Every area, each as {@link view} answers it. */
   const views = () => db.areas.list().map(viewOf);
+  /** The areas, as `GET /api/areas` answers them: the route answers it, and the admin tools list them directly. */
+  const list = () => ({ areas: views() });
 
   /** Where each setting of a project comes from now. */
   const sourcesOf = async (project: ProjectRow) => {
@@ -386,7 +388,7 @@ export const createAreas = ({
 
   const routes = () =>
     new Elysia()
-      .get("/api/areas", () => ({ areas: views() }))
+      .get("/api/areas", () => list())
       .post(
         "/api/areas",
         { body: t.Object({ name: AREA_NAME }) },
@@ -514,7 +516,7 @@ export const createAreas = ({
         }
       );
 
-  return { named, place, remove, routes, view };
+  return { list, named, place, remove, routes, view };
 };
 
 export type Areas = ReturnType<typeof createAreas>;

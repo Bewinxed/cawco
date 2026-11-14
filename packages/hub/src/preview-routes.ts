@@ -12,6 +12,7 @@ import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROL_NAMES } from "@cawco/core/comments/model";
 import type { ServerWebSocket } from "bun";
 import { Elysia, problem, t } from "elysia";
+import type { Static } from "typebox";
 import type { createArtifactPages } from "./artifact-pages";
 import type { ArtifactSocket } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
@@ -22,6 +23,35 @@ import { mintTicket, presentedPasses } from "./preview-access";
 
 /** A panel asked for an artifact its session doesn't see. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
+
+export const previewSettingsBody = t.Object({
+  mode: t.Union([t.Literal("port"), t.Literal("host")]),
+  // A host name's 253, its scheme and a port.
+  pattern: t.Optional(t.String({ maxLength: 270 })),
+});
+
+/**
+ * How every session's previews are reached, fleet-wide: the routes answer it,
+ * and the admin tools read and change it directly. A change stops every
+ * listener, a refused one too: each shown preview opens again where the mode
+ * now standing serves it (`republish`).
+ */
+export const previewSettings = (deps: {
+  listeners: PreviewListeners;
+  /** Every shown preview again, at its address now: the mode changed. */
+  republish: () => void;
+}) => ({
+  get: () => deps.listeners.settings(),
+  set: async (body: Static<typeof previewSettingsBody>) => {
+    try {
+      return await deps.listeners.set(body);
+    } finally {
+      // Every listener stopped for the change, a refused one too: each
+      // shown preview opens again where the mode now standing serves it.
+      deps.republish();
+    }
+  },
+});
 
 export const previewRoutes = (deps: {
   /** The paired device a request comes from (hub-auth.ts); null on a trusted hub, which pairs none. */
@@ -54,27 +84,12 @@ export const previewRoutes = (deps: {
 }) => {
   /** Each pane's doc socket, as the artifact sync code keeps one. */
   const panes = new Map<string, ServerWebSocket<ArtifactSocket>>();
+  const settings = previewSettings(deps);
   return (
     new Elysia()
-      .get("/api/preview-settings", () => deps.listeners.settings())
-      .put(
-        "/api/preview-settings",
-        {
-          body: t.Object({
-            mode: t.Union([t.Literal("port"), t.Literal("host")]),
-            // A host name's 253, its scheme and a port.
-            pattern: t.Optional(t.String({ maxLength: 270 })),
-          }),
-        },
-        async ({ body }) => {
-          try {
-            return await deps.listeners.set(body);
-          } finally {
-            // Every listener stopped for the change, a refused one too: each
-            // shown preview opens again where the mode now standing serves it.
-            deps.republish();
-          }
-        }
+      .get("/api/preview-settings", () => settings.get())
+      .put("/api/preview-settings", { body: previewSettingsBody }, ({ body }) =>
+        settings.set(body)
       )
       // Whether the hub reaches a preview origin itself now, which this
       // browser didn't (core preview-reach.ts): the pane says which side

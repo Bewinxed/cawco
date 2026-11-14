@@ -8,12 +8,164 @@ import {
   memoryScopeProblem,
 } from "@cawco/core/fleet";
 import { areaWords } from "@cawco/core/words/areas";
-import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, status, t } from "elysia";
+import type { Static } from "typebox";
 import { MEMORY_ID } from "../db/schema";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 import type { MachineReadsContext } from "../machine-reads";
 import { pushTarget, readMachineMemory } from "../machine-reads";
+
+export const memoryBody = t.Object({
+  content: t.String(),
+  expectedHash: t.Optional(t.String()),
+});
+
+export const memoryDocBody = t.Object({
+  path: t.String(),
+  content: t.String(),
+  expectedHash: t.Optional(t.String()),
+  scope: t.Optional(
+    t.Object({
+      role: t.Optional(t.UnionEnum(MEMORY_ROLES)),
+      projectIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
+      areaIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
+      delegateTypes: t.Optional(t.Array(t.String(), { minItems: 1 })),
+      model: t.Optional(t.String({ minLength: 1 })),
+      briefer: t.Optional(t.Literal(true)),
+    })
+  ),
+});
+
+/**
+ * The fleet's user-scope memory (NEW.md §11): the main CLAUDE.md every
+ * session loads flat, and the documents it links under
+ * `~/.claude/memories/` — each hash-synced to every machine like a skill's
+ * files are, and each drifting on its own. The routes answer these writes,
+ * and the admin tools call them directly.
+ */
+export const fleetMemoryCalls = ({
+  db,
+  delegateTypes,
+  fleetChanged,
+  keepRemovedMemory,
+  keepReplacedDoc,
+  keepReplacedMemory,
+  projectTypes,
+}: Pick<
+  HubContext,
+  | "db"
+  | "delegateTypes"
+  | "fleetChanged"
+  | "keepRemovedMemory"
+  | "keepReplacedDoc"
+  | "keepReplacedMemory"
+  | "projectTypes"
+>) => ({
+  /**
+   * `expectedHash` is what the writer had in front of them. A save against a
+   * row somebody else has moved answers with what is really there rather than
+   * taking the last writer's word for it — two dashboards on one document is
+   * the ordinary case here, not the exotic one.
+   */
+  set: (body: Static<typeof memoryBody>) => {
+    const current = db.getFleetMemory();
+    if (
+      body.expectedHash !== undefined &&
+      current &&
+      current.hash !== body.expectedHash
+    ) {
+      return status(409, current);
+    }
+    keepReplacedMemory(body.content);
+    const memory = db.setFleetMemory(body.content);
+    fleetChanged();
+    return memory;
+  },
+  /**
+   * One document. Same save as the main file's, keyed by its path —
+   * `models/claude-opus-5.md` is the same string on every machine, which is
+   * what makes it the row's identity. `scope` names the sessions it is
+   * loaded into (core fleet.ts `MemoryScope`): a role, projects, or both;
+   * `{}` makes it a linked document again, and left out it stays.
+   */
+  setDoc: (body: Static<typeof memoryDocBody>) => {
+    const misfit =
+      memoryDocProblem(body.path) ??
+      (body.scope ? memoryScopeProblem(body.scope) : undefined);
+    if (misfit) {
+      return problem(400, { code: "memory-doc-invalid", detail: misfit });
+    }
+    const unknown = body.scope?.projectIds?.find((id) => !db.project(id));
+    if (unknown) {
+      return problem(400, {
+        code: "no-project",
+        detail: `there is no project ${unknown}`,
+      });
+    }
+    const noArea = body.scope?.areaIds?.find((id) => !db.areas.get(id));
+    if (noArea) {
+      return problem(400, {
+        code: "scope-no-area",
+        detail: areaWords.scopeNoArea(noArea),
+      });
+    }
+    const typeNames = new Set([
+      ...delegateTypes.list().map((type) => type.name),
+      ...db
+        .listProjects()
+        .flatMap((project) => projectTypes.typesFor(project.id))
+        .map((type) => type.name),
+    ]);
+    const unknownType = body.scope?.delegateTypes?.find(
+      (name) => !typeNames.has(name.trim())
+    );
+    if (unknownType) {
+      return problem(400, {
+        code: "no-delegate-type",
+        detail: `there is no delegate type ${unknownType}; the catalog has ${[...typeNames].sort().join(", ")}`,
+      });
+    }
+
+    const current = db.getFleetMemoryDoc(body.path);
+    if (
+      body.expectedHash !== undefined &&
+      current &&
+      current.hash !== body.expectedHash
+    ) {
+      return status(409, current);
+    }
+    keepReplacedDoc(body.path, body.content);
+    const doc = db.putFleetMemoryDoc({
+      path: body.path,
+      content: body.content,
+      ...(body.scope ? { scope: body.scope } : {}),
+    });
+    fleetChanged();
+    return doc;
+  },
+  /** Kept before it goes, like every other version this hub replaces: the machines give the file back, and the fleet's copy of it was the last one. */
+  removeDoc: (path: string) => {
+    const current = db.getFleetMemoryDoc(path);
+    if (!current) {
+      return problem(404, {
+        code: "no-memory-doc",
+        detail: `the fleet keeps no ${path}`,
+      });
+    }
+
+    keepRemovedMemory(current);
+    const trashed = db.trash.put({ kind: "memoryDoc", key: path }, Date.now());
+    if (trashed === undefined) {
+      return problem(404, {
+        code: "no-memory-doc",
+        detail: `the fleet keeps no ${path}`,
+      });
+    }
+    fleetChanged();
+    return undoable(trashed);
+  },
+});
 
 export const fleetMemoryRoutes = (
   ctx: Pick<
@@ -33,16 +185,15 @@ export const fleetMemoryRoutes = (
 ) => {
   const {
     db,
-    delegateTypes,
     fleetChanged,
     fleetSyncs,
     keepRemovedMemory,
     keepReplacedDoc,
     keepReplacedMemory,
     machineName,
-    projectTypes,
     publishInstances,
   } = ctx;
+  const memoryCalls = fleetMemoryCalls(ctx);
   return (
     new Elysia()
       // The fleet's user-scope memory (NEW.md §11): the main CLAUDE.md every
@@ -54,28 +205,8 @@ export const fleetMemoryRoutes = (
       // row somebody else has moved answers with what is really there rather than
       // taking the last writer's word for it — two dashboards on one document is
       // the ordinary case here, not the exotic one.
-      .put(
-        "/api/fleet/memory",
-        {
-          body: t.Object({
-            content: t.String(),
-            expectedHash: t.Optional(t.String()),
-          }),
-        },
-        ({ body, status }) => {
-          const current = db.getFleetMemory();
-          if (
-            body.expectedHash !== undefined &&
-            current &&
-            current.hash !== body.expectedHash
-          ) {
-            return status(409, current);
-          }
-          keepReplacedMemory(body.content);
-          const memory = db.setFleetMemory(body.content);
-          fleetChanged();
-          return memory;
-        }
+      .put("/api/fleet/memory", { body: memoryBody }, ({ body }) =>
+        memoryCalls.set(body)
       )
       // The machines take back only what their own sidecar says cawco wrote:
       // one edited by hand on a machine stays there, unmanaged. The set goes with
@@ -118,116 +249,20 @@ export const fleetMemoryRoutes = (
       // is what makes it the row's identity. `scope` names the sessions it is
       // loaded into (core fleet.ts `MemoryScope`): a role, projects, or both;
       // `{}` makes it a linked document again, and left out it stays.
-      .put(
-        "/api/fleet/memory/docs",
-        {
-          body: t.Object({
-            path: t.String(),
-            content: t.String(),
-            expectedHash: t.Optional(t.String()),
-            scope: t.Optional(
-              t.Object({
-                role: t.Optional(t.UnionEnum(MEMORY_ROLES)),
-                projectIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
-                areaIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
-                delegateTypes: t.Optional(t.Array(t.String(), { minItems: 1 })),
-                model: t.Optional(t.String({ minLength: 1 })),
-                briefer: t.Optional(t.Literal(true)),
-              })
-            ),
-          }),
-        },
-        ({ body, status }) => {
-          const misfit =
-            memoryDocProblem(body.path) ??
-            (body.scope ? memoryScopeProblem(body.scope) : undefined);
-          if (misfit) {
-            return problem(400, { code: "memory-doc-invalid", detail: misfit });
-          }
-          const unknown = body.scope?.projectIds?.find((id) => !db.project(id));
-          if (unknown) {
-            return problem(400, {
-              code: "no-project",
-              detail: `there is no project ${unknown}`,
-            });
-          }
-          const noArea = body.scope?.areaIds?.find((id) => !db.areas.get(id));
-          if (noArea) {
-            return problem(400, {
-              code: "scope-no-area",
-              detail: areaWords.scopeNoArea(noArea),
-            });
-          }
-          const typeNames = new Set([
-            ...delegateTypes.list().map((type) => type.name),
-            ...db
-              .listProjects()
-              .flatMap((project) => projectTypes.typesFor(project.id))
-              .map((type) => type.name),
-          ]);
-          const unknownType = body.scope?.delegateTypes?.find(
-            (name) => !typeNames.has(name.trim())
-          );
-          if (unknownType) {
-            return problem(400, {
-              code: "no-delegate-type",
-              detail: `there is no delegate type ${unknownType}; the catalog has ${[...typeNames].sort().join(", ")}`,
-            });
-          }
-
-          const current = db.getFleetMemoryDoc(body.path);
-          if (
-            body.expectedHash !== undefined &&
-            current &&
-            current.hash !== body.expectedHash
-          ) {
-            return status(409, current);
-          }
-          keepReplacedDoc(body.path, body.content);
-          const doc = db.putFleetMemoryDoc({
-            path: body.path,
-            content: body.content,
-            ...(body.scope ? { scope: body.scope } : {}),
-          });
-          fleetChanged();
-          return doc;
-        }
+      .put("/api/fleet/memory/docs", { body: memoryDocBody }, ({ body }) =>
+        memoryCalls.setDoc(body)
       )
-      // Kept before it goes, like every other version this hub replaces: the
-      // machines give the file back, and the fleet's copy of it was the last one.
       .delete(
         "/api/fleet/memory/docs",
         { body: t.Object({ path: t.String() }) },
-        ({ body }) => {
-          const current = db.getFleetMemoryDoc(body.path);
-          if (!current) {
-            return problem(404, {
-              code: "no-memory-doc",
-              detail: `the fleet keeps no ${body.path}`,
-            });
-          }
-
-          keepRemovedMemory(current);
-          const trashed = db.trash.put(
-            { kind: "memoryDoc", key: body.path },
-            Date.now()
-          );
-          if (trashed === undefined) {
-            return problem(404, {
-              code: "no-memory-doc",
-              detail: `the fleet keeps no ${body.path}`,
-            });
-          }
-          fleetChanged();
-          return undoable(trashed);
-        }
+        ({ body }) => memoryCalls.removeDoc(body.path)
       )
       // What one machine really has, without touching anything: the read behind
       // "compare", so a reader chooses between two documents by looking at them.
       .post(
         "/api/fleet/memory/peek",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ body, set, status }) => {
+        async ({ body, set }) => {
           const read = await readMachineMemory(ctx, body.machineId, set);
           if (read instanceof ElysiaStatus) {
             return read;

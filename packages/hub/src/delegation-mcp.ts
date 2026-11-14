@@ -19,6 +19,7 @@ import {
 import { ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ACTION_TOOLS, type Actions } from "./actions";
+import type { AdminCalls } from "./admin-calls";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
 import type { Artifacts } from "./artifacts/service";
 import { ASK_TOOLS, type Asks } from "./asks";
@@ -291,6 +292,8 @@ export function createDelegationMcp(options: {
   workItemCalls: WorkItemCalls;
   /** The other calls a session's tools make directly, each the function its route calls (session-calls.ts). */
   sessionCalls: SessionCalls;
+  /** The calls the admin tools make on the fleet's settings, each the function its route calls (admin-calls.ts). */
+  adminCalls: () => AdminCalls;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
@@ -692,7 +695,7 @@ export function createDelegationMcp(options: {
     if (recorded !== undefined) {
       return { content: [{ type: "text", text: recorded }] };
     }
-    return await entry.call(bound);
+    return await entry.call(bound, options.adminCalls());
   };
 
   /**

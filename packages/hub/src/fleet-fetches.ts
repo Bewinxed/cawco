@@ -6,6 +6,8 @@
  * agent's admin tool (admin-tools.ts) from here, in the same process.
  */
 import type { FleetFetchFrame } from "@cawco/core/frames";
+import { answered } from "./mcp-tool";
+import type { AnyProblem } from "./refusal";
 
 /** What one announcement carries: the frame less its kind. */
 export type FetchNews = Omit<FleetFetchFrame, "kind" | "instanceId">;
@@ -27,10 +29,10 @@ export const heardFetch = (news: FetchNews): void => {
  */
 export const landedFetch = <T extends { fetching?: boolean }>(
   pick: (news: FetchNews) => T | undefined,
-  ask: () => Promise<T>
-): Promise<T> =>
-  new Promise<T>((resolve, reject) => {
-    let answered = false;
+  ask: () => Promise<T | AnyProblem>
+): Promise<T | AnyProblem> =>
+  new Promise<T | AnyProblem>((resolve, reject) => {
+    let heard = false;
     let landed: T | undefined;
     const listener = (news: FetchNews): void => {
       const row = pick(news);
@@ -38,7 +40,7 @@ export const landedFetch = <T extends { fetching?: boolean }>(
         return;
       }
       landed = row;
-      if (answered) {
+      if (heard) {
         listeners.delete(listener);
         resolve(row);
       }
@@ -46,7 +48,13 @@ export const landedFetch = <T extends { fetching?: boolean }>(
     listeners.add(listener);
     ask().then(
       (row) => {
-        answered = true;
+        // A request the hub refused lands nothing.
+        if (!answered(row)) {
+          listeners.delete(listener);
+          resolve(row);
+          return;
+        }
+        heard = true;
         if (!row.fetching) {
           listeners.delete(listener);
           resolve(row);
