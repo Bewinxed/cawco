@@ -345,9 +345,6 @@ export const routinesWords = {
  * page's words: agent-facing, so none of them reach the app.
  */
 export const routineToolWords = {
-  /** A connector poll's item whose id or version is over a key part's bound: refused, never cut. */
-  keyPartOver: (max: number): string =>
-    `an item's id or version is over ${max} characters, the most a key part holds`,
   /** `event_route_list`'s heading over its events, when the project has more than it lists. */
   eventsCut: (older: number, skip: number): string =>
     `Inbound events, newest first; ${older} older: call again with skip ${skip} to read on:`,

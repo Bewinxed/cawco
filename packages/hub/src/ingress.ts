@@ -146,8 +146,6 @@ const CONNECTOR_MIN_S = 60;
 /** How often the pollers look for one that is due. Our choice. */
 const LOOK_MS = 5000;
 const CUT = "[cut by the hub: the event was over 64 KB]";
-/** The most a key's id or version part holds. */
-const KEY_PART_MAX = 200;
 /**
  * What a route's regex reads at most: what is stored of an event
  * ({@link PAYLOAD_MAX}). RE2 is linear, so reading all of it costs little.
@@ -240,16 +238,12 @@ export const valueAt = (value: unknown, path: string): unknown =>
       value
     );
 
-/** A scalar as a key part; anything else is no id; one over its bound is refused, never cut. */
+/** A scalar as a key part; anything else is no id. A part is bounded only by its item (PAYLOAD_MAX): its columns are unbounded text. */
 const keyPart = (value: unknown): string | undefined => {
   if (typeof value !== "string" && typeof value !== "number") {
     return undefined;
   }
-  const part = String(value);
-  if (part.length > KEY_PART_MAX) {
-    throw new Error(routineToolWords.keyPartOver(KEY_PART_MAX));
-  }
-  return part;
+  return String(value);
 };
 
 /**
