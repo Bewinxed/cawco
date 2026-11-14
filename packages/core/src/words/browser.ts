@@ -96,6 +96,20 @@ export const passkeyWords = {
   sentToExtension: "QR sent to extension",
   /** The QR expired. */
   expired: "The passkey QR expired",
+  /** The hub's relay of the phone's Bluetooth advert, by where it is, said under the QR. */
+  relay: {
+    scanning: (machines: readonly string[]) =>
+      machines.length === 1
+        ? `Listening for your phone on ${machines[0]}…`
+        : `Listening for your phone on ${machines.length} machines…`,
+    captured: "Passkey captured, signing in…",
+    injected: "Passkey sent to the browser.",
+    authenticated: "Passkey signed in.",
+    timeout:
+      "No passkey heard in time. Scan the QR with your phone or install the Chrome extension.",
+    no_ble:
+      "No machine here has Bluetooth. Scan the QR with your phone or install the Chrome extension.",
+  },
 };
 
 /**
