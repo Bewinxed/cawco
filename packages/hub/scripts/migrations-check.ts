@@ -65,7 +65,7 @@ import { type OwnerKind, ownerOf } from "../src/db/owner-columns";
 import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
 import { baseRefOf } from "./openapi-inputs";
-import { newestNightly } from "./shipped";
+import { type Baseline, newestNightly } from "./shipped";
 import { storedRows, storedRowsReport } from "./stored-rows";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
@@ -197,23 +197,62 @@ const JournalTags = z.object({
 });
 
 /**
- * A MIGRATION ON MAIN IS FROZEN. Every entry of the journal at the base (the
- * merge-base with origin/main, or `--base`) and at the newest published
- * nightly keeps its `when` here, and the entry with that `when` keeps that
- * commit's `.sql` bytes: a database records `(hash, created_at)` and nothing
- * else, so an edited or re-stamped migration reads as another one (core
- * migration-state.ts). Its tag may be renumbered. A migration found wrong
- * after it lands is fixed by a new one. The bases are the ones
- * stored-compat.ts holds the stored shapes to.
+ * Migrations on main whose SQL may differ from the base's (the merge-base)
+ * alone, each while the newest published nightly's journal holds no entry
+ * of its tag: no database outside dev and scratch ones has applied it, and
+ * those resolve it by its `when`, which stays (core migration-state.ts), so
+ * its new hash refuses none of them. Once a nightly holds it, it is frozen
+ * like every other, with no edit here.
  */
-const editedMigrations = (
-  journal: readonly JournalEntry[]
-): { problems: string[]; said: string } => {
-  const byWhen = new Map(journal.map((entry) => [entry.when, entry]));
+const UNSHIPPED_EDITS: ReadonlyMap<string, string> = new Map([
+  [
+    "0397_may_start_tables",
+    // Not shipped in any nightly (newest 7813). A guard only: its `__types`
+    // update read json_each(may_start) behind an AND, which SQLite may run
+    // first on a trashed type whose may_start is not JSON; it is now inside
+    // a CASE. The same rows are written for every input.
+    "its `__types` update's json_each now inside a CASE; the same rows",
+  ],
+]);
+
+/**
+ * Why {@link UNSHIPPED_EDITS} lets `tag`'s SQL differ from `commit`'s: only
+ * against a base that is not `nightly`, and only while `nightly`'s journal
+ * holds no entry of `tag`. Undefined when it does not.
+ */
+const unshippedExcuse = (
+  nightly: Baseline
+): ((commit: string, tag: string) => string | undefined) => {
+  const nightlyCommit = gitOut([
+    "rev-parse",
+    `${nightly.commit}^{commit}`,
+  ])?.trim();
+  const nightlyJournal = gitOut([
+    "show",
+    `${nightly.commit}:packages/hub/drizzle/meta/_journal.json`,
+  ]);
+  if (!nightlyJournal) {
+    throw new Error(
+      `${nightly.label} (${nightly.commit}) has no migration journal to hold the unshipped edits to`
+    );
+  }
+  const shipped = new Set(
+    JournalTags.parse(JSON.parse(nightlyJournal)).entries.map(
+      (entry) => entry.tag
+    )
+  );
+  return (commit, tag) =>
+    commit !== nightlyCommit && !shipped.has(tag)
+      ? UNSHIPPED_EDITS.get(tag)
+      : undefined;
+};
+
+/** The commits whose journals freeze migrations here, each once with its label: the base, then `nightly`. */
+const frozenBases = (nightly: Baseline): Map<string, string> => {
   const bases = new Map<string, string>();
   for (const base of [
     { label: "the base", commit: baseRefOf(process.argv) },
-    newestNightly(HUB),
+    nightly,
   ]) {
     const commit = gitOut(["rev-parse", `${base.commit}^{commit}`])?.trim();
     if (!commit) {
@@ -228,6 +267,28 @@ const editedMigrations = (
       );
     }
   }
+  return bases;
+};
+
+/**
+ * A MIGRATION ON MAIN IS FROZEN. Every entry of the journal at the base (the
+ * merge-base with origin/main, or `--base`) and at the newest published
+ * nightly keeps its `when` here, and the entry with that `when` keeps that
+ * commit's `.sql` bytes: a database records `(hash, created_at)` and nothing
+ * else, so an edited or re-stamped migration reads as another one (core
+ * migration-state.ts). Its tag may be renumbered. A migration found wrong
+ * after it lands is fixed by a new one. The bases are the ones
+ * stored-compat.ts holds the stored shapes to. The one way past it is
+ * {@link UNSHIPPED_EDITS}, against the merge-base only.
+ */
+const editedMigrations = (
+  journal: readonly JournalEntry[]
+): { problems: string[]; said: string } => {
+  const byWhen = new Map(journal.map((entry) => [entry.when, entry]));
+  const nightly = newestNightly(HUB);
+  const bases = frozenBases(nightly);
+  const excused = unshippedExcuse(nightly);
+  const allowed: string[] = [];
   const problems: string[] = [];
   for (const [commit, label] of bases) {
     const text = gitOut([
@@ -246,25 +307,38 @@ const editedMigrations = (
         );
         continue;
       }
-      const sqlThen = gitOut([
-        "show",
-        `${commit}:packages/hub/drizzle/${entry.tag}.sql`,
-      ]);
-      const sqlNow = readFileSync(
-        join(HUB, "drizzle", `${now.tag}.sql`),
-        "utf8"
-      );
-      if (sqlThen !== undefined && sqlThen !== sqlNow) {
-        problems.push(
-          `${now.tag}.sql differs from ${label}'s ${entry.tag}.sql: a migration on main keeps its bytes; fix it with a new migration`
-        );
+      if (!sqlEdited(commit, entry.tag, now.tag)) {
+        continue;
       }
+      const why = excused(commit, entry.tag);
+      if (why) {
+        allowed.push(
+          `${now.tag} (${why}; in no nightly up to ${nightly.label})`
+        );
+        continue;
+      }
+      problems.push(
+        `${now.tag}.sql differs from ${label}'s ${entry.tag}.sql: a migration on main keeps its bytes; fix it with a new migration`
+      );
     }
   }
+  const but =
+    allowed.length === 0
+      ? ""
+      : `, but for the unshipped edit${allowed.length === 1 ? "" : "s"} ${allowed.join(", ")}`;
   return {
     problems,
-    said: `every migration in ${[...bases.values()].join(" and ")} keeps its \`when\` and its SQL here`,
+    said: `every migration in ${[...bases.values()].join(" and ")} keeps its \`when\` and its SQL here${but}`,
   };
+};
+
+/** Whether `nowTag`'s SQL here differs from `tag`'s at `commit` (false when that commit has no such file). */
+const sqlEdited = (commit: string, tag: string, nowTag: string): boolean => {
+  const sqlThen = gitOut(["show", `${commit}:packages/hub/drizzle/${tag}.sql`]);
+  return (
+    sqlThen !== undefined &&
+    sqlThen !== readFileSync(join(HUB, "drizzle", `${nowTag}.sql`), "utf8")
+  );
 };
 
 /** SQL that makes, alters, drops or renames something: a migration without it runs again on a finished schema. */
