@@ -17,7 +17,11 @@
    * words, signed out offline, and three sign-ins parked on their cells:
    * one waiting for its code, one refused, one whose link lapsed.
    */
-  import { TOOL_CATALOG, toolSpec } from "@cawco/core/tools";
+  import {
+    TOOL_CATALOG,
+    TOOL_UPDATES_DEFAULT,
+    toolSpec,
+  } from "@cawco/core/tools";
   import { toolWords } from "@cawco/core/words/tools";
   import { z } from "zod";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
@@ -118,6 +122,12 @@
     <ConfigRail current="cli-tools" />
   </div>
   <SectionFrame {section}>
-    <ToolMatrix catalog={TOOL_CATALOG} {machines} policies={[]} />
+    <ToolMatrix
+      catalog={TOOL_CATALOG}
+      {machines}
+      policies={[]}
+      releases={{}}
+      updates={TOOL_UPDATES_DEFAULT}
+    />
   </SectionFrame>
 </div>

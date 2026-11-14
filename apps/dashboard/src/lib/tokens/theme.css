@@ -1110,6 +1110,10 @@
   );
   /* A ledger's sign-in column: its state's glyph and words in meta at the column's start and its one act at its end, "Waiting for the pasted code" beside an act as wide as "Sign in again" the widest (Command-line tools, a tool with its own sign-in). */
   --spacing-c-signin-col-w: 20rem;
+  /* A ledger's version column: a tool's version in the code face, "2.1.330" as long as any (Command-line tools). */
+  --spacing-c-version-col-w: 6rem;
+  /* A tool ledger's state column: its glyph and words in meta at the column's start and its one act at its end, "Paused · updates when its pause ends" the longest, or "Your own install" beside "Hand to CawCo" (Command-line tools). */
+  --spacing-c-tool-state-col-w: 16rem;
   /* The side divider's hit width when the split is expanded. */
   --spacing-c-side-grip-w: 6px;
   /* A side surface's floor (SideSurface SIDE_FLOOR_PX). */
