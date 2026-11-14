@@ -86,10 +86,15 @@ const OBJECT =
 /** A policy 0399 reads whole: an object whose nine fields each read. */
 const POLICY_READS = `CASE WHEN ${OBJECT} THEN ${FIELDS.map((field) => `coalesce((${field.reads}), 0)`).join(" AND ")} ELSE 0 END`;
 
-/** Each field that is not read: its JSON as stored (null when missing), as columns `f0`… */
+/**
+ * Each field that is not read: its JSON as stored (null when missing), as
+ * columns `f0`… Each test is a CASE inside the object's: SQLite may run the
+ * right side of an AND first, so an AND would not keep the JSON functions
+ * off a policy that is not JSON.
+ */
 const BAD_FIELDS = FIELDS.map(
   (field, n) =>
-    `CASE WHEN ${OBJECT} AND NOT coalesce((${field.reads}), 0) THEN CASE WHEN json_type(at_limit, '${field.path}') IS NULL THEN 'missing' ELSE json_quote(json_extract(at_limit, '${field.path}')) END END AS f${n}`
+    `CASE WHEN NOT (${OBJECT}) THEN NULL WHEN coalesce((${field.reads}), 0) THEN NULL WHEN json_type(at_limit, '${field.path}') IS NULL THEN 'missing' ELSE json_quote(json_extract(at_limit, '${field.path}')) END AS f${n}`
 ).join(", ");
 
 interface Unread {

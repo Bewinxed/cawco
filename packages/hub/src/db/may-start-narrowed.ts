@@ -99,9 +99,12 @@ const narrowedLines = (client: Database): string[] => {
     .all()) {
     lines.push(`delegate type ${row.name} ${narrowedType}`);
   }
+  // The type's lists are read inside the entry's CASE: SQLite may run the
+  // right side of an AND first, so an AND would not keep json_extract off
+  // an entry that is not JSON.
   for (const row of client
     .query<{ id: number; name: string }, []>(
-      `SELECT t.id, json_extract(t.rows, '$[0].rows[0].name') AS name FROM config_trash t WHERE t.kind = 'delegateType' AND (${TRASHED_ROW}) AND NOT (${typeReads((column) => `json_extract(t.rows, '$[0].rows[0].${column}')`)}) ORDER BY t.id`
+      `SELECT t.id, json_extract(t.rows, '$[0].rows[0].name') AS name FROM config_trash t WHERE t.kind = 'delegateType' AND CASE WHEN ${TRASHED_ROW} THEN NOT (${typeReads((column) => `json_extract(t.rows, '$[0].rows[0].${column}')`)}) ELSE 0 END ORDER BY t.id`
     )
     .all()) {
     lines.push(
