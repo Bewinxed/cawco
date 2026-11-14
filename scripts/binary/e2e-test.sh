@@ -807,11 +807,13 @@ export -f boot inotify_on
 # its root is the host user and reads nothing that user cannot; it gains no capability, and it sits on the internal
 # network with no route out.
 # SMALL_DATA (a tmpfs size, the migration rig's): the hub's data dir, where its database and the update's copies of it
-# lie, is a filesystem of that size, so a check can fill it (no loop device in a rootless container), and the binary
-# root inside it a volume of the rig's own storage, which holds the builds.
+# lie, is a filesystem of that size, so a check can fill it (no loop device in a rootless container); the binary root
+# and the builds' runtime trees inside it (core runtime.ts `runtimeDataDir`) are volumes of the rig's own storage,
+# which hold the builds.
 machines() {
   local role pids=() rc=0 pid hub_opts=()
-  [[ -z ${SMALL_DATA:-} ]] || hub_opts=(--tmpfs "$DATA:rw,exec,nosuid,nodev,size=$SMALL_DATA,mode=0700" --mount "type=volume,src=$prefix-binary,dst=$DATA/binary")
+  [[ -z ${SMALL_DATA:-} ]] || hub_opts=(--tmpfs "$DATA:rw,exec,nosuid,nodev,size=$SMALL_DATA,mode=0700"
+    --mount "type=volume,src=$prefix-binary,dst=$DATA/binary" --mount "type=volume,src=$prefix-runtime,dst=$DATA/runtime")
   # The orchestrator started this rig for the machines RIG_MACHINES names: what it holds of the inotify room.
   (( $# == RIG_MACHINE_COUNT )) || { echo "rig $RIG boots $# machine(s), and RIG_MACHINES names $RIG_MACHINE_COUNT: correct RIG_MACHINES"; return 1; }
   $P network create --internal --subnet "$subnet.0/24" "$net" > /dev/null || return 1
@@ -826,8 +828,8 @@ machines() {
     pids+=($!)
   done
   for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
-  # Both mounts are root's as podman makes them; the user CawCo runs as owns them, as it owns the dirs they stand for.
-  [[ -z ${SMALL_DATA:-} ]] || $P exec "$hubc" chown cawco:cawco "$DATA" "$DATA/binary" || rc=1
+  # The mounts are root's as podman makes them; the user CawCo runs as owns them, as it owns the dirs they stand for.
+  [[ -z ${SMALL_DATA:-} ]] || $P exec "$hubc" chown cawco:cawco "$DATA" "$DATA/binary" "$DATA/runtime" || rc=1
   return $rc
 }
 export subnet
