@@ -7,6 +7,9 @@ import type { OfferedMode } from "@cawco/core/harness/kinds";
 import type { GitHubCursors } from "./db/ingress";
 import type { InboundVia } from "./db/schema";
 
+/** The most a stored payload holds (ingress.ts). */
+export const PAYLOAD_MAX = 64 * 1024;
+
 export interface EventRouteView {
   author: string | null;
   branch: string | null;

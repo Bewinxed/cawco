@@ -99,6 +99,7 @@ import type {
   InboundEventView,
   IngressView,
 } from "./ingress-views";
+import { PAYLOAD_MAX } from "./ingress-views";
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_CONVERSATION } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -142,13 +143,15 @@ const GITHUB_EVERY_MS = 60_000;
 const CONNECTOR_MIN_S = 60;
 /** How often the pollers look for one that is due. Our choice. */
 const LOOK_MS = 5000;
-/** The most a stored payload holds. */
-const PAYLOAD_MAX = 64 * 1024;
 const CUT = "[cut by the hub: the event was over 64 KB]";
 /** The most a key's id or version part holds. */
 const KEY_PART_MAX = 200;
-/** What a route's regex reads at most, and how long it may be. */
-const MATCH_TEXT_MAX = 16 * 1024;
+/**
+ * What a route's regex reads at most: what is stored of an event
+ * ({@link PAYLOAD_MAX}). RE2 is linear, so reading all of it costs little.
+ * And how long the regex may be.
+ */
+const MATCH_TEXT_MAX = PAYLOAD_MAX;
 const REGEX_MAX = 200;
 /** The most inbox lines one send carries; the rest are counted. */
 const INBOX_SHOWN = 30;

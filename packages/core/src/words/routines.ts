@@ -340,6 +340,9 @@ export const routinesWords = {
  * page's words: agent-facing, so none of them reach the app.
  */
 export const routineToolWords = {
+  /** An event route's regex, beside it: how much of each event it reads. */
+  regexReads: (kib: number): string =>
+    `(reads the first ${kib} KiB of an event)`,
   /** `routine_delete`: the routine gone, and each event route that fed it, which went with it. */
   deleted: (routes: string[]): string =>
     routes.length === 0

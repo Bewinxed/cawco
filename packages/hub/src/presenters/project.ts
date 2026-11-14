@@ -14,6 +14,7 @@ import type {
   EventRouteView,
   IngressView,
 } from "../ingress-views";
+import { PAYLOAD_MAX } from "../ingress-views";
 import type { FolderFile, FolderListing } from "../project-folder";
 import type { RelayCreated } from "../relay-created";
 import { slotLabel } from "../routine-schedule";
@@ -219,7 +220,7 @@ export const routineRunWords = (run: RoutineRunView): string =>
   `Run ${handle(run.id)}: ${runState(run, Date.now())}${run.reason ? `; ${run.reason}` : ""}.`;
 
 const routeLine = (route: EventRouteView, now: number): string =>
-  `- ${handle(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/` : ""} → routine ${handle(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;
+  `- ${handle(route.id)} · ${route.enabled ? "on" : "off"} · ${route.source}${route.kinds.length > 0 ? ` ${listed(route.kinds)}` : " any kind"}${route.author ? ` by ${route.author}` : ""}${route.label ? ` labelled ${route.label}` : ""}${route.branch ? ` on ${route.branch}` : ""}${route.regex ? ` matching /${route.regex}/ ${routineToolWords.regexReads(PAYLOAD_MAX / 1024)}` : ""} → routine ${handle(route.routineId)} · ${route.lastDeliveryAt === null ? "nothing delivered yet" : `last delivered ${ago(route.lastDeliveryAt, now)}`}`;
 
 const pollLine = (poll: ConnectorPollView, now: number): string =>
   `- ${handle(poll.id)} · ${poll.enabled ? "on" : "off"} · ${poll.connection}:${poll.tool} every ${poll.intervalS} s · ${poll.polledAt === null ? "not called yet" : `called ${ago(poll.polledAt, now)}${poll.seen === null ? "" : `, ${count(poll.seen, "item")} seen`}`}${poll.reason ? ` · ${poll.reason}` : ""}`;
