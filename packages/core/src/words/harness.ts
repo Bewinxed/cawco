@@ -47,6 +47,9 @@ export const harnessWords = {
  * `harnessRefusal`). Claude Code's version sentences the agent says itself
  * (agent claude-version.ts `versionRefusal`), and the report carries them.
  */
+/** A sentence that already ends: a quoted one takes no stop of ours. */
+const SENTENCE_END = /[.!?]$/u;
+
 export const harnessRefusedWords = {
   /** The press that fixes it: its install, OpenCode's one version, or its update. */
   press: (
@@ -124,7 +127,7 @@ export const harnessRefusedWords = {
   notDeletedTitle: "A conversation wasn't deleted",
   /** Its body: where, how often, the machine's last words, and that CawCo goes on trying. */
   notDeleted: (name: string, machine: string, tries: number, said: string) =>
-    `${name} on ${machine} didn't delete this conversation's stored transcript in ${tries} tries. The last said: ${said}${/[.!?]$/u.test(said) ? "" : "."} CawCo keeps trying every few minutes, and this goes once it's deleted.`,
+    `${name} on ${machine} didn't delete this conversation's stored transcript in ${tries} tries. The last said: ${said}${SENTENCE_END.test(said) ? "" : "."} CawCo keeps trying every few minutes, and this goes once it's deleted.`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**
