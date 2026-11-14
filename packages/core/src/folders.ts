@@ -53,6 +53,7 @@ import {
   type Dirent,
   fchmodSync,
   fstatSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -235,8 +236,8 @@ export const makeFolder = async (
  * {@link KEPT_DEPTH}: run as the agent and the hub start, so an install made
  * under a looser umask (module doc) is its user's alone from then on. A
  * folder deeper than that was made in a 0700 one, which no other user
- * passes. A link is never followed, nor set. Each folder it changed, said
- * through `say`.
+ * passes. A link is never followed, nor set, a root that is one included.
+ * Each folder it changed, said through `say`.
  */
 export const keepFoldersPrivate = (say: (line: string) => void): void => {
   const walk = (at: string, depth: number): void => {
@@ -258,6 +259,15 @@ export const keepFoldersPrivate = (say: (line: string) => void): void => {
     }
   };
   for (const root of ownRoots()) {
+    // A root that is a link (`~/.cawco` moved to another disk, a dotfiles
+    // checkout) is never read through, as no link below a root is: the walk
+    // would set the modes of folders wherever it points.
+    if (lstatSync(root, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      say(
+        `[folders] ${root} is a link: it and what it points at are left as they are`
+      );
+      continue;
+    }
     walk(root, 0);
   }
 };
