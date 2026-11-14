@@ -200,15 +200,13 @@ const branchesOf = (schema: Schema): Schema[] | undefined => {
 };
 const propertiesOf = (schema: Schema): Schema =>
   isObject(schema.properties) ? schema.properties : {};
-/** A branch by what tells it apart: its const properties, or its kinds. */
+/** A branch by what tells it apart: its first const property, or its values or kinds. */
 const shown = (schema: Schema): string => {
-  const tags = Object.entries(propertiesOf(schema)).flatMap(([key, value]) =>
-    isObject(value) && value.const !== undefined
-      ? [`${key}: ${JSON.stringify(value.const)}`]
-      : []
+  const tag = Object.entries(propertiesOf(schema)).find(
+    ([, value]) => isObject(value) && value.const !== undefined
   );
-  if (tags.length > 0) {
-    return `{ ${tags.join(", ")} }`;
+  if (tag) {
+    return `{ ${tag[0]}: ${JSON.stringify((tag[1] as Schema).const)} }`;
   }
   const values = valuesOf(schema);
   return values ? quoted(values) : [...kindsOf(schema)].join(" or ");
@@ -230,7 +228,24 @@ const tagged = (branches: Schema[]): boolean =>
     );
   });
 
-/** A value `was` took against a union `now`: one branch must take all of it. */
+/** A shape that lists several values or several kinds, as the shapes each one alone makes. */
+const membersOf = (was: Schema): Schema[] | undefined => {
+  const values = valuesOf(was);
+  if (values && values.length > 1) {
+    const { enum: _all, ...rest } = was;
+    return values.map((value) => ({ ...rest, const: value }));
+  }
+  if (Array.isArray(was.type) && was.type.length > 1) {
+    return was.type.map((kind) => ({ ...was, type: kind }));
+  }
+  return undefined;
+};
+
+/**
+ * A value `was` took against a union `now`: a row holds one value of one
+ * kind, so each of `was`'s values and kinds needs one branch that takes it,
+ * and anything else one branch that takes all of it.
+ */
 const unionNarrowings = (
   was: Schema,
   now: Schema,
@@ -243,14 +258,20 @@ const unionNarrowings = (
       `${said}is now exactly one of several shapes no key tells apart, which this check does not judge`,
     ];
   }
+  const members = membersOf(was);
+  if (members) {
+    return members.flatMap((member) => narrowings(member, now, at));
+  }
   const tries = branches.map((branch) => narrowings(was, branch, at));
   if (tries.some((reasons) => reasons.length === 0)) {
     return [];
   }
+  // The branch with `was`'s tag is the one its rows were meant for: say why it fails them.
+  const meant = tries.find((_, i) => shown(branches[i] ?? {}) === shown(was));
   const closest = tries.toSorted((a, b) => a.length - b.length)[0] ?? [];
   return [
     `${said}no longer takes ${shown(was)}`,
-    ...(branches.length > 1 && closest.length > 3 ? [] : closest),
+    ...(meant ?? (branches.length > 1 && closest.length > 3 ? [] : closest)),
   ];
 };
 
@@ -510,15 +531,17 @@ for (const entry of REWRITES) {
 }
 
 // One compare per commit: the nightly can be the base itself.
-const baseRef = baseRefOf(process.argv);
 const byCommit = new Map<string, string>();
 for (const base of [
-  { label: `the base ${baseRef.slice(0, 12)}`, commit: baseRef },
+  { label: "the base", commit: baseRefOf(process.argv) },
   newestNightly(HUB),
 ]) {
   const commit = git("rev-parse", `${base.commit}^{commit}`).trim();
   if (!byCommit.has(commit)) {
-    byCommit.set(commit, base.label);
+    byCommit.set(
+      commit,
+      base.label === "the base" ? `the base ${commit.slice(0, 12)}` : base.label
+    );
   }
 }
 
