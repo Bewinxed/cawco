@@ -7,6 +7,9 @@
  * - **kit-reaches-up**: the dashboard's kit (`lib/components/ui/`) imports no
  *   module that itself imports the kit, however far down.
  *
+ * A package in {@link ACYCLIC} holds no cycle at all: one there fails the
+ * check whatever the baseline holds, and `--write-baseline` cannot record it.
+ *
  * What a specifier alone can say (core imports no other package, the kit
  * imports no feature or route, a member reaches another through its
  * manifest) is Biome's noRestrictedImports, in biome.jsonc. These two need
@@ -35,6 +38,9 @@ const RULES = {
     "lib/components/ui imports no module that imports the kit; pass what it needs in as a prop or a snippet",
 };
 type Rule = keyof typeof RULES;
+
+/** The packages whose import cycles were all cut: a new one there fails outright, never counted against the baseline. */
+const ACYCLIC: ReadonlySet<string> = new Set(["@cawco/hub"]);
 
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 const SCOPE = /^(?:apps|packages|scripts|site)\//u;
@@ -106,8 +112,26 @@ for (const [file, edges] of graph) {
   }
 }
 
-holdRatchet(found, {
-  name: "import-rules",
-  baseline: join(ROOT, "scripts/import-rules.baseline.tsv"),
-  rules: RULES,
-});
+/* A cycle in an ACYCLIC package fails here, and never reaches the ratchet or its baseline. */
+const outright = found.filter(
+  (one) => one.rule === "cycle" && ACYCLIC.has(one.shape)
+);
+if (outright.length > 0) {
+  process.stdout.write(
+    [
+      `import-rules: ${outright.length} import(s) close a cycle in a package that holds none (${[...ACYCLIC].join(", ")}): ${RULES.cycle}`,
+      ...outright.map((one) => `  ${one.file}:${one.line}`),
+      "",
+    ].join("\n")
+  );
+  process.exitCode = 1;
+}
+
+holdRatchet(
+  found.filter((one) => !outright.includes(one)),
+  {
+    name: "import-rules",
+    baseline: join(ROOT, "scripts/import-rules.baseline.tsv"),
+    rules: RULES,
+  }
+);
