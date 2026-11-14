@@ -16,7 +16,7 @@
  *
  * Not SQLite's own locking: `locking_mode=EXCLUSIVE` would also shut out
  * every reader beside a running hub (the update helper's `VACUUM INTO` copy
- * before a schema change, the probes that read a scratch hub's rows).
+ * before every update of the hub, the probes that read a scratch hub's rows).
  *
  * The update helper takes the same lock while a rollback puts the database
  * copy back (cli binary-apply.ts `restoreDatabase`): it is taken only once the

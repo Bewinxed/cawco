@@ -3,7 +3,7 @@
  * service manager runs it (not the agent it replaces), so it outlives the
  * restarts it performs; only one runs at a time (an exclusive lock file).
  *
- * An apply: copy the hub's database when the schema changes, write the trial
+ * An apply: copy the hub's database (on the hub's machine), write the trial
  * (`trial.json`), swap `current`, restart every unit that runs from it; once
  * the new build answers, hand the session keeper over to it (its keeper
  * starts beside the one before, which keeps every session it holds), and say
@@ -28,8 +28,9 @@
  */
 
 import { Database } from "bun:sqlite";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, renameSync, rmSync, statSync } from "node:fs";
 import {
+  link as addName,
   appendFile,
   copyFile,
   readdir,
@@ -47,6 +48,7 @@ import {
   keeperJob,
 } from "@cawco/agent/service-manager/keeper-job";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
+import { humanSize } from "@cawco/core/attachments";
 import { AwakeTime } from "@cawco/core/awake-time";
 import {
   binaryRoot,
@@ -85,6 +87,7 @@ import {
   lockDatabase,
   releaseDatabase,
 } from "@cawco/core/db-lock";
+import { freeBytes } from "@cawco/core/free-bytes";
 import {
   answers,
   currentKeeper,
@@ -397,13 +400,22 @@ async function endUndecided(
   tries: number,
   why: string
 ): Promise<void> {
+  // A rollback that could not put the database back: the database the trial
+  // left stays, and the person is told where the copy from before it is.
+  const unrestored =
+    trial.decision === "roll-back" &&
+    trial.dbBackup &&
+    trial.dbPath &&
+    !trial.dbRestored
+      ? ` ${updatesWords.databaseLeftAsTrialLeft(trial.dbPath, trial.dbBackup, trial.previous)}`
+      : "";
   await writeState({
     phase: "failed",
     failedVersion: trial.version,
     hubSilentTrials: undefined,
     unconfirmedVersion: trial.version,
     heldChildren: undefined,
-    error: updatesWords.trialUndecided(trial.version, tries, why),
+    error: `${updatesWords.trialUndecided(trial.version, tries, why)}${unrestored}`,
   });
   await rm(trialPath(), { force: true });
   await say(`ended ${trial.version} undecided after ${tries} resumes: ${why}`);
@@ -678,39 +690,142 @@ async function handOverKeeperAlone(version: string): Promise<void> {
   });
 }
 
+/** A file's size in bytes, 0 when it is not there. */
+const sizeOf = (path: string): number =>
+  statSync(path, { throwIfNoEntry: false })?.size ?? 0;
+
+/** What SQLite's `PRAGMA quick_check` says of the database at `path`: `ok` when it is sound. */
+function quickCheck(path: string): string {
+  // Read-write and never written: a read-only open of a WAL database with no
+  // `-shm` beside it is refused on macOS's SQLite.
+  const handle = new Database(path, { readwrite: true });
+  try {
+    return handle
+      .query<{ quick_check: string }, []>("PRAGMA quick_check")
+      .all()
+      .map((row) => row.quick_check)
+      .join("; ");
+  } finally {
+    handle.close();
+  }
+}
+
+/**
+ * Throws, before anything is copied or swapped, when the disk the hub's
+ * database is on has less free than twice the database (its file and WAL):
+ * room for the copy made now, and for the copy a rollback puts beside the
+ * database before it swaps it in ({@link putBackup}).
+ */
+async function requireRoom(db: string, version: string): Promise<void> {
+  const needed = 2 * (sizeOf(db) + sizeOf(`${db}-wal`));
+  const free = await freeBytes(dirname(db));
+  if (free < needed) {
+    throw new Error(
+      updatesWords.noRoomForDatabaseCopy(
+        version,
+        humanSize(needed),
+        humanSize(free)
+      )
+    );
+  }
+}
+
+/**
+ * A build's version as the release step writes it (semver: `0.1.12-nightly.
+ * 7813+7237c78f0f23`, the test's `0.0.1-test.8`): the part of a file's name
+ * the update helper writes ({@link updaterFiles}).
+ */
+const VERSION = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
+
+/**
+ * The files the update helper wrote beside the database `db`, of one kind,
+ * each with the database file it belongs to (its own name, less a sidecar's
+ * suffix): `pre`, the copies taken before an update (`<db>.pre-<version>.bak`,
+ * {@link backUpDatabase}); `migrated`, the databases a rollback moved aside
+ * (`<db>.migrated-<version>`, {@link putBackup}). Matched by those names
+ * exactly: every other file in the folder (a person's own copies among them)
+ * is never one of these.
+ */
+async function updaterFiles(
+  db: string,
+  kind: "pre" | "migrated"
+): Promise<{ file: string; name: string }[]> {
+  const base = basename(db).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const own = new RegExp(
+    kind === "pre"
+      ? `^${base}\\.pre-${VERSION}\\.bak$`
+      : `^${base}\\.migrated-${VERSION}$`,
+    "u"
+  );
+  return (await readdir(dirname(db))).flatMap((name) => {
+    const suffix = SIDECARS.find((one) => name.endsWith(one));
+    const file = suffix ? name.slice(0, -suffix.length) : name;
+    return own.test(file) ? [{ file, name }] : [];
+  });
+}
+
+/**
+ * Every file of `kind` ({@link updaterFiles}) but `kept`'s and its sidecars',
+ * removed, each said with its size. Called only once `kept` is written whole
+ * and SQLite checks it `ok`: one of each is kept, and there is never a moment
+ * with none.
+ */
+async function dropOlder(
+  db: string,
+  kind: "pre" | "migrated",
+  kept: string
+): Promise<void> {
+  const folder = dirname(db);
+  for (const { file, name } of await updaterFiles(db, kind)) {
+    if (file === basename(kept)) {
+      continue;
+    }
+    const path = join(folder, name);
+    const size = sizeOf(path);
+    await rm(path, { force: true });
+    await say(updatesWords.olderCopyRemoved(path, humanSize(size)));
+  }
+}
+
 /**
  * `VACUUM INTO` a copy of the hub database beside it, named for the build it
  * belongs to: one read transaction, so the copy is the database as one commit
  * left it while the hub goes on writing. The hub keeps its file in WAL (hub
  * db/wal.ts): the read sees every commit up to its start, in the WAL or the
  * file, never waits on the hub's writes, and the copy is one file in
- * rollback-journal mode, whole by itself. A copy SQLite does not check `ok`
- * throws, before anything is swapped. A journal left from a copy before is
- * removed with it: opened beside this one, SQLite would play it in.
+ * rollback-journal mode, whole by itself. It is written under another name
+ * first and takes the copy's only once SQLite checks it `ok`, so a copy that
+ * fails (no room, a bad read) throws before anything is swapped and leaves
+ * the copy before it in place; once it stands, the copies before it go
+ * ({@link dropOlder}). A journal left beside the copy's name is removed
+ * first: opened beside this one, SQLite would play it in.
  */
-function backUpDatabase(db: string, previous: string): string {
+async function backUpDatabase(db: string, previous: string): Promise<string> {
   const copy = `${db}.pre-${previous}.bak`;
-  rmSync(copy, { force: true });
-  rmSync(`${copy}-journal`, { force: true });
-  const handle = new Database(db, { readonly: true });
+  const writing = `${db}.copying`;
+  const clear = () => {
+    rmSync(writing, { force: true });
+    rmSync(`${writing}-journal`, { force: true });
+  };
+  clear();
   try {
-    handle.run(`VACUUM INTO '${copy.replaceAll("'", "''")}'`);
-  } finally {
-    handle.close();
-  }
-  const copied = new Database(copy, { readonly: true });
-  try {
-    const check = copied
-      .query<{ quick_check: string }, []>("PRAGMA quick_check")
-      .all()
-      .map((row) => row.quick_check)
-      .join("; ");
-    if (check !== "ok") {
-      throw new Error(`The database copy ${copy} is not sound: ${check}`);
+    const handle = new Database(db, { readonly: true });
+    try {
+      handle.run(`VACUUM INTO '${writing.replaceAll("'", "''")}'`);
+    } finally {
+      handle.close();
     }
-  } finally {
-    copied.close();
+    const check = quickCheck(writing);
+    if (check !== "ok") {
+      throw new Error(`The database copy ${writing} is not sound: ${check}`);
+    }
+  } catch (error) {
+    clear();
+    throw error;
   }
+  rmSync(`${copy}-journal`, { force: true });
+  renameSync(writing, copy);
+  await dropOlder(db, "pre", copy);
   return copy;
 }
 
@@ -733,11 +848,15 @@ async function applyBuild(version: string): Promise<void> {
   }
   const previous = installed.installedVersion;
   const units = trialUnits(installed.role);
+  // Every update of the hub copies its database, and a rollback puts the
+  // copy back: a build can leave rows its predecessor cannot read with or
+  // without a migration of its own.
   const db = installed.role === "hub" ? hubDbPath() : undefined;
-  const schemaChange =
-    db !== undefined && manifest.schemaVersion !== running.schemaVersion;
+  if (db) {
+    await requireRoom(db, version);
+  }
   await writeState({ phase: "installing", heldChildren: undefined });
-  const backup = schemaChange && db ? backUpDatabase(db, previous) : undefined;
+  const backup = db ? await backUpDatabase(db, previous) : undefined;
   if (backup) {
     await say(`database copy ${backup}`);
   }
@@ -1156,17 +1275,6 @@ async function confirm(trial: TrialMarker): Promise<void> {
   await say(`confirmed ${trial.version}`);
   // What went on for it before the swap stays on.
   await forgetPins();
-  if (trial.dbPath && trial.dbBackup) {
-    // Confirmed: this trial's copy is the newest one kept, older ones go.
-    const prefix = `${basename(trial.dbPath)}.pre-`;
-    const folder = dirname(trial.dbPath);
-    const old = (await readdir(folder)).filter(
-      (name) => name.startsWith(prefix) && join(folder, name) !== trial.dbBackup
-    );
-    await Promise.all(
-      old.map((name) => rm(join(folder, name), { force: true }))
-    );
-  }
   await prune();
 }
 
@@ -1174,7 +1282,8 @@ async function confirm(trial: TrialMarker): Promise<void> {
  * The previous build back, on every unit: the update says installing again
  * while it restarts them (the hub keeps this machine's new starts), `current`
  * and the installation point at the previous build, the database copy replaces
- * the migrated file (which is kept beside it, with its journal or WAL, never deleted),
+ * the database the trial left (which is kept beside it with its journal or
+ * WAL, until a later rollback's replaces it, {@link putBackup}),
  * and every unit that runs from `current` is restarted, so none is left on the
  * build that failed. A keeper handed over to the build that failed is handed
  * over again, to the build rolled back to, which keeps the sessions the failed
@@ -1199,10 +1308,12 @@ async function rollBack(start: TrialMarker): Promise<void> {
     installedVersion: trial.previous,
   });
   await say(`roll back ${trial.version} -> ${trial.previous}: current moved`);
-  if (trial.dbBackup && trial.dbPath && !trial.dbRestored) {
-    await restoreDatabase(trial.dbPath, trial.dbBackup, trial.version);
+  const { dbBackup, dbPath } = trial;
+  if (dbBackup && dbPath && !trial.dbRestored) {
+    const aside = await restoreDatabase(dbPath, dbBackup, trial.version);
     trial = { ...trial, dbRestored: true };
     await writeJsonAtomic(trialPath(), trial);
+    await dropOlderAsides(dbPath, aside);
   }
   // Before the units restart, so the agent rolled back to starts beside its own.
   const pinsBack = await putBackPins(trial.version, trial.previous);
@@ -1238,6 +1349,9 @@ async function rollBack(start: TrialMarker): Promise<void> {
     ...(manifest ? { channel: manifest.channel, notes: manifest.notes } : {}),
     error: [
       trial.reason ?? "The new build did not become healthy",
+      trial.dbPath === undefined || trial.dbRestored !== true
+        ? undefined
+        : updatesWords.databasePutBack(asideOf(trial.dbPath, trial.version)),
       rollbackWords(cause, failed, trial),
       pinsBack,
     ]
@@ -1348,21 +1462,50 @@ async function holdDatabase(db: string, version: string): Promise<void> {
 /**
  * The hub is stopped, gone and held off while its database is swapped
  * ({@link holdDatabase}); the copy goes in ({@link putBackup}); the hub's lock
- * is let go, and the restart that follows starts the hub on the copy.
+ * is let go, and the restart that follows starts the hub on the copy. The
+ * database the trial left, moved aside.
  */
 async function restoreDatabase(
   db: string,
   backup: string,
   version: string
-): Promise<void> {
+): Promise<string> {
   await holdDatabase(db, version);
+  let aside: string;
   try {
-    await putBackup(db, backup, version);
+    aside = await putBackup(db, backup, version);
   } finally {
     await releaseDatabase(db);
   }
   if (process.platform === "darwin") {
     await startAgain(["hub"]);
+  }
+  return aside;
+}
+
+/** Where a rollback of `version` moves the database the trial left. */
+const asideOf = (db: string, version: string): string =>
+  `${db}.migrated-${version}`;
+
+/**
+ * Once the database a rollback moved aside is checked `ok`, the ones earlier
+ * rollbacks moved aside go ({@link dropOlder}); one that is not `ok` keeps
+ * them, and says so. Never throws: the rollback is done.
+ */
+async function dropOlderAsides(db: string, aside: string): Promise<void> {
+  try {
+    const check = quickCheck(aside);
+    if (check !== "ok") {
+      await say(
+        `${aside} is not sound (${check}), so the databases earlier rollbacks moved aside are kept`
+      );
+      return;
+    }
+    await dropOlder(db, "migrated", aside);
+  } catch (error) {
+    await say(
+      `the databases earlier rollbacks moved aside are kept: ${message(error)}`
+    );
   }
 }
 
@@ -1375,42 +1518,76 @@ async function restoreDatabase(
  */
 const SIDECARS = ["-journal", "-wal", "-shm"] as const;
 
+/** Whether two paths name one file (a hard link's two names). */
+const sameFile = (a: string, b: string): boolean => {
+  const one = statSync(a, { throwIfNoEntry: false });
+  const other = statSync(b, { throwIfNoEntry: false });
+  return (
+    one !== undefined &&
+    other !== undefined &&
+    one.dev === other.dev &&
+    one.ino === other.ino
+  );
+};
+
 /**
- * The copy in place of the migrated file, with no file of the migrated one's
- * left beside it. The migrated file is moved aside whole: a hub its unit
- * killed mid-write (SIGTERM is the kernel's, hub lifetime.ts) leaves a hot
- * journal, a WAL holds committed writes not yet checkpointed, and either is
- * only good beside the file it belongs to. Its sidecars go first and the file
- * itself last, so a moved-aside file means every sidecar went with it, and
- * what a helper that died half-way left at `db` is a copy of ours. The hub
- * is held off the database while this runs ({@link holdDatabase}). The copy
- * goes in by a plain file copy: {@link backUpDatabase} wrote it as one file
- * in rollback-journal mode, with no WAL of its own to lose, and the hub
- * converts it to WAL as it opens it.
+ * The copy in place of the database the trial left, which is moved aside to
+ * `<db>.migrated-<version>` with every file SQLite keeps beside it, and with
+ * no moment at which `db` holds nothing. The hub is held off the database
+ * while this runs ({@link holdDatabase}).
+ *
+ * 1. The copy goes in beside the database, `<db>.restoring`, and SQLite
+ *    checks it `ok`. A copy that cannot be put there (no room) or is not
+ *    sound throws, and `db` is as it was.
+ * 2. The database gets its moved-aside name as a second name (a hard link),
+ *    then its sidecars move to that name: a hub its unit killed mid-write
+ *    (SIGTERM is the kernel's, hub lifetime.ts) leaves a hot journal, a WAL
+ *    holds committed writes not yet checkpointed, and either is only good
+ *    beside the file it belongs to.
+ * 3. The copy takes the database's name, in one rename.
+ *
+ * A helper that resumes this finds the moved-aside name already the
+ * database's own (step 2 was begun) and goes on; one that finds it another
+ * file's (a helper of a build before this one moved it aside, and what is at
+ * `db` is no copy of ours) leaves it as it is, and what is beside `db` goes.
+ * {@link backUpDatabase} wrote the copy as one file in rollback-journal mode,
+ * with no WAL of its own to lose; the hub converts it to WAL as it opens it.
  */
 async function putBackup(
   db: string,
   backup: string,
   version: string
-): Promise<void> {
-  const aside = `${db}.migrated-${version}`;
-  if (existsSync(aside)) {
-    // A helper before this one moved it aside already: what is at `db` now is
-    // no copy of ours, and goes.
-    for (const suffix of [...SIDECARS, ""]) {
-      await rm(`${db}${suffix}`, { force: true });
-    }
-  } else {
-    for (const suffix of [...SIDECARS, ""]) {
-      if (existsSync(`${db}${suffix}`)) {
-        await rename(`${db}${suffix}`, `${aside}${suffix}`);
-      }
-    }
-  }
+): Promise<string> {
+  const aside = asideOf(db, version);
   const restoring = `${db}.restoring`;
-  await copyFile(backup, restoring);
+  try {
+    await copyFile(backup, restoring);
+    const check = quickCheck(restoring);
+    if (check !== "ok") {
+      throw new Error(`${restoring} is not sound: ${check}`);
+    }
+  } catch (error) {
+    await rm(restoring, { force: true });
+    throw new Error(updatesWords.databaseNotPutBack(db, message(error)), {
+      cause: error,
+    });
+  }
+  if (!existsSync(aside) && existsSync(db)) {
+    await addName(db, aside);
+  }
+  const ours = sameFile(db, aside);
+  for (const suffix of SIDECARS) {
+    const from = `${db}${suffix}`;
+    if (!existsSync(from)) {
+      continue;
+    }
+    await (ours && !existsSync(`${aside}${suffix}`)
+      ? rename(from, `${aside}${suffix}`)
+      : rm(from, { force: true }));
+  }
   await rename(restoring, db);
   await say(
-    `roll back ${version}: database restored from ${backup}; the migrated one is ${aside}`
+    `roll back ${version}: database restored from ${backup}; the database the trial left is ${aside}`
   );
+  return aside;
 }

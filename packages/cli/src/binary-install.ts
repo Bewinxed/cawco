@@ -36,6 +36,8 @@ import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core/join";
 import { machineId } from "@cawco/core/machine-id";
+import { newerDatabase } from "@cawco/core/migrations-ahead";
+import { hubDbPath } from "@cawco/core/paths/hub";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -237,6 +239,13 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
 export async function setupBinary(
   options: BinaryInstallOptions
 ): Promise<void> {
+  // A hub database a newer build migrated, which this build's hub would not
+  // open (core migrations-ahead.ts): said before anything is written, so an
+  // install already here, and its hub, run on as they were.
+  const newer = options.role === "hub" ? newerDatabase(hubDbPath()) : undefined;
+  if (newer) {
+    throw new Error(newer);
+  }
   try {
     await bringUp(options);
   } catch (error) {
