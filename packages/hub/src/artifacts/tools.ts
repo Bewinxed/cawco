@@ -450,10 +450,7 @@ export const commentReply = {
   input: {
     pin,
     text: z.string().min(1).max(COMMENT_LIMITS.text),
-    files: z
-      .array(z.string().min(1).max(COMMENT_LIMITS.file))
-      .max(COMMENT_LIMITS.files)
-      .optional(),
+    files: z.array(z.string().min(1).max(COMMENT_LIMITS.file)).optional(),
     asks: z.boolean().optional(),
   },
 };

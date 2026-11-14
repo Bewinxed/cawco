@@ -68,11 +68,13 @@
  * link is down, wins every merge, and every copy converges on "deleted".
  */
 
+import { CHOICE_LIMITS } from "../choices";
 import { type DocMap, type MapDoc, PIN_MAPS } from "../doc-maps";
 import type { ArtifactChanges, ChangedItem, HeldNote } from "../doc-meta";
 import { getMeta, setMeta } from "../doc-meta";
 import { everyOf } from "../every-of";
 import { fnv1a } from "../fnv1a";
+import { commentsFull } from "../words/comment-lines";
 import type { Anchor, PinnedElement } from "./anchor";
 
 /**
@@ -88,21 +90,29 @@ export type PreviewMode = (typeof PREVIEW_MODES)[number];
 export const previewMode = (value: unknown): PreviewMode | null =>
   PREVIEW_MODES.find((mode) => mode === value) ?? null;
 
+/** The longest `writes` a Send carries, in base64 characters. Our call: a page's own picks, pins and ink are a few KB. */
+export const SEND_WRITES_MAX = 4 * 1024 * 1024;
+
+/** The longest send body read: its text and the page's writes at their bounds, as JSON. */
+export const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note + SEND_WRITES_MAX + 4096;
+
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
   pins: 200,
   /** Deleted pins' tombstones an artifact keeps (the doc's `gone`). Our call: five artifacts' worth of pins. */
   gone: 1000,
-  /** Entries one pin's thread keeps. Our call. */
-  entries: 100,
-  /** Characters one thread entry holds: comment_reply's bound. */
-  text: 2000,
+  /**
+   * Bytes the comments of one artifact hold, every pin's thread together: the
+   * size of a send body ({@link SEND_BODY_MAX}), which the hub already reads
+   * whole. This is what bounds a thread; no count of entries or files does.
+   */
+  bytes: SEND_BODY_MAX,
+  /** Characters one thread entry holds: what a send's text holds (`CHOICE_LIMITS.note`), which a held note rides in. */
+  text: CHOICE_LIMITS.note,
   /** Pictures, texts and files one entry carries (attachments design §1). */
   attachments: 10,
   /** Characters an attachment's name holds. Our call. */
   attachmentName: 300,
-  /** Files an agent's reply names. Our call. */
-  files: 20,
   /** Characters one named file holds: Linux's PATH_MAX, the longest path a file can have there. */
   file: 4096,
   /** Characters of the element's text an anchor keeps. */
@@ -155,9 +165,6 @@ export interface SendBody {
    */
   writes?: string;
 }
-
-/** The longest `writes` a Send carries, in base64 characters. Our call: a page's own picks, pins and ink are a few KB. */
-export const SEND_WRITES_MAX = 4 * 1024 * 1024;
 
 /**
  * The controls that send a page, each as the journal names it: the page's
@@ -1352,6 +1359,20 @@ export const writeAgain = (
   };
 };
 
+/** The bytes `pins`' threads hold, as the doc keeps them: what {@link COMMENT_LIMITS}`.bytes` bounds. */
+export const threadBytes = (pins: Iterable<Pin>): number => {
+  const encoder = new TextEncoder();
+  let bytes = 0;
+  for (const pin of pins) {
+    bytes += encoder.encode(JSON.stringify(pin.thread)).length;
+  }
+  return bytes;
+};
+
+/** The bytes one entry adds to its thread. */
+export const entryBytes = (entry: ThreadEntry): number =>
+  new TextEncoder().encode(JSON.stringify(entry)).length;
+
 export function replyToPin(
   doc: MapDoc,
   pin: string,
@@ -1361,12 +1382,13 @@ export function replyToPin(
   if (!held) {
     return "This pin is gone from the page, so the reply wasn't kept.";
   }
-  if (held.thread.length >= COMMENT_LIMITS.entries) {
-    return `This thread holds ${COMMENT_LIMITS.entries} entries, so the reply wasn't kept. Start a new comment.`;
-  }
   const entry = personEntry(said, "reply");
   if (typeof entry === "string") {
     return entry;
+  }
+  const heldBytes = threadBytes(readPins(doc).values());
+  if (heldBytes + entryBytes(entry) > COMMENT_LIMITS.bytes) {
+    return commentsFull(heldBytes, COMMENT_LIMITS.bytes, "reply");
   }
   writeEntry(doc, pin, entry);
   return null;

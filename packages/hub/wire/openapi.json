@@ -12603,7 +12603,6 @@
                     "type": "boolean"
                   },
                   "files": {
-                    "maxItems": 20,
                     "type": "array",
                     "items": {
                       "minLength": 1,

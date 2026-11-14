@@ -37,6 +37,7 @@ import {
   COMMENT_LIMITS,
   isSendControl,
   type MarkPictures,
+  SEND_BODY_MAX,
   SEND_CONTROLS,
   SEND_WRITES_MAX,
   type SendBody,
@@ -589,9 +590,6 @@ const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
     }
   });
 };
-
-/** The longest send body read: its text and the page's writes at their bounds, as JSON. */
-const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note + SEND_WRITES_MAX + 4096;
 
 /** The longest pictures body read: its pictures and its address at their bounds, as JSON. */
 const PICTURES_BODY_MAX =

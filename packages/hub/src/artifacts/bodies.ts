@@ -267,9 +267,7 @@ export const statementsBody = t.Object({
 export const replyBody = t.Object({
   text: t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text }),
   files: t.Optional(
-    t.Array(t.String({ minLength: 1, maxLength: COMMENT_LIMITS.file }), {
-      maxItems: COMMENT_LIMITS.files,
-    })
+    t.Array(t.String({ minLength: 1, maxLength: COMMENT_LIMITS.file }))
   ),
   asks: t.Optional(t.Boolean()),
 });

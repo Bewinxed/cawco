@@ -17,6 +17,14 @@ export const chainWords = (anchor: PageAnchor): string | null => {
     .join(" › ");
 };
 
+/** A comment, reply or answer turned away because the artifact's comments hold `held` of `most` bytes. */
+export const commentsFull = (
+  held: number,
+  most: number,
+  what: "reply" | "answer" | "page"
+): string =>
+  `This page's comments hold ${held.toLocaleString("en-US")} of ${most.toLocaleString("en-US")} bytes, so ${what === "page" ? "they hold no more" : `the ${what} wasn't kept`}. Resolve or delete a comment, then try again.`;
+
 /** A delivery's line for the person's note with the comments they held and sent together. */
 export const notedLine = (text: string): string =>
   `- My note with these comments: ${JSON.stringify(text)}`;

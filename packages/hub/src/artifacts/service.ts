@@ -46,6 +46,7 @@ import {
 import { pinsToTell } from "@cawco/core/comments/deliver";
 import {
   COMMENT_LIMITS,
+  entryBytes,
   type MarkPictures,
   newAnswer,
   type Pin,
@@ -59,6 +60,7 @@ import {
   seePin,
   stampHeard,
   type ThreadEntry,
+  threadBytes,
   writeDelivery,
   writeEntry,
   writeResolve,
@@ -128,6 +130,7 @@ import {
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { commentsFull } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
@@ -5146,12 +5149,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return found;
       }
       const { row, pin } = found;
-      if (pin.thread.length >= COMMENT_LIMITS.entries) {
-        return problem(409, {
-          code: "artifact-thread-full",
-          detail: `Pin ${pin.number}'s thread holds ${COMMENT_LIMITS.entries} entries, so this reply wasn't kept. Resolve the pin, or answer in the conversation.`,
-        });
-      }
       const entry: ThreadEntry = {
         id: crypto.randomUUID(),
         by: "agent",
@@ -5160,6 +5157,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...(files && files.length > 0 ? { files: [...new Set(files)] } : {}),
         ...(asks ? { asks: true as const } : {}),
       };
+      const heldBytes = threadBytes(readPins(docs.doc(row.id)).values());
+      if (heldBytes + entryBytes(entry) > COMMENT_LIMITS.bytes) {
+        return problem(409, {
+          code: "artifact-thread-full",
+          detail: commentsFull(heldBytes, COMMENT_LIMITS.bytes, "reply"),
+        });
+      }
       // An answer means everything before it was heard (core `pinHeard`).
       docs.transact(row.id, "hub", (doc) => {
         stampHeard(doc, pin, pin, entry.at);
@@ -5191,14 +5195,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const { row, pin } = found;
       const at = new Date().toISOString();
+      const last = text
+        ? {
+            id: crypto.randomUUID(),
+            by: "agent" as const,
+            text,
+            at,
+          }
+        : undefined;
+      // The last line goes in while the comments have the room for it.
       const said =
-        text && pin.thread.length < COMMENT_LIMITS.entries
-          ? {
-              id: crypto.randomUUID(),
-              by: "agent" as const,
-              text,
-              at,
-            }
+        last &&
+        threadBytes(readPins(docs.doc(row.id)).values()) + entryBytes(last) <=
+          COMMENT_LIMITS.bytes
+          ? last
           : undefined;
       // The agent's resolve is an answer: the person's next look takes it in (core `newAnswer`).
       const resolved: Pin = {

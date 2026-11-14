@@ -2,6 +2,7 @@
 
 import type { MapDoc } from "../doc-maps";
 import { readFileSpot } from "../file-spot";
+import { commentsFull } from "../words/comment-lines";
 import {
   attachmentsProblem,
   CHANGES_LIMIT,
@@ -12,6 +13,7 @@ import {
   isObject,
   readPins,
   type ThreadEntry,
+  threadBytes,
 } from "./model";
 
 /** A revision's key in the `seen` map: its number. */
@@ -67,13 +69,12 @@ const entryProblem = (entry: unknown): string | null => {
     files !== undefined &&
     !(
       Array.isArray(files) &&
-      files.length <= COMMENT_LIMITS.files &&
       files.every(
         (file) => typeof file === "string" && file.length <= COMMENT_LIMITS.file
       )
     )
   ) {
-    return `A reply names at most ${COMMENT_LIMITS.files} files of ${COMMENT_LIMITS.file} characters.`;
+    return `A reply names files of at most ${COMMENT_LIMITS.file} characters.`;
   }
   return null;
 };
@@ -89,9 +90,6 @@ export function pinProblem(value: unknown): string | null {
     Array.isArray(value.thread)
   )) {
     return "A pin is an object with its id, number, kind, anchor and thread.";
-  }
-  if (value.thread.length > COMMENT_LIMITS.entries) {
-    return `A pin's thread keeps at most ${COMMENT_LIMITS.entries} entries.`;
   }
   if (fileSpotProblem(value.anchor)) {
     return FILE_SPOT_PROBLEM;
@@ -158,6 +156,10 @@ export function pinsProblem(before: MapDoc, after: MapDoc): string | null {
   const pins = [...readPins(after).values()].filter((pin) => standing(pin.id));
   if (pins.length > COMMENT_LIMITS.pins) {
     return `An artifact keeps at most ${COMMENT_LIMITS.pins} pins.`;
+  }
+  const held = threadBytes(pins);
+  if (held > COMMENT_LIMITS.bytes) {
+    return commentsFull(held, COMMENT_LIMITS.bytes, "page");
   }
   const was = readPins(before);
   for (const pin of pins) {
