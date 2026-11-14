@@ -314,7 +314,7 @@ export const workItemRoutes = (
       .get("/api/work-items/:id", hidden, ({ params }) => {
         const item = workItems.item(params.id);
         return item
-          ? workItemOut(item)
+          ? workItemOut(item, ctx.db.landedChecks(item.id))
           : problem(404, {
               code: "no-work-item",
               detail: `no work item ${params.id}`,

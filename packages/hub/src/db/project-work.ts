@@ -29,10 +29,12 @@ import {
   queuedWorkItems,
   type WorkspaceState,
   workItemGlobs,
+  workItemLandedChecks,
   workItems,
   workspaceCreates,
   workspaces,
 } from "./schema";
+import type { WorkLanding } from "./stored-types";
 
 /** A session of the project, as its removal needs it. */
 export interface HeldSession {
@@ -141,6 +143,58 @@ export const projectWorkDb = (db: BunSQLiteDatabase): ProjectWorkDb => ({
 
 export type WorkItemRow = typeof workItems.$inferSelect;
 
+/**
+ * Whether any of an item's work landed: its landing recorded the commit
+ * pushed, or its landing is there and did not read as landings became
+ * columns (schema.ts `workItems.landedUnread`), which holds it landed so it
+ * is never landed again.
+ */
+export const landedWork = (
+  item: Pick<WorkItemRow, "landedSha" | "landedUnread">
+): boolean => item.landedSha !== null || item.landedUnread !== null;
+
+/**
+ * A change to a work item: its columns, and `landed`, what a landing that
+ * pushed something put where, written to its landing's columns and its
+ * gate's commands in one transaction, the record it replaces cleared.
+ */
+export type WorkItemChange = Partial<
+  Pick<
+    WorkItemRow,
+    | "state"
+    | "result"
+    | "summary"
+    | "headline"
+    | "error"
+    | "endedBlocked"
+    | "endedAt"
+    | "dismissedAt"
+    | "dismissReason"
+    | "replacedBy"
+    | "landingSince"
+    | "landingPhase"
+    | "gatePasses"
+    | "blocked"
+    | "lastTurnAt"
+    | "submission"
+    | "waitUntil"
+    | "waitReason"
+    | "waitResumeBy"
+    | "waitHistory"
+    | "heldAt"
+    | "heldAsleepAt"
+    | "stoppingAt"
+    | "prUrl"
+    | "groupReportedAt"
+    | "digest"
+    | "turns"
+    | "instanceId"
+    | "origin"
+    | "stoppedBy"
+    | "taskResult"
+  >
+> & { landed?: WorkLanding };
+
 type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 
 /**
@@ -209,8 +263,13 @@ export interface WorkRowsDb {
    * tree's walk has no use for (3,134 items read whole took 200 ms a walk).
    */
   readonly itemSessionsOfParents: (parentInstanceIds: string[]) => string[];
-  /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */
-  readonly landedOnTree: (tree: string) => WorkItemRow[];
+  /** The commands an item's landing gate passed on the tree that landed, in the gate's order. */
+  readonly landedChecks: (itemId: string) => string[];
+  /**
+   * Each command the landing gate passed on `tree` (schema.ts
+   * `workItems.landedGateTree`), once, over every item that landed it.
+   */
+  readonly landedChecksOnTree: (tree: string) => string[];
   /** The work items, live or ended, whose session's `finish_item` turn has not been heard to end (`last_turn_at`). */
   readonly lastTurnWorkItems: () => WorkItemRow[];
   /** The live work items (starting or running) that own files, each with its globs: one join on `work_item_globs`. */
@@ -258,43 +317,7 @@ export interface WorkRowsDb {
   /** Moves a work item; the hub is its only writer. */
   readonly updateWorkItem: (
     id: string,
-    change: Partial<
-      Pick<
-        WorkItemRow,
-        | "state"
-        | "result"
-        | "summary"
-        | "headline"
-        | "error"
-        | "endedBlocked"
-        | "endedAt"
-        | "dismissedAt"
-        | "dismissReason"
-        | "replacedBy"
-        | "landingSince"
-        | "landingPhase"
-        | "gatePasses"
-        | "blocked"
-        | "lastTurnAt"
-        | "submission"
-        | "waitUntil"
-        | "waitReason"
-        | "waitResumeBy"
-        | "waitHistory"
-        | "heldAt"
-        | "heldAsleepAt"
-        | "stoppingAt"
-        | "landed"
-        | "prUrl"
-        | "groupReportedAt"
-        | "digest"
-        | "turns"
-        | "instanceId"
-        | "origin"
-        | "stoppedBy"
-        | "taskResult"
-      >
-    >
+    change: WorkItemChange
   ) => WorkItemRow | undefined;
   /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its clone's HEAD was when it retired. */
   readonly updateWorkspace: (
@@ -661,12 +684,23 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             .where(inArray(instances.parentInstanceId, parentInstanceIds))
             .all()
             .map((row) => row.id),
-    landedOnTree: (tree) =>
+    landedChecksOnTree: (tree) =>
       db
-        .select()
-        .from(workItems)
-        .where(sql`json_extract(${workItems.landed}, '$.gate.tree') = ${tree}`)
-        .all(),
+        .selectDistinct({ command: workItemLandedChecks.command })
+        .from(workItemLandedChecks)
+        .innerJoin(workItems, eq(workItems.id, workItemLandedChecks.itemId))
+        .where(eq(workItems.landedGateTree, tree))
+        .orderBy(workItemLandedChecks.command)
+        .all()
+        .map((row) => row.command),
+    landedChecks: (itemId) =>
+      db
+        .select({ command: workItemLandedChecks.command })
+        .from(workItemLandedChecks)
+        .where(eq(workItemLandedChecks.itemId, itemId))
+        .orderBy(sql`${workItemLandedChecks}.rowid`)
+        .all()
+        .map((row) => row.command),
     trayItemsOf: (sessionId, endedSince) =>
       db
         .select()
@@ -683,13 +717,38 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         )
         .orderBy(workItems.createdAt)
         .all(),
-    updateWorkItem: (id, change) =>
-      db
-        .update(workItems)
-        .set(change)
-        .where(eq(workItems.id, id))
-        .returning()
-        .get(),
+    updateWorkItem: (id, { landed, ...change }) =>
+      landed
+        ? db.transaction((tx) => {
+            tx.delete(workItemLandedChecks)
+              .where(eq(workItemLandedChecks.itemId, id))
+              .run();
+            const passed = [...new Set(landed.gate?.passed ?? [])];
+            if (passed.length > 0) {
+              tx.insert(workItemLandedChecks)
+                .values(passed.map((command) => ({ itemId: id, command })))
+                .run();
+            }
+            return tx
+              .update(workItems)
+              .set({
+                ...change,
+                landedSha: landed.sha,
+                landedOnto: landed.onto,
+                landedAt: landed.at === undefined ? null : new Date(landed.at),
+                landedGateTree: landed.gate?.tree ?? null,
+                landedUnread: null,
+              })
+              .where(eq(workItems.id, id))
+              .returning()
+              .get();
+          })
+        : db
+            .update(workItems)
+            .set(change)
+            .where(eq(workItems.id, id))
+            .returning()
+            .get(),
     activeWorkspacesOn: (machineId) =>
       db
         .select()

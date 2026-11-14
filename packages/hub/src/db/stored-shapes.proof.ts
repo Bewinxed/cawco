@@ -49,7 +49,6 @@ import type {
   TrackerSyncedOutput,
   TrashedRowsOutput,
   WorkItemSubmissionOutput,
-  WorkLandingOutput,
   WorkspaceFromOutput,
 } from "./stored-shapes";
 import type {
@@ -73,7 +72,6 @@ import type {
   TrackerSynced as TrackerSyncedType,
   TrashedRows as TrashedRowsType,
   WorkItemSubmission as WorkItemSubmissionType,
-  WorkLanding as WorkLandingType,
   WorkspaceFrom as WorkspaceFromType,
 } from "./stored-types";
 
@@ -135,7 +133,6 @@ prove<
     Same<TrackerSyncedOutput, TrackerSyncedType>,
     Same<TrashedRowsOutput, TrashedRowsType>,
     Same<WorkItemSubmissionOutput, WorkItemSubmissionType>,
-    Same<WorkLandingOutput, WorkLandingType>,
     Same<WorkspaceFromOutput, WorkspaceFromType>,
   ]
 >();

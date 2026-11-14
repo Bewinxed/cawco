@@ -1060,6 +1060,9 @@ export const createLandingRun = ({
    * ({@link landingBranch}): the newest branch landing of every attempt at
    * its task in its project, the item's own earlier rounds among them, or of
    * the item alone when it is no task's. Undefined: the hub never pushed there.
+   * A landing whose record does not read (`landedUnread`) is none of them:
+   * the hub cannot vouch it pushed there, so a branch at it is refused, not
+   * pushed over.
    */
   const lastBranchPush = (item: WorkItemRow): string | undefined => {
     const now = db.workItem(item.id) ?? item;
@@ -1069,14 +1072,16 @@ export const createLandingRun = ({
             .projectAttempts(now.projectId)
             .filter((attempt) => attempt.taskId === now.taskId)
         : [now];
-    let last: WorkLanding | undefined;
-    for (const { landed } of sharing) {
+    let last: { at: number; sha: string } | undefined;
+    for (const attempt of sharing) {
+      const at = attempt.landedAt?.getTime() ?? 0;
       if (
-        landed &&
-        landed.onto === null &&
-        (!last || (landed.at ?? 0) > (last.at ?? 0))
+        attempt.landedSha !== null &&
+        attempt.landedOnto === null &&
+        attempt.landedUnread === null &&
+        (!last || at > last.at)
       ) {
-        last = landed;
+        last = { at, sha: attempt.landedSha };
       }
     }
     return last?.sha;

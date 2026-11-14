@@ -954,14 +954,19 @@ export interface OwnLanding {
  * nothing: it parks the person's ask").
  */
 export const ownLandings = (
-  attempts: Pick<WorkItemRow, "landed" | "taskId">[],
+  attempts: Pick<
+    WorkItemRow,
+    "landedOnto" | "landedSha" | "landedUnread" | "taskId"
+  >[],
   item: Pick<WorkItemRow, "taskId">,
   taskOpen: boolean
 ): OwnLanding[] =>
   taskOpen && item.taskId
-    ? attempts.flatMap((attempt) =>
-        attempt.taskId === item.taskId && attempt.landed?.onto
-          ? [{ onto: attempt.landed.onto, sha: attempt.landed.sha }]
+    ? attempts.flatMap(({ landedOnto, landedSha, landedUnread, taskId }) =>
+        // A landing whose record does not read is not vouched as its own:
+        // design work on what it put there stays checked.
+        taskId === item.taskId && landedOnto && landedSha && !landedUnread
+          ? [{ onto: landedOnto, sha: landedSha }]
           : []
       )
     : [];

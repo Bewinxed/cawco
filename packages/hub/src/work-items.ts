@@ -124,10 +124,11 @@ import { ElysiaStatus, problem } from "elysia";
 import type { HandedReceiver } from "./artifacts/shapes";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
-import type {
-  QueuedWorkItemRow,
-  WorkItemRow,
-  WorkspaceRow,
+import {
+  landedWork,
+  type QueuedWorkItemRow,
+  type WorkItemRow,
+  type WorkspaceRow,
 } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { Origin, WorkOrigin } from "./db/schema";
@@ -4740,13 +4741,13 @@ export const createWorkItems = ({
    * nothing holds it, which its session, still in the turn that ended it,
    * does until it sleeps.
    *
-   * An item whose work landed (its `landed`) and that runs again (a word
-   * from the reader, its parent or its project's conversation, {@link reopen}; a
-   * continuation of its session, `continuedIn`; work found since its landing,
-   * {@link finishable}) stays done however its follow-up ends without
-   * landing: blocked, a failed or third quiet turn, its session failing or
-   * gone, its budget, a stop. The reason is its `error`, and its task goes to
-   * review with it (dispatch.ts `settle`). On nightly 3944 Caw's send-back
+   * An item whose work landed (project-work.ts `landedWork`) and that runs
+   * again (a word from the reader, its parent or its project's conversation,
+   * {@link reopen}; a continuation of its session, `continuedIn`; work found
+   * since its landing, {@link finishable}) stays done however its follow-up
+   * ends without landing: blocked, a failed or third quiet turn, its session
+   * failing or gone, its budget, a stop. The reason is its `error`, and its
+   * task goes to review with it (dispatch.ts `settle`). On nightly 3944 Caw's send-back
    * of a landed design build ended blocked and failed the attempt that had
    * landed it, its task back in its first stage.
    */
@@ -4768,9 +4769,9 @@ export const createWorkItems = ({
     landingRun.stopLanding(item.id);
     workedThisTurn.delete(item.id);
     toldWhileWaiting.delete(item.id);
-    const { landed } = db.workItem(item.id) ?? item;
     const kept =
-      landed && (change.state === "failed" || change.state === "cancelled")
+      landedWork(db.workItem(item.id) ?? item) &&
+      (change.state === "failed" || change.state === "cancelled")
         ? {
             state: "done" as const,
             error: change.error ?? FOLLOW_UP_STOPPED,
@@ -6653,19 +6654,12 @@ export const createWorkItems = ({
 
     /**
      * What the landing gate passed on `tree`, a git tree's name: each step's
-     * command that passed on it, over every item that landed it (WorkLanding
-     * `gate`). Empty when none did. A release asks it of its commit's tree
-     * (scripts/release.ts), and checks only what it does not find here.
+     * command that passed on it, over every item that landed it
+     * (work_item_landed_checks). Empty when none did. A release asks it of
+     * its commit's tree (scripts/release.ts), and checks only what it does
+     * not find here.
      */
-    gatePassesOn: (tree: string): string[] => [
-      ...new Set(
-        db
-          .landedOnTree(tree)
-          .flatMap((row) =>
-            row.landed?.gate?.tree === tree ? row.landed.gate.passed : []
-          )
-      ),
-    ],
+    gatePassesOn: (tree: string): string[] => db.landedChecksOnTree(tree),
 
     /**
      * What a session's delegate tray shows when it opens: the items it

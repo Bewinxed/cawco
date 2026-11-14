@@ -13992,45 +13992,6 @@
       }
     }
   },
-  "work_items.landed": {
-    "type": "object",
-    "properties": {
-      "at": {
-        "type": "number"
-      },
-      "gate": {
-        "type": "object",
-        "properties": {
-          "passed": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "tree": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "passed",
-          "tree"
-        ]
-      },
-      "onto": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "sha": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "onto",
-      "sha"
-    ]
-  },
   "work_items.outputs": {
     "type": "array",
     "items": {
