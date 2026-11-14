@@ -3,10 +3,14 @@
  */
 
 import { archiveRefusal } from "@cawco/core/archive";
-import type { ArtifactNeedsRead } from "@cawco/core/artifact-needs";
+import type {
+  ArtifactNeedsFrame,
+  ArtifactNeedsRead,
+} from "@cawco/core/artifact-needs";
+import type { ParkedAsk } from "@cawco/core/frames";
 import type { Envelope } from "@cawco/core/protocol";
 import { Elysia, problem, t } from "elysia";
-import { clientCopy } from "../ask-presentation";
+import { clientAsk } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import {
   askCollapseId,
@@ -119,8 +123,8 @@ export const pendingRoutes = ({
     // Every ask parked on the person, and Needs you's artifacts as one
     // `artifact.needs` frame (artifacts/lane.ts): the lane whole, from
     // the hub, which no session's ask names.
-    .get("/api/pending", (): Envelope[] => [
-      ...pending.list().map(clientCopy),
+    .get("/api/pending", (): (ParkedAsk | Envelope<ArtifactNeedsFrame>)[] => [
+      ...pending.list().map(clientAsk),
       { verb: "frames", machineId: "hub", payload: artifactLane.frame() },
     ])
     // Needs you's artifacts and their notices as they stand (core

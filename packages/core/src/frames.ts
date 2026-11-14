@@ -4,7 +4,7 @@ import type { AccountBorrowFrame } from "./accounts";
 import type { ActionsFrame } from "./actions";
 import type { ArtifactKind } from "./artifact-kinds";
 import type { ArtifactNeedsFrame } from "./artifact-needs";
-import type { AskAnswer } from "./asks";
+import type { AskAnswer, SourceFacts } from "./asks";
 import type {
   BrowserFrame,
   BrowserHandedBackFrame,
@@ -373,6 +373,8 @@ export type ConnectAnswer =
   | { outcome: "declined"; server: string; words: string };
 
 export interface PermissionRequestFrame {
+  /** The hub's own ask this frame stands for (core asks.ts), absent on a session process's own prompt. */
+  askId?: string;
   /** A browser ask's browser, reason and origin; absent on every other ask. */
   browserAsk?: BrowserAskFrame;
   /** A connect ask's server, reason, address and access; absent on every other ask. */
@@ -401,10 +403,23 @@ export interface PermissionRequestFrame {
   requestId: string;
   /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
   requestKind?: "tool" | "question";
+  /** `parent` when the ask is left to the session's parent, not the person. */
+  routedTo?: "parent";
+  /** Where an install the ask proposes fetches from (hub source-facts.ts). */
+  sourceFacts?: SourceFacts;
   suggestions?: PermissionUpdate[];
   toolName: string;
   /** The tool call the ask gates, as its transcript message names it. */
   toolUseId?: string;
+}
+
+/** A parked ask as the hub holds it and every screen reads it (`/api/pending`): an `Envelope` whose payload is its permission request. */
+export interface ParkedAsk {
+  instanceId?: string;
+  machineId: string;
+  payload: PermissionRequestFrame;
+  requestId?: string;
+  verb: Verb;
 }
 
 /**

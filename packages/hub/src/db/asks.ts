@@ -8,7 +8,7 @@
  */
 
 import type { AskAnswer, AskRecord, AskResult } from "@cawco/core/asks";
-import type { Envelope } from "@cawco/core/protocol";
+import type { ParkedAsk } from "@cawco/core/frames";
 import { and, asc, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DbCore } from "./core";
@@ -253,8 +253,8 @@ export interface AskPartsDb {
    */
   readonly parkedAsks: {
     readonly drop: (requestId: string) => void;
-    readonly list: () => Envelope[];
-    readonly save: (requestId: string, envelope: Envelope) => void;
+    readonly list: () => ParkedAsk[];
+    readonly save: (requestId: string, envelope: ParkedAsk) => void;
   };
 }
 

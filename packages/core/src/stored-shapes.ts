@@ -2203,6 +2203,194 @@ const PairingOffAnswerShape = declared(
 export const PairingOffAnswerSchema = PairingOffAnswerShape;
 export type PairingOffAnswerOutput = z.output<typeof PairingOffAnswerShape>;
 
+const BrowserAskFrameShape = declared(
+  z.object({
+    artifactId: z.string(),
+    key: BrowserKeyShape,
+    machineId: z.string(),
+    origin: z.string(),
+    reason: z.string(),
+  }),
+  "BrowserAskFrame",
+  "packages/core/src/frames.ts"
+);
+export type BrowserAskFrameOutput = z.output<typeof BrowserAskFrameShape>;
+
+const ConnectAskFrameShape = declared(
+  z.object({
+    access: ConnectAccessShape.nullable(),
+    again: z.boolean(),
+    reason: z.string(),
+    server: z.string(),
+    url: z.string(),
+  }),
+  "ConnectAskFrame",
+  "packages/core/src/frames.ts"
+);
+export type ConnectAskFrameOutput = z.output<typeof ConnectAskFrameShape>;
+
+const PermissionChangeShape = declared(
+  z.object({
+    added: z.number(),
+    after: z.string(),
+    before: z.string(),
+    path: z.string(),
+    removed: z.number(),
+  }),
+  "PermissionChange",
+  "packages/core/src/permission-presentation.ts"
+);
+
+const PermissionFieldShape = declared(
+  z.object({ key: z.string(), value: z.string() }),
+  "PermissionField",
+  "packages/core/src/permission-presentation.ts"
+);
+
+const SetItemRowShape = declared(
+  z.object({
+    kind: z.enum(["skill", "server"]),
+    lastAt: z.number().nullable(),
+    name: z.string(),
+    sessions: z.number(),
+  }),
+  "SetItemRow",
+  "packages/core/src/permission-presentation.ts"
+);
+
+const SetChangeTableShape = declared(
+  z.object({
+    change: z.enum(["joins", "leaves"]),
+    days: z.number(),
+    rows: z.array(SetItemRowShape),
+    set: z.string(),
+  }),
+  "SetChangeTable",
+  "packages/core/src/permission-presentation.ts"
+);
+export type SetChangeTableOutput = z.output<typeof SetChangeTableShape>;
+
+const PermissionPresentationShape = declared(
+  z.object({
+    asker: z.string(),
+    changes: z.array(PermissionChangeShape),
+    command: z.string().optional(),
+    detail: z.string().optional(),
+    fields: z.array(PermissionFieldShape),
+    project: z.string().optional(),
+    setTables: z.array(SetChangeTableShape).optional(),
+    summary: z.string(),
+  }),
+  "PermissionPresentation",
+  "packages/core/src/permission-presentation.ts"
+);
+export type PermissionPresentationOutput = z.output<
+  typeof PermissionPresentationShape
+>;
+
+const SourceFactsShape = declared(
+  z.object({
+    at: z.string(),
+    since: z.string().optional(),
+    skill: z
+      .object({
+        description: z.string(),
+        files: z.array(z.object({ hash: z.string(), path: z.string() })),
+        hash: z.string(),
+        name: z.string(),
+      })
+      .optional(),
+    stars: z.number().optional(),
+    unknown: z.string().optional(),
+    weeklyDownloads: z.number().optional(),
+  }),
+  "SourceFacts",
+  "packages/core/src/asks.ts"
+);
+export type SourceFactsOutput = z.output<typeof SourceFactsShape>;
+
+const PermissionUpdateDestinationShape = declared(
+  z.enum([
+    "userSettings",
+    "projectSettings",
+    "localSettings",
+    "session",
+    "cliArg",
+  ]),
+  "PermissionUpdateDestination",
+  "packages/core/src/session-messages.ts"
+);
+export type PermissionUpdateDestinationOutput = z.output<
+  typeof PermissionUpdateDestinationShape
+>;
+
+const PermissionUpdateShape = declared(
+  z.union([
+    z.object({
+      type: z.enum(["addRules", "replaceRules", "removeRules"]),
+      rules: z.array(
+        z.object({ toolName: z.string(), ruleContent: z.string().optional() })
+      ),
+      behavior: z.enum(["allow", "deny", "ask"]),
+      destination: PermissionUpdateDestinationShape,
+    }),
+    z.object({
+      type: z.literal("setMode"),
+      mode: PermissionModeShape,
+      destination: PermissionUpdateDestinationShape,
+    }),
+    z.object({
+      type: z.enum(["addDirectories", "removeDirectories"]),
+      directories: z.array(z.string()),
+      destination: PermissionUpdateDestinationShape,
+    }),
+  ]),
+  "PermissionUpdate",
+  "packages/core/src/session-messages.ts"
+);
+export type PermissionUpdateOutput = z.output<typeof PermissionUpdateShape>;
+
+const PermissionRequestFrameShape = declared(
+  z.object({
+    askId: z.string().optional(),
+    browserAsk: BrowserAskFrameShape.optional(),
+    connectAsk: ConnectAskFrameShape.optional(),
+    harness: HarnessKindShape,
+    input: z.record(z.string(), z.unknown()),
+    instanceId: z.string(),
+    kind: z.literal("permission_request"),
+    originInstanceId: z.string().optional(),
+    presentation: PermissionPresentationShape,
+    processGeneration: z.string().optional(),
+    raisedAt: z.number().optional(),
+    requestId: z.string(),
+    requestKind: z.enum(["tool", "question"]).optional(),
+    routedTo: z.literal("parent").optional(),
+    sourceFacts: SourceFactsShape.optional(),
+    suggestions: z.array(PermissionUpdateShape).optional(),
+    toolName: z.string(),
+    toolUseId: z.string().optional(),
+  }),
+  "PermissionRequestFrame",
+  "packages/core/src/frames.ts"
+);
+export type PermissionRequestFrameOutput = z.output<
+  typeof PermissionRequestFrameShape
+>;
+
+export const ParkedAskShape = declared(
+  z.object({
+    instanceId: z.string().optional(),
+    machineId: z.string(),
+    payload: PermissionRequestFrameShape,
+    requestId: z.string().optional(),
+    verb: VerbShape,
+  }),
+  "ParkedAsk",
+  "packages/core/src/frames.ts"
+);
+export type ParkedAskOutput = z.output<typeof ParkedAskShape>;
+
 const PlaceLfsRowShape = declared(
   z.object({
     bytes: z.number(),

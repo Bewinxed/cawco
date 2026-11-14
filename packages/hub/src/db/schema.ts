@@ -93,6 +93,7 @@ import {
   NeutralUserMessageSchema,
   OpenCodeGoLimitsSchema,
   OrphanedCommentsSchema,
+  ParkedAskShape,
   PlaceLfsRowSchema,
   PlanStepSchema,
   ProjectNoteSchema,
@@ -225,8 +226,6 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
     open: (raw) => openOrNull(raw),
   });
 
-/** An envelope as its machine is handed it, payload unread. */
-const EnvelopeSchema: z.ZodType<Envelope> = EnvelopeShape;
 /** A send as its machine is handed it (`Envelope<SendPayload>`). */
 const SendEnvelopeSchema: z.ZodType<Envelope<SendPayload>> =
   EnvelopeShape.extend({ payload: SendPayloadShape });
@@ -5677,7 +5676,7 @@ export const parkedAsks = sqliteTable(
     instanceId: sessionColumn("instance_id"),
     machineId: machineColumn("machine_id").notNull(),
     /** The `permission_request` envelope, `raisedAt` stamped on its payload. */
-    envelope: storedJson(EnvelopeSchema)("envelope").notNull(),
+    envelope: storedJson(ParkedAskShape)("envelope").notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
 );

@@ -1,8 +1,9 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
+import type { ParkedAsk } from "@cawco/core/frames";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
-import { EnvelopeShape } from "@cawco/core/stored-shapes";
+import { ParkedAskShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
 import { parkedToolAsk } from "./parked-ask";
@@ -27,8 +28,8 @@ export interface PendingShape {
    */
   readonly forget: (instanceId: string) => void;
   /** The parked ask itself, for whoever answers it away from a dashboard. */
-  readonly get: (requestId: string) => Envelope | undefined;
-  readonly list: () => Envelope[];
+  readonly get: (requestId: string) => ParkedAsk | undefined;
+  readonly list: () => ParkedAsk[];
   /**
    * The one place an ask's end is heard: called for every parked ask that
    * leaves, by `resolve` or `forget`, whichever path settled it. Set once by
@@ -146,10 +147,6 @@ export const askEnvelope = (
 export const outlivesSession = (envelope: Envelope): boolean =>
   (envelope.payload as { askId?: unknown } | undefined)?.askId !== undefined;
 
-const isPermissionAsk = (envelope: Envelope): boolean =>
-  (envelope.payload as { kind?: unknown } | undefined)?.kind ===
-  "permission_request";
-
 export class Pending extends Context.Service<Pending, PendingShape>()(
   "Pending"
 ) {}
@@ -204,25 +201,27 @@ const ownedAsks = (db: DbShape): Envelope[] => {
   });
 };
 
+/** An envelope that says what it asks, taken into `ParkedAsk`: what a machine stamped beside its declared keys is left out (hub stored-json.ts `received`). */
+const taken = (envelope: Envelope): ParkedAsk =>
+  received(ParkedAskShape, envelope, "a machine's permission ask");
+
 const make = (db: DbShape): PendingShape => {
   const parked = db.parkedAsks;
   // A machine's envelope, taken into CawCo's type as it is kept: what the
   // machine stamped beside its declared keys is left out (core
   // stored-json.ts `received`).
-  const kept = {
-    ...parked,
-    save: (requestId: string, envelope: Envelope) =>
-      parked.save(
-        requestId,
-        received(EnvelopeShape, envelope, "a machine's permission ask")
-      ),
-  };
-  // What the hub held parked when it last stopped, by request id.
-  const requests = new Map<string, Envelope>(
-    [...kept.list(), ...ownedAsks(db)].flatMap((envelope) =>
-      envelope.requestId ? [[envelope.requestId, envelope] as const] : []
-    )
+  const kept = parked;
+  // What the hub held parked when it last stopped, by request id. The asks
+  // the hub owns join it as the presenter stamps them (`presentWith`): an ask
+  // is a `ParkedAsk` once it says what it asks.
+  const requests = new Map<string, ParkedAsk>(
+    kept
+      .list()
+      .flatMap((envelope) =>
+        envelope.requestId ? [[envelope.requestId, envelope] as const] : []
+      )
   );
+  const owned = ownedAsks(db);
   // A daemon replay must not resurrect a request that already left this ledger.
   const settledIds = new Set<string>();
   let settled: SettledListener | undefined;
@@ -246,8 +245,13 @@ const make = (db: DbShape): PendingShape => {
     presentWith: (presenter) => {
       present = presenter;
       for (const envelope of requests.values()) {
-        if (isPermissionAsk(envelope)) {
-          presenter(envelope);
+        presenter(envelope);
+      }
+      for (const envelope of owned.splice(0)) {
+        presenter(envelope);
+        const ask = taken(envelope);
+        if (ask.requestId) {
+          requests.set(ask.requestId, ask);
         }
       }
     },
@@ -263,24 +267,23 @@ const make = (db: DbShape): PendingShape => {
       if (settledIds.has(requestId)) {
         return false;
       }
-      if (isPermissionAsk(envelope)) {
-        if (!present) {
-          throw new Error(
-            "An ask was parked before the hub could say what it asks."
-          );
-        }
-        present(envelope);
+      if (!present) {
+        throw new Error(
+          "An ask was parked before the hub could say what it asks."
+        );
       }
+      present(envelope);
       const payload = envelope.payload as Record<string, unknown>;
       payload.raisedAt =
         raisedAtOf(requests.get(requestId)) ??
         raisedAtOf(envelope) ??
         Date.now();
-      requests.set(requestId, envelope);
+      const ask = taken(envelope);
+      requests.set(requestId, ask);
       // A process's prompt the hub now owns (asks.ts `keep`) is read back
       // from its row, no longer from the process's kept copy.
       if (outlivesHub) {
-        kept.save(requestId, envelope);
+        kept.save(requestId, ask);
       } else {
         kept.drop(requestId);
       }
@@ -289,8 +292,7 @@ const make = (db: DbShape): PendingShape => {
     get: (requestId) => requests.get(requestId),
     unroute: (requestId) => {
       const envelope = requests.get(requestId);
-      const payload = envelope?.payload as
-        { askId?: unknown; routedTo?: unknown } | undefined;
+      const payload = envelope?.payload;
       if (!(envelope && payload?.routedTo !== undefined)) {
         return;
       }

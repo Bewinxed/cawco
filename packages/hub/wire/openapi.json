@@ -49699,6 +49699,32 @@
           "verificationUriComplete"
         ]
       },
+      "ParkedAsk": {
+        "description": "A parked ask as the hub holds it and every screen reads it (`/api/pending`): an `Envelope` whose payload is its permission request.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PermissionRequestFrame"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "verb": {
+            "$ref": "#/components/schemas/Verb"
+          }
+        },
+        "required": [
+          "machineId",
+          "payload",
+          "verb"
+        ]
+      },
       "PendingAccountSignin": {
         "description": "A sign-in a machine has started for an account and not finished: the link\nor device code it showed, kept by the hub until it ends or lapses\n(`expiresAt`, epoch ms), so a screen that reloads or reopens shows that\nsame link or code again instead of starting another.",
         "type": "object",
@@ -49840,6 +49866,10 @@
       "PermissionRequestFrame": {
         "type": "object",
         "properties": {
+          "askId": {
+            "description": "The hub's own ask this frame stands for (core asks.ts), absent on a session process's own prompt.",
+            "type": "string"
+          },
           "browserAsk": {
             "$ref": "#/components/schemas/BrowserAskFrame",
             "description": "A browser ask's browser, reason and origin; absent on every other ask."
@@ -49885,6 +49915,15 @@
           "requestKind": {
             "$ref": "#/components/schemas/DelegateEventBaseRequestKind",
             "description": "`tool` for a permission, `question` for an AskUserQuestion-shaped prompt."
+          },
+          "routedTo": {
+            "description": "`parent` when the ask is left to the session's parent, not the person.",
+            "const": "parent",
+            "type": "string"
+          },
+          "sourceFacts": {
+            "$ref": "#/components/schemas/SourceFacts",
+            "description": "Where an install the ask proposes fetches from (hub source-facts.ts)."
           },
           "suggestions": {
             "type": "array",
@@ -55818,6 +55857,76 @@
           "custom",
           "mcp",
           "skill"
+        ]
+      },
+      "SourceFacts": {
+        "description": "Where an install fetches from, as the hub read it when the call was\nproposed (hub source-facts.ts): a skill's source, a marketplace's.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "The source as read: `github.com/owner/repo`, `npm package`, `/path on machine`.",
+            "type": "string"
+          },
+          "since": {
+            "description": "When it first came out: the repository's creation, the package's first publish (ISO).",
+            "type": "string"
+          },
+          "skill": {
+            "description": "A skill read from a folder on a machine before the person is asked: what\nits SKILL.md declares and every file the install carries, by path.",
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "files": {
+                "description": "Every file, by path, with the hash of its content.",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "hash": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "hash",
+                    "path"
+                  ]
+                }
+              },
+              "hash": {
+                "description": "The hash of every file together: what the approval pins.",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "description",
+              "files",
+              "hash",
+              "name"
+            ]
+          },
+          "stars": {
+            "description": "The repository's GitHub stars.",
+            "type": "number"
+          },
+          "unknown": {
+            "description": "Why there are no facts: a source that carries none, or the registry's answer.",
+            "type": "string"
+          },
+          "weeklyDownloads": {
+            "description": "The package's npm downloads in the last week.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "at"
         ]
       },
       "Sourced.T": {
@@ -88917,28 +89026,37 @@
       "getApiPending200": {
         "type": "array",
         "items": {
-          "description": "Every message on every hop. `payload` is whatever the verb carries — a neutral\nmessage, a harness option object, a control call — passed through. The hub\nroutes on the envelope fields and peeks only what harness.ts names.",
-          "type": "object",
-          "properties": {
-            "instanceId": {
-              "type": "string"
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/ParkedAsk"
             },
-            "machineId": {
-              "type": "string"
-            },
-            "payload": {},
-            "requestId": {
-              "description": "The `requestId` when the payload correlates to a permission or control reply.",
-              "type": "string"
-            },
-            "verb": {
-              "$ref": "#/components/schemas/Verb"
+            {
+              "description": "Every message on every hop. `payload` is whatever the verb carries — a neutral\nmessage, a harness option object, a control call — passed through. The hub\nroutes on the envelope fields and peeks only what harness.ts names.",
+              "type": "object",
+              "properties": {
+                "instanceId": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "payload": {
+                  "$ref": "#/components/schemas/ArtifactNeedsFrame"
+                },
+                "requestId": {
+                  "description": "The `requestId` when the payload correlates to a permission or control reply.",
+                  "type": "string"
+                },
+                "verb": {
+                  "$ref": "#/components/schemas/Verb"
+                }
+              },
+              "required": [
+                "machineId",
+                "payload",
+                "verb"
+              ]
             }
-          },
-          "required": [
-            "machineId",
-            "payload",
-            "verb"
           ]
         }
       },

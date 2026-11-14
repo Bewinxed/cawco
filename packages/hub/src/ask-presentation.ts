@@ -9,7 +9,7 @@
 
 import type { SourceFacts } from "@cawco/core/asks";
 import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
-import type { PermissionRequestFrame } from "@cawco/core/frames";
+import type { ParkedAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import {
   type AdminGroup,
   presentPermission,
@@ -20,20 +20,14 @@ import {
 import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { ParkedAskShape } from "@cawco/core/stored-shapes";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
 
-/** A permission (not a question) parked on this envelope, else undefined. */
-const permissionOf = (
-  envelope: Envelope
-): PermissionRequestFrame | undefined => {
-  const payload = envelope.payload as PermissionRequestFrame | undefined;
-  return payload?.kind === "permission_request" &&
-    !questionsOf(payload.toolName, payload.input)
-    ? payload
-    : undefined;
-};
+/** Whether a parked ask is a permission, not a question. */
+const isPermission = (payload: PermissionRequestFrame): boolean =>
+  !questionsOf(payload.toolName, payload.input);
 
 const MCP_SERVERS_WRITE = /^(?:mcp__cawco__|cawco_)?admin_mcp_servers_write$/u;
 
@@ -62,10 +56,10 @@ const withOpenUrl = (
  * puts it back on the way in, so an Approve runs the call as it was asked. A
  * question is left whole: its answer is written into its input.
  */
-export const clientCopy = (envelope: Envelope): Envelope => {
-  const payload = permissionOf(envelope);
-  if (!payload) {
-    return envelope;
+export const clientAsk = (ask: ParkedAsk): ParkedAsk => {
+  const { payload } = ask;
+  if (!isPermission(payload)) {
+    return ask;
   }
   const input = Object.fromEntries(
     Object.entries(payload.input).map(([key, value]) => [
@@ -74,7 +68,7 @@ export const clientCopy = (envelope: Envelope): Envelope => {
     ])
   );
   return {
-    ...envelope,
+    ...ask,
     payload: {
       ...payload,
       input: MCP_SERVERS_WRITE.test(payload.toolName)
@@ -85,19 +79,26 @@ export const clientCopy = (envelope: Envelope): Envelope => {
 };
 
 /**
+ * {@link clientAsk} for an envelope read as it arrives: one that is not a
+ * parked ask (it does not read as a permission request) is left whole.
+ */
+export const clientCopy = (envelope: Envelope): Envelope => {
+  const read = ParkedAskShape.safeParse(envelope);
+  return read.success ? clientAsk(read.data) : envelope;
+};
+
+/**
  * An answer to a parked permission, carrying the call's own input: clients
  * only ever held the redacted copy ({@link clientCopy}), so the input they
  * echo back is replaced by the ledger's.
  */
 export const answeredWithOriginal = (
-  parked: Envelope,
+  parked: ParkedAsk,
   result: PermissionResult
-): PermissionResult => {
-  const payload = permissionOf(parked);
-  return payload && result.behavior === "allow"
-    ? { ...result, updatedInput: payload.input }
+): PermissionResult =>
+  isPermission(parked.payload) && result.behavior === "allow"
+    ? { ...result, updatedInput: parked.payload.input }
     : result;
-};
 
 export const createAskPresenter = (
   db: DbShape,

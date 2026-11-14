@@ -26,6 +26,7 @@ import type {
   AccountHue as AccountHueType,
   CompactMethod as CompactMethodType,
 } from "./accounts/kinds";
+import type { SourceFacts as SourceFactsType } from "./asks";
 import type {
   FileAttachment as FileAttachmentType,
   SendAttachment as SendAttachmentType,
@@ -99,7 +100,13 @@ import type {
   SessionInstruction as SessionInstructionType,
   SkillFile as SkillFileType,
 } from "./fleet";
-import type { ConnectAccess as ConnectAccessType } from "./frames";
+import type {
+  BrowserAskFrame as BrowserAskFrameType,
+  ConnectAccess as ConnectAccessType,
+  ConnectAskFrame as ConnectAskFrameType,
+  ParkedAsk as ParkedAskType,
+  PermissionRequestFrame as PermissionRequestFrameType,
+} from "./frames";
 import type {
   ChildLimit as ChildLimitType,
   HarnessCapabilities as HarnessCapabilitiesType,
@@ -152,6 +159,10 @@ import type {
   NamedMoveRequest as NamedMoveRequestType,
 } from "./move";
 import type { PairingOffAnswer as PairingOffAnswerType } from "./paths/hub";
+import type {
+  PermissionPresentation as PermissionPresentationType,
+  SetChangeTable as SetChangeTableType,
+} from "./permission-presentation";
 import type {
   OrphanedComments as OrphanedCommentsType,
   PlanComment as PlanCommentType,
@@ -208,6 +219,8 @@ import type {
   NeutralOrigin as NeutralOriginType,
   NeutralSessionInfo as NeutralSessionInfoType,
   NeutralUserMessage as NeutralUserMessageType,
+  PermissionUpdateDestination as PermissionUpdateDestinationType,
+  PermissionUpdate as PermissionUpdateType,
   SendRefusal as SendRefusalType,
   SentMessage as SentMessageType,
   UserAnswers as UserAnswersType,
@@ -271,6 +284,7 @@ import type {
   BinaryUpdatePhaseOutput,
   BinaryUpdatePolicyOutput,
   BinaryUpdateStateOutput,
+  BrowserAskFrameOutput,
   BrowserHostKindOutput,
   BrowserKeyOutput,
   BrowserPortsOutput,
@@ -290,6 +304,7 @@ import type {
   CompactStageOutput,
   ComponentDocOutput,
   ConnectAccessOutput,
+  ConnectAskFrameOutput,
   ContextFillOutput,
   ContextLineOutput,
   ContinuationReadOutput,
@@ -395,8 +410,13 @@ import type {
   OrphanedCommentsOutput,
   PageErrorOutput,
   PairingOffAnswerOutput,
+  ParkedAskOutput,
   PartUseOutput,
   PermissionModeOutput,
+  PermissionPresentationOutput,
+  PermissionRequestFrameOutput,
+  PermissionUpdateDestinationOutput,
+  PermissionUpdateOutput,
   PlacedSectionOutput,
   PlaceLfsRowOutput,
   PlanCommentOutput,
@@ -444,12 +464,14 @@ import type {
   SessionInstructionOutput,
   SessionRoleOutput,
   SessionToolingOutput,
+  SetChangeTableOutput,
   SheetImportOutput,
   SheetReadOutput,
   SheetWeightOutput,
   SheetWrittenOutput,
   SignInFaultOutput,
   SkillFileOutput,
+  SourceFactsOutput,
   SpawnPayloadOutput,
   StageErrorKindOutput,
   StageErrorOutput,
@@ -680,6 +702,15 @@ prove<
     Same<PlanCommentOutput, PlanCommentType>,
     Same<OrphanedCommentsOutput, OrphanedCommentsType>,
     Same<PairingOffAnswerOutput, PairingOffAnswerType>,
+    Same<BrowserAskFrameOutput, BrowserAskFrameType>,
+    Same<ConnectAskFrameOutput, ConnectAskFrameType>,
+    Same<SetChangeTableOutput, SetChangeTableType>,
+    Same<PermissionPresentationOutput, PermissionPresentationType>,
+    Same<SourceFactsOutput, SourceFactsType>,
+    Same<PermissionUpdateDestinationOutput, PermissionUpdateDestinationType>,
+    Same<PermissionUpdateOutput, PermissionUpdateType>,
+    Same<PermissionRequestFrameOutput, PermissionRequestFrameType>,
+    Same<ParkedAskOutput, ParkedAskType>,
     Same<PlaceLfsRowOutput, PlaceLfsRowType>,
     Same<PlanStepPriorityOutput, PlanStepPriorityType>,
     Same<PlanStepStatusOutput, PlanStepStatusType>,
