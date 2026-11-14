@@ -136,7 +136,7 @@ import type {
   WorkBudget,
   WorkItemSubmission,
 } from "./db/stored-types";
-import type { designOnBase } from "./design-system";
+import type { designOnBase, designSection } from "./design-system";
 import { failedWith } from "./gate";
 import {
   capableMachines,
@@ -496,10 +496,13 @@ export interface WorkItemRequest {
    * before the item is filed: what the clone holds that the brief carries
    * (an attempt's design system, dispatch.ts). Its answer is the brief the
    * item stores and its session reads; `prompt` is that brief as it reads
-   * before any clone, for what is said of the request before one is cut. Set
-   * by the hub alone.
+   * before any clone, for what is said of the request before one is cut. Its
+   * problem stops the start: the clone's design/ could not be read. Set by
+   * the hub alone.
    */
-  briefFromClone?: (clone: CloneRef) => Promise<string>;
+  briefFromClone?: (
+    clone: CloneRef
+  ) => Promise<string | ProblemsOf<ReturnType<typeof designSection>>>;
   /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
   budget?: WorkBudget;
   /**
@@ -3856,13 +3859,7 @@ export const createWorkItems = ({
         if (settings instanceof ElysiaStatus) {
           return settings;
         }
-        return spawnIn(
-          again,
-          settings,
-          parent,
-          await briefedFrom(request, again),
-          inputs
-        );
+        return spawnBriefed(again, settings, parent, request, inputs);
       }
       // Its clone is gone, or on a machine the attempt may not run on: the
       // retry runs in a new workspace, and the old one's sessions are
@@ -4012,14 +4009,10 @@ export const createWorkItems = ({
       return workspace;
     }
     // In its scratch dir before its session starts ({@link spawnIn}).
-    return spawnIn(
-      workspace,
-      settings,
-      parent,
-      await briefedFrom(request, workspace),
-      inputs,
-      { instanceId, placement }
-    );
+    return spawnBriefed(workspace, settings, parent, request, inputs, {
+      instanceId,
+      placement,
+    });
   };
 
   /**
@@ -4115,21 +4108,38 @@ export const createWorkItems = ({
     return workspace;
   };
 
-  /** The request with its brief written from its clone, when it asks for that ({@link WorkItemRequest.briefFromClone}). */
-  const briefedFrom = async (
+  /**
+   * {@link spawnIn}, the request's brief written from `workspace`'s clone
+   * first when it asks for that ({@link WorkItemRequest.briefFromClone}):
+   * the brief's problem stops the start.
+   */
+  const spawnBriefed = async (
+    workspace: WorkspaceRow,
+    settings: Settings,
+    parent: Parent,
     request: WorkItemRequest,
-    workspace: WorkspaceRow
-  ): Promise<WorkItemRequest> =>
-    request.briefFromClone
-      ? {
-          ...request,
-          prompt: await request.briefFromClone({
-            id: workspace.id,
-            machineId: workspace.machineId,
-            path: workspace.path,
-          }),
-        }
-      : request;
+    inputs: Inputs,
+    ahead?: { instanceId: string; placement: ItemPlacement }
+  ) => {
+    if (!request.briefFromClone) {
+      return spawnIn(workspace, settings, parent, request, inputs, ahead);
+    }
+    const prompt = await request.briefFromClone({
+      id: workspace.id,
+      machineId: workspace.machineId,
+      path: workspace.path,
+    });
+    return prompt instanceof ElysiaStatus
+      ? prompt
+      : spawnIn(
+          workspace,
+          settings,
+          parent,
+          { ...request, prompt },
+          inputs,
+          ahead
+        );
+  };
 
   /**
    * The follow-up in the workspace `needle` names, going on there in one

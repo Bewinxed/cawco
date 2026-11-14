@@ -145,6 +145,7 @@ import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
 import { needsDesignSystem } from "./design-offers";
+import type { designSection as designSectionOf } from "./design-system";
 import type { JevAccess } from "./jev";
 import {
   DISPATCH_ASKED_MAX,
@@ -160,6 +161,7 @@ import {
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
 import type { Memory } from "./memory";
+import type { ProblemsOf } from "./refusal";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
@@ -230,11 +232,13 @@ export interface DispatchDeps {
   /**
    * The brief's `## Design system` section, read from the attempt's clone
    * (design-system.ts `designSection`): "" when the clone's design/ holds
-   * no guide (SKILL.md or DESIGN.md).
-   * Asked only for a task that needs the system (design-offers.ts
-   * `needsDesignSystem`).
+   * no guide (SKILL.md or DESIGN.md); its problem when the clone's
+   * design/ could not be read. Asked only for a task that needs the system
+   * (design-offers.ts `needsDesignSystem`).
    */
-  readonly designSection: (clone: CloneRef) => Promise<string>;
+  readonly designSection: (
+    clone: CloneRef
+  ) => Promise<string | ProblemsOf<ReturnType<typeof designSectionOf>>>;
   /** Runs the safety net until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /**
@@ -1351,8 +1355,10 @@ export const createDispatcher = ({
       // a task that needs it (spec §5.7, "Use").
       ...(needsDesignSystem(project.template ?? null, task)
         ? {
-            briefFromClone: async (clone: CloneRef) =>
-              brief(await designSection(clone)),
+            briefFromClone: async (clone: CloneRef) => {
+              const section = await designSection(clone);
+              return section instanceof ElysiaStatus ? section : brief(section);
+            },
           }
         : {}),
       title: asked?.title ?? titleOf(task),
