@@ -1629,6 +1629,10 @@ const spentOn = (admitted: Map<string, FactLine[]>): number =>
     .flat()
     .reduce((sum, fact) => sum + fact.raw.length + 1, 0);
 
+/** A file the brief has no room for, named so its reader knows it exists. */
+const leftOutBlock = (path: string): string =>
+  `### ${path}\n\n(left out: the brief's context is full; read it in the project's folder)`;
+
 /**
  * Prose files from before fact lines, each one block marked as such, up to
  * its budget, in the room the fact lines left: the one transitional read,
@@ -1638,7 +1642,7 @@ const proseBlocks = (files: FactFile[], room: number): string[] => {
   let left = room;
   return files.flatMap((file) => {
     if (left <= 0) {
-      return [];
+      return [leftOutBlock(file.path)];
     }
     const said = excerpt(file.content, Math.min(MEMORY_FILE_CHARS, left));
     left -= said.length;
@@ -1655,7 +1659,7 @@ const wholeFiles = (
   let room = CONTEXT_CHARS;
   const parts = files.map((file) => {
     if (room <= 0) {
-      return `### ${file.path}\n\n(left out: the brief's context is full; read it in the project's folder)`;
+      return leftOutBlock(file.path);
     }
     const said = excerpt(file.content, Math.min(MEMORY_FILE_CHARS, room));
     room -= said.length;

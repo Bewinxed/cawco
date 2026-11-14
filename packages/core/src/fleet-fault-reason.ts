@@ -9,8 +9,9 @@
  * rows stored before that read the same.
  */
 import { HARNESSES, type HarnessKind } from "./harness/kinds";
+import { cutShort } from "./words/helpers";
 
-/** A reason's longest plain text: past it, the words are a body, not a sentence. */
+/** A reason's longest plain text: a longer one is kept cut short. */
 const PLAIN_MAX = 160;
 
 /** What went wrong, as short as it can be said. */
@@ -28,7 +29,7 @@ const TIMEOUT = /timed? ?out|ETIMEDOUT/iu;
 const REFUSED = /ECONNREFUSED|connection refused/iu;
 const MARKUP = /[{}<>]|https?:\/\//u;
 
-/** The reason a run of raw words gives; none when they are a body with no code in it. */
+/** The reason a run of raw words gives; none when they are markup or a URL with no code in it. */
 function faultReason(raw: string): FaultReason | undefined {
   const status = STATUS.exec(raw);
   if (status?.[1]) {
@@ -41,8 +42,8 @@ function faultReason(raw: string): FaultReason | undefined {
     return { word: "refused" };
   }
   const text = raw.replace(/\s+/gu, " ").trim();
-  return text && text.length <= PLAIN_MAX && !MARKUP.test(text)
-    ? { text }
+  return text && !MARKUP.test(text)
+    ? { text: cutShort(text, PLAIN_MAX) }
     : undefined;
 }
 
