@@ -12607,7 +12607,7 @@
                     "type": "array",
                     "items": {
                       "minLength": 1,
-                      "maxLength": 300,
+                      "maxLength": 4096,
                       "type": "string"
                     }
                   },

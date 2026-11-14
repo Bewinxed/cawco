@@ -103,8 +103,8 @@ export const COMMENT_LIMITS = {
   attachmentName: 300,
   /** Files an agent's reply names. Our call. */
   files: 20,
-  /** Characters one named file holds. Our call. */
-  file: 300,
+  /** Characters one named file holds: Linux's PATH_MAX, the longest path a file can have there. */
+  file: 4096,
   /** Characters of the element's text an anchor keeps. */
   anchorText: 200,
   /** Pictures one post carries: one crop per mark. Our call. */
