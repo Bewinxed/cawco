@@ -3,6 +3,7 @@
  * page's own origin (wire.ts), answered by the engine that owns what it
  * changes.
  */
+
 import {
   PAGE_TOUCHED_MESSAGE,
   PREVIEW_LOCKED_MESSAGE,
@@ -23,6 +24,7 @@ import {
   stageScrolledOf,
   stageTimeOf,
 } from "@cawco/core/stage-graph";
+import { sheetWords } from "@cawco/core/words/sheet";
 import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
 import { heardInput } from "../reload.svelte";
 import { runShellShortcut } from "../shell-shortcut";
@@ -332,7 +334,19 @@ export class PageWire {
         // A sheet's page said its stories and props: the design graph's model, and the props on its Dials card.
         const said = previewSheet(message.sheet);
         if (said) {
-          paneSheet.link?.heardSheet(said);
+          paneSheet.link?.heardSheet(said.sheet);
+          if (said.cut.length > 0) {
+            paneNotice.say({
+              message: sheetWords.sheetCut(
+                said.cut
+                  .map((one) =>
+                    sheetWords.sheetCutOf(one.kept, one.of, one.what)
+                  )
+                  .join(", ")
+              ),
+              again: null,
+            });
+          }
         }
         break;
       }

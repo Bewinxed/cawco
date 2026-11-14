@@ -8,6 +8,13 @@ import { commonWords } from "./common";
  * writes them into the app as `Words.Sheet` (CawCoCore/Words.generated.swift).
  */
 export const sheetWords = {
+  /** The notice when a page's sheet was longer than the pane takes: `what` lists each cut, like "100 of 150 stories". */
+  sheetCut: (what: string) =>
+    `This page's sheet was longer than the pane takes, so it shows ${what}.`,
+  /** One cut in that list. */
+  sheetCutOf: (kept: number, of: number, what: string) =>
+    `${kept} of ${of} ${what}`,
+    "The page's picture was too large to take, so it was not kept.",
   /** The loading cover's line while the stage first starts. */
   starting: (dir: string) => `Starting the dev server in ${dir}…`,
   /** The cover's line while a sleeping stage starts again. */

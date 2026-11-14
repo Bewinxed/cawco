@@ -306,8 +306,42 @@ const SHEET_BOUNDS = {
   text: 1000,
 } as const;
 
-const list = (value: unknown, max: number): unknown[] =>
-  Array.isArray(value) ? value.slice(0, max) : [];
+/** What this read of a sheet left out for its bound: what, how many it kept of how many it was given. */
+export interface SheetCut {
+  kept: number;
+  of: number;
+  what: string;
+}
+
+/** The cuts of the sheet being read now (`previewSheet` reads one at a time, synchronously). */
+let cuts: Map<string, SheetCut> = new Map();
+
+function cutAt(what: string, kept: number, of: number) {
+  const so_far = cuts.get(what);
+  cuts.set(what, {
+    what,
+    kept: (so_far?.kept ?? 0) + kept,
+    of: (so_far?.of ?? 0) + of,
+  });
+}
+
+const list = (value: unknown, max: number, what: string): unknown[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  if (value.length > max) {
+    cutAt(what, max, value.length);
+  }
+  return value.slice(0, max);
+};
+
+/** A name, bounded: what is longer than {@link SHEET_BOUNDS.name} is cut and counted. */
+const nameText = (value: unknown): string | null => {
+  if (typeof value === "string" && value.length > SHEET_BOUNDS.name) {
+    cutAt("names", SHEET_BOUNDS.name, value.length);
+  }
+  return text(value, SHEET_BOUNDS.name);
+};
 
 /** Args as JSON values, at most {@link SHEET_BOUNDS.args} of them: a structured clone of plain data. */
 const argsOf = (value: unknown): Record<string, unknown> => {
@@ -315,10 +349,17 @@ const argsOf = (value: unknown): Record<string, unknown> => {
   if (!raw) {
     return {};
   }
+  const entries = Object.entries(raw);
+  if (entries.length > SHEET_BOUNDS.args) {
+    cutAt("args", SHEET_BOUNDS.args, entries.length);
+  }
   return Object.fromEntries(
-    Object.entries(raw)
-      .slice(0, SHEET_BOUNDS.args)
-      .filter(([key]) => key.length <= SHEET_BOUNDS.name)
+    entries.slice(0, SHEET_BOUNDS.args).filter(([key]) => {
+      if (key.length > SHEET_BOUNDS.name) {
+        cutAt("names", SHEET_BOUNDS.name, key.length);
+      }
+      return key.length <= SHEET_BOUNDS.name;
+    })
   );
 };
 const codeOf = (value: unknown): Record<string, string> =>
@@ -332,7 +373,7 @@ const codeOf = (value: unknown): Record<string, string> =>
 function propOf(value: unknown): PropMeta | null {
   const raw = record(value);
   const type = record(raw?.type);
-  const name = text(raw?.name, SHEET_BOUNDS.name);
+  const name = nameText(raw?.name);
   const kind = KINDS.find((one) => one === type?.name);
   if (!(raw && type && name && kind)) {
     return null;
@@ -340,7 +381,8 @@ function propOf(value: unknown): PropMeta | null {
   const token = kind.startsWith("token-");
   const options = list(
     raw.options,
-    token ? SHEET_BOUNDS.tokens : SHEET_BOUNDS.options
+    token ? SHEET_BOUNDS.tokens : SHEET_BOUNDS.options,
+    token ? "tokens" : "options"
   ).filter(
     (one): one is string | number =>
       (typeof one === "number" && !token) ||
@@ -359,7 +401,7 @@ function propOf(value: unknown): PropMeta | null {
 function componentOf(value: unknown): ComponentDoc | null {
   const raw = record(value);
   const file = text(raw?.file, SHEET_BOUNDS.text);
-  const name = text(raw?.name, SHEET_BOUNDS.name);
+  const name = nameText(raw?.name);
   const types = raw?.types;
   if (!(
     raw &&
@@ -374,7 +416,7 @@ function componentOf(value: unknown): ComponentDoc | null {
     file,
     name,
     types,
-    props: list(raw.props, SHEET_BOUNDS.props).flatMap(
+    props: list(raw.props, SHEET_BOUNDS.props, "props").flatMap(
       (one) => propOf(one) ?? []
     ),
     ...(note ? { note } : {}),
@@ -383,7 +425,7 @@ function componentOf(value: unknown): ComponentDoc | null {
 
 function storyOf(value: unknown): Story | null {
   const raw = record(value);
-  const name = text(raw?.name, SHEET_BOUNDS.name);
+  const name = nameText(raw?.name);
   const line = finite(raw?.line);
   const column = finite(raw?.column);
   if (!(
@@ -406,12 +448,12 @@ function storyOf(value: unknown): Story | null {
     label: text(raw.label, SHEET_BOUNDS.text),
     form: formOf(raw.form),
     formUnread: text(raw.formUnread, SHEET_BOUNDS.text),
-    from: text(raw.from, SHEET_BOUNDS.name),
+    from: nameText(raw.from),
     play: raw.play === true,
     display: text(raw.display, SHEET_BOUNDS.text),
-    records: text(raw.records, SHEET_BOUNDS.name),
-    tags: list(raw.tags, SHEET_BOUNDS.tags).flatMap(
-      (one) => text(one, SHEET_BOUNDS.name) ?? []
+    records: nameText(raw.records),
+    tags: list(raw.tags, SHEET_BOUNDS.tags, "tags").flatMap(
+      (one) => nameText(one) ?? []
     ),
   };
 }
@@ -441,17 +483,20 @@ function formOf(value: unknown): Form | null {
     : null;
 }
 
-/** A sheet as its page says it, checked and bounded; null when it is no sheet. */
-export function previewSheet(value: unknown): SheetOnPage | null {
+/** A sheet as its page says it, checked and bounded, with what the bounds cut; null when it is no sheet. */
+export function previewSheet(
+  value: unknown
+): { cut: SheetCut[]; sheet: SheetOnPage } | null {
+  cuts = new Map();
   const raw = record(value);
   const meta = record(raw?.meta);
   const file = text(raw?.file, SHEET_BOUNDS.text);
   if (!(raw && meta && file)) {
     return null;
   }
-  return {
+  const sheet = {
     file,
-    stories: list(raw.stories, SHEET_BOUNDS.stories).flatMap(
+    stories: list(raw.stories, SHEET_BOUNDS.stories, "stories").flatMap(
       (one) => storyOf(one) ?? []
     ),
     meta: {
@@ -460,10 +505,13 @@ export function previewSheet(value: unknown): SheetOnPage | null {
       component: text(meta.component, SHEET_BOUNDS.text),
       title: text(meta.title, SHEET_BOUNDS.text),
     },
-    components: list(raw.components, SHEET_BOUNDS.components).flatMap(
-      (one) => componentOf(one) ?? []
-    ),
+    components: list(
+      raw.components,
+      SHEET_BOUNDS.components,
+      "components"
+    ).flatMap((one) => componentOf(one) ?? []),
   };
+  return { sheet, cut: [...cuts.values()] };
 }
 
 /** One of the pane's keys (core `PANE_KEYS`) pressed while the page had the keyboard. */
