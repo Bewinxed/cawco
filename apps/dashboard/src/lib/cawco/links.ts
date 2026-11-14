@@ -2,7 +2,6 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import { hub, hubPath } from "#lib/platform/hub.js";
 
 /**
  * A row the lists draw: a session's. Its `harness` is null where the row
@@ -28,22 +27,6 @@ interface SessionLocation {
   cwd?: string;
   machineId?: string | null;
 }
-
-/**
- * Where a session's transcript is read from: the view's id alone, the newest
- * page unless `cursor` names where an older one ends, of the hub's own size
- * unless `limit` names one. The hub maps a live instance to its key and
- * locates any other, so the same address works before this browser knows
- * anything about the conversation.
- */
-export const transcriptUrl = (
-  viewId: string,
-  page: { cursor?: string; limit?: number } = {}
-): string =>
-  hubPath(hub.api.instances({ id: viewId }).transcript, {
-    ...(page.cursor ? { before: page.cursor } : {}),
-    ...(page.limit ? { limit: String(page.limit) } : {}),
-  });
 
 /**
  * Every instance row, looked up by id and by session. Built once per change to

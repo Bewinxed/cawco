@@ -1,15 +1,13 @@
-import type { TranscriptPage } from "@cawco/core/transcript-types";
-import { transcriptUrl } from "#lib/cawco/links.js";
 import type { ServerTail } from "#lib/cawco/stores/transcript-reads.svelte.js";
 import { isSessionTab } from "#lib/cawco/workspace/tabs.js";
 import { focusedIn, type WorkspaceV1 } from "#lib/cawco/workspace/tree.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
 import { hubThrough } from "#lib/platform/hub.js";
 import {
+  hubAsk,
   hubFailure,
   hubRead,
   machineAway,
-  refusedOf,
 } from "#lib/platform/hub-read.js";
 import type { PageServerLoad } from "./$types";
 
@@ -72,33 +70,30 @@ export const load: PageServerLoad = async ({
   if (!viewId) {
     return { tail: null };
   }
-  const response = await fetch(
-    transcriptUrl(viewId, { limit: FIRST_SCREEN_PAGE })
+  const asked = await hubAsk(
+    hubThrough(fetch)
+      .api.instances({ id: viewId })
+      .transcript.get({ query: { limit: String(FIRST_SCREEN_PAGE) } })
   );
+  if (asked.ok) {
+    return { tail: { ok: true, viewId, page: asked.value } };
+  }
+  const { response } = asked.refused;
   // No transcript, but an ask the hub holds under this id (a memory
   // proposal): the pane is that ask's card, which the socket brings; nothing
   // is painted for it here, least of all "no such session".
   if (response.status === 404 && (await askHeldFor(fetch, viewId))) {
     return { tail: null };
   }
-  if (!response.ok) {
-    // A 503 naming a machine is the hub saying that machine is not connected.
-    const { away, reconnectingMs } = machineAway(response);
-    return {
-      tail: {
-        ok: false,
-        viewId,
-        machineId: away,
-        reconnectingMs,
-        ...hubFailure(await refusedOf(response)),
-      },
-    };
-  }
+  // A 503 naming a machine is the hub saying that machine is not connected.
+  const { away, reconnectingMs } = machineAway(response);
   return {
     tail: {
-      ok: true,
+      ok: false,
       viewId,
-      page: (await response.json()) as TranscriptPage,
+      machineId: away,
+      reconnectingMs,
+      ...hubFailure(asked.refused),
     },
   };
 };

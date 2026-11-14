@@ -85,8 +85,6 @@ const HUB_PATH_USERS: Record<string, string> = {
     "a view's own Query arguments, which no type holds and Eden types per tool",
   "apps/dashboard/src/lib/cawco/stores/projects.svelte.ts":
     "the delete for good, whose `delete` segment Eden's types fold into DELETE /api/projects/:id",
-  "apps/dashboard/src/lib/cawco/links.ts":
-    "the transcript read, its answer and its body each under a limit of their own",
   "apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte":
     "a machine's picture or video, an element's src",
   "apps/dashboard/src/lib/cawco/transcript/block-sources.ts":

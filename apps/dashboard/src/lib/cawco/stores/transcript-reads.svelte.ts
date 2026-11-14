@@ -11,16 +11,17 @@ import type {
   TranscriptPageBranch,
 } from "@cawco/core/transcript-types";
 import { TRANSCRIPT_OLDER_PAGE } from "#lib/config.js";
+import { hub } from "#lib/platform/hub.js";
 import {
   deadlineIn,
   type HubFailure,
+  hubAsk,
   hubFailure,
   machineAway,
+  type Refused,
   refusalClause,
-  refusedOf,
 } from "#lib/platform/hub-read.js";
 import { connectionState, hubRun } from "../hub/socket.svelte";
-import { transcriptUrl } from "../links";
 import { adoptPage, beginRead } from "../stream";
 import {
   boardState,
@@ -44,12 +45,12 @@ import {
 } from "./transcripts.svelte";
 
 /**
- * How long one transcript page request may go without an answer: the time to
- * its response, then again the time to read its body. Past it the request is
+ * How long one transcript page request may go without an answer, its body
+ * read with it (Eden reads both in one call). Past it the request is
  * aborted and made once more ({@link readPage}); a phone on a flaky link
  * otherwise leaves a request hanging, and the pane waiting on it, forever.
  */
-const TRANSCRIPT_READ_LIMIT_MS = 15_000;
+const TRANSCRIPT_READ_LIMIT_MS = 30_000;
 
 /** What a read past {@link TRANSCRIPT_READ_LIMIT_MS} says of itself. */
 const READ_LIMIT_SENTENCE = `The hub didn't answer within ${TRANSCRIPT_READ_LIMIT_MS / 1000} seconds`;
@@ -251,12 +252,12 @@ function thrownReason(error: unknown): string {
 }
 
 /** Why a page read ended with nothing, said the way the pane says it. */
-async function pageFault(response: Response): Promise<TranscriptOutcome> {
-  const failure = hubFailure(await refusedOf(response));
-  const { away, reconnectingMs } = machineAway(response);
+function pageFault(refused: Refused): TranscriptOutcome {
+  const failure = hubFailure(refused);
+  const { away, reconnectingMs } = machineAway(refused.response);
   return {
     ok: false,
-    status: response.status,
+    status: refused.response.status,
     ...readFaultOf(failure, away, deadlineIn(reconnectingMs)),
   };
 }
@@ -388,16 +389,38 @@ export function storedReadWaits(viewId: string): StoredWait | null {
     : null;
 }
 
+/** A transcript page as the route answers it. */
+type TranscriptPageRead = Extract<PageAsked, { ok: true }>["value"];
+
+/** One request for a transcript page, as Eden reads it ({@link hubAsk}). */
+const askPage = (
+  viewId: string,
+  page: { cursor?: string; limit?: number },
+  signal: AbortSignal
+) =>
+  hubAsk(
+    hub.api.instances({ id: viewId }).transcript.get({
+      query: {
+        ...(page.cursor ? { before: page.cursor } : {}),
+        ...(page.limit ? { limit: String(page.limit) } : {}),
+      },
+      fetch: { signal },
+    })
+  );
+
+/** How a transcript page request ended: the page, or the hub's refusal of it. */
+type PageAsked = Awaited<ReturnType<typeof askPage>>;
+
 /**
- * One request for a transcript page, aborted when its response, or its body,
- * takes longer than {@link TRANSCRIPT_READ_LIMIT_MS}, or when `cancel` fires.
- * `parse` runs while the body can still be cut off.
+ * One request for a transcript page, aborted when it takes longer than
+ * {@link TRANSCRIPT_READ_LIMIT_MS} to be answered and read, or when `cancel`
+ * fires.
  */
-async function requestPage<T>(
-  url: string,
-  parse: (response: Response) => Promise<T>,
+async function requestPage(
+  viewId: string,
+  page: { cursor?: string; limit?: number },
   cancel?: AbortSignal
-): Promise<T> {
+): Promise<PageAsked> {
   const request = new AbortController();
   const stop = () => request.abort(cancel?.reason);
   cancel?.addEventListener("abort", stop, { once: true });
@@ -405,19 +428,12 @@ async function requestPage<T>(
   // reason the abort carried, so the limit's sentence is thrown from here.
   const late = new Error(READ_LIMIT_SENTENCE);
   let timedOut = false;
-  const limit = () =>
-    setTimeout(() => {
-      timedOut = true;
-      request.abort(late);
-    }, TRANSCRIPT_READ_LIMIT_MS);
-  let timer = limit();
+  const timer = setTimeout(() => {
+    timedOut = true;
+    request.abort(late);
+  }, TRANSCRIPT_READ_LIMIT_MS);
   try {
-    const response = await fetch(url, { signal: request.signal });
-    // The response is in; the body gets a limit of its own, so a page that is
-    // slow but moving is not mistaken for one that never came.
-    clearTimeout(timer);
-    timer = limit();
-    return await parse(response);
+    return await askPage(viewId, page, request.signal);
   } catch (error) {
     throw timedOut ? late : error;
   } finally {
@@ -431,18 +447,18 @@ async function requestPage<T>(
  * requested once more at once. A hub that answers, with a page or a refusal,
  * is an answer and is not asked twice. The second failure is thrown.
  */
-async function readPage<T>(
-  url: string,
-  parse: (response: Response) => Promise<T>,
+async function readPage(
+  viewId: string,
+  page: { cursor?: string; limit?: number },
   cancel?: AbortSignal
-): Promise<T> {
+): Promise<PageAsked> {
   try {
-    return await requestPage(url, parse, cancel);
+    return await requestPage(viewId, page, cancel);
   } catch (error) {
     if (cancel?.aborted) {
       throw error;
     }
-    return await requestPage(url, parse, cancel);
+    return await requestPage(viewId, page, cancel);
   }
 }
 
@@ -643,17 +659,12 @@ async function readNewestPage(
   beginRead(streamState, viewId);
   target.loading = true;
   try {
-    const answer = await readPage<
-      | { page: TranscriptPage; fault?: undefined }
-      | { fault: TranscriptOutcome; page?: undefined }
-    >(
-      transcriptUrl(viewId),
-      async (response) =>
-        response.ok
-          ? { page: (await response.json()) as TranscriptPage }
-          : { fault: await pageFault(response) },
-      cancel
-    );
+    const asked = await readPage(viewId, {}, cancel);
+    const answer:
+      | { page: TranscriptPageRead; fault?: undefined }
+      | { fault: TranscriptOutcome; page?: undefined } = asked.ok
+      ? { page: asked.value }
+      : { fault: pageFault(asked.refused) };
     if (cancel.aborted) {
       return { ok: true, skipped: true };
     }
@@ -720,20 +731,19 @@ async function olderPage(
   cancel?: AbortSignal
 ): Promise<TranscriptPage | ReadFault> {
   try {
-    return await readPage(
-      transcriptUrl(viewId, { cursor, limit: TRANSCRIPT_OLDER_PAGE }),
-      async (response) => {
-        if (response.ok) {
-          return (await response.json()) as TranscriptPage;
-        }
-        const { away, reconnectingMs } = machineAway(response);
-        return readFaultOf(
-          hubFailure(await refusedOf(response)),
-          away,
-          deadlineIn(reconnectingMs)
-        );
-      },
+    const asked = await readPage(
+      viewId,
+      { cursor, limit: TRANSCRIPT_OLDER_PAGE },
       cancel
+    );
+    if (asked.ok) {
+      return asked.value;
+    }
+    const { away, reconnectingMs } = machineAway(asked.refused.response);
+    return readFaultOf(
+      hubFailure(asked.refused),
+      away,
+      deadlineIn(reconnectingMs)
     );
   } catch (error) {
     return { reason: "failed", message: thrownReason(error) };
