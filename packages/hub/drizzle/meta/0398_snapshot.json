@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ec4d3197-3031-41f6-a8b3-1e8705e047c2",
+  "id": "844ce0e3-8c13-4133-b232-53b974912a29",
   "prevId": "5f5fa4f4-2d5a-4b23-84d3-8d6dbe42297c",
   "tables": {
     "account_bench": {
@@ -9462,6 +9462,13 @@
         },
         "problem": {
           "name": "problem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "budget_unread": {
+          "name": "budget_unread",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

@@ -185,7 +185,12 @@ import {
   type WorkItemStart,
   type WorkItems,
 } from "./work-items";
-import { budgetColumns, budgetOf, budgetProblem } from "./work-limits";
+import {
+  budgetColumns,
+  budgetFrom,
+  budgetOf,
+  budgetProblem,
+} from "./work-limits";
 import { capitalized, type WorkAsk, type WorkPlace } from "./work-place";
 
 /** What the dispatcher needs of the hub. */
@@ -331,6 +336,12 @@ export interface DispatchView {
   dispatch: boolean;
   /** The tasks it would start next, in order. */
   frontier: string[];
+  /**
+   * Ready tasks it does not start, each with why (its `startProblem`): a
+   * budget line that does not read, or the hub's last try failing on the
+   * file as it stands.
+   */
+  held: { task: string; why: string }[];
   /** Where an attempt lands when its task and type say nothing. */
   lands: LandsMode;
   /** Attempts starting or running now. */
@@ -524,7 +535,8 @@ const runsAs = (
     outputs: asked?.outputs ?? limits.outputs,
     group: asked?.group ?? limits.group,
     owns: asked?.owns ?? limits.owns,
-    budget: asked?.budget ?? limits.budget,
+    // An asked limit overrides that limit alone; the task's others stay.
+    budget: budgetFrom(asked?.budget, limits.budget) ?? undefined,
     account: asked?.account,
     fork: asked?.fork,
     from: asked?.from,
@@ -934,7 +946,7 @@ export const createDispatcher = ({
     console.warn(`[dispatch] ${task.id} in project ${projectId}: ${message}`);
   };
 
-  /** The refusal of an attempt at a task that has a live one, or is done or dropped. */
+  /** The refusal of an attempt at a task that has a live one, is done or dropped, or whose budget line does not read. */
   const startable = (projectId: string, task: TaskView) => {
     const live = liveAttempts(projectId).find(
       (item) => item.taskId === task.id
@@ -949,6 +961,18 @@ export const createDispatcher = ({
       return problem(409, {
         code: "dispatch-task-closed",
         detail: `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`,
+      });
+    }
+    // A budget line that does not read is never read as none: whatever a
+    // start asks, the task's own limit is unknown.
+    if (task.budgetUnread !== null) {
+      return problem(409, {
+        code: "dispatch-budget-unread",
+        detail: workWords.taskBudgetUnread(
+          task.path,
+          task.id,
+          task.budgetUnread
+        ),
       });
     }
   };
@@ -1656,6 +1680,11 @@ export const createDispatcher = ({
     const live = liveAttempts(project.id).length + startingIn(project.id);
     const review = list.tasks.filter((task) => task.kind === "you").length;
     const frontier = list.tasks.filter(onFrontier).map((task) => task.id);
+    const held = list.tasks.flatMap((task) =>
+      task.ready && task.startProblem !== null
+        ? [{ task: task.id, why: task.startProblem }]
+        : []
+    );
     const paused = pauseOf(project, {
       stagesProblems: list.stagesProblems,
       review,
@@ -1673,6 +1702,7 @@ export const createDispatcher = ({
       review,
       paused,
       frontier,
+      held,
       queued: db.queuedTaskStarts(project.id).map((each) => each.taskId),
     };
     return view;

@@ -173,6 +173,7 @@ function seedTasks(db: HubDb, projects: string[]): void {
         todosDone: t % 3,
         todosTotal: 3,
         problem: null,
+        budgetUnread: null,
         hash: Bun.hash(`${projectId}-${t}`).toString(16),
         updatedAt: new Date(Date.UTC(2026, 9, 2) + t * HOUR_MS),
       }))
@@ -382,8 +383,9 @@ const NEVER = Date.UTC(2100, 0, 1);
  * it (JSON text, `null` for none) and as a hand edit could: each limit set
  * alone and together, a budget unset at each level (null, JSON `null`,
  * `{}`), a work item that took its project's limit beside its own and one
- * in the same project made before the project had one, and at each level
- * a budget that does not read, one of them partly.
+ * in the same project made before the project had one, at each level a
+ * budget that does not read, one of them partly, and a task whose file's
+ * budget line did not read.
  */
 function seedBudgets(dbPath: string): void {
   const sqlite = new Database(dbPath);
@@ -454,6 +456,14 @@ function seedBudgets(dbPath: string): void {
       ]
     );
   };
+  // A task file whose budget line did not read, as the index held it.
+  sqlite.run(
+    "UPDATE project_tasks SET problem = ? WHERE rowid = (SELECT rowid FROM project_tasks WHERE project_id = ? ORDER BY number LIMIT 1)",
+    [
+      "budget: “usd: lots” is not one of usd (dollars), turns or minutes (whole numbers) with a value above 0.",
+      first.project,
+    ]
+  );
   routine("Check the release proof", '{"usd":3,"turns":30,"minutes":60}');
   routine("Tidy the preview pane", null);
   routine("Answer the queued asks", "{}");

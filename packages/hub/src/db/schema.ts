@@ -755,6 +755,12 @@ export const projectTasks = sqliteTable(
     todosTotal: integer("todos_total").notNull().default(0),
     /** What in the file could not be read, in a sentence; null when all of it could. */
     problem: text("problem"),
+    /**
+     * What its `budget:` line holds that does not read (task-file.ts
+     * `budgetUnread`); null when it reads or there is none. While set, no
+     * attempt at the task starts, and its `startProblem` says why.
+     */
+    budgetUnread: text("budget_unread"),
     /** sha256 hex of the file's content as indexed. */
     hash: text("hash").notNull(),
     /** When the hub last saw the content change. */
