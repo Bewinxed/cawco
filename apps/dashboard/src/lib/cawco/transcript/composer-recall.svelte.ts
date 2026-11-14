@@ -291,13 +291,13 @@ export class ComposerRecall {
 
   /**
    * The buttons slide together into the deck on the wheel's own growth:
-   * its --duration-grow on the drawer curve. Transform and opacity only, by the
+   * its --duration-panel on the drawer curve. Transform and opacity only, by the
    * Web Animations API, so the buttons' own transitions stay theirs.
    */
   #deckIn(places: DeckPlace[], from: number, to: number): void {
     this.deckOut(0);
     const timing = {
-      duration: dur("--duration-grow"),
+      duration: dur("--duration-panel"),
       easing: CURVE.drawer,
       fill: "forwards",
     } as const;
@@ -337,10 +337,10 @@ export class ComposerRecall {
 
   /**
    * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --duration-grow-exit on the drawer curve (`ms`: 0 puts
+   * wheel's fold: its --duration-panel-exit on the drawer curve (`ms`: 0 puts
    * them back at once).
    */
-  deckOut(ms = dur("--duration-grow-exit")): void {
+  deckOut(ms = dur("--duration-panel-exit")): void {
     const was = this.#decked;
     this.#decked = null;
     if (!was) {

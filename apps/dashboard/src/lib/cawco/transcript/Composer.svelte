@@ -375,7 +375,7 @@
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--duration-grow-exit) has landed, so the two never stand in one place
+   * fold (--duration-panel-exit) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
    * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
    * out of a --part-blur blur over --duration-control, as the card's own parts come up
@@ -384,7 +384,7 @@
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--duration-grow-exit"),
+      delay: still ? 0 : dur("--duration-panel-exit"),
       duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
@@ -1462,7 +1462,7 @@
               : undefined}
             aria-expanded={menu.open || !!recalling.recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(swap.cueBottom && !fieldFold.folded) || undefined}
             data-cue-top={(swap.cueTop && !fieldFold.folded) || undefined}
             data-flying={swap.flight !== null ||
