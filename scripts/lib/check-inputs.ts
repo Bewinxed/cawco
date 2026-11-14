@@ -108,7 +108,10 @@ export const inputsOf = (
       }
       if (edge.file) {
         queue.push(edge.file);
-      } else if (isPackage(edge.specifier)) {
+      } else if (
+        isPackage(edge.specifier) &&
+        !inputs.declared.includes(INSTALLED)
+      ) {
         inputs.declared.push(INSTALLED);
       }
     }

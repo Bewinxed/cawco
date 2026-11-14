@@ -74,6 +74,7 @@ import {
   runInBackground,
   takeSlot,
 } from "../packages/core/src/heavy-slots";
+import { wireBaselines } from "../packages/hub/scripts/openapi-inputs";
 import { filesOf, inputsOf } from "./lib/check-inputs";
 import { type Check, runChecks } from "./lib/checks";
 import { diskRoomOrExit } from "./lib/disk-room";
@@ -582,7 +583,20 @@ const gated: Gated[] = [
   bun("scripts/preview-switcher-check.ts"),
   bun("scripts/surface-briefs-check.ts"),
   bun("scripts/setup-draft-check.ts"),
-  run("packages/hub", "openapi:check"),
+  {
+    ...run("packages/hub", "openapi:check"),
+    // It holds the wire to the commits readers were built at (the base and
+    // what is shipped, read off origin's tags), so a pass holds only for
+    // those. Origin out of reach: what is shipped is unknown, and no pass
+    // is reused (the check then says why it cannot run).
+    extra: () => {
+      try {
+        return Promise.resolve(wireBaselines([]));
+      } catch (error) {
+        return Promise.resolve([`${String(error)} ${crypto.randomUUID()}`]);
+      }
+    },
+  },
   // What every hub route takes, for core's request door (hub-request.ts):
   // read off the same in-process hub, so the same inputs.
   run("packages/hub", "route-types:check"),

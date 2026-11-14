@@ -59,15 +59,25 @@ export const baseRefOf = (argv: string[]): string => {
   return ref;
 };
 
-/** The hash of every input's path and bytes, and of every commit the wire is compared against. */
-const inputKey = async (baseRef: string): Promise<string> => {
-  const bases = [
-    { label: "base", commit: baseRef },
+/**
+ * Every commit the wire is compared against, one `<label> <commit>` each:
+ * the base `argv` names (or the merge-base with origin/main), the shipped
+ * builds and every published nightly. A verdict holds only for these, so
+ * scripts/check.ts keys the check's pass by them too, beside its files.
+ * Throws when origin cannot be reached (shipped.ts).
+ */
+export const wireBaselines = (argv: string[]): string[] =>
+  [
+    { label: "base", commit: baseRefOf(argv) },
     ...shippedBaselines(HUB),
     ...publishedNightlies(HUB),
   ].map(
     ({ label, commit }) => `${label} ${git("rev-parse", `${commit}^{commit}`)}`
   );
+
+/** The hash of every input's path and bytes, and of every commit the wire is compared against. */
+const inputKey = async (argv: string[]): Promise<string> => {
+  const bases = wireBaselines(argv);
   const paths = [
     ...git("ls-files", "-co", "--exclude-standard", "-z", "--", ...INPUT_DIRS)
       .split("\0")
@@ -96,7 +106,7 @@ const inputKey = async (baseRef: string): Promise<string> => {
 export const checkGate = async (
   argv: string[]
 ): Promise<{ fresh: boolean; record: () => Promise<void> }> => {
-  const key = await inputKey(baseRefOf(argv));
+  const key = await inputKey(argv);
   const last = await readFile(STAMP, "utf8").catch(() => "");
   return {
     fresh: last === key,
