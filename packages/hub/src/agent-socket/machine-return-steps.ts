@@ -86,7 +86,6 @@ export type MachineReturnContext = Pick<
   | "streams"
   | "tailnetHttps"
   | "takeUpMovesOn"
-  | "toolReleases"
   | "transcripts"
   | "unknownAccountsOf"
   | "workItems"
@@ -116,14 +115,6 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     console.info(
       `[hub] machine ${message.machineId} registered from ${from ?? "an unknown address"}`
     );
-  };
-
-  const toolReleasesTold = (ret: MachineReturn): void => {
-    const { message } = ret;
-    // A copy an update left older is sent it once more: the agent
-    // may be a new process, which remembers no failure of the old
-    // one's (tool-releases.ts `connected`).
-    ctx.toolReleases.connected(message.machineId);
   };
 
   const artifactsBack = (ret: MachineReturn): void => {
@@ -751,7 +742,6 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
   return [
     backRegistered,
     registryEntered,
-    toolReleasesTold,
     artifactsBack,
     foldersRead,
     workResumed,
