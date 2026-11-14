@@ -707,7 +707,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         ? {
             payload: {
               ...message.payload,
-              args: ctx.installArgs(toolId, ask, false),
+              args: ctx.installArgs(toolId, ask, false, "person"),
             },
           }
         : {}),
@@ -734,6 +734,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         state: "installing",
         ...(updated ? { version: updated } : {}),
         ...(to ? { to } : {}),
+        startedBy: "person",
         at: Date.now(),
       });
       ctx.publishInstances(message.machineId);

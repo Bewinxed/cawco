@@ -3,6 +3,7 @@ import {
   ACCOUNT_MOVE,
   CUSTODY_HELD,
   FLEET_WATCH,
+  HARNESS_TOOL,
   MOVED_HERE,
   PROJECT_NOTE,
 } from "@cawco/core/harness";
@@ -237,26 +238,46 @@ export const createHistory = (ctx: HistoryContext) => {
   };
 
   /**
-   * Why `where`'s machine cannot read its stored conversation now: its
-   * harness reads one only through its own CLI (core traits
-   * `readsThroughCli`: OpenCode's server), and the machine refuses that CLI
-   * (core harness-refusal.ts), so asked, it could only refuse the read too.
-   * Said as the conversation kept and where it shows again, then the
-   * refusal in the machine's own sentence, which carries its fix. A
-   * harness read from the files it stored (Claude Code, pi) reads them
-   * whatever its CLI is: never refused here.
+   * Why `where`'s machine could not read its stored conversation, once it
+   * failed to: its harness reads one only through its own CLI (core traits
+   * `readsThroughCli`: OpenCode's server), and with no server of it running
+   * there a read needs one started, which a CLI CawCo doesn't run never is.
+   * `updating`: an install of that CLI runs there now (its tool cell), so
+   * the read is the install's to wait out, said as such and read again once
+   * it lands. `refused`: the machine refuses the CLI (core
+   * harness-refusal.ts), said as the conversation kept and where it shows
+   * again, then the refusal in the machine's own sentence, which carries its
+   * fix. Asked only after the machine failed the read: a server that still
+   * runs there (the one a session mid-turn is on, through an update) answers
+   * whatever its CLI on disk is, and that answer is the true one. A harness
+   * read from the files it stored (Claude Code, pi) reads them whatever its
+   * CLI is: never refused here.
    */
   const refusedRead = (where: TranscriptWhere): HistoryFault | undefined => {
     const harness = harnessNamed(where.harness);
     if (!(harness && traitsOf(harness).readsThroughCli)) {
       return;
     }
-    const why = ctx.refusedHarness(where.machineId, harness);
+    const { machineId } = where;
+    const { name } = harnessSpec(harness);
+    const cell = ctx.db.agentTools(machineId)[HARNESS_TOOL[harness]];
+    if (cell?.state === "installing") {
+      return {
+        fault: "updating",
+        machineId,
+        message: harnessRefusedWords.updatingUnread(
+          name,
+          ctx.machineName(machineId),
+          cell.to
+        ),
+      };
+    }
+    const why = ctx.refusedHarness(machineId, harness);
     return why
       ? {
           fault: "refused",
-          machineId: where.machineId,
-          message: `${harnessRefusedWords.unread(harnessSpec(harness).name, ctx.machineName(where.machineId))} ${why}`,
+          machineId,
+          message: `${harnessRefusedWords.unread(name, ctx.machineName(machineId))} ${why}`,
         }
       : undefined;
   };
@@ -275,10 +296,6 @@ export const createHistory = (ctx: HistoryContext) => {
     window: WindowAsk
   ): Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
-    const refused = refusedRead(where);
-    if (refused) {
-      return refused;
-    }
     const answer = await ctx.readAgent(
       machineId,
       CONTROL_READ_TRANSCRIPT_WINDOW,
@@ -301,10 +318,12 @@ export const createHistory = (ctx: HistoryContext) => {
             };
       case "answered": {
         if (!answer.value.ok) {
-          return {
-            fault: "failed",
-            message: answer.value.error ?? "the transcript could not be read",
-          };
+          return (
+            refusedRead(where) ?? {
+              fault: "failed",
+              message: answer.value.error ?? "the transcript could not be read",
+            }
+          );
         }
         // A session the machine has never stored answers with nothing: an
         // empty transcript, the same shape a brand new session has.
