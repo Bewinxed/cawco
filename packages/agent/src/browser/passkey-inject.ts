@@ -294,7 +294,6 @@ export class PasskeyInjector {
   /** The adapter index the kernel assigned (hciN). */
   #adapterIndex = -1;
   /** Whether the fd is dead (closed by kernel, ENXIO on a prior write). */
-  #dead = false;
   /** The polling interval handle. */
   #poll: ReturnType<typeof setInterval> | undefined;
   /** Random static BLE address reused for every injected advert. */
@@ -321,8 +320,8 @@ export class PasskeyInjector {
     try {
       fd = openSync(
         DEV_VHCI,
-        // biome-ignore lint/suspicious/noBitwiseOperators: O_RDWR | O_NONBLOCK is the documented way to open a device node in non-blocking mode
-        constants.O_RDWR | constants.O_NONBLOCK
+        // Two distinct flag bits: their sum is their union.
+        constants.O_RDWR + constants.O_NONBLOCK
       );
     } catch (cause: unknown) {
       throw new Error(
@@ -331,7 +330,6 @@ export class PasskeyInjector {
       );
     }
     this.#fd = fd;
-    this.#dead = false;
 
     // Read the 4-byte creation response: 2 bytes opcode + 2 bytes adapter index.
     const adapterIndex = await readCreationResponse(fd);
@@ -366,10 +364,10 @@ export class PasskeyInjector {
       writeSync(this.#fd, packet);
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === "ENXIO") {
-        this.#dead = true;
-        console.warn(
-          "[browser] passkey-inject: adapter lost (ENXIO), marking dead"
-        );
+        // The kernel took the adapter away: close it, so the next inject
+        // says it is not started.
+        console.warn("[browser] passkey-inject: adapter lost (ENXIO), closing");
+        this.stop();
       } else {
         throw err;
       }
@@ -385,8 +383,10 @@ export class PasskeyInjector {
     if (this.#fd >= 0) {
       try {
         closeSync(this.#fd);
-      } catch {
-        // Already closed or invalid — fine.
+      } catch (error) {
+        console.info(
+          `[browser] passkey-inject: hci${this.#adapterIndex} was already closed: ${String(error)}`
+        );
       }
       console.info(`[browser] passkey-inject: hci${this.#adapterIndex} closed`);
       this.#fd = -1;
@@ -395,15 +395,12 @@ export class PasskeyInjector {
 
   // ── Private ────────────────────────────────────────────────────
 
-  /** Whether the adapter fd is open and alive (not killed by ENXIO). */
+  /** Whether the adapter fd is open: stopped, or lost to ENXIO, it is not. */
   #writable(): boolean {
     if (this.#fd < 0) {
-      console.warn("[browser] passkey-inject: not started, cannot inject");
-      return false;
-    }
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #dead is set by a prior inject() call's ENXIO catch; biome's narrowing does not model repeated method invocations
-    if (this.#dead) {
-      console.warn("[browser] passkey-inject: adapter is dead, cannot inject");
+      console.warn(
+        "[browser] passkey-inject: not started or adapter lost, cannot inject"
+      );
       return false;
     }
     return true;
@@ -416,7 +413,7 @@ export class PasskeyInjector {
   #startReadLoop(): void {
     const buf = Buffer.alloc(4096);
     this.#poll = setInterval(() => {
-      if (this.#fd < 0 || this.#dead) {
+      if (this.#fd < 0) {
         return;
       }
       fsRead(this.#fd, buf, 0, buf.length, null, (err, bytesRead) => {
@@ -460,8 +457,10 @@ export class PasskeyInjector {
     event.copy(packet, 1);
     try {
       writeSync(this.#fd, packet);
-    } catch {
-      // fd closed or ENXIO — the stop path or a dead adapter.
+    } catch (error) {
+      console.info(
+        `[browser] passkey-inject: write failed, the adapter is closed or dead: ${String(error)}`
+      );
     }
   }
 
