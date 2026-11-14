@@ -72,7 +72,29 @@ export class MachineProblem extends HTTPError {
   override value() {
     return this.problem;
   }
+  /** The same cause in `detail`'s words: what a step says of it as it passes it up. */
+  saying(detail: string): MachineProblem {
+    const held = this.problem;
+    if (held.status === 503) {
+      return new MachineProblem(awayProblem(held.response.machineId, detail));
+    }
+    return new MachineProblem(
+      held.status === 504
+        ? silentProblem(detail)
+        : problem(502, { code: held.response.code, detail })
+    );
+  }
 }
+
+/**
+ * A thrown `error` said again in `words` by a step that passes it up: a
+ * machine's cause keeps its status and code ({@link MachineProblem.saying}),
+ * anything else is an Error of those words with it as its cause.
+ */
+export const thrownAgain = (error: unknown, words: string): Error =>
+  error instanceof MachineProblem
+    ? error.saying(words)
+    : new Error(words, { cause: error });
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 export type ControlResult = Extract<FramePayload, { kind: "control_result" }>;

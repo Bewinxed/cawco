@@ -134,6 +134,7 @@ import type { ProjectRow } from "./db/projects";
 import type { Origin, WorkOrigin } from "./db/schema";
 import type {
   ItemBlock,
+  StoredSendRefusal,
   WorkBudget,
   WorkItemSubmission,
 } from "./db/stored-types";
@@ -166,6 +167,7 @@ import {
   reportLine,
 } from "./landing-run";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { awayProblem, MachineProblem, thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import type { Plans } from "./plans";
@@ -176,7 +178,6 @@ import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo, TodoChanges } from "./task-file";
 import type { Tasks } from "./tasks";
-
 import { unwatchedMode } from "./unwatched-mode";
 import { CAWCO_TOOL } from "./web-reads";
 import {
@@ -884,9 +885,10 @@ interface WorkItemDeps extends Pick<
   ) => void;
   /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; or its refusal in its words. */
   readonly resolveHanded: HandedInputs["resolve"];
-  /** The one send path; its record says whether the machine took it. */
+  /** The one send path; its record says whether the machine took it, and what refused it when one did. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
+    refusal: StoredSendRefusal | null;
     state: string;
   };
   /**
@@ -3127,10 +3129,13 @@ export const createWorkItems = ({
         error: sent.reason,
         endedAt: new Date(),
       });
-      return problem(502, {
-        code: "work-item-session-unreached",
-        detail: sent.reason ?? `could not reach ${session.id}`,
-      });
+      const words = sent.reason ?? `could not reach ${session.id}`;
+      // Its machine away is answered as one; any other refusal of the send
+      // is the hub's, by what the session or its item stands at (core
+      // SendRefusal): a conflict, never the machine's failure.
+      return sent.refusal?.kind === "machine-away"
+        ? awayProblem(sent.refusal.machineId, words)
+        : problem(409, { code: "work-item-session-unreached", detail: words });
     }
     const label = sessionLabel(session).tag;
     const continued: WorkItemStart = {
@@ -3720,11 +3725,11 @@ export const createWorkItems = ({
       }
     } catch (error) {
       await clear();
-      throw new Error(
+      throw thrownAgain(
+        error,
         workWords.inputsCleared(
           inputsLine(error instanceof Error ? error.message : String(error))
-        ),
-        { cause: error }
+        )
       );
     }
     return room.folder;
@@ -4332,8 +4337,9 @@ export const createWorkItems = ({
    * The session of a filed item spawned, its row standing from now as its
    * item does: a live item whose session has no row is one whose session is
    * gone ({@link followSessions}). The item fails in the words it got when
-   * its session does not start, and those words are the problem; a machine's
-   * failure is a 502.
+   * its session does not start, and those words are the problem; a
+   * machine's cause thrown is answered as it is, anything else thrown is the
+   * hub's own failure.
    */
   const spawnItemSession = (
     item: WorkItemRow,
@@ -4371,7 +4377,12 @@ export const createWorkItems = ({
       const message =
         (error instanceof Error && error.message) || String(error);
       notStarted(message);
-      return problem(502, { code: "work-item-spawn-failed", detail: message });
+      // A machine's cause is answered as it is; anything else thrown is the
+      // hub's own failure, Elysia's 500.
+      if (error instanceof MachineProblem) {
+        return error.value();
+      }
+      throw error;
     }
   };
 

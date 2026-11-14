@@ -45,6 +45,7 @@ import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import { soon } from "./lifetime";
+import { thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
@@ -675,9 +676,9 @@ export const createWorkspaces = ({
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `its ${SCRATCH_OUTPUTS} could not be copied into ${folder}/ of its project's folder, so it stays: ${reason}`,
-        { cause: error }
+      throw thrownAgain(
+        error,
+        `its ${SCRATCH_OUTPUTS} could not be copied into ${folder}/ of its project's folder, so it stays: ${reason}`
       );
     }
   };
@@ -2310,9 +2311,9 @@ export const createWorkspaces = ({
         checksFor: checksFor ?? null,
       });
     } catch (error) {
-      throw new Error(
-        await letGo(error instanceof Error ? error.message : String(error)),
-        { cause: error }
+      throw thrownAgain(
+        error,
+        await letGo(error instanceof Error ? error.message : String(error))
       );
     } finally {
       opening.delete(id);
@@ -2520,9 +2521,9 @@ export const createWorkspaces = ({
         cutFrom: { workspace: source.id, commit: made.head, landed: false },
       });
     } catch (error) {
-      throw new Error(
-        await unmade(error instanceof Error ? error.message : String(error)),
-        { cause: error }
+      throw thrownAgain(
+        error,
+        await unmade(error instanceof Error ? error.message : String(error))
       );
     }
   };

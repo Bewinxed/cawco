@@ -8113,8 +8113,8 @@ export const createServer = (
     send: (envelope) => {
       const sent = deliverSend(envelope);
       return sent instanceof ElysiaStatus
-        ? { reason: sent.response.detail, state: "failed" }
-        : (sent ?? { reason: null, state: "pending" });
+        ? { reason: sent.response.detail, refusal: null, state: "failed" }
+        : (sent ?? { reason: null, refusal: null, state: "pending" });
     },
     // The plan ↔ to-do link: the task's to-dos, ticked and proposed as the hub.
     todos: {
