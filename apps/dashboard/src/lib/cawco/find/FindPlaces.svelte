@@ -94,6 +94,9 @@
       case "refused":
         return { retries: true, words: findInWords.refused(hub.detail) };
       case "answered":
+        return hub.more
+          ? { retries: false, words: findInWords.more(hub.places.length) }
+          : null;
       case "asking":
       case "idle":
         return null;

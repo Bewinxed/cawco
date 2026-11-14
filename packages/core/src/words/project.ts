@@ -46,4 +46,11 @@ export const projectWords = {
   /** That row under the problems of a gate.md the hub cannot read. */
   mergeChecksUnread:
     "Until gate.md is fixed, the hub merges no work in this project.",
+  /** The binding's repository choice when the connection reaches more than it lists. */
+  repositoriesMore: (listed: number) =>
+    `Showing the ${listed} most recently pushed repositories. Search by name to reach the rest.`,
+  repositorySearch: "Search repositories",
+  /** A search of the connection's repositories that matched none. */
+  repositoriesNone: (search: string) =>
+    `No repository of this connection has "${search}" in its name.`,
 };

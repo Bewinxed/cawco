@@ -168,7 +168,7 @@ const MIN_GAP_MS = 500;
 /** How long a run waits for its machine to be online before it is skipped. */
 const PLACE_WAIT_MS = 60_000;
 const PLACE_POLL_MS = 1000;
-/** Runs a routine's view lists. */
+/** Runs a routine's view lists: the newest; its `runsTotal` says how many it has had, and the dashboard says so beside them. */
 const RUNS_SHOWN = 20;
 /** The longest delivered output a project note carries. */
 const NOTE_MAX = 4000;
@@ -766,6 +766,7 @@ export const createRoutines = ({
     schedule: scheduleOf(row),
     createdAt: row.createdAt.getTime(),
     runs: store.runs(row.id, RUNS_SHOWN).map(runView),
+    runsTotal: store.runsSince(row.id, 0).runs,
   });
 
   // --- checks on what a routine may say ---------------------------------------

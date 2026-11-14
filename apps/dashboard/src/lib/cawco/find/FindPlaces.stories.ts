@@ -146,7 +146,7 @@ function standing(
   {
     at = "p3",
     whose = "all",
-    hub = { kind: "answered", places: [] },
+    hub = { kind: "answered", places: [], more: false },
     words = WORDS,
   }: {
     at?: string | null;

@@ -176,6 +176,8 @@ interface FolderChange {
 
 export interface FolderHistory {
   commits: FolderChange[];
+  /** Older commits exist past these: ask again with `skip` set to how many were read. */
+  more: boolean;
   /** The file, or `""` for the whole folder. */
   path: string;
 }
@@ -1848,7 +1850,8 @@ export const moveFolderFile = async (
 export const folderHistory = async (
   projectId: string,
   rawPath = "",
-  limit = HISTORY_DEFAULT
+  limit = HISTORY_DEFAULT,
+  skip = 0
 ) => {
   const at = await inFolder(projectId, rawPath);
   if (at instanceof ElysiaStatus) {
@@ -1858,14 +1861,16 @@ export const folderHistory = async (
   const count = Math.min(Math.max(Math.floor(limit), 1), HISTORY_LIMIT);
   const out = await git(root, [
     "log",
-    `--max-count=${count}`,
+    // One past what is answered: it says there are older commits.
+    `--max-count=${count + 1}`,
+    `--skip=${Math.max(Math.floor(skip), 0)}`,
     "--format=%H%x1f%an%x1f%aI%x1f%s%x1e",
     ...(rel ? ["--follow", "--", rel] : []),
   ]);
   if (out instanceof ElysiaStatus) {
     return out;
   }
-  const commits = out
+  const read = out
     .split("\x1e")
     .map((record) => record.trim())
     .filter(Boolean)
@@ -1874,7 +1879,11 @@ export const folderHistory = async (
         record.split("\x1f");
       return { sha, author, date, message };
     });
-  const history: FolderHistory = { path: rel, commits };
+  const history: FolderHistory = {
+    path: rel,
+    commits: read.slice(0, count),
+    more: read.length > count,
+  };
   return history;
 };
 
@@ -2586,10 +2595,16 @@ export const projectFolderRoutes = (
         query: t.Object({
           path: t.Optional(t.String()),
           limit: t.Optional(t.Integer({ minimum: 1, maximum: HISTORY_LIMIT })),
+          skip: t.Optional(t.Integer({ minimum: 0 })),
         }),
       },
       async ({ params, query }) =>
         unknown(params.id) ??
-        (await folderHistory(params.id, query.path ?? "", query.limit))
+        (await folderHistory(
+          params.id,
+          query.path ?? "",
+          query.limit,
+          query.skip
+        ))
     );
 };

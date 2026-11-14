@@ -230,6 +230,15 @@ export const routinesWords = {
   // A routine opened in place.
   recentRuns: "Recent runs",
   more: "More",
+  /** The runs ledger's reveal of the runs the hub sent beyond the first few. */
+  /** Under the approved actions ledger when the project has more than it lists. */
+  actionsWindow: (listed: number) =>
+    `The newest ${listed} actions. Older ones are not listed here.`,
+  moreRuns: (count: number) =>
+    `Show ${count} more ${count === 1 ? "run" : "runs"}`,
+  /** Under the whole ledger when the routine has had more runs than the hub lists. */
+  runsWindow: (listed: number, total: number) =>
+    `The newest ${listed} of ${total} runs. Earlier ones stay in the project's history.`,
   less: "Less",
   readRun: "Read the run",
   /** How long a run ran: under a minute, minutes, hours and minutes. */
@@ -343,6 +352,12 @@ export const routineToolWords = {
   /** A connector poll's item whose id or version is over a key part's bound: refused, never cut. */
   keyPartOver: (max: number): string =>
     `an item's id or version is over ${max} characters, the most a key part holds`,
+  /** `event_route_list`'s heading over its events, when the project has more than it lists. */
+  eventsCut: (listed: number): string =>
+    `The newest ${listed} inbound events; older ones are not listed here:`,
+  /** `action_list`'s heading, when the project has more actions than it lists. */
+  actionsCut: (listed: number): string =>
+    `The newest ${listed} actions; older ones are not listed here, and action_cancel reaches only these:`,
   /** An event route's regex over its bound. */
   regexOver: (max: number): string => `regex is at most ${max} characters.`,
   /** An event route's regex, beside it: how much of each event it reads. */

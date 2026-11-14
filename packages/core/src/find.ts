@@ -286,6 +286,8 @@ export type PlacesHeard = "answered" | "silent" | "outdated";
 export interface FindPlacesAnswer {
   /** The machine holding the conversation's transcript: unless it answered, `places` is empty. */
   machine: { heard: PlacesHeard; id: string; name: string };
+  /** The conversation holds more places than the list does: `places` is the oldest of them. */
+  more: boolean;
   places: FindPlace[];
 }
 

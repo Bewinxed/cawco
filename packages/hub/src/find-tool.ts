@@ -742,6 +742,16 @@ const narrowed = (input: FindInput): boolean =>
   input.project !== undefined ||
   input.machine !== undefined;
 
+/**
+ * Whether a listing has an older page to ask for: words past this page, or
+ * past what the machines read in one listing, with a last hit to ask from.
+ */
+const pagesOn = (
+  pastPage: boolean,
+  machinesAtLimit: boolean,
+  last: ListedAt | undefined
+): last is ListedAt => (pastPage || machinesAtLimit) && last !== undefined;
+
 /** What a listing answers past its hits: how to page on, or why nothing came. */
 const listedNote = (
   by: By,
@@ -1195,7 +1205,7 @@ export const createFindTool = (deps: FindToolDeps) => {
       from === undefined
         ? where.before
         : Math.min(where.before ?? from.at, from.at);
-    const { results, coverage } = await deps.find.listing({
+    const { atLimit, results, coverage } = await deps.find.listing({
       author: AUTHOR[input.by],
       caller: `the find tool of session ${actor.id}`,
       transcripts: true,
@@ -1225,7 +1235,9 @@ export const createFindTool = (deps: FindToolDeps) => {
         : shown.map(hitOf)
     );
     const last = page[hits.length - 1];
-    const hasMore = said.length > hits.length && last !== undefined;
+    // Past the page, or past what the machines read in one listing: the
+    // cursor asks from before the last hit, so it reaches the older words.
+    const hasMore = pagesOn(said.length > hits.length, atLimit, last);
     const unsearched = unsearchedOf(coverage, Date.now());
     const note = listedNote(input.by, hasMore, hits.length, scoped);
     return {

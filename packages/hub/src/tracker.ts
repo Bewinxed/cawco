@@ -2027,7 +2027,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   };
 
   /** The repositories or teams a connection reaches, for the binding's choice. */
-  const targets = async (name: string) => {
+  const targets = async (name: string, search?: string) => {
     const connection = connectionNamed(name);
     if (connection instanceof ElysiaStatus) {
       return connection;
@@ -2043,10 +2043,16 @@ export const createTrackers = (deps: TrackersDeps) => {
       const octokit = await signedIn(() => deps.connections.githubClient(name));
       return octokit instanceof ElysiaStatus
         ? octokit
-        : githubTargets(octokit, connection.auth === "app");
+        : githubTargets(octokit, connection.auth === "app", search);
     }
     const client = await signedIn(() => deps.connections.linearClient(name));
-    return client instanceof ElysiaStatus ? client : linearTargets(client);
+    if (client instanceof ElysiaStatus) {
+      return client;
+    }
+    const teams = await linearTargets(client);
+    return teams instanceof ElysiaStatus
+      ? teams
+      : { targets: teams, more: false };
   };
 
   const poller = lifetime.every(POLL_MS, () => {
@@ -2125,10 +2131,11 @@ export const trackerRoutes = (trackers: Trackers) =>
     .post("/api/projects/:id/tracker/sync", ({ params }) =>
       trackers.sync(params.id)
     )
-    .get("/api/connections/:name/targets", async ({ params }) => {
-      const reached = await trackers.targets(params.name);
-      return reached instanceof ElysiaStatus ? reached : { targets: reached };
-    })
+    .get(
+      "/api/connections/:name/targets",
+      { query: t.Object({ search: t.Optional(t.String()) }) },
+      ({ params, query }) => trackers.targets(params.name, query.search)
+    )
     .get(
       "/api/connections/:name/github-projects",
       { query: t.Object({ repo: t.String() }) },

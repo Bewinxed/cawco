@@ -149,6 +149,7 @@
         id: "obelisk",
         name: "obelisk",
       },
+      more: false,
       // What the engine answers for this conversation: every place, each
       // by its stored record; every one is loaded here, so each is the
       // transcript's own place.

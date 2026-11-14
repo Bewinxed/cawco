@@ -317,6 +317,10 @@
   let pickConnection = $state("");
   let targets = $state<TrackerTarget[] | null>(null);
   let targetsFault = $state<string | null>(null);
+  /** The connection reaches more repositories than the choice lists: a search reaches them. */
+  let targetsMore = $state(false);
+  /** The words the repository choice is narrowed by. */
+  let targetSearch = $state("");
   let pickTarget = $state("");
   let binding = $state(false);
   let bindFault = $state<string | null>(null);
@@ -362,11 +366,13 @@
       return;
     }
     try {
-      const read = (await trackerTargets(connection)).targets;
+      const answer = await trackerTargets(connection, targetSearch.trim());
+      const read = answer.targets;
       if (pickConnection !== connection) {
         return;
       }
       targets = read;
+      targetsMore = answer.more;
       const own = project.links.flatMap((link) =>
         link.startsWith("github.com/")
           ? [link.slice("github.com/".length).toLowerCase()]
@@ -1355,6 +1361,8 @@
                   () => pickConnection,
                   (next) => {
                     pickConnection = next;
+                    targetSearch = "";
+                    targetsMore = false;
                     readTargets(next);
                   }
                 }
@@ -1365,6 +1373,24 @@
                   >
                 {/each}
               </NativeSelect.Root>
+              {#if picking === "github" && (targetsMore || targetSearch.trim() !== "")}
+                <Input
+                  aria-label={projectWords.repositorySearch}
+                  autocomplete="off"
+                  data-search-targets
+                  onchange={() => readTargets(pickConnection)}
+                  onkeydown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      readTargets(pickConnection);
+                    }
+                  }}
+                  placeholder={projectWords.repositorySearch}
+                  spellcheck="false"
+                  text="label"
+                  bind:value={targetSearch}
+                />
+              {/if}
               {#if targets}
                 <NativeSelect.Root
                   aria-label={picking === "github" ? "Repository" : "Team"}
@@ -1384,6 +1410,22 @@
                     >
                   {/each}
                 </NativeSelect.Root>
+                {#if targetsMore}
+                  <p
+                    data-slot="note"
+                    class="col-span-full type-meta text-ink-muted"
+                    data-targets-more
+                  >
+                    {projectWords.repositoriesMore(targets.length)}
+                  </p>
+                {:else if targets.length === 0 && targetSearch.trim() !== ""}
+                  <p
+                    data-slot="note"
+                    class="col-span-full type-meta text-ink-muted"
+                  >
+                    {projectWords.repositoriesNone(targetSearch.trim())}
+                  </p>
+                {/if}
                 {#if picking === "github"}
                   {@render projectPick()}
                 {/if}

@@ -76,7 +76,7 @@ export interface Place {
 export type HubRead =
   | { kind: "idle" }
   | { kind: "asking" }
-  | { kind: "answered"; places: FindPlace[] }
+  | { kind: "answered"; places: FindPlace[]; more: boolean }
   | { kind: "unreached"; machine: string }
   /** The machine's agent is older than the places read: an update brings it. */
   | { kind: "outdated"; machine: string }
@@ -521,7 +521,11 @@ export class ConversationFind {
       const { heard, name } = read.value.machine;
       switch (heard) {
         case "answered":
-          this.hub = { kind: "answered", places: read.value.places };
+          this.hub = {
+            kind: "answered",
+            places: read.value.places,
+            more: read.value.more,
+          };
           break;
         case "outdated":
           this.hub = { kind: "outdated", machine: name };

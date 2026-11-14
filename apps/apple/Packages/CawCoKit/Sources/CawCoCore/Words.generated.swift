@@ -101,6 +101,9 @@ public enum Words {
             "\(what) changed elsewhere since this page read it. The latest is shown now"
         }
 
+        /// An Undo the hub answered without the item it was asked for: said as the clause of a refused Undo.
+        public static let restoredNothing = "The hub answered without the item"
+
         // packages/core/src/words/configure.ts `CONFIG_GROUPS`
         /// The rail's groups, in its order.
         public static let groups: [String] = ["Automation", "Agents", "Tools", "Memory", "Hub"]
@@ -617,6 +620,11 @@ public enum Words {
 
             public static let forks = "Forks stay on their parent’s account, whatever the strategy."
 
+            /// Under the strategy cards when the figures draw fewer lanes than there are accounts.
+            public static func figureCut(drawn: Int, total: Int) -> String {
+                "The figures draw \(drawn) of your \(total) accounts. Every account takes part in the strategy."
+            }
+
             public static let order = "Order: drag to change it"
 
             public static let draggable = "draggable"
@@ -1028,6 +1036,16 @@ public enum Words {
 
     public enum Transcript {
         // packages/core/src/words/transcript.ts `transcriptWords`
+        /// The toast when a stored composer draft was dropped to keep the stored drafts under their size cap: `what` names the draft by its first words.
+        public static func draftDropped(what: String) -> String {
+            "Storage for unsent drafts was full, so the oldest draft was dropped: \(what)"
+        }
+
+        /// The toast when an unsaved Configure editor's edits were dropped for the same reason: `where` is the editor's path.
+        public static func editorDraftDropped(`where`: String) -> String {
+            "Storage for unsaved edits was full, so the oldest unsaved edits were dropped: \(`where`)"
+        }
+
         /// A tab's details card, and the tabs of a pane's group.
         public static let sessionDetails = "Session details"
 
@@ -3114,6 +3132,20 @@ public enum Words {
         public static let recentRuns = "Recent runs"
 
         public static let more = "More"
+
+        /// Under the approved actions ledger when the project has more than it lists.
+        public static func actionsWindow(listed: Int) -> String {
+            "The newest \(listed) actions. Older ones are not listed here."
+        }
+
+        public static func moreRuns(count: Int) -> String {
+            "Show \(count) more \(count == 1 ? "run" : "runs")"
+        }
+
+        /// Under the whole ledger when the routine has had more runs than the hub lists.
+        public static func runsWindow(listed: Int, total: Int) -> String {
+            "The newest \(listed) of \(total) runs. Earlier ones stay in the project's history."
+        }
 
         public static let less = "Less"
 

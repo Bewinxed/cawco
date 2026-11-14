@@ -52,6 +52,8 @@ export interface RoutineView {
   projectId: string | null;
   prompt: string;
   runs: RoutineRunView[];
+  /** Every run it has had; `runs` holds only the newest of them. */
+  runsTotal: number;
   /** Its schedule in words, and its next run. */
   schedule: RoutineSchedule;
   target: RoutineTarget;

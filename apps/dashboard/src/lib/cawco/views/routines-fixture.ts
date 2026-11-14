@@ -97,6 +97,7 @@ const OWN: Routine[] = [
         "Proposed folding two lines of decisions.md."
       ),
     ],
+    runsTotal: 1,
   },
   {
     ...base,
@@ -115,6 +116,7 @@ const OWN: Routine[] = [
       words: "At 02:00, Monday through Friday (Europe/London)",
     },
     runs: [run("n1", 9 * HOUR_MS, 14, "silent", null)],
+    runsTotal: 1,
   },
   {
     ...base,
@@ -133,6 +135,7 @@ const OWN: Routine[] = [
       words: "Every 30 minutes (Europe/London)",
     },
     runs: [run("g1", 16 * DAY_MS, 3, "delivered", "Filed #412.")],
+    runsTotal: 1,
   },
 ];
 
@@ -157,7 +160,7 @@ const TRIM = {
 } as const;
 
 /** The routine turned on: no run yet. */
-const TRIM_ON: Routine = { ...TRIM, runs: [] };
+const TRIM_ON: Routine = { ...TRIM, runs: [], runsTotal: 0 };
 
 /** The routine after Monday's run proposed a trim, and the Monday before found nothing. */
 export const TRIM_RAN: Routine = {
@@ -178,6 +181,7 @@ export const TRIM_RAN: Routine = {
       "Found nothing to unlist: every item in this project's starting sets was called in the last 30 days, kept by you, or already waits on you."
     ),
   ],
+  runsTotal: 2,
 };
 
 /** The reads the page makes, answered: `routines` its ledger, `offered` whether Caw suggests the routine. */
@@ -198,10 +202,13 @@ const pageAnswers = (
         state: "",
       },
       routes: [],
+      events: [],
+      eventsMore: false,
     },
     [hubPath(project.relays)]: [],
     [hubPath(hub.api.actions)]: {
       actions: [],
+      more: false,
     },
     [hubPath(hub.api.connections)]: { connections: [] },
     [hubPath(project["trim-routine"])]: { offered },

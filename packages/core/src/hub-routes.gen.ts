@@ -397,6 +397,9 @@ export interface components {
       path: {
         name: string | number;
       };
+      query?: {
+        search?: string;
+      };
     };
     "GET /api/connections/:name/tools": {
       path: {
@@ -789,6 +792,7 @@ export interface components {
       query?: {
         limit?: number;
         path?: string;
+        skip?: number;
       };
     };
     "GET /api/projects/:id/folder/raw": {

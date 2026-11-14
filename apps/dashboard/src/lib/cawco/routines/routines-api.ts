@@ -47,6 +47,8 @@ export interface Poll {
 
 export interface RoutinesPage {
   actions: ApprovedActionView[];
+  /** The project has older actions than `actions` lists. */
+  actionsMore: boolean;
   polls: Poll[];
   relays: RelayView[];
   routes: EventRoute[];
@@ -125,6 +127,7 @@ export async function readRoutinesPage(
     polls,
     relays,
     actions: actions.actions,
+    actionsMore: actions.more,
     trimOffered: trim.offered,
   };
 }

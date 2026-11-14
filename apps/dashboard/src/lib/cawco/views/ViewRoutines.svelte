@@ -1535,6 +1535,14 @@
     <div data-slot="ledger">
       <ActionsTable {actions} label={words.actions} {routineNames} />
     </div>
+    {#if page?.actionsMore}
+      <p
+        class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
+        data-slot="actions-window"
+      >
+        {words.actionsWindow(actions.length)}
+      </p>
+    {/if}
   {/if}
 {/snippet}
 

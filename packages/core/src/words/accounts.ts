@@ -335,6 +335,9 @@ export const accountsWords = {
     /** A card as a screen reader hears it: "Spread: The account that lasts longest with the session on it". */
     card: (label: string, line: string) => `${label}: ${line}`,
     forks: "Forks stay on their parent’s account, whatever the strategy.",
+    /** Under the strategy cards when the figures draw fewer lanes than there are accounts. */
+    figureCut: (drawn: number, total: number) =>
+      `The figures draw ${drawn} of your ${total} accounts. Every account takes part in the strategy.`,
     order: "Order: drag to change it",
     draggable: "draggable",
     place: (name: string, place: number, count: number) =>

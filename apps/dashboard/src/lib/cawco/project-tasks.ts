@@ -288,9 +288,11 @@ export const pollGitHub = (projectId: string): Promise<void> =>
   );
 
 /** The repositories or teams a connection reaches, for a project to be bound to one. */
-export const trackerTargets = (connection: string) =>
+export const trackerTargets = (connection: string, search?: string) =>
   hubData(
-    hub.api.connections({ name: connection }).targets.get(),
+    hub.api
+      .connections({ name: connection })
+      .targets.get({ query: search ? { search } : {} }),
     refusedOrUnreached
   );
 

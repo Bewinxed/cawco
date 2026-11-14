@@ -24,6 +24,7 @@
    * The field keeps the focus (a WAI-ARIA combobox over a listbox): ↑↓ move
    * the active row, ↵ opens it, → peeks it in place, ← folds, Escape closes.
    */
+  import { findInWords } from "@cawco/core/words/find-in";
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { tick, untrack } from "svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -878,6 +879,14 @@
       value={finder.waitingSort}
     />
   </div>
+  {#if finder.waiting.state === "ok"}
+    <p
+      data-slot="waiting-window"
+      class="m-0 flex-none px-space-3 py-space-2 type-meta text-ink-muted"
+    >
+      {findInWords.waitingWindow(finder.waiting.value.days)}
+    </p>
+  {/if}
   <div
     data-slot="list"
     bind:this={list}

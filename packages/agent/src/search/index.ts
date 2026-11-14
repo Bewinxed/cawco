@@ -71,11 +71,11 @@ const MAX_LISTED_DOCS = 200;
 /** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
 const MAX_TURNS_SIDE = 10;
 /**
- * The most places one conversation's find answers with: a conversation
- * saying a word more often than this is stepped through the first of them.
- * Our own call: a few hundred rows draw in the places list at once.
+ * The most places one conversation's find answers with: the hub's own
+ * limit (hub find-places.ts `PLACES_LIMIT`, 500) and one more, so the hub
+ * can tell a conversation holds more and say so to the person.
  */
-const MAX_PLACES = 500;
+const MAX_PLACES = 501;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {

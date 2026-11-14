@@ -223,6 +223,11 @@
       </div>
     {/each}
   </div>
+  {#if accounts.length > shown.length}
+    <p class="type-meta text-ink-muted" data-figure-cut>
+      {words.figureCut(shown.length, accounts.length)}
+    </p>
+  {/if}
   <p class="mark-line type-meta flex items-center gap-space-2 text-ink-muted">
     <IconSubagent class="size-icon-md" />
     <span>{words.forks}</span>

@@ -64,6 +64,8 @@ export interface InboundEventView {
 export interface IngressView {
   connectorPolls: ConnectorPollView[];
   events: InboundEventView[];
+  /** Events older than those in {@link events} exist. */
+  eventsMore: boolean;
   github: {
     connection: string | null;
     polled: boolean;

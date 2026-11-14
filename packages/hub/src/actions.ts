@@ -861,14 +861,25 @@ export const createActions = ({
     );
   };
 
+  /** The newest {@link LISTED} actions, and whether older ones exist that are not listed. */
+  const listed = (
+    projectId: string | undefined,
+    state?: ActionState
+  ): { actions: ApprovedActionView[]; more: boolean } => {
+    // One past what is listed: it says there are older actions.
+    const rows = store.list(projectId, LISTED + 1);
+    return {
+      actions: rows
+        .slice(0, LISTED)
+        .filter((row) => state === undefined || row.state === state)
+        .map(view),
+      more: rows.length > LISTED,
+    };
+  };
   const list = (
     projectId: string | undefined,
     state?: ActionState
-  ): ApprovedActionView[] =>
-    store
-      .list(projectId, LISTED)
-      .filter((row) => state === undefined || row.state === state)
-      .map(view);
+  ): ApprovedActionView[] => listed(projectId, state).actions;
 
   /** The project a session's tools act on, or the problem that it is in none. */
   const projectOf = (actor: InstanceRow) =>
@@ -916,7 +927,7 @@ export const createActions = ({
           return projectId;
         }
         await titlesOf(store.list(projectId, LISTED));
-        return list(projectId, state);
+        return listed(projectId, state);
       }),
       ACTION_CANCEL_DEFINITION.run(({ id }) => {
         const projectId = projectOf(me());
@@ -952,6 +963,7 @@ export const createActions = ({
       return row instanceof ElysiaStatus ? row : view(row);
     },
     list,
+    listed,
     propose,
     start,
     tick,
@@ -996,7 +1008,7 @@ export const actionRoutes = (actions: Actions) =>
           state: t.Optional(STATE),
         }),
       },
-      ({ query }) => ({ actions: actions.list(query.projectId, query.state) })
+      ({ query }) => actions.listed(query.projectId, query.state)
     )
     .get("/api/actions/waiting", () => ({ actions: actions.waiting() }))
     .get("/api/actions/:id", ({ params }) => actions.get(params.id))

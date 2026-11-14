@@ -46,9 +46,15 @@
     scheduleOf(routine.cron, routine.timeZone, routine.nextSlot).words
   );
 
-  /** The runs shown: the newest five. */
+  /** The runs shown first: the newest five; a button shows the rest the hub sent. */
   const SHOWN = 5;
-  const recent = $derived(routine.runs.slice(0, SHOWN));
+  let allRuns = $state(false);
+  const recent = $derived(
+    allRuns ? routine.runs : routine.runs.slice(0, SHOWN)
+  );
+  const unshown = $derived(routine.runs.length - recent.length);
+  /** Runs it has had that the hub did not send. */
+  const unsent = $derived(routine.runsTotal - routine.runs.length);
   /** Where a run is read whole: its session; null for a run no session took. */
   const runHref = (run: RoutineRun): string | null =>
     run.instanceId ? rowHref(run.instanceId) : null;
@@ -277,6 +283,21 @@
           </Table.Body>
         </Table.Root>
       </div>
+      {#if unshown > 0}
+        <Button
+          data-more-runs
+          class="-ms-space-2 self-start"
+          onclick={() => {
+            allRuns = true;
+          }}
+          size="xs"
+          variant="ghost">{words.moreRuns(unshown)}</Button
+        >
+      {:else if unsent > 0}
+        <p class="m-0 type-meta text-ink-muted" data-slot="runs-window">
+          {words.runsWindow(routine.runs.length, routine.runsTotal)}
+        </p>
+      {/if}
     </section>
   {/if}
 

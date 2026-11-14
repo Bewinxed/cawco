@@ -76,13 +76,15 @@ export const findRoutes = ({
         }
         const named = (
           took: PlacesHeard,
-          places: FindPlace[] = []
+          places: FindPlace[] = [],
+          more = false
         ): FindPlacesAnswer => ({
           machine: {
             heard: took,
             id: row.machineId,
             name: machineName(row.machineId),
           },
+          more,
           places,
         });
         const sessions = [row.sessionId, ...row.priorSessionIds].filter(
@@ -99,7 +101,7 @@ export const findRoutes = ({
             {
               sessions,
               words,
-              limit: PLACES_LIMIT,
+              limit: PLACES_LIMIT + 1,
             } satisfies TranscriptPlacesQuery,
           ],
           FIND_PLACES_MS,
@@ -114,7 +116,11 @@ export const findRoutes = ({
         }
         return named(
           "answered",
-          await placesForScreens(heard.places, db.findSettings.hideSecrets())
+          await placesForScreens(
+            heard.places.slice(0, PLACES_LIMIT),
+            db.findSettings.hideSecrets()
+          ),
+          heard.places.length > PLACES_LIMIT
         );
       }
     )

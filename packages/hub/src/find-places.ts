@@ -22,7 +22,11 @@ import {
 } from "@cawco/core/session/controls";
 import { secretRangesOf } from "./secret-filter";
 
-/** The most places one find in a conversation answers with (agent search/index.ts `MAX_PLACES` holds it too). */
+/**
+ * The most places one find in a conversation lists: a few hundred rows draw
+ * in the places list at once. The hub asks the machine for one more (agent
+ * search/index.ts `MAX_PLACES` is this and one), which says there are more.
+ */
 export const PLACES_LIMIT = 500;
 
 const WHOSE: Record<

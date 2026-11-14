@@ -245,7 +245,9 @@ export const ingressWords = (view: IngressView): string => {
     view.events.length === 0
       ? "No inbound events yet."
       : lines(
-          "Newest inbound events:",
+          view.eventsMore
+            ? routineToolWords.eventsCut(view.events.length)
+            : "Newest inbound events:",
           view.events.map(
             (event) =>
               `- ${event.kind} from ${event.source} ${ago(event.receivedAt, now)} · ${event.routedTo ? `to routine ${handle(event.routedTo)}` : "routed to no routine"}${event.handledAt === null ? ", not handled yet" : ""}`
@@ -277,12 +279,20 @@ const actionLine = (action: ApprovedActionView, now: number): string =>
   `- ${handle(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${action.args.length > 200 ? `${action.args.slice(0, 199)}…` : action.args} · ${quote(action.reason, 160)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskTitle === null ? action.taskId : taskLink(action.projectId, action.taskId, action.taskTitle)}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result, 240)}` : ""} · proposed ${ago(action.createdAt, now)}`;
 
 /** `action_list`. */
-export const actionListWords = (actions: ApprovedActionView[]): string => {
+export const actionListWords = ({
+  actions,
+  more,
+}: {
+  actions: ApprovedActionView[];
+  more: boolean;
+}): string => {
   const now = Date.now();
   return actions.length === 0
     ? "No approved actions."
     : lines(
-        `${count(actions.length, "action")}, newest first; action_cancel takes the handle:`,
+        more
+          ? routineToolWords.actionsCut(actions.length)
+          : `${count(actions.length, "action")}, newest first; action_cancel takes the handle:`,
         actions.map((action) => actionLine(action, now))
       );
 };

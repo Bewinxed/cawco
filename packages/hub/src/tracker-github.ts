@@ -53,7 +53,7 @@ const OVERLAP_MS = 2 * 60_000;
 const PER_PAGE = 100;
 /** Pages one list reads at most in a poll; the next poll goes on from its newest. Our choice. */
 const MAX_PAGES = 10;
-/** Pages of repositories a binding's choice lists. Our choice. */
+/** Pages of repositories a binding's choice lists before a search; a search reads on to the last page. Our choice. */
 const TARGET_PAGES = 3;
 
 const OPEN: IssueState = { token: "open", name: "Open", type: "unstarted" };
@@ -589,8 +589,9 @@ export const githubAdapter = (
 /** The repositories a GitHub connection reaches, for a project to be bound to one. */
 export const githubTargets = async (
   octokit: Octokit,
-  app: boolean
-): Promise<TrackerTarget[] | TrackerProblem> => {
+  app: boolean,
+  search?: string
+): Promise<{ targets: TrackerTarget[]; more: boolean } | TrackerProblem> => {
   const what = app
     ? "list the repositories the app is installed on"
     : "list the token's repositories";
@@ -618,7 +619,7 @@ export const githubTargets = async (
   let last = PER_PAGE;
   for (
     let number = 1;
-    last === PER_PAGE && number <= TARGET_PAGES;
+    last === PER_PAGE && (search !== undefined || number <= TARGET_PAGES);
     number += 1
   ) {
     const batch = await page(number);
@@ -628,9 +629,16 @@ export const githubTargets = async (
     repos.push(...batch);
     last = batch.length;
   }
-  return repos.map((each) => ({
-    id: each.full_name,
-    name: each.full_name,
-    url: each.html_url,
-  }));
+  const needle = search?.trim().toLowerCase() ?? "";
+  return {
+    // Without a search, a full last page means the connection reaches more.
+    more: search === undefined && last === PER_PAGE,
+    targets: repos
+      .filter((each) => each.full_name.toLowerCase().includes(needle))
+      .map((each) => ({
+        id: each.full_name,
+        name: each.full_name,
+        url: each.html_url,
+      })),
+  };
 };

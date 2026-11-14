@@ -1240,6 +1240,15 @@ export const createFind = (deps: FindDeps) => {
       .toSorted((a, b) => newestOf(b) - newestOf(a));
     return {
       ranked,
+      // A machine that gave all it may leaves older words unread: the
+      // listing's reader pages on from before its last (find-tool.ts).
+      atLimit: asked.some(
+        (each) =>
+          (each.answer?.conversations.reduce(
+            (sum, conversation) => sum + conversation.moments.length,
+            0
+          ) ?? 0) >= LISTED_DOCS
+      ),
       coverage: transcripts
         ? { asked: true, machines: asked.map((each) => each.coverage) }
         : { asked: false, machines: unasked(held.machines) },
@@ -1450,11 +1459,19 @@ export const createFind = (deps: FindDeps) => {
       request: Omit<FindRequest, "cursor" | "limit" | "q"> & {
         author: MomentAuthor;
       }
-    ): Promise<{ coverage: FindCoverage; results: FindResult[] }> {
+    ): Promise<{
+      atLimit: boolean;
+      coverage: FindCoverage;
+      results: FindResult[];
+    }> {
       const named = request.kinds?.length ? new Set(request.kinds) : null;
       const kinds = named ?? new Set<FindKind>(["conversation"]);
       const listed = await listAll(request, kinds, performance.now());
-      return { results: listed.ranked, coverage: listed.coverage };
+      return {
+        atLimit: listed.atLimit,
+        results: listed.ranked,
+        coverage: listed.coverage,
+      };
     },
 
     /**

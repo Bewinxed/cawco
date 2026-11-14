@@ -156,7 +156,7 @@ const MATCH_TEXT_MAX = PAYLOAD_MAX;
 const REGEX_MAX = 200;
 /** The most inbox lines one send carries; the rest are counted. */
 const INBOX_SHOWN = 30;
-/** Events an ingress view lists. */
+/** Events an ingress view lists; `eventsMore` says there are older ones. */
 const EVENTS_SHOWN = 50;
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
@@ -1177,11 +1177,14 @@ export const createIngress = ({
       return github;
     }
     const delivered = deliveredBy(store.deliveries(projectId));
+    // One past what is listed: it says there are older events.
+    const events = store.events(projectId, EVENTS_SHOWN + 1);
     const seen: IngressView = {
       github,
       routes: store.routes(projectId).map((row) => routeView(row, delivered)),
       connectorPolls: store.connectorPolls(projectId).map(pollView),
-      events: store.events(projectId, EVENTS_SHOWN).map(eventView),
+      events: events.slice(0, EVENTS_SHOWN).map(eventView),
+      eventsMore: events.length > EVENTS_SHOWN,
     };
     return seen;
   };

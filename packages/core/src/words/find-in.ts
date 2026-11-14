@@ -57,6 +57,12 @@ export const findInWords = {
   refused: (detail: string) =>
     `${detail.replace(CLOSE, "")}, so only the messages already here were searched.`,
   retry: "Retry",
+  /** The Waiting for you list's window: reports and tasks reach back this far; artifacts wait whatever their age. */
+  waitingWindow: (days: number) =>
+    `Reports and tasks from the last ${days} days. Artifacts stay until you open them.`,
+  /** The conversation holds more places than the list lists. */
+  more: (listed: number) =>
+    `This conversation holds more matches than the ${listed} listed, the oldest first. Search for more of the words to narrow them.`,
   /** Find closed at a place: the way back to where the conversation was being read. */
   back: "Back to where you were",
 };
