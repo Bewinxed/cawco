@@ -343,6 +343,9 @@ export const routineToolWords = {
   /** An event route's regex, beside it: how much of each event it reads. */
   regexReads: (kib: number): string =>
     `(reads the first ${kib} KiB of an event)`,
+  /** A delivered output cut to fit a project note: its end, with the run's session link when it ran one. */
+  noteCut: (session?: string): string =>
+    `\n\n… (cut; the whole is in the run's conversation${session ? `: ${session}` : ""})`,
   /** `routine_delete`: the routine gone, and each event route that fed it, which went with it. */
   deleted: (routes: string[]): string =>
     routes.length === 0

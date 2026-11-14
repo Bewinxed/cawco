@@ -547,7 +547,14 @@ const surfaceRun = (
   instanceId: string | null
 ): boolean => {
   if (end.outcome === "delivered") {
-    const words = (end.output ?? "").slice(0, NOTE_MAX);
+    const output = end.output ?? "";
+    const words = output.slice(0, NOTE_MAX);
+    const report = reportOf(run);
+    // A note is cut to NOTE_MAX and says so, with the run's conversation.
+    const noted =
+      output.length > NOTE_MAX
+        ? `${words}${routineToolWords.noteCut(report?.session)}`
+        : words;
     const { projectId } = routine;
     if (!projectId) {
       push.routine({
@@ -564,7 +571,7 @@ const surfaceRun = (
     // A conversation run's result is Caw's own answer; the curator's reaches
     // the person as a memory proposal ({@link reportsToLead}): each a note.
     if (!reportsToLead(routine)) {
-      note(routine, run, "delivered", words);
+      note(routine, run, "delivered", noted);
       return false;
     }
     const unheard = (why: string) =>
@@ -572,9 +579,8 @@ const surfaceRun = (
         routine,
         run,
         "delivered",
-        `${words}\n\nCaw did not hear this result: ${why}`
+        `${noted}\n\nCaw did not hear this result: ${why}`
       );
-    const report = reportOf(run);
     const label = slotLabel(run.slot, routine.timeZone);
     caw
       .tell(projectId, {
