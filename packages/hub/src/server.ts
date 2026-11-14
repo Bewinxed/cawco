@@ -5,7 +5,11 @@ import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
-import { binaryUpdateOf, decodeAgentFrame } from "@cawco/core/agent-frame";
+import {
+  type AgentFrame,
+  binaryUpdateOf,
+  decodeAgentFrame,
+} from "@cawco/core/agent-frame";
 import type { ArchiveView } from "@cawco/core/archive";
 import { unparked } from "@cawco/core/artifact-needs";
 import {
@@ -153,6 +157,7 @@ import type {
   SessionOrigin,
   SpawnPayload,
   StoredFrame,
+  Verb,
 } from "@cawco/core/protocol";
 import {
   AGENT_BUSY,
@@ -1163,6 +1168,19 @@ export interface ServerOptions {
    */
   serves?: boolean;
 }
+
+/** A machine's socket: one the hub may close, from an address. */
+type AgentSocket = AuthSocket & { remoteAddress: string };
+
+/**
+ * One verb of a machine's socket, handled once its envelope is decoded and
+ * its connection speaks for its machine (server.ts `agentMessage`).
+ */
+type AgentVerb = (
+  ws: AgentSocket,
+  message: Envelope,
+  agentFrame: AgentFrame
+) => void | Promise<void>;
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
@@ -11990,6 +12008,553 @@ export const createServer = (
     usageRoutes(ctx),
   ]);
 
+  // ── The agent socket ────────────────────────────────────────────────────
+
+  /**
+   * Whether `message`'s connection speaks for its machine. A register speaks
+   * for itself: it proves its key once it runs. A connection held for its
+   * machine's admission was told it waits (`holdWaiting`): what it sent
+   * before it heard that is not acted on, and not refused either: it is no
+   * machine's yet. Any other that is not its machine's registered one (a
+   * superseded, unregistered or unproven connection, or one speaking for a
+   * machine it did not register as) is not acted on, and is told so.
+   */
+  const speaksForMachine = (ws: AgentSocket, message: Envelope): boolean => {
+    if (message.verb === "register") {
+      return true;
+    }
+    if (waitingSockets.get(ws.id) === message.machineId) {
+      return false;
+    }
+    if (
+      socketMachines.get(ws.id) === message.machineId &&
+      registry.agent(message.machineId)?.id === ws.id
+    ) {
+      return true;
+    }
+    const fault = `${message.verb} refused: this connection is not machine ${message.machineId}'s registered one; register first`;
+    console.warn(`[hub] ${fault}`);
+    recordHubEvent({
+      kind: "frame-refused",
+      machineId: message.machineId,
+      verb: message.verb,
+    });
+    sendFrame(ws, refusalFrame(message, fault));
+    return false;
+  };
+
+  /** A verb no machine sends: a dashboard's, or an older or newer agent's. */
+  const refuseAgentVerb: AgentVerb = (ws, message) => {
+    const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
+    console.warn(`[hub] ${fault}, from ${message.machineId}`);
+    sendFrame(ws, refusalFrame(message, fault));
+  };
+
+  /**
+   * A machine's register: a machine that re-joins under a new id takes its
+   * rows, its key among them, before it proves itself (`takeFormerId`); its
+   * key's proof next, so an unproven register never evicts a machine's
+   * connection, nor hears anything meant for it; then its return, step by
+   * step ({@link machineReturnSteps}), awaited.
+   */
+  const registerFromMachine: AgentVerb = async (ws, message, agentFrame) => {
+    takeFormerId(ws, message);
+    if (!registerProven(ws, message)) {
+      return;
+    }
+    await runMachineReturn(machineReturnSteps, {
+      ws,
+      message,
+      agentFrame,
+      settled: [],
+      custody: agentFrame.custody,
+      heldIds: new Set(),
+      heldOpencode: false,
+      outlived: () => false,
+      returningRemoved: new Set(),
+      cutoff: 0,
+      heldRows: new Set(),
+      revivable: [],
+      toEnd: [],
+    });
+  };
+
+  /**
+   * A beat heard: the sessions' addresses it replays, the machine touched,
+   * a fleet delta it did not acknowledge sent again (fleet-sync.ts), its
+   * desktop toward whether the person is here, and the keep-alive schedule
+   * woken: a recovered machine can now answer an idle receipt for an
+   * overdue one.
+   */
+  const beatHeard = (
+    ws: AgentSocket,
+    machineId: string,
+    agentFrame: AgentFrame
+  ): void => {
+    for (const claim of agentFrame.sessionAddresses) {
+      recordSessionAddress(ws, machineId, claim);
+    }
+    db.touchAgent(machineId);
+    fleetSyncs.heartbeat(machineId);
+    const { activity, activityReadable } = agentFrame.heartbeat;
+    if (activityReadable !== undefined) {
+      notifications.readable(machineId, activityReadable);
+    }
+    if (activity) {
+      notifications.machine(machineId, activity);
+    }
+    detach(keepAliveScheduler.wake(), "keepalive wake");
+  };
+
+  /**
+   * The beat is the truth (contract C4): the machine's rows reconciled with
+   * what it carries, then the hub's column made to agree with it. Payload
+   * fields outside the declared heartbeat (old listing reports among them)
+   * are ignored; fresh reads and stored row intent alone drive lifetime.
+   * Once a beat: a fresh custody's reconcile does all a cached one would,
+   * and each reads every row the machine has.
+   *
+   * Every 15s the machine says what it is carrying: listed ids become
+   * `running`, and rows claiming a process the machine neither lists nor
+   * holds in custody (the newest custody it reported) settle, `sleeping`
+   * when there is a conversation to resume, `error` when there is not.
+   *
+   * Deliberately no respawn from this path. A heartbeat is a report, and
+   * answering a report by starting processes turns the fleet's
+   * slowest-moving surface into its most destructive one: the daemon would
+   * be told to relaunch a session every 15 seconds for as long as it
+   * disagreed with the hub. Recovery is register's job, where it happens
+   * once, bounded, on an event that means "the machine just came back".
+   *
+   * A row whose launch is on its way is the machine's to settle: it is
+   * starting, whatever the beat lists, until that launch settles
+   * ({@link launches}). Filed asleep instead, it was owed its sends again
+   * and woken by each one, every launch minting over the last (2026-10-10).
+   */
+  const beatReconciled = (machineId: string, agentFrame: AgentFrame) => {
+    if (agentFrame.heartbeat.custody === undefined) {
+      lifecycle.reconcile(machineId);
+    } else {
+      const { custody } = agentFrame;
+      keepCustody(machineId, custody);
+      lifecycle.reconcile(machineId, {
+        custody,
+        attached: agentFrame.instances,
+      });
+      settleLaunchesOn(
+        machineId,
+        agentFrame.instances,
+        agentFrame.custody,
+        HEARTBEAT_SETTLE_GRACE_MS
+      );
+    }
+    return db.reconcileHeartbeat(
+      machineId,
+      agentFrame.instances,
+      [
+        ...heldProcesses(machineCustody.get(machineId)),
+        ...launchingOn(machineId),
+      ],
+      HEARTBEAT_SETTLE_GRACE_MS
+    );
+  };
+
+  /**
+   * What a beat settled, listed and promoted, each taken up in that order,
+   * and the custody the machine did not answer for asked again.
+   */
+  const beatTakenUp = (
+    machineId: string,
+    agentFrame: AgentFrame,
+    beat: ReturnType<typeof beatReconciled>
+  ): void => {
+    for (const row of beat.settled) {
+      // Its parked questions cannot be answered by a process that is
+      // gone. What it was sent and never read goes to its next
+      // process: on its conversation, or fresh when it never began
+      // one (core `relaunchOf`).
+      losePending(row.id, relaunchOf(row).kind !== "refused");
+      escalateRoutedAsks(row.id);
+      // Settled at rest: what was handed back and waited for a
+      // process wakes it, as a session put to sleep is woken.
+      if (processEvent(row.id)) {
+        releaseOwed({ instanceId: row.id });
+      }
+    }
+    // A session its machine lists attached has a process to take
+    // what was handed back meanwhile.
+    for (const id of agentFrame.instances) {
+      if (waitingForProcess.has(id) && processEvent(id)) {
+        releaseOwed({ instanceId: id });
+      }
+    }
+    // A restored process up before it said a word (Claude's CLI
+    // speaks its `init` only once it has input) is handed back the
+    // turn a restart cut on the beat that lists it.
+    for (const id of beat.promoted) {
+      resumeCutTurn(id);
+    }
+    // An outlived session whose sends could not be decided because
+    // the machine did not answer the read is asked again.
+    for (const [instanceId, held] of inCustody) {
+      if (held.machineId === machineId) {
+        decideCustody(instanceId);
+      }
+    }
+  };
+
+  /**
+   * The update state and the damaged records a beat carries, kept: each
+   * change is board news on its own, so it joins the session reconciliation
+   * in deciding to republish. A moved update state flushes the starts owed
+   * to the machine.
+   */
+  const beatStates = (machineId: string, agentFrame: AgentFrame) => {
+    const { binaryUpdate: beaten } = agentFrame;
+    const updated =
+      beaten !== undefined &&
+      !sameBinaryUpdate(binaryUpdateStates.get(machineId), beaten);
+    if (beaten) {
+      binaryUpdateStates.set(machineId, beaten);
+      restarts.note(beaten);
+    }
+    // The machine's damaged records: the rows they belong to say so
+    // from the next publish, and stop saying it once the machine's
+    // list drops them (the workspace archived, the session ended).
+    const { damagedRecords: damaged } = agentFrame;
+    const damageMoved =
+      damaged !== undefined && damagedRecords.heard(machineId, damaged);
+    if (updated) {
+      flushOwedStarts(machineId);
+    }
+    return updated || damageMoved;
+  };
+
+  /**
+   * The harnesses a beat reports, filed. A report with no word (Claude's,
+   * its dirs unanswered) is filed with the last word kept of that harness;
+   * with none kept, it is not filed, and the harness reads as not reported
+   * yet. One whose machine refuses to run it (its Claude Code too old: no
+   * dir was asked) is filed all the same, its word `unauthenticated` (no
+   * account can run on it; the machine's own word stays): the refusal is the
+   * report, and the dashboard puts it, with its fix, where Claude would
+   * start.
+   */
+  const harnessesReported = (
+    machineId: string,
+    reported: NonNullable<AgentFrame["harnesses"]>
+  ): void => {
+    const filed = reported.flatMap((report): HarnessReport[] => {
+      const auth =
+        report.auth ??
+        harnessReportOf(machineId, report.harness)?.auth ??
+        (report.refused ? "unauthenticated" : undefined);
+      return auth
+        ? [
+            received(
+              HarnessReportSchema,
+              { ...report, auth },
+              "a machine's report beat (a harness's report)"
+            ),
+          ]
+        : [];
+    });
+    db.mergeAgentHarnesses(machineId, filed);
+    capabilityReports.delete(machineId);
+    const claudeReport = reported.find(
+      (report) => traitsOf(report.harness).accountDir
+    );
+    // The machine's word on Claude moves with its Claude report,
+    // not only at its register: a keychain unlocked from the
+    // dashboard clears the machine's row (its Unlock offer) now.
+    // A report whose dirs did not answer carries no word, and the
+    // row keeps the last one.
+    const claudeWord = claudeReport?.auth;
+    if (
+      claudeWord &&
+      AUTH_STATES.includes(claudeWord) &&
+      db.setAgentAuth(machineId, claudeWord)
+    ) {
+      publishInstances(machineId);
+    }
+    // Where each Claude account is signed in on this machine, as
+    // its Claude Code config dirs say; the dirs it gave no answer
+    // for stay as they were.
+    const claudeAccounts = claudeReport?.accounts;
+    if (claudeAccounts) {
+      syncAccounts(machineId, "claude", {
+        reports: claudeAccounts,
+        unread: claudeReport?.unreadAccounts ?? [],
+      });
+    }
+  };
+
+  /**
+   * The tools a beat reports, merged, with what the machine is owed
+   * installed; and what the machine has installed, on its own beat once its
+   * probe has asked every tool for its version. A platform other than the
+   * one its register's `os` named (core `machinePlatform`) moves which
+   * platform-scoped servers it runs: what moved goes.
+   */
+  const toolsReported = (
+    ws: AgentSocket,
+    machineId: string,
+    agentFrame: AgentFrame
+  ): void => {
+    const tools = agentFrame.tools.map(keptToolStatus);
+    if (tools.length > 0) {
+      db.mergeAgentTools(machineId, tools);
+      autoInstall(machineId, ws);
+    }
+    const capabilities = keptCapabilities(agentFrame.machineCapabilities);
+    if (!capabilities) {
+      return;
+    }
+    const before = db.listAgents().find((row) => row.machineId === machineId);
+    db.setAgentCapabilities(machineId, capabilities);
+    publishInstances(machineId);
+    if (before && machinePlatform(before) !== capabilities.platform) {
+      fleetSyncs.changed(`its platform is ${capabilities.platform}`, {
+        machineId,
+      });
+    }
+  };
+
+  /**
+   * The accounts a beat reports. What the machine's own pi and OpenCode
+   * stores hold is moved into accounts on each connection and whenever they
+   * change under it (a login made there with `opencode auth login`); a
+   * lender back lends what its borrowers could not get while it was away;
+   * then every other provider's accounts on this machine, as their stores
+   * there say, and the providers it knows.
+   */
+  const accountsReported = (machineId: string, agentFrame: AgentFrame) => {
+    const { homeStores } = agentFrame.heartbeat;
+    if (homeStores !== undefined && homeStamps.get(machineId) !== homeStores) {
+      homeStamps.set(machineId, homeStores);
+      adoptHomeCredentials(machineId).catch(console.error);
+    }
+    lendToWaiting(machineId);
+    const { providerAccounts, providers } = agentFrame.heartbeat;
+    if (providerAccounts) {
+      syncAccounts(machineId, "providers", {
+        reports: providerAccounts,
+        unread: [],
+      });
+    }
+    if (providers) {
+      machineProviders.set(machineId, {
+        ...machineProviders.get(machineId),
+        ...providers,
+      });
+    }
+  };
+
+  /**
+   * The stored sessions a beat dates: when the conversations a harness's
+   * server lists last moved, read after the register so the register never
+   * waits on that server's start, join the machine's catalog. How many it
+   * dated.
+   */
+  const beatDated = (machineId: string, agentFrame: AgentFrame): number => {
+    const { resumableAt: served } = agentFrame;
+    if (served) {
+      const kept = keptOn.get(machineId) ?? new Set();
+      for (const key of Object.keys(served)) {
+        kept.add(key);
+      }
+      keptOn.set(machineId, kept);
+    }
+    return db.dateStoredSessions(machineId, agentFrame.instances, served, () =>
+      publishInstances(machineId)
+    );
+  };
+
+  /**
+   * A machine's beat, its steps in this order: heard ({@link beatHeard}),
+   * reconciled ({@link beatReconciled}) and taken up ({@link beatTakenUp}),
+   * its states kept ({@link beatStates}), then what the machine can do,
+   * each part on a beat of its own, sent the moment the daemon reads it (a
+   * harness's report, its tools, its providers), so a part that is slow
+   * never holds another back: Claude's sign-ins land when Claude's report is
+   * read. It used to ride the register, which made the register wait on
+   * those probes, and the register is what puts a machine back in the
+   * registry. So everything that reads a machine's harnesses or tools runs
+   * here, off the part it reads. Then its stored sessions dated, one
+   * publish when anything moved, and its acknowledgement.
+   */
+  const heartbeatFromMachine: AgentVerb = (ws, message, agentFrame) => {
+    const { machineId } = message;
+    beatHeard(ws, machineId, agentFrame);
+    const beat = beatReconciled(machineId, agentFrame);
+    beatTakenUp(machineId, agentFrame, beat);
+    const moved = beatStates(machineId, agentFrame);
+    const { harnesses: reported } = agentFrame;
+    if (reported) {
+      harnessesReported(machineId, reported);
+    }
+    toolsReported(ws, machineId, agentFrame);
+    accountsReported(machineId, agentFrame);
+    const dated = beatDated(machineId, agentFrame);
+    if (
+      dated > 0 ||
+      reported ||
+      moved ||
+      beat.promoted.length > 0 ||
+      beat.settled.length > 0
+    ) {
+      publishInstances(machineId);
+    }
+    const beatIds = agentFrame.instances;
+    const tailnetServing = tailnetHttps.serving();
+    sendFrame(ws, {
+      ...ack(message),
+      payload: {
+        ok: true,
+        // What this hub took of each session: the agent lets go
+        // of what it kept to send again.
+        delivered: streams.deliveredFor(beatIds),
+        keepAwake: keptWarm(machineId, beatIds),
+        // Each keeps its boundary up there, whatever else holds it.
+        liveWorkspaces: db.liveWorkspacesOn(machineId),
+        sessionLimits: db.sessionLimits(),
+        // Its loopback carries over https while this hub serves it.
+        ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
+        // Its desktop is read only once the person said yes to it.
+        reportActivity: notifications.reports(machineId),
+      } satisfies HeartbeatAckPayload,
+    });
+  };
+
+  /**
+   * The per-machine scanner's usage report (USAGE-SPEC.md §6.4): each
+   * metered account's windows as the machine just read them, the buckets
+   * and the OpenCode Go reading stored, then the small frame of limits and
+   * the fleet's spend pushed, which moves exactly here: the dashboard pulls
+   * the heavy aggregates over REST. Claude's limits are its accounts',
+   * which its sessions report.
+   */
+  const usageFromMachine: AgentVerb = (_ws, message, agentFrame) => {
+    const { buckets, openCodeGo, accounts } = agentFrame.usage;
+    for (const reading of accounts ?? []) {
+      noteProviderReading(db, message.machineId, reading);
+    }
+    if (buckets && buckets.length > 0) {
+      db.putUsageBuckets(message.machineId, buckets);
+      // Spend moved: every capped project's state with it.
+      caps.recheck();
+    }
+    if (openCodeGo !== undefined) {
+      db.putOpenCodeGoLimits(
+        message.machineId,
+        openCodeGo &&
+          received(
+            OpenCodeGoLimitsSchema,
+            openCodeGo,
+            "a machine's usage report (OpenCode Go)"
+          )
+      );
+    }
+    publishUsage(message.machineId);
+  };
+
+  /**
+   * A launch starting on its machine: what it runs on, minted now. A grant
+   * that throws is answered with why: the frame's own failure is no answer
+   * to the ask, whose machine would wait out its 90 s and fail the start
+   * saying only that nothing came.
+   */
+  const launchFromMachine: AgentVerb = (ws, message, agentFrame) => {
+    let grant: LaunchGrant;
+    try {
+      grant = grantLaunch(
+        message.machineId,
+        message.instanceId,
+        agentFrame.launchAsk
+      );
+    } catch (error) {
+      grant = {
+        refusal: `The hub could not grant this launch: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+    if ("refusal" in grant) {
+      console.warn(
+        `[hub] launch of ${message.instanceId} refused at its start: ${grant.refusal}`
+      );
+    }
+    sendFrame(ws, {
+      verb: "launch",
+      machineId: message.machineId,
+      instanceId: message.instanceId,
+      requestId: message.requestId,
+      payload: grant,
+    } satisfies Envelope<LaunchGrant>);
+  };
+
+  /**
+   * Each verb a machine's socket takes, and its handler; a verb a dashboard
+   * sends is refused here as one no machine sends. Every verb has its
+   * entry: a new one does not compile until it is handled here.
+   */
+  const agentVerbs: Record<Verb, AgentVerb> = {
+    register: registerFromMachine,
+    heartbeat: heartbeatFromMachine,
+    usage: usageFromMachine,
+    launch: launchFromMachine,
+    frames: (ws, message, agentFrame) =>
+      runFrameStages(frameStages, {
+        ws,
+        message,
+        agentFrame,
+        hubReply: false,
+        ownedSession: undefined,
+        internal: false,
+      }),
+    // A dashboard's verbs on a machine's socket.
+    admission: refuseAgentVerb,
+    control: refuseAgentVerb,
+    fs: refuseAgentVerb,
+    send: refuseAgentVerb,
+    spawn: refuseAgentVerb,
+    stop: refuseAgentVerb,
+  };
+
+  /**
+   * EVERY MESSAGE ON A MACHINE'S SOCKET, in this order: one that is no
+   * envelope is refused; its payload is decoded once, for every step after;
+   * a connection that does not speak for its machine stops it
+   * ({@link speaksForMachine}); word from the machine is noted
+   * (machine-contact.ts; its beat also says whether sessions run there);
+   * then its verb's handler ({@link agentVerbs}), awaited, or a verb outside
+   * the union (an older or newer agent's: the wire's `verb` is checked only
+   * to be a string, `envelopeFault`) refused. What any of it throws meets
+   * the socket's one error policy ({@link agentFrameFailed}).
+   */
+  const agentMessage = async (
+    ws: AgentSocket,
+    message: unknown
+  ): Promise<void> => {
+    if (!isEnvelope(message)) {
+      const fault = envelopeFault(message);
+      console.warn(`[hub] agent ${fault}`, message);
+      sendFrame(ws, refusalFrame(message, fault));
+      return;
+    }
+    const agentFrame = decodeAgentFrame(message.payload);
+    if (!speaksForMachine(ws, message)) {
+      return;
+    }
+    doing(`${message.verb} from machine ${message.machineId}`);
+    contact.heard(
+      message.machineId,
+      message.verb === "heartbeat" ? agentFrame.instances.length > 0 : undefined
+    );
+    const handle = Object.hasOwn(agentVerbs, message.verb)
+      ? agentVerbs[message.verb]
+      : refuseAgentVerb;
+    await handle(ws, message, agentFrame);
+  };
+
   return Object.assign(
     // Every body, query and params schema closed (Elysia's
     // `nonAdditionalProperties`): a field a route doesn't take is refused,
@@ -12242,472 +12807,7 @@ export const createServer = (
         ping(ws) {
           wordFrom(ws);
         },
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
-        message: guardedAgentMessage(async (ws, message) => {
-          if (!isEnvelope(message)) {
-            const fault = envelopeFault(message);
-            console.warn(`[hub] agent ${fault}`, message);
-            sendFrame(ws, refusalFrame(message, fault));
-            return;
-          }
-          const agentFrame = decodeAgentFrame(message.payload);
-          // Only the machine's registered connection speaks for it: a
-          // superseded, unregistered or unproven one is not acted on, and is
-          // told so. A connection speaks for the one machine it registered
-          // as, never another.
-          // A connection held for its machine's admission was told it waits
-          // (`holdWaiting`); what it sent before it heard that is not acted
-          // on, and not refused either: it is no machine's yet.
-          if (
-            message.verb !== "register" &&
-            waitingSockets.get(ws.id) === message.machineId
-          ) {
-            return;
-          }
-          if (
-            message.verb !== "register" &&
-            (socketMachines.get(ws.id) !== message.machineId ||
-              registry.agent(message.machineId)?.id !== ws.id)
-          ) {
-            const fault = `${message.verb} refused: this connection is not machine ${message.machineId}'s registered one; register first`;
-            console.warn(`[hub] ${fault}`);
-            recordHubEvent({
-              kind: "frame-refused",
-              machineId: message.machineId,
-              verb: message.verb,
-            });
-            sendFrame(ws, refusalFrame(message, fault));
-            return;
-          }
-
-          doing(`${message.verb} from machine ${message.machineId}`);
-          // Word from the machine (machine-contact.ts); its beat also says
-          // whether sessions run there.
-          contact.heard(
-            message.machineId,
-            message.verb === "heartbeat"
-              ? agentFrame.instances.length > 0
-              : undefined
-          );
-          const refuseVerb = () => {
-            const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
-            console.warn(`[hub] ${fault}, from ${message.machineId}`);
-            sendFrame(ws, refusalFrame(message, fault));
-          };
-          switch (message.verb) {
-            case "register": {
-              // A machine that re-joins under a new id takes its rows, its
-              // key among them, before it proves itself (`takeFormerId`).
-              takeFormerId(ws, message);
-              // Its key's proof first: an unproven register never evicts a
-              // machine's connection, nor hears anything meant for it.
-              if (!registerProven(ws, message)) {
-                break;
-              }
-              await runMachineReturn(machineReturnSteps, {
-                ws,
-                message,
-                agentFrame,
-                settled: [],
-                custody: agentFrame.custody,
-                heldIds: new Set(),
-                heldOpencode: false,
-                outlived: () => false,
-                returningRemoved: new Set(),
-                cutoff: 0,
-                heldRows: new Set(),
-                revivable: [],
-                toEnd: [],
-              });
-              break;
-            }
-            case "heartbeat": {
-              for (const claim of agentFrame.sessionAddresses) {
-                recordSessionAddress(ws, message.machineId, claim);
-              }
-              db.touchAgent(message.machineId);
-              // A delta it did not acknowledge goes again (fleet-sync.ts).
-              fleetSyncs.heartbeat(message.machineId);
-              // The machine's desktop, toward whether the person is here.
-              const { activity, activityReadable } = agentFrame.heartbeat;
-              if (activityReadable !== undefined) {
-                notifications.readable(message.machineId, activityReadable);
-              }
-              if (activity) {
-                notifications.machine(message.machineId, activity);
-              }
-              // A recovered machine can now answer an idle receipt for an overdue schedule.
-              detach(keepAliveScheduler.wake(), "keepalive wake");
-              // Payload fields outside the declared heartbeat (including old listing reports)
-              // are ignored; fresh reads and stored row intent alone drive lifetime.
-              // Once a beat: a fresh custody's reconcile does all a cached
-              // one would, and each reads every row the machine has.
-              if (agentFrame.heartbeat.custody === undefined) {
-                lifecycle.reconcile(message.machineId);
-              } else {
-                const { custody } = agentFrame;
-                keepCustody(message.machineId, custody);
-                lifecycle.reconcile(message.machineId, {
-                  custody,
-                  attached: agentFrame.instances,
-                });
-              }
-              // The beat is the truth (contract C4). Every 15s the machine says
-              // what it is carrying, and the hub's column is made to agree with
-              // it: listed ids become `running`, and rows claiming a process the
-              // machine neither lists nor holds in custody (the newest custody
-              // it reported) settle — `sleeping` when there is a conversation
-              // to resume, `error` when there is not.
-              //
-              // Deliberately no respawn from this path. A heartbeat is a report,
-              // and answering a report by starting processes turns the fleet's
-              // slowest-moving surface into its most destructive one: the daemon
-              // would be told to relaunch a session every 15 seconds for as long
-              // as it disagreed with the hub. Recovery is register's job, where
-              // it happens once, bounded, on an event that means "the machine
-              // just came back".
-              //
-              // A row whose launch is on its way is the machine's to settle:
-              // it is starting, whatever the beat lists, until that launch
-              // settles ({@link launches}). Filed asleep instead, it was owed
-              // its sends again and woken by each one, every launch minting
-              // over the last (2026-10-10).
-              if (agentFrame.heartbeat.custody !== undefined) {
-                settleLaunchesOn(
-                  message.machineId,
-                  agentFrame.instances,
-                  agentFrame.custody,
-                  HEARTBEAT_SETTLE_GRACE_MS
-                );
-              }
-              const beat = db.reconcileHeartbeat(
-                message.machineId,
-                agentFrame.instances,
-                [
-                  ...heldProcesses(machineCustody.get(message.machineId)),
-                  ...launchingOn(message.machineId),
-                ],
-                HEARTBEAT_SETTLE_GRACE_MS
-              );
-              for (const row of beat.settled) {
-                // Its parked questions cannot be answered by a process that is
-                // gone. What it was sent and never read goes to its next
-                // process: on its conversation, or fresh when it never began
-                // one (core `relaunchOf`).
-                losePending(row.id, relaunchOf(row).kind !== "refused");
-                escalateRoutedAsks(row.id);
-                // Settled at rest: what was handed back and waited for a
-                // process wakes it, as a session put to sleep is woken.
-                if (processEvent(row.id)) {
-                  releaseOwed({ instanceId: row.id });
-                }
-              }
-              // A session its machine lists attached has a process to take
-              // what was handed back meanwhile.
-              for (const id of agentFrame.instances) {
-                if (waitingForProcess.has(id) && processEvent(id)) {
-                  releaseOwed({ instanceId: id });
-                }
-              }
-              // A restored process up before it said a word (Claude's CLI
-              // speaks its `init` only once it has input) is handed back the
-              // turn a restart cut on the beat that lists it.
-              for (const id of beat.promoted) {
-                resumeCutTurn(id);
-              }
-              // A process the operator stopped that the machine still carries:
-              // one the stop never reached (the agent was restarting), taken
-              // back into custody when its agent came up again. The row keeps
-              // the decision; this ends the process behind it. Not a respawn,
-              // and sent once per connection, so no beat repeats it.
-              const { instances: beatIds } = agentFrame;
-              // An outlived session whose sends could not be decided because
-              // the machine did not answer the read is asked again.
-              for (const [instanceId, held] of inCustody) {
-                if (held.machineId === message.machineId) {
-                  decideCustody(instanceId);
-                }
-              }
-              // The update state rides the beat. A change in it is board news on
-              // its own, so it joins the session reconciliation in deciding to
-              // republish.
-              const { binaryUpdate: beaten } = agentFrame;
-              const moved =
-                beaten !== undefined &&
-                !sameBinaryUpdate(
-                  binaryUpdateStates.get(message.machineId),
-                  beaten
-                );
-              if (beaten) {
-                binaryUpdateStates.set(message.machineId, beaten);
-                restarts.note(beaten);
-              }
-              // The machine's damaged records: the rows they belong to say so
-              // from the next publish, and stop saying it once the machine's
-              // list drops them (the workspace archived, the session ended).
-              const { damagedRecords: damaged } = agentFrame;
-              const damageMoved =
-                damaged !== undefined &&
-                damagedRecords.heard(message.machineId, damaged);
-              if (moved) {
-                flushOwedStarts(message.machineId);
-              }
-              // What the machine can do: each part on a beat of its own, sent
-              // the moment the daemon reads it (a harness's report, its tools,
-              // its providers), so a part that is slow never holds another
-              // back: Claude's sign-ins land when Claude's report is read. It
-              // used to ride the register, which made the register wait on
-              // those probes, and the register is what puts a machine back in
-              // the registry. So everything that reads a machine's harnesses
-              // or tools runs here, off the part it reads.
-              const { harnesses: reported } = agentFrame;
-              if (reported) {
-                // A report with no word (Claude's, its dirs unanswered) is
-                // filed with the last word kept of that harness; with none
-                // kept, it is not filed, and the harness reads as not
-                // reported yet. One whose machine refuses to run it (its
-                // Claude Code too old: no dir was asked) is filed all the
-                // same, its word `unauthenticated` (no account can run on
-                // it; the machine's own word stays): the refusal is the report, and
-                // the dashboard puts it, with its fix, where Claude would
-                // start.
-                const filed = reported.flatMap((report): HarnessReport[] => {
-                  const auth =
-                    report.auth ??
-                    harnessReportOf(message.machineId, report.harness)?.auth ??
-                    (report.refused ? "unauthenticated" : undefined);
-                  return auth
-                    ? [
-                        received(
-                          HarnessReportSchema,
-                          { ...report, auth },
-                          "a machine's report beat (a harness's report)"
-                        ),
-                      ]
-                    : [];
-                });
-                db.mergeAgentHarnesses(message.machineId, filed);
-                capabilityReports.delete(message.machineId);
-                const claudeReport = reported.find(
-                  (report) => traitsOf(report.harness).accountDir
-                );
-                // The machine's word on Claude moves with its Claude report,
-                // not only at its register: a keychain unlocked from the
-                // dashboard clears the machine's row (its Unlock offer) now.
-                // A report whose dirs did not answer carries no word, and the
-                // row keeps the last one.
-                const claudeWord = claudeReport?.auth;
-                if (
-                  claudeWord &&
-                  AUTH_STATES.includes(claudeWord) &&
-                  db.setAgentAuth(message.machineId, claudeWord)
-                ) {
-                  publishInstances(message.machineId);
-                }
-                // Where each Claude account is signed in on this machine, as
-                // its Claude Code config dirs say; the dirs it gave no answer
-                // for stay as they were.
-                const claudeAccounts = claudeReport?.accounts;
-                if (claudeAccounts) {
-                  syncAccounts(message.machineId, "claude", {
-                    reports: claudeAccounts,
-                    unread: claudeReport?.unreadAccounts ?? [],
-                  });
-                }
-              }
-              const tools = agentFrame.tools.map(keptToolStatus);
-              if (tools.length > 0) {
-                db.mergeAgentTools(message.machineId, tools);
-                autoInstall(message.machineId, ws);
-              }
-              // What the machine has installed, on its own beat once its probe
-              // has asked every tool for its version.
-              const capabilities = keptCapabilities(
-                agentFrame.machineCapabilities
-              );
-              if (capabilities) {
-                const before = db
-                  .listAgents()
-                  .find((row) => row.machineId === message.machineId);
-                db.setAgentCapabilities(message.machineId, capabilities);
-                publishInstances(message.machineId);
-                // A platform other than the one its register's `os` named
-                // (core `machinePlatform`) moves which platform-scoped
-                // servers it runs: what moved goes.
-                if (
-                  before &&
-                  machinePlatform(before) !== capabilities.platform
-                ) {
-                  fleetSyncs.changed(
-                    `its platform is ${capabilities.platform}`,
-                    {
-                      machineId: message.machineId,
-                    }
-                  );
-                }
-              }
-              // What the machine's own pi and OpenCode stores hold, moved into
-              // accounts on each connection and whenever they change under it
-              // (a login made there with `opencode auth login`).
-              const { homeStores } = agentFrame.heartbeat;
-              if (
-                homeStores !== undefined &&
-                homeStamps.get(message.machineId) !== homeStores
-              ) {
-                homeStamps.set(message.machineId, homeStores);
-                adoptHomeCredentials(message.machineId).catch(console.error);
-              }
-              // A lender back: what its borrowers could not get while it was away.
-              lendToWaiting(message.machineId);
-              // Every other provider's accounts on this machine, as their
-              // stores there say, and the providers it knows.
-              const { providerAccounts, providers } = agentFrame.heartbeat;
-              if (providerAccounts) {
-                syncAccounts(message.machineId, "providers", {
-                  reports: providerAccounts,
-                  unread: [],
-                });
-              }
-              if (providers) {
-                machineProviders.set(message.machineId, {
-                  ...machineProviders.get(message.machineId),
-                  ...providers,
-                });
-              }
-              // When the conversations a harness's server lists last moved,
-              // read after the register so the register never waits on that
-              // server's start. They join the machine's catalog.
-              const { resumableAt: served } = agentFrame;
-              if (served) {
-                const kept = keptOn.get(message.machineId) ?? new Set();
-                for (const key of Object.keys(served)) {
-                  kept.add(key);
-                }
-                keptOn.set(message.machineId, kept);
-              }
-              const dated = db.dateStoredSessions(
-                message.machineId,
-                beatIds,
-                served,
-                () => publishInstances(message.machineId)
-              );
-              if (
-                dated > 0 ||
-                reported ||
-                moved ||
-                damageMoved ||
-                beat.promoted.length > 0 ||
-                beat.settled.length > 0
-              ) {
-                publishInstances(message.machineId);
-              }
-              const tailnetServing = tailnetHttps.serving();
-              sendFrame(ws, {
-                ...ack(message),
-                payload: {
-                  ok: true,
-                  // What this hub took of each session: the agent lets go
-                  // of what it kept to send again.
-                  delivered: streams.deliveredFor(beatIds),
-                  keepAwake: keptWarm(message.machineId, beatIds),
-                  // Each keeps its boundary up there, whatever else holds it.
-                  liveWorkspaces: db.liveWorkspacesOn(message.machineId),
-                  sessionLimits: db.sessionLimits(),
-                  // Its loopback carries over https while this hub serves it.
-                  ...(tailnetServing ? { tailnetHttps: tailnetServing } : {}),
-                  // Its desktop is read only once the person said yes to it.
-                  reportActivity: notifications.reports(message.machineId),
-                } satisfies HeartbeatAckPayload,
-              });
-              break;
-            }
-            // The per-machine scanner's usage report (USAGE-SPEC.md §6.4): store
-            // the buckets and the OpenCode Go reading, then push the small
-            // frame of limits and the fleet's spend, which moves exactly here
-            // — the dashboard pulls the heavy aggregates over REST. Claude's
-            // limits are its accounts', which its sessions report.
-            case "usage": {
-              const { buckets, openCodeGo, accounts } = agentFrame.usage;
-              // Each metered account's windows as the machine just read them.
-              for (const reading of accounts ?? []) {
-                noteProviderReading(db, message.machineId, reading);
-              }
-              if (buckets && buckets.length > 0) {
-                db.putUsageBuckets(message.machineId, buckets);
-                // Spend moved: every capped project's state with it.
-                caps.recheck();
-              }
-              if (openCodeGo !== undefined) {
-                db.putOpenCodeGoLimits(
-                  message.machineId,
-                  openCodeGo &&
-                    received(
-                      OpenCodeGoLimitsSchema,
-                      openCodeGo,
-                      "a machine's usage report (OpenCode Go)"
-                    )
-                );
-              }
-              publishUsage(message.machineId);
-              break;
-            }
-            // A launch starting on its machine: what it runs on, minted now.
-            // A grant that throws is answered with why: the frame's own
-            // failure is no answer to the ask, whose machine would wait out
-            // its 90 s and fail the start saying only that nothing came.
-            case "launch": {
-              let grant: LaunchGrant;
-              try {
-                grant = grantLaunch(
-                  message.machineId,
-                  message.instanceId,
-                  agentFrame.launchAsk
-                );
-              } catch (error) {
-                grant = {
-                  refusal: `The hub could not grant this launch: ${error instanceof Error ? error.message : String(error)}`,
-                };
-              }
-              if ("refusal" in grant) {
-                console.warn(
-                  `[hub] launch of ${message.instanceId} refused at its start: ${grant.refusal}`
-                );
-              }
-              sendFrame(ws, {
-                verb: "launch",
-                machineId: message.machineId,
-                instanceId: message.instanceId,
-                requestId: message.requestId,
-                payload: grant,
-              } satisfies Envelope<LaunchGrant>);
-              break;
-            }
-            case "frames": {
-              runFrameStages(frameStages, {
-                ws,
-                message,
-                agentFrame,
-                hubReply: false,
-                ownedSession: undefined,
-                internal: false,
-              });
-              break;
-            }
-            // A dashboard's verbs on a machine's socket.
-            case "admission":
-            case "control":
-            case "fs":
-            case "send":
-            case "spawn":
-            case "stop":
-              refuseVerb();
-              break;
-            // A verb outside the union: an older or newer agent's. The wire's
-            // `verb` is checked only to be a string (`envelopeFault`).
-            default:
-              refuseVerb();
-          }
-        }),
+        message: guardedAgentMessage(agentMessage),
         close(ws) {
           closeLine(ws);
           machineNonces.delete(ws.id);
