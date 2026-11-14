@@ -342,14 +342,13 @@ export const storedProjectRoot = (project: { id: string }) =>
 /**
  * The bytes free on the disk a project's folder is on (core free-bytes.ts,
  * the one reading of free space), read at the nearest folder that exists
- * since the project's own may not be made yet.
+ * since the project's own may not be made yet. Its id was checked when the
+ * project was made ({@link storedProjectRoot}).
  */
-export const folderFreeBytes = async (projectId: string): Promise<number> => {
-  const root = projectRoot(projectId);
-  if (root instanceof ElysiaStatus) {
-    throw new Error(root.response.detail);
-  }
-  let at = root;
+export const folderFreeBytes = async (project: {
+  id: string;
+}): Promise<number> => {
+  let at = storedProjectRoot(project);
   while (!(await stat(at).catch(() => undefined)) && dirname(at) !== at) {
     at = dirname(at);
   }

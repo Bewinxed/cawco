@@ -57,6 +57,9 @@
     // A problem's status is never a plain `number`: Eden reads it as a
     // possible success (ProblemStatus, packages/hub/src/refusal.ts).
     "./scripts/lint/problem-status-number.grit",
+    // A problem a function could return is returned, never thrown as its
+    // detail (packages/hub/src/refusal.ts).
+    "./scripts/lint/problem-detail-thrown.grit",
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",

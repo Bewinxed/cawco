@@ -1331,7 +1331,9 @@ export const createLandingRun = ({
     }
     const scratch = item.projectId ? await scratchOutputs(workspace, item) : [];
     const total = outputsBytes(result.stdout, scratch);
-    const free = item.projectId ? await folderFreeBytes(item.projectId) : total;
+    const free = item.projectId
+      ? await folderFreeBytes({ id: item.projectId })
+      : total;
     const problems = [
       ...outputsSaid(result.stdout),
       ...scratchOutputsSaid(scratch, declaredFilesOf(result.stdout)),

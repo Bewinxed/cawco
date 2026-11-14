@@ -1,0 +1,16 @@
+language js
+
+// A problem a function could return is returned, never thrown as its words:
+// `throw new Error(x.response.detail)` drops its status and code, and the catch
+// that words it (a tool call's, Elysia's 500) answers something else. The
+// function answers the problem (Elysia's `problem()` at a `ProblemStatus`,
+// packages/hub/src/refusal.ts) and its caller passes it on. Absolute: none.
+`throw new Error($args)` as $hit where {
+  $args <: contains or {
+    `$_.response.detail`,
+    `$_.response?.detail`,
+    `$_?.response.detail`,
+    `$_?.response?.detail`
+  },
+  register_diagnostic(span=$hit, message="Never throw a problem's detail: return the problem (Elysia's `problem()`, packages/hub/src/refusal.ts) and let its caller pass it on, its status and code kept.")
+}
