@@ -26,6 +26,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { runtimeTree, standalone } from "./runtime";
+import { copyBeforeUpdate } from "./update-copies";
 import { hubDatabaseWords } from "./words/hub-database";
 
 /**
@@ -59,10 +60,15 @@ export const journalWhens = (): Map<string, number> => {
   return new Map(journal.entries.map(({ tag, when }) => [tag, when]));
 };
 
+/** The way out with no copy from before an update beside the database: a build's, or a checkout's. */
+const wayOut = (): string =>
+  standalone ? hubDatabaseWords.outOfBuild : hubDatabaseWords.outOfCheckout;
+
 /**
  * Why the hub does not open the database at `path`, when a newer build
  * migrated it: its applied migrations newer than this build's newest, counted,
- * the newest one's time, and the way out for a checkout or a build.
+ * the newest one's time, and the way out: the copy from before an update
+ * when the update helper left one beside it, else a checkout's or a build's.
  * `undefined` when there are none, or no database, or one no migration has run
  * on. Opened read-write and never written: a read-only open of a WAL database
  * with no `-shm` beside it is refused on macOS's SQLite (migrations-check.ts
@@ -90,16 +96,16 @@ export const newerDatabase = (path: string): string | undefined => {
       .all()
       .map((row) => Number(row.at))
       .filter((at) => at > last);
-    return newer.length > 0
-      ? hubDatabaseWords.newer(
-          path,
-          newer.length,
-          new Date(Math.max(...newer)).toISOString(),
-          standalone
-            ? hubDatabaseWords.outOfBuild
-            : hubDatabaseWords.outOfCheckout
-        )
-      : undefined;
+    if (newer.length === 0) {
+      return undefined;
+    }
+    const copy = copyBeforeUpdate(path);
+    return hubDatabaseWords.newer(
+      path,
+      newer.length,
+      new Date(Math.max(...newer)).toISOString(),
+      copy ? hubDatabaseWords.outOfCopy(copy) : wayOut()
+    );
   } finally {
     db.close();
   }

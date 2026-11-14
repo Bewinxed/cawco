@@ -858,7 +858,7 @@ check_hub_dashboard_3455() {
 install_hub() {
   local version=$1 channel=${2:-}
   as_user "$hubc" sh -c 'for tool in git bun node openssl; do if command -v $tool > /dev/null; then echo "$tool is already there"; exit 1; fi; done; echo pristine'
-  as_user "$hubc" env ${channel:+CAWCO_CHANNEL=$channel} sh /shared/installer.sh
+  as_user "$hubc" env ${channel:+CAWCO_CHANNEL=$channel} ${HUB_DB_PATH:+CAWCO_DB_PATH=$HUB_DB_PATH} sh /shared/installer.sh
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   # On the hub's machine 3455 is the dashboard on every address its sockets name: the network's (0.0.0.0, so the
   # machine's own address and 127.0.0.1) and [::1] where the machine has it (the loopback socket names it there
@@ -1104,6 +1104,8 @@ rolled_back() {
   # Every update of the hub copies its database, and every rollback puts it back: the database the trial left is
   # moved aside, and the rollback's words name it.
   copy_made "$BASE"
+  # The hub's database is where its unit names (HUB_DB_PATH, not the default), and that is the file the update copied.
+  ! as_user "$hubc" sh -c 'ls "$1"/cawco.db* 2> /dev/null | grep -q .' sh "$DATA" || { echo "ASSERTION FAILED: a database or copy is at the default path: $(data_files '^cawco\.db')"; return 1; }
   as_user "$hubc" test -e "$DB.migrated-0.0.1-test.10" || { echo "ASSERTION FAILED: the rollback moved no database aside"; return 1; }
   [[ "$(field $hid error)" == *"what it stored during the trial is in $DB.migrated-0.0.1-test.10"* ]] \
     || { echo "ASSERTION FAILED: the rollback's words do not name $DB.migrated-0.0.1-test.10: $(field $hid error)"; return 1; }
@@ -1180,6 +1182,14 @@ migration_rolled_back() {
   fi
   [[ $out == *"the hub is down: /tmp/newer/cawco.db was migrated by a newer build of CawCo"* ]] \
     || { echo "ASSERTION FAILED: cawco status does not say the hub is down and why: $out"; return 1; }
+  # With the update's copy from before beside it, the stop names that copy as the way back.
+  as_user "$hubc" cp "$DB.pre-$NEXT.bak" "/tmp/newer/cawco.db.pre-$NEXT.bak"
+  if out=$(hub_on /tmp/newer/cawco.db); then
+    echo "ASSERTION FAILED: the hub started on a database a newer build migrated: $out"
+    return 1
+  fi
+  [[ $out == *"The copy from before the update is /tmp/newer/cawco.db.pre-$NEXT.bak"* ]] \
+    || { echo "ASSERTION FAILED: the hub's stop does not name the copy beside the database: $out"; return 1; }
 }
 # `cawco service install` and a first install, pointed at a database a newer build migrated (the one the migration
 # check left in /tmp/newer), stop before they change anything: the units and the install's record are as they were,
@@ -1260,6 +1270,8 @@ no_room_to_copy() {
 }
 export -f db_rows data_files copy_made one_copy others_kept rolled_back hub_on plant_others confirmed_update_copies migration_rolled_back installs_stop_on_newer reshaped_rolled_back no_room_to_put_back no_room_to_copy
 rig_rollback() {
+  # The hub's database at a path of the installer's choosing, which only the hub's unit records.
+  export HUB_DB_PATH=/home/cawco/hub-db/cawco.db DB=/home/cawco/hub-db/cawco.db
   fleet base "$BASE" hub
   setup_done
   check "a build that cannot start is rolled back and the failure is recorded; the update copied the hub's database and the rollback put it back" rolled_back
