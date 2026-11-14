@@ -1481,6 +1481,25 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
 };
 
 /**
+ * The copy a probe found, kept for the looks ({@link probedCopies}).
+ * Whatever asked for the probe (a look, an install's end, a harness's
+ * version gate, the hub's `listTools`), a copy found gone or changed may be
+ * mid-move: the settle looks start ({@link settleCopies}), and tell again
+ * once two agree.
+ */
+const probedCopy = async (
+  spec: ToolSpec,
+  at: Found | undefined
+): Promise<void> => {
+  const before = probedCopies.get(spec.id);
+  const stamp = await copyStamp(at);
+  probedCopies.set(spec.id, stamp);
+  if (before !== undefined && before !== stamp) {
+    settleCopies(before === "missing" ? [] : [spec.id]);
+  }
+};
+
+/**
  * What this machine has of one tool. A binary that will not say its version is
  * still installed — presence is the question, and the version is what we can
  * add about it.
@@ -1491,7 +1510,7 @@ const probeTool = async (
   want = spec.exactVersion
 ): Promise<ToolStatus> => {
   const at = await findCopy(spec);
-  probedCopies.set(spec.id, await copyStamp(at));
+  await probedCopy(spec, at);
   if (!at) {
     sawTool(spec.id, "missing");
     return { id: spec.id, state: "missing", at: Date.now() };
@@ -1615,27 +1634,43 @@ const sameCopies = (
 ): boolean =>
   a.size === b.size && [...a].every(([id, stamp]) => b.get(id) === stamp);
 
+/** The settle looks running now, one at a time ({@link settleCopies}). */
+let settling: Promise<void> | undefined;
+/** The tools whose copy was there before the move the settle looks follow. */
+const thereBeforeMove = new Set<string>();
+
+/** Each probed copy as its last probe found it, less those an install of this agent's is putting on. */
+const probedNow = (): Map<string, string> =>
+  new Map([...probedCopies].filter(([id]) => !installing.has(id)));
+
 /**
- * Looks at each tool's copy ({@link toolBinary}, a stat; nothing is run)
- * against what its last probe found. When any moved, it is looked at again
- * every {@link COPY_SETTLE_MS} and {@link onToolsMoved} is told each time
- * two looks in a row agree on copies other than those last told (the tools
- * are probed again and the hub hears whose each copy is now), until two
- * agree with every copy that was there before still there, or
+ * THE TWO-LOOKS RULE, for every copy found gone or changed, by whichever
+ * trigger found it (the minute's {@link lookAtCopies}, or any probe,
+ * `probeTool`): the copies are looked at again every {@link COPY_SETTLE_MS},
+ * and {@link onToolsMoved} is told each time two looks in a row agree on
+ * copies other than those last told (the tools are probed again and the
+ * hub hears whose each copy is now), until two agree with every copy that
+ * was there before the move (`wasThere`) there again, or
  * {@link COPY_SETTLE_MOST_MS} has gone by, when what the last look found is
- * told. So a hand install is told within a minute and two looks of its end,
- * and a copy gone for the half minute of an install is never held gone for
- * the minute after it is back.
+ * told. One run at a time: a move found while one runs adds its copies to
+ * it. So a copy gone for the half minute of an install is never held gone
+ * for the minute after it is back, whatever probe saw it gone (host run
+ * 49045442: a probe outside the looks left OpenCode "missing" 47–49 s).
  */
-export const lookAtCopies = async (): Promise<void> => {
-  let told = new Map([...probedCopies].filter(([id]) => !installing.has(id)));
-  let last = await copiesNow();
-  if (sameCopies(last, told)) {
-    return;
+const settleCopies = (wasThere: Iterable<string>): void => {
+  for (const id of wasThere) {
+    thereBeforeMove.add(id);
   }
-  const wasThere = [...told]
-    .filter(([, stamp]) => stamp !== "missing")
-    .map(([id]) => id);
+  settling ??= settleLooks().finally(() => {
+    settling = undefined;
+    thereBeforeMove.clear();
+  });
+};
+
+/** The looks {@link settleCopies} runs. */
+const settleLooks = async (): Promise<void> => {
+  let told = probedNow();
+  let last = await copiesNow();
   const until = Date.now() + COPY_SETTLE_MOST_MS;
   while (Date.now() < until) {
     await Bun.sleep(COPY_SETTLE_MS);
@@ -1659,13 +1694,30 @@ export const lookAtCopies = async (): Promise<void> => {
       toolsMoved();
       told = look;
     }
-    if (wasThere.every((id) => look.get(id) !== "missing")) {
+    if ([...thereBeforeMove].every((id) => look.get(id) !== "missing")) {
       return;
     }
   }
   if (!sameCopies(last, told)) {
     toolsMoved();
   }
+};
+
+/**
+ * The minute's look at each tool's copy ({@link toolBinary}, a stat;
+ * nothing is run) against what its last probe found: any moved starts the
+ * settle looks ({@link settleCopies}), which this waits out. So a hand
+ * install is told within a minute and two looks of its end.
+ */
+export const lookAtCopies = async (): Promise<void> => {
+  const told = probedNow();
+  if (sameCopies(await copiesNow(), told)) {
+    return;
+  }
+  settleCopies(
+    [...told].filter(([, stamp]) => stamp !== "missing").map(([id]) => id)
+  );
+  await settling;
 };
 
 /**
@@ -1888,6 +1940,8 @@ export const signinMoved = (id: string): void => {
  * ended while the probe read is read again.
  */
 const installing = new Map<string, Promise<ToolStatus>>();
+/** The machine's installs one after another ({@link installTool}): the last one asked, settled. */
+let installTurn: Promise<void> = Promise.resolve();
 const installEnded = new Map<string, number>();
 /**
  * Each running install, by tool id: the version it puts on, when it names
@@ -2261,21 +2315,31 @@ export const installTool = async (
       at: Date.now(),
     };
   }
-  // One install of a tool at a time: a second ask while one runs (a press
-  // in the dashboard while an add brings the machine up) answers with it.
+  // One install of a tool at a time: a second ask while one runs or waits
+  // (two dashboards pressing at once, a press while an add brings the
+  // machine up, CawCo's own pass beside a press) answers with it.
   const running = installing.get(spec.id);
   if (running) {
     return await running;
   }
   // A tool CawCo is built against goes on at its one version, whatever is pinned.
   const target = spec.exactVersion ?? version;
-  const work = install(spec, target, ask).finally(() => {
-    installing.delete(spec.id);
-    installingAs.delete(spec.id);
-    installEnded.set(spec.id, Date.now());
-    toolsMoved();
-  });
+  // One install on the machine at a time, of any tool: package managers
+  // take their own locks, and the asks arrive in lanes of their own.
+  const turn = installTurn;
+  const work = turn
+    .then(() => install(spec, target, ask))
+    .finally(() => {
+      installing.delete(spec.id);
+      installingAs.delete(spec.id);
+      installEnded.set(spec.id, Date.now());
+      toolsMoved();
+    });
   installing.set(spec.id, work);
+  installTurn = work.then(
+    () => undefined,
+    () => undefined
+  );
   const to = target ?? ask.newest;
   installingAs.set(spec.id, {
     ...(to ? { to } : {}),

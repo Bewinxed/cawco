@@ -2,7 +2,7 @@
 
 import { clientAsk } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
-import { peekToolStatus } from "../machine-answers";
+import { type ControlResult, peekToolStatus } from "../machine-answers";
 import { externalizeImages } from "../media";
 import type { TranscriptPayload } from "../transcripts";
 import type { FrameAnswer, FrameRun } from "./frame-run";
@@ -38,6 +38,23 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       : undefined;
     if (install && kind === "control_result" && message.requestId) {
       ctx.pendingInstalls.delete(message.requestId);
+      // Each press that joined it is answered with this answer, under its
+      // own request id, where it waits (relay-control.ts).
+      for (const joined of install.joined ?? []) {
+        const result: ControlResult = {
+          ...(message.payload as ControlResult),
+          requestId: joined.requestId,
+        };
+        if (joined.replyAsFrame) {
+          ctx.sendFrame(joined.dashboard, {
+            ...message,
+            requestId: joined.requestId,
+            payload: result,
+          });
+        } else {
+          ctx.streams.settleCommand(joined.requestId, result);
+        }
+      }
       // A copy left older than the release it was sent to reach says
       // why on its row (agent tools.ts `install`), and is due no other
       // until a newer release (core `toolUpdateOf`).

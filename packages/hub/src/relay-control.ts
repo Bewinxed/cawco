@@ -698,6 +698,23 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // else the release to reach, so a copy its updater leaves older answers
     // why and keeps its Retry. A press is no automatic update.
     const toolId = peekControlArg(message.payload, "installTool");
+    // One install of a tool on a machine at a time: a press while one runs
+    // (another dashboard's press, Update all, CawCo's own pass) joins it and
+    // is answered with its answer, never sent as a second install.
+    const running = toolId
+      ? [...ctx.pendingInstalls.values()].find(
+          (install) =>
+            install.machineId === message.machineId && install.toolId === toolId
+        )
+      : undefined;
+    if (running && requestId) {
+      running.joined = [
+        ...(running.joined ?? []),
+        { dashboard, requestId, replyAsFrame },
+      ];
+      noteControl(message);
+      return true;
+    }
     const ask = toolId ? ctx.installAsk(toolId) : {};
     const { newest } = ask;
     const correlated = {
