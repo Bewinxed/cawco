@@ -18,12 +18,16 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { hostEnvironment } from "@cawco/core/session-env";
-import type { ToolUpdates } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { hubClient } from "./hub-client";
 import { provenFetch } from "./hub-proof";
-import { type PinMove, pinMoveWords, putOnPins } from "./tools";
+import {
+  type FleetUpdates,
+  type PinMove,
+  pinMoveWords,
+  putOnPins,
+} from "./tools";
 
 const PinRecord = z.object({
   /** The build whose pins went on. */
@@ -179,14 +183,16 @@ const UPDATES_READ_MS = 10_000;
  * What the fleet does with a copy of a tool at a version CawCo does not run
  * (core `ToolUpdates`), as this machine's hub says it now, asked as this
  * machine: what a build's pins go on by before its swap (tools.ts
- * `putOnFleetPins`). Undefined, and why in the log, when the hub could not
- * be asked or did not say: nothing goes on before the swap then, and the
+ * `putOnFleetPins`). When the hub could not be asked or did not say (a hub
+ * of a build before the choice answers 404; one restarting into its own
+ * new build, nothing), why, in words that `binary-pins` says on the line
+ * the update's log keeps: nothing goes on before the swap then, and the
  * build's agent reports what it found to a hub that decides.
  */
-export async function fleetToolUpdates(): Promise<ToolUpdates | undefined> {
+export async function fleetToolUpdates(): Promise<FleetUpdates> {
   const installation = await readInstallation();
   if (!installation) {
-    return;
+    return { unsaid: "this machine's install names no hub to ask" };
   }
   const hub = installation.hubUrl;
   try {
@@ -196,21 +202,19 @@ export async function fleetToolUpdates(): Promise<ToolUpdates | undefined> {
       ].get()
     );
     if (read.kind === "unanswered") {
-      console.error(
-        `the hub at ${hub} didn't say within ${UPDATES_READ_MS / 1000} s whether the fleet updates a copy CawCo doesn't run`
-      );
-      return;
+      return {
+        unsaid: `the hub at ${hub} didn't say within ${UPDATES_READ_MS / 1000} s whether the fleet updates one`,
+      };
     }
     if (read.value.error) {
-      console.error(
-        `the hub at ${hub} answered ${read.value.status} when asked whether the fleet updates a copy CawCo doesn't run`
-      );
-      return;
+      return {
+        unsaid: `the hub at ${hub} answered ${read.value.status} when asked whether the fleet updates one`,
+      };
     }
-    return read.value.data.updates;
+    return { updates: read.value.data.updates };
   } catch (error) {
-    console.error(
-      `the hub at ${hub} wasn't reached to ask whether the fleet updates a copy CawCo doesn't run: ${error instanceof Error ? error.message : String(error)}`
-    );
+    return {
+      unsaid: `the hub at ${hub} wasn't reached to ask whether the fleet updates one: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
 }
