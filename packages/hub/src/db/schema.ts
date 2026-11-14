@@ -148,7 +148,6 @@ import {
   ContinueRequestSchema,
   DesignFindingSchema,
   DesignProposalFileSchema,
-  GatePassSchema,
   ItemBlockSchema,
   MoveStateShape,
   OAuthClientInformationFullSchema,
@@ -1644,7 +1643,7 @@ export type WorkItemState = import("@cawco/core/work-items").WorkItemState;
  *   live; it lands once every item it delegated, queued ones included, has
  *   ended (work-items.ts `completeIfDrained`).
  * - `gating`: its landing gate runs on its tree (at finish_item, or on top
- *   of its base); each step that passed is kept ({@link GatePass}), so a
+ *   of its base); each step that passed is kept ({@link workItemGatePasses}), so a
  *   gate a restart cut runs from the step it was on.
  * - `turn`: in its turn to land, rebased again, the steps the rebase moved
  *   run again, then the push.
@@ -1757,7 +1756,7 @@ export const workItems = sqliteTable(
      * When the hub began landing it for a `finish_item` (its landing gate,
      * then the push), while that runs. Set, the item is landing: a hub that
      * starts finds it here and runs the landing again on {@link submission},
-     * each gate step that passed kept ({@link gatePasses}), so its gate goes
+     * each gate step that passed kept ({@link workItemGatePasses}), so its gate goes
      * on from the step it was on.
      */
     landingSince: timestamp("landing_since"),
@@ -1767,14 +1766,14 @@ export const workItems = sqliteTable(
      */
     landingPhase: text("landing_phase").$type<LandingPhase>(),
     /**
-     * The landing gate's steps that passed for it while it is live, by what
-     * each passed on (gate.ts `passKey`: the whole tree, or the trees
-     * of the paths a step declares), each kept as it passes: a step runs at
-     * most once on one such key, a hub restart included. Null: none yet.
+     * Its landing gate's passes as they were stored, when they were there
+     * and did not read whole as they became {@link workItemGatePasses} rows
+     * (migration 0401): not JSON, not an object of lists, or a pass that is
+     * not a command and a stage. None of it was placed: it vouches for no
+     * tree, so the gate runs each of its steps again. Cleared with the
+     * item's passes as it ends (work-items.ts `finish`).
      */
-    gatePasses: storedJson(z.record(z.string(), z.array(GatePassSchema)))(
-      "gate_passes"
-    ),
+    gatePassesUnread: text("gate_passes_unread"),
     /**
      * When its session called `finish_item` (to land, or blocked) in the
      * turn still under way: that call is the turn's last step. While set, a
@@ -2046,6 +2045,32 @@ export const workItemLandedChecks = sqliteTable(
     command: text("command").notNull(),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.command] })]
+);
+
+/**
+ * A landing gate step that passed for a live work item: its command as
+ * gate.md writes it, trimmed, on what it passed on (gate.ts `passKey`: the
+ * whole tree, or the trees of the paths the step declares), and the stage
+ * it ran in, for the line of a later run it lets skip. Kept as each step
+ * passes, read in the order kept (rowid): a step runs at most once on one
+ * key, a hub restart included. A run whose workspace moved under it lets
+ * its own rows go; the item's end drops them all (work-items.ts `finish`).
+ */
+export const workItemGatePasses = sqliteTable(
+  "work_item_gate_passes",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    passKey: text("pass_key").notNull(),
+    command: text("command").notNull(),
+    stage: text("stage").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.itemId, table.passKey, table.command, table.stage],
+    }),
+  ]
 );
 
 /** The globs a queued delegate's request owns (`owns`), one row each: what holds it back. */

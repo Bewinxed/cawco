@@ -28,6 +28,7 @@ import { logBudgetUnread } from "./budget-unread";
 import type { DbCore } from "./core";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
+import { logGatePassesUnread } from "./gate-passes-unread";
 import { logLandedUnread } from "./landed-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
@@ -125,6 +126,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every landing 0400 keeps as not read, read before it runs.
       logLandedUnread(client);
+    },
+  },
+  {
+    name: "gate-passes-unread",
+    before: "0401_gate_passes_table",
+    at: "migrator",
+    run: (client) => {
+      // Every record of gate passes 0401 keeps as not read, read before it runs.
+      logGatePassesUnread(client);
     },
   },
   {

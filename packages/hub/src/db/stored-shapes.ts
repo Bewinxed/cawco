@@ -47,7 +47,6 @@ import type {
   ContinueRequest as ContinueRequestType,
   DesignFinding as DesignFindingType,
   DesignProposalFile as DesignProposalFileType,
-  GatePass as GatePassType,
   InstallsRecord as InstallsRecordType,
   ItemBlock as ItemBlockType,
   PreparedContinuation as PreparedContinuationType,
@@ -261,14 +260,6 @@ const DesignProposalFileShape = declared(
 export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
   DesignProposalFileShape;
 export type DesignProposalFileOutput = z.output<typeof DesignProposalFileShape>;
-
-const GatePassShape = declared(
-  z.object({ command: z.string(), stage: z.string() }),
-  "GatePass",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const GatePassSchema: z.ZodType<GatePassType> = GatePassShape;
-export type GatePassOutput = z.output<typeof GatePassShape>;
 
 const InstallsRecordShape = declared(
   z.object({

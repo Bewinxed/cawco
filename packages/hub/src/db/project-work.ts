@@ -28,13 +28,14 @@ import {
   queuedWorkItemGlobs,
   queuedWorkItems,
   type WorkspaceState,
+  workItemGatePasses,
   workItemGlobs,
   workItemLandedChecks,
   workItems,
   workspaceCreates,
   workspaces,
 } from "./schema";
-import type { WorkLanding } from "./stored-types";
+import type { GatePass, WorkLanding } from "./stored-types";
 
 /** A session of the project, as its removal needs it. */
 export interface HeldSession {
@@ -154,9 +155,11 @@ export const landedWork = (
 ): boolean => item.landedSha !== null || item.landedUnread !== null;
 
 /**
- * A change to a work item: its columns, and `landed`, what a landing that
+ * A change to a work item: its columns; `landed`, what a landing that
  * pushed something put where, written to its landing's columns and its
- * gate's commands in one transaction, the record it replaces cleared.
+ * gate's commands in one transaction, the record it replaces cleared; and
+ * `gatePasses: null`, its landing gate's passes dropped with the change
+ * ({@link workItemGatePasses}, and `gatePassesUnread`).
  */
 export type WorkItemChange = Partial<
   Pick<
@@ -173,7 +176,6 @@ export type WorkItemChange = Partial<
     | "replacedBy"
     | "landingSince"
     | "landingPhase"
-    | "gatePasses"
     | "blocked"
     | "lastTurnAt"
     | "submission"
@@ -193,7 +195,23 @@ export type WorkItemChange = Partial<
     | "stoppedBy"
     | "taskResult"
   >
-> & { landed?: WorkLanding };
+> & { gatePasses?: null; landed?: WorkLanding };
+
+/** A landing's columns on its work item, the record it replaces cleared. */
+const landedColumns = (landed: WorkLanding) => ({
+  landedSha: landed.sha,
+  landedOnto: landed.onto,
+  landedAt: landed.at === undefined ? null : new Date(landed.at),
+  landedGateTree: landed.gate?.tree ?? null,
+  landedUnread: null,
+});
+
+/** A landing gate's passed commands as `work_item_landed_checks` rows, each once, in the gate's order. */
+const landedCheckRows = (itemId: string, landed: WorkLanding) =>
+  [...new Set(landed.gate?.passed ?? [])].map((command) => ({
+    itemId,
+    command,
+  }));
 
 type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 
@@ -246,10 +264,25 @@ export interface WorkRowsDb {
   readonly createWorkspace: (
     workspace: typeof workspaces.$inferInsert
   ) => WorkspaceRow;
+  /**
+   * The passes `taken` let go of, each under its key: their run's workspace
+   * moved while it ran (gate.ts `gateOnce`).
+   */
+  readonly dropGatePasses: (
+    itemId: string,
+    taken: readonly { key: string; pass: GatePass }[]
+  ) => void;
   /** Forgets a task's queued start, if it had one. */
   readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
   readonly dropQueuedWorkItem: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
+  /**
+   * A live item's landing gate passes, by what each passed on (gate.ts
+   * `passKey`), each key's in the order kept. A record that did not read as
+   * passes became rows (`gatePassesUnread`) gives none: it vouches for no
+   * tree.
+   */
+  readonly gatePasses: (itemId: string) => Map<string, GatePass[]>;
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
   readonly groupWorkItems: (
     parentInstanceId: string,
@@ -263,6 +296,8 @@ export interface WorkRowsDb {
    * tree's walk has no use for (3,134 items read whole took 200 ms a walk).
    */
   readonly itemSessionsOfParents: (parentInstanceIds: string[]) => string[];
+  /** `pass` kept for `itemId` under `key`, as its step passes; one already kept stays as it was. */
+  readonly keepGatePass: (itemId: string, key: string, pass: GatePass) => void;
   /** The commands an item's landing gate passed on the tree that landed, in the gate's order. */
   readonly landedChecks: (itemId: string) => string[];
   /**
@@ -693,6 +728,50 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .orderBy(workItemLandedChecks.command)
         .all()
         .map((row) => row.command),
+    gatePasses: (itemId) => {
+      const passes = new Map<string, GatePass[]>();
+      const rows = db
+        .select({
+          key: workItemGatePasses.passKey,
+          command: workItemGatePasses.command,
+          stage: workItemGatePasses.stage,
+        })
+        .from(workItemGatePasses)
+        .where(eq(workItemGatePasses.itemId, itemId))
+        .orderBy(sql`${workItemGatePasses}.rowid`)
+        .all();
+      for (const { key, command, stage } of rows) {
+        passes.set(key, [...(passes.get(key) ?? []), { command, stage }]);
+      }
+      return passes;
+    },
+    keepGatePass: (itemId, key, { command, stage }) => {
+      db.insert(workItemGatePasses)
+        .values({ itemId, passKey: key, command, stage })
+        .onConflictDoNothing()
+        .run();
+    },
+    dropGatePasses: (itemId, taken) => {
+      if (taken.length === 0) {
+        return;
+      }
+      db.delete(workItemGatePasses)
+        .where(
+          and(
+            eq(workItemGatePasses.itemId, itemId),
+            or(
+              ...taken.map(({ key, pass }) =>
+                and(
+                  eq(workItemGatePasses.passKey, key),
+                  eq(workItemGatePasses.command, pass.command),
+                  eq(workItemGatePasses.stage, pass.stage)
+                )
+              )
+            )
+          )
+        )
+        .run();
+    },
     landedChecks: (itemId) =>
       db
         .select({ command: workItemLandedChecks.command })
@@ -717,38 +796,42 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         )
         .orderBy(workItems.createdAt)
         .all(),
-    updateWorkItem: (id, { landed, ...change }) =>
-      landed
-        ? db.transaction((tx) => {
-            tx.delete(workItemLandedChecks)
-              .where(eq(workItemLandedChecks.itemId, id))
-              .run();
-            const passed = [...new Set(landed.gate?.passed ?? [])];
-            if (passed.length > 0) {
-              tx.insert(workItemLandedChecks)
-                .values(passed.map((command) => ({ itemId: id, command })))
-                .run();
-            }
-            return tx
-              .update(workItems)
-              .set({
-                ...change,
-                landedSha: landed.sha,
-                landedOnto: landed.onto,
-                landedAt: landed.at === undefined ? null : new Date(landed.at),
-                landedGateTree: landed.gate?.tree ?? null,
-                landedUnread: null,
-              })
-              .where(eq(workItems.id, id))
-              .returning()
-              .get();
+    updateWorkItem: (id, { landed, gatePasses, ...change }) => {
+      if (!landed && gatePasses !== null) {
+        return db
+          .update(workItems)
+          .set(change)
+          .where(eq(workItems.id, id))
+          .returning()
+          .get();
+      }
+      return db.transaction((tx) => {
+        if (gatePasses === null) {
+          tx.delete(workItemGatePasses)
+            .where(eq(workItemGatePasses.itemId, id))
+            .run();
+        }
+        if (landed) {
+          tx.delete(workItemLandedChecks)
+            .where(eq(workItemLandedChecks.itemId, id))
+            .run();
+          const checks = landedCheckRows(id, landed);
+          if (checks.length > 0) {
+            tx.insert(workItemLandedChecks).values(checks).run();
+          }
+        }
+        return tx
+          .update(workItems)
+          .set({
+            ...change,
+            ...(gatePasses === null ? { gatePassesUnread: null } : {}),
+            ...(landed ? landedColumns(landed) : {}),
           })
-        : db
-            .update(workItems)
-            .set(change)
-            .where(eq(workItems.id, id))
-            .returning()
-            .get(),
+          .where(eq(workItems.id, id))
+          .returning()
+          .get();
+      });
+    },
     activeWorkspacesOn: (machineId) =>
       db
         .select()

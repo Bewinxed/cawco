@@ -2752,6 +2752,13 @@
       "when": 1794695662505,
       "tag": "0400_landed_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 401,
+      "version": "6",
+      "when": 1794698573328,
+      "tag": "0401_gate_passes_table",
+      "breakpoints": true
     }
   ]
 }

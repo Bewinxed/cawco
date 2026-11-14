@@ -606,7 +606,7 @@ interface LandingRunDeps
   extends
     LandingsHub,
     Pick<WorkspacesDeps, "call" | "command" | "db">,
-    Pick<GateDeps, "machinePaused" | "online" | "update" | "workspaces"> {
+    Pick<GateDeps, "machinePaused" | "online" | "workspaces"> {
   readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
   readonly declareWait: (
     item: WorkItemRow,
@@ -630,6 +630,10 @@ interface LandingRunDeps
     headline?: string,
     outputs?: string[]
   ) => void;
+  readonly update: (
+    id: string,
+    asked: Parameters<DbShape["updateWorkItem"]>[1]
+  ) => WorkItemRow | undefined;
 }
 
 export const createLandingRun = ({
@@ -795,7 +799,6 @@ export const createLandingRun = ({
     machineFree,
     machinePaused,
     online,
-    update,
     workspaces,
     landingStop: (itemId) => landingStops.get(itemId)?.signal,
     runIn,
