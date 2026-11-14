@@ -87,6 +87,7 @@ import {
 } from "./stores/needs.svelte";
 import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
 import { takePasskeyQr } from "./stores/passkey-qr.svelte";
+import { takePasskeyStatus } from "./stores/passkey-relay.svelte";
 import { plansState } from "./stores/plans.svelte";
 import {
   previewsState,
@@ -463,6 +464,7 @@ routeFrames([
   onFrame("desk_alert", (frame) => showDeskAlert(frame, instanceIndex)),
   onFrame("browser_list", takeBrowsers),
   onFrame("passkey_qr", takePasskeyQr),
+  onFrame("passkey_status", takePasskeyStatus),
   // The stream relay's journey moved: every place that draws it follows.
   onFrame("stream_relay.journey", (frame) => keepRelayJourney(frame.journey)),
   onFrame("tailnet.https", takeTailnet),
@@ -492,10 +494,10 @@ routeFrames([
   ...hubOnly("stage"),
   // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
   ...hubOnly("browsers"),
-  // A machine's passkey relay capability travels machine → hub only.
-  ...hubOnly("passkey_relay"),
   // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
   ...hubOnly("browser_handback"),
+  // A BLE passkey advert from a machine travels machine → hub only.
+  ...hubOnly("passkey_advert"),
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
   ...hubOnly("stream_relay"),
   // A place's stage clone travels machine → hub only; the hub files it as a workspace.

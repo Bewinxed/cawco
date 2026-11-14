@@ -46,7 +46,9 @@ import {
   type BrowserViewersArgs,
   isBrowserKey,
   PASSKEY_ADVERT_MAX_AGE_MS,
-  type PasskeyRelayFrame,
+  PASSKEY_SCAN_START,
+  PASSKEY_SCAN_STOP,
+  type PasskeyAdvertFrame,
 } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { timerMs } from "@cawco/core/clock";
@@ -228,7 +230,7 @@ import {
   watchBrowsers,
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
-import { PasskeyScanner } from "./browser/passkey-capture";
+import { PasskeyCapture } from "./browser/passkey-capture";
 import { PasskeyInjector } from "./browser/passkey-inject";
 import {
   certifyRelay,
@@ -2464,6 +2466,8 @@ const attach = (
         frame.kind === "browser_handback" ||
         frame.kind === "browser_list" ||
         frame.kind === "passkey_qr" ||
+        frame.kind === "passkey_status" ||
+        frame.kind === "passkey_advert" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone" ||
         frame.kind === "catalog_moved" ||
@@ -3788,14 +3792,13 @@ const startDaemon = (rediscover = false) =>
       );
       return Promise.resolve(true);
     });
-
     // ── Passkey proximity relay ────────────────────────────────────────
     // Inject side: receives relayed BLE adverts from the hub and writes
     // them into a virtual HCI adapter so Chromium's caBLE discovery sees
     // them (passkey-inject.ts). The injector is lazily created on the
     // first advert so machines without /dev/vhci pay nothing.
     let passkeyInjector: PasskeyInjector | undefined;
-    supervisor.registerDaemonFunction(BROWSER_INJECT_ADVERT, async (args) => {
+    supervisor.declareControl(BROWSER_INJECT_ADVERT, async (args) => {
       const { key, serviceData, capturedAt } = args as BrowserInjectAdvertArgs;
 
       // Drop stale adverts.
@@ -3822,74 +3825,54 @@ const startDaemon = (rediscover = false) =>
       console.info(`[passkey] injected advert for ${key} (${data.length}B)`);
       return true;
     });
+
+    // Capture side: scan for the phone's FIDO BLE advert while the hub
+    // asks, and send each one hub-ward for relay (passkey-capture.ts).
+    // Lazy: nothing scans until the hub says so.
+    const passkeyCapture = new PasskeyCapture((advert) =>
+      framed({
+        kind: "passkey_advert",
+        serviceData: advert.serviceData.toString("base64"),
+        rssi: advert.rssi,
+        capturedAt: Date.now(),
+      } satisfies PasskeyAdvertFrame)
+    );
+    supervisor.declareControl(PASSKEY_SCAN_START, async (args) => {
+      const key = browserKeyOf(args);
+      if (!(await PasskeyCapture.available())) {
+        throw new Error("No BLE scanner available on this machine");
+      }
+      await passkeyCapture.start(key);
+      console.info(`[passkey] BLE scan started for ${key}`);
+      return true;
+    });
+    supervisor.declareControl(PASSKEY_SCAN_STOP, async (args) => {
+      const key = browserKeyOf(args);
+      passkeyCapture.stop(key);
+      console.info(`[passkey] BLE scan stopped for ${key}`);
+      return true;
+    });
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
-        if (passkeyInjector) {
-          passkeyInjector.stop();
-          passkeyInjector = undefined;
-        }
+        passkeyCapture.stopAll();
+        passkeyInjector?.stop();
+        passkeyInjector = undefined;
       })
     );
-
-    // Capture side: scan for FIDO BLE adverts on this machine and send
-    // them to the hub for relay (passkey-capture.ts). Only started when
-    // a BLE adapter is present; no error otherwise.
-    let passkeyScanner: PasskeyScanner | undefined;
-    yield* Effect.forkScoped(
-      Effect.promise(() => {
-        const run = async (): Promise<void> => {
-          const hasBle = await PasskeyScanner.available();
-          if (!hasBle) {
-            return;
-          }
-          const bleScanner = new PasskeyScanner();
-          await bleScanner.start((advert) => {
-            supervisor.emit({
-              verb: "frames",
-              machineId: "",
-              payload: {
-                kind: "passkey_relay",
-                machineId: machineIdValue,
-                role: "capture",
-                scanning: true,
-              } satisfies PasskeyRelayFrame,
-            });
-            supervisor.emit({
-              verb: "frames",
-              machineId: "",
-              payload: {
-                kind: "passkey_advert",
-                serviceData: advert.serviceData.toString("base64"),
-                rssi: advert.rssi,
-                capturedAt: Date.now(),
-              },
-            });
-          });
-          passkeyScanner = bleScanner;
-          console.info("[passkey] BLE capture scanner started");
-        };
-        return run().catch((error: unknown) =>
-          console.warn(
-            `[passkey] capture scanner not started: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
-      })
-    );
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        passkeyScanner?.stop();
-        passkeyScanner = undefined;
-      })
-    );
-
     // The records' watch and tick end with the daemon's scope, and one that
     // is still starting as it ends is stopped the moment it is ready.
+    // Also stop any BLE passkey scans.
     let unwatchBrowsers: (() => void) | undefined;
     let browsersEnded = false;
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         browsersEnded = true;
         unwatchBrowsers?.();
+        import("./passkey-scanner")
+          .then(({ stopAllScans }) => stopAllScans())
+          .catch((error: unknown) =>
+            console.warn(`[passkey] cleanup: ${String(error)}`)
+          );
       })
     );
     yield* Effect.forkScoped(
