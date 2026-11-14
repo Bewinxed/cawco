@@ -354,12 +354,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    machine does not have), Caw's turn-off and a continuation's start (no
  *    transcript, no clone) answer new 502, 404, 400 and 409 bodies. A page
  *    built for 70 reads those statuses' bodies closed, so it reloads first.
+ * 72: an attempt whose task file's budget line does not read is refused
+ *    409 `dispatch-budget-unread`, where it started with no task limit: a
+ *    project's requests, an attempt and its retry may answer it. A page
+ *    built for 71 does not know the new code, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 71;
+export const WIRE_PROTOCOL = 72;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -190,6 +190,7 @@ import {
 import {
   type BudgetColumns,
   budgetColumns,
+  budgetFrom,
   budgetOf,
   budgetProblem,
   globOf,
@@ -372,22 +373,6 @@ const budgetHeld = (row: BudgetColumns): boolean =>
 /** `1 turn`, `40 turns`. */
 const counted = (count: number, one: string): string =>
   `${count} ${one}${count === 1 ? "" : "s"}`;
-
-/** A budget's fields, each from the first that sets it; null when none does. */
-const budgetFrom = (
-  ...budgets: (WorkBudget | null | undefined)[]
-): WorkBudget | null => {
-  const merged: WorkBudget = {};
-  for (const budget of [...budgets].reverse()) {
-    Object.assign(
-      merged,
-      Object.fromEntries(
-        Object.entries(budget ?? {}).filter(([, value]) => value !== undefined)
-      )
-    );
-  }
-  return Object.keys(merged).length > 0 ? merged : null;
-};
 
 /** Statuses of a session whose process its machine confirmed gone. */
 const GONE: ReadonlySet<string> = new Set(["stopped", "discarded"]);

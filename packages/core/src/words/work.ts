@@ -187,6 +187,13 @@ export const workWords = {
   /** A work item refused, or a project's dispatch paused, because its project's budget does not read (`budgetUnread`). */
   projectBudgetUnread: (name: string, why: string) =>
     `${name} starts no work item: ${why}. Set the project's budget again, or clear it, and its work starts.`,
+  /**
+   * Why no attempt at a task starts (hub dispatch.ts `startable`, and the
+   * task's `startProblem`): its file's `budget:` line does not read; `why`
+   * is what does not, quoted from the line.
+   */
+  taskBudgetUnread: (path: string, id: string, why: string) =>
+    `${path} has a budget line that does not read, so no attempt at ${id} starts until it reads or is taken out: ${why}`,
   /** A routine's run skipped because its budget does not read (`budgetUnread`). */
   routineBudgetUnread: (why: string) =>
     `The run is skipped: ${why}. Set the routine's budget again, or clear it, and its runs start.`,

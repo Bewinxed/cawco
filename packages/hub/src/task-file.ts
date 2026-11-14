@@ -195,6 +195,13 @@ export type ExtraValue = string | string[];
 export interface ParsedTask {
   /** The `## Acceptance criteria` section's text; empty when there is none. */
   acceptance: string;
+  /**
+   * What its `budget:` line holds that does not read, one sentence each
+   * (in `problems` too); null when the line reads or there is none. While
+   * set, no attempt at it starts (dispatch.ts `startable`): a budget that
+   * does not read is never read as none.
+   */
+  budgetUnread: string | null;
   /** The `## Comments` section's entries, oldest first. */
   comments: TaskComment[];
   /** The text between the title and the first `## ` section. */
@@ -1053,6 +1060,12 @@ export class TaskDoc {
     if (this.front && !fields.stage) {
       problems.push("The front matter names no stage.");
     }
+    const budgetUnread: string[] = [];
+    for (const line of this.front ?? []) {
+      if (line.key === "budget") {
+        readBudget(line, budgetUnread);
+      }
+    }
     const sections = sectionsOf(this.body);
     const preambleEnd = sections[0]?.at ?? this.body.length;
     const title = titleLine(this.body, preambleEnd);
@@ -1089,6 +1102,7 @@ export class TaskDoc {
           text: textOf(this.body.slice(section.at + 1, section.end)),
         })),
       problems,
+      budgetUnread: budgetUnread.join(" ") || null,
     };
   }
 

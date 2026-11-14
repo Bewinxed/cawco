@@ -39464,6 +39464,25 @@
               "type": "string"
             }
           },
+          "held": {
+            "description": "Ready tasks it does not start, each with why (its `startProblem`): a\nbudget line that does not read, or the hub's last try failing on the\nfile as it stands.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "task",
+                "why"
+              ]
+            }
+          },
           "lands": {
             "$ref": "#/components/schemas/LandsMode",
             "description": "Where an attempt lands when its task and type say nothing."
@@ -39501,6 +39520,7 @@
         "required": [
           "dispatch",
           "frontier",
+          "held",
           "lands",
           "live",
           "maxAttempts",
@@ -58533,6 +58553,10 @@
           "budget": {
             "description": "What an attempt may spend before the hub stops it; null: the project's default.",
             "$ref": "#/components/schemas/WorkBudget"
+          },
+          "budgetUnread": {
+            "description": "What its `budget:` line holds that does not read; null when it reads or\nthere is none. While set, no attempt at it starts (dispatch.ts\n`startable`), and `startProblem` says why.",
+            "type": "string"
           },
           "builtOn": {
             "description": "A done task's cards and pins that moved since its attempt was dispatched on them.",
@@ -167401,6 +167425,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-budget-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-guidance-first"
                 ]
               },
@@ -177942,6 +178002,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-budget-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-guidance-first"
                 ]
               },
@@ -181378,6 +181474,10 @@
           "budget": {
             "description": "What an attempt may spend before the hub stops it; null: the project's default.",
             "$ref": "#/components/schemas/WorkBudget"
+          },
+          "budgetUnread": {
+            "description": "What its `budget:` line holds that does not read; null when it reads or\nthere is none. While set, no attempt at it starts (dispatch.ts\n`startable`), and `startProblem` says why.",
+            "type": "string"
           },
           "builtOn": {
             "description": "A done task's cards and pins that moved since its attempt was dispatched on them.",
@@ -186079,6 +186179,42 @@
                 "type": "string",
                 "enum": [
                   "dispatch-attempt-live"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "dispatch-budget-unread"
                 ]
               },
               "detail": {

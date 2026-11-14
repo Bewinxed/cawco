@@ -67,6 +67,8 @@ export interface SettingsRead {
   frontier: string[];
   /** The conversation reads what the person writes on tasks. */
   hearsTasks: boolean;
+  /** Ready tasks dispatch does not start, each with why. */
+  held: { task: string; why: string }[];
   lands: string;
   /** Its links, one per repository, like github.com/owner/name. */
   links: string[];
@@ -124,7 +126,7 @@ export const projectSettingsWords = {
         now.paused === null
           ? `Next to start: ${now.frontier.length > 0 ? now.frontier.join(", ") : "nothing is ready"}.`
           : `Dispatch starts nothing: ${now.paused}`
-      }`,
+      }${now.held.map(({ task, why }) => `\n- ${task} does not start: ${why}`).join("")}`,
     ].join("\n"),
 
   /** Each dispatch change, in the card's and the project note's words. */

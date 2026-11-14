@@ -33,6 +33,26 @@ export const ownsProblem = (owns: string[]): string | undefined => {
 
 // --- budgets ---------------------------------------------------------------------
 
+/**
+ * A budget's limits, each from the first that sets it; null when none does.
+ * The one merge along a budget's chain (a call's ask, its task, its routine,
+ * then its project): an earlier one's limit overrides that limit alone.
+ */
+export const budgetFrom = (
+  ...budgets: (WorkBudget | null | undefined)[]
+): WorkBudget | null => {
+  const merged: WorkBudget = {};
+  for (const budget of [...budgets].reverse()) {
+    Object.assign(
+      merged,
+      Object.fromEntries(
+        Object.entries(budget ?? {}).filter(([, value]) => value !== undefined)
+      )
+    );
+  }
+  return Object.keys(merged).length > 0 ? merged : null;
+};
+
 /** Why a budget cannot stand, or nothing when it can. */
 export const budgetProblem = (budget: WorkBudget): string | undefined => {
   const { usd, turns, minutes } = budget;

@@ -1,7 +1,8 @@
 /**
  * Before migration 0398's SQL runs, the hub's log names every project,
  * routine and work item whose stored budget 0398 keeps as `budget_unread`
- * (a budget that does not read whole), with why, so the journal of the day
+ * (a budget that does not read whole), and every task whose file's budget
+ * line did not read, with why, so the journal of the day
  * it runs records each row whose work stops. Read with 0398's own
  * predicates, over the JSON `budget` columns as they stand before it.
  */
@@ -65,6 +66,9 @@ const why = (row: Unread): string => {
     .join("; ");
 };
 
+/** A task index row whose file's budget line did not read (task-file.ts `readBudget`'s words): 0398 clears its hash, so its file is read again. */
+const TASK_BUDGET_UNREAD = "problem LIKE '%budget: “%'";
+
 /** A work item's live states (work-item-state.ts `LIVE`): the ones the hub stops. */
 const LIVE = ["starting", "running"];
 
@@ -93,6 +97,15 @@ const unreadLines = (client: Database): string[] => [
     (row) =>
       `work item ${row.id} (${row.label}) ${LIVE.includes(row.label) ? "stops" : "stays ended"}: its budget ${shown(row.raw)} does not read: ${why(row)}`
   ),
+  ...client
+    .query<{ project: string; id: string; path: string; problem: string }, []>(
+      `SELECT project_id AS project, id, path, problem FROM project_tasks WHERE ${TASK_BUDGET_UNREAD} ORDER BY project_id, number`
+    )
+    .all()
+    .map(
+      (row) =>
+        `task ${row.id} of project ${row.project} (${row.path}) starts no attempt: its budget line does not read, and its file is read again: ${row.problem}`
+    ),
 ];
 
 /** Logs every budget 0398 keeps as not read, one line each. Run only in a start that applies 0398 (db/migrate.ts). */

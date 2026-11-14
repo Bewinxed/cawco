@@ -474,6 +474,12 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   accounts: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
+  /**
+   * What its `budget:` line holds that does not read; null when it reads or
+   * there is none. While set, no attempt at it starts (dispatch.ts
+   * `startable`), and `startProblem` says why.
+   */
+  budgetUnread: string | null;
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
   comments: TaskComment[];
@@ -1284,6 +1290,7 @@ const viewOf = (
   group: parsed.fields.group,
   owns: parsed.fields.owns,
   budget: parsed.fields.budget,
+  budgetUnread: parsed.budgetUnread,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
   accounts: parsed.fields.accounts,
@@ -1953,9 +1960,11 @@ export const createTasks = (store: TaskStore) => {
   const flagsOf = (
     projectId: string,
     task: {
+      budgetUnread: string | null;
       hash: string;
       id: string;
       partOf: string | null;
+      path: string;
       stage: string;
       waitsOn: string[];
     },
@@ -2000,7 +2009,12 @@ export const createTasks = (store: TaskStore) => {
         open,
       lastAttemptStopped: last?.state === "cancelled" && open,
       queuedStart: context.queued.has(task.id),
-      startProblem: store.startProblem?.(projectId, task) ?? null,
+      // A budget line that does not read holds every start (dispatch.ts
+      // `startable`), so it is why the task does not start until it reads.
+      startProblem:
+        task.budgetUnread === null
+          ? (store.startProblem?.(projectId, task) ?? null)
+          : workWords.taskBudgetUnread(task.path, task.id, task.budgetUnread),
     };
   };
   /**
@@ -2151,6 +2165,7 @@ export const createTasks = (store: TaskStore) => {
       todosDone: todos.done,
       todosTotal: todos.total,
       problem: parsed.problems.join(" ") || null,
+      budgetUnread: parsed.budgetUnread,
       hash,
       updatedAt: new Date(),
     };
@@ -3360,10 +3375,12 @@ export const createTasks = (store: TaskStore) => {
       projectId,
       {
         id: taskId(number),
+        path,
         waitsOn: parsed.fields.waitsOn,
         partOf: parsed.fields.partOf,
         stage,
         hash,
+        budgetUnread: parsed.budgetUnread,
       },
       context
     );

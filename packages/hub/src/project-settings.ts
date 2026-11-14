@@ -1146,6 +1146,7 @@ export const createProjectSettings = ({
       reviewing: now.review,
       paused: now.paused,
       frontier: now.frontier,
+      held: now.held,
     });
   };
 
