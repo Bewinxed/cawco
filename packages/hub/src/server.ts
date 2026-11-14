@@ -6152,7 +6152,6 @@ export const createServer = (
     agent: HubSocket,
     row: InstanceRow,
     reattachOnly: SpawnPayload["reattachOnly"] = false
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the restore payload from the stored row in one place
   ): void => {
     if (
       !registry.agent(row.machineId) ||
@@ -6165,55 +6164,86 @@ export const createServer = (
     // `row` is the register's snapshot, read before its machine was asked for
     // the launch directories of rows from before they were pinned. A row whose
     // conversation its machine has no record of is not restored.
-    const launched = atLaunchDir(row.id, {
-      instanceId: row.id,
-      cwd: row.cwd,
-      ...(reattachOnly ? { reattachOnly } : {}),
-      ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
-      harness: row.harness,
-      ...(row.model ? { model: row.model } : {}),
-      ...(row.permissionMode
-        ? {
-            permissionMode:
-              row.permissionMode as SpawnPayload["permissionMode"],
-          }
-        : {}),
-      ...(row.projectId ? { projectId: row.projectId } : {}),
-      // A leaf stays a leaf across a restart: the daemon builds the toolset
-      // from the payload, and a restore that dropped this would hand a leaf
-      // delegate the spawning tools back.
-      ...(row.mayStart ? { mayStart: row.mayStart } : {}),
-      ...typeSettingsOf(row),
-    } satisfies NamedSpawn);
+    const launched = atLaunchDir(row.id, restoredSpawn(row, reattachOnly));
     if ("refusal" in launched) {
       console.warn(`[hub] not restored: ${launched.refusal}`);
       return;
     }
-    const asked: NamedSpawn = launched.payload;
-    // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
-      lifecycle.restoring(row.id);
-      // A process sessiond holds is alive while its attach is on the way:
-      // filed asleep or failed, the asks its attach replays were refused at
-      // admission, and its CLI waited on a question nobody was shown.
-      if (
-        reattachOnly === true &&
-        heldProcesses(machineCustody.get(row.machineId)).includes(row.id) &&
-        db.markInstanceAttaching(row.id)
-      ) {
-        publishInstances(row.machineId);
-      }
-      sendFrame(agent, {
-        verb: "spawn",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          ...bounded(asked, row),
-          ingested: streams.ingestedFor([row.id])[row.id],
-        },
-      });
+      reattach(agent, row, launched.payload, reattachOnly);
       return;
     }
+    relaunch(agent, row, launched.payload);
+  };
+
+  /** The spawn a restore of `row` asks for, built from the stored row in one place. */
+  const restoredSpawn = (
+    row: InstanceRow,
+    reattachOnly: SpawnPayload["reattachOnly"]
+  ): NamedSpawn => ({
+    instanceId: row.id,
+    cwd: row.cwd,
+    ...(reattachOnly ? { reattachOnly } : {}),
+    ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
+    harness: row.harness,
+    ...(row.model ? { model: row.model } : {}),
+    ...(row.permissionMode
+      ? {
+          permissionMode: row.permissionMode as SpawnPayload["permissionMode"],
+        }
+      : {}),
+    ...(row.projectId ? { projectId: row.projectId } : {}),
+    // A leaf stays a leaf across a restart: the daemon builds the toolset
+    // from the payload, and a restore that dropped this would hand a leaf
+    // delegate the spawning tools back.
+    ...(row.mayStart ? { mayStart: row.mayStart } : {}),
+    ...typeSettingsOf(row),
+  });
+
+  /**
+   * A restore that reattaches the process its machine still holds: the
+   * stored mode adopted without revalidating a new launch, custody never
+   * skipped. Marked restoring, then attaching, before its spawn goes.
+   */
+  const reattach = (
+    agent: HubSocket,
+    row: InstanceRow,
+    asked: NamedSpawn,
+    reattachOnly: NonNullable<SpawnPayload["reattachOnly"]>
+  ): void => {
+    lifecycle.restoring(row.id);
+    // A process sessiond holds is alive while its attach is on the way:
+    // filed asleep or failed, the asks its attach replays were refused at
+    // admission, and its CLI waited on a question nobody was shown.
+    if (
+      reattachOnly === true &&
+      heldProcesses(machineCustody.get(row.machineId)).includes(row.id) &&
+      db.markInstanceAttaching(row.id)
+    ) {
+      publishInstances(row.machineId);
+    }
+    sendFrame(agent, {
+      verb: "spawn",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        ...bounded(asked, row),
+        ingested: streams.ingestedFor([row.id])[row.id],
+      },
+    });
+  };
+
+  /**
+   * A restore that starts the session again as a new launch: none beside
+   * one already on its way, none for a blocked work item, failed in its
+   * words when its account or mode refuse it; its row opened before its
+   * spawn goes.
+   */
+  const relaunch = (
+    agent: HubSocket,
+    row: InstanceRow,
+    asked: NamedSpawn
+  ): void => {
     // A launch already on its way is this restore: nothing goes beside it.
     const inFlight = inFlightRefusal(row.id);
     if (inFlight) {
