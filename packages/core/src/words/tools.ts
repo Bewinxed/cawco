@@ -31,6 +31,14 @@ const listed = (names: string[]): string =>
 
 export const toolWords = {
   /**
+   * An install that stopped before it finished `runs` times in a row, each
+   * time with the agent that ran it (a restart, an out-of-memory kill, a
+   * power cut), and is not run again unasked: the agent's `detail` on the
+   * tool's failed row (agent tools.ts `redoInstall`).
+   */
+  cutShort: (name: string, runs: number) =>
+    `${name}'s install stopped before it finished ${runs} times in a row, each time with the agent running it. Retry runs it again.`,
+  /**
    * An update that left the copy older than the release it was after: the
    * release, the updater's own words, what still runs, and what comes next.
    * The agent's `detail` on the tool's row (agent tools.ts `install`), read

@@ -691,20 +691,34 @@ export interface ToolInstallRecord {
  * the version it said, `from`), the version it puts on (`to`, none when it
  * puts on the newest), the method's label, when it began, and the process
  * that runs it (`pid`, its start and the boot it runs in, core
- * `ownIdentity`, so a pid used again is never taken for it). One whose
- * process is gone (the agent restarted
- * mid-install, which takes the installer down with it) is settled at the
- * next start ({@link settleUnderway}).
+ * `ownIdentity`, so a pid used again is never taken for it). What it was
+ * asked besides the version ({@link InstallAsk}: `automatic`, `newest`,
+ * `startedBy`), and how many runs of it a stop cut short before this one
+ * (`tries`), so the next start can run it again as it was asked. One whose
+ * process is gone (the agent restarted mid-install, which takes the
+ * installer down with it) is settled at the next start
+ * ({@link settleUnderway}).
+ *
+ * `answered`: when the install answered, failing, with the copy at its path
+ * saying no version ({@link closeUnderway}). Such an entry stands only for
+ * that broken copy ({@link midway}): it never makes a copy that says a
+ * version CawCo's, and no start runs it again; the failure it answered is
+ * said, and the hub's pass or a press takes it from there.
  */
 export interface ToolInstallUnderway {
+  answered?: number;
   at: number;
+  automatic?: boolean;
   bootId?: string;
   from?: string;
   method?: string;
+  newest?: string;
   path?: string;
   pid: number;
   procStart?: string;
+  startedBy?: "cawco" | "person";
   to?: string;
+  tries?: number;
 }
 
 /**
@@ -794,21 +808,29 @@ const withoutUnderway = (
 };
 
 /**
+ * Whether the copy at `at` is where the install under way (`underway`) puts
+ * its copy: the path of the copy it replaces, or any, when there was none.
+ */
+const atItsPath = (underway: ToolInstallUnderway, at: Found): boolean =>
+  underway.path === undefined ||
+  underway.path === at.path ||
+  realOf(underway.path) === at.file;
+
+/**
  * Whether the copy at `at` that says `version` is the one the install
- * under way (`underway`) put on: at the path of the copy it replaces (any,
- * when there was none), saying the version it puts on, or, when it puts on
- * the newest, any version other than the one the copy said as it began.
- * The record of a copy at its version before then ({@link copyOf}) decides
- * any other.
+ * under way (`underway`) put on: at its path ({@link atItsPath}), saying
+ * the version it puts on, or, when it puts on the newest, any version other
+ * than the one the copy said as it began. An install that answered
+ * (`answered`) put on nothing after it answered. The record of a copy at its
+ * version before then ({@link copyOf}) decides any other.
  */
 const landedBy = (
   underway: ToolInstallUnderway,
   at: Found,
   version: string | undefined
 ): boolean =>
-  (underway.path === undefined ||
-    underway.path === at.path ||
-    realOf(underway.path) === at.file) &&
+  underway.answered === undefined &&
+  atItsPath(underway, at) &&
   version !== undefined &&
   (underway.to === undefined
     ? version !== underway.from
@@ -816,32 +838,32 @@ const landedBy = (
 
 /**
  * Whether the copy at `at` is the install under way (`underway`) half done:
- * at the path of the copy it replaces, it says no version (npm has the
- * package aside for seconds, the link still there; an installer a restart
- * killed left a copy that doesn't run, which {@link settleOne} keeps the
- * entry for). It is CawCo's to put right, never a hand's.
+ * at its path ({@link atItsPath}), it says no version (npm has the package
+ * aside for seconds, the link still there; an installer a stop killed left
+ * a copy that doesn't run, which {@link settleOne} runs the install again
+ * over; an install that answered failing left it so, {@link closeUnderway}).
+ * It is CawCo's to put right, never a hand's.
  */
 const midway = (
   underway: ToolInstallUnderway,
   at: Found,
   version: string | undefined
-): boolean =>
-  version === undefined &&
-  underway.path !== undefined &&
-  (underway.path === at.path || realOf(underway.path) === at.file);
+): boolean => version === undefined && atItsPath(underway, at);
 
 /**
  * CawCo's install of `spec` is about to run its method over `copy` (none:
  * there is none), which says `from`, to put on `to` with `method`: written
  * first, so the copy it leaves reads as CawCo's while it is under way and
- * after a restart cuts it short ({@link ToolInstallUnderway}). Its `at`, for
+ * after a restart cuts it short ({@link ToolInstallUnderway}), with what it
+ * was asked (`ask`), for a start to run it again. Its `at`, for
  * {@link endUnderway}.
  */
 const markUnderway = async (
   spec: ToolSpec,
   method: ToolInstallMethod,
   copy: { at?: Found; from?: string },
-  to: string | undefined
+  to: string | undefined,
+  ask: InstallAsk
 ): Promise<number> => {
   const at = Date.now();
   const underway: ToolInstallUnderway = {
@@ -851,6 +873,10 @@ const markUnderway = async (
     ...(copy.at ? { path: copy.at.path } : {}),
     ...(copy.from ? { from: copy.from } : {}),
     ...(to ? { to } : {}),
+    ...(ask.automatic ? { automatic: true } : {}),
+    ...(ask.newest ? { newest: ask.newest } : {}),
+    ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
+    ...(ask.tries ? { tries: ask.tries } : {}),
   };
   await writeInstalls(`${spec.id}'s install under way`, (file) => ({
     ...file,
@@ -866,16 +892,26 @@ const endUnderway = (id: string, at: number): Promise<void> =>
   );
 
 /**
- * THE INSTALLS A RESTART CUT SHORT ARE SETTLED, AT THE START. An install
- * under way whose process is gone (systemd and launchd take an agent's
- * installer down with it) left the copy as it stands: one it put on
- * ({@link landedBy}) is recorded as CawCo's install, as the install would
- * have recorded it; one at its path that says no version is one it broke
- * ({@link midway}), and the entry stays, so the copy is CawCo's to put right
- * and the next start looks again; any other is left to the record of
- * before, and the entry goes, so an install that never finished makes no
- * later copy CawCo's. An install another process still runs (`cawco
- * binary-pins` beside the agent) is its own.
+ * THE INSTALLS A STOP CUT SHORT ARE SETTLED, AT THE START. An install under
+ * way whose process is gone (systemd and launchd take an agent's installer
+ * down with it: a restart, an out-of-memory kill of the unit, a power cut)
+ * never answered, and the copy stands as it left it:
+ * - one it put on ({@link landedBy}) is recorded as CawCo's install, as
+ *   the install would have recorded it;
+ * - one that says another version than it began from or puts on, or one
+ *   the PATH finds at another path, is someone else's doing since: the
+ *   entry goes, and the record of before says whose it is;
+ * - anything else is the install not done: no copy (npm left its package
+ *   aside, or its new package.json with no bin), a copy at its path that
+ *   says no version ({@link midway}), or the copy it began from, unmoved.
+ *   The install was asked for (the hub's pass, a press, adding a machine,
+ *   a build's pins), so it runs again now as it was asked
+ *   ({@link redoInstall}), and the tool reads `installing` meanwhile: never
+ *   a missing tool with nothing on its way, which the hub sends nothing for.
+ * An install that answered (`answered`) is not run again: its failure was
+ * said; its entry stays while its copy says no version, and goes otherwise.
+ * An install another process still runs (`cawco binary-pins` beside the
+ * agent) is its own.
  */
 const settleUnderway = async (): Promise<void> => {
   const { underway = {} } = await readInstallFile();
@@ -890,19 +926,31 @@ const settleUnderway = async (): Promise<void> => {
   }
 };
 
-/** One install a restart cut short, settled ({@link settleUnderway}). */
+/**
+ * How many runs of one install a stop may cut short, one after another,
+ * before the next start runs it no more and says so ({@link redoInstall}):
+ * an installer that takes its agent down with it (memory) would otherwise
+ * restart the agent, and every session on it, for good. Our call: two
+ * stops in a row are a power cut and a restart; a third is the install.
+ */
+const CUT_SHORT_MOST = 3;
+
+/** One install a stop cut short, settled ({@link settleUnderway}). */
 const settleOne = async (
   id: string,
   entry: ToolInstallUnderway
 ): Promise<void> => {
   const spec = toolSpec(id);
-  const at = spec ? await findCopy(spec) : undefined;
-  const version = spec && at ? await probeVersion(spec, at.path) : undefined;
-  const name = spec?.name ?? id;
+  if (!spec) {
+    await endUnderway(id, entry.at);
+    return;
+  }
+  const at = await findCopy(spec);
+  const version = at ? await probeVersion(spec, at.path) : undefined;
   const began = new Date(entry.at).toISOString();
-  if (spec && at && landedBy(entry, at, version)) {
+  if (at && landedBy(entry, at, version)) {
     console.info(
-      `[tools] ${name} ${version} ${copyWords(spec, at.path).at} is CawCo's: its install that began ${began} put it on and stopped before it was recorded`
+      `[tools] ${spec.name} ${version} ${copyWords(spec, at.path).at} is CawCo's: its install that began ${began} put it on and stopped before it was recorded`
     );
     await recordInstall(id, {
       path: at.path,
@@ -912,16 +960,72 @@ const settleOne = async (
     });
     return;
   }
-  if (spec && at && midway(entry, at, version)) {
+  if (entry.answered !== undefined) {
+    if (at && midway(entry, at, version)) {
+      console.info(
+        `[tools] ${spec.name} ${copyWords(spec, at.path).at} says no version: its install that began ${began} failed so, and it stays CawCo's to put right`
+      );
+      return;
+    }
+    await endUnderway(id, entry.at);
+    return;
+  }
+  const untouched = at && atItsPath(entry, at) && version === entry.from;
+  if (at && !untouched && !midway(entry, at, version)) {
     console.info(
-      `[tools] ${name} ${copyWords(spec, at.path).at} says no version: its install that began ${began} stopped half done, so it stays CawCo's to put right`
+      `[tools] ${spec.name}'s install that began ${began} stopped, and the copy ${copyWords(spec, at.path).at} says ${version ?? "no version"}, which it did not put on: the copy there is whose the record says`
     );
+    await endUnderway(id, entry.at);
+    return;
+  }
+  await redoInstall(spec, entry, at ? (version ?? "no version") : undefined);
+};
+
+/**
+ * An install a stop cut short with its work not done ({@link settleOne}),
+ * run again as it was asked, its `tries` one more: the new run writes its
+ * own entry under way over this one as its method starts, and this one goes
+ * when the run answers without having started it (the copy now the
+ * person's, no method). Once {@link CUT_SHORT_MOST}
+ * runs were cut short it runs no more: the tool says the install failed,
+ * and why, for Retry, and the entry goes. `found`: what the copy there says
+ * now, none for no copy.
+ */
+const redoInstall = async (
+  spec: ToolSpec,
+  entry: ToolInstallUnderway,
+  found: string | undefined
+): Promise<void> => {
+  const began = new Date(entry.at).toISOString();
+  const there = found ? `the copy there says ${found}` : "no copy is there";
+  const runs = (entry.tries ?? 0) + 1;
+  if (runs >= CUT_SHORT_MOST) {
+    console.info(
+      `[tools] ${spec.name}'s install that began ${began} stopped before it finished, as ${runs} runs of it in a row did, and ${there}: it is not run again until Retry`
+    );
+    await settle(spec, {
+      id: spec.id,
+      state: "failed",
+      detail: toolWords.cutShort(spec.name, runs),
+      ...(entry.method ? { method: entry.method } : {}),
+      at: Date.now(),
+    });
+    await endUnderway(spec.id, entry.at);
     return;
   }
   console.info(
-    `[tools] ${name}'s install that began ${began} stopped, and no copy there now is one it put on; the copy there is whose the record says`
+    `[tools] ${spec.name}'s install that began ${began} stopped before it finished, and ${there}: it runs again now`
   );
-  await endUnderway(id, entry.at);
+  // Not waited on: the tool reads `installing` from here on (installTool
+  // marks it before its first wait), and its end tells the hub.
+  installTool(spec.id, entry.to, {
+    ...(entry.automatic ? { automatic: true } : {}),
+    ...(entry.newest ? { newest: entry.newest } : {}),
+    ...(entry.startedBy ? { startedBy: entry.startedBy } : {}),
+    tries: runs,
+  })
+    .then(() => endUnderway(spec.id, entry.at))
+    .catch(() => undefined);
 };
 
 /**
@@ -1081,7 +1185,9 @@ const stillRecorded = (
 
 /**
  * WHOSE THE COPY AT `at` IS (core `ToolCopy`). CawCo's, when an install of
- * CawCo's under way put it on ({@link landedBy}). Else, when CawCo's record
+ * CawCo's under way put it on ({@link landedBy}) or left it saying no
+ * version ({@link midway}; an install that answered stands for that copy
+ * alone, `answered`). Else, when CawCo's record
  * of its own install names this copy's path (the link the PATH finds, or
  * the file it resolves to: a package manager's update rewrites the file
  * under the same link), the record alone decides: CawCo's while the copy
@@ -2145,9 +2251,10 @@ const installingAs = new Map<
 
 /**
  * One catalog tool, as {@link probeTools} reports it. An attempt's failure
- * ({@link failures}) stands while the copy is where the attempt left it: one
- * that kept the copy's version is gone once the copy says another (updated
- * by hand, or by its own updater), and any is gone once the tool runs,
+ * ({@link failures}) stands while the copy is where the attempt left it: it
+ * is gone once the copy says another version than it left, or one where it
+ * left none (updated by hand, or by its own updater), and any is gone once
+ * the tool runs,
  * except an update that left a copy that runs older than the release it was
  * after, which stands until that copy moves.
  */
@@ -2173,7 +2280,9 @@ const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
     status = await probeTool(spec);
   }
   const kept = failures.get(spec.id);
-  const moved = kept?.version !== undefined && kept.version !== status.version;
+  // A failure whose copy said no version (an install that broke it) is gone
+  // too once the copy says one: a hand that put it right since.
+  const moved = kept !== undefined && kept.version !== status.version;
   if (moved || (kept?.state === "installed" && status.state !== "installed")) {
     failures.delete(spec.id);
     return status;
@@ -2333,7 +2442,7 @@ const install = async (
   if ("left" in now) {
     return now.left;
   }
-  const began = await markUnderway(spec, method, now, version);
+  const began = await markUnderway(spec, method, now, version, ask);
   try {
     return await runInstall(spec, method, version, ask, began);
   } finally {
@@ -2344,7 +2453,12 @@ const install = async (
 /**
  * The install of `spec` begun at `began` answered: its entry under way goes
  * ({@link endUnderway}), unless the copy at its path says no version, one
- * the install broke ({@link midway}), which stays CawCo's to put right.
+ * the install broke ({@link midway}), which stays CawCo's to put right: the
+ * entry stays, marked `answered`, so it stands for that broken copy alone.
+ * Left as it was, it went on making a copy at its path that says the
+ * version it puts on (or, with none named, any other than it began from)
+ * CawCo's ({@link landedBy}) while the agent ran, whoever put that copy on,
+ * and the next start would run an install again that had answered.
  */
 const closeUnderway = async (spec: ToolSpec, began: number): Promise<void> => {
   const entry = (await readInstallFile()).underway?.[spec.id];
@@ -2356,6 +2470,16 @@ const closeUnderway = async (spec: ToolSpec, began: number): Promise<void> => {
     console.info(
       `[tools] ${spec.name} ${copyWords(spec, at.path).at} says no version after CawCo's install, so it stays CawCo's to put right`
     );
+    const answered = Date.now();
+    await writeInstalls(`${spec.id}'s install as answered`, (file) => {
+      const mine = file.underway?.[spec.id];
+      return mine?.at === began
+        ? {
+            ...file,
+            underway: { ...file.underway, [spec.id]: { ...mine, answered } },
+          }
+        : file;
+    });
     return;
   }
   await endUnderway(spec.id, began);
@@ -2528,6 +2652,8 @@ export interface InstallAsk {
   newest?: string;
   /** Who started it (core `ToolStatus.startedBy`), said on the tool's row while it runs. */
   startedBy?: "cawco" | "person";
+  /** How many runs of this install a stop cut short before this one, which a start runs again ({@link redoInstall}). */
+  tries?: number;
 }
 
 /**
