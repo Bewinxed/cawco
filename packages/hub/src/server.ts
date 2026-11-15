@@ -12647,9 +12647,9 @@ export const createServer = (
   /**
    * The tools a beat reports, merged, with what the machine is owed
    * installed; and what the machine has installed, on its own beat once its
-   * probe has asked every tool for its version. A platform other than the
-   * one its register's `os` named (core `machinePlatform`) moves which
-   * platform-scoped servers it runs: what moved goes.
+   * probe has asked every tool for its version. Its platform is its
+   * register's `os`'s (core `machinePlatform`), so this beat moves no
+   * platform-scoped server.
    */
   const toolsReported = (machineId: string, agentFrame: AgentFrame): void => {
     const tools = agentFrame.tools.map(keptToolStatus);
@@ -12665,14 +12665,8 @@ export const createServer = (
     if (!capabilities) {
       return;
     }
-    const before = db.listAgents().find((row) => row.machineId === machineId);
     db.setAgentCapabilities(machineId, capabilities);
     publishInstances(machineId);
-    if (before && machinePlatform(before) !== capabilities.platform) {
-      fleetSyncs.changed(`its platform is ${capabilities.platform}`, {
-        machineId,
-      });
-    }
   };
 
   /**

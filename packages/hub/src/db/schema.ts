@@ -82,7 +82,7 @@ import {
   FiledRecordsSchema,
   FleetItemStatusSchema,
   FleetMcpConfigSchema,
-  FleetRefreshSchema,
+  FleetRefreshOutcomeSchema,
   FleetScopeSchema,
   FleetSyncOutcomeSchema,
   FleetSyncReportSchema,
@@ -90,6 +90,7 @@ import {
   HookHandlerSchema,
   InstanceStatusSchema,
   IssueTrackerSchema,
+  KeptMachineCapabilitiesSchema,
   LastErrorKindSchema,
   LinkModeSchema,
   MachineStateSchema,
@@ -98,9 +99,7 @@ import {
   MoveEndedSchema,
   MoveStageSchema,
   NamedHarnessReportSchema,
-  NamedMachineCapabilitiesSchema,
   NamedMoveRequestSchema,
-  NamedToolSigninSchema,
   NeutralUserMessageSchema,
   OnCapSchema,
   OpenCodeGoLimitsSchema,
@@ -123,10 +122,8 @@ import {
   SessionOriginSchema,
   SessionToolingSchema,
   SigninStateSchema,
-  SkillFileSchema,
   SpawnPayloadSchema,
   StarterOutcomeSchema,
-  StoppedCommandsSchema,
   StreamRelayStateSchema,
   ToolCopySchema,
   ToolWantsSchema,
@@ -342,8 +339,11 @@ export interface PriorConversation {
 
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
-  /** What the machine has installed, in its own words (core `NamedMachineCapabilities`). */
-  machineCapabilities: storedJson(NamedMachineCapabilitiesSchema)(
+  /**
+   * What the machine has installed, in its own words (core
+   * `KeptMachineCapabilities`); its platform is the first part of `os`.
+   */
+  machineCapabilities: storedJson(KeptMachineCapabilitiesSchema)(
     "machine_capabilities"
   ),
   machineId: machineColumn("machine_id").primaryKey(),
@@ -399,11 +399,21 @@ export const agents = sqliteTable("agents", {
    */
   pausedUntil: timestamp("paused_until"),
   /**
-   * How many of each kind of command the pause stopped as it began
-   * (machine-pause.ts): the machine's row says it. Null when it stopped
-   * nothing; cleared with the pause.
+   * How many merge checks and how many commands the pause stopped as it
+   * began (machine-pause.ts): the machine's row says it. 0 when it stopped
+   * none; cleared with the pause.
    */
-  pauseStopped: storedJson(StoppedCommandsSchema)("pause_stopped"),
+  pauseStoppedMergeChecks: integer("pause_stopped_merge_checks")
+    .notNull()
+    .default(0),
+  pauseStoppedCommands: integer("pause_stopped_commands").notNull().default(0),
+  /**
+   * What the pause stopped as migration 0424 found it stored, kept as it
+   * was when it did not read (db/machine-columns-unread.ts): the pause
+   * stopped work it no longer counts, and its row says so. Cleared with the
+   * pause.
+   */
+  pauseStoppedUnread: text("pause_stopped_unread"),
   lastSeenAt: timestamp("last_seen_at"),
   createdAt: stampedNow("created_at"),
 });
@@ -425,8 +435,22 @@ export const agentTools = sqliteTable(
     version: text("version"),
     method: text("method"),
     detail: text("detail"),
-    /** For a tool with its own sign-in: whether it is signed in there, as the machine last read it. */
-    signin: storedJson(NamedToolSigninSchema)("signin"),
+    /**
+     * For a tool with its own sign-in: whether it is signed in there, as the
+     * machine last read it, in its own word (core `NamedToolSignin.state`);
+     * null when the machine said nothing of it.
+     */
+    signinState: text("signin_state"),
+    /** When that sign-in was read (core `ToolSignin.at`). */
+    signinAt: timestamp("signin_at"),
+    /** What that read said when it said neither (core `ToolSignin.detail`). */
+    signinDetail: text("signin_detail"),
+    /**
+     * The sign-in as migration 0424 found it stored, kept as it was when it
+     * did not read (db/machine-columns-unread.ts): read as signed out until
+     * the machine says it again.
+     */
+    signinUnread: text("signin_unread"),
     /** Whose the copy there is, as the machine judged it (core `ToolCopy`); null from an older machine, or with no copy. */
     copy: storedJson(ToolCopySchema)("copy"),
     /** While the copy there is one its CawCo does not run: the version it runs (core `ToolWants`). */
@@ -2623,14 +2647,42 @@ const fetchedColumns = () => ({
   bytes: integer("bytes"),
   /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
   error: text("error"),
-  files: storedJson(z.array(SkillFileSchema))("files"),
+  /**
+   * Whether the row holds a resolve's files, each a row of its files table
+   * ({@link skillFiles}, {@link pluginFiles}); false until a resolve
+   * stores some.
+   */
+  filesHeld: integer("files_held", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * The files as migration 0423's step found them stored, kept as they were
+   * when they did not read (db/fleet-files-unread.ts): the row holds no
+   * files, machines are sent its hash alone, and its listing says so, until
+   * a fetch stores files again (a skill's kept value then goes into its
+   * history).
+   */
+  filesUnread: text("files_unread"),
   /**
    * What the source held when last read (latest_*, checked_at) and why that
    * read failed (check_error), the version the stored files declare, and
-   * what the last fetch of a row that had files came to (FleetVersioned).
+   * what the last fetch of a row that had files came to (refresh_*,
+   * FleetVersioned `lastRefresh`).
    */
   version: text("version"),
-  lastRefresh: storedJson(FleetRefreshSchema)("last_refresh"),
+  refreshAt: timestamp("refresh_at"),
+  refreshOutcome: storedEnum(FleetRefreshOutcomeSchema)("refresh_outcome"),
+  refreshError: text("refresh_error"),
+  refreshFromHash: text("refresh_from_hash"),
+  refreshFromVersion: text("refresh_from_version"),
+  refreshToHash: text("refresh_to_hash"),
+  refreshToVersion: text("refresh_to_version"),
+  /**
+   * The last fetch as migration 0422 found it stored, kept as it was when
+   * it did not read (db/fleet-refresh-unread.ts): no last fetch is said
+   * until the next one.
+   */
+  refreshUnread: text("refresh_unread"),
   latestHash: text("latest_hash"),
   latestVersion: text("latest_version"),
   checkedAt: timestamp("checked_at"),
@@ -2638,41 +2690,48 @@ const fetchedColumns = () => ({
 });
 
 /** The plugins the fleet installs, by the CLI's own `plugin@marketplace` id. */
-export const plugins = sqliteTable(
-  "plugins",
+export const plugins = sqliteTable("plugins", {
+  id: text("id").primaryKey(),
+  /** A disabled row is uninstalled from the machines, not merely switched off. */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  /**
+   * The resolved content, the same way {@link skills} keeps it, and for the
+   * same reason: the hub fetches a plugin once and every machine is sent the
+   * bytes ({@link pluginFiles}). A row with no files is one the machines
+   * still install the old way, by asking the CLI to go and get it.
+   */
+  ...fetchedColumns(),
+  createdAt: stampedNow("created_at"),
+});
+
+/**
+ * One file of a skill's or a plugin's resolved content (core `SkillFile`),
+ * as the three files tables keep it: its path under the skill's or plugin's
+ * directory, where it stood in the list its writer gave (the order the wire
+ * carries it in), whether it is executable, and its bytes exactly as
+ * fetched. The wire carries them as base64 (`contentBase64`), made from
+ * these bytes.
+ */
+const fileColumns = () => ({
+  path: text("path").notNull(),
+  position: integer("position").notNull(),
+  executable: integer("executable", { mode: "boolean" }).notNull(),
+  content: blob("content", { mode: "buffer" }).notNull(),
+});
+
+/** A plugin's resolved files ({@link plugins} `files_held`), gone with the plugin and renamed with it. */
+export const pluginFiles = sqliteTable(
+  "plugin_files",
   {
-    id: text("id").primaryKey(),
-    /** A disabled row is uninstalled from the machines, not merely switched off. */
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    /**
-     * The resolved content, the same way {@link skills} keeps it, and for the
-     * same reason: the hub fetches a plugin once and every machine is sent the
-     * bytes. A row with no files is one the machines still install the old
-     * way, by asking the CLI to go and get it.
-     */
-    ...fetchedColumns(),
-    createdAt: stampedNow("created_at"),
+    pluginId: text("plugin_id")
+      .notNull()
+      .references(() => plugins.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    ...fileColumns(),
   },
-  // Every column the fleet's listing reads (db/fleet-catalog.ts `listPlugins`), so
-  // it is read off this index alone: those after `files` sat behind its
-  // megabytes in each row, and a listing walked them all (12.6 ms a read on
-  // the live database, asked once per row of a pass). A column the listing
-  // reads is added here with it.
-  (table) => [
-    index("plugins_listing").on(
-      table.id,
-      table.enabled,
-      table.hash,
-      table.bytes,
-      table.error,
-      table.version,
-      table.lastRefresh,
-      table.latestHash,
-      table.latestVersion,
-      table.checkedAt,
-      table.checkError
-    ),
-  ]
+  (table) => [primaryKey({ columns: [table.pluginId, table.path] })]
 );
 
 /**
@@ -2680,50 +2739,39 @@ export const plugins = sqliteTable(
  * hub resolves a source once and keeps the files here, so a machine that joins
  * tomorrow is sent them without anything being downloaded again.
  */
-export const skills = sqliteTable(
-  "skills",
+export const skills = sqliteTable("skills", {
+  /** The directory the files land in on every machine. */
+  name: text("name").primaryKey(),
+  /** A `skills:` / `github:` / `npm:` / URL source, stored as the user gave it. */
+  source: text("source").notNull(),
+  /** A disabled row stays here and is deleted from the machines. */
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  ...fetchedColumns(),
+  /**
+   * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
+   * null for every machine (`~/.claude/skills/`). Placed at every checkout
+   * and delegate workspace of the project, as a bound MCP server is.
+   */
+  scope: storedEnum(FleetScopeSchema)("scope"),
+  projectId: fleetRowProject(),
+  /** Bound to every project in one area instead (`fleetRowArea`). */
+  areaId: fleetRowArea(),
+  createdAt: stampedNow("created_at"),
+});
+
+/** A skill's resolved files ({@link skills} `files_held`), gone with the skill. */
+export const skillFiles = sqliteTable(
+  "skill_files",
   {
-    /** The directory the files land in on every machine. */
-    name: text("name").primaryKey(),
-    /** A `skills:` / `github:` / `npm:` / URL source, stored as the user gave it. */
-    source: text("source").notNull(),
-    /** A disabled row stays here and is deleted from the machines. */
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    ...fetchedColumns(),
-    /**
-     * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
-     * null for every machine (`~/.claude/skills/`). Placed at every checkout
-     * and delegate workspace of the project, as a bound MCP server is.
-     */
-    scope: storedEnum(FleetScopeSchema)("scope"),
-    projectId: fleetRowProject(),
-    /** Bound to every project in one area instead (`fleetRowArea`). */
-    areaId: fleetRowArea(),
-    createdAt: stampedNow("created_at"),
+    skillName: text("skill_name")
+      .notNull()
+      .references(() => skills.name, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    ...fileColumns(),
   },
-  // Every column the fleet's listing reads (db/fleet-catalog.ts `listSkills`), so it
-  // is read off this index alone, never past `files` (10 ms a read on the
-  // live database, 0.1 ms off the index). A column the listing reads is
-  // added here with it.
-  (table) => [
-    index("skills_listing").on(
-      table.name,
-      table.source,
-      table.enabled,
-      table.hash,
-      table.bytes,
-      table.error,
-      table.scope,
-      table.projectId,
-      table.areaId,
-      table.version,
-      table.lastRefresh,
-      table.latestHash,
-      table.latestVersion,
-      table.checkedAt,
-      table.checkError
-    ),
-  ]
+  (table) => [primaryKey({ columns: [table.skillName, table.path] })]
 );
 
 /**
@@ -3853,11 +3901,29 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
   skillSource: text("skill_source").notNull(),
   hash: text("hash").notNull(),
   bytes: integer("bytes").notNull(),
-  files: storedJson(z.array(SkillFileSchema))("files").notNull(),
+  /**
+   * The version's files as migration 0423's step found them stored, or a
+   * skill's kept so when a fetch replaced them, as they were when they did
+   * not read (db/fleet-files-unread.ts): the version holds no files
+   * ({@link skillVersionFiles}) and is not restored.
+   */
+  filesUnread: text("files_unread"),
   /** `fleet` for the hub's own row; `machine:<machineId>` for an edited copy an overwrite took off it. */
   source: text("source").notNull(),
   createdAt: stampedNow("created_at"),
 });
+
+/** A kept skill version's files, gone with the version. */
+export const skillVersionFiles = sqliteTable(
+  "skill_version_files",
+  {
+    versionId: integer("version_id")
+      .notNull()
+      .references(() => fleetSkillHistory.id, { onDelete: "cascade" }),
+    ...fileColumns(),
+  },
+  (table) => [primaryKey({ columns: [table.versionId, table.path] })]
+);
 /** The one row of {@link supervisorConfig}. */
 export const SUPERVISOR_CONFIG_ID = "supervisor";
 

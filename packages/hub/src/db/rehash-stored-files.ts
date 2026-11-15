@@ -1,18 +1,28 @@
 import type { SkillFile } from "@cawco/core/fleet";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { storedHash } from "./fleet-catalog";
+import {
+  pluginFilesOf,
+  skillFilesOf,
+  storedHash,
+  versionFilesOf,
+} from "./fleet-catalog";
 import { dataMigrations, fleetSkillHistory, plugins, skills } from "./schema";
 
-/** Each of `rows` whose stored hash is not its files' own, written its own through `write`. */
-const rehashRows = <
-  Row extends { files: SkillFile[] | null; hash: string | null },
->(
+/**
+ * Each of `rows` whose stored hash is not its files' own (`files` reads
+ * them; a row that holds none is left), written its own through `write`.
+ */
+const rehashRows = <Row extends { hash: string | null; held: boolean }>(
   rows: Row[],
+  files: (row: Row) => SkillFile[],
   write: (row: Row, hash: string | null) => void
 ): void => {
   for (const row of rows) {
-    const hash = storedHash(row.files, row.hash);
+    if (!row.held) {
+      continue;
+    }
+    const hash = storedHash(files(row), row.hash);
     if (hash !== row.hash) {
       write(row, hash);
     }
@@ -50,17 +60,23 @@ export const rehashStoredFilesOnce = (
     }
     rehashRows(
       tx
-        .select({ name: skills.name, hash: skills.hash, files: skills.files })
+        .select({
+          name: skills.name,
+          hash: skills.hash,
+          held: skills.filesHeld,
+        })
         .from(skills)
         .all(),
+      (row) => skillFilesOf(tx, row.name),
       (row, hash) =>
         tx.update(skills).set({ hash }).where(eq(skills.name, row.name)).run()
     );
     rehashRows(
       tx
-        .select({ id: plugins.id, hash: plugins.hash, files: plugins.files })
+        .select({ id: plugins.id, hash: plugins.hash, held: plugins.filesHeld })
         .from(plugins)
         .all(),
+      (row) => pluginFilesOf(tx, row.id),
       (row, hash) =>
         tx.update(plugins).set({ hash }).where(eq(plugins.id, row.id)).run()
     );
@@ -69,10 +85,12 @@ export const rehashStoredFilesOnce = (
         .select({
           id: fleetSkillHistory.id,
           hash: fleetSkillHistory.hash,
-          files: fleetSkillHistory.files,
+          unread: fleetSkillHistory.filesUnread,
         })
         .from(fleetSkillHistory)
-        .all(),
+        .all()
+        .map((row) => ({ ...row, held: row.unread === null })),
+      (row) => versionFilesOf(tx, row.id),
       (row, hash) =>
         tx
           .update(fleetSkillHistory)

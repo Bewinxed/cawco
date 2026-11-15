@@ -60,11 +60,9 @@ export type MediaPath = "udp+tcp" | "tcp" | "none";
 /**
  * A {@link MachineCapabilities} in its machine's own words: each item's id,
  * its media path and its missing tools' needs the string the machine sent,
- * which may be one this build does not know (a newer agent's). What the hub
- * keeps of a machine's report (`agents.machine_capabilities`), and reads
- * into a {@link MachineCapabilities} (hub db machines.ts
- * `capabilitiesOf`): an item, a media path or a missing tool it does not
- * know is left out.
+ * which may be one this build does not know (a newer agent's). What a
+ * machine's report beat carries; the hub keeps it as
+ * {@link KeptMachineCapabilities}.
  */
 export interface NamedMachineCapabilities {
   at: number;
@@ -75,6 +73,18 @@ export interface NamedMachineCapabilities {
   })[];
   platform: string;
 }
+
+/**
+ * What the hub keeps of a machine's report (`agents.machine_capabilities`):
+ * a {@link NamedMachineCapabilities} without its `platform`, which is the
+ * first part of the machine's `os` (fleet.ts `machinePlatform`). Read into a
+ * {@link MachineCapabilities} (hub db machines.ts `capabilitiesOf`): an
+ * item, a media path or a missing tool this build does not know is left out.
+ */
+export type KeptMachineCapabilities = Omit<
+  NamedMachineCapabilities,
+  "platform"
+>;
 
 export interface MachineCapabilities {
   at: number;

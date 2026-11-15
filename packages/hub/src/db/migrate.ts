@@ -31,10 +31,13 @@ import type { DbCore } from "./core";
 import { logCutFromUnread } from "./cut-from-unread";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
+import { placeFleetFiles } from "./fleet-files-unread";
+import { logFleetRefreshUnread } from "./fleet-refresh-unread";
 import { logGatePassesUnread } from "./gate-passes-unread";
 import { logItemBlocksUnread } from "./item-blocks-unread";
 import { logLandedUnread } from "./landed-unread";
 import { logLimitLinesUnread } from "./limit-lines-unread";
+import { logMachineColumnsUnread } from "./machine-columns-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
@@ -298,6 +301,36 @@ export const MIGRATION_STEPS: readonly Step[] = [
       // Every owed send whose owed envelope 0421 does not fold as it
       // stands, read before it runs.
       logOwedSendsUnread(client);
+    },
+  },
+  {
+    name: "fleet-refresh-unread",
+    before: "0422_fleet_file_rows",
+    at: "migrator",
+    run: (client) => {
+      // Every skill's and plugin's last fetch 0422 keeps as not read, read before it runs.
+      logFleetRefreshUnread(client);
+    },
+  },
+  {
+    name: "fleet-files",
+    before: "0423_fleet_files_dropped",
+    at: "migrator",
+    run: (client) => {
+      // Every skill's, plugin's and kept version's files placed as rows of
+      // 0422's tables, the trash's with them, before 0423 drops the JSON
+      // (fleet-files-unread.ts).
+      placeFleetFiles(client);
+    },
+  },
+  {
+    name: "machine-columns-unread",
+    before: "0424_machine_pause_signin_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every machine's pause and tool sign-in 0424 keeps as not read, and
+      // each platform it drops that was not its os's, read before it runs.
+      logMachineColumnsUnread(client);
     },
   },
   {

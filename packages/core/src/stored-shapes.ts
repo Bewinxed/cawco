@@ -25,7 +25,10 @@ import type {
   LinkMode as LinkModeType,
 } from "./external-items";
 import { EXTERNAL_SOURCES } from "./external-items";
-import type { McpPlatform as McpPlatformType } from "./fleet";
+import type {
+  FleetRefreshOutcome as FleetRefreshOutcomeType,
+  McpPlatform as McpPlatformType,
+} from "./fleet";
 import { FAULT_CAUSES, MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
 import type { FleetScope as FleetScopeType } from "./fleet-placement";
 import type {
@@ -1531,21 +1534,16 @@ const FleetMcpConfigShape = declared(
 export const FleetMcpConfigSchema = FleetMcpConfigShape;
 export type FleetMcpConfigOutput = z.output<typeof FleetMcpConfigShape>;
 
-const FleetRefreshShape = declared(
-  z.object({
-    at: z.number(),
-    error: z.string().optional(),
-    fromHash: z.string().optional(),
-    fromVersion: z.string().optional(),
-    outcome: z.enum(["updated", "unchanged", "failed"]),
-    toHash: z.string().optional(),
-    toVersion: z.string().optional(),
-  }),
-  "FleetRefresh",
+const FleetRefreshOutcomeShape = declared(
+  z.enum(["updated", "unchanged", "failed"]),
+  "FleetRefreshOutcome",
   "packages/core/src/fleet.ts"
 );
-export const FleetRefreshSchema = FleetRefreshShape;
-export type FleetRefreshOutput = z.output<typeof FleetRefreshShape>;
+export const FleetRefreshOutcomeSchema: z.ZodType<FleetRefreshOutcomeType> =
+  FleetRefreshOutcomeShape;
+export type FleetRefreshOutcomeOutput = z.output<
+  typeof FleetRefreshOutcomeShape
+>;
 
 const FleetScopeShape = declared(
   z.enum(["user", "project", "local"]),
@@ -2040,23 +2038,6 @@ const IssueTrackerShape = declared(
 export const IssueTrackerSchema = IssueTrackerShape;
 export type IssueTrackerOutput = z.output<typeof IssueTrackerShape>;
 
-const LastErrorKindShape = declared(
-  z.enum(["conversation-gone", "restart-lost", "start-refused"]),
-  "LastErrorKind",
-  "packages/core/src/relaunch.ts"
-);
-export const LastErrorKindSchema: z.ZodType<LastErrorKindType> =
-  LastErrorKindShape;
-export type LastErrorKindOutput = z.output<typeof LastErrorKindShape>;
-
-const LinkModeShape = declared(
-  z.enum(["record", "closes", "refs", "related"]),
-  "LinkMode",
-  "packages/core/src/external-items.ts"
-);
-export const LinkModeSchema: z.ZodType<LinkModeType> = LinkModeShape;
-export type LinkModeOutput = z.output<typeof LinkModeShape>;
-
 const WorkspaceToolShape = declared(
   z.object({
     command: z.string(),
@@ -2098,6 +2079,61 @@ const MachineCapabilityShape = declared(
 );
 export const MachineCapabilitySchema = MachineCapabilityShape;
 export type MachineCapabilityOutput = z.output<typeof MachineCapabilityShape>;
+
+const NamedMachineCapabilitiesShape = declared(
+  z.object({
+    at: z.number(),
+    items: z.array(
+      MachineCapabilityShape.omit({
+        id: true,
+        media: true,
+        missing: true,
+      }).extend({
+        id: z.string(),
+        media: z.string().optional(),
+        missing: z
+          .array(
+            WorkspaceToolShape.omit({ need: true }).extend({ need: z.string() })
+          )
+          .optional(),
+      })
+    ),
+    platform: z.string(),
+  }),
+  "NamedMachineCapabilities",
+  "packages/core/src/capabilities.ts"
+);
+export const NamedMachineCapabilitiesSchema = NamedMachineCapabilitiesShape;
+export type NamedMachineCapabilitiesOutput = z.output<
+  typeof NamedMachineCapabilitiesShape
+>;
+
+const KeptMachineCapabilitiesShape = declared(
+  NamedMachineCapabilitiesShape.omit({ platform: true }),
+  "KeptMachineCapabilities",
+  "packages/core/src/capabilities.ts"
+);
+export const KeptMachineCapabilitiesSchema = KeptMachineCapabilitiesShape;
+export type KeptMachineCapabilitiesOutput = z.output<
+  typeof KeptMachineCapabilitiesShape
+>;
+
+const LastErrorKindShape = declared(
+  z.enum(["conversation-gone", "restart-lost", "start-refused"]),
+  "LastErrorKind",
+  "packages/core/src/relaunch.ts"
+);
+export const LastErrorKindSchema: z.ZodType<LastErrorKindType> =
+  LastErrorKindShape;
+export type LastErrorKindOutput = z.output<typeof LastErrorKindShape>;
+
+const LinkModeShape = declared(
+  z.enum(["record", "closes", "refs", "related"]),
+  "LinkMode",
+  "packages/core/src/external-items.ts"
+);
+export const LinkModeSchema: z.ZodType<LinkModeType> = LinkModeShape;
+export type LinkModeOutput = z.output<typeof LinkModeShape>;
 
 const MachineStateShape = declared(
   z.enum(["active", "idle", "locked", "asleep"]),
@@ -2329,34 +2365,6 @@ const NamedHarnessReportShape = declared(
 );
 export const NamedHarnessReportSchema = NamedHarnessReportShape;
 export type NamedHarnessReportOutput = z.output<typeof NamedHarnessReportShape>;
-
-const NamedMachineCapabilitiesShape = declared(
-  z.object({
-    at: z.number(),
-    items: z.array(
-      MachineCapabilityShape.omit({
-        id: true,
-        media: true,
-        missing: true,
-      }).extend({
-        id: z.string(),
-        media: z.string().optional(),
-        missing: z
-          .array(
-            WorkspaceToolShape.omit({ need: true }).extend({ need: z.string() })
-          )
-          .optional(),
-      })
-    ),
-    platform: z.string(),
-  }),
-  "NamedMachineCapabilities",
-  "packages/core/src/capabilities.ts"
-);
-export const NamedMachineCapabilitiesSchema = NamedMachineCapabilitiesShape;
-export type NamedMachineCapabilitiesOutput = z.output<
-  typeof NamedMachineCapabilitiesShape
->;
 
 const MoveRequestShape = declared(
   z.object({
@@ -3594,21 +3602,6 @@ const StarterOutcomeShape = declared(
 export const StarterOutcomeSchema: z.ZodType<StarterOutcomeType> =
   StarterOutcomeShape;
 export type StarterOutcomeOutput = z.output<typeof StarterOutcomeShape>;
-
-const RunKindShape = declared(
-  z.enum(["merge check", "command"]),
-  "RunKind",
-  "packages/core/src/protocol.ts"
-);
-export type RunKindOutput = z.output<typeof RunKindShape>;
-
-const StoppedCommandsShape = declared(
-  z.partialRecord(RunKindShape, z.number()),
-  "StoppedCommands",
-  "packages/core/src/protocol.ts"
-);
-export const StoppedCommandsSchema = StoppedCommandsShape;
-export type StoppedCommandsOutput = z.output<typeof StoppedCommandsShape>;
 
 export const SendRefusalShape = declared(
   z.union([

@@ -2,13 +2,15 @@
 
 import type { AccountReport } from "@cawco/core/accounts";
 import type {
+  KeptMachineCapabilities,
   MachineCapabilities,
   NamedMachineCapabilities,
 } from "@cawco/core/capabilities";
-import type {
-  FleetItemStatus,
-  FleetSyncOutcome,
-  FleetSyncReport,
+import {
+  type FleetItemStatus,
+  type FleetSyncOutcome,
+  type FleetSyncReport,
+  machinePlatform,
 } from "@cawco/core/fleet";
 import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
 import {
@@ -25,7 +27,6 @@ import {
 import type {
   AgentRow,
   BuildInfo,
-  RunKind,
   StoppedCommands,
 } from "@cawco/core/protocol";
 import {
@@ -42,7 +43,11 @@ import type {
   ToolSignin,
   ToolStatus,
 } from "@cawco/core/tools";
-import { stoppedWords } from "@cawco/core/words/machine-pause";
+import {
+  machinePauseWords,
+  stoppedWords,
+} from "@cawco/core/words/machine-pause";
+import { toolWords } from "@cawco/core/words/tools";
 import { and, asc, eq, getTableName, ne, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { DbCore } from "./core";
@@ -121,15 +126,17 @@ const signinStateOf = (state: string): ToolSignin["state"] => {
 };
 
 /**
- * What a machine reported it has installed (core `NamedMachineCapabilities`),
- * read: an item, a media path or a missing tool this build does not know is
- * left out.
+ * What the hub keeps of what a machine reported it has installed (core
+ * `KeptMachineCapabilities`), read, its platform the one its `os` names
+ * (core `machinePlatform`): an item, a media path or a missing tool this
+ * build does not know is left out.
  */
-const capabilitiesOf = ({
-  items,
-  ...capabilities
-}: NamedMachineCapabilities): MachineCapabilities => ({
+const capabilitiesOf = (
+  { items, ...capabilities }: KeptMachineCapabilities,
+  os: string
+): MachineCapabilities => ({
   ...capabilities,
+  platform: machinePlatform({ os }) ?? "",
   items: items.flatMap(({ media, missing, ...item }) => {
     const parsed = MachineCapabilitySchema.safeParse({
       ...item,
@@ -146,6 +153,14 @@ const capabilitiesOf = ({
     });
     return parsed.success ? [parsed.data] : [];
   }),
+});
+
+/** A tool's sign-in as its row's columns keep it; a sign-in said lets one kept as not read go. */
+const signinCells = (signin: ReportedToolStatus["signin"]) => ({
+  signinState: signin?.state ?? null,
+  signinAt: signin === undefined ? null : new Date(signin.at),
+  signinDetail: signin?.detail ?? null,
+  signinUnread: null,
 });
 
 export interface MachinesDb {
@@ -258,7 +273,7 @@ export interface MachinesDb {
    * row moved.
    */
   readonly setAgentAuth: (machineId: string, auth: AgentAuth) => boolean;
-  /** What the machine has installed, as its latest capabilities beat said. */
+  /** What the machine has installed, as its latest capabilities beat said; its platform is its `os`'s, not kept twice. */
   readonly setAgentCapabilities: (
     machineId: string,
     capabilities: NamedMachineCapabilities
@@ -355,6 +370,35 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     tx.delete(agents).where(eq(agents.machineId, from)).run();
   };
 
+  /**
+   * A tool's sign-in as its row keeps it: none while the machine said none;
+   * signed out, at the row's time, while the one kept does not read
+   * (`signin_unread`, hub migration 0424).
+   */
+  const signinOf = (
+    row: typeof agentTools.$inferSelect
+  ): { signin?: ToolSignin } => {
+    if (row.signinUnread !== null) {
+      return {
+        signin: {
+          state: "signed-out",
+          at: row.at.getTime(),
+          detail: toolWords.signinKeptUnread,
+        },
+      };
+    }
+    if (row.signinState === null || row.signinAt === null) {
+      return {};
+    }
+    return {
+      signin: {
+        state: signinStateOf(row.signinState),
+        at: row.signinAt.getTime(),
+        ...(row.signinDetail === null ? {} : { detail: row.signinDetail }),
+      },
+    };
+  };
+
   /** A tool's row as the status the wire carries: what it does not say is left out. */
   const toolStatusOf = (row: typeof agentTools.$inferSelect): ToolStatus => ({
     id: row.toolId,
@@ -363,9 +407,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     ...(row.version === null ? {} : { version: row.version }),
     ...(row.method === null ? {} : { method: row.method }),
     ...(row.detail === null ? {} : { detail: row.detail }),
-    ...(row.signin === null
-      ? {}
-      : { signin: { ...row.signin, state: signinStateOf(row.signin.state) } }),
+    ...signinOf(row),
     ...(row.copy === null ? {} : { copy: row.copy }),
     ...(row.wants === null ? {} : { wants: row.wants }),
     ...(row.triedAt === null ? {} : { triedAt: row.triedAt.getTime() }),
@@ -414,7 +456,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           version: status.version ?? null,
           method: status.method ?? null,
           detail: status.detail ?? null,
-          signin: status.signin ?? null,
+          ...signinCells(status.signin),
           copy: status.copy ?? null,
           wants: status.wants ?? null,
           triedAt:
@@ -528,7 +570,9 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         home,
         machineCapabilities,
         pausedUntil,
-        pauseStopped,
+        pauseStoppedMergeChecks,
+        pauseStoppedCommands,
+        pauseStoppedUnread,
         ...agent
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
       }) => {
@@ -539,7 +583,13 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           ...agent,
           tools: toolCells.get(agent.machineId) ?? {},
           pausedUntil: pausedUntil?.getTime() ?? null,
-          pauseStopped: (pauseStopped && stoppedWords(pauseStopped)) || null,
+          pauseStopped:
+            pauseStoppedUnread === null
+              ? (stoppedWords({
+                  "merge check": pauseStoppedMergeChecks,
+                  command: pauseStoppedCommands,
+                }) ?? null)
+              : machinePauseWords.stoppedUncounted,
           ...(fleet ? { fleet } : {}),
           ...(fleetSync ? { fleetSync } : {}),
           ...(fleetItems ? { fleetItems } : {}),
@@ -549,7 +599,12 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           ...(chosen ? { chosenModes: chosen } : {}),
           ...(home ? { home } : {}),
           ...(machineCapabilities
-            ? { machineCapabilities: capabilitiesOf(machineCapabilities) }
+            ? {
+                machineCapabilities: capabilitiesOf(
+                  machineCapabilities,
+                  agent.os
+                ),
+              }
             : {}),
         };
       }
@@ -652,7 +707,10 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
-    setAgentCapabilities: (machineId, machineCapabilities) => {
+    setAgentCapabilities: (
+      machineId,
+      { platform: _platform, ...machineCapabilities }
+    ) => {
       db.update(agents)
         .set({ machineCapabilities })
         .where(eq(agents.machineId, machineId))
@@ -777,24 +835,27 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     // what it stopped this time.
     setMachinePause: (machineId, until, stopped) => {
       const row = db
-        .select({ pauseStopped: agents.pauseStopped })
+        .select({
+          mergeChecks: agents.pauseStoppedMergeChecks,
+          commands: agents.pauseStoppedCommands,
+          unread: agents.pauseStoppedUnread,
+        })
         .from(agents)
         .where(eq(agents.machineId, machineId))
         .get();
       if (!row) {
         return false;
       }
-      const kept: StoppedCommands = until ? { ...row.pauseStopped } : {};
-      for (const [kind, count] of Object.entries(stopped ?? {}) as [
-        RunKind,
-        number,
-      ][]) {
-        kept[kind] = (kept[kind] ?? 0) + count;
-      }
+      // Ended, nothing it stopped is said any more, a count kept as not
+      // read included.
       db.update(agents)
         .set({
           pausedUntil: until,
-          pauseStopped: Object.keys(kept).length > 0 ? kept : null,
+          pauseStoppedMergeChecks:
+            (until ? row.mergeChecks : 0) + (stopped?.["merge check"] ?? 0),
+          pauseStoppedCommands:
+            (until ? row.commands : 0) + (stopped?.command ?? 0),
+          pauseStoppedUnread: until ? row.unread : null,
         })
         .where(eq(agents.machineId, machineId))
         .run();

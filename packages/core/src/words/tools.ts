@@ -274,4 +274,11 @@ export const toolWords = {
   /** The machine took the code and the tool still reads signed out; that link is spent. */
   signinRefused: (name: string) =>
     `That code didn't sign ${name} in. That link is spent.`,
+  /**
+   * A tool's sign-in the hub kept and could not read (hub migration 0424):
+   * its `detail`, the tool read as signed out until the machine reads its
+   * sign-in again (hub db machines.ts `toolStatusOf`).
+   */
+  signinKeptUnread:
+    "The kept sign-in didn't read, so this reads as signed out until the machine checks it again.",
 } as const;

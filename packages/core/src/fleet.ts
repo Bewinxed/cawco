@@ -66,9 +66,9 @@ export interface FleetMcpServer extends FleetPlacement {
   enabled: boolean;
   name: string;
   /**
-   * The machine platforms it can run on, by the name each machine reports in
-   * its capabilities (`MachineCapabilities.platform`, Node's
-   * `process.platform`: "darwin", "linux", "win32"). A machine of another
+   * The machine platforms it can run on, by the name each machine's
+   * platform goes by ({@link machinePlatform}, Node's `process.platform`:
+   * "darwin", "linux", "win32"). A machine of another
    * platform is never sent it, so it is neither installed nor probed there.
    * Absent: every machine.
    */
@@ -115,18 +115,15 @@ export const mcpRunsOn = (
       (server.platforms as readonly string[]).includes(platform)));
 
 /**
- * A machine's platform, by the first report that names it: its capabilities
- * beat (`MachineCapabilities.platform`, Node's `process.platform`), else its
- * register's `os`, `<process.platform>-<arch>` (agent daemon.ts), which the
- * hub holds before it sends the machine anything. A platform-scoped server
- * ({@link mcpRunsOn}) reaches a new machine on its first sync either way.
+ * A machine's platform: the first part of its register's `os`,
+ * `<process.platform>-<arch>` (agent daemon.ts), which the hub holds before
+ * it sends the machine anything, so a platform-scoped server
+ * ({@link mcpRunsOn}) reaches a new machine on its first sync. Its
+ * capabilities beat names the same `process.platform`, which the hub does
+ * not keep twice.
  */
-export const machinePlatform = (machine: {
-  machineCapabilities?: { platform: string };
-  os: string;
-}): string | undefined =>
-  machine.machineCapabilities?.platform ??
-  (machine.os.split("-")[0] || undefined);
+export const machinePlatform = (machine: { os: string }): string | undefined =>
+  machine.os.split("-")[0] || undefined;
 
 /**
  * Where CawCo publishes its shared OAuth client: a metadata document, and the
@@ -193,6 +190,9 @@ export interface FleetPlugin extends FleetPlacement, FleetVersioned {
   id: string;
 }
 
+/** What a fetch of a row that already had files came to ({@link FleetRefresh.outcome}). */
+export type FleetRefreshOutcome = "updated" | "unchanged" | "failed";
+
 /**
  * What a fetch of a row that already had files came to: its source moved on
  * (`updated`), held what the fleet already has (`unchanged`), or could not be
@@ -207,7 +207,7 @@ export interface FleetRefresh {
   error?: string;
   fromHash?: string;
   fromVersion?: string;
-  outcome: "updated" | "unchanged" | "failed";
+  outcome: FleetRefreshOutcome;
   toHash?: string;
   toVersion?: string;
 }

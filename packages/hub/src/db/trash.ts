@@ -1,6 +1,8 @@
+import type { Database } from "bun:sqlite";
 import type { Deleted } from "@cawco/core/fleet";
 import { and, eq, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { z } from "zod";
 import {
   configTrash,
   connectionAreas,
@@ -28,11 +30,14 @@ import {
   marketplaces,
   mcpServerPlatforms,
   mcpServers,
+  pluginFiles,
   plugins,
   ruleState,
   rules,
+  skillFiles,
   skills,
 } from "./schema";
+import { TrashedRowsSchema } from "./stored-shapes";
 import type { TrashedRows, TrashKind } from "./stored-types";
 import type { Tx } from "./tx";
 
@@ -54,6 +59,40 @@ export const undoable = (restore: number): Undoable => ({
   restore,
   restorableForMs: UNDO_MS,
 });
+
+/** An entry's rows as the trash keeps them. */
+const TrashRows = z.array(TrashedRowsSchema);
+
+/** One trash entry, its rows parsed. */
+export interface TrashedEntry {
+  id: number;
+  rows: z.output<typeof TrashRows>;
+}
+
+/**
+ * The trash's entries of `kinds`, each as its rows parse, for a migration
+ * step that moves them to a new shape on the driver's connection; one that
+ * does not parse is not the step's to move.
+ */
+export const trashedEntries = (
+  client: Database,
+  kinds: readonly TrashKind[]
+): TrashedEntry[] =>
+  client
+    .query<{ id: number; rows: string }, string[]>(
+      `SELECT id, rows FROM config_trash WHERE kind IN (${kinds.map(() => "?").join(", ")}) ORDER BY id`
+    )
+    .all(...kinds)
+    .flatMap((entry) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(entry.rows);
+      } catch {
+        return [];
+      }
+      const rows = TrashRows.safeParse(parsed);
+      return rows.success ? [{ id: entry.id, rows: rows.data }] : [];
+    });
 
 /** What a delete names: the item, by its kind and key. */
 type TrashItem =
@@ -135,8 +174,15 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
   harnessConfig: (key) => [
     part("fleet_harness_config", eq(fleetHarnessConfig.id, key)),
   ],
-  skill: (key) => [part("skills", eq(skills.name, key))],
-  plugin: (key) => [part("plugins", eq(plugins.id, key))],
+  // Its files come back with it.
+  skill: (key) => [
+    part("skills", eq(skills.name, key)),
+    part("skill_files", eq(skillFiles.skillName, key)),
+  ],
+  plugin: (key) => [
+    part("plugins", eq(plugins.id, key)),
+    part("plugin_files", eq(pluginFiles.pluginId, key)),
+  ],
   marketplace: (key) => [part("marketplaces", eq(marketplaces.name, key))],
   agent: (key) => [part("fleet_agents", eq(fleetAgents.name, key))],
   mcp: (key) => [
@@ -210,30 +256,59 @@ const docParts = (paths: readonly string[]): Part[] => [
   part("fleet_memory_doc_areas", inArray(fleetMemoryDocAreas.path, [...paths])),
 ];
 
-/** A driver value the trash can keep as JSON; anything else is refused by name. */
+/**
+ * The columns that hold bytes, by table: the trash keeps each one's value
+ * as base64 text ({@link keepable}) and puts the bytes back
+ * ({@link putBack}).
+ */
+const BYTES: Readonly<Record<string, readonly string[]>> = {
+  skill_files: ["content"],
+  plugin_files: ["content"],
+};
+
+/** A driver value the trash can keep as JSON, bytes as base64 where {@link BYTES} names them; anything else is refused by name. */
 const keepable = (
   table: string,
   row: Record<string, unknown>
-): Record<string, string | number | null> => {
-  for (const [column, value] of Object.entries(row)) {
-    if (
-      value !== null &&
-      typeof value !== "string" &&
-      typeof value !== "number"
-    ) {
-      throw new Error(
-        `${table}.${column} holds a ${typeof value}, which the trash cannot keep`
-      );
-    }
-  }
-  return row as Record<string, string | number | null>;
-};
+): Record<string, string | number | null> =>
+  Object.fromEntries(
+    Object.entries(row).map(([column, value]) => {
+      if (value instanceof Uint8Array && BYTES[table]?.includes(column)) {
+        return [column, Buffer.from(value).toString("base64")];
+      }
+      if (
+        value !== null &&
+        typeof value !== "string" &&
+        typeof value !== "number"
+      ) {
+        throw new Error(
+          `${table}.${column} holds a ${typeof value}, which the trash cannot keep`
+        );
+      }
+      return [column, value];
+    })
+  );
+
+/** A row the trash kept, as the driver writes it: bytes put back from their base64. */
+const putBack = (
+  table: string,
+  row: Record<string, string | number | null>
+): Record<string, string | number | Buffer | null> =>
+  Object.fromEntries(
+    Object.entries(row).map(([column, value]) => [
+      column,
+      typeof value === "string" && BYTES[table]?.includes(column)
+        ? Buffer.from(value, "base64")
+        : value,
+    ])
+  );
 
 const insert = (
   tx: Tx,
   table: string,
-  row: Record<string, string | number | null>
+  kept: Record<string, string | number | null>
 ) => {
+  const row = putBack(table, kept);
   const columns = Object.keys(row);
   tx.run(
     sql`insert into ${sql.identifier(table)} (${sql.join(
