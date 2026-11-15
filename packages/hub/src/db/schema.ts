@@ -10,7 +10,7 @@ import {
 } from "@cawco/core/accounts/kinds";
 import { ACTION_STATES } from "@cawco/core/actions";
 import { ARTIFACT_DOES, ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
-import { ASK_STORED } from "@cawco/core/asks";
+import { ASK_KEPT, ASK_KINDS } from "@cawco/core/asks";
 import { BLOCK_PAGES, BLOCK_WIDTHS } from "@cawco/core/blocks";
 import {
   CONNECTION_AUTHS,
@@ -4346,8 +4346,10 @@ export const ownerDevices = sqliteTable("owner_devices", {
  * opened it and goes with that device: unpaired, or every device forgotten
  * as pairing turns off. One with no device is a trusted hub's browser,
  * known by its pass alone; those go as pairing turns on. A session's own
- * pass (`artifact_browse`) names its session and the origins it opens
- * (`scope`), and goes with that session.
+ * pass (`artifact_browse`) names its session, and goes with that session.
+ * Which origins a pass opens is `opens_every` and its rows in
+ * {@link previewPassOrigins}, never its session: the person's opens every
+ * one, a session's those its rows name.
  */
 export const previewPasses = sqliteTable(
   "preview_passes",
@@ -4362,8 +4364,17 @@ export const previewPasses = sqliteTable(
     instanceId: sessionColumn("instance_id").references(() => instances.id, {
       onDelete: "cascade",
     }),
-    /** The preview origins (their keys) a session's pass opens; null for the person's, which opens every one. */
-    scope: storedJson(z.array(z.string()))("scope"),
+    /** The person's pass, which opens every preview origin; a session's opens only the origins its {@link previewPassOrigins} rows name. */
+    opensEvery: integer("opens_every", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
+     * A session's scope that did not read as a list of origin keys when it
+     * became rows (migration 0409), as it was stored: the pass opens no
+     * origin (`opens_every` false, no rows), and its browser enters again
+     * with a fresh ticket.
+     */
+    scopeUnread: text("scope_unread"),
     createdAt: timestamp("created_at").notNull(),
     lastSeenAt: timestamp("last_seen_at").notNull(),
     /** Its absolute end, from its entry: never moved by use. */
@@ -4373,6 +4384,18 @@ export const previewPasses = sqliteTable(
     index("preview_passes_device_id_idx").on(table.deviceId),
     index("preview_passes_instance_id_idx").on(table.instanceId),
   ]
+);
+
+/** The preview origins (their keys) a session's pass opens, one row each (preview-access.ts `passOf`). */
+export const previewPassOrigins = sqliteTable(
+  "preview_pass_origins",
+  {
+    passId: text("pass_id")
+      .notNull()
+      .references(() => previewPasses.id, { onDelete: "cascade" }),
+    originKey: text("origin_key").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.passId, table.originKey] })]
 );
 
 /**
@@ -6098,9 +6121,14 @@ export const parkedAsks = sqliteTable(
 /**
  * What a session asked the person and the hub carries out (core asks.ts):
  * one row per ask, open until answered or withdrawn, kept after as its
- * record. The asker, its state and when it was raised are columns, so a
- * session's fold moves its asks and a boot reads the open ones without the
- * record; the rest is `record`.
+ * record. Everything the hub decides an ask by is a column: the asker, its
+ * state, when it was raised, its kind, whether it is routed to its
+ * session's parent, when it was answered and whether that allowed, when its
+ * approved call started and ended, when it was withdrawn, and when a
+ * permit's grant was spent or lapsed. A permit's grant is found by them
+ * alone (db/asks.ts `grants`), and so is a call the hub went while running
+ * (`cutShort`). What was asked, who answered and what the call said are
+ * `kept` (core `ASK_KEPT`).
  */
 export const asks = sqliteTable(
   "asks",
@@ -6109,10 +6137,41 @@ export const asks = sqliteTable(
     instanceId: sessionColumn("instance_id").notNull(),
     state: storedEnum(AskStateSchema)("state").notNull(),
     raisedAt: integer("raised_at").notNull(),
-    record: storedJson(ASK_STORED)("record").notNull(),
+    /** Every writer sets it; null only where a record did not read when it became columns (migration 0408), `record_unread` set. */
+    kind: storedEnum(z.enum(ASK_KINDS))("kind"),
+    /** A permit whose prompt went to its session's parent to answer (core `routedTo`). */
+    routedToParent: integer("routed_to_parent", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    answeredAt: integer("answered_at"),
+    /** Whether the answer allowed; set with `answered_at`. Never `allow` where `record_unread` is set. */
+    answerBehavior: storedEnum(z.enum(["allow", "deny"]))("answer_behavior"),
+    /** When the hub started the approved call: in the answer's own write, so it runs at most once. */
+    carriedStartedAt: integer("carried_started_at"),
+    carriedEndedAt: integer("carried_ended_at"),
+    withdrawnAt: integer("withdrawn_at"),
+    /** When an approved permit's grant was spent on the same call. */
+    usedAt: integer("used_at"),
+    /** When an approved permit's grant lapsed unspent. */
+    lapsedAt: integer("lapsed_at"),
+    /** What was asked, who answered, what the call said (core `ASK_KEPT`); every writer sets it and clears `record_unread`. Null: `record_unread` set. */
+    kept: storedJson(ASK_KEPT)("kept"),
+    /**
+     * A record that did not read whole when it became columns (migration
+     * 0408), as it was stored, `kept` null beside it; what of it read is
+     * placed in the columns, an answer that allowed aside. The hub never
+     * reads it as an ask: it is never granted, answered or carried, and an
+     * open one is withdrawn as the hub starts, its session told (asks.ts
+     * `boot`).
+     */
+    recordUnread: text("record_unread"),
   },
   (table) => [
-    index("asks_instance").on(table.instanceId),
+    index("asks_instance_state_kind").on(
+      table.instanceId,
+      table.state,
+      table.kind
+    ),
     index("asks_state").on(table.state),
   ]
 );

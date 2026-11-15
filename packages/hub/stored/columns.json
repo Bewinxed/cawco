@@ -1796,21 +1796,24 @@
       "browser"
     ]
   },
-  "asks.record": {
+  "asks.answer_behavior": {
+    "type": "string",
+    "enum": [
+      "allow",
+      "deny"
+    ]
+  },
+  "asks.kept": {
     "type": "object",
     "properties": {
       "toolUseId": {
         "type": "string"
       },
       "asked": {
-        "oneOf": [
+        "anyOf": [
           {
             "type": "object",
             "properties": {
-              "kind": {
-                "type": "string",
-                "const": "approve"
-              },
               "tool": {
                 "type": "string"
               },
@@ -1900,7 +1903,6 @@
               }
             },
             "required": [
-              "kind",
               "tool",
               "input",
               "carry"
@@ -1909,10 +1911,6 @@
           {
             "type": "object",
             "properties": {
-              "kind": {
-                "type": "string",
-                "const": "question"
-              },
               "questions": {
                 "minItems": 1,
                 "type": "array",
@@ -1966,7 +1964,6 @@
               }
             },
             "required": [
-              "kind",
               "questions",
               "blocks"
             ]
@@ -1974,10 +1971,6 @@
           {
             "type": "object",
             "properties": {
-              "kind": {
-                "type": "string",
-                "const": "permit"
-              },
               "tool": {
                 "type": "string"
               },
@@ -1990,23 +1983,15 @@
               }
             },
             "required": [
-              "kind",
               "tool",
               "input"
             ]
           }
         ]
       },
-      "routedTo": {
-        "type": "string",
-        "const": "parent"
-      },
       "answer": {
         "type": "object",
         "properties": {
-          "at": {
-            "type": "number"
-          },
           "by": {
             "type": "object",
             "properties": {
@@ -2036,59 +2021,34 @@
             ]
           },
           "result": {
-            "oneOf": [
-              {
+            "type": "object",
+            "properties": {
+              "answers": {
                 "type": "object",
-                "properties": {
-                  "behavior": {
-                    "type": "string",
-                    "const": "allow"
-                  },
-                  "answers": {
-                    "type": "object",
-                    "propertyNames": {
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
                       "type": "string"
                     },
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      ]
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
-                  }
-                },
-                "required": [
-                  "behavior"
-                ]
+                  ]
+                }
               },
-              {
-                "type": "object",
-                "properties": {
-                  "behavior": {
-                    "type": "string",
-                    "const": "deny"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "behavior",
-                  "message"
-                ]
+              "message": {
+                "type": "string"
               }
-            ]
+            }
           }
         },
         "required": [
-          "at",
           "by",
           "result"
         ]
@@ -2096,68 +2056,36 @@
       "carried": {
         "type": "object",
         "properties": {
-          "startedAt": {
-            "type": "number"
-          },
-          "endedAt": {
-            "type": "number"
-          },
           "said": {
             "type": "string"
           },
           "failed": {
             "type": "string"
           }
-        },
-        "required": [
-          "startedAt"
-        ]
+        }
       },
       "withdrawn": {
         "type": "object",
         "properties": {
-          "at": {
-            "type": "number"
-          },
-          "by": {
-            "type": "string",
-            "const": "hub"
-          },
           "why": {
             "type": "string"
           }
         },
         "required": [
-          "at",
-          "by",
           "why"
-        ]
-      },
-      "used": {
-        "type": "object",
-        "properties": {
-          "at": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "at"
-        ]
-      },
-      "lapsed": {
-        "type": "object",
-        "properties": {
-          "at": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "at"
         ]
       }
     },
     "required": [
       "asked"
+    ]
+  },
+  "asks.kind": {
+    "type": "string",
+    "enum": [
+      "approve",
+      "question",
+      "permit"
     ]
   },
   "asks.state": {
@@ -11592,12 +11520,6 @@
     }
   },
   "presence_settings.recapped": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
-  "preview_passes.scope": {
     "type": "array",
     "items": {
       "type": "string"

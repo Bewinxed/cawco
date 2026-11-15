@@ -40,9 +40,9 @@
  *   {@link SESSION_PASS_MS} and once. Its entry, on one of those names, sets
  *   that session's own cookie ({@link sessionPassCookie}), beside the
  *   person's and never in its place, so sessions sharing a project's browser
- *   each keep theirs. The row keeps the session and the scope; the pass
- *   lapses with its ticket's end, absolute, and goes with its session
- *   (preview-passes.ts `revoke`). A request on a name outside its scope is
+ *   each keep theirs. The row keeps the session, and a row per origin of
+ *   its scope (`preview_pass_origins`); the pass lapses with its ticket's
+ *   end, absolute, and goes with its session (preview-passes.ts `revoke`). A request on a name outside its scope is
  *   answered as one with no pass, so it learns nothing of other names.
  *
  * The port's cookie over plain http carries no `Secure` and no prefix, the
@@ -363,17 +363,11 @@ export const presentedPasses = (request: Request): string[] =>
 const touched = new Map<string, number>();
 
 /**
- * Whether `row` opens origin `key`: the person's pass opens every name, and
- * alone learns of a name nobody holds (`key` undefined); a session's opens
- * the names of its scope.
- */
-const opens = (row: PreviewPassRow, key: string | undefined): boolean =>
-  row.scope === null || (key !== undefined && row.scope.includes(key));
-
-/**
- * The live pass `request` carries that opens origin `key` ({@link opens}),
- * the person's or a session's, or null: its last use written at most once a
- * minute.
+ * The live pass `request` carries that opens origin `key`, the person's or
+ * a session's, or null (db/preview-passes.ts `live`: the person's pass
+ * opens every name, and alone learns of a name nobody holds, `key`
+ * undefined; a session's opens the names of its scope): its last use
+ * written at most once a minute.
  */
 export const passOf = (
   request: Request,
@@ -389,8 +383,8 @@ export const passOf = (
       name.startsWith(PORT_SESSION_PASS_PREFIX)
   );
   for (const hash of presented) {
-    const row = lock.passes.live(hash, new Date(now));
-    if (row && opens(row, key)) {
+    const row = lock.passes.live(hash, new Date(now), key);
+    if (row) {
       if (now - (touched.get(row.id) ?? 0) > TOUCH_EVERY_MS) {
         touched.set(row.id, now);
         lock.passes.touch(row.id, new Date(now));
@@ -452,7 +446,7 @@ const passFor = (
     return {
       cookie,
       expiresAt,
-      held: { deviceId: null, instanceId, scope },
+      held: { deviceId: null, instanceId, opens: scope },
       replacing: tokensUnder(request, (name) => name === cookie)[0] ?? null,
     };
   }
@@ -460,7 +454,11 @@ const passFor = (
   return {
     cookie,
     expiresAt: now + PASS_MS,
-    held: { deviceId: spending.deviceId, instanceId: null, scope: null },
+    held: {
+      deviceId: spending.deviceId,
+      instanceId: null,
+      opens: "every" as const,
+    },
     replacing: tokensUnder(request, (name) => name === cookie)[0] ?? null,
   };
 };
