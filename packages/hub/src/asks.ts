@@ -82,6 +82,7 @@ import {
   askClosedWords,
   askQuestionWords,
   askRecordedWords,
+  askUnreadWords,
 } from "@cawco/core/words/ask-lines";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
@@ -621,10 +622,24 @@ export const createAsks = (deps: AsksDeps) => {
 
     /**
      * As the hub comes back: an approved call it was running when it went
-     * is told to its session as cut short and never run again, and the open
-     * asks of sessions that ended meanwhile are withdrawn.
+     * is told to its session as cut short and never run again, the open
+     * asks of sessions that ended meanwhile are withdrawn, and so is every
+     * open ask whose row does not read as one (migration 0408's
+     * `record_unread`): nothing of it can be shown, answered or run, so its
+     * session, while it may still act, is told to ask again.
      */
     boot(): void {
+      for (const unread of deps.asks.openUnread()) {
+        if (!deps.asks.withdrawUnread(unread.id, Date.now())) {
+          continue;
+        }
+        console.log(
+          `[asks] ${unread.id} of ${unread.instanceId} does not read: withdrawn unanswered`
+        );
+        if (!deps.ended(unread.instanceId)) {
+          deps.tell(unread.instanceId, askUnreadWords(unread.id), ASK_ORIGIN);
+        }
+      }
       for (const ask of deps.asks.cutShort()) {
         const ended = deps.asks.carried(ask.id, {
           at: Date.now(),

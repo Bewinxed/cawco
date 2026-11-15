@@ -12,6 +12,14 @@ export const unshownAskMessage = (question: boolean, why: string): string =>
 export const unreadAskWords = (fields: readonly string[]): string =>
   `the hub could not read the ask: ${fields.join(", ") || "its whole body"} ${fields.length > 1 ? "are" : "is"} missing or of the wrong kind`;
 
+/**
+ * What a session is told of an ask of its whose stored record no longer
+ * reads (hub asks.ts `boot`): withdrawn unanswered, nothing it asked ran,
+ * and asking again puts it to the person afresh.
+ */
+export const askUnreadWords = (id: string): string =>
+  `Your ask ${id} was withdrawn unanswered: its stored record no longer reads, so it can't be shown or answered. Nothing it asked ran. If you still need it, ask again.`;
+
 /** What an approve ask's call answers at once, in one paragraph. */
 export const askRecordedWords = (ask: { id: string; link: string }): string =>
   `Recorded as ${ask.link}: it waits on the person. Carry on with work that doesn't depend on it; the answer arrives as a message that names it. Don't ask it again, and don't do it another way. With nothing else to do, end your turn: the answer wakes you.`;

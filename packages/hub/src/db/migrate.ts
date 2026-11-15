@@ -23,6 +23,7 @@ import { eq, is, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
 import type { DbCore } from "./core";
@@ -34,6 +35,7 @@ import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
 import { logOutputsUnread } from "./outputs-unread";
+import { logPassScopesUnread } from "./pass-scopes-unread";
 import { logPlatformsRoutesUnread } from "./platforms-routes-unread";
 import { logQueuedUnread } from "./queued-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
@@ -175,6 +177,24 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every tracker baseline 0407 keeps as not read, its link's merge held, read before it runs.
       logTrackerBaselinesUnread(client);
+    },
+  },
+  {
+    name: "asks-unread",
+    before: "0408_ask_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every ask record 0408 keeps as not read, never read as an ask, read before it runs.
+      logAsksUnread(client);
+    },
+  },
+  {
+    name: "pass-scopes-unread",
+    before: "0409_pass_origins",
+    at: "migrator",
+    run: (client) => {
+      // Every preview pass scope 0409 keeps as not read, opening no origin, read before it runs.
+      logPassScopesUnread(client);
     },
   },
   {

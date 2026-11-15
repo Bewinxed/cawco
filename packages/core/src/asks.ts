@@ -48,13 +48,13 @@ const CARRY = z.object({ by: z.literal("hub"), tool: z.string() });
  * tool's own name and the input the card shows, and what its source is (an
  * install's or a link's, hub source-facts.ts) as read when it was asked.
  */
-const APPROVE = z.object({
-  kind: z.literal("approve"),
+const APPROVE_ASKED = z.object({
   tool: z.string(),
   input: z.record(z.string(), z.unknown()),
   carry: CARRY,
   source: SOURCE_FACTS.optional(),
 });
+const APPROVE = APPROVE_ASKED.extend({ kind: z.literal("approve") });
 
 /**
  * What a `permit` ask asks: the tool call a session's harness was halted on
@@ -62,11 +62,11 @@ const APPROVE = z.object({
  * it is granted once ({@link sameCall}); nothing runs until the session
  * makes the call again, in the turn that reads the answer.
  */
-const PERMIT = z.object({
-  kind: z.literal("permit"),
+const PERMIT_ASKED = z.object({
   tool: z.string(),
   input: z.record(z.string(), z.unknown()),
 });
+const PERMIT = PERMIT_ASKED.extend({ kind: z.literal("permit") });
 export type AskedPermit = z.infer<typeof PERMIT>;
 
 /**
@@ -113,13 +113,13 @@ const UserAnswersShape = z.record(
  * going on, `meanwhile` says what the session goes ahead with, its
  * assumption. Either way the asking call answers at once.
  */
-const QUESTION = z.object({
-  kind: z.literal("question"),
+const QUESTION_ASKED = z.object({
   questions: z.array(UserQuestionShape).min(1),
   blocks: z.boolean(),
   waiting: z.string().optional(),
   meanwhile: z.string().optional(),
 });
+const QUESTION = QUESTION_ASKED.extend({ kind: z.literal("question") });
 export type AskedQuestion = z.infer<typeof QUESTION>;
 
 const ANSWER_BY = z.object({
@@ -138,12 +138,16 @@ const RESULT = z.discriminatedUnion("behavior", [
 ]);
 export type AskResult = z.infer<typeof RESULT>;
 
+/** What each kind of ask is, as its row's `kind` column holds it (hub db/asks.ts). */
+export const ASK_KINDS = ["approve", "question", "permit"] as const;
+export type AskKind = (typeof ASK_KINDS)[number];
+
 /**
- * An ask as the hub stores it beside its row's columns (hub db/asks.ts):
- * the asker's id, its state and when it was raised are columns, so a
- * session's fold or a query reads them without the record.
+ * An ask as the hub reads it, its row's columns and its kept record
+ * ({@link ASK_KEPT}) put together (hub db/asks.ts), beside the asker's id,
+ * its state and when it was raised.
  */
-export const ASK_STORED = z.object({
+export const ASK_RECORD = z.object({
   /** The tool call the card is drawn at. */
   toolUseId: z.string().optional(),
   asked: z.discriminatedUnion("kind", [APPROVE, QUESTION, PERMIT]),
@@ -180,7 +184,40 @@ export const ASK_STORED = z.object({
   lapsed: z.object({ at: z.number() }).optional(),
 });
 
-export type AskRecord = z.infer<typeof ASK_STORED> & {
+/**
+ * What an ask's row keeps as JSON (hub db/asks.ts `record`): what was
+ * asked, who answered and what they wrote, and what the carried call said.
+ * Everything the hub decides on is a column of the row: the ask's kind,
+ * whether it is routed to its session's parent, when it was answered and
+ * whether it was allowed, when its call started and ended, when it was
+ * withdrawn, and when its grant was spent or lapsed. What was asked is one
+ * kind's fields without the kind, which is the column's: an approve ask's
+ * names who carries it, a question's holds its questions, a permit's
+ * neither.
+ */
+export const ASK_KEPT = z.object({
+  toolUseId: z.string().optional(),
+  asked: z.union([APPROVE_ASKED, QUESTION_ASKED, PERMIT_ASKED]),
+  /** Who answered, and a question's answers or a denial's message; whether it allowed is the row's. */
+  answer: z
+    .object({
+      by: ANSWER_BY,
+      result: z.object({
+        answers: UserAnswersShape.optional(),
+        message: z.string().optional(),
+      }),
+    })
+    .optional(),
+  /** What the carried call said, or why it failed; when it started and ended are the row's. */
+  carried: z
+    .object({ said: z.string().optional(), failed: z.string().optional() })
+    .optional(),
+  /** Why the hub withdrew it; when is the row's. */
+  withdrawn: z.object({ why: z.string() }).optional(),
+});
+export type AskKept = z.infer<typeof ASK_KEPT>;
+
+export type AskRecord = z.infer<typeof ASK_RECORD> & {
   /** `ask_<uuid>`: the request id on every screen, and the id the answer's message names. */
   id: string;
   instanceId: string;

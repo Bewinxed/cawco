@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    ASK_STORED,
+    ASK_RECORD,
     type AskRecord,
     askAnsweredText,
     askOutcome,
@@ -258,7 +258,7 @@
       (one) => one.requestId !== requestId
     );
     const { questions, blocks: blocking, waiting, meanwhile } = parked.input;
-    const stored = ASK_STORED.safeParse({
+    const stored = ASK_RECORD.safeParse({
       asked: {
         kind: "question",
         questions: questions ?? [],

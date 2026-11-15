@@ -18,12 +18,13 @@
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
  * budgets, at-limit policies, landings, gate passes, outputs, queued
- * starts, MCP servers' platforms, the fleet's routes and a tracker's
- * baselines besides ({@link seedLists}, {@link seedBudgets},
- * {@link seedAtLimit}, {@link seedLanded}, {@link seedGatePasses},
- * {@link seedOutputs}, {@link seedQueued}, {@link seedMcpServers},
- * {@link seedPlatformsRoutes}, {@link seedTracker},
- * {@link seedTrackerBaselines}), written to
+ * starts, MCP servers' platforms, the fleet's routes, a tracker's
+ * baselines, asks and preview passes besides ({@link seedLists},
+ * {@link seedBudgets}, {@link seedAtLimit}, {@link seedLanded},
+ * {@link seedGatePasses}, {@link seedOutputs}, {@link seedQueued},
+ * {@link seedMcpServers}, {@link seedPlatformsRoutes}, {@link seedTracker},
+ * {@link seedTrackerBaselines}, {@link seedAsks}, {@link seedAsksByHand},
+ * {@link seedPassScopes}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -32,7 +33,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
-import { HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { hubInProcess } from "./hub-in-process";
 import { newestNightly } from "./shipped";
 
@@ -51,8 +52,10 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * every shape a work item's and a task's outputs took before migration
  * 0404, every shape a queued start's kept call took before migration
  * 0405, every shape an MCP server's platforms and the fleet's routes
- * took before migration 0406, and every shape a tracker link's baseline
- * took before migration 0407, written here.
+ * took before migration 0406, every shape a tracker link's baseline took
+ * before migration 0407, every shape an ask's record took before migration
+ * 0408, and every shape a preview pass's scope took before migration 0409,
+ * written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -1220,6 +1223,328 @@ function seedTrackerBaselines(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the fixture's asks and passes were raised and entered: 2026-10-02, a minute apart. */
+const ASKED_AT = Date.UTC(2026, 9, 2);
+
+/** The fixture's first session, by its row: what the hand-written asks and passes are given to. */
+const firstSession = (sqlite: Database): string | undefined =>
+  sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances ORDER BY rowid LIMIT 1"
+    )
+    .get()?.id;
+
+/**
+ * Asks as the hub's own code writes them (`asks.add`, `answer`, `carried`,
+ * `grant`, `lapse`, `withdraw`), every one migration 0408 places whole:
+ * an open approve ask with its source's facts and a skill's files, an open
+ * question that blocks work, an open permit routed to its session's
+ * parent; an approve ask that ran, one the hub went while running, one
+ * declined; a question answered (a label and a multi-select's list) and one
+ * dismissed; a permit granted and unspent, one spent, one lapsed; and a
+ * question withdrawn. {@link seedAsksByHand} adds the ones that do not read.
+ */
+function seedAsks(db: HubDb, sessions: Seeded[]): void {
+  const [first, second, third] = sessions;
+  if (!(first && second && third)) {
+    return;
+  }
+  let n = 0;
+  const raised = (instanceId: string) => {
+    n += 1;
+    return {
+      id: `ask_fixture-${n.toString().padStart(2, "0")}`,
+      instanceId,
+      state: "open" as const,
+      raisedAt: ASKED_AT + n * MINUTE_MS,
+    };
+  };
+  const at = (minutes: number) => ASKED_AT + minutes * MINUTE_MS;
+  const approve = (tool: string, input: Record<string, unknown>) => ({
+    kind: "approve" as const,
+    tool,
+    input,
+    carry: { by: "hub" as const, tool },
+  });
+  const question = {
+    kind: "question" as const,
+    questions: [
+      {
+        header: "Retention",
+        multiSelect: false,
+        options: [
+          { label: "90 days", description: "Keep a quarter of history." },
+          { label: "A year", description: "Keep every release's history." },
+        ],
+        question: "How long should the board keep finished tasks?",
+      },
+      {
+        header: "Surfaces",
+        multiSelect: true,
+        options: [
+          { label: "Board", description: "The project's board." },
+          { label: "Rail", description: "The session rail." },
+        ],
+        question: "Where should the archive show?",
+      },
+    ],
+    blocks: true,
+    waiting: "Deleting finished tasks older than the cut",
+  };
+  const permit = (command: string) => ({
+    kind: "permit" as const,
+    tool: "Bash",
+    input: { command, description: "Run the release proof" },
+  });
+  const installing = raised(first.id);
+  db.asks.add({
+    ...installing,
+    toolUseId: "toolu_fixture_install",
+    asked: {
+      ...approve("admin_skills_write", {
+        reason: "The release task needs the proof skill.",
+        name: "release-proof",
+      }),
+      source: {
+        at: "github.com/dev/release-proof",
+        since: "2025-03-14T09:00:00Z",
+        stars: 214,
+        weeklyDownloads: 1280,
+        skill: {
+          description: "Runs the binary's smoke test once per build.",
+          files: [
+            { hash: "sha256-a1", path: "SKILL.md" },
+            { hash: "sha256-b2", path: "scripts/smoke.sh" },
+          ],
+          hash: "sha256-c3",
+          name: "release-proof",
+        },
+      },
+    },
+  });
+  db.asks.add({
+    ...raised(first.id),
+    toolUseId: "toolu_fixture_q",
+    asked: question,
+  });
+  db.asks.add({
+    ...raised(second.id),
+    asked: permit("bun run test:binary"),
+    routedTo: "parent",
+  });
+  const answered = (
+    ask: ReturnType<typeof raised>,
+    asked: Parameters<typeof db.asks.add>[0]["asked"],
+    minutes: number,
+    result:
+      | { behavior: "allow"; answers?: Record<string, string | string[]> }
+      | { behavior: "deny"; message: string }
+  ) => {
+    db.asks.add({ ...ask, asked });
+    db.asks.answer(ask.id, {
+      at: at(minutes),
+      by: { behavior: result.behavior, name: "Chrome on Linux", via: "page" },
+      result,
+    });
+  };
+  const ran = raised(first.id);
+  answered(ran, approve("admin_hooks_write", { reason: "Lint on save." }), 20, {
+    behavior: "allow",
+  });
+  db.asks.carried(ran.id, { at: at(21), said: "The hook is set." });
+  answered(
+    raised(first.id),
+    approve("admin_rules_write", { reason: "Hold the release rule." }),
+    22,
+    { behavior: "allow" }
+  );
+  answered(
+    raised(second.id),
+    approve("project_settings", { reason: "Rename the project." }),
+    23,
+    { behavior: "deny", message: "Keep the name for now." }
+  );
+  answered(raised(second.id), question, 24, {
+    behavior: "allow",
+    answers: {
+      "How long should the board keep finished tasks?": "90 days",
+      "Where should the archive show?": ["Board", "Rail"],
+    },
+  });
+  answered(raised(third.id), question, 25, {
+    behavior: "deny",
+    message: "",
+  });
+  answered(raised(third.id), permit("git push origin main"), 26, {
+    behavior: "allow",
+  });
+  answered(raised(third.id), permit("bun run check"), 27, {
+    behavior: "allow",
+  });
+  db.asks.grant(
+    third.id,
+    (ask) =>
+      ask.asked.kind === "permit" &&
+      ask.asked.input.command === "bun run check",
+    at(28)
+  );
+  const lapsing = raised(second.id);
+  answered(lapsing, permit("rm -rf dist"), 29, { behavior: "allow" });
+  db.asks.lapse(second.id, (ask) => ask.id === lapsing.id, at(30));
+  const withdrawn = raised(third.id);
+  db.asks.add({ ...withdrawn, asked: question });
+  db.asks.withdraw(
+    withdrawn.id,
+    at(31),
+    "its session ended before anyone answered"
+  );
+}
+
+/**
+ * Every shape migration 0408 reads an ask's record in that does not read
+ * whole, as a hand edit or an older build could leave it: an open one that
+ * is not JSON, an answered one that is JSON `null`, one that is a list; and
+ * partly readable ones: an allowed permit whose grant's spending is not a
+ * time (read as unspent, it would allow the call again), an allowed call
+ * started whose end is not a time (read as never ended, it would be told
+ * cut short), an open question with no questions, and a denial with no
+ * message.
+ */
+function seedAsksByHand(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const session = firstSession(sqlite);
+  if (!session) {
+    sqlite.close();
+    return;
+  }
+  const records: [string, string, string][] = [
+    ["ask_fixture-hand-1", "open", "asked: permit Bash git push"],
+    ["ask_fixture-hand-2", "answered", "null"],
+    ["ask_fixture-hand-3", "answered", JSON.stringify([{ kind: "permit" }])],
+    [
+      "ask_fixture-hand-4",
+      "answered",
+      JSON.stringify({
+        asked: {
+          kind: "permit",
+          tool: "Bash",
+          input: { command: "git push --force" },
+        },
+        answer: {
+          at: ASKED_AT + 40 * MINUTE_MS,
+          by: { behavior: "allow", via: "app" },
+          result: { behavior: "allow" },
+        },
+        used: { at: "soon" },
+      }),
+    ],
+    [
+      "ask_fixture-hand-5",
+      "answered",
+      JSON.stringify({
+        asked: {
+          kind: "approve",
+          tool: "admin_hooks_write",
+          input: { reason: "Format on save." },
+          carry: { by: "hub", tool: "admin_hooks_write" },
+        },
+        answer: {
+          at: ASKED_AT + 41 * MINUTE_MS,
+          by: { via: "page" },
+          result: { behavior: "allow" },
+        },
+        carried: { startedAt: ASKED_AT + 41 * MINUTE_MS, endedAt: "later" },
+      }),
+    ],
+    [
+      "ask_fixture-hand-6",
+      "open",
+      JSON.stringify({
+        toolUseId: "toolu_fixture_empty",
+        asked: {
+          kind: "question",
+          questions: [],
+          blocks: false,
+          meanwhile: "Going ahead",
+        },
+      }),
+    ],
+    [
+      "ask_fixture-hand-7",
+      "answered",
+      JSON.stringify({
+        asked: {
+          kind: "approve",
+          tool: "admin_rules_write",
+          input: { reason: "Drop the rule." },
+          carry: { by: "hub", tool: "admin_rules_write" },
+        },
+        answer: {
+          at: ASKED_AT + 42 * MINUTE_MS,
+          by: { behavior: "deny", via: "page" },
+          result: { behavior: "deny" },
+        },
+      }),
+    ],
+  ];
+  for (const [index, [askId, askState, record]] of records.entries()) {
+    sqlite.run(
+      "INSERT INTO asks (id, instance_id, state, raised_at, record) VALUES (?, ?, ?, ?, ?)",
+      [askId, session, askState, ASKED_AT + (50 + index) * MINUTE_MS, record]
+    );
+  }
+  sqlite.close();
+}
+
+/**
+ * Every shape migration 0409 reads a preview pass's scope in, written as
+ * an entry writes a pass (preview-access.ts `enter`): the person's, no
+ * session, scope never set (it opens every origin); a session's with its
+ * origins, one named twice, and one with none; and as a hand edit could
+ * leave them: a session's pass with none (it opens every origin, as
+ * today), one with no session and a list (it opens that list alone, as
+ * today), and scopes that do not read: not JSON, a JSON text, JSON `null`,
+ * and a list with an entry that is not text.
+ */
+function seedPassScopes(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const session = firstSession(sqlite);
+  if (!session) {
+    sqlite.close();
+    return;
+  }
+  const passes: [string, string | null, string | null][] = [
+    ["pass-fixture-person", null, null],
+    [
+      "pass-fixture-session",
+      session,
+      JSON.stringify(["art-fixture-1", "art-fixture-2", "art-fixture-1"]),
+    ],
+    ["pass-fixture-none", session, JSON.stringify([])],
+    ["pass-fixture-hand-every", session, null],
+    ["pass-fixture-hand-listed", null, JSON.stringify(["art-fixture-3"])],
+    ["pass-fixture-hand-text", session, "art-fixture-1"],
+    ["pass-fixture-hand-string", session, JSON.stringify("art-fixture-1")],
+    ["pass-fixture-hand-null", session, "null"],
+    ["pass-fixture-hand-partly", session, JSON.stringify(["art-fixture-1", 7])],
+  ];
+  for (const [passId, instanceId, scope] of passes) {
+    sqlite.run(
+      "INSERT INTO preview_passes (id, token_hash, device_id, instance_id, scope, created_at, last_seen_at, expires_at) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
+      [
+        passId,
+        `sha256-${passId}`,
+        instanceId,
+        scope,
+        ASKED_AT,
+        ASKED_AT,
+        Date.UTC(2099, 0, 1),
+      ]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -1235,6 +1560,7 @@ async function seed(
     seedDelegateTypes(db);
     seedMcpServers(db, projects);
     seedTracker(db, projects);
+    seedAsks(db, sessions);
   }
   lifetime.close();
   if (withLists) {
@@ -1247,6 +1573,8 @@ async function seed(
     seedQueued(dbPath);
     seedPlatformsRoutes(dbPath);
     seedTrackerBaselines(dbPath);
+    seedAsksByHand(dbPath);
+    seedPassScopes(dbPath);
   }
 }
 
