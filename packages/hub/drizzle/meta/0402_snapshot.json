@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "951c44aa-bd4e-497a-81ed-f6570f002cc0",
-  "prevId": "7fba97fb-88ea-4336-8328-8f8acc7857c9",
+  "id": "37277ece-b030-4be5-950b-7d3af981caa1",
+  "prevId": "269c2c23-f20f-41ff-9e31-a771916ef44a",
   "tables": {
     "account_bench": {
       "name": "account_bench",
@@ -1091,13 +1091,6 @@
         },
         "going_to": {
           "name": "going_to",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "started_by": {
-          "name": "started_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -13767,6 +13760,68 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "work_item_gate_passes": {
+      "name": "work_item_gate_passes",
+      "columns": {
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pass_key": {
+          "name": "pass_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command": {
+          "name": "command",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "work_item_gate_passes_item_id_work_items_id_fk": {
+          "name": "work_item_gate_passes_item_id_work_items_id_fk",
+          "tableFrom": "work_item_gate_passes",
+          "tableTo": "work_items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "work_item_gate_passes_item_id_pass_key_command_stage_pk": {
+          "columns": [
+            "item_id",
+            "pass_key",
+            "command",
+            "stage"
+          ],
+          "name": "work_item_gate_passes_item_id_pass_key_command_stage_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "work_item_globs": {
       "name": "work_item_globs",
       "columns": {
@@ -14034,8 +14089,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "gate_passes": {
-          "name": "gate_passes",
+        "gate_passes_unread": {
+          "name": "gate_passes_unread",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
