@@ -34,6 +34,7 @@ import {
   gitSection,
   openingMessage,
   summariserPrompt,
+  tailSides,
 } from "./continuation-words";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type {
@@ -282,8 +283,12 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         : estimateTokens(
             openingMessage(
               source,
-              redacted({ summary: "", artifacts: extracted.artifacts }),
-              { tail: extracted.tail, note }
+              redacted({
+                summary: "",
+                artifacts: extracted.artifacts,
+                tail: tailSides(extracted).agent,
+              }),
+              { tail: tailSides(extracted).person, note }
             ).length
           ) + SUMMARY_CAP_TOKENS,
       compacted: read.compacted,
@@ -647,10 +652,14 @@ export const createContinuations = (ctx: ContinuationsContext) => {
           // its filed open items: its agents' words, through the redactor.
           redacted({
             artifacts: row.prepared.extracted.artifacts,
+            tail: tailSides(row.prepared.extracted).agent,
             ...(row.summary ? { summary: row.summary } : {}),
             ...(row.openItems ? { open: row.openItems } : {}),
           }),
-          { tail: row.prepared.extracted.tail, note: row.request.note }
+          {
+            tail: tailSides(row.prepared.extracted).person,
+            note: row.request.note,
+          }
         );
 
   /** A continuation's start, as the hub's log line says it. */

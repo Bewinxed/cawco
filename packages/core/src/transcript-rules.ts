@@ -1926,7 +1926,7 @@ export function sentRow(
  * compaction summary, cawco's deliveries on someone else's behalf (a hand-off,
  * a report, a rule) and the harness's own notes.
  */
-function personWords(entry: SessionMessage): string | null {
+export function personWords(entry: SessionMessage): string | null {
   if (entry.compactSummary) {
     return null;
   }

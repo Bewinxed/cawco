@@ -3992,6 +3992,31 @@
           },
           "tail": {
             "type": "string"
+          },
+          "tailTurns": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "who": {
+                    "type": "string",
+                    "enum": [
+                      "person",
+                      "agent"
+                    ]
+                  }
+                },
+                "required": [
+                  "text",
+                  "who"
+                ]
+              }
+            }
           }
         },
         "required": [

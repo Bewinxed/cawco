@@ -784,6 +784,13 @@ const ContinuationJobShape = declared(
 export const ContinuationJobSchema = ContinuationJobShape;
 export type ContinuationJobOutput = z.output<typeof ContinuationJobShape>;
 
+const TailPartShape = declared(
+  z.object({ text: z.string(), who: z.enum(["person", "agent"]) }),
+  "TailPart",
+  "packages/core/src/continuation-read.ts"
+);
+export type TailPartOutput = z.output<typeof TailPartShape>;
+
 export const ExtractedShape = declared(
   z.object({
     artifacts: z.string(),
@@ -791,6 +798,7 @@ export const ExtractedShape = declared(
     covers: z.string().nullable(),
     middle: z.array(z.string()),
     tail: z.string(),
+    tailTurns: z.array(z.array(TailPartShape)).optional(),
   }),
   "Extracted",
   "packages/core/src/continuation-read.ts"

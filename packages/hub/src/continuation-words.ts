@@ -5,7 +5,7 @@
  * continuation-read.ts); this file only decides the words.
  */
 import { SUMMARY_CAP_TOKENS } from "@cawco/core/continuation";
-import { blocksOf } from "@cawco/core/continuation-read";
+import { blocksOf, type Extracted } from "@cawco/core/continuation-read";
 import type { GitChanges } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
 import type { ContinuationSource } from "./db/stored-types";
@@ -127,41 +127,81 @@ export function summariserPrompt(
 }
 
 /**
+ * The tail's parts, turn by turn, as one side holds them: its own part's
+ * words where it said that part, null where the other side did. The two
+ * sides of one tail have the same shape.
+ */
+export type TailSide = (string | null)[][];
+
+/**
  * What of a continuation's opening its agents wrote: the summariser's
  * summary of the source (absent while the session is short enough to carry
- * whole), the artifact index (its tool calls and git), and its Open items
+ * whole), the artifact index (its tool calls and git), its Open items
  * section (open-items.ts, from the records it filed; absent while sizing,
- * before anything is filed). One session's words reaching another: only as
+ * before anything is filed), and every part of the last turns that is not
+ * the person's own words (`tail`: the agent's replies, a parent's brief or
+ * hand-off, the hub's word). One session's words reaching another: only as
  * the redactor passed them (redactor.ts).
  */
 export interface AgentOpening {
   artifacts: string;
   open?: string;
   summary?: string;
+  tail: TailSide;
 }
 
 /**
- * What of a continuation's opening is the conversation's own: its last
- * turns verbatim (the person's messages among them) and the person's note,
- * carried whole.
+ * What of a continuation's opening is the person's own: the messages they
+ * typed among the last turns (`tail`) and their note, carried whole.
  */
 export interface PersonOpening {
   note: string | undefined;
-  tail: string;
+  tail: TailSide;
 }
+
+/**
+ * The tail's two sides (core `Extracted.tailTurns`): the agents' words,
+ * for the redactor, and the person's, whole. A machine whose agent predates
+ * `tailTurns` says only the tail's text, whose speakers it does not tell
+ * apart: all of it is then the agents' side, cut where it holds a
+ * credential.
+ */
+export const tailSides = (
+  extracted: Pick<Extracted, "tail" | "tailTurns">
+): { agent: TailSide; person: TailSide } => {
+  const turns = extracted.tailTurns ?? [
+    [{ who: "agent" as const, text: extracted.tail }],
+  ];
+  return {
+    agent: turns.map((parts) =>
+      parts.map((part) => (part.who === "agent" ? part.text : null))
+    ),
+    person: turns.map((parts) =>
+      parts.map((part) => (part.who === "person" ? part.text : null))
+    ),
+  };
+};
 
 /**
  * The new session's first message, in the order it should be read: the
  * agents' part (`agent`, which only the redactor makes) and the person's
- * (`person`, whole), put together here alone.
+ * (`person`, whole), put together here alone, the last turns interleaved
+ * back in the order they were said.
  */
 export function openingMessage<F extends Redacted<AgentOpening>>(
   source: ContinuationSource,
   agent: Typed<F>,
   person: PersonOpening
 ): string {
-  const { summary, open, artifacts } = passedValue(agent);
-  const { tail, note } = person;
+  const { summary, open, artifacts, tail: agentTail } = passedValue(agent);
+  const { tail: personTail, note } = person;
+  const tail = agentTail
+    .map((parts, turn) =>
+      parts
+        .map((said, part) => said ?? personTail[turn]?.[part] ?? "")
+        .join("\n")
+    )
+    .join("\n\n");
   return [
     `Continuing session "${source.title}" (instance ${source.instanceId}, ${source.harness}, ${source.model}, in ${source.cwd}).`,
     "",

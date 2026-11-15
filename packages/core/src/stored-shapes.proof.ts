@@ -72,6 +72,7 @@ import type {
 import type {
   ContinuationRead as ContinuationReadType,
   Extracted as ExtractedType,
+  TailPart as TailPartType,
 } from "./continuation-read";
 import type {
   MayStart as MayStartType,
@@ -525,6 +526,7 @@ import type {
   StoryOutput,
   StreamRelayStateOutput,
   StyleDeltaOutput,
+  TailPartOutput,
   TextAttachmentOutput,
   TokenKindOutput,
   ToolCopyOutput,
@@ -661,6 +663,7 @@ prove<
     Same<FilingWroteOutput, FilingWroteType>,
     Same<ContextLineOutput, ContextLineType>,
     Same<ContinuationJobOutput, ContinuationJobType>,
+    Same<TailPartOutput, TailPartType>,
     Same<ExtractedOutput, ExtractedType>,
     Same<ContinuationReadOutput, ContinuationReadType>,
     Same<TextAttachmentOutput, TextAttachmentType>,

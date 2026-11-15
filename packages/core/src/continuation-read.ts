@@ -23,7 +23,7 @@
  */
 import type { NeutralContentBlock, SessionMessage } from "./session-messages";
 import { FILE_CHANGE_TOOLS, toolNamesOf } from "./tool-names";
-import { askedWords } from "./transcript-rules";
+import { askedWords, personWords } from "./transcript-rules";
 
 /**
  * Machine-scoped catalog control: a session's continuation inputs
@@ -94,6 +94,21 @@ export interface Extracted {
   middle: string[];
   /** The newest user turns that fit the tail budget. */
   tail: string;
+  /**
+   * {@link tail} by who said each part, turn by turn, oldest first: what the
+   * person typed (`person`, their own words: {@link personWords}), and
+   * everything else (`agent`: the agent's replies, a parent's brief or
+   * hand-off, the hub's word, the source's compaction summary). Each turn's
+   * parts joined by a line break, and the turns by a blank line, are
+   * {@link tail} exactly. Absent from a machine whose agent predates it.
+   */
+  tailTurns?: TailPart[][];
+}
+
+/** One part of a turn of the tail ({@link Extracted.tailTurns}): who said it, and its lines under their heading. */
+export interface TailPart {
+  text: string;
+  who: "person" | "agent";
 }
 
 /** At most this many user turns at the end are carried into the new session… */
@@ -370,21 +385,33 @@ function renderTurn(
   results: Map<string, ToolResult>,
   calls: boolean
 ): string {
-  const lines: string[] = [];
+  return turnParts(turn, results, calls)
+    .map((part) => part.text)
+    .join("\n");
+}
+
+/**
+ * {@link renderTurn}'s turn as its parts ({@link TailPart}), each the lines
+ * one entry said, under its speaker's heading where the speaker changes.
+ */
+function turnParts(
+  turn: SessionMessage[],
+  results: Map<string, ToolResult>,
+  calls: boolean
+): TailPart[] {
+  const parts: TailPart[] = [];
   let speaker: string | null = null;
-  const say = (heading: string, said: string[]) => {
+  const say = (who: TailPart["who"], heading: string, said: string[]) => {
     if (said.length === 0) {
       return;
     }
-    if (speaker !== heading) {
-      lines.push(heading);
-      speaker = heading;
-    }
-    lines.push(...said);
+    const lines = speaker === heading ? said : [heading, ...said];
+    speaker = heading;
+    parts.push({ who, text: lines.join("\n") });
   };
   for (const entry of turn) {
     if (entry.compactSummary) {
-      say(COMPACTED_LABEL, [
+      say("agent", COMPACTED_LABEL, [
         blocksOf(entry)
           .flatMap((block) => (block.type === "text" ? [block.text] : []))
           .join("\n")
@@ -392,12 +419,16 @@ function renderTurn(
       ]);
     } else if (entry.type === "user") {
       const text = userText(entry);
-      say("## User", text ? [text] : []);
+      say(
+        personWords(entry) === null ? "agent" : "person",
+        "## User",
+        text ? [text] : []
+      );
     } else if (entry.type === "assistant") {
-      say("## Assistant", assistantLines(entry, results, calls));
+      say("agent", "## Assistant", assistantLines(entry, results, calls));
     }
   }
-  return lines.join("\n");
+  return parts;
 }
 
 /**
@@ -495,5 +526,9 @@ function extractTranscript(
       .map((turn) => renderTurn(turn, results, true))
       .filter(Boolean),
     tail: said.slice(split).filter(Boolean).join("\n\n"),
+    tailTurns: turns
+      .slice(split)
+      .map((turn) => turnParts(turn, results, false))
+      .filter((parts) => parts.length > 0),
   };
 }
