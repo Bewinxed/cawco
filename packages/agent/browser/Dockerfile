@@ -26,7 +26,18 @@ ENV NEKO_DESKTOP_INPUT_ENABLED=false
 COPY chromium.conf /etc/neko/supervisord/chromium.conf
 COPY policies.json /etc/chromium/policies/managed/policies.json
 # CawCo's WebAuthn proxy (passkey-extension/background.js), loaded by
-# chromium.conf's --load-extension and allowed by policies.json.
+# chromium.conf's --load-extension and again over DevTools by the daemon's
+# passkey bridge (agent passkey-bridge.ts, Extensions.loadUnpacked).
 COPY passkey-extension/ /opt/cawco/passkey-extension/
 COPY --chown=neko preferences.json /home/neko/.config/chromium/Default/Preferences
-RUN rm -f /etc/chromium.d/extensions
+# Debian's /usr/bin/chromium, which chromium.conf runs, adds
+# --disable-extensions-except= with the --load-extension paths it finds in
+# CHROMIUM_FLAGS unless CHROMIUM_FLAGS holds --enable-remote-extensions.
+# chromium.conf's --load-extension is an argument, not in CHROMIUM_FLAGS, so
+# that list came out empty and every extension was off, the bridge's too.
+# The base image's /etc/chromium.d/extensions set the flag along with a
+# --load-extension of /usr/share/chromium/extensions, which holds none; it
+# goes, and /etc/chromium.d/cawco sets the flag alone.
+RUN set -eux; \
+    rm -f /etc/chromium.d/extensions; \
+    echo 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --enable-remote-extensions"' > /etc/chromium.d/cawco

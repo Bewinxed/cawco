@@ -12,8 +12,15 @@
  * and the bridge meets the phone on the caBLE tunnel, gets the assertion, and
  * writes `passkey-response:<id>` with the credential as
  * `PublicKeyCredential.toJSON()` gives it. The extension answers the page.
+ *
+ * The bridge opens with its take-over, before any ceremony: no ceremony is
+ * seen until the extension runs. It loads the extension over DevTools
+ * (`Extensions.loadUnpacked`) unless its worker already runs, and finds the
+ * worker by the browser's own target events for service workers
+ * (`Target.setDiscoverTargets`), attaching to it as it starts.
  */
 import { createHash } from "node:crypto";
+import { readWithin } from "@cawco/core/bounded";
 import { z } from "zod";
 import {
   type CableAssertionResponse,
@@ -25,9 +32,20 @@ import {
 } from "./cable-initiator";
 import { CdpLink } from "./cdp-takeover";
 
-/** The extension's service worker, by the id its manifest's key gives it (chromium.conf). */
-const WORKER_URL =
-  "chrome-extension://ggmghgopcefkanlpdhbbjogokighkbgc/background.js";
+/** The extension's id, which its manifest's key gives it (chromium.conf). */
+const EXTENSION_ID = "ggmghgopcefkanlpdhbbjogokighkbgc";
+
+/** Where the image puts the extension (Dockerfile). */
+const EXTENSION_PATH = "/opt/cawco/passkey-extension";
+
+/** The extension's service worker. */
+const WORKER_URL = `chrome-extension://${EXTENSION_ID}/background.js`;
+
+/** How long the bridge waits for the worker to run once the extension is loaded. */
+const WORKER_MS = 10_000;
+
+/** How long `Extensions.loadUnpacked` has to read the extension and install it. */
+const LOAD_MS = 10_000;
 
 const REQUEST = "passkey-request:";
 const RESPONSE = "passkey-response:";
@@ -69,9 +87,16 @@ const StorageRead = z.object({
   exceptionDetails: z.object({ text: z.string() }).optional(),
 });
 
-const TargetList = z.object({
-  targetInfos: z.array(z.object({ targetId: z.string(), url: z.string() })),
+/** `Target.targetCreated` and `Target.targetInfoChanged`'s target. */
+const TargetEvent = z.object({
+  targetInfo: z.object({ targetId: z.string(), url: z.string() }),
 });
+
+/** `Target.targetDestroyed`'s target. */
+const TargetGone = z.object({ targetId: z.string() });
+
+/** `Extensions.loadUnpacked`'s answer. */
+const Loaded = z.object({ id: z.string() });
 
 /** A DOMException the extension hands the page in place of a credential. */
 interface CeremonyError {
@@ -171,8 +196,12 @@ export class PasskeyBridge {
   readonly #link: CdpLink;
   readonly #onQr: (qr: BridgeQr) => void;
   readonly #onFail: (error: unknown) => void;
-  readonly #timer: ReturnType<typeof setInterval>;
-  /** The service worker's session on {@link #link}; it goes when the worker sleeps. */
+  #timer: ReturnType<typeof setInterval> | undefined;
+  /** The worker's target while it runs, as the browser's target events say. */
+  #target: string | undefined;
+  /** Settled when {@link #target} is found; made new when the worker stops. */
+  #found = Promise.withResolvers<void>();
+  /** The service worker's session on {@link #link}; it goes when the worker stops. */
   #session: string | undefined;
   /** Requests already taken up, so one standing across reads is taken once. */
   readonly #taken = new Set<number>();
@@ -189,10 +218,26 @@ export class PasskeyBridge {
     this.#link = link;
     this.#onQr = onQr;
     this.#onFail = onFail;
-    link.onEvent = (message) => {
+    link.onEvent = ({ method, params }) => {
       if (
-        message.method === "Target.detachedFromTarget" &&
-        message.params?.sessionId === this.#session
+        method === "Target.targetCreated" ||
+        method === "Target.targetInfoChanged"
+      ) {
+        const event = TargetEvent.safeParse(params);
+        if (event.success && event.data.targetInfo.url === WORKER_URL) {
+          this.#target = event.data.targetInfo.targetId;
+          this.#found.resolve();
+        }
+      } else if (method === "Target.targetDestroyed") {
+        const gone = TargetGone.safeParse(params);
+        if (gone.success && gone.data.targetId === this.#target) {
+          this.#target = undefined;
+          this.#session = undefined;
+          this.#found = Promise.withResolvers<void>();
+        }
+      } else if (
+        method === "Target.detachedFromTarget" &&
+        params?.sessionId === this.#session
       ) {
         this.#session = undefined;
       }
@@ -200,16 +245,32 @@ export class PasskeyBridge {
     link.onClose = () => {
       this.close();
     };
-    this.#timer = setInterval(() => this.#tick(), POLL_MS);
   }
 
-  /** A bridge to the Chromium whose DevTools answer at `devtools`. */
+  /**
+   * A bridge to the Chromium whose DevTools answer at `devtools`, with the
+   * extension loaded and its worker attached. A worker that does not run
+   * within {@link WORKER_MS} is said through `onFail`, and the bridge stays
+   * open: a loaded extension's worker stops when idle and starts again at
+   * its next WebAuthn ceremony, and is attached then.
+   */
   static async open(
     devtools: string,
     onQr: (qr: BridgeQr) => void,
     onFail: (error: unknown) => void
   ): Promise<PasskeyBridge> {
-    return new PasskeyBridge(await CdpLink.open(devtools), onQr, onFail);
+    const bridge = new PasskeyBridge(
+      await CdpLink.open(devtools),
+      onQr,
+      onFail
+    );
+    try {
+      await bridge.#start();
+    } catch (error) {
+      bridge.close();
+      throw error;
+    }
+    return bridge;
   }
 
   /** Whether it closed (the browser's DevTools connection did): a new one is opened. */
@@ -258,10 +319,67 @@ export class PasskeyBridge {
     this.#link.close();
   }
 
+  /**
+   * The browser's service workers watched (`Target.setDiscoverTargets`
+   * names each that runs now, and each that starts or stops after), the
+   * extension loaded unless its worker runs already, the worker waited for
+   * and attached, and the storage read from then on.
+   */
+  async #start(): Promise<void> {
+    await this.#link.call("Target.setDiscoverTargets", {
+      discover: true,
+      filter: [{ type: "service_worker" }],
+    });
+    const load = this.#target ? undefined : await this.#load();
+    const read = await readWithin(WORKER_MS, () => this.#found.promise);
+    if (read.kind === "answered") {
+      await this.#worker();
+    } else {
+      this.#onFail(
+        new Error(
+          `the extension's worker (${WORKER_URL}) did not run within ${WORKER_MS / 1000} s${load ? `, and ${load}` : ""}; it is attached when it starts`
+        )
+      );
+    }
+    // The browser's DevTools connection closed meanwhile: nothing to read.
+    if (!this.closed) {
+      this.#timer = setInterval(() => this.#tick(), POLL_MS);
+    }
+  }
+
+  /**
+   * The extension loaded from the image (`Extensions.loadUnpacked`), which
+   * starts its worker. Undefined once loaded; else why not, for a build
+   * whose DevTools refuse the call (before Chromium 149 a client on
+   * --remote-debugging-port gets "Method not available.": the call wanted
+   * --remote-debugging-pipe and --enable-unsafe-extension-debugging,
+   * chrome/browser/devtools/chrome_devtools_session.cc), where
+   * chromium.conf's --load-extension is what loads it.
+   */
+  async #load(): Promise<string | undefined> {
+    let id: string;
+    try {
+      ({ id } = Loaded.parse(
+        await this.#link.call(
+          "Extensions.loadUnpacked",
+          { path: EXTENSION_PATH },
+          undefined,
+          LOAD_MS
+        )
+      ));
+    } catch (error) {
+      return `Extensions.loadUnpacked did not load it (${error instanceof Error ? error.message : String(error)})`;
+    }
+    if (id !== EXTENSION_ID) {
+      return `Extensions.loadUnpacked loaded ${EXTENSION_PATH} as ${id}, not ${EXTENSION_ID}: its manifest's key changed`;
+    }
+    return undefined;
+  }
+
   #tick(): void {
     this.#reading ??= this.#read()
       .catch((error: unknown) => {
-        // The worker slept or went: found and attached again next read.
+        // The worker stopped or went: attached again once it runs.
         this.#session = undefined;
         this.#onFail(error);
       })
@@ -270,17 +388,12 @@ export class PasskeyBridge {
       });
   }
 
+  /** The worker's session, attached when it runs and is not yet; undefined while it does not run. */
   async #worker(): Promise<string | undefined> {
-    if (this.#session) {
+    if (this.#session || !this.#target) {
       return this.#session;
     }
-    const { targetInfos } = TargetList.parse(
-      await this.#link.call("Target.getTargets")
-    );
-    const worker = targetInfos.find(({ url }) => url === WORKER_URL);
-    if (worker) {
-      this.#session = await this.#link.attach(worker.targetId);
-    }
+    this.#session = await this.#link.attach(this.#target);
     return this.#session;
   }
 

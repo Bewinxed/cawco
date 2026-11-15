@@ -33,7 +33,5 @@
     "chrome://*",
     "chrome-untrusted://*",
     "devtools://*"
-  ],
-  "ExtensionInstallBlocklist": ["*"],
-  "ExtensionInstallAllowlist": ["ggmghgopcefkanlpdhbbjogokighkbgc"]
+  ]
 }

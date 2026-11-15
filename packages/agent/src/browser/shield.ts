@@ -505,6 +505,7 @@ export const shieldBrowser = async (
   await keep(key, take);
   await recordTakeover(ports, key, take);
   watch(ports);
+  watchPasskey(ports, key, take).catch(() => undefined);
   console.info(
     `[browser] ${key} taken over${take.workspaceId ? ` for workspace ${take.workspaceId}` : ""}`
   );
@@ -851,11 +852,12 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
 };
 
 /**
- * The take-over's passkey bridge (passkey-bridge.ts), opened at the first
- * count and opened again once its browser's DevTools connection closed. Each
- * QR it makes for a WebAuthn ceremony goes to the hub as a `passkey_qr`
- * frame. Only a container's browser loads the bridge extension (its image's
- * chromium.conf).
+ * The take-over's passkey bridge (passkey-bridge.ts), opened as the
+ * take-over starts, since no WebAuthn ceremony is seen until the bridge has
+ * its extension running, and opened again at a count once its browser's
+ * DevTools connection closed. Each QR it makes for a WebAuthn ceremony goes
+ * to the hub as a `passkey_qr` frame. Only a container's browser has the bridge extension (its image's
+ * Dockerfile).
  */
 const watchPasskey = async (
   ports: ShieldPorts,
@@ -976,6 +978,7 @@ export const restoreShields = async (ports: ShieldPorts): Promise<void> => {
     };
     held.set(record.key, take);
     viewFor(record.key, record, take);
+    watchPasskey(ports, record.key, take).catch(() => undefined);
     keys.push(record.key);
   }
   if (keys.length === 0) {
