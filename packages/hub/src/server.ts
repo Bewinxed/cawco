@@ -12686,7 +12686,41 @@ export const createServer = (
     },
     // A machine's verbs on a dashboard's socket.
     admission: refuseDashboardVerb,
-    frames: refuseDashboardVerb,
+    // Only the Chrome extension's BLE advert: it belongs to no machine.
+    frames: (ws, message) => {
+      const body = message.payload as
+        | {
+            kind?: unknown;
+            serviceData?: unknown;
+            rssi?: unknown;
+            capturedAt?: unknown;
+          }
+        | undefined;
+      if (
+        body?.kind !== "passkey_advert" ||
+        typeof body.serviceData !== "string" ||
+        typeof body.rssi !== "number" ||
+        typeof body.capturedAt !== "number"
+      ) {
+        refuseDashboardVerb(ws, message);
+        return;
+      }
+      detach(
+        browsers.relayPasskeyAdvert(
+          "extension",
+          {
+            serviceData: body.serviceData,
+            rssi: body.rssi,
+            capturedAt: body.capturedAt,
+          },
+          {
+            captured: (key) => passkeyRelay.captured(key),
+            injected: (key) => passkeyRelay.injected(key),
+          }
+        ),
+        "relay the passkey advert"
+      );
+    },
     heartbeat: refuseDashboardVerb,
     launch: refuseDashboardVerb,
     register: refuseDashboardVerb,
@@ -13117,7 +13151,12 @@ export const createServer = (
           // read again here, so nothing but the person ever holds one). Its
           // device is kept, so removing the device closes it.
           const caller = hubAuth.classify(
-            (name) => ws.headers[name],
+            (name) =>
+              name === "authorization" &&
+              !ws.headers[name] &&
+              typeof ws.query.token === "string"
+                ? `Owner ${ws.query.token}`
+                : ws.headers[name],
             "GET",
             "/ws/dashboard",
             ws.remoteAddress ?? null
