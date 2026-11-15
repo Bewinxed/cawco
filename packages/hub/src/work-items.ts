@@ -131,12 +131,13 @@ import {
   type WorkspaceRow,
 } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import type { Origin, WorkOrigin } from "./db/schema";
 import type {
   ItemBlock,
+  Origin,
   StoredSendRefusal,
   WorkBudget,
   WorkItemSubmission,
+  WorkOrigin,
 } from "./db/stored-types";
 import type { designOnBase, designSection } from "./design-system";
 import { failedWith } from "./gate";

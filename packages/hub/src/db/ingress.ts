@@ -21,11 +21,11 @@ import {
   eventRouteKinds,
   eventRoutes,
   type GitHubCursor,
-  type GitHubResource,
   githubPollCursors,
   githubPollers,
   inboundEvents,
 } from "./schema";
+import type { GitHubResource } from "./stored-types";
 
 export type InboundEventRow = typeof inboundEvents.$inferSelect;
 /** A route with the kinds it takes (`event_route_kinds`); none takes any. */

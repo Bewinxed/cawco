@@ -2,12 +2,8 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
-import {
-  instances,
-  type MachineLineKind,
-  type SessionLineKind,
-  sessionLines,
-} from "./schema";
+import { instances, type MachineLineKind, sessionLines } from "./schema";
+import type { SessionLineKind } from "./stored-types";
 
 interface LimitNote {
   at: number;

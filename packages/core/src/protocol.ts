@@ -4,6 +4,7 @@
 import type { ACTIVITIES } from "./activity";
 import type { ArtifactDoes, ArtifactKind } from "./artifact-kinds";
 import type { MayStart } from "./delegate-types";
+import { everyOf } from "./every-of";
 import type { FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { LastErrorKind } from "./relaunch";
@@ -1204,7 +1205,7 @@ export interface InstanceRow {
    * waits on, its turn's end, the background work its process holds ending,
    * or its machine connected again. Absent when it owes none.
    */
-  owedMove?: { accountId: string; waits: "turn" | "work" | "machine" };
+  owedMove?: { accountId: string; waits: OwedMoveWait };
   /**
    * The session that started this one (`delegate`, `start_session`), which every rail nests it under; absent on a
    * session a person started. A delegate is told from a session merely
@@ -1447,8 +1448,22 @@ export type DelegateEvent =
       };
     });
 
+/**
+ * What a move a session owes waits on before it runs: the session's turn's
+ * end; the work its process holds for later (a background task) ending, or
+ * the restart bound; or its machine connected again (hub `owed_moves.waits`).
+ */
+export type OwedMoveWait = "turn" | "work" | "machine";
+
 /** The three things a delegate and its parent ever say to each other. */
 export type DelegateEventKind = DelegateEvent["kind"];
+
+/** Every {@link DelegateEventKind}. */
+export const DELEGATE_EVENT_KINDS = everyOf<DelegateEventKind>()([
+  "ask",
+  "answer",
+  "report",
+]);
 
 /** What each kind carries: the ask's own input, the answer, the turn's report. */
 export type DelegateEventPayload = DelegateEvent["payload"];

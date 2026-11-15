@@ -20,6 +20,7 @@ import { RELAY_PROVIDERS, RELAY_STATES } from "./relays";
 import { INTERACTIONS } from "./stage";
 import { declared } from "./stored-types";
 import { COMMAND_ACK_STAGES } from "./stream";
+import { TRACKERS } from "./trackers";
 import { WORK_ITEM_STATES } from "./work-items";
 
 const AccountKindShape = declared(
@@ -268,6 +269,14 @@ const ArtifactThumbnailShape = declared(
 export const ArtifactThumbnailSchema = ArtifactThumbnailShape;
 export type ArtifactThumbnailOutput = z.output<typeof ArtifactThumbnailShape>;
 
+const AskStateShape = declared(
+  z.enum(["open", "answered", "withdrawn"]),
+  "AskState",
+  "packages/core/src/asks.ts"
+);
+export const AskStateSchema = AskStateShape;
+export type AskStateOutput = z.output<typeof AskStateShape>;
+
 const AtPlanLimitShape = declared(
   z.enum(["move", "extra-usage"]),
   "AtPlanLimit",
@@ -499,7 +508,7 @@ export const BrowserRelayShape = declared(
 );
 export type BrowserRelayOutput = z.output<typeof BrowserRelayShape>;
 
-export const BrowserStateShape = declared(
+const BrowserStateShape = declared(
   z.enum([
     "pulling",
     "building",
@@ -512,6 +521,7 @@ export const BrowserStateShape = declared(
   "BrowserState",
   "packages/core/src/browser.ts"
 );
+export const BrowserStateSchema = BrowserStateShape;
 export type BrowserStateOutput = z.output<typeof BrowserStateShape>;
 
 export const BrowserRowShape = declared(
@@ -554,6 +564,14 @@ const BuildInfoShape = declared(
 );
 export const BuildInfoSchema = BuildInfoShape;
 export type BuildInfoOutput = z.output<typeof BuildInfoShape>;
+
+const CapPeriodShape = declared(
+  z.enum(["day", "month"]),
+  "CapPeriod",
+  "packages/core/src/areas.ts"
+);
+export const CapPeriodSchema = CapPeriodShape;
+export type CapPeriodOutput = z.output<typeof CapPeriodShape>;
 
 const CarryRestoredShape = declared(
   z.union([
@@ -608,6 +626,14 @@ const ConnectAccessShape = declared(
 );
 export const ConnectAccessSchema = ConnectAccessShape;
 export type ConnectAccessOutput = z.output<typeof ConnectAccessShape>;
+
+const ConnectionStateShape = declared(
+  z.enum(["signed-in", "needs-sign-in", "error"]),
+  "ConnectionState",
+  "packages/core/src/connections.ts"
+);
+export const ConnectionStateSchema = ConnectionStateShape;
+export type ConnectionStateOutput = z.output<typeof ConnectionStateShape>;
 
 const ContextFillShape = declared(
   z.object({ compactsAt: z.number(), tokens: z.number() }),
@@ -1184,6 +1210,14 @@ const ExternalActorShape = declared(
 export const ExternalActorSchema = ExternalActorShape;
 export type ExternalActorOutput = z.output<typeof ExternalActorShape>;
 
+const ExternalStateShape = declared(
+  z.enum(["open", "draft", "merged", "closed", "canceled"]),
+  "ExternalState",
+  "packages/core/src/external-items.ts"
+);
+export const ExternalStateSchema = ExternalStateShape;
+export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
+
 const FiledRecordsShape = declared(
   z.object({
     notes: z.array(z.string()),
@@ -1424,6 +1458,14 @@ const FleetRefreshShape = declared(
 );
 export const FleetRefreshSchema = FleetRefreshShape;
 export type FleetRefreshOutput = z.output<typeof FleetRefreshShape>;
+
+const FleetScopeShape = declared(
+  z.enum(["user", "project", "local"]),
+  "FleetScope",
+  "packages/core/src/fleet-placement.ts"
+);
+export const FleetScopeSchema = FleetScopeShape;
+export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
 
 const FleetSyncOutcomeShape = declared(
   z.union([
@@ -1845,6 +1887,55 @@ export const InstallShape = declared(
 );
 export type InstallOutput = z.output<typeof InstallShape>;
 
+const InstanceStatusShape = declared(
+  z.enum([
+    "moving",
+    "starting",
+    "running",
+    "sleeping",
+    "stopping",
+    "stopped",
+    "discarded",
+    "unknown",
+    "error",
+  ]),
+  "InstanceStatus",
+  "packages/core/src/protocol.ts"
+);
+export const InstanceStatusSchema = InstanceStatusShape;
+export type InstanceStatusOutput = z.output<typeof InstanceStatusShape>;
+
+const TrackerShape = declared(
+  z.enum(TRACKERS),
+  "Tracker",
+  "packages/core/src/trackers.ts"
+);
+export type TrackerOutput = z.output<typeof TrackerShape>;
+
+const IssueTrackerShape = declared(
+  TrackerShape.exclude(["cawco"]),
+  "IssueTracker",
+  "packages/core/src/trackers.ts"
+);
+export const IssueTrackerSchema = IssueTrackerShape;
+export type IssueTrackerOutput = z.output<typeof IssueTrackerShape>;
+
+const LastErrorKindShape = declared(
+  z.enum(["conversation-gone", "restart-lost", "start-refused"]),
+  "LastErrorKind",
+  "packages/core/src/relaunch.ts"
+);
+export const LastErrorKindSchema = LastErrorKindShape;
+export type LastErrorKindOutput = z.output<typeof LastErrorKindShape>;
+
+const LinkModeShape = declared(
+  z.enum(["record", "closes", "refs", "related"]),
+  "LinkMode",
+  "packages/core/src/external-items.ts"
+);
+export const LinkModeSchema = LinkModeShape;
+export type LinkModeOutput = z.output<typeof LinkModeShape>;
+
 const WorkspaceToolShape = declared(
   z.object({
     command: z.string(),
@@ -1886,6 +1977,14 @@ const MachineCapabilityShape = declared(
 );
 export const MachineCapabilitySchema = MachineCapabilityShape;
 export type MachineCapabilityOutput = z.output<typeof MachineCapabilityShape>;
+
+const MachineStateShape = declared(
+  z.enum(["active", "idle", "locked", "asleep"]),
+  "MachineState",
+  "packages/core/src/notifications.ts"
+);
+export const MachineStateSchema = MachineStateShape;
+export type MachineStateOutput = z.output<typeof MachineStateShape>;
 
 const McpPlatformShape = declared(
   z.enum(MCP_PLATFORMS),
@@ -2215,6 +2314,14 @@ const NeutralSessionInfoShape = declared(
 export const NeutralSessionInfoSchema = NeutralSessionInfoShape;
 export type NeutralSessionInfoOutput = z.output<typeof NeutralSessionInfoShape>;
 
+const OnCapShape = declared(
+  z.enum(["pause", "quiet", "both"]),
+  "OnCap",
+  "packages/core/src/areas.ts"
+);
+export const OnCapSchema = OnCapShape;
+export type OnCapOutput = z.output<typeof OnCapShape>;
+
 const LimitWindowShape = declared(
   z.object({
     group: z.union([
@@ -2267,6 +2374,14 @@ const OrphanedCommentsShape = declared(
 );
 export const OrphanedCommentsSchema = OrphanedCommentsShape;
 export type OrphanedCommentsOutput = z.output<typeof OrphanedCommentsShape>;
+
+const OwedMoveWaitShape = declared(
+  z.enum(["turn", "work", "machine"]),
+  "OwedMoveWait",
+  "packages/core/src/protocol.ts"
+);
+export const OwedMoveWaitSchema = OwedMoveWaitShape;
+export type OwedMoveWaitOutput = z.output<typeof OwedMoveWaitShape>;
 
 const PairingOffAnswerShape = declared(
   z.union([z.object({ ok: z.literal(true) }), z.object({ error: z.string() })]),
@@ -2483,6 +2598,13 @@ const PolicyShape = declared(
 export const PolicySchema = PolicyShape;
 export type PolicyOutput = z.output<typeof PolicyShape>;
 
+export const PresenceClientShape = declared(
+  z.enum(["web", "ios", "mac"]),
+  "PresenceClient",
+  "packages/core/src/notifications.ts"
+);
+export type PresenceClientOutput = z.output<typeof PresenceClientShape>;
+
 const RoutineScheduleShape = declared(
   z.object({
     cron: z.string(),
@@ -2639,6 +2761,14 @@ const ProjectNoteShape = declared(
 );
 export const ProjectNoteSchema = ProjectNoteShape;
 export type ProjectNoteOutput = z.output<typeof ProjectNoteShape>;
+
+const RefusalReachShape = declared(
+  z.enum(["machine", "account"]),
+  "RefusalReach",
+  "packages/core/src/accounts.ts"
+);
+export const RefusalReachSchema = RefusalReachShape;
+export type RefusalReachOutput = z.output<typeof RefusalReachShape>;
 
 const RelayPortNameShape = declared(
   z.enum(["udp 3478", "tcp 3478", "tls 5349"]),
@@ -2949,6 +3079,14 @@ const ScratchWorktreeShape = declared(
 export const ScratchWorktreeSchema = ScratchWorktreeShape;
 export type ScratchWorktreeOutput = z.output<typeof ScratchWorktreeShape>;
 
+const SendModeShape = declared(
+  z.enum(["turn", "note"]),
+  "SendMode",
+  "packages/core/src/session-messages.ts"
+);
+export const SendModeSchema = SendModeShape;
+export type SendModeOutput = z.output<typeof SendModeShape>;
+
 const SessionCommandsShape = declared(
   z.object({ names: z.array(z.string()), skills: z.array(z.string()) }),
   "SessionCommands",
@@ -2964,6 +3102,14 @@ const SessionEndIntentShape = declared(
 );
 export const SessionEndIntentSchema = SessionEndIntentShape;
 export type SessionEndIntentOutput = z.output<typeof SessionEndIntentShape>;
+
+const SessionOriginShape = declared(
+  z.enum(["person", "delegate", "project", "check"]),
+  "SessionOrigin",
+  "packages/core/src/protocol.ts"
+);
+export const SessionOriginSchema = SessionOriginShape;
+export type SessionOriginOutput = z.output<typeof SessionOriginShape>;
 
 const SessionToolingShape = declared(
   z.object({
@@ -3241,6 +3387,14 @@ const SheetWrittenShape = declared(
 export const SheetWrittenSchema = SheetWrittenShape;
 export type SheetWrittenOutput = z.output<typeof SheetWrittenShape>;
 
+const SigninStateShape = declared(
+  z.enum(["signed-in", "signed-out", "mismatch"]),
+  "SigninState",
+  "packages/core/src/accounts.ts"
+);
+export const SigninStateSchema = SigninStateShape;
+export type SigninStateOutput = z.output<typeof SigninStateShape>;
+
 const SkillFileShape = declared(
   z.object({
     contentBase64: z.string(),
@@ -3413,6 +3567,17 @@ export const ModeAskShape = declared(
   "packages/core/src/session-messages.ts"
 );
 export type ModeAskOutput = z.output<typeof ModeAskShape>;
+
+const StreamRelayStateShape = declared(
+  z.union([
+    BrowserStateShape.extract(["pulling", "starting", "live", "failed"]),
+    z.literal("stopped"),
+  ]),
+  "StreamRelayState",
+  "packages/core/src/stream-relay.ts"
+);
+export const StreamRelayStateSchema = StreamRelayStateShape;
+export type StreamRelayStateOutput = z.output<typeof StreamRelayStateShape>;
 
 const WaitWitnessShape = declared(
   z.object({ target: z.string(), value: z.string() }),

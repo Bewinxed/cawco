@@ -24,6 +24,7 @@ import type {
   MoveSnapshotResult,
   MoveStep,
 } from "@cawco/core/move";
+import type { PresenceClient } from "@cawco/core/notifications";
 import type { SendPayload } from "@cawco/core/protocol";
 import type { ModeAsk, SendRefusal } from "@cawco/core/session-messages";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
@@ -510,3 +511,108 @@ export interface TrackerSynced {
   status?: string | null;
   title: string;
 }
+
+/* -------------------------------------------- closed sets of text columns */
+
+/** Whether a machine's agent is connected (schema `agents.status`). */
+export type AgentStatus = "online" | "offline";
+
+/** Why a task's attempt waits in `queued_task_starts`: the project's attempt cap, or a live item that owns its paths. */
+export type QueuedStartWhy = "cap" | "owns";
+
+/** How long a session's prompt cache lives, as its last write said (schema `instances.cache_ttl`). */
+export type CacheTtl = "5m" | "1h";
+
+/** Who named a session (schema `instances.title_source`): its owner's rename stands over its agent's. */
+export type InstanceTitleSource = "owner" | "agent";
+
+/** What a session row is (schema `instances.kind`): a mainline session, a scratch spin-off, or a summariser. */
+export type InstanceKind = "mainline" | "scratch" | "summariser";
+
+/** How the hub reaches an MCP server (schema `mcp_servers.auth_mode`): directly, or through its OAuth sign-in. */
+export type McpAuthMode = "direct" | "oauth";
+
+/** Where a compaction at an account's limit stands (schema `limit_compactions.stage`). */
+export type LimitCompactionStage = "carrying" | "filing" | "compacting";
+
+/** A repeating rule's state on a session (schema `rule_state.status`). */
+export type RuleStateStatus = "armed" | "pending";
+
+/** The person's answer to a design offer (schema `design_offers.answer`). */
+export type DesignOfferAnswer = "built" | "dismissed";
+
+/** Where a design check stands (schema `design_checks.state`). */
+export type DesignCheckState = "checking" | "passed" | "findings" | "failed";
+
+/** How previews are served (schema `preview_settings.mode`): each on its own port, or by host name. */
+export type PreviewSettingsMode = "port" | "host";
+
+/** Where a relay's secret came from (schema `relays.secret_from`): minted by the hub, or given by its owner. */
+export type RelaySecretFrom = "minted" | "owner";
+
+/** Whose word a presence row keeps (schema `presence_clients.kind`): a client's, a machine's, or the last send's. */
+export type PresenceKind = PresenceClient | "machine" | "send";
+
+/**
+ * Who began a piece of work, or a turn of Caw's: `you`, the person's own
+ * words; `event`, anything else (Caw on / Caw off).
+ */
+export type Origin = "you" | "event";
+
+/**
+ * A work item's origin: an {@link Origin}, or `kept`, Caw's own work (an
+ * event's) you chose to let finish when you turned him off. Kept work runs
+ * to its end, past an account's limit, and its report is noted in the
+ * project's conversation without a turn while events are off.
+ */
+export type WorkOrigin = Origin | "kept";
+
+/**
+ * Where a work item's landing stands (schema `work_items.landing_phase`), kept
+ * so a hub that starts mid-landing goes on from there:
+ * - `completing`: its `finish_item` stored while work it delegated is still
+ *   live; it lands once every item it delegated, queued ones included, has
+ *   ended (work-items.ts `completeIfDrained`).
+ * - `gating`: its landing gate runs on its tree (at finish_item, or on top
+ *   of its base); each step that passed is kept (schema `work_item_gate_passes`), so a
+ *   gate a restart cut runs from the step it was on.
+ * - `turn`: in its turn to land, rebased again, the steps the rebase moved
+ *   run again, then the push.
+ */
+export type LandingPhase = "completing" | "gating" | "turn";
+
+/**
+ * A workspace's life, which is its work items' (workspaces.ts `settle`):
+ * `active` while an item there is live, or ended a moment ago and the hub
+ * has not settled it, or while something holds it (a session attached, an
+ * artifact showing what it serves); `held` once its item ended with work
+ * that is nowhere else, which the session that started its work ends, told
+ * so, by continuing it or discarding it (workspaces.ts `heldNotice`), or a
+ * workspace cut from it ends by landing that work (`vouchLanded`);
+ * `archived` once its boundary and clone are gone.
+ */
+export type WorkspaceState = "active" | "held" | "archived";
+
+/**
+ * What kind of line the hub keeps in a session's transcript:
+ * - `limit`: a limit its keeper held it to (core `LIMIT_REACHED`), the line
+ *   its machine said;
+ * - `outdated`: its process runs a Claude Code other than its machine's
+ *   (core `CLI_OUTDATED`), the line its machine said;
+ * - `watch`: what fleet watch did about it, or for it as the project's conversation (core
+ *   `FLEET_WATCH`), the line with the triage's reason under it;
+ * - `moved`: it started on a machine its project was moved to for it (core
+ *   `MOVED_HERE`), the move's ready line: what moved and what stayed. Its
+ *   transcript opens on it; one per session.
+ * - `room`: its start waits for its machine's memory (core `ROOM_HELD`),
+ *   the line its machine said, with the machine's readings.
+ * - `context`: what the hub did as its context filled (core `CONTEXT_LINE`,
+ *   context-filing.ts `ContextLine` as JSON): a filing at the threshold,
+ *   said again in its place as it ends, or its harness's compaction.
+ */
+export type SessionLineKind =
+  "limit" | "outdated" | "watch" | "moved" | "room" | "context";
+
+/** The resources a project's repository is polled for: issue events are where its labels come from. */
+export type GitHubResource =
+  "pulls" | "issues" | "comments" | "issueEvents" | "discussions";

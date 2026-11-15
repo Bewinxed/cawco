@@ -94,11 +94,89 @@
       "type": "string"
     }
   },
+  "account_routing.delegates_strategy": {
+    "type": "string",
+    "enum": [
+      "pinned",
+      "fill-first",
+      "spread",
+      "soonest-reset"
+    ]
+  },
+  "account_routing.yours_strategy": {
+    "type": "string",
+    "enum": [
+      "pinned",
+      "fill-first",
+      "spread",
+      "soonest-reset"
+    ]
+  },
+  "account_signins.refusal_reach": {
+    "type": "string",
+    "enum": [
+      "machine",
+      "account"
+    ]
+  },
+  "account_signins.state": {
+    "type": "string",
+    "enum": [
+      "signed-in",
+      "signed-out",
+      "mismatch"
+    ]
+  },
   "accounts.at_plan_limit": {
     "type": "string",
     "enum": [
       "move",
       "extra-usage"
+    ]
+  },
+  "accounts.hue": {
+    "type": "string",
+    "enum": [
+      "amber",
+      "blue",
+      "cyan",
+      "green",
+      "orange",
+      "rose",
+      "violet"
+    ]
+  },
+  "accounts.kind": {
+    "type": "string",
+    "enum": [
+      "subscription",
+      "console",
+      "oauth",
+      "api_key"
+    ]
+  },
+  "accounts.setup_step": {
+    "type": "string",
+    "enum": [
+      "signIn",
+      "nameIt",
+      "yourSessions",
+      "delegates",
+      "atLimit",
+      "done"
+    ]
+  },
+  "actions.state": {
+    "type": "string",
+    "enum": [
+      "proposed",
+      "approved",
+      "denied",
+      "running",
+      "done",
+      "failed",
+      "unknown",
+      "cancelled"
     ]
   },
   "agent_harnesses.report": {
@@ -1539,11 +1617,62 @@
       "type": "number"
     }
   },
+  "agents.status": {
+    "type": "string",
+    "enum": [
+      "online",
+      "offline"
+    ]
+  },
   "areas.account_at_limit": {
     "type": "string",
     "enum": [
       "wait",
       "move"
+    ]
+  },
+  "areas.cap_period": {
+    "type": "string",
+    "enum": [
+      "day",
+      "month"
+    ]
+  },
+  "areas.caw_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
+  "areas.on_cap": {
+    "type": "string",
+    "enum": [
+      "pause",
+      "quiet",
+      "both"
+    ]
+  },
+  "artifacts.does": {
+    "type": "string",
+    "enum": [
+      "pick",
+      "judge",
+      "try",
+      "draw"
+    ]
+  },
+  "artifacts.kind": {
+    "type": "string",
+    "enum": [
+      "page",
+      "canvas",
+      "preview",
+      "component",
+      "browser"
     ]
   },
   "asks.record": {
@@ -1910,6 +2039,34 @@
       "asked"
     ]
   },
+  "asks.state": {
+    "type": "string",
+    "enum": [
+      "open",
+      "answered",
+      "withdrawn"
+    ]
+  },
+  "browsers.state": {
+    "type": "string",
+    "enum": [
+      "pulling",
+      "building",
+      "starting",
+      "live",
+      "stopping",
+      "asleep",
+      "failed"
+    ]
+  },
+  "capability_calls.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "tool",
+      "mcp"
+    ]
+  },
   "config_trash.kind": {
     "type": "string",
     "enum": [
@@ -1963,6 +2120,18 @@
     "items": {
       "type": "string"
     }
+  },
+  "connections.auth": {
+    "type": "string",
+    "enum": [
+      "none",
+      "bearer",
+      "header",
+      "oauth",
+      "app",
+      "gh",
+      "device"
+    ]
   },
   "connections.discovery": {
     "type": "object",
@@ -2663,6 +2832,22 @@
         "type": "string"
       }
     }
+  },
+  "connections.state": {
+    "type": "string",
+    "enum": [
+      "signed-in",
+      "needs-sign-in",
+      "error"
+    ]
+  },
+  "connections.transport": {
+    "type": "string",
+    "enum": [
+      "http",
+      "sse",
+      "stdio"
+    ]
   },
   "connector_polls.args": {
     "type": "object",
@@ -4369,6 +4554,14 @@
       "type": "string"
     }
   },
+  "delegate_events.kind": {
+    "type": "string",
+    "enum": [
+      "ask",
+      "answer",
+      "report"
+    ]
+  },
   "delegate_events.payload": {
     "anyOf": [
       {
@@ -4463,6 +4656,15 @@
       ]
     }
   },
+  "design_checks.state": {
+    "type": "string",
+    "enum": [
+      "checking",
+      "passed",
+      "findings",
+      "failed"
+    ]
+  },
   "design_checks.submission": {
     "type": "object",
     "properties": {
@@ -4522,6 +4724,13 @@
       "summary"
     ]
   },
+  "design_offers.answer": {
+    "type": "string",
+    "enum": [
+      "built",
+      "dismissed"
+    ]
+  },
   "design_proposals.files": {
     "type": "array",
     "items": {
@@ -4571,6 +4780,16 @@
         "path"
       ]
     }
+  },
+  "event_routes.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
   },
   "external_comments.author": {
     "type": "object",
@@ -4626,6 +4845,29 @@
       "name",
       "source",
       "url"
+    ]
+  },
+  "external_comments.source": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
+    ]
+  },
+  "fleet_harness_config.kind": {
+    "type": "string",
+    "enum": [
+      "claudeSettings",
+      "opencodePlugins",
+      "piExtensions"
+    ]
+  },
+  "fleet_harness_config.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
     ]
   },
   "fleet_harness_config.settings": {
@@ -4789,6 +5031,14 @@
       }
     ]
   },
+  "fleet_hook_history.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
+  },
   "fleet_hooks.handler": {
     "anyOf": [
       {
@@ -4941,6 +5191,21 @@
           "type"
         ]
       }
+    ]
+  },
+  "fleet_hooks.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
+  },
+  "fleet_mcp_oauth.access": {
+    "type": "string",
+    "enum": [
+      "read",
+      "write"
     ]
   },
   "fleet_mcp_oauth.client": {
@@ -5748,6 +6013,13 @@
     },
     "additionalProperties": {}
   },
+  "fleet_memory_docs.role": {
+    "type": "string",
+    "enum": [
+      "orchestrator",
+      "leaf"
+    ]
+  },
   "fleet_skill_history.files": {
     "type": "array",
     "items": {
@@ -5770,6 +6042,32 @@
       ]
     }
   },
+  "github_poll_cursors.resource": {
+    "type": "string",
+    "enum": [
+      "pulls",
+      "issues",
+      "comments",
+      "issueEvents",
+      "discussions"
+    ]
+  },
+  "image_settings.provider": {
+    "type": "string",
+    "enum": [
+      "chatgpt",
+      "antigravity",
+      "gemini-api"
+    ]
+  },
+  "instance_conversations.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
   "instances.cache_cold": {
     "type": "object",
     "properties": {
@@ -5783,6 +6081,13 @@
     "required": [
       "reason",
       "at"
+    ]
+  },
+  "instances.cache_ttl": {
+    "type": "string",
+    "enum": [
+      "5m",
+      "1h"
     ]
   },
   "instances.commands": {
@@ -5813,6 +6118,30 @@
       "discard",
       "delete",
       "delete-transcript"
+    ]
+  },
+  "instances.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "instances.kind": {
+    "type": "string",
+    "enum": [
+      "mainline",
+      "scratch",
+      "summariser"
+    ]
+  },
+  "instances.last_error_kind": {
+    "type": "string",
+    "enum": [
+      "conversation-gone",
+      "restart-lost",
+      "start-refused"
     ]
   },
   "instances.model_usage_seen": {
@@ -5847,6 +6176,15 @@
         "outputTokens"
       ]
     }
+  },
+  "instances.origin": {
+    "type": "string",
+    "enum": [
+      "person",
+      "delegate",
+      "project",
+      "check"
+    ]
   },
   "instances.owed_spawn": {
     "type": "object",
@@ -6208,6 +6546,17 @@
       "verb"
     ]
   },
+  "instances.role": {
+    "type": "string",
+    "enum": [
+      "worker",
+      "delegate",
+      "overseer",
+      "web-facing",
+      "curator",
+      "trimmer"
+    ]
+  },
   "instances.scratch_worktree": {
     "type": "object",
     "properties": {
@@ -6225,6 +6574,27 @@
       "dir",
       "path",
       "root"
+    ]
+  },
+  "instances.status": {
+    "type": "string",
+    "enum": [
+      "moving",
+      "starting",
+      "running",
+      "sleeping",
+      "stopping",
+      "stopped",
+      "discarded",
+      "unknown",
+      "error"
+    ]
+  },
+  "instances.title_source": {
+    "type": "string",
+    "enum": [
+      "owner",
+      "agent"
     ]
   },
   "instances.tooling": {
@@ -7506,6 +7876,14 @@
       "todos"
     ]
   },
+  "limit_compactions.stage": {
+    "type": "string",
+    "enum": [
+      "carrying",
+      "filing",
+      "compacting"
+    ]
+  },
   "limit_events.move": {
     "anyOf": [
       {
@@ -8672,6 +9050,13 @@
       "type": "string"
     }
   },
+  "mcp_servers.auth_mode": {
+    "type": "string",
+    "enum": [
+      "direct",
+      "oauth"
+    ]
+  },
   "mcp_servers.config": {
     "anyOf": [
       {
@@ -8784,6 +9169,14 @@
         "win32"
       ]
     }
+  },
+  "mcp_servers.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
   },
   "move_endings.ended": {
     "type": "object",
@@ -10508,6 +10901,14 @@
       }
     ]
   },
+  "owed_moves.waits": {
+    "type": "string",
+    "enum": [
+      "turn",
+      "work",
+      "machine"
+    ]
+  },
   "parked_asks.envelope": {
     "type": "object",
     "properties": {
@@ -10884,6 +11285,17 @@
       "verb"
     ]
   },
+  "plan_changes.kind": {
+    "type": "string",
+    "enum": [
+      "reword",
+      "add",
+      "remove",
+      "comment",
+      "tick",
+      "move"
+    ]
+  },
   "plugins.files": {
     "type": "array",
     "items": {
@@ -10941,6 +11353,35 @@
       "outcome"
     ]
   },
+  "presence_clients.kind": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "web",
+          "ios",
+          "mac"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "machine"
+      },
+      {
+        "type": "string",
+        "const": "send"
+      }
+    ]
+  },
+  "presence_clients.machine": {
+    "type": "string",
+    "enum": [
+      "active",
+      "idle",
+      "locked",
+      "asleep"
+    ]
+  },
   "presence_clients.showing": {
     "type": "array",
     "items": {
@@ -10958,6 +11399,29 @@
     "items": {
       "type": "string"
     }
+  },
+  "preview_settings.mode": {
+    "type": "string",
+    "enum": [
+      "port",
+      "host"
+    ]
+  },
+  "project_blocks.page": {
+    "type": "string",
+    "enum": [
+      "board",
+      "table",
+      "pipeline",
+      "routines"
+    ]
+  },
+  "project_blocks.width": {
+    "type": "string",
+    "enum": [
+      "narrow",
+      "wide"
+    ]
   },
   "project_notes.note": {
     "type": "object",
@@ -11447,6 +11911,57 @@
       "hub"
     ]
   },
+  "project_starter_sets.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
+  "project_starter_sources.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
+  "project_starters.glyph": {
+    "type": "string",
+    "enum": [
+      "brief",
+      "bug",
+      "calendar",
+      "draft",
+      "explore",
+      "grill",
+      "ideas",
+      "mail",
+      "palette",
+      "people",
+      "refresh",
+      "reply",
+      "rocket",
+      "routine",
+      "screen",
+      "search",
+      "site",
+      "stages",
+      "system",
+      "tasks",
+      "triage",
+      "voice"
+    ]
+  },
+  "project_starters.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
   "project_tasks.outputs": {
     "type": "array",
     "items": {
@@ -11460,6 +11975,31 @@
       "move"
     ]
   },
+  "projects.cap_period": {
+    "type": "string",
+    "enum": [
+      "day",
+      "month"
+    ]
+  },
+  "projects.caw_harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "projects.caw_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
   "projects.lands": {
     "type": "string",
     "enum": [
@@ -11469,7 +12009,49 @@
       "none"
     ]
   },
+  "projects.on_cap": {
+    "type": "string",
+    "enum": [
+      "pause",
+      "quiet",
+      "both"
+    ]
+  },
+  "projects.template": {
+    "type": "string",
+    "enum": [
+      "code",
+      "launch",
+      "seo",
+      "brand",
+      "design",
+      "social",
+      "outreach"
+    ]
+  },
+  "projects.tracker": {
+    "type": "string",
+    "enum": [
+      "cawco",
+      "github",
+      "linear"
+    ]
+  },
   "queued_task_starts.asked": {},
+  "queued_task_starts.origin": {
+    "type": "string",
+    "enum": [
+      "you",
+      "event"
+    ]
+  },
+  "queued_task_starts.why": {
+    "type": "string",
+    "enum": [
+      "cap",
+      "owns"
+    ]
+  },
   "queued_work_items.request": {},
   "relays.provider": {
     "type": "string",
@@ -11477,6 +12059,32 @@
       "github",
       "stripe",
       "generic"
+    ]
+  },
+  "relays.secret_from": {
+    "type": "string",
+    "enum": [
+      "minted",
+      "owner"
+    ]
+  },
+  "relays.state": {
+    "type": "string",
+    "enum": [
+      "wanted",
+      "live",
+      "needs-owner",
+      "off"
+    ]
+  },
+  "routine_runs.state": {
+    "type": "string",
+    "enum": [
+      "queued",
+      "starting",
+      "running",
+      "ended",
+      "skipped"
     ]
   },
   "routines.lands": {
@@ -11488,6 +12096,16 @@
       "none"
     ]
   },
+  "routines.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
   "routines.target": {
     "type": "string",
     "enum": [
@@ -11496,6 +12114,13 @@
       "conversation",
       "curator",
       "trim"
+    ]
+  },
+  "rule_state.status": {
+    "type": "string",
+    "enum": [
+      "armed",
+      "pending"
     ]
   },
   "rules.match_kind": {
@@ -12657,6 +13282,13 @@
       "update"
     ]
   },
+  "sent_messages.mode": {
+    "type": "string",
+    "enum": [
+      "turn",
+      "note"
+    ]
+  },
   "sent_messages.owed": {
     "type": "object",
     "properties": {
@@ -13448,6 +14080,27 @@
       }
     ]
   },
+  "sent_messages.state": {
+    "type": "string",
+    "enum": [
+      "pending",
+      "read",
+      "failed",
+      "replaced",
+      "cancelled"
+    ]
+  },
+  "session_lines.kind": {
+    "type": "string",
+    "enum": [
+      "limit",
+      "outdated",
+      "watch",
+      "moved",
+      "room",
+      "context"
+    ]
+  },
   "session_plans.orphaned_comments": {
     "type": "array",
     "items": {
@@ -13598,6 +14251,30 @@
       "outcome"
     ]
   },
+  "skills.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
+  },
+  "spend_settings.on_cap": {
+    "type": "string",
+    "enum": [
+      "pause",
+      "quiet",
+      "both"
+    ]
+  },
+  "starter_outcomes.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
   "stream_relay_proofs.ports": {
     "type": "array",
     "items": {
@@ -13670,6 +14347,33 @@
       "tailnet"
     ]
   },
+  "stream_relay.state": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "pulling",
+          "starting",
+          "live",
+          "failed"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "stopped"
+      }
+    ]
+  },
+  "supervisor_config.caw_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
   "task_links.author": {
     "type": "object",
     "properties": {
@@ -13726,11 +14430,45 @@
       "url"
     ]
   },
+  "task_links.kind": {
+    "type": "string",
+    "enum": [
+      "issue",
+      "pr",
+      "discussion"
+    ]
+  },
   "task_links.labels": {
     "type": "array",
     "items": {
       "type": "string"
     }
+  },
+  "task_links.mode": {
+    "type": "string",
+    "enum": [
+      "record",
+      "closes",
+      "refs",
+      "related"
+    ]
+  },
+  "task_links.source": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
+    ]
+  },
+  "task_links.state": {
+    "type": "string",
+    "enum": [
+      "open",
+      "draft",
+      "merged",
+      "closed",
+      "canceled"
+    ]
   },
   "tool_call_keys.headers": {
     "type": "array",
@@ -13838,6 +14576,13 @@
       "options",
       "title",
       "url"
+    ]
+  },
+  "tracker_bindings.provider": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
     ]
   },
   "tracker_links.synced": {
@@ -14048,6 +14793,15 @@
       "windows"
     ]
   },
+  "view_proposals.page": {
+    "type": "string",
+    "enum": [
+      "board",
+      "table",
+      "pipeline",
+      "routines"
+    ]
+  },
   "work_items.blocked": {
     "type": "object",
     "properties": {
@@ -14072,6 +14826,14 @@
       "since"
     ]
   },
+  "work_items.landing_phase": {
+    "type": "string",
+    "enum": [
+      "completing",
+      "gating",
+      "turn"
+    ]
+  },
   "work_items.lands": {
     "type": "string",
     "enum": [
@@ -14079,6 +14841,21 @@
       "branch",
       "pr",
       "none"
+    ]
+  },
+  "work_items.origin": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "you",
+          "event"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "kept"
+      }
     ]
   },
   "work_items.outputs": {
@@ -14432,6 +15209,13 @@
       "stashes"
     ]
   },
+  "workspaces.kind": {
+    "type": "string",
+    "enum": [
+      "repo",
+      "folder"
+    ]
+  },
   "workspaces.moved_untold": {
     "anyOf": [
       {
@@ -14511,6 +15295,14 @@
           "to"
         ]
       }
+    ]
+  },
+  "workspaces.state": {
+    "type": "string",
+    "enum": [
+      "active",
+      "held",
+      "archived"
     ]
   }
 }

@@ -65,6 +65,7 @@ import {
   sentMessages,
   workItems,
 } from "./schema";
+import type { InstanceKind } from "./stored-types";
 import type { Tx } from "./tx";
 
 /** The harnesses a removed machine's sessions can be recovered from: those in a server that outlives the agent. */
@@ -97,8 +98,6 @@ const END_PRIORITY: Record<SessionEndIntent, number> = {
   delete: 2,
   "delete-transcript": 3,
 };
-
-export type InstanceKind = (typeof instances.$inferSelect)["kind"];
 
 type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
 

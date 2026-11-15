@@ -1,4 +1,5 @@
 import type { AccountMove } from "@cawco/core/accounts";
+import type { OwedMoveWait } from "@cawco/core/protocol";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { owedMoves } from "./schema";
@@ -18,7 +19,7 @@ export interface OwedMove {
    * for later (a background task) ending, or the restart bound; or its
    * machine connected again.
    */
-  waits: "turn" | "work" | "machine";
+  waits: OwedMoveWait;
 }
 
 /**

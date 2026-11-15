@@ -98,7 +98,6 @@ typeOverrides:
     FrameState: OpenEnums.FrameState
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
-    GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessConfigKind: OpenEnums.HarnessConfigKind
     HarnessKind: OpenEnums.HarnessKind
@@ -118,10 +117,11 @@ typeOverrides:
     InstallSignIn: OpenEnums.InstallSignIn
     InstallState: OpenEnums.InstallState
     InstallStep: OpenEnums.InstallStep
+    InstanceKind: OpenEnums.InstanceKind
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
+    InstanceRowOrigin: OpenEnums.InstanceRowOrigin
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
-    InstanceRowWaits: OpenEnums.InstanceRowWaits
     InstanceStatus: OpenEnums.InstanceStatus
     Interaction: OpenEnums.Interaction
     IssueTracker: OpenEnums.IssueTracker
@@ -145,6 +145,7 @@ typeOverrides:
     NeutralSessionInfoStartedBy: OpenEnums.NeutralSessionInfoStartedBy
     NeutralStatus: OpenEnums.NeutralStatus
     OnCap: OpenEnums.OnCap
+    OwedMoveWait: OpenEnums.OwedMoveWait
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
@@ -159,6 +160,7 @@ typeOverrides:
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
+    PostApiWorkspacesByIdArchive200Kind: OpenEnums.PostApiWorkspacesByIdArchive200Kind
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
     PreviewFrameState: OpenEnums.PreviewFrameState
@@ -185,7 +187,6 @@ typeOverrides:
     SendBackBy: OpenEnums.SendBackBy
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
-    SessionOrigin: OpenEnums.SessionOrigin
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SetChangeTableChange: OpenEnums.SetChangeTableChange
     SetItemRowKind: OpenEnums.SetItemRowKind
@@ -227,6 +228,5 @@ typeOverrides:
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind
     WorkItemState: OpenEnums.WorkItemState
-    WorkspaceKind: OpenEnums.WorkspaceKind
     WorkspaceState: OpenEnums.WorkspaceState
     WorkspaceToolNeed: OpenEnums.WorkspaceToolNeed

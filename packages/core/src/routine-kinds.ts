@@ -24,7 +24,7 @@ export const MADE_ROUTINE_TARGETS = [
 ] as const satisfies readonly RoutineTarget[];
 
 /** Every {@link RoutineRunState}. */
-const ROUTINE_RUN_STATES = [
+export const ROUTINE_RUN_STATES = [
   "queued",
   "starting",
   "running",
