@@ -8,20 +8,17 @@
  */
 
 import type { SourceFacts } from "@cawco/core/asks";
-import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
+import { maskMcpConfig } from "@cawco/core/fleet-secrets";
 import type { ParkedAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import {
   type AdminGroup,
   presentPermission,
-  redact,
   type SetOwner,
   type SetStanding,
 } from "@cawco/core/permission-presentation";
 import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
-import { ParkedAskShape } from "@cawco/core/stored-shapes";
-import { z } from "zod";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
@@ -30,73 +27,10 @@ import { boardTitle } from "./labels";
 const isPermission = (payload: PermissionRequestFrame): boolean =>
   !questionsOf(payload.toolName, payload.input);
 
-const MCP_SERVERS_WRITE = /^(?:mcp__cawco__|cawco_)?admin_mcp_servers_write$/u;
-
-/** A connector write's `config.url` with its secret parts cut, as every read says it. */
-const withOpenUrl = (
-  input: Record<string, unknown>
-): Record<string, unknown> => {
-  const { config } = input;
-  if (
-    typeof config !== "object" ||
-    config === null ||
-    typeof (config as { url?: unknown }).url !== "string"
-  ) {
-    return input;
-  }
-  return {
-    ...input,
-    config: { ...config, url: openUrl((config as { url: string }).url) },
-  };
-};
-
-/**
- * The copy of a parked ask that leaves the hub for a client (a dashboard, the
- * apps, `/api/pending`): its tool input with every secret hidden, as the card
- * shows it. The ledger keeps the original, and {@link answeredWithOriginal}
- * puts it back on the way in, so an Approve runs the call as it was asked. A
- * question is left whole: its answer is written into its input.
- */
-export const clientAsk = (ask: ParkedAsk): ParkedAsk => {
-  const { payload } = ask;
-  if (!isPermission(payload)) {
-    return ask;
-  }
-  const input = Object.fromEntries(
-    Object.entries(payload.input).map(([key, value]) => [
-      key,
-      redact(key, value),
-    ])
-  );
-  return {
-    ...ask,
-    payload: {
-      ...payload,
-      input: MCP_SERVERS_WRITE.test(payload.toolName)
-        ? withOpenUrl(input)
-        : input,
-    },
-  };
-};
-
-/** An envelope whose payload says it is a permission request, by its kind alone. */
-const PERMISSION_KIND = z.object({ kind: z.literal("permission_request") });
-
-/**
- * {@link clientAsk} for an envelope read as it arrives. The payload's kind
- * decides: a permission request is read as a `ParkedAsk` (one that is not
- * throws, a fault in the hub's own handling) and redacted; any other
- * envelope passes whole.
- */
-export const clientCopy = (envelope: Envelope): Envelope =>
-  PERMISSION_KIND.safeParse(envelope.payload).success
-    ? clientAsk(ParkedAskShape.parse(envelope))
-    : envelope;
-
 /**
  * An answer to a parked permission, carrying the call's own input: clients
- * only ever held the redacted copy ({@link clientCopy}), so the input they
- * echo back is replaced by the ledger's.
+ * only ever held the redacted copy (redactor.ts `redactedAsk`), so the
+ * input they echo back is replaced by the ledger's.
  */
 export const answeredWithOriginal = (
   parked: ParkedAsk,

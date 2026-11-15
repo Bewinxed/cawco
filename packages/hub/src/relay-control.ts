@@ -59,6 +59,7 @@ import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek } from "./payload-peeks";
 import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
+import { redactedFrame } from "./redactor";
 import type { AnyProblem } from "./refusal";
 import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
@@ -175,7 +176,7 @@ export type RelayControlContext = Pick<
   | "recordDelegateAnswer"
   | "registry"
   | "relaunchOnAccount"
-  | "sendFrame"
+  | "sendToClient"
   | "sessionIdle"
   | "silentWords"
   | "streams"
@@ -434,6 +435,28 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     );
   };
 
+  /**
+   * A control's answer to the page that sent it: a frame on its socket
+   * (`replyAsFrame`), through the redactor as everything a client is sent,
+   * or its command's ack.
+   */
+  const answerControl = (
+    message: Envelope<ControlPayload>,
+    dashboard: HubSocket,
+    replyAsFrame: boolean,
+    requestId: string,
+    frame: ControlResult
+  ): void => {
+    if (replyAsFrame) {
+      ctx.sendToClient(
+        dashboard,
+        redactedFrame({ ...message, verb: "frames", payload: frame })
+      );
+    } else {
+      ctx.streams.settleCommand(requestId, frame);
+    }
+  };
+
   const relayPermissionAnswer = (
     message: Envelope<ControlPayload>,
     dashboard: HubSocket,
@@ -464,17 +487,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         failed(error instanceof Error ? error.message : String(error))
     );
     const correlationId = message.requestId ?? message.payload.requestId;
-    const reply = (frame: ControlResult): void => {
-      if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(correlationId, frame);
-      }
-    };
+    const reply = (frame: ControlResult): void =>
+      answerControl(message, dashboard, replyAsFrame, correlationId, frame);
     const failed = (reason: string): void => {
       console.error(
         `[hub] dashboard permission.answer ${answer?.requestId ?? "(no request)"} failed: ${reason}`
@@ -565,17 +579,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       return false;
     }
     const requestId = message.requestId ?? payload.requestId;
-    const receipt = (frame: ControlResult): void => {
-      if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(requestId, frame);
-      }
-    };
+    const receipt = (frame: ControlResult): void =>
+      answerControl(message, dashboard, replyAsFrame, requestId, frame);
     // The receipt is sent when the move is decided, or when deciding it
     // threw: a move that failed says so on the command that asked for it.
     const move = crossModel(instanceId, asked).then(
@@ -627,21 +632,12 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     const hubOwned = hubOwnedControl(message.payload.method);
     if (hubOwned) {
       const requestId = message.requestId ?? message.payload.requestId;
-      const frame: ControlResult = {
+      answerControl(message, dashboard, replyAsFrame, requestId, {
         kind: "control_result",
         requestId,
         ok: false,
         error: hubOwned,
-      };
-      if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(requestId, frame);
-      }
+      });
       return true;
     }
     if (relayPermissionAnswer(message, dashboard, replyAsFrame)) {
@@ -675,20 +671,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
           ctx.endSession(row.id, "delete-transcript", { kind: "person" });
         }
         const requestId = message.requestId ?? message.payload.requestId;
-        const frame: ControlResult = {
+        answerControl(message, dashboard, replyAsFrame, requestId, {
           kind: "control_result",
           requestId,
           ok: true,
-        };
-        if (replyAsFrame) {
-          ctx.sendFrame(dashboard, {
-            ...message,
-            verb: "frames",
-            payload: frame,
-          });
-        } else {
-          ctx.streams.settleCommand(requestId, frame);
-        }
+        });
         return true;
       }
     }

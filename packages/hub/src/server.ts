@@ -339,7 +339,7 @@ import {
   takeSentWrites,
 } from "./artifacts/sync";
 import { takesNoInput } from "./artifacts/taker";
-import { clientCopy, createAskPresenter } from "./ask-presentation";
+import { createAskPresenter } from "./ask-presentation";
 import { createAskRouting } from "./ask-routing";
 import { createAsks } from "./asks";
 import { createAtLimit } from "./at-limit";
@@ -605,6 +605,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
+import { redactedAsk, redactedFrame, redactProblemDetail } from "./redactor";
 import type { AnyProblem } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
@@ -746,7 +747,8 @@ import {
   type HubSocket,
   openLine,
   receiveFrame,
-  sendFrame as writeFrame,
+  sendToClient,
+  sendToMachine as writeToMachine,
 } from "./wire-socket";
 import { workItemCalls } from "./work-item-calls";
 import { isHubParent, isLive } from "./work-item-state";
@@ -1442,11 +1444,13 @@ export const createServer = (
     tasks: () => tasks,
     pulses: () => pulses,
     say: () => (payload) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload,
-      } satisfies Envelope<FramePayload>),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload,
+        } satisfies Envelope<FramePayload>)
+      ),
     online: () => (machineId) => Boolean(registry.agent(machineId)),
     accountWords: () => accountWords,
     advanceCompaction: () => advanceCompaction,
@@ -1469,7 +1473,8 @@ export const createServer = (
     processAt: () => processAt,
     push: () => push,
     sayCompaction: () => sayCompaction,
-    sendFrame: () => sendFrame,
+    sendToClient: () => sendToClient,
+    sendToMachine: () => sendToMachine,
     sendRefusal: () => sendRefusal,
     silentWords: () => silentWords,
     startHold: () => startHold,
@@ -2113,11 +2118,13 @@ export const createServer = (
         primaryPlaceId: checkoutOf(project)?.id ?? null,
       })),
     publish: (stored) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "stored", stored } satisfies StoredFrame,
-      }),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "stored", stored } satisfies StoredFrame,
+        })
+      ),
     wrapped: (sessionId) => db.instanceBySessionId(sessionId) !== undefined,
   });
   const {
@@ -2290,11 +2297,13 @@ export const createServer = (
    */
   const laws = createLaws({
     broadcast: (broken) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "laws.broken", broken },
-      } satisfies Envelope<FramePayload>),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "laws.broken", broken },
+        } satisfies Envelope<FramePayload>)
+      ),
   });
 
   /**
@@ -2303,11 +2312,13 @@ export const createServer = (
    */
   const restarts = hubRestarts(
     (payload) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload,
-      } satisfies Envelope<FramePayload>),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload,
+        } satisfies Envelope<FramePayload>)
+      ),
     HUB_VERSION
   );
 
@@ -2387,14 +2398,14 @@ export const createServer = (
     processAt.set(instanceId, Date.now());
     return waitingForProcess.delete(instanceId);
   };
-  /** The one way a frame leaves this hub: a start or attach sent is a process event. */
-  const sendFrame = (socket: HubSocket, frame: unknown): void => {
+  /** The one way a command leaves this hub for a machine: a start or attach sent is a process event. */
+  const sendToMachine = (socket: HubSocket, frame: object): void => {
     const envelope = frame as Partial<Envelope<Partial<SpawnPayload>>>;
     const instanceId = envelope.instanceId ?? envelope.payload?.instanceId;
     if (envelope.verb === "spawn" && instanceId) {
       processEvent(instanceId);
     }
-    writeFrame(socket, frame);
+    writeToMachine(socket, frame);
   };
 
   /**
@@ -2483,7 +2494,9 @@ export const createServer = (
       ) && !artifacts.lookedSince(id, raisedAt),
     db,
     desk: (frame) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload: frame })
+      ),
     lifetime,
     notifications,
     // A task the folder does not read is none to push about.
@@ -2508,7 +2521,7 @@ export const createServer = (
     owned: (requestId) => db.asks.get(requestId)?.asked.kind,
     handed: (requestId) => db.delegateAsk(requestId) !== undefined,
     hand: (asker, parent, ask) =>
-      deliverDelegateAsk(asker, parent, clientCopy(ask)),
+      deliverDelegateAsk(asker, parent, redactedFrame(ask)),
     tell: ({ asker, depth, parent, requestId, mark, what }, line, body) =>
       tellParentOfWait(
         parent,
@@ -2540,7 +2553,14 @@ export const createServer = (
       requestId,
       () => pending.remember(requestId, envelope, outlivesHub),
       () => {
-        registry.broadcast(clientCopy(envelope));
+        // The ledger's copy, as every screen reads it (`/api/pending`).
+        const ask = pending.get(requestId);
+        if (!ask) {
+          throw new Error(
+            `Ask ${requestId} was published without being parked.`
+          );
+        }
+        registry.broadcast(redactedAsk(ask));
         // A browser ask is read by its session's artifact tabs too.
         if ((envelope.payload as PermissionRequestFrame).browserAsk) {
           artifactSessions.refresh(envelope.instanceId);
@@ -2549,7 +2569,7 @@ export const createServer = (
           !existed &&
           (envelope.payload as { routedTo?: string }).routedTo !== "parent"
         ) {
-          push.onAsk(envelope);
+          push.onAsk(redactedFrame(envelope));
         }
       }
     );
@@ -2821,7 +2841,9 @@ export const createServer = (
     // so does a browser artifact's own tab (its frame's `browser`). Called
     // only once the hub serves, so `artifactSessions` is made by then.
     publish: (frame) => {
-      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload: frame })
+      );
       artifactSessions.refresh();
     },
     // A note its next turn reads: the take-over asks nothing of it.
@@ -2841,7 +2863,9 @@ export const createServer = (
     machineName: (machineId) => machineName(machineId),
     personMachines: () => db.presence.counted(),
     broadcast: (frame) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload: frame })
+      ),
   });
   // The person's view of a browser, on the hub's own origin
   // (browser-routes.ts): relayed to its machine's browser listener.
@@ -3069,23 +3093,25 @@ export const createServer = (
       why === undefined,
       said?.closed
     );
-    registry.broadcast({
-      verb: "frames",
-      machineId: parked.machineId,
-      instanceId: parked.instanceId,
-      requestId: parked.requestId,
-      payload: {
-        kind: "permission_settled",
+    registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId: parked.machineId,
         instanceId: parked.instanceId,
         requestId: parked.requestId,
-        outcome,
-        ...(answer ? { answer } : {}),
-        // An ask no screen was shown: the transcript's only word of it.
-        ...(why
-          ? { reason: why, toolName: peek(parked.payload, "toolName") }
-          : {}),
-      },
-    });
+        payload: {
+          kind: "permission_settled",
+          instanceId: parked.instanceId,
+          requestId: parked.requestId,
+          outcome,
+          ...(answer ? { answer } : {}),
+          // An ask no screen was shown: the transcript's only word of it.
+          ...(why
+            ? { reason: why, toolName: peek(parked.payload, "toolName") }
+            : {}),
+        },
+      })
+    );
   });
 
   // And the same honesty for the sessions those machines were carrying. A hub
@@ -3181,7 +3207,7 @@ export const createServer = (
         lifecycle.deliveryFailed(row.id);
       }
     }
-    sendFrame(agent, {
+    sendToMachine(agent, {
       verb: "control",
       machineId,
       instanceId: claim.instanceId,
@@ -3873,11 +3899,13 @@ export const createServer = (
       hubAuth.admit(machineId);
     },
     changed: (frame) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: frame,
-      } satisfies Envelope<FramePayload>),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: frame,
+        } satisfies Envelope<FramePayload>)
+      ),
     outcome: (install) => push.install(install),
     settled: (id) => push.installSettled(id),
     synced: (machineId, signal) => welcomeConverge.settled(machineId, signal),
@@ -4091,7 +4119,7 @@ export const createServer = (
         sent.set(delta.generation, riding);
         fleetMcpRiding.set(machineId, sent);
       }
-      sendFrame(agent, {
+      sendToMachine(agent, {
         verb: "control",
         machineId,
         payload: {
@@ -4294,11 +4322,13 @@ export const createServer = (
     hubMachineId: () => ownMachineIdRead ?? null,
     lifetime,
     publish: (journey) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "stream_relay.journey", journey },
-      }),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "stream_relay.journey", journey },
+        })
+      ),
   });
   /** The names and addresses the hub's own machine answers by: a page on one of them came in by no domain. */
   const hubOwnNames = (): string[] => {
@@ -4428,7 +4458,9 @@ export const createServer = (
     lifetime,
     read: () => artifacts.needs(),
     broadcast: (frame) => {
-      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame });
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload: frame })
+      );
       // A pin answered: an artifact's push still saying more asks comes to its count.
       push.needsNow(unparked(frame.needs));
     },
@@ -4802,11 +4834,13 @@ export const createServer = (
     acknowledged: () => noticesSeen.ids(),
     needsMoved: () => artifactLane.moved(),
     questionsMoved: (artifactId) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "questions.moved", artifactId },
-      }),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "questions.moved", artifactId },
+        })
+      ),
     // A pin's reply that asks: the artifact's item as the lane reads it now
     // (its count), pushed unless it is put away with Not now or not in the lane.
     pinAsked: (artifactId, text) => {
@@ -5505,11 +5539,13 @@ export const createServer = (
   tailnetHttps.onChange((tailnet) => {
     noteTailnetDashboard(tailnetHttps.dashboard());
     noteParent(tailnet.dashboard);
-    registry.broadcast({
-      verb: "frames",
-      machineId: "hub",
-      payload: { kind: "tailnet.https", tailnet },
-    });
+    registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "tailnet.https", tailnet },
+      })
+    );
     for (const [instanceId, target] of previewTargets) {
       publishPreview(instanceId, "open", target);
     }
@@ -5645,24 +5681,30 @@ export const createServer = (
       console.error(
         `[hub] dashboard command ${String(raw.kind)} ${raw.commandId}${typeof raw.sessionId === "string" ? ` for ${raw.sessionId}` : ""} failed: ${reason}`
       );
-      sendFrame(ws, {
-        type: "command.ack",
-        commandId: raw.commandId,
-        stage: "failed",
-        reason,
-      } satisfies CommandAck);
+      sendToClient(
+        ws,
+        redactedFrame({
+          type: "command.ack",
+          commandId: raw.commandId,
+          stage: "failed",
+          reason,
+        } satisfies CommandAck)
+      );
       return;
     }
     if (isEnvelope(message)) {
       console.error(
         `[hub] dashboard ${message.verb}${message.instanceId ? ` for ${message.instanceId}` : ""} failed: ${reason}`
       );
-      sendFrame(ws, failure(message, reason));
+      sendToClient(ws, redactedFrame(failure(message, reason)));
       return;
     }
     const kind = typeof raw?.type === "string" ? raw.type : "message";
     console.error(`[hub] dashboard ${kind} failed: ${reason}`);
-    sendFrame(ws, refusalFrame(message, `${kind} failed: ${reason}`));
+    sendToClient(
+      ws,
+      redactedFrame(refusalFrame(message, `${kind} failed: ${reason}`))
+    );
   };
   /**
    * Whether a failed agent frame carried session custody its machine waits
@@ -5700,12 +5742,15 @@ export const createServer = (
     const commandAnswered = streams.settleCommand(requestId, frame);
     const requester = registry.takeRequester(requestId);
     if (requester) {
-      sendFrame(requester, {
-        ...message,
-        verb: "frames",
-        requestId,
-        payload: frame,
-      });
+      sendToClient(
+        requester,
+        redactedFrame({
+          ...message,
+          verb: "frames",
+          requestId,
+          payload: frame,
+        })
+      );
     } else if (!(waitingReply || commandAnswered)) {
       logUnroutedReply({ ...message, payload: frame });
     }
@@ -5926,7 +5971,7 @@ export const createServer = (
       if (!agent) {
         return false;
       }
-      sendFrame(agent, {
+      sendToMachine(agent, {
         verb: "stop",
         machineId,
         instanceId: payload.instanceId,
@@ -6133,7 +6178,9 @@ export const createServer = (
     owe: (id) => oweStop(id, PROJECT_STOP),
     online: (machineId) => !!registry.agent(machineId),
     publish: (payload) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload })
+      ),
     timeoutMs: READ_TIMEOUT_MS,
   });
   const waitForEnd = (
@@ -6163,9 +6210,11 @@ export const createServer = (
   const stopFromDashboard = (dashboard: HubSocket, message: Envelope): void => {
     const { instanceId } = message;
     if (!instanceId) {
-      sendFrame(
+      sendToClient(
         dashboard,
-        failure(message, "No session was named. Refresh, then retry.")
+        redactedFrame(
+          failure(message, "No session was named. Refresh, then retry.")
+        )
       );
       return;
     }
@@ -6189,12 +6238,15 @@ export const createServer = (
           );
         }
       }
-      sendFrame(dashboard, {
-        ...message,
-        verb: "frames",
-        requestId,
-        payload: frame,
-      });
+      sendToClient(
+        dashboard,
+        redactedFrame({
+          ...message,
+          verb: "frames",
+          requestId,
+          payload: frame,
+        })
+      );
     };
     // The receipt: the machine's frame, or the hub's own word on the stop
     // (confirmed already, machine away, refused here), within the bound.
@@ -6312,9 +6364,9 @@ export const createServer = (
     let outgoing = envelope;
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
-      sendFrame(
+      sendToClient(
         dashboard,
-        failure(envelope, commandAwayWords(envelope.machineId))
+        redactedFrame(failure(envelope, commandAwayWords(envelope.machineId)))
       );
       return false;
     }
@@ -6337,7 +6389,7 @@ export const createServer = (
         registry.rememberRequester(requestId, dashboard);
       }
     }
-    sendFrame(agent, outgoing);
+    sendToMachine(agent, outgoing);
     return true;
   };
 
@@ -6436,7 +6488,7 @@ export const createServer = (
     ) {
       publishInstances(row.machineId);
     }
-    sendFrame(agent, {
+    sendToMachine(agent, {
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
@@ -6761,7 +6813,7 @@ export const createServer = (
     if (bound && bound !== message.machineId) {
       const fault = `register refused: this connection registered as machine ${bound}, not ${message.machineId}`;
       console.warn(`[hub-auth] ${fault}`);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToMachine(ws, refusalFrame(message, fault));
       return false;
     }
     const nonce = machineNonces.get(ws.id);
@@ -6784,7 +6836,7 @@ export const createServer = (
     if (verdict === "wrong") {
       const fault = `register refused: machine ${message.machineId} is admitted with a key, and this connection did not prove it. If this is that machine and it lost its key, add it again over SSH, which gives it a new key, or remove it from Machines and admit it again.`;
       console.warn(`[hub-auth] ${fault} (from ${socketAddress(ws)})`);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToMachine(ws, refusalFrame(message, fault));
       ws.close(4403, "machine key not proven");
       return false;
     }
@@ -6821,7 +6873,7 @@ export const createServer = (
     machineId: string,
     reason: string
   ): void => {
-    sendFrame(ws, {
+    sendToMachine(ws, {
       verb: "admission",
       machineId,
       payload: { kind: "refused", message: reason },
@@ -6858,7 +6910,7 @@ export const createServer = (
       // while setting up) never closed its own, and heartbeated into "register
       // first" refusals on it until its register lapsed.
       admit: (key) => {
-        sendFrame(ws, {
+        sendToMachine(ws, {
           verb: "admission",
           machineId: message.machineId,
           payload: { kind: "admitted", key },
@@ -6868,7 +6920,7 @@ export const createServer = (
       close: (reason) => ws.close(4403, reason),
       turnAway: (reason) => refuseSocket(ws, message.machineId, reason),
     });
-    sendFrame(ws, {
+    sendToMachine(ws, {
       verb: "admission",
       machineId: message.machineId,
       payload: {
@@ -6949,11 +7001,13 @@ export const createServer = (
       installs.heard(code, machineId);
     },
     changed: (frame) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: frame,
-      } satisfies Envelope<FramePayload>),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: frame,
+        } satisfies Envelope<FramePayload>)
+      ),
     deviceRemoved: (deviceId) => {
       for (const [socket, device] of dashboardDevices) {
         if (device === deviceId) {
@@ -6978,7 +7032,7 @@ export const createServer = (
             if (!socket || id === own) {
               continue;
             }
-            sendFrame(socket, {
+            sendToMachine(socket, {
               verb: "admission",
               machineId: id,
               payload: { kind: "admitted", key: hubAuth.mintMachineKey(id) },
@@ -7067,7 +7121,9 @@ export const createServer = (
       pending.resolve(requestId, outcome);
     },
     publish: (frame) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload: frame })
+      ),
     rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
     // The place-repo steps, made further down; no move is planned before the hub is up.
@@ -7363,16 +7419,18 @@ export const createServer = (
     machineId: string,
     event: DelegateEvent
   ): void => {
-    registry.broadcast({
-      verb: "frames",
-      machineId,
-      instanceId: event.instanceId,
-      payload: {
-        kind: "delegate_event",
+    registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId,
         instanceId: event.instanceId,
-        event,
-      } satisfies FramePayload,
-    });
+        payload: {
+          kind: "delegate_event",
+          instanceId: event.instanceId,
+          event,
+        } satisfies FramePayload,
+      })
+    );
   };
 
   /**
@@ -7615,11 +7673,13 @@ export const createServer = (
 
   /** Tells every dashboard the projects changed: each reads them again. */
   const projectsChanged = (): void => {
-    registry.broadcast({
-      verb: "frames",
-      machineId: "hub",
-      payload: { kind: "projects.changed" },
-    });
+    registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "projects.changed" },
+      })
+    );
     // A place come or gone moves which stored transcripts are a project's.
     storedRecent.moved();
   };
@@ -7741,13 +7801,15 @@ export const createServer = (
       servers,
       db.listAgents().map((row) => row.machineId)
     );
-    registry.broadcast({
-      verb: "frames",
-      machineId: "",
-      // What a screen is told says every secret as set (core fleet-secrets.ts);
-      // the machines are sent the real values by the sync above.
-      payload: { kind: "fleet_mcp", servers: servers.map(maskMcpServer) },
-    } satisfies Envelope<FramePayload>);
+    registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId: "",
+        // What a screen is told says every secret as set (core fleet-secrets.ts);
+        // the machines are sent the real values by the sync above.
+        payload: { kind: "fleet_mcp", servers: servers.map(maskMcpServer) },
+      } satisfies Envelope<FramePayload>)
+    );
     fleetChanged();
   };
   /** A fleet server as a read says it (core fleet-secrets.ts): every secret as set. */
@@ -7811,8 +7873,10 @@ export const createServer = (
     build: (machineId) =>
       db.listAgents().find((agent) => agent.machineId === machineId)?.build
         ?.commit,
+    // Through the redactor as it enters the ring: every follower and
+    // every resume replays what the ring holds.
     sequence: (instanceId, frame) => {
-      streams.sequence(instanceId, frame);
+      streams.sequence(instanceId, redactedFrame(frame));
     },
     head: (instanceId) => streams.head(instanceId),
     hubRun,
@@ -7999,7 +8063,9 @@ export const createServer = (
   const caps = createCaps({
     db,
     publish: (payload) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload })
+      ),
   });
   /**
    * A machine-scoped daemon function, answered, or thrown as its cause
@@ -8307,12 +8373,18 @@ export const createServer = (
     publish: (item) => {
       const [parent] = db.getInstancesByIds([item.parentInstanceId]);
       publishInstances(parent?.machineId ?? "");
-      registry.broadcast({
-        verb: "frames",
-        machineId: parent?.machineId ?? "",
-        instanceId: item.parentInstanceId,
-        payload: { kind: "work_item", instanceId: item.parentInstanceId, item },
-      });
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: parent?.machineId ?? "",
+          instanceId: item.parentInstanceId,
+          payload: {
+            kind: "work_item",
+            instanceId: item.parentInstanceId,
+            item,
+          },
+        })
+      );
     },
     // A session's project's catalog: its own types shadow the fleet's.
     types: (projectId?: string | null) => projectTypes.typesFor(projectId),
@@ -8639,11 +8711,13 @@ export const createServer = (
       return kept instanceof ElysiaStatus ? undefined : kept;
     },
     changed: (projectId) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "blocks.changed", projectId },
-      }),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "blocks.changed", projectId },
+        })
+      ),
   });
   // A project's memory (memory.ts): the agents' inbox, its curator's
   // proposals as your asks, and "Make a note" into AGENTS.md.
@@ -8710,7 +8784,7 @@ export const createServer = (
     }
     saidInterrupt(instanceId, why);
     const requestId = crypto.randomUUID();
-    sendFrame(agent, {
+    sendToMachine(agent, {
       verb: "control",
       machineId: row.machineId,
       instanceId,
@@ -9087,11 +9161,13 @@ export const createServer = (
       line: (instanceId, content) => noteWatch(instanceId, content),
       name: (row) => sessionName(row),
       notices: (notices) =>
-        registry.broadcast({
-          verb: "frames",
-          machineId: "hub",
-          payload: { kind: "fleet_watch.notices", notices },
-        }),
+        registry.broadcast(
+          redactedFrame({
+            verb: "frames",
+            machineId: "hub",
+            payload: { kind: "fleet_watch.notices", notices },
+          })
+        ),
       online: (machineId) => Boolean(registry.agent(machineId)),
       push: (notice) => push.watchNotice(notice),
       send: (envelope) => {
@@ -9194,15 +9270,17 @@ export const createServer = (
   // Every dashboard showing the project reads its tasks again, whoever moved
   // them; one showing the task the change names reads it again too.
   tasks.listen((event) =>
-    registry.broadcast({
-      verb: "frames",
-      machineId: "hub",
-      payload: {
-        kind: "tasks.changed",
-        projectId: event.projectId,
-        ...(event.id ? { taskId: event.id } : {}),
-      },
-    })
+    registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId: "hub",
+        payload: {
+          kind: "tasks.changed",
+          projectId: event.projectId,
+          ...(event.id ? { taskId: event.id } : {}),
+        },
+      })
+    )
   );
   // The project page's Decisions tab (decisions.ts): its pages, their sends
   // and Make tasks, its graph. A record keeps its tasks as they are filed.
@@ -9341,16 +9419,18 @@ export const createServer = (
       }
     },
     publish: (row, offer) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          kind: "project_offer",
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: row.machineId,
           instanceId: row.id,
-          offer,
-        } satisfies FramePayload,
-      }),
+          payload: {
+            kind: "project_offer",
+            instanceId: row.id,
+            offer,
+          } satisfies FramePayload,
+        })
+      ),
   });
   delegateSpawned.add(projectOffers.delegateSpawned);
   // Caw asking once whether to build a design system, on the code signal: a
@@ -9423,7 +9503,9 @@ export const createServer = (
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     broadcast: (payload) =>
-      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+      registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload })
+      ),
   });
   tasks.listen(projectStarters.taskChanged);
   // Every session's plan (§5.2): its steps, its spec, an attempt's to-dos,
@@ -9433,7 +9515,7 @@ export const createServer = (
     tasks,
     needs: () => artifactLane.now().needs,
     publish: (instanceId, message) => {
-      streams.planToFollowers(instanceId, message);
+      streams.planToFollowers(instanceId, redactedFrame(message));
       // A step ticked, removed or waiting: an artifact's ask stands on it.
       artifactLane.moved();
     },
@@ -10304,11 +10386,13 @@ export const createServer = (
     push,
     tasks,
     publish: (needsYou) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "actions", actions: needsYou },
-      }),
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "actions", actions: needsYou },
+        })
+      ),
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
   actionMovesPort.fill(actions.actionMove);
@@ -10981,7 +11065,7 @@ export const createServer = (
     if (!agent) {
       return awayProblem(row.machineId, machineFault(row.machineId, "offline"));
     }
-    sendFrame(agent, {
+    sendToMachine(agent, {
       ...envelope,
       instanceId: row.id,
       machineId: row.machineId,
@@ -11775,11 +11859,13 @@ export const createServer = (
     const [row] = db.getInstancesByIds([now]);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row && agent)) {
-      sendFrame(
+      sendToClient(
         ws,
-        failure(
-          message,
-          `${named} is ${now} now, whose machine is not connected.`
+        redactedFrame(
+          failure(
+            message,
+            `${named} is ${now} now, whose machine is not connected.`
+          )
         )
       );
       return true;
@@ -11793,14 +11879,17 @@ export const createServer = (
       message.requestId ??
       peek(message.payload, "requestId") ??
       crypto.randomUUID();
-    sendFrame(ws, {
-      ...message,
-      instanceId: now,
-      machineId: row.machineId,
-      verb: "frames",
-      requestId,
-      payload: { kind: "control_result", requestId, ok: true },
-    } satisfies Envelope<ControlResult>);
+    sendToClient(
+      ws,
+      redactedFrame({
+        ...message,
+        instanceId: now,
+        machineId: row.machineId,
+        verb: "frames",
+        requestId,
+        payload: { kind: "control_result", requestId, ok: true },
+      } satisfies Envelope<ControlResult>)
+    );
     return true;
   };
 
@@ -11830,12 +11919,15 @@ export const createServer = (
     );
     const requestId = message.requestId ?? peek(message.payload, "requestId");
     if (requestId) {
-      sendFrame(ws, {
-        ...message,
-        verb: "frames",
-        requestId,
-        payload: { kind: "control_result", requestId, ok: true },
-      } satisfies Envelope<ControlResult>);
+      sendToClient(
+        ws,
+        redactedFrame({
+          ...message,
+          verb: "frames",
+          requestId,
+          payload: { kind: "control_result", requestId, ok: true },
+        } satisfies Envelope<ControlResult>)
+      );
     }
   };
 
@@ -11958,7 +12050,7 @@ export const createServer = (
     const begins = startingSetOf({ ...payload, projectId });
     if ("refusal" in begins) {
       console.warn(spawnWords.refusedLine(begins.refusal));
-      sendFrame(ws, failure(message, begins.refusal));
+      sendToClient(ws, redactedFrame(failure(message, begins.refusal)));
       return;
     }
     return { ...start, projectId, startingSet: begins.startingSet };
@@ -11975,7 +12067,7 @@ export const createServer = (
   ): void => {
     if (asked instanceof ElysiaStatus) {
       console.warn(spawnWords.refusedLine(asked.response.detail));
-      sendFrame(ws, failure(message, asked.response.detail));
+      sendToClient(ws, redactedFrame(failure(message, asked.response.detail)));
       return;
     }
     // A session the hub has a row for is started again (a relaunch, a
@@ -11984,13 +12076,13 @@ export const createServer = (
     const settled = settleMode(message.machineId, asked, reviveMode(before));
     if ("refusal" in settled) {
       console.warn(spawnWords.refusedLine(settled.refusal));
-      sendFrame(ws, refusedStart(message, settled));
+      sendToClient(ws, redactedFrame(refusedStart(message, settled)));
       return;
     }
     const launched = atLaunchDir(message.instanceId, settled.payload);
     if ("refusal" in launched) {
       console.warn(spawnWords.refusedLine(launched.refusal));
-      sendFrame(ws, failure(message, launched.refusal));
+      sendToClient(ws, redactedFrame(failure(message, launched.refusal)));
       return;
     }
     const { payload } = launched;
@@ -12002,7 +12094,7 @@ export const createServer = (
       : {};
     if ("refusal" in placed) {
       console.warn(spawnWords.refusedLine(placed.refusal));
-      sendFrame(ws, failure(message, placed.refusal));
+      sendToClient(ws, redactedFrame(failure(message, placed.refusal)));
       return;
     }
     // A machine inside its reconnect window takes the start on its register
@@ -12012,9 +12104,11 @@ export const createServer = (
       (registry.agent(message.machineId) ||
         machinePresence(message.machineId).kind === "reconnecting")
     )) {
-      sendFrame(
+      sendToClient(
         ws,
-        failure(message, machineFault(message.machineId, "offline"))
+        redactedFrame(
+          failure(message, machineFault(message.machineId, "offline"))
+        )
       );
       return;
     }
@@ -12389,7 +12483,7 @@ export const createServer = (
       machineId: message.machineId,
       verb: message.verb,
     });
-    sendFrame(ws, refusalFrame(message, fault));
+    sendToMachine(ws, refusalFrame(message, fault));
     return false;
   };
 
@@ -12397,7 +12491,7 @@ export const createServer = (
   const refuseAgentVerb: AgentVerb = (ws, message) => {
     const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
     console.warn(`[hub] ${fault}, from ${message.machineId}`);
-    sendFrame(ws, refusalFrame(message, fault));
+    sendToMachine(ws, refusalFrame(message, fault));
   };
 
   /**
@@ -12756,7 +12850,7 @@ export const createServer = (
     }
     const beatIds = agentFrame.instances;
     const tailnetServing = tailnetHttps.serving();
-    sendFrame(ws, {
+    sendToMachine(ws, {
       ...ack(message),
       payload: {
         ok: true,
@@ -12841,7 +12935,7 @@ export const createServer = (
         `[hub] launch of ${message.instanceId} refused at its start: ${grant.refusal}`
       );
     }
-    sendFrame(ws, {
+    sendToMachine(ws, {
       verb: "launch",
       machineId: message.machineId,
       instanceId: message.instanceId,
@@ -12896,7 +12990,7 @@ export const createServer = (
     if (!isEnvelope(message)) {
       const fault = envelopeFault(message);
       console.warn(`[hub] agent ${fault}`, message);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToMachine(ws, refusalFrame(message, fault));
       return;
     }
     const agentFrame = decodeAgentFrame(message.payload);
@@ -12929,7 +13023,7 @@ export const createServer = (
     console.warn(
       `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
     );
-    sendFrame(ws, refusalFrame(message, fault));
+    sendToClient(ws, redactedFrame(refusalFrame(message, fault)));
   };
 
   /**
@@ -12945,7 +13039,7 @@ export const createServer = (
     const start = namedSpawn(message.payload as SpawnPayload);
     if ("refusal" in start) {
       console.warn(spawnWords.refusedLine(start.refusal));
-      sendFrame(ws, failure(message, start.refusal));
+      sendToClient(ws, redactedFrame(failure(message, start.refusal)));
       return;
     }
     const [known] = message.instanceId
@@ -12956,7 +13050,7 @@ export const createServer = (
       enforceRowSessionKey(known, start);
     if (why) {
       console.warn(spawnWords.refusedLine(why));
-      sendFrame(ws, failure(message, why));
+      sendToClient(ws, redactedFrame(failure(message, why)));
       return;
     }
     // A spawn that names no model runs on its harness's own default
@@ -13085,7 +13179,7 @@ export const createServer = (
     if (!isEnvelope(message)) {
       const fault = envelopeFault(message);
       console.warn(`[hub] dashboard ${fault}`, message);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToClient(ws, redactedFrame(refusalFrame(message, fault)));
       return;
     }
     const handle = Object.hasOwn(dashboardVerbs, message.verb)
@@ -13113,17 +13207,24 @@ export const createServer = (
         // machine, when away, is named on it by the one setter a returned
         // answer meets below. Returning it here would add it to every
         // route's answers.
+        // Its words through the redactor as every returned problem's are
+        // (`redactProblemDetail` below): a machine's failure can quote a
+        // command line.
         if (error instanceof MachineProblem) {
+          redactProblemDetail({ responseValue: error.value() });
           nameAway({ responseValue: error.value(), set });
           return;
         }
         const unknown = unknownFieldsOf(error);
-        return unknown
-          ? problem(422, {
-              code: "unknown-fields",
-              detail: hubFailureWords.unknownFields(unknown.on, unknown.fields),
-            })
-          : undefined;
+        if (!unknown) {
+          return;
+        }
+        const answer = problem(422, {
+          code: "unknown-fields",
+          detail: hubFailureWords.unknownFields(unknown.on, unknown.fields),
+        });
+        redactProblemDetail({ responseValue: answer });
+        return answer;
       })
       // Every answer the hub sends, its text compressed for the client that
       // asked (core compress-answer.ts): the phone and the machines reach
@@ -13167,6 +13268,10 @@ export const createServer = (
       // deep it was made (machine-answers.ts `awayProblem`): its headers'
       // one setter, before every route.
       .mapResponse("global", nameAway)
+      // Every problem a route answers, its `detail` through the one
+      // redactor (redactor.ts) before Elysia writes it: a problem can quote
+      // a command line, and ~1,200 places make one.
+      .mapResponse("global", redactProblemDetail)
       .use(
         previewRoutes({
           deviceOf: (request) => {
@@ -13341,12 +13446,12 @@ export const createServer = (
         // config per server, so both routes name the same limit.
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         open(ws) {
-          openLine(ws, false);
+          openLine(ws, "machine");
           // The first frame on every connection: the nonce its register
           // answers with its key's proof (hub-auth.ts).
           const nonce = randomBytes(24).toString("base64url");
           machineNonces.set(ws.id, nonce);
-          sendFrame(ws, {
+          sendToMachine(ws, {
             verb: "admission",
             machineId: "",
             payload: { kind: "challenge", nonce, hubId: hubId() },
@@ -13430,7 +13535,7 @@ export const createServer = (
           drainLine(ws);
         },
         open(ws) {
-          openLine(ws, true);
+          openLine(ws, "client");
           const { instance, artifact } = ws.params;
           // The person's alone, read here rather than at the gate (hub-auth.ts
           // lets this upgrade through): a browser cannot read the answer to a
@@ -13471,7 +13576,10 @@ export const createServer = (
             message !== null &&
             (message as { type?: unknown }).type === "heartbeat"
           ) {
-            sendFrame(ws, { type: "heartbeat" } satisfies StreamHeartbeat);
+            sendToClient(
+              ws,
+              redactedFrame({ type: "heartbeat" } satisfies StreamHeartbeat)
+            );
             return;
           }
           // A page's place picker browsing a machine's folders; the reply
@@ -13483,7 +13591,7 @@ export const createServer = (
           const fault =
             "an artifact's session socket takes heartbeat and fs alone";
           console.warn(`[hub] ${fault}`, message);
-          sendFrame(ws, refusalFrame(message, fault));
+          sendToClient(ws, redactedFrame(refusalFrame(message, fault)));
         }),
         close(ws) {
           closeLine(ws);
@@ -13493,7 +13601,7 @@ export const createServer = (
       })
       .ws("/ws/dashboard", {
         // Offered to the browser; every frame to a dashboard then goes out
-        // with the flag Bun compresses on (`openLine(ws, true)`).
+        // with the flag Bun compresses on (`openLine(ws, "client")`).
         perMessageDeflate: true,
         // The same limit as the agent route: Bun's config is server-wide.
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
@@ -13502,7 +13610,7 @@ export const createServer = (
         },
         open(ws) {
           // Before anything is sent to it: every frame goes through its line.
-          openLine(ws, true);
+          openLine(ws, "client");
           // The person's alone (the gate refused anyone else at the upgrade;
           // read again here, so nothing but the person ever holds one). Its
           // device is kept, so removing the device closes it.
@@ -13529,11 +13637,14 @@ export const createServer = (
             gatedPages.set(ws.id, gatedBy);
           }
           if (hubAuth.mode() === "pairing") {
-            sendFrame(ws, {
-              verb: "frames",
-              machineId: "hub",
-              payload: hubAuth.frame(),
-            } satisfies Envelope<FramePayload>);
+            sendToClient(
+              ws,
+              redactedFrame({
+                verb: "frames",
+                machineId: "hub",
+                payload: hubAuth.frame(),
+              } satisfies Envelope<FramePayload>)
+            );
           }
           // A page names the wire it was built for (WIRE_PROTOCOL, 6). One
           // that names none was built before pages did: a browser sends
@@ -13571,14 +13682,17 @@ export const createServer = (
               if (ws.readyState !== 1) {
                 return;
               }
-              sendFrame(ws, {
-                verb: "frames",
-                machineId: "",
-                payload: {
-                  kind: "fleet_mcp",
-                  servers: db.fleetConfig().mcp.map(maskMcpServer),
-                },
-              } satisfies Envelope<FramePayload>);
+              sendToClient(
+                ws,
+                redactedFrame({
+                  verb: "frames",
+                  machineId: "",
+                  payload: {
+                    kind: "fleet_mcp",
+                    servers: db.fleetConfig().mcp.map(maskMcpServer),
+                  },
+                } satisfies Envelope<FramePayload>)
+              );
             }),
             "fleet snapshot"
           );

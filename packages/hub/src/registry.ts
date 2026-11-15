@@ -2,7 +2,8 @@ import type { ErrorFrame } from "@cawco/core/frames";
 import type { Envelope, Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
 import { HubLifetime, type HubLifetimeShape } from "./lifetime";
-import { type HubSocket, sendFrame } from "./wire-socket";
+import type { Redacted } from "./redactor";
+import { type HubSocket, sendToClient } from "./wire-socket";
 
 /**
  * The hub's answer to a frame it will not act on, on every socket: an `error`
@@ -50,16 +51,20 @@ export interface RegistryShape {
   readonly addDashboard: (socket: HubSocket, older: boolean) => void;
   readonly address: (machineId: string) => string | undefined;
   readonly agent: (machineId: string) => HubSocket | undefined;
-  readonly broadcast: (envelope: Envelope) => void;
+  /** An envelope to every dashboard and app socket: only what the redactor passed (redactor.ts). */
+  readonly broadcast: (envelope: Redacted<Envelope>) => void;
   /**
    * A move of the board. A page on this hub's wire gets `delta`. An older one
    * cannot read it and gets the snapshot instead: the one frame every build
    * reads, and the one whose `protocol` reloads it. Built once, and only when
    * an older page is connected.
    */
-  readonly broadcastBoard: (delta: Envelope, snapshot: () => Envelope) => void;
+  readonly broadcastBoard: (
+    delta: Redacted<Envelope>,
+    snapshot: () => Redacted<Envelope>
+  ) => void;
   /** A hub frame that is not an envelope (`{ type, … }`), to every dashboard and app socket. */
-  readonly broadcastTyped: (frame: { readonly type: string }) => void;
+  readonly broadcastTyped: (frame: Redacted<{ readonly type: string }>) => void;
   /** Every usable dashboard origin seen since the hub started, newest first: empty if none has connected. */
   readonly dashboardOrigins: () => readonly string[];
   /** Returns the machine the socket was registered as, if it was an agent. */
@@ -233,22 +238,22 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     },
     broadcast: (envelope) => {
       for (const socket of dashboards.values()) {
-        sendFrame(socket, envelope);
+        sendToClient(socket, envelope);
       }
     },
     broadcastTyped: (frame) => {
       for (const socket of dashboards.values()) {
-        sendFrame(socket, frame);
+        sendToClient(socket, frame);
       }
     },
     broadcastBoard: (delta, snapshot) => {
-      let whole: Envelope | undefined;
+      let whole: Redacted<Envelope> | undefined;
       for (const socket of dashboards.values()) {
         if (older.has(socket.id)) {
           whole ??= snapshot();
-          sendFrame(socket, whole);
+          sendToClient(socket, whole);
         } else {
-          sendFrame(socket, delta);
+          sendToClient(socket, delta);
         }
       }
     },

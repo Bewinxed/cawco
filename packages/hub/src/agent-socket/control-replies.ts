@@ -1,9 +1,9 @@
 /** A control's answer finding who waits on it, and the fan-out to dashboards. */
 
-import { clientAsk } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import { type ControlResult, peekToolStatus } from "../machine-answers";
 import { externalizeImages } from "../media";
+import { redactedAsk, redactedFrame } from "../redactor";
 import type { TranscriptPayload } from "../transcripts";
 import type { FrameAnswer, FrameRun } from "./frame-run";
 
@@ -20,7 +20,7 @@ export type ControlRepliesContext = Pick<
   | "publishInstances"
   | "registry"
   | "rewinds"
-  | "sendFrame"
+  | "sendToClient"
   | "streams"
   | "transcripts"
   | "waiting"
@@ -46,11 +46,14 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
           requestId: joined.requestId,
         };
         if (joined.replyAsFrame) {
-          ctx.sendFrame(joined.dashboard, {
-            ...message,
-            requestId: joined.requestId,
-            payload: result,
-          });
+          ctx.sendToClient(
+            joined.dashboard,
+            redactedFrame({
+              ...message,
+              requestId: joined.requestId,
+              payload: result,
+            })
+          );
         } else {
           ctx.streams.settleCommand(joined.requestId, result);
         }
@@ -149,7 +152,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
         ? ctx.registry.takeRequester(message.requestId)
         : undefined;
     if (requester) {
-      ctx.sendFrame(requester, message);
+      ctx.sendToClient(requester, redactedFrame(message));
     }
     // An acknowledged command's reply is that command's news and nobody
     // else's — the same rule as the line above, in the newer dialect.
@@ -189,9 +192,9 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
           `Permission request ${message.requestId ?? "(no id)"} reached the fan-out without being parked.`
         );
       }
-      ctx.registry.broadcast(clientAsk(ask));
+      ctx.registry.broadcast(redactedAsk(ask));
     } else {
-      ctx.registry.broadcast(message);
+      ctx.registry.broadcast(redactedFrame(message));
     }
     return "continue";
   };

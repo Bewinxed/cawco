@@ -44,6 +44,7 @@ import { awayProblem, silentProblem } from "./machine-answers";
 import { externalizeImages } from "./media";
 import { peek } from "./payload-peeks";
 import { handle as idHandle } from "./presenters/words";
+import { redactedFrame } from "./redactor";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
 import { isLive, isRoutineParent } from "./work-item-state";
@@ -583,11 +584,13 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       projectId,
       ctx.lifetime.after(DECISIONS_TOLD_MS, () => {
         decisionsTelling.delete(projectId);
-        ctx.registry.broadcast({
-          verb: "frames",
-          machineId: "hub",
-          payload: { kind: "decisions.changed", projectId },
-        });
+        ctx.registry.broadcast(
+          redactedFrame({
+            verb: "frames",
+            machineId: "hub",
+            payload: { kind: "decisions.changed", projectId },
+          })
+        );
       })
     );
   };

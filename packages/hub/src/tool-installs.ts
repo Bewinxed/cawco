@@ -38,7 +38,7 @@ export type ToolInstallsContext = Pick<
   | "pendingInstalls"
   | "publishInstances"
   | "registry"
-  | "sendFrame"
+  | "sendToMachine"
   | "silentWords"
   | "toolReleases"
 >;
@@ -160,7 +160,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
       toolId: install.toolId,
       ...(install.newest ? { newest: install.newest } : {}),
     });
-    ctx.sendFrame(agent, {
+    ctx.sendToMachine(agent, {
       verb: "control",
       machineId,
       payload: {
@@ -413,7 +413,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
           args: installArgs(toolId, ask, false, "cawco"),
         },
       } satisfies Envelope<ControlPayload>;
-      ctx.sendFrame(agent, frame);
+      ctx.sendToMachine(agent, frame);
       return frame;
     });
   };

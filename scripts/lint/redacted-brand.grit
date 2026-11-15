@@ -1,0 +1,20 @@
+language js
+
+// A `Redacted` value is one the one redactor passed
+// (packages/hub/src/redactor.ts): every send to a client, broadcast, relay
+// of an ask and push takes the brand, and that module alone makes it. A
+// cast to it, or a guard that answers it, anywhere else lets an unredacted
+// frame, ask or problem reach a browser, an app or another session, so it
+// is refused everywhere but there.
+or {
+  `$value as $type` as $hit where { $type <: contains `Redacted<$_>` },
+  `($param): $guard => $body` as $hit where {
+    $guard <: r"^\s*(?:asserts\s+)?\w+\s+is\s+[\s\S]*Redacted<[\s\S]*"
+  },
+  `function $name($params): $guard { $body }` as $hit where {
+    $guard <: r"^\s*(?:asserts\s+)?\w+\s+is\s+[\s\S]*Redacted<[\s\S]*"
+  }
+} where {
+  $filename <: not includes "packages/hub/src/redactor.ts",
+  register_diagnostic(span=$hit, message="A Redacted value is made by packages/hub/src/redactor.ts alone (redactedFrame, redactedAsk): pass the value through it, never cast to the brand or guard it.")
+}

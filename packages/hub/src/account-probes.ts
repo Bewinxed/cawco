@@ -27,6 +27,7 @@ import {
 import type { ClosureContext } from "./closure-context";
 import type { HubTimer } from "./lifetime";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
+import { redactedFrame } from "./redactor";
 import { unreachable } from "./unreachable";
 
 export type AccountProbesContext = Pick<
@@ -403,15 +404,17 @@ export const createAccountProbes = (ctx: AccountProbesContext) => {
   const REBALANCE_NOTICES_KEPT = 20;
   const publishUsage = (machineId = ""): void => {
     ctx.accountsMoved();
-    ctx.registry.broadcast({
-      verb: "frames",
-      machineId,
-      payload: {
-        kind: "usage",
-        ...usageLimits(ctx.db),
-        spend: ctx.spendNow(),
-      },
-    });
+    ctx.registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId,
+        payload: {
+          kind: "usage",
+          ...usageLimits(ctx.db),
+          spend: ctx.spendNow(),
+        },
+      })
+    );
   };
 
   return {

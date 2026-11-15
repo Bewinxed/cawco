@@ -29,6 +29,8 @@
  *   rule above does when the value is all lower case. The value is cut, the
  *   key kept.
  */
+
+import { looksSecret } from "@cawco/core/secret-shapes";
 import { lintSource } from "@secretlint/core";
 import { creator as recommended } from "@secretlint/secretlint-rule-preset-recommend";
 
@@ -168,16 +170,48 @@ export const secretRangesOf = async (
   });
 };
 
-/** `text` with every secret found (module header) replaced by {@link REDACTED_SECRET}, overlapping finds as one. */
-export const redactSecrets = async (text: string): Promise<string> => {
+/** `text` with each of `ranges` (in order, none overlapping) replaced by {@link REDACTED_SECRET}. */
+const cutOut = (text: string, ranges: readonly Range[]): string => {
   let out = "";
   let at = 0;
-  for (const [start, end] of await secretRanges(text)) {
+  for (const [start, end] of ranges) {
     out += `${text.slice(at, start)}${REDACTED_SECRET}`;
     at = end;
   }
   return `${out}${text.slice(at)}`;
 };
+
+/** Every word of `text` that `test` reads as a credential, its wrapping (quotes, brackets, a trailing stop) left out. */
+const wordsWhere = (text: string, test: (word: string) => boolean): Range[] =>
+  [...text.matchAll(WORD)].flatMap((match): Range[] => {
+    const [raw] = match;
+    const lead = WRAP_START.exec(raw)?.[0].length ?? 0;
+    const word = raw.slice(lead).replace(WRAP_END, "");
+    const start = match.index + lead;
+    return test(word) ? [[start, start + word.length]] : [];
+  });
+
+/** `text` with every secret found (module header) replaced by {@link REDACTED_SECRET}, overlapping finds as one. */
+export const redactSecrets = async (text: string): Promise<string> =>
+  cutOut(text, await secretRanges(text));
+
+/**
+ * `text` with every credential set to a value ({@link SET_TO_VALUE}) and
+ * every word core reads as a credential by its shape (`looksSecret`: a
+ * `sk-`, `ghp_`, `xox…`, AWS or JWT token) replaced by
+ * {@link REDACTED_SECRET}, at once: for words that leave the moment they are
+ * made, in order with the frames around them (a problem's detail, an error
+ * frame, a failed command's reason; redactor.ts), where secretlint's run
+ * (asynchronous) cannot be waited on. A credential typed in prose is not
+ * read here: the hub's sentences name machines and accounts beside
+ * "sign-in" and "login", and a name such as "MacBook-Pro2" is
+ * password-shaped.
+ */
+export const redactCredentialsNow = (text: string): string =>
+  cutOut(
+    text,
+    mergedRanges([...setCredentials(text), ...wordsWhere(text, looksSecret)])
+  );
 
 /**
  * Where the secrets stand in `text` ({@link secretRanges}), and every
@@ -189,15 +223,8 @@ export const redactSecrets = async (text: string): Promise<string> => {
  */
 export const outOfSentenceRanges = async (
   text: string
-): Promise<[start: number, end: number][]> => {
-  const shaped = [...text.matchAll(WORD)].flatMap(
-    (match): [number, number][] => {
-      const [raw] = match;
-      const lead = WRAP_START.exec(raw)?.[0].length ?? 0;
-      const word = raw.slice(lead).replace(WRAP_END, "");
-      const start = match.index + lead;
-      return passwordShaped(word) ? [[start, start + word.length]] : [];
-    }
-  );
-  return mergedRanges([...(await secretRanges(text)), ...shaped]);
-};
+): Promise<[start: number, end: number][]> =>
+  mergedRanges([
+    ...(await secretRanges(text)),
+    ...wordsWhere(text, passwordShaped),
+  ]);

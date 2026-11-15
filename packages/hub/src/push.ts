@@ -127,6 +127,7 @@ import {
   turnCollapseId,
 } from "./notifications";
 
+import type { Redacted } from "./redactor";
 import type { Decided } from "./settling";
 import type { TaskEvent } from "./tasks";
 
@@ -1720,9 +1721,10 @@ export const createPush = ({
     /**
      * A session is blocked on you: a permission or a question.
      * Call wherever the ask reaches the operator; a request is pushed once
-     * however often it is called.
+     * however often it is called. `envelope` is what the redactor passed
+     * (redactor.ts), as everything that leaves the hub is.
      */
-    onAsk(envelope: Envelope): void {
+    onAsk(envelope: Redacted<Envelope>): void {
       const payload = envelope.payload as Partial<PermissionRequestFrame> & {
         /** An ask no session row stands behind names its project itself (a memory proposal, memory.ts). */
         projectId?: string;

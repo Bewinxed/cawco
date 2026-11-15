@@ -77,7 +77,7 @@ export type MachineReturnContext = Pick<
   | "restarts"
   | "restore"
   | "resumeCutTurn"
-  | "sendFrame"
+  | "sendToMachine"
   | "settleLaunchesOn"
   | "settlePending"
   | "socketAddress"
@@ -610,7 +610,7 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     } else {
       ctx.relayingPreviews.delete(message.machineId);
     }
-    ctx.sendFrame(
+    ctx.sendToMachine(
       ws,
       registerAck(
         message,

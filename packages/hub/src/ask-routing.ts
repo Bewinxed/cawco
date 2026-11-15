@@ -15,7 +15,6 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
-import { clientAsk } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
@@ -25,6 +24,7 @@ import type { ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
 import { peek } from "./payload-peeks";
 import { outlivesSession } from "./pending";
+import { type Redacted, redactedAsk } from "./redactor";
 import type { createSends } from "./sends";
 import { sessionWord } from "./session-word";
 
@@ -355,8 +355,8 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       console.log(
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
-      ctx.registry.broadcast(clientAsk(parked));
-      ctx.push.onAsk(parked);
+      ctx.registry.broadcast(redactedAsk(parked));
+      ctx.push.onAsk(redactedAsk(parked));
       // Its parent, if it can still be woken, hears it is the person's now.
       ctx.delegateWaits.asked(parked, true);
     }
@@ -414,7 +414,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
   const deliverDelegateAsk = (
     delegate: InstanceRow,
     parent: { id: string; machineId: string },
-    ask: { requestId?: string; payload: unknown }
+    ask: Redacted<Envelope>
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);

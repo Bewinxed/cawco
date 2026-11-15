@@ -1,10 +1,15 @@
 /** The ingest ledger's gate, what reads every admitted frame, and keep-alive pings. */
 
 import { detach } from "@cawco/core/detach";
-import { readProvenance, readSent } from "@cawco/core/stream";
+import {
+  readProvenance,
+  readSent,
+  type SessionStreamFrame,
+} from "@cawco/core/stream";
 import { isProjectConversation } from "../caw";
 import type { HubContext } from "../hub-context";
 import { keepAliveResult, keepAliveUsage } from "../keep-alive";
+import { redactedFrame } from "../redactor";
 import type { FrameAnswer, FrameRun } from "./frame-run";
 import { peekSendSignal } from "./wire-reads";
 
@@ -130,7 +135,10 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
             detach(ctx.keepAliveScheduler.wake(), "keepalive wake");
             ctx.publishInstances(row.machineId);
           }
-          ctx.streams.sequence(row.id, { ...frame, keepAlive: true });
+          ctx.streams.sequence(
+            row.id,
+            redactedFrame<SessionStreamFrame>({ ...frame, keepAlive: true })
+          );
           return "stop";
         } else {
           return "stop";

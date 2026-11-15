@@ -86,6 +86,7 @@ import type { DbShape } from "./db";
 import type { AwayStretch, PresenceClientRow } from "./db/presence";
 import { addressOf } from "./hub-auth";
 import type { HubLifetimeShape } from "./lifetime";
+import { redactedFrame } from "./redactor";
 import type { RegistryShape } from "./registry";
 import { askedFrom } from "./relay-journey";
 
@@ -887,11 +888,13 @@ export const createNotifications = ({
     }
     if (said !== toldView) {
       toldView = said;
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "person", person: view },
-      });
+      registry.broadcast(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "person", person: view },
+        })
+      );
     }
   };
 
@@ -1042,7 +1045,7 @@ export const createNotifications = ({
       type: "notificationsCleared",
       collapseIds: newly,
     };
-    registry.broadcastTyped(frame);
+    registry.broadcastTyped(redactedFrame(frame));
     for (const listener of listeners) {
       listener(newly, via);
     }

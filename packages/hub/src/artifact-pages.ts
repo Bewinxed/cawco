@@ -51,6 +51,7 @@ import {
   readFolderBytes,
   readFolderFile,
 } from "./project-folder";
+import { redactedFrame } from "./redactor";
 import { unreachable } from "./unreachable";
 
 /**
@@ -264,7 +265,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       ctx.artifacts.stageFor(target.artifact.id),
       pageProject(target.artifact.id)
     );
-    ctx.streams.sequence(instanceId, frame);
+    ctx.streams.sequence(instanceId, redactedFrame(frame));
     ctx.artifactSessions.refresh(instanceId);
     // A project's decision page is read by the project's sessions, some of
     // which follow no session's stream: the board carries every open
