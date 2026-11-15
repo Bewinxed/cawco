@@ -43,7 +43,6 @@
   import { madeWords } from "@cawco/core/words/made";
   import { setupWords } from "@cawco/core/words/onboarding";
   import { projectWords } from "@cawco/core/words/project";
-  import { projectTrashWords } from "@cawco/core/words/project-trash";
   import { viewsWords } from "@cawco/core/words/views";
   import { onMount, type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -59,6 +58,7 @@
 
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
+  import RestoreHeldAlert from "#lib/cawco/forgotten/RestoreHeldAlert.svelte";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
@@ -149,7 +149,6 @@
     Alert,
     AlertAction,
     AlertDescription,
-    AlertTitle,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -2159,35 +2158,13 @@
             {/if}
             {#if heldBack.length > 0}
               <!-- What its restore held back, each row by its table, its
-                 title or id, and why: said where the restore landed, until
-                 dismissed. -->
-              <Alert
-                data-id-page-notice
+                 title or id, and why, and where they wait to be tried
+                 again: said where the restore landed, until dismissed. -->
+              <RestoreHeldAlert
                 class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
-                variant="warning"
-              >
-                <AlertTitle
-                  >{projectTrashWords.heldTitle(heldBack.length)}</AlertTitle
-                >
-                <AlertDescription>
-                  <p>{projectTrashWords.heldKept}</p>
-                  <ul
-                    class="max-h-48 list-disc overflow-y-auto ps-space-5 break-words"
-                  >
-                    {#each heldBack as row, at (at)}
-                      <li>{projectTrashWords.heldRow(row)}</li>
-                    {/each}
-                  </ul>
-                </AlertDescription>
-                <AlertAction>
-                  <Button
-                    label={projectTrashWords.heldDismiss}
-                    onclick={() => restoreHeld.dismiss(projectId)}
-                    size="sm"
-                    variant="outline"
-                  />
-                </AlertAction>
-              </Alert>
+                ondismiss={() => restoreHeld.dismiss(projectId)}
+                rows={heldBack}
+              />
             {/if}
             {#if unread && !paneSaysUnread}
               <!-- The tasks stand, but the stages or the views didn't come: said

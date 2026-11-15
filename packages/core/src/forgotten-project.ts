@@ -110,8 +110,9 @@ export interface ForgottenProject {
 }
 
 /**
- * Why a row of a forgotten project's record stayed out of its restore
- * (hub db forget.ts): its record stays in the trash, the row in it.
+ * Why a row of a forgotten project's record stayed out of its restore, or
+ * out of a try of it again (hub db forget.ts): the row stays listed in
+ * Forgotten projects ({@link HeldRows}) until a try takes it.
  */
 export type RestoreHeldWhy =
   /** A migration since the record was made kept these columns' values as not read. */
@@ -143,10 +144,43 @@ export interface RestoreHeldRow {
 export interface ProjectRestored {
   /** What came back. */
   brought: ForgottenBrings;
-  /** Every row held back, each named: its record stays in the trash while there is one. */
+  /** Every row held back, each named: listed in Forgotten projects ({@link HeldRows}) while there is one. */
   held: RestoreHeldRow[];
   id: string;
   /** Rows left out, by table: those {@link held} names, counted; `browsers`: its browsers no machine keeps now. */
   left: Record<string, number>;
+  name: string;
+}
+
+/**
+ * The rows a restore held back of a project, listed in Forgotten projects
+ * under the project they belong to (`GET /api/projects/held`, hub
+ * project-trash.ts) until a try takes the last of them
+ * (`POST /api/projects/:id/held/retry`) or they are deleted for good
+ * (`POST /api/projects/:id/held/discard`). Never a forgotten project: the
+ * project is live, and nothing brings it back from here.
+ */
+export interface HeldRows {
+  /** When the project these rows come from was forgotten, ms since the epoch: which entry this is. */
+  forgottenAt: number;
+  /** When they were last tried, ms since the epoch: the restore, or the latest try again. */
+  heldAt: number;
+  /** The project's id. */
+  id: string;
+  /** Whether the project is live now; false: forgotten again, and nothing goes back into it until it is brought back. */
+  live: boolean;
+  /** The project's name: its live one, else the one its record kept. */
+  name: string;
+  /** Each row held back, named, and why. */
+  rows: RestoreHeldRow[];
+}
+
+/** What a try of held rows again came to: how many went back, and each still held back, named; none, and the entry is gone. */
+export interface HeldRetried {
+  /** Rows that went back into the project. */
+  back: number;
+  /** Every row still held back, each named, and why. */
+  held: RestoreHeldRow[];
+  id: string;
   name: string;
 }

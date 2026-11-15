@@ -1,14 +1,18 @@
 /**
  * A forgotten project brought back (hub project-trash.ts,
- * `POST /api/projects/:id/restore`), or a project deleted for good (hub
- * project-delete.ts, `POST /api/projects/:id/discard`): the hub's refusals,
- * said to whoever asked, and the head of the journal line each forget,
- * restore and delete writes.
+ * `POST /api/projects/:id/restore`), the rows its restore held back, listed
+ * in Forgotten projects and tried again (`POST /api/projects/:id/held/…`),
+ * or a project deleted for good (hub project-delete.ts,
+ * `POST /api/projects/:id/discard`): the hub's refusals, said to whoever
+ * asked, the words of the held rows' entry and its results, and the head of
+ * the journal line each forget, restore, try again and delete writes.
  */
 import type { RestoreHeldRow, RestoreHeldWhy } from "../forgotten-project";
 import { unhandled } from "../unhandled";
 
 /** Why a restore held one row back (hub db forget.ts), as a clause. */
+const rows = (n: number) => (n === 1 ? "1 row" : `${n} rows`);
+
 const heldWhy = (why: RestoreHeldWhy): string => {
   switch (why.kind) {
     case "unread":
@@ -39,6 +43,9 @@ export const projectTrashWords = {
   restoreLine: (id: string) => `[hub] restore project=${id}`,
   /** A delete's journal line, before who asked and how it went. */
   deleteLine: (id: string) => `[hub] delete project=${id}`,
+  /** A try again of held rows' journal line, or their delete's, before who asked and how it went. */
+  heldLine: (id: string, act: "retry" | "discard") =>
+    `[hub] held rows ${act} project=${id}`,
 
   // ── Delete for good ──
   /** Neither a live project nor one in the trash. */
@@ -120,11 +127,62 @@ export const projectTrashWords = {
   /** The head of a restore's held rows, beside the project. */
   heldTitle: (count: number) =>
     count === 1 ? "1 row held back" : `${count} rows held back`,
-  /** Where the held rows are now. */
-  heldKept:
-    "They stay in the project's record in the trash, as they were when it was forgotten.",
+  /** Where the held rows are now, under the head after a restore: "They are listed under Forgotten projects and can be tried again." */
+  heldWhere: {
+    before: "They are listed under ",
+    /** The page's name, its link. */
+    place: "Forgotten projects",
+    after: " and can be tried again.",
+  },
   /** The held rows' dismiss. */
   heldDismiss: "Dismiss",
+
+  // ── The held rows' entry in Forgotten projects ──
+  /** What the entry holds, in its row. */
+  heldEntry: (n: number) => `${rows(n)} not restored`,
+  /** Under the entry's name on a phone, where the heads are gone: what it holds and when its project was forgotten. */
+  heldFacts: (n: number, when: string) =>
+    `${rows(n)} not restored · forgotten ${when}`,
+  /** The entry's name, to a reader: it opens the project. */
+  heldOpenProject: (name: string) => `Open ${name}`,
+  /** The entry's rows, to a reader. */
+  heldListLabel: (name: string) => `${name}'s rows not restored`,
+  /** Under the entry's name while its project is forgotten again. */
+  heldProjectGone: (name: string) =>
+    `${name} is forgotten. These rows can be tried again once it is brought back.`,
+  /** The entry's act, and its pending word. */
+  heldRetry: "Try again",
+  heldRetrying: "Trying again…",
+  /** That act, to a reader. */
+  heldRetryOne: (name: string) => `Try ${name}'s rows again`,
+  /** A try again that put every row back: the entry is gone. */
+  heldAllBack: (name: string, n: number) => `${rows(n)} back in ${name}.`,
+  /** A try again that held some back again, under the entry, its rows listed with why. */
+  heldStill: (back: number, held: number) =>
+    back === 0
+      ? `${rows(held)} still held back.`
+      : `${rows(back)} back; ${rows(held)} still held back.`,
+  /** The entry's delete, to a reader. */
+  heldDeleteOne: (name: string) => `Delete ${name}'s rows not restored…`,
+  /** The question under the entry. */
+  heldDeleteAsk: (name: string, n: number) =>
+    `Delete ${name}'s ${rows(n)} not restored?`,
+  heldDeleteBody: "Their values are removed. This cannot be undone.",
+  /** That question's confirm. */
+  heldDeleteConfirm: "Delete rows",
+  /** The held rows' list, a try again and a delete refused or unanswered, said after the hub's sentence. */
+  heldUnreadThen: "so the rows not restored were not listed. Try again.",
+  heldNotRetriedThen: "so the rows were not tried again. Try again.",
+  heldNotDeletedThen: "so the rows were not deleted. Try again.",
+  /** No such entry: none of the project's rows are held back from that forget. */
+  heldNone: (id: string) =>
+    `Project ${id} has no rows held back from that restore.`,
+  /** Its project is forgotten again: nothing goes back into it. */
+  heldProjectForgotten: (name: string) =>
+    `${name} is forgotten, so its rows were not tried again. Bring it back first.`,
+  /** The entry is asked to bring its project back: it holds rows, not a forgotten project. */
+  heldNotForgotten: (name: string, n: number) =>
+    `${name} is not forgotten: this entry holds ${rows(n)} of it that were not restored, which can be tried again.`,
 
   /** The record beside its folder could not be read. */
   unreadable: (id: string, why: string) =>

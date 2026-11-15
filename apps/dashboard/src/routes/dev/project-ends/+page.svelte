@@ -12,13 +12,17 @@
    * project's page. Each step can also be opened from Step; Cancel and
    * Close put Step back to none.
    *
-   * Forgotten projects: the page with the twenty projects the trash held.
+   * Forgotten projects: the page with the twenty projects the trash held,
+   * and Private office's five rows its restore held back.
    * Bring back answers after a beat and lands on the project's page;
    * Balcony garden's is refused (Garden holds its checkout, with the way
    * to Garden), and deleting the first unnamed folder with its files is
    * refused (kestrel away).
    */
-  import type { ForgottenProject } from "@cawco/core/forgotten-project";
+  import type {
+    ForgottenProject,
+    HeldRows,
+  } from "@cawco/core/forgotten-project";
   import { commonWords } from "@cawco/core/words/common";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { projectTrashWords } from "@cawco/core/words/project-trash";
@@ -27,6 +31,7 @@
   import {
     ALL,
     BALCONY,
+    HELD_OFFICE,
     NOW,
   } from "#lib/cawco/forgotten/forgotten-fixtures.js";
   import {
@@ -281,6 +286,8 @@
   }
 
   let list = $state<ForgottenProject[]>(ALL.map((one) => ({ ...one })));
+  /** Private office's rows its restore held back; Delete… removes them. */
+  let heldRows = $state<HeldRows[]>([HELD_OFFICE]);
   let refused = $state<Record<string, string>>({});
   const beat = () => new Promise((resolve) => setTimeout(resolve, 900));
 
@@ -485,6 +492,13 @@
   {:else}
     <ForgottenPage
       {bringBack}
+      held={heldRows}
+      heldSaidOf={() => null}
+      removeHeld={(one) => {
+        heldRows = heldRows.filter((each) => each !== one);
+        return Promise.resolve();
+      }}
+      retry={() => Promise.resolve()}
       holderOf={(one) =>
         one.id === BALCONY.id ? { href: "#garden", name: "Garden" } : null}
       {list}

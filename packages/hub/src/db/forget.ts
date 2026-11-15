@@ -34,8 +34,17 @@
  *   that thing's delete would have treated it: its link set to null where
  *   the key says so, else the row stays out.
  *
- * Each cut link is set again where it still reads null. A project whose own
- * row is held back does not come back at all.
+ * Each cut link is set again where it still reads null and the row it
+ * names stands; one naming a row held back waits with it. A project whose
+ * own row is held back does not come back at all.
+ *
+ * The rows held back, as today's schema holds them, and the links waiting
+ * on them, are the restore's `kept`: the trash lists them under the project
+ * (project-trash.ts), and a try again ({@link ForgetDb.retry}) puts them
+ * back the same way, once they are brought through every migration since
+ * from the schema they were kept at (restore-schema.ts, read out by
+ * {@link heldRowsAt}): what goes back is no longer kept, what is held back
+ * again is, named again with why.
  */
 import type { Database } from "bun:sqlite";
 import type {
@@ -100,17 +109,26 @@ export type ProjectRows = z.infer<typeof ProjectRowsSchema>;
 /** By table: how many rows each outcome counted. */
 type Counts = Record<string, number>;
 
+/** What a restore, or a try again of the rows it held back, put back. */
+export interface RowsPut {
+  /** Rows put back. */
+  back: Counts;
+  /** Every row left out, each named, and why. */
+  held: RestoreHeldRow[];
+  /**
+   * The rows left out, as the database's schema holds them, and each cut
+   * link naming one of them: what a try again puts back.
+   */
+  kept: ProjectRows;
+  /** The migrations the database has applied: `kept`'s schema. */
+  migrations: AppliedRow[];
+  /** Links set again. */
+  relinked: Counts;
+}
+
 /** What a restore came to. */
 export type RowsRestored =
-  | {
-      ok: true;
-      /** Rows put back. */
-      back: Counts;
-      /** Links set again. */
-      relinked: Counts;
-      /** Every row left out, each named, and why. */
-      held: RestoreHeldRow[];
-    }
+  | ({ ok: true } & RowsPut)
   /** A live project holds the id. */
   | { ok: false; why: "live" }
   /** The project's own row is held back: nothing of it goes back. */
@@ -142,7 +160,20 @@ export interface ForgetDb {
    * holds its id or a place of it, or its own row is held back.
    */
   readonly restore: (id: string, rows: ProjectRows) => RowsRestored;
+  /**
+   * Puts back rows a restore of project `id` held back (its `kept`), `rows`
+   * as today's schema holds them (restore-schema.ts `migratedRows`, read
+   * out by {@link heldRowsAt}), checked and held back as a restore's are;
+   * or does not while the project is not live.
+   */
+  readonly retry: (id: string, rows: ProjectRows) => RowsRetried;
 }
+
+/** What a try again of held rows came to. */
+export type RowsRetried =
+  | ({ ok: true } & RowsPut)
+  /** The project is not live (forgotten again): nothing goes back into it. */
+  | { ok: false; why: "gone" };
 
 /** A foreign key, its columns in order. */
 interface Edge {
@@ -525,7 +556,7 @@ export const forgetDb = (
 
   restore: (id, rows) =>
     db.transaction((tx): RowsRestored => {
-      if (first(tx, sql`select 1 from ${name("projects")} where id = ${id}`)) {
+      if (isLive(tx, id)) {
         return { ok: false, why: "live" };
       }
       const held = placeHeld(tx, id, rows);
@@ -539,22 +570,67 @@ export const forgetDb = (
       if (own) {
         return { ok: false, why: "own", held: heldRow(own) };
       }
-      // Checked at the commit: rows go back in any order.
-      tx.run(sql`pragma defer_foreign_keys = on`);
-      const inserted = putBack(tx, staged, edges);
-      const relinked = relink(tx, rows);
-      const settled = settleKeys(tx, inserted);
-      if (!first(tx, sql`select 1 from ${name("projects")} where id = ${id}`)) {
+      const put = putRows(tx, rows, staged, edges);
+      if (!isLive(tx, id)) {
         throw new Error(`project ${id}'s row did not go back`);
       }
+      return { ok: true, ...put, migrations: appliedRows(db.$client) };
+    }),
+
+  retry: (id, rows) =>
+    db.transaction((tx): RowsRetried => {
+      if (!isLive(tx, id)) {
+        return { ok: false, why: "gone" };
+      }
+      const edges = edgesOf(tx);
+      const staged = stage(rows, tables);
+      holdDependents(staged, edges);
       return {
         ok: true,
-        back: standingBack(tx, inserted, settled),
-        relinked,
-        held: staged.flatMap((one) => (one.held ? [heldRow(one)] : [])),
+        ...putRows(tx, rows, staged, edges),
+        migrations: appliedRows(db.$client),
       };
     }),
 });
+
+/** Whether project `id` is live. */
+const isLive = (tx: Tx, id: string): boolean =>
+  first(tx, sql`select 1 from ${name("projects")} where id = ${id}`) !==
+  undefined;
+
+/**
+ * Every staged row not held back inserted (as above), each that names
+ * something gone since settled, and each cut link whose row stands set
+ * again: what went back, and what was left out, named and kept.
+ */
+const putRows = (
+  tx: Tx,
+  rows: ProjectRows,
+  staged: Staged[],
+  edges: Edge[]
+): Omit<RowsPut, "migrations"> => {
+  // Checked at the commit: rows go back in any order.
+  tx.run(sql`pragma defer_foreign_keys = on`);
+  const inserted = putBack(tx, staged, edges);
+  const settled = settleKeys(tx, inserted);
+  const back = standingBack(tx, inserted, settled);
+  // Once the rows that go back stand: a link names only a row that does.
+  const { relinked, waiting } = relink(tx, rows.unlinked, edges);
+  return {
+    back,
+    relinked,
+    held: staged.flatMap((one) => (one.held ? [heldRow(one)] : [])),
+    kept: {
+      tables: rows.tables.flatMap((kept) => {
+        const left = staged.flatMap((one) =>
+          one.kept === kept && one.held ? [one.row] : []
+        );
+        return left.length > 0 ? [{ ...kept, rows: left }] : [];
+      }),
+      unlinked: waiting,
+    },
+  };
+};
 
 /**
  * How many inserted rows still stand, by table, once their keys are settled;
@@ -614,6 +690,37 @@ export const projectRowsAt = (
       ).tables
   );
 
+/**
+ * The rows `rows` keeps (a restore's `kept`) on `db`, as a restore reads a
+ * record's ({@link projectRowsAt}), from the scratch database that brought
+ * them through the migrations since (restore-schema.ts): each kept row,
+ * found by its table's key as it stands, and every row a cascade from them
+ * reaches, which a migration since may have made of them. That database
+ * holds no project row to walk from, and a held row's parent stands in the
+ * live database, not there. A table with no key of its own is read whole:
+ * the scratch database holds no row of it but these.
+ */
+export const heldRowsAt = (
+  db: BunSQLiteDatabase,
+  rows: ProjectRows
+): ProjectRows["tables"] =>
+  db.transaction((tx) => {
+    const roots = rows.tables.flatMap((kept): Root[] => {
+      if (columnsOf(tx, kept.table).length === 0) {
+        return [];
+      }
+      const key = keyOf(tx, kept.table);
+      const at = key.map((column) => kept.columns.indexOf(column));
+      if (key.length === 0 || at.some((index) => index < 0)) {
+        return [{ table: kept.table, where: sql`1` }];
+      }
+      return chunks(
+        kept.rows.map((row) => at.map((index) => sqliteValue(row[index])))
+      ).map((part) => ({ table: kept.table, where: holding(key, part) }));
+    });
+    return recordOf(tx, walk(tx, roots)).tables;
+  });
+
 /** Every table the schema declares, by its SQL name. */
 export type SchemaTables = ReadonlyMap<string, SQLiteTable>;
 
@@ -632,8 +739,12 @@ interface Staged {
   held: RestoreHeldWhy | undefined;
   /** Its primary key, `/`-joined; null when its table has none. */
   id: string | null;
+  /** Its table's rows as the record keeps them. */
+  kept: ProjectRows["tables"][number];
   /** Its schema table; undefined when the schema no longer declares it. */
   of: SQLiteTable | undefined;
+  /** Its values as the record keeps them, in `kept`'s columns. */
+  row: Cell[];
   table: string;
   title: string | null;
   /** Its values as its schema table's insert takes them, by key; undefined when it is held back before its insert. */
@@ -729,7 +840,9 @@ const stage = (rows: ProjectRows, tables: SchemaTables): Staged[] =>
           key.length > 0 && key.every((part) => part !== null)
             ? key.join("/")
             : null,
+        kept,
         of: table,
+        row,
         table: kept.table,
         title: named(cells.title) ?? named(cells.name),
         values: "values" in staged ? staged.values : undefined,
@@ -865,37 +978,69 @@ const putBack = (
   }
 };
 
-/** Each cut link set again where its row still stands and still reads null: how many, by table. */
-const relink = (tx: Tx, rows: ProjectRows): Counts => {
+/**
+ * Each cut link set again where its row still stands and still reads null,
+ * and the row it names stands: how many, by table. One whose named row does
+ * not stand (held back) waits, while its own row stands and reads null; a
+ * link its table no longer has is gone with it.
+ */
+const relink = (
+  tx: Tx,
+  unlinked: ProjectRows["unlinked"],
+  edges: readonly Edge[]
+): { relinked: Counts; waiting: ProjectRows["unlinked"] } => {
   const relinked: Counts = {};
-  for (const cut of rows.unlinked) {
+  const waiting: ProjectRows["unlinked"] = [];
+  for (const cut of unlinked) {
     const now = new Set(columnsOf(tx, cut.table));
-    if (
-      ![...cut.key, ...cut.columns].every(
-        (one) => now.has(one) || one === "rowid"
-      )
-    ) {
+    const edge = edges.find(
+      (one) =>
+        one.child === cut.table &&
+        one.from.length === cut.columns.length &&
+        one.from.every((column, at) => column === cut.columns[at])
+    );
+    if (!(edge && cut.key.every((one) => now.has(one) || one === "rowid"))) {
       continue;
     }
+    const left: ProjectRows["unlinked"][number]["rows"] = [];
     for (const row of cut.rows) {
       const keyed = cut.key.map(
         (column, at) => sql`${name(column)} = ${sqliteValue(row[at])}`
       );
-      const set = cut.columns.map(
-        (column, at) =>
-          sql`${name(column)} = ${sqliteValue(row[cut.key.length + at])}`
+      const values = cut.columns.map((_column, at) =>
+        sqliteValue(row[cut.key.length + at])
       );
       const unset = cut.columns.map((column) => sql`${name(column)} is null`);
+      const where = sql.join([...keyed, ...unset], sql` and `);
+      const stands = first(
+        tx,
+        sql`select 1 from ${name(edge.parent)} where ${sql.join(
+          edge.to.map((column, at) => sql`${name(column)} = ${values[at]}`),
+          sql` and `
+        )}`
+      );
+      if (!stands) {
+        if (first(tx, sql`select 1 from ${name(cut.table)} where ${where}`)) {
+          left.push(row);
+        }
+        continue;
+      }
+      const set = cut.columns.map(
+        (column, at) => sql`${name(column)} = ${values[at]}`
+      );
       add(
         relinked,
         cut.table,
         tx.all(
-          sql`update ${name(cut.table)} set ${list(set)} where ${sql.join([...keyed, ...unset], sql` and `)} returning 1`
+          sql`update ${name(cut.table)} set ${list(set)} where ${where} returning 1`
         ).length
       );
     }
+    if (left.length > 0) {
+      waiting.push({ ...cut, rows: left });
+    }
   }
-  return relinked;
+  return { relinked, waiting };
 };
 
 /** A live project holding one of the record's places, as the refusal names it. */

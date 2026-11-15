@@ -26,6 +26,11 @@
  * 4. The project's rows read out of it as a forget today would read them
  *    (forget.ts `projectRowsAt`), for the live database's typed insert.
  *
+ * Rows a restore held back are kept at the schema they were held at (its
+ * `kept`, forget.ts) and named by its migrations, and a try of them again
+ * takes the same steps, read out in step 4 from the rows themselves
+ * (forget.ts `heldRowsAt`): the scratch database holds no project row.
+ *
  * The scratch database lives in its own folder under the system's temporary
  * one, gone when the restore is.
  */
@@ -39,9 +44,9 @@ import {
   MIGRATIONS_DIR,
   migrationState,
 } from "@cawco/core/migration-state";
-import { drizzle } from "drizzle-orm/bun-sqlite";
+import { type BunSQLiteDatabase, drizzle } from "drizzle-orm/bun-sqlite";
 import { z } from "zod";
-import { type ProjectRows, projectRowsAt, sqliteValue } from "./forget";
+import { type ProjectRows, sqliteValue } from "./forget";
 import { applyMigrations, migrateTo, runOpenedSteps } from "./migrate";
 
 /** The migrations a record's hub had applied when it was made, as `__drizzle_migrations` records each. */
@@ -191,20 +196,21 @@ export const recordSchema = (
   };
 };
 
-/** Project `id`'s rows at today's schema, or the recorded column its record's schema does not have. */
+/** A record's rows at today's schema, or the recorded column its record's schema does not have. */
 export type MigratedRows =
   { ok: true; tables: ProjectRows["tables"] } | { ok: false; missing: string };
 
 /**
  * `rows` brought from `journal` (the record's schema, {@link recordSchema})
- * to this build's newest on a scratch database, and project `id`'s rows read
- * out of it (as above). A migration that throws on them throws here, and
- * nothing of the record goes back.
+ * to this build's newest on a scratch database, and read out of it by
+ * `readOut` (as above: forget.ts `projectRowsAt` for a forgotten project's
+ * record, `heldRowsAt` for the rows a restore held back). A migration that
+ * throws on them throws here, and nothing of the record goes back.
  */
 export const migratedRows = async (
-  id: string,
   rows: ProjectRows,
-  journal: readonly JournalEntry[]
+  journal: readonly JournalEntry[],
+  readOut: (db: BunSQLiteDatabase) => ProjectRows["tables"]
 ): Promise<MigratedRows> => {
   const dir = mkdtempSync(join(tmpdir(), "cawco-restore-"));
   const path = join(dir, "record.db");
@@ -240,7 +246,7 @@ export const migratedRows = async (
     }
     await applyMigrations(db, db.$client, path);
     runOpenedSteps(db);
-    return { ok: true, tables: projectRowsAt(db, id) };
+    return { ok: true, tables: readOut(db) };
   } finally {
     db.$client.close();
     rmSync(dir, { recursive: true, force: true });
