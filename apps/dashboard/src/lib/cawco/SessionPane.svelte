@@ -712,11 +712,14 @@
    * server's until this pane's read answers. A card with a button, never a
    * skeleton.
    */
+  /** The newest read's word as it came, before a landed fix makes it a read under way ({@link fault}). */
+  const readFault = $derived(
+    session?.messages.length || askAlone
+      ? null
+      : (session?.readFault ?? servedFault)
+  );
   const fault = $derived.by(() => {
-    if (session?.messages.length || askAlone) {
-      return null;
-    }
-    const now = session?.readFault ?? servedFault;
+    const now = readFault;
     // A refusal whose fix landed is a read under way, not a refusal: the
     // re-read it set off replaces it (`readAfterFix`). Landed is read here,
     // in the same evaluation as the block going (`unreadFix`), never from an
@@ -724,10 +727,15 @@
     // block gone, is the read under way. A host run's landings drew one
     // frame of the refusal's line under Try again, the block gone and the
     // fault not yet, and faded that out for 100–250 ms.
+    // The same for a wait on the machine's cell: the read that waited on
+    // it, with the cell out of installing (landed or failed), is the read
+    // under way, in the same evaluation.
     if (
       now !== null &&
       (now === readAfterFix ||
-        (now.reason === "refused" && now === blockedFault && !unreadFix))
+        (now.reason === "refused" &&
+          ((now === blockedFault && !unreadFix) ||
+            (now === installingFault && waitedCell?.state !== "installing"))))
     ) {
       return null;
     }
@@ -923,12 +931,12 @@
    * row, and no block, and its wait is the same wait.
    */
   const waitsOn = $derived.by(() => {
-    if (fault?.reason !== "refused") {
+    if (readFault?.reason !== "refused") {
       return null;
     }
     const row = boardStore.rowOf(viewId);
-    const on = row?.machineId ?? fault.machineId;
-    const harness = row?.harness ?? fault.harness ?? session?.harness;
+    const on = row?.machineId ?? readFault.machineId;
+    const harness = row?.harness ?? readFault.harness ?? session?.harness;
     return on && harness ? { machineId: on, harness } : null;
   });
   /**
@@ -1073,9 +1081,9 @@
    * read again, row or no row, block or none; the page shows what that
    * read says.
    */
-  let installingFault: ReadFault | null = null;
+  let installingFault = $state.raw<ReadFault | null>(null);
   $effect.pre(() => {
-    const now = fault;
+    const now = readFault;
     const state = waitedCell?.state;
     untrack(() => {
       if (now?.reason !== "refused") {
