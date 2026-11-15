@@ -189,6 +189,10 @@ export class WhoDecides {
       ? (this.read.table?.routes ?? this.read.fleet.routes)
       : {}
   );
+  /** The fleet's saved routes don't read: every kind is his until a hand-over saves them. */
+  readonly routesUnread = $derived(
+    this.read.state === "read" && this.read.fleet.routesUnread === true
+  );
   /** decides.md's problems: while there are any, every kind is his. */
   readonly problems = $derived(
     this.read.state === "read" ? (this.read.table?.problems ?? []) : []
@@ -329,7 +333,9 @@ export class WhoDecides {
         ...read.fleet.routes,
         ...handed,
       });
-      this.#replace({ fleet: { ...read.fleet, ...fleet } });
+      // The hub's answer says whether the routes read now: a save clears it.
+      const { routesUnread: _was, ...held } = read.fleet;
+      this.#replace({ fleet: { ...held, ...fleet } });
     } else {
       const { decides } = await writeProjectRoutes(
         this.projectId,

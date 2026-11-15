@@ -104,6 +104,8 @@ export const decidesWords = {
     `${kind} goes to ${member} ${here}, but ${reason}, so the card waits on him.`,
   /** decides.md doesn't read: every kind is his until it does. */
   fileProblems: (problems: string) => `decides.md doesn't read: ${problems}`,
+  /** The fleet's saved routes don't read (core `FleetDecides.routesUnread`): every kind is his until they are saved. */
+  routesUnread: "Saved routes unreadable. Every kind goes to You until saved.",
 
   // ── Why a member can't be reached (lower case: the routed line and the signature open it) ──
   /** A person or channel member: no connection carries a question yet. */
