@@ -1128,7 +1128,7 @@ export const createSends = (ctx: SendsContext) => {
   };
 
   /** Sends handed back by their machine, decided together per session ({@link takeBack}). */
-  const handedBack = new Map<string, Envelope<SendPayload>[]>();
+  const handedBack = new Map<string, SendPayload[]>();
 
   /** Whether a pending send's current hand-off is the one `send` was given. */
   const currentHandOff = (instanceId: string, send: SendPayload): boolean => {
@@ -1143,34 +1143,43 @@ export const createSends = (ctx: SendsContext) => {
 
   /**
    * One send handed back, decided ({@link takeBack}): read when the session's
-   * transcript shows it taken up, owed otherwise. The time it was handed over
-   * when it is owed; infinity when it is not.
+   * transcript shows it taken up, owed otherwise. Owed, it is handed again
+   * from the envelope its record kept as it was last handed (`envelope`,
+   * before {@link presenced}), never from what the machine returned: that
+   * copy carries the reminder and the person's presence already folded into
+   * its words, and handed again it would carry the presence twice. The time
+   * it was handed over when it is owed; infinity when it is not.
    */
   const holdBack = (
     instanceId: string,
-    one: Envelope<SendPayload>,
+    one: SendPayload,
     stored: Map<string, boolean> | { unread: string }
   ): number => {
-    const { uuid } = one.payload.message;
-    if (!currentHandOff(instanceId, one.payload)) {
+    const { uuid } = one.message;
+    if (!currentHandOff(instanceId, one)) {
       return Number.POSITIVE_INFINITY;
     }
     const now = ctx.db.sendRecord(uuid);
+    if (!now) {
+      return Number.POSITIVE_INFINITY;
+    }
     // Unread: the machine handed it back whole, its own word that no
     // process took it, so it is owed as one the transcript does not hold.
-    if (now && !("unread" in stored) && stored.get(uuid)) {
+    if (!("unread" in stored) && stored.get(uuid)) {
       readSend(now, false);
       return Number.POSITIVE_INFINITY;
     }
-    ctx.db.holdSend(uuid, one);
+    // A record that kept no envelope (a keep-alive ping, which nothing
+    // hands on) has nothing to hand again: it did not go.
+    if (!ctx.db.oweAgain(uuid)) {
+      failSend(now, UNREAD.lost);
+      return Number.POSITIVE_INFINITY;
+    }
     console.log(
       `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
     );
-    const owed = ctx.db.sendRecord(uuid);
-    if (owed) {
-      publishSend(owed);
-    }
-    return now ? now.acceptedAt.getTime() : Number.POSITIVE_INFINITY;
+    publishSend(ctx.db.sendRecord(uuid) ?? now);
+    return now.acceptedAt.getTime();
   };
 
   /**
@@ -1179,7 +1188,8 @@ export const createSends = (ctx: SendsContext) => {
    * hand-off it names must be its current one: a later hand-off overtook any
    * other, and owing that again would hand it twice. Once per session, what
    * its transcript shows taken up is read, and the rest is owed to the
-   * session's next process ({@link releaseOwed}), as it was handed: at once
+   * session's next process ({@link releaseOwed}), as it was last handed
+   * ({@link holdBack}): at once
    * when a process event came after the hand-off, else when the next one
    * comes ({@link waitingForProcess}).
    */
@@ -1194,18 +1204,12 @@ export const createSends = (ctx: SendsContext) => {
       );
       return;
     }
-    const envelope: Envelope<SendPayload> = {
-      verb: "send",
-      machineId,
-      instanceId,
-      payload: send,
-    };
     const batch = handedBack.get(instanceId);
     if (batch) {
-      batch.push(envelope);
+      batch.push(send);
       return;
     }
-    handedBack.set(instanceId, [envelope]);
+    handedBack.set(instanceId, [send]);
     ctx.lifetime.after(0, () => {
       const back = handedBack.get(instanceId) ?? [];
       handedBack.delete(instanceId);
@@ -3102,10 +3106,10 @@ export const createSends = (ctx: SendsContext) => {
 
   /** {@link releaseOne}'s hand: true once the send has left the hub's keeping (handed, moved or failed). */
   const handOwed = (send: SentMessageRow): boolean => {
-    // Owed with no envelope to hand: one whose owed envelope did not read
-    // when migration 0421 folded it into `envelope` (its record's
-    // `owed_unread`). It stays owed, never handed or carried on with an
-    // envelope made up for it.
+    // Owed with no envelope to hand: one that kept none and whose owed
+    // envelope did not read when migration 0421 folded it into `envelope`
+    // (its record's `owed_unread`). It stays owed, never handed or carried
+    // on with an envelope made up for it.
     const { envelope } = send;
     if (!envelope) {
       return false;

@@ -2369,12 +2369,13 @@ export const sentMessages = sqliteTable(
       .notNull()
       .default(false),
     /**
-     * What migration 0421 did not place when it folded the owed envelope it
-     * replaced into {@link sentMessages.envelope}, as stored: the envelope
-     * the send kept beside an owed one that differed (the owed one is what
-     * the hub handed, so it is the envelope now), or an owed envelope that
-     * did not read, whose send stays owed with no envelope and is never
-     * handed on. Written by 0421 alone; null on every other send.
+     * The owed envelope migration 0421 did not keep as
+     * {@link sentMessages.envelope}, as stored: one that differed from the
+     * envelope the send kept (a copy its machine handed back, the hub's
+     * reminder and the person's presence folded into its words), or one that
+     * did not read. Beside no kept envelope, an unreadable one leaves its
+     * send owed with no envelope, never handed on. Written by 0421 alone;
+     * null on every other send.
      */
     owedUnread: text("owed_unread"),
     /**
@@ -2388,11 +2389,13 @@ export const sentMessages = sqliteTable(
      * kept while it is pending: a process that went away before reading it
      * leaves the hub what to hand the session's next process, and an owed
      * send ({@link sentMessages.owedHeld}) is handed this once its hold
-     * ends. A send its machine handed back keeps what the machine handed
-     * back. Null once the send is no longer pending, on a keep-alive ping,
-     * which nothing hands on, and on an owed send whose owed envelope did
-     * not read at 0421 ({@link sentMessages.owedUnread}), which is never
-     * handed on.
+     * ends. It is the send as last handed, before the hub's reminder and the
+     * person's presence are folded in (sends.ts `presenced`), which every
+     * hand does afresh: a send its machine handed back keeps it, never what
+     * the machine returned. Null once the send is no longer pending, on a
+     * keep-alive ping, which nothing hands on, and on an owed send that kept
+     * none and whose owed envelope did not read at 0421
+     * ({@link sentMessages.owedUnread}), which is never handed on.
      */
     envelope: storedJson(SendEnvelopeSchema)("envelope"),
     /**

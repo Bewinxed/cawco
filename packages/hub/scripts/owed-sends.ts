@@ -6,9 +6,10 @@
  * read-only (a copy of a live hub's, or a fixture unpacked) and counts its
  * sends as owed and envelope equal (the flag set, nothing else moves), owed
  * alone (the owed envelope becomes its envelope), envelope alone (left as it
- * is), both different (the owed one kept, the other moved to owed_unread)
- * and owed unreadable (still owed with no envelope, never handed on), and
- * names each of the last two. Read with 0421's own predicates
+ * is), both different (the kept envelope stays, the owed one moves to
+ * owed_unread), owed unreadable beside a kept envelope (the same) and owed
+ * unreadable alone (still owed with no envelope, never handed on), and
+ * names each of the last three. Read with 0421's own predicates
  * (db/owed-sends-unread.ts); on a database 0421 has run on it says so and
  * counts nothing.
  */
@@ -41,20 +42,21 @@ if (ran) {
       )
       .get()?.found ?? 0;
   console.log(
-    `sent_messages: ${sends} sends, ${owed.length} owed: ${of("same").length} owed and envelope equal, ${of("alone").length} owed alone, ${envelopeAloneCount(client)} envelope alone, ${of("different").length} both different, ${of("unread").length} owed unreadable`
+    `sent_messages: ${sends} sends, ${owed.length} owed: ${of("same").length} owed and envelope equal, ${of("alone").length} owed alone, ${envelopeAloneCount(client)} envelope alone, ${of("different").length} both different, ${of("unread-beside").length} owed unreadable beside an envelope, ${of("unread-alone").length} owed unreadable alone`
   );
   /** A value as this shows it: cut short, on one line. */
   const shown = (raw: string | null): string =>
     JSON.stringify((raw ?? "").slice(0, 120));
   for (const one of of("different")) {
     console.log(
-      `  both different: ${one.key}: the owed one is kept; the envelope ${shown(one.envelope)} goes to owed_unread`
+      `  both different: ${one.key}: the kept envelope stays; the owed one ${shown(one.owed)} goes to owed_unread`
     );
   }
-  for (const one of of("unread")) {
-    if (one.reading.kind === "unread") {
+  for (const one of owed) {
+    const { reading } = one;
+    if (reading.kind === "unread-beside" || reading.kind === "unread-alone") {
       console.log(
-        `  owed unreadable: ${one.key}: ${shown(one.owed)}: ${one.reading.why}`
+        `  owed unreadable ${reading.kind === "unread-beside" ? "beside an envelope" : "alone"}: ${one.key}: ${shown(one.owed)}: ${reading.why}`
       );
     }
   }

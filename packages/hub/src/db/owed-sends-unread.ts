@@ -1,20 +1,23 @@
 /**
  * Before migration 0421's SQL runs, the hub's log names every send whose
  * owed envelope (`sent_messages.owed`, the send as its machine is to be
- * handed it once the hub's hold ends, as JSON) 0421 does not fold into the
- * send's kept envelope (`sent_messages.envelope`) as it stands: one that
- * differs from the kept envelope, and one that does not read whole as the
- * hub read it, with why.
+ * handed it once the hub's hold ends, as JSON) 0421 does not keep as the
+ * send's envelope: one that differs from the envelope it kept
+ * (`sent_messages.envelope`), and one that does not read whole as the hub
+ * read it, with why.
  *
  * 0421 replaces the owed envelope with a flag (`owed_held`): the hub holds
- * the send, and hands `envelope` when the hold ends. The hub handed the
- * owed envelope (sends.ts `handOwed`), so where both are there the owed one
- * is kept as `envelope`. They differ only for a send its machine handed
- * back (sends.ts `holdBack`: what the machine was handed, the hub's
- * reminder and the person's presence in it); the kept one moves, as stored,
- * to `owed_unread`. An owed envelope that does not read stays owed with no
- * envelope, kept as stored in `owed_unread`, and is never handed on: the
- * hub's reader threw on its row, so it was never handed before either.
+ * the send, and hands `envelope` when the hold ends. The kept envelope is
+ * the send as it was last handed, before the hub's reminder and the
+ * person's presence are folded into its words (sends.ts `presenced`), so
+ * where it is there it stays. The owed one differs only for a send its
+ * machine handed back (sends.ts `holdBack`), which was what the machine
+ * returned, presence folded in: handed again it carried the presence twice.
+ * An owed envelope that differs, or that does not read, moves as stored to
+ * `owed_unread`. With no kept envelope, an owed one that reads becomes the
+ * envelope, and one that does not read stays owed with no envelope and is
+ * never handed on: the hub's reader threw on its row, so it was never
+ * handed before either. No value is dropped.
  *
  * The predicates below are 0421's own: its SQL was written from them, over
  * the columns as they stand before it. {@link ENVELOPE} is the owed
@@ -194,10 +197,12 @@ export type OwedReading =
   | { kind: "same" }
   /** Owed with no kept envelope: the owed one is kept as its envelope. */
   | { kind: "alone" }
-  /** Owed, and its kept envelope differs: the owed one is kept, the other moves to `owed_unread`. */
+  /** Owed, and its kept envelope differs: the kept one stays, the owed one moves to `owed_unread`. */
   | { kind: "different" }
-  /** The owed envelope does not read: still owed, no envelope, never handed on; the owed value kept in `owed_unread`. */
-  | { kind: "unread"; why: string };
+  /** The owed envelope does not read beside a kept one: the kept one stays, the owed one moves to `owed_unread`. */
+  | { kind: "unread-beside"; why: string }
+  /** The owed envelope does not read and none was kept: still owed with no envelope, never handed on; the owed value kept in `owed_unread`. */
+  | { kind: "unread-alone"; why: string };
 
 /** One owed send as 0421 reads it: its key, both envelopes as stored, and what 0421 makes of it. */
 export interface KeptOwed {
@@ -217,20 +222,24 @@ interface Row {
   same: number;
 }
 
+/** Why an owed envelope does not read. */
+const whyUnread = (row: Row): string =>
+  row.json === 0
+    ? "it is not JSON"
+    : "it is not a send's envelope as the hub read it (core Envelope<SendPayload>)";
+
 const readingOf = (row: Row): OwedReading => {
-  if (!row.reads) {
-    return {
-      kind: "unread",
-      why:
-        row.json === 0
-          ? "it is not JSON"
-          : "it is not a send's envelope as the hub read it (core Envelope<SendPayload>)",
-    };
-  }
   if (row.envelope === null) {
-    return { kind: "alone" };
+    return row.reads
+      ? { kind: "alone" }
+      : { kind: "unread-alone", why: whyUnread(row) };
   }
-  return row.same ? { kind: "same" } : { kind: "different" };
+  if (row.same) {
+    return { kind: "same" };
+  }
+  return row.reads
+    ? { kind: "different" }
+    : { kind: "unread-beside", why: whyUnread(row) };
 };
 
 /** Every owed send as 0421 reads it, by `session/uuid`. Run on a database 0421 has not run on. */
@@ -255,21 +264,23 @@ export const envelopeAloneCount = (client: Database): number =>
     )
     .get()?.found ?? 0;
 
-/** Logs every owed send 0421 does not fold as it stands, one line each. Run only in a start that applies 0421 (db/migrate.ts). */
+/** Logs every owed send 0421 does not keep as its envelope, one line each. Run only in a start that applies 0421 (db/migrate.ts). */
 export const logOwedSendsUnread = (client: Database): void => {
   for (const row of owedSendsKept(client)) {
-    if (row.reading.kind === "different") {
+    const { reading } = row;
+    if (reading.kind === "different") {
       console.info(
-        `[migrations] 0421: send ${row.key}: its owed envelope and the envelope it kept differ; the owed one, which the hub hands, is kept as its envelope, and the one it kept, ${shown(row.envelope ?? "")}, is kept as stored in owed_unread`
+        `[migrations] 0421: send ${row.key}: its owed envelope ${shown(row.owed)} differs from the envelope it kept; the kept one, the send as it was last handed, is handed when its hold ends, and the owed one is kept as stored in owed_unread`
       );
     }
-    if (row.reading.kind === "unread") {
-      const dropped =
-        row.envelope !== null && row.envelope !== row.owed
-          ? `; the envelope it kept, ${shown(row.envelope)}, is not handed either and goes`
-          : "";
+    if (reading.kind === "unread-beside") {
       console.info(
-        `[migrations] 0421: send ${row.key}: its owed envelope ${shown(row.owed)} does not read: ${row.reading.why}; it stays owed with no envelope, kept as stored in owed_unread, and is never handed on${dropped}`
+        `[migrations] 0421: send ${row.key}: its owed envelope ${shown(row.owed)} does not read: ${reading.why}; the envelope it kept is handed when its hold ends, and the owed one is kept as stored in owed_unread`
+      );
+    }
+    if (reading.kind === "unread-alone") {
+      console.info(
+        `[migrations] 0421: send ${row.key}: its owed envelope ${shown(row.owed)} does not read: ${reading.why}, and it kept no other; it stays owed with no envelope, kept as stored in owed_unread, and is never handed on`
       );
     }
   }

@@ -40,12 +40,6 @@ export interface SendsDb {
    * or a turn took its place.
    */
   readonly handBackTurn: (id: string, from: number, at: number) => boolean;
-  /**
-   * A pending send its machine handed back whole (`envelope`, what the
-   * machine was handed), owed again as it came back until the session's
-   * next start; false when it is no longer pending.
-   */
-  readonly holdSend: (uuid: string, envelope: Envelope<SendPayload>) => boolean;
   /** Keeps a pending send whole, as its machine was handed it. */
   readonly keepEnvelope: (
     uuid: string,
@@ -282,15 +276,6 @@ export const sendsDb = (core: DbCore): SendsDb => {
         )
         .orderBy(asc(sentMessages.acceptedAt))
         .all(),
-    holdSend: (uuid, envelope) =>
-      db
-        .update(sentMessages)
-        .set({ owedHeld: true, envelope })
-        .where(
-          and(eq(sentMessages.uuid, uuid), eq(sentMessages.state, "pending"))
-        )
-        .returning({ uuid: sentMessages.uuid })
-        .all().length === 1,
     oweAgain: (uuid) =>
       db
         .update(sentMessages)
