@@ -26,7 +26,7 @@ import { cardOfMcpWrite } from "./fleet-secrets";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
-import { looksSecret, SECRET_KEY } from "./secret-shapes";
+import { isSecretName, looksSecret } from "./secret-shapes";
 import { DAY_MS } from "./time";
 import { areaWords } from "./words/areas";
 import { askStanceLine } from "./words/ask-lines";
@@ -434,7 +434,7 @@ export function redact(key: string, value: unknown): unknown {
     return value;
   }
   if (typeof value === "string") {
-    return SECRET_KEY.test(key) || looksSecret(value) ? HIDDEN : value;
+    return isSecretName(key) || looksSecret(value) ? HIDDEN : value;
   }
   if (typeof value !== "object") {
     // A number or a flag is a setting, never a credential.

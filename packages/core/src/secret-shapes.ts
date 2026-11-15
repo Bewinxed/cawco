@@ -4,9 +4,54 @@
  * fleet's connector reads (fleet-secrets.ts) share.
  */
 
-/** A field whose name says it carries a credential. */
-export const SECRET_KEY =
-  /secret|token|passw|api[-_]?key|apikey|auth|credential|cookie|private[-_]?key|^key$|bearer|session[-_]?id/iu;
+/**
+ * Credential names, each written as its segments run together in lower case
+ * (`api_key`, `apiKey` and `X-API-Key` all read `apikey`). Taken from Sentry's
+ * default scrubber denylist (sentry-python `scrubber.py` DEFAULT_DENYLIST,
+ * "stolen from relay"), less its bare `auth` and `session`, which name ordinary
+ * fields (`author`, `session_id`) far more often than they carry a credential.
+ */
+const SECRET_NAMES = new Set([
+  "password",
+  "passwd",
+  "pwd",
+  "passphrase",
+  "secret",
+  "token",
+  "credential",
+  "credentials",
+  "cookie",
+  "authorization",
+  "bearer",
+  "csrf",
+  "xsrf",
+  "apikey",
+  "privatekey",
+  "csrftoken",
+  "phpsessid",
+]);
+
+/** A name's segments, in lower case: camelCase, snake_case, kebab-case and UPPER_CASE split alike (`OAuth2Token` reads `o`, `auth`, `2`, `token`). */
+const segmentsOf = (name: string): string[] =>
+  (name.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/gu) ?? []).map((segment) =>
+    segment.toLowerCase()
+  );
+
+/**
+ * A field whose name says it carries a credential: one of its segments, or
+ * two side by side read together (`api` + `key`, `private` + `key`), is a
+ * credential name. A name that only contains one (`author`, `max_tokens`,
+ * `tokenizer`) is not.
+ */
+export const isSecretName = (name: string): boolean => {
+  const segments = segmentsOf(name);
+  return segments.some(
+    (segment, at) =>
+      SECRET_NAMES.has(segment) ||
+      SECRET_NAMES.has(`${segment}${segments[at + 1] ?? ""}`)
+  );
+};
+
 /** A value that reads as a credential whatever its field is called. */
 const SECRET_VALUE = [
   /^(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/u,
