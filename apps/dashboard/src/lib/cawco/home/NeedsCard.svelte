@@ -197,7 +197,9 @@
               ?.question ?? item.ask)
           : item.ask;
       case "watch":
-        return item.notice.title;
+        // Why, in the notice's words: its title is the row's own first line
+        // when the board holds no row, and never said twice.
+        return item.notice.body;
       case "tailnet":
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
