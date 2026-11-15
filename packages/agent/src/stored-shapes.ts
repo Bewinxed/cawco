@@ -167,14 +167,19 @@ export type ToolInstallRecordOutput = z.output<typeof ToolInstallRecordShape>;
 
 const ToolInstallUnderwayShape = declared(
   z.object({
+    answered: z.number().optional(),
     at: z.number(),
+    automatic: z.boolean().optional(),
     bootId: z.string().optional(),
     from: z.string().optional(),
     method: z.string().optional(),
+    newest: z.string().optional(),
     path: z.string().optional(),
     pid: z.number(),
     procStart: z.string().optional(),
+    startedBy: z.enum(["cawco", "person"]).optional(),
     to: z.string().optional(),
+    tries: z.number().optional(),
   }),
   "ToolInstallUnderway",
   "packages/agent/src/tools.ts"
