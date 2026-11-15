@@ -579,7 +579,7 @@ export const createGate = ({
     inputPaths: readonly string[],
     noWait: boolean
   ): Promise<TreeState | undefined> => {
-    const outputs = item.outputs ?? [];
+    const outputs = db.workItemOutputs(item.id);
     // One hash a line per output; a folder's is the hash of its files' list
     // with each file's hash.
     const hashed =

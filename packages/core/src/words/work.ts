@@ -194,6 +194,20 @@ export const workWords = {
    */
   taskBudgetUnread: (path: string, id: string, why: string) =>
     `${path} has a budget line that does not read, so no attempt at ${id} starts until it reads or is taken out: ${why}`,
+  /**
+   * Why no attempt at a task starts (hub dispatch.ts `startable`, and the
+   * task's `startProblem`): its file's `outputs:` line does not read as a
+   * list; `why` is what does not, quoted from the line.
+   */
+  taskOutputsUnread: (path: string, id: string, why: string) =>
+    `${path} has an outputs line that does not read, so no attempt at ${id} starts until it reads or is taken out: the files it names would land with the rest of the work. ${why}`,
+  /**
+   * A work item's landing refused because its outputs did not read as they
+   * became rows (hub schema.ts `workItems.outputsUnread`); `stored` is the
+   * list as it was stored.
+   */
+  outputsUnreadRefused: (stored: string) =>
+    `Not landed: this item's outputs, stored as “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, do not read, so the hub cannot tell which of its files are outputs to keep off the base branch, and it pushes nothing. Its outputs that read are collected; start the work again with its outputs named.`,
   /** A routine's run skipped because its budget does not read (`budgetUnread`). */
   routineBudgetUnread: (why: string) =>
     `The run is skipped: ${why}. Set the routine's budget again, or clear it, and its runs start.`,

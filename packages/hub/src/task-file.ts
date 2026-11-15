@@ -209,6 +209,14 @@ export interface ParsedTask {
   /** Front matter fields this file carries that a task file does not know, with their values; kept as written. */
   extra: Record<string, ExtraValue>;
   fields: TaskFields;
+  /**
+   * What its `outputs:` line holds that does not read as a list, quoted
+   * from the line (the line's problem is in `problems` too); null when it
+   * reads or there is none. While set, no attempt at it starts (dispatch.ts
+   * `startable`): outputs that do not read are never read as none, which
+   * would land the files they name on the base branch.
+   */
+  outputsUnread: string | null;
   /** What in the file could not be read, one sentence each. */
   problems: string[];
   sections: TaskSection[];
@@ -1061,9 +1069,15 @@ export class TaskDoc {
       problems.push("The front matter names no stage.");
     }
     const budgetUnread: string[] = [];
+    const outputsUnread: string[] = [];
     for (const line of this.front ?? []) {
       if (line.key === "budget") {
         readBudget(line, budgetUnread);
+      }
+      if (line.key === "outputs" && !listOf(line)) {
+        outputsUnread.push(
+          `outputs: “${withoutComment(line.value)}” is not a list like [a, b].`
+        );
       }
     }
     const sections = sectionsOf(this.body);
@@ -1103,6 +1117,7 @@ export class TaskDoc {
         })),
       problems,
       budgetUnread: budgetUnread.join(" ") || null,
+      outputsUnread: outputsUnread.join(" ") || null,
     };
   }
 

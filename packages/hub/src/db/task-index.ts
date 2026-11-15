@@ -8,6 +8,7 @@ import {
   projectTaskEdges,
   projectTaskFields,
   projectTaskLabels,
+  projectTaskOutputs,
   projectTasks,
 } from "./schema";
 import { summaryOf as linkSummaryOf, syncTaskLinks } from "./task-links";
@@ -17,6 +18,8 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect & {
   /** What it waits on (`waits_on`), as its file lists them: a task as `tsk-12`, any other target as wait-targets.ts keeps it. */
   waitsOn: string[];
   labels: string[];
+  /** The project folder files its work produces (`outputs:`), as its file lists them: what the project's Made list draws. */
+  outputs: string[];
   /** Its file's own scalar fields (`priority`, `due`), as written. */
   fields: Record<string, string>;
   /**
@@ -49,7 +52,7 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
     taskIndex: (projectId) => {
       const ofTask = new Map<
         string,
-        Pick<TaskIndexRow, "waitsOn" | "labels" | "fields">
+        Pick<TaskIndexRow, "waitsOn" | "labels" | "outputs" | "fields">
       >();
       const linksOf = Map.groupBy(
         taskLinksOf.ofProject(projectId),
@@ -60,9 +63,13 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
         if (known) {
           return known;
         }
-        const made: Pick<TaskIndexRow, "waitsOn" | "labels" | "fields"> = {
+        const made: Pick<
+          TaskIndexRow,
+          "waitsOn" | "labels" | "outputs" | "fields"
+        > = {
           waitsOn: [],
           labels: [],
+          outputs: [],
           fields: {},
         };
         ofTask.set(file, made);
@@ -83,6 +90,14 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
         .orderBy(sql`rowid`)
         .all()) {
         lists(labelled.path).labels.push(labelled.label);
+      }
+      for (const output of db
+        .select()
+        .from(projectTaskOutputs)
+        .where(eq(projectTaskOutputs.projectId, projectId))
+        .orderBy(sql`rowid`)
+        .all()) {
+        lists(output.path).outputs.push(output.output);
       }
       for (const field of db
         .select()
@@ -141,9 +156,14 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
             .all()
             .map((project) => project.id)
         );
-        for (const { waitsOn, labels, fields, links, ...row } of rows.filter(
-          (r) => live.has(r.projectId)
-        )) {
+        for (const {
+          waitsOn,
+          labels,
+          outputs,
+          fields,
+          links,
+          ...row
+        } of rows.filter((r) => live.has(r.projectId))) {
           const { projectId, path: file } = row;
           syncTaskLinks(
             tx,
@@ -166,10 +186,12 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
             table:
               | typeof projectTaskEdges
               | typeof projectTaskLabels
+              | typeof projectTaskOutputs
               | typeof projectTaskFields
           ) => and(eq(table.projectId, projectId), eq(table.path, file));
           tx.delete(projectTaskEdges).where(ofIt(projectTaskEdges)).run();
           tx.delete(projectTaskLabels).where(ofIt(projectTaskLabels)).run();
+          tx.delete(projectTaskOutputs).where(ofIt(projectTaskOutputs)).run();
           tx.delete(projectTaskFields).where(ofIt(projectTaskFields)).run();
           const edges = [...new Set(waitsOn)].map((otherId) => ({
             kind: "waits_on" as const,
@@ -184,6 +206,14 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
           if (named.length > 0) {
             tx.insert(projectTaskLabels)
               .values(named.map((label) => ({ projectId, path: file, label })))
+              .run();
+          }
+          const produced = [...new Set(outputs)];
+          if (produced.length > 0) {
+            tx.insert(projectTaskOutputs)
+              .values(
+                produced.map((output) => ({ projectId, path: file, output }))
+              )
               .run();
           }
           const scalars = Object.entries(fields);

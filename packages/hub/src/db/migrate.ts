@@ -33,6 +33,7 @@ import { logLandedUnread } from "./landed-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
+import { logOutputsUnread } from "./outputs-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
@@ -135,6 +136,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every record of gate passes 0401 keeps as not read, read before it runs.
       logGatePassesUnread(client);
+    },
+  },
+  {
+    name: "outputs-unread",
+    before: "0404_outputs_tables",
+    at: "migrator",
+    run: (client) => {
+      // Every list of outputs 0404 keeps as not read or reads again, read before it runs.
+      logOutputsUnread(client);
     },
   },
   {

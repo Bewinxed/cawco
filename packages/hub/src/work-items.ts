@@ -1417,10 +1417,10 @@ const outputsOf = (outputs: string[] | undefined) => {
   return [...paths];
 };
 
-/** How an item lands, as its session is told. */
-const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
+/** How an item lands, as its session is told: `outputs` the outputs it declared. */
+const landingOf = (item: WorkItemRow, outputs: string[]): WorkspaceLanding => ({
   lands: item.lands,
-  ...(item.outputs?.length ? { outputs: item.outputs } : {}),
+  ...(outputs.length > 0 ? { outputs } : {}),
   ...(item.projectId ? { assets: outputsFolder(item) } : {}),
 });
 
@@ -3123,11 +3123,12 @@ export const createWorkItems = ({
     );
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
+    const outputs = db.workItemOutputs(item.id);
     const told =
-      (item.lands === "main" && !item.outputs?.length) ||
+      (item.lands === "main" && outputs.length === 0) ||
       isFolderOverlay(workspace)
         ? brief
-        : withLandingLine(brief, workspace.base, landingOf(item));
+        : withLandingLine(brief, workspace.base, landingOf(item, outputs));
     const sent = send(messageOf(session.id, session.machineId, parent, told));
     if (sent.state === "failed") {
       update(item.id, {
@@ -4555,7 +4556,7 @@ export const createWorkItems = ({
                   ...workspaces.askedIn(workspace, request.cwd ?? parent.cwd),
                 },
                 workspace.base,
-                landingOf(item)
+                landingOf(item, db.workItemOutputs(item.id))
               )
         )
       );
@@ -5121,7 +5122,7 @@ export const createWorkItems = ({
     const read = await command(
       workspace.machineId,
       workspace.path,
-      `${SAFE_GIT_SHELL}git rev-list --count HEAD --not --remotes=origin && ${statusCommand(item.outputs ?? [])} | wc -l`,
+      `${SAFE_GIT_SHELL}git rev-list --count HEAD --not --remotes=origin && ${statusCommand(db.workItemOutputs(item.id))} | wc -l`,
       GIT_TIMEOUT_MS,
       refOf(workspace),
       { noWait: true }
@@ -5238,7 +5239,7 @@ export const createWorkItems = ({
       }
       return result.stdout;
     };
-    const outputs = item.outputs ?? [];
+    const outputs = db.workItemOutputs(item.id);
     const pathspec =
       outputs.length > 0
         ? ` -- .${outputs.map((path) => ` ${shellQuote(`:(exclude,literal)${path}`)}`).join("")}`

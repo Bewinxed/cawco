@@ -813,8 +813,6 @@ export const projectTasks = sqliteTable(
     /** The task it repeats (`duplicate_of`): a task waiting on it waits on that one instead. */
     duplicateOf: text("duplicate_of"),
     rank: text("rank"),
-    /** The project folder files its work produces (`outputs:`): what the project's Made list draws, read whole. */
-    outputs: storedJson(z.array(z.string()))("outputs").notNull().default([]),
     todosDone: integer("todos_done").notNull().default(0),
     todosTotal: integer("todos_total").notNull().default(0),
     /** What in the file could not be read, in a sentence; null when all of it could. */
@@ -825,6 +823,13 @@ export const projectTasks = sqliteTable(
      * attempt at the task starts, and its `startProblem` says why.
      */
     budgetUnread: text("budget_unread"),
+    /**
+     * What its `outputs:` line holds that does not read (task-file.ts
+     * `outputsUnread`); null when it reads or there is none. While set, no
+     * attempt at the task starts, and its `startProblem` says why: a list
+     * of outputs that does not read is never read as none.
+     */
+    outputsUnread: text("outputs_unread"),
     /** sha256 hex of the file's content as indexed. */
     hash: text("hash").notNull(),
     /** When the hub last saw the content change. */
@@ -885,6 +890,27 @@ export const projectTaskLabels = sqliteTable(
       foreignColumns: [projectTasks.projectId, projectTasks.path],
     }).onDelete("cascade"),
     index("project_task_labels_label").on(table.projectId, table.label),
+  ]
+);
+
+/**
+ * The project folder files a task's work produces (`outputs:`), one row
+ * each, in the order its file lists them (rowid): what the project's Made
+ * list draws. Rebuilt with its task's index row.
+ */
+export const projectTaskOutputs = sqliteTable(
+  "project_task_outputs",
+  {
+    projectId: projectColumn("project_id").notNull(),
+    path: text("path").notNull(),
+    output: text("output").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.path, table.output] }),
+    foreignKey({
+      columns: [table.projectId, table.path],
+      foreignColumns: [projectTasks.projectId, projectTasks.path],
+    }).onDelete("cascade"),
   ]
 );
 
@@ -1746,11 +1772,14 @@ export const workItems = sqliteTable(
      */
     lands: storedEnum(z.enum(LANDS_MODES))("lands").notNull().default("main"),
     /**
-     * Files in its workspace, as paths from the clone's root, that the hub
-     * copies into its project's folder (`assets/<task or item>/`) when it
-     * finishes; one missing sends it back to its session. Null: none.
+     * Its outputs as they were stored, when they were there and did not
+     * read whole as they became {@link workItemOutputs} rows (migration
+     * 0404): not JSON, not a list, or an entry that is not a path. Those
+     * that read were placed. While set, its landing pushes nothing
+     * (landing-run.ts `outputsUnreadRefused`): the hub cannot tell which of
+     * its files were declared outputs, so none of them goes to its base.
      */
-    outputs: storedJson(z.array(z.string()))("outputs"),
+    outputsUnread: text("outputs_unread"),
     /**
      * What an attempt at a task was dispatched on (dispatch.ts): each card
      * or pin its task waited on, its own or its parts' chain's, and the
@@ -2058,6 +2087,24 @@ export const workItemGlobs = sqliteTable(
     glob: text("glob").notNull(),
   },
   (table) => [primaryKey({ columns: [table.itemId, table.glob] })]
+);
+
+/**
+ * Files in a work item's workspace, as paths from the clone's root, that the
+ * hub copies into its project's folder (`assets/<task or item>/`) when it
+ * finishes, one row each, in the order it declared them (rowid): its landing
+ * passes over them, and one missing sends it back to its session. None: it
+ * declared no outputs.
+ */
+export const workItemOutputs = sqliteTable(
+  "work_item_outputs",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.path] })]
 );
 
 /**

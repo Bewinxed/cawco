@@ -491,11 +491,8 @@ export const createWorkspaces = ({
     return found;
   };
   /** The paths a workspace's items handed over as outputs: `git status` passes over them. */
-  const handedOver = (workspace: WorkspaceRow): string[] => [
-    ...new Set(
-      db.workItemsIn(workspace.id).flatMap((item) => item.outputs ?? [])
-    ),
-  ];
+  const handedOver = (workspace: WorkspaceRow): string[] =>
+    db.workspaceOutputs(workspace.id);
   /** A held workspace's work as its row keeps it (schema.ts `workspaces.holding`). */
   const heldWork = (
     workspace: WorkspaceRow & { holding: WorkspaceHolding }

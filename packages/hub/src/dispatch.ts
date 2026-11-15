@@ -1112,7 +1112,7 @@ export const createDispatcher = ({
     console.warn(`[dispatch] ${task.id} in project ${projectId}: ${message}`);
   };
 
-  /** The refusal of an attempt at a task that has a live one, is done or dropped, or whose budget line does not read. */
+  /** The refusal of an attempt at a task that has a live one, is done or dropped, or whose budget or outputs line does not read. */
   const startable = (projectId: string, task: TaskView) => {
     const live = liveAttempts(projectId).find(
       (item) => item.taskId === task.id
@@ -1138,6 +1138,18 @@ export const createDispatcher = ({
           task.path,
           task.id,
           task.budgetUnread
+        ),
+      });
+    }
+    // An outputs line that does not read is never read as none: the files
+    // it names would land on the base with the rest, whatever a start asks.
+    if (task.outputsUnread !== null) {
+      return problem(409, {
+        code: "dispatch-outputs-unread",
+        detail: workWords.taskOutputsUnread(
+          task.path,
+          task.id,
+          task.outputsUnread
         ),
       });
     }
