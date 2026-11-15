@@ -675,7 +675,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     tokens: number,
     now: number
   ): boolean => {
-    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    const last = db.atLimit.latestEvent(row.id)?.move;
     if (last?.kind === "moving" && last.to.id === target.id) {
       return last.at > now;
     }
@@ -979,9 +979,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return false;
     }
     // Its cache came along when the line of its move says so.
-    const last = db.atLimit
-      .events([row.id])
-      .findLast((one) => one.move.kind === "moved")?.move;
+    const last = db.atLimit.latestEvent(row.id, "moved")?.move;
     const kept =
       last?.kind === "moved" && last.to.id === to.id && last.sameOrganization;
     const cost = kept

@@ -21,6 +21,7 @@ import {
   PLACEMENT_STRATEGIES,
   type PlacementStrategy,
 } from "./accounts/kinds";
+import { everyOf } from "./every-of";
 import type { HarnessKind } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
 import type { LimitWindow } from "./usage/types";
@@ -1439,6 +1440,21 @@ export type AccountMove =
        */
       waits?: true;
     };
+
+/** What a limit line says the hub did: an {@link AccountMove}'s `kind`. */
+export type AccountMoveKind = AccountMove["kind"];
+
+/** Every {@link AccountMoveKind}: the hub keeps a line's kind in a column of its own (hub `limit_events.kind`). */
+export const ACCOUNT_MOVE_KINDS = everyOf<AccountMoveKind>()([
+  "moved",
+  "moving",
+  "waiting",
+  "continued",
+  "stopped",
+  "signed-out",
+  "ended",
+  "unmoved",
+]);
 
 /**
  * Who ended a session's process ({@link AccountMove} `ended`): a person (the

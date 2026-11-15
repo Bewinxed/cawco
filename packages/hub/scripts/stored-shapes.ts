@@ -99,6 +99,14 @@ const WRITTEN: Record<string, { schema: string; values: [string, string][] }> =
         "z.union([DelegateEventShape.options[2].shape.payload, DelegateEventShape.options[1].shape.payload, DelegateEventShape.options[0].shape.payload])",
       values: [],
     },
+    // Stored apart from its kind (limit_events and limit_compactions keep
+    // that in their own column): most required keys first, as a line of
+    // fewer would take, and strip, another's.
+    AccountMoveBody: {
+      schema:
+        "z.union([AccountMoveSchema.options[0].omit({ kind: true }), AccountMoveSchema.options[3].omit({ kind: true }), AccountMoveSchema.options[7].omit({ kind: true }), AccountMoveSchema.options[1].omit({ kind: true }), AccountMoveSchema.options[2].omit({ kind: true }), AccountMoveSchema.options[4].omit({ kind: true }), AccountMoveSchema.options[5].omit({ kind: true }), AccountMoveSchema.options[6].omit({ kind: true })])",
+      values: [],
+    },
   };
 
 type Declaration = ts.InterfaceDeclaration | ts.TypeAliasDeclaration;

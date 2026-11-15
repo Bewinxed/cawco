@@ -525,10 +525,14 @@ export const createAdmission = (db: DbShape) => {
       if (charges.get(row.id)?.accountId === row.accountId) {
         return true;
       }
-      const last = db.atLimit
-        .events([row.id])
-        .findLast((one) => one.move.kind === "moved");
-      if (!(last?.move.kind === "moved" && last.move.to.id === row.accountId)) {
+      // A line that does not read could be its move here: it stays, as
+      // one that lands here would, inside the window alone.
+      const last = db.atLimit.latestEvent(row.id, "moved");
+      if (!(
+        last &&
+        (last.move === null ||
+          (last.move.kind === "moved" && last.move.to.id === row.accountId))
+      )) {
         return false;
       }
       const { windows } = bearingWindows(

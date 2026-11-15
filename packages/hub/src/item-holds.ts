@@ -1,4 +1,4 @@
-import type { WorkItemRow } from "./db/project-work";
+import { isBlocked, type WorkItemRow } from "./db/project-work";
 
 /**
  * What holds a live work item right now: each reason the hub leaves it
@@ -78,7 +78,8 @@ type ItemFacts<T extends ItemHold> = {
 /** The columns of an item its holds read. */
 type HoldColumns = Pick<
   WorkItemRow,
-  | "blocked"
+  | "blockedKind"
+  | "blockedUnread"
   | "heldAt"
   | "landingPhase"
   | "landingSince"
@@ -94,7 +95,7 @@ const ROW_HOLDS: Record<
 > = {
   held: (item) => item.heldAt !== null,
   stopping: (item) => item.stoppingAt !== null,
-  blocked: (item) => item.blocked !== null,
+  blocked: isBlocked,
   waiting: (item) => !!item.waitUntil,
   waitResuming: (item) => !!item.waitResumeBy,
   landing: (item) => !!item.landingSince && item.landingPhase !== "completing",

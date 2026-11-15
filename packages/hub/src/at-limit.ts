@@ -640,7 +640,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     // any other is said once for the same failure.
     const last = how.waits
       ? db.atLimit.waitingMove(row.id)?.move
-      : db.atLimit.events([row.id]).at(-1)?.move;
+      : db.atLimit.latestEvent(row.id)?.move;
     const repeated =
       last?.kind === "unmoved" &&
       last.action === "move" &&
@@ -702,8 +702,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     );
     const line = crypto.randomUUID();
     // Its announcement gives way to the move it announced.
-    const announced = db.atLimit.events([row.id]).at(-1);
-    if (announced?.move.kind === "moving") {
+    const announced = db.atLimit.latestEvent(row.id);
+    if (announced?.move?.kind === "moving") {
       ports.unnote(row, announced.id);
     }
     // A turn extra usage answered is over: the session waits there for its
@@ -751,7 +751,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * announcement of that move, names; undefined when none stands.
    */
   const announcedAt = (row: LimitRow, target: Account): number | undefined => {
-    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    const last = db.atLimit.latestEvent(row.id)?.move;
     return last?.kind === "moving" && last.to.id === target.id
       ? last.at
       : undefined;
@@ -1264,7 +1264,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const held = db.atLimit.hold(row.id);
     db.atLimit.dropHold(row.id);
     waitEnded(row.id);
-    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    const last = db.atLimit.latestEvent(row.id)?.move;
     if (!(
       last?.kind === "stopped" &&
       last.account.id === current.id &&
@@ -1688,7 +1688,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (carry) {
       return carryStall(name, carry, held.until);
     }
-    const last = db.atLimit.events([held.instanceId]).at(-1)?.move;
+    const last = db.atLimit.latestEvent(held.instanceId)?.move;
     const clock = clockWords(held.until);
     if (last?.kind === "moving" && last.at === held.until) {
       return {

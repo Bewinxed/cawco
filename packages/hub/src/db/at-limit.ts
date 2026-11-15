@@ -1,7 +1,9 @@
-import type { AccountMove } from "@cawco/core/accounts";
+import type { AccountMove, AccountMoveKind } from "@cawco/core/accounts";
 import type { ContextFill, FiledRecords } from "@cawco/core/context-filing";
-import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
+import { AccountMoveSchema } from "@cawco/core/stored-shapes";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { StoredShapeError } from "../stored-json";
 import {
   contextCompactions,
   contextRises,
@@ -11,7 +13,7 @@ import {
   limitHolds,
   limitStops,
 } from "./schema";
-import type { LimitCompactionStage } from "./stored-types";
+import type { AccountMoveBody, LimitCompactionStage } from "./stored-types";
 
 /** A session waiting out its account's limit. */
 export interface LimitHold {
@@ -101,6 +103,20 @@ export interface LimitEvent {
   move: AccountMove;
 }
 
+/**
+ * A line as a read of a session's newest finds it: `move` null when its
+ * kind did not read as kinds became a column (migration 0410,
+ * `limit_events.move_unread`). Such a line says nothing the hub acts on:
+ * it is no announcement to carry out, no move that kept the session where
+ * it is, no line already said.
+ */
+export interface LimitLine {
+  at: number;
+  id: string;
+  instanceId: string;
+  move: AccountMove | null;
+}
+
 export interface AtLimitDb {
   /**
    * Since when `instanceId`'s harness compacted it with no answer of its own
@@ -120,11 +136,20 @@ export interface AtLimitDb {
   readonly dropRise: (instanceId: string) => void;
   /** A turn of `instanceId` ended other than at a usage limit: its stop, if any, is over. */
   readonly dropStop: (instanceId: string) => void;
-  /** The lines written into these sessions' transcripts, oldest first. */
+  /** The lines written into these sessions' transcripts, oldest first: every one that reads. */
   readonly events: (instanceIds: string[]) => LimitEvent[];
   readonly forget: (instanceIds: string[]) => void;
   readonly hold: (instanceId: string) => LimitHold | undefined;
   readonly holds: () => LimitHold[];
+  /**
+   * `instanceId`'s newest line, or, given `kind`, its newest of that kind
+   * or of a kind that does not read (`move` null), which could be one;
+   * undefined when it has none.
+   */
+  readonly latestEvent: (
+    instanceId: string,
+    kind?: AccountMoveKind
+  ) => LimitLine | undefined;
   /** Records that `instanceId`'s hold went stale at `at`. */
   readonly markStale: (instanceId: string, at: number) => void;
   /** Moves a compaction on: its stage, the step whose turn ended, that it compacted, or its move's line as it now reads. */
@@ -171,6 +196,44 @@ export interface AtLimitDb {
 export const waitsLine = (move: AccountMove): boolean =>
   move.kind === "unmoved" && move.action === "move" && move.waits === true;
 
+/** `move` as its columns hold it: its kind apart from the rest of the line. */
+const lineColumns = (
+  move: AccountMove
+): { kind: AccountMoveKind; body: AccountMoveBody } => {
+  const { kind, ...body } = move;
+  return { kind, body };
+};
+
+/**
+ * A stored line whole again: its kind put back in the rest of it, the two
+ * read together as the one line they were written as, or
+ * {@link StoredShapeError} naming `place` when they are not one.
+ */
+const lineOf = (
+  kind: AccountMoveKind,
+  body: AccountMoveBody,
+  place: { table: string; column: string; row: string }
+): AccountMove => {
+  const parsed = AccountMoveSchema.safeParse({ ...body, kind });
+  if (!parsed.success) {
+    throw new StoredShapeError(place, "read", parsed.error.message, {
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
+};
+
+/** A compaction plan's move as its columns hold it: none for a filing at the threshold. */
+const planMove = (
+  move: AccountMove | null
+): { move: AccountMoveBody | null; moveKind: AccountMoveKind | null } => {
+  if (!move) {
+    return { move: null, moveKind: null };
+  }
+  const { kind, body } = lineColumns(move);
+  return { move: body, moveKind: kind };
+};
+
 type HoldRow = typeof limitHolds.$inferSelect;
 
 const toHold = (row: HoldRow): LimitHold => ({
@@ -194,10 +257,16 @@ const toCompaction = (
     compacted: row.compacted,
     endedStep: row.endedStep,
   };
-  if (row.move && row.compactUuid) {
+  // A plan whose move's line did not read (`move_unread`) is neither: it
+  // drives no move and holds nothing back.
+  if (row.moveKind && row.move && row.compactUuid) {
     return {
       ...steps,
-      move: row.move,
+      move: lineOf(row.moveKind, row.move, {
+        table: "limit_compactions",
+        column: "move",
+        row: row.instanceId,
+      }),
       compactUuid: row.compactUuid,
       fill: null,
       records: null,
@@ -215,12 +284,23 @@ const toCompaction = (
   return undefined;
 };
 
-const toEvent = (row: typeof limitEvents.$inferSelect): LimitEvent => ({
+const toLine = (row: typeof limitEvents.$inferSelect): LimitLine => ({
   id: row.id,
   instanceId: row.instanceId,
   at: row.at.getTime(),
-  move: row.move,
+  move:
+    row.kind && row.body
+      ? lineOf(row.kind, row.body, {
+          table: "limit_events",
+          column: "body",
+          row: row.id,
+        })
+      : null,
 });
+
+/** `line` when it reads: a line kept as not read is in no transcript. */
+const readEvent = (line: LimitLine): LimitEvent[] =>
+  line.move ? [{ ...line, move: line.move }] : [];
 
 export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
   holds: () => db.select().from(limitHolds).all().map(toHold),
@@ -310,16 +390,21 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .where(eq(contextRises.instanceId, instanceId))
       .run();
   },
-  putCompaction: (compaction) => {
-    const values = { ...compaction, createdAt: new Date() };
+  putCompaction: ({ move, ...compaction }) => {
+    const values = {
+      ...compaction,
+      ...planMove(move),
+      moveUnread: null,
+      createdAt: new Date(),
+    };
     db.insert(limitCompactions)
       .values(values)
       .onConflictDoUpdate({ target: limitCompactions.instanceId, set: values })
       .run();
   },
-  patchCompaction: (instanceId, patch) => {
+  patchCompaction: (instanceId, { move, ...patch }) => {
     db.update(limitCompactions)
-      .set(patch)
+      .set({ ...patch, ...(move ? planMove(move) : {}) })
       .where(eq(limitCompactions.instanceId, instanceId))
       .run();
   },
@@ -363,12 +448,11 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
     db.delete(limitEvents).where(eq(limitEvents.id, id)).run();
   },
   putEvent: ({ id, instanceId, at, move }) => {
+    // Said again under its id, a line kept as not read reads.
+    const said = { at: new Date(at), ...lineColumns(move), moveUnread: null };
     db.insert(limitEvents)
-      .values({ id, instanceId, at: new Date(at), move })
-      .onConflictDoUpdate({
-        target: limitEvents.id,
-        set: { at: new Date(at), move },
-      })
+      .values({ id, instanceId, ...said })
+      .onConflictDoUpdate({ target: limitEvents.id, set: said })
       .run();
   },
   events: (instanceIds) =>
@@ -380,15 +464,37 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
           .where(inArray(limitEvents.instanceId, instanceIds))
           .orderBy(asc(limitEvents.at))
           .all()
-          .map(toEvent),
+          .flatMap((row) => readEvent(toLine(row))),
+  latestEvent: (instanceId, kind) => {
+    const row = db
+      .select()
+      .from(limitEvents)
+      .where(
+        and(
+          eq(limitEvents.instanceId, instanceId),
+          kind === undefined
+            ? undefined
+            : or(eq(limitEvents.kind, kind), isNull(limitEvents.kind))
+        )
+      )
+      .orderBy(desc(limitEvents.at))
+      .limit(1)
+      .get();
+    return row ? toLine(row) : undefined;
+  },
   waitingMove: (instanceId) =>
     db
       .select()
       .from(limitEvents)
-      .where(eq(limitEvents.instanceId, instanceId))
+      .where(
+        and(
+          eq(limitEvents.instanceId, instanceId),
+          eq(limitEvents.kind, "unmoved")
+        )
+      )
       .orderBy(asc(limitEvents.at))
       .all()
-      .map(toEvent)
+      .flatMap((row) => readEvent(toLine(row)))
       .findLast((event) => waitsLine(event.move)),
   forget: (instanceIds) => {
     if (instanceIds.length === 0) {

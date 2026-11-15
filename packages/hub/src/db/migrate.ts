@@ -27,10 +27,13 @@ import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
 import type { DbCore } from "./core";
+import { logCutFromUnread } from "./cut-from-unread";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
 import { logGatePassesUnread } from "./gate-passes-unread";
+import { logItemBlocksUnread } from "./item-blocks-unread";
 import { logLandedUnread } from "./landed-unread";
+import { logLimitLinesUnread } from "./limit-lines-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
@@ -41,6 +44,7 @@ import { logQueuedUnread } from "./queued-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { logSendOriginsUnread } from "./send-origins-unread";
 import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
 
 /** Where a step's work runs. */
@@ -198,6 +202,42 @@ export const MIGRATION_STEPS: readonly Step[] = [
     },
   },
   {
+    name: "limit-lines-unread",
+    before: "0410_limit_line_kinds",
+    at: "migrator",
+    run: (client) => {
+      // Every limit line and compaction plan 0410 keeps as not read, read before it runs.
+      logLimitLinesUnread(client);
+    },
+  },
+  {
+    name: "cut-from-unread",
+    before: "0411_cut_from_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every workspace's source 0411 keeps as not read, read before it runs.
+      logCutFromUnread(client);
+    },
+  },
+  {
+    name: "item-blocks-unread",
+    before: "0412_blocked_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every work item's block 0412 keeps as not read, read before it runs.
+      logItemBlocksUnread(client);
+    },
+  },
+  {
+    name: "send-origins-unread",
+    before: "0413_send_origin_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every send whose origin's kind 0413 reads as null, read before it runs.
+      logSendOriginsUnread(client);
+    },
+  },
+  {
     name: "seal-at-rest",
     after: "latest",
     at: "open",
@@ -233,14 +273,15 @@ const stopOn = (path: string, why: string): never => {
 /**
  * The first table or column the schema declares (`./schema`, its module
  * given) that the database on `client` does not have, as `table` or
- * `table.column`.
+ * `table.column`. Read with `table_xinfo`, which lists a generated column
+ * (`sent_messages.origin_kind`) as `table_info` does not.
  */
 const missingDeclared = (
   client: Database,
   schema: Record<string, unknown>
 ): string | undefined => {
   const columnsOf = client.query<{ name: string }, [string]>(
-    "SELECT name FROM pragma_table_info(?)"
+    "SELECT name FROM pragma_table_xinfo(?)"
   );
   for (const table of Object.values(schema)) {
     if (!is(table, SQLiteTable)) {

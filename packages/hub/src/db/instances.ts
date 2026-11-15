@@ -1126,12 +1126,8 @@ export const instancesDb = (core: DbCore): InstancesDb => {
       for (const send of db
         .select({
           instanceId: sentMessages.instanceId,
-          kind: sql<
-            string | null
-          >`json_extract(${sentMessages.body}, '$.origin.kind')`,
-          name: sql<
-            string | null
-          >`json_extract(${sentMessages.body}, '$.origin.name')`,
+          kind: sentMessages.originKind,
+          name: sentMessages.originName,
           newest: sql<number>`max(${sentMessages.acceptedAt})`,
         })
         .from(sentMessages)
@@ -2188,7 +2184,7 @@ export const instancesDb = (core: DbCore): InstancesDb => {
       for (const event of db
         .select({ id: limitEvents.id, instanceId: limitEvents.instanceId })
         .from(limitEvents)
-        .where(sql`json_extract(${limitEvents.move}, '$.kind') = 'continued'`)
+        .where(eq(limitEvents.kind, "continued"))
         .all()) {
         if (running.has(event.instanceId)) {
           lines.set(event.instanceId, [

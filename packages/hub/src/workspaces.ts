@@ -535,7 +535,11 @@ export const createWorkspaces = ({
   const landedFrom = (id: string): string[] =>
     db
       .workspacesCutFrom(id)
-      .flatMap((cut) => (cut.cutFrom?.landed ? [cut.cutFrom.commit] : []));
+      .flatMap((cut) =>
+        cut.cutFromLanded && cut.cutFromCommit !== null
+          ? [cut.cutFromCommit]
+          : []
+      );
   /** A notice about `workspace` to the session its latest item reports to, as `words` writes it of that item. */
   const workspaceNotice = (
     workspace: WorkspaceRow,
@@ -1986,7 +1990,7 @@ export const createWorkspaces = ({
     }
     const taker = db
       .workspacesCutFrom(workspace.id)
-      .find((cut) => cut.cutFrom?.landed);
+      .find((cut) => cut.cutFromLanded === true);
     if (taker) {
       return `its workspace ${handle(workspace.id)} retired: its work went on in workspace ${handle(taker.id)}, cut from it, which landed it, so it is not cut again; workspace ${handle(taker.id)} is where that work goes on.`;
     }
@@ -2668,7 +2672,9 @@ export const createWorkspaces = ({
         );
       }
       db.updateWorkspace(workspace.id, {
-        cutFrom: { workspace: source.id, commit: made.head, landed: false },
+        cutFromWorkspace: source.id,
+        cutFromCommit: made.head,
+        cutFromLanded: false,
       });
     } catch (error) {
       throw thrownAgain(

@@ -1576,8 +1576,15 @@ export const createLandingRun = ({
   ): Promise<void> => {
     const target = shellQuote(`origin/${workspace.base}`);
     let [row] = db.workspacesNamed(workspace.id);
-    while (row?.cutFrom && !row.cutFrom.landed) {
-      const from = row.cutFrom;
+    while (
+      row?.cutFromWorkspace &&
+      row.cutFromCommit !== null &&
+      row.cutFromLanded === false
+    ) {
+      const from = {
+        workspace: row.cutFromWorkspace,
+        commit: row.cutFromCommit,
+      };
       if (!COMMIT_ID.test(from.commit)) {
         return;
       }
@@ -1594,7 +1601,7 @@ export const createLandingRun = ({
         );
         return;
       }
-      db.updateWorkspace(row.id, { cutFrom: { ...from, landed: true } });
+      db.updateWorkspace(row.id, { cutFromLanded: true });
       console.log(
         `[workspaces] ${row.id}: landed the work of workspace ${from.workspace} at ${from.commit.slice(0, 9)}; that workspace is read again`
       );

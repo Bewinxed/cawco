@@ -19,12 +19,13 @@
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
  * budgets, at-limit policies, landings, gate passes, outputs, queued
  * starts, MCP servers' platforms, the fleet's routes, a tracker's
- * baselines, asks and preview passes besides ({@link seedLists},
+ * baselines, asks and preview passes, and the values migrations 0410 to
+ * 0413 lift into columns besides ({@link seedLists},
  * {@link seedBudgets}, {@link seedAtLimit}, {@link seedLanded},
  * {@link seedGatePasses}, {@link seedOutputs}, {@link seedQueued},
  * {@link seedMcpServers}, {@link seedPlatformsRoutes}, {@link seedTracker},
  * {@link seedTrackerBaselines}, {@link seedAsks}, {@link seedAsksByHand},
- * {@link seedPassScopes}), written to
+ * {@link seedPassScopes}, {@link seedLiftedColumns}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -54,8 +55,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * 0405, every shape an MCP server's platforms and the fleet's routes
  * took before migration 0406, every shape a tracker link's baseline took
  * before migration 0407, every shape an ask's record took before migration
- * 0408, and every shape a preview pass's scope took before migration 0409,
- * written here.
+ * 0408, every shape a preview pass's scope took before migration 0409, and
+ * every shape a limit line, a workspace's source, a work item's block and a
+ * send's origin took before migrations 0410 to 0413, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -1545,6 +1547,220 @@ function seedPassScopes(dbPath: string): void {
   sqlite.close();
 }
 
+/** Two accounts as a limit line names them (core `NamedAccount`). */
+const WORK = { hue: "amber", id: "acct-work", name: "Work" };
+const HOME = { hue: "blue", id: "acct-home", name: "Home" };
+
+/** When the seeded lines say their windows reset and their moves go. */
+const RESETS = Date.UTC(2026, 9, 3, 14);
+
+/**
+ * Every shape migration 0410 reads a limit line's kind in, on sessions that
+ * ended in error: a line of each kind as the hub writes them (core
+ * `AccountMove`), and as a hand edit could leave one, a line that is not
+ * JSON, JSON `null`, a list, an object with no kind, a kind no line has, a
+ * kind that is a number. And compaction plans: a move's, a filing's at the
+ * threshold (no move: never set), and a move's whose line is not JSON.
+ */
+const LIMIT_LINES: string[] = [
+  ...[
+    {
+      kind: "moved",
+      from: WORK,
+      to: HOME,
+      sameOrganization: false,
+      tokens: 182_000,
+      window: "5-hour limit",
+      resetsAt: RESETS,
+      compact: "compacted",
+      ended: { tasks: 1, wakeups: 0 },
+    },
+    { kind: "moving", from: WORK, to: HOME, at: RESETS, tokens: 240_000 },
+    {
+      kind: "waiting",
+      account: WORK,
+      until: RESETS,
+      why: "soon",
+      tokens: null,
+    },
+    {
+      kind: "continued",
+      from: WORK,
+      to: HOME,
+      writtenOn: HOME,
+      by: "Fix the board's scroll after a reconnect",
+      asked: true,
+      tokens: 90_000,
+      preparedAtPct: null,
+    },
+    { kind: "stopped", account: WORK, resetsAt: null },
+    { kind: "signed-out", account: HOME },
+    { kind: "ended", by: { kind: "person" } },
+    {
+      kind: "unmoved",
+      action: "move",
+      from: WORK,
+      to: HOME,
+      step: "start",
+      reason: "a background task is still running",
+      waits: true,
+    },
+  ].map((line) => JSON.stringify(line)),
+  "moved from Work to Home at its 5-hour limit",
+  "null",
+  JSON.stringify(["moved", WORK, HOME]),
+  JSON.stringify({ from: WORK, to: HOME, tokens: 12_000 }),
+  JSON.stringify({ kind: "teleported", from: WORK, to: HOME }),
+  JSON.stringify({ kind: 3, account: WORK }),
+];
+
+/**
+ * Every shape migrations 0410 to 0413 read in the values they lift into
+ * columns, beside what the hub wrote: limit lines and compaction plans
+ * ({@link LIMIT_LINES}); where workspaces were cut from (a source not
+ * landed and one landed, as workspaces.ts `cutFrom` and landing-run.ts
+ * `vouchLanded` write them, and not JSON, JSON `null`, a list, `landed`
+ * that is text, `commit` missing); work items' blocks (a missing machine
+ * and a missing type as work-items.ts `blockIfMissing` writes them, and
+ * not JSON, JSON `null`, a kind no block has, `since` that is text); and
+ * sends' origins (the person's, a peer's, a keep-alive and the hub's own
+ * line, as the hub writes them, beside the seeded sends with none).
+ */
+function seedLiftedColumns(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const ended = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE status = 'error' ORDER BY id"
+    )
+    .all()
+    .map((row) => row.id);
+  for (const [at, move] of LIMIT_LINES.entries()) {
+    sqlite.run(
+      "INSERT INTO limit_events (id, instance_id, at, move) VALUES (?, ?, ?, ?)",
+      [
+        `line-${at.toString().padStart(2, "0")}`,
+        ended[at % 4] ?? "",
+        RESETS - (LIMIT_LINES.length - at) * 60_000,
+        move,
+      ]
+    );
+  }
+  const plans: [string | null, string | null, string | null][] = [
+    [
+      JSON.stringify({
+        kind: "moved",
+        from: WORK,
+        to: HOME,
+        sameOrganization: false,
+        tokens: 210_000,
+        window: "5-hour limit",
+        resetsAt: RESETS,
+        compact: "filing",
+        compactFirst: true,
+      }),
+      null,
+      "compact-0",
+    ],
+    [null, JSON.stringify({ compactsAt: 200_000, tokens: 176_000 }), null],
+    ["moved to Home, compacting first", null, "compact-2"],
+  ];
+  for (const [at, [move, fill, compactUuid]] of plans.entries()) {
+    sqlite.run(
+      "INSERT INTO limit_compactions (instance_id, stage, line_id, move, fill, filing_uuid, compact_uuid, compacted, created_at) VALUES (?, 'filing', ?, ?, ?, ?, ?, 0, ?)",
+      [
+        ended[4 + at] ?? "",
+        `line-plan-${at}`,
+        move,
+        fill,
+        `filing-${at}`,
+        compactUuid,
+        RESETS,
+      ]
+    );
+  }
+  const workspaces = sqlite
+    .query<{ id: string }, []>("SELECT id FROM workspaces ORDER BY id")
+    .all()
+    .map((row) => row.id);
+  const [source = "", landedSource = ""] = workspaces;
+  const sources: string[] = [
+    JSON.stringify({
+      workspace: source,
+      commit: "4f2c9a1e7b3d5c8f0a6e2b9d1c4f7a3e5b8d0c2f",
+      landed: false,
+    }),
+    JSON.stringify({
+      workspace: landedSource,
+      commit: "9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d",
+      landed: true,
+    }),
+    "cut from ws-00000 at 4f2c9a1",
+    "null",
+    JSON.stringify([source, "4f2c9a1e"]),
+    JSON.stringify({ workspace: source, commit: "4f2c9a1e", landed: "yes" }),
+    JSON.stringify({ workspace: landedSource, landed: false }),
+  ];
+  for (const [at, cutFrom] of sources.entries()) {
+    sqlite.run("UPDATE workspaces SET cut_from = ? WHERE id = ?", [
+      cutFrom,
+      workspaces[2 + at] ?? "",
+    ]);
+  }
+  const items = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM work_items WHERE state = 'starting' ORDER BY id"
+    )
+    .all()
+    .map((row) => row.id);
+  const blocks: string[] = [
+    JSON.stringify({ kind: "machine", name: "quarry", since: RESETS }),
+    JSON.stringify({ kind: "type", name: "browser", since: RESETS + 1000 }),
+    "blocked: its machine left the fleet",
+    "null",
+    JSON.stringify({ kind: "printer", name: "office", since: RESETS }),
+    JSON.stringify({ kind: "account", name: "Work", since: "yesterday" }),
+  ];
+  for (const [at, blocked] of blocks.entries()) {
+    sqlite.run("UPDATE work_items SET blocked = ? WHERE id = ?", [
+      blocked,
+      items[at] ?? "",
+    ]);
+  }
+  const live = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE status = 'starting' ORDER BY id LIMIT 2"
+    )
+    .all()
+    .map((row) => row.id);
+  const [peer = "", other = ""] = live;
+  const origins = [
+    { kind: "human" },
+    { kind: "peer", from: other, name: "Fix the board's scroll" },
+    { kind: "system", name: "keepalive" },
+    { kind: "system", line: "Your work item is still open: continue it." },
+  ];
+  for (const [at, origin] of origins.entries()) {
+    sqlite.run(
+      "INSERT INTO sent_messages (uuid, instance_id, accepted_at, body, mode, state) VALUES (?, ?, ?, ?, 'turn', 'read')",
+      [
+        `send-origin-${at}`,
+        peer,
+        RESETS + at * 1000,
+        JSON.stringify({
+          type: "user",
+          uuid: `send-origin-${at}`,
+          message: {
+            role: "user",
+            content: "Check the migration on a real database.",
+          },
+          origin,
+        }),
+      ]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -1575,6 +1791,7 @@ async function seed(
     seedTrackerBaselines(dbPath);
     seedAsksByHand(dbPath);
     seedPassScopes(dbPath);
+    seedLiftedColumns(dbPath);
   }
 }
 

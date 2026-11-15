@@ -62412,28 +62412,6 @@
           "commit"
         ]
       },
-      "WorkspaceFrom": {
-        "description": "Where a workspace cut `from` another started ({@link workspaces.cutFrom}):\nthat workspace, and its HEAD then, which this one's clone took.",
-        "type": "object",
-        "properties": {
-          "commit": {
-            "description": "The source's HEAD as this clone took it.",
-            "type": "string"
-          },
-          "landed": {
-            "description": "Whether this workspace's landing put every patch of that commit's work\non the base branch (landing-run.ts `vouchLanded`): then the source holds\nnone of it as its own, and an archive is told so (core\n`WorkspaceArchive.landed`).",
-            "type": "boolean"
-          },
-          "workspace": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "commit",
-          "landed",
-          "workspace"
-        ]
-      },
       "WorkspaceHolding": {
         "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), stash entries, and the files kept out of\ngit only by the clone's own excludes (`excluded`). Files a committed\n`.gitignore` covers (dependencies, builds, caches) are none of it: they go\nwith the clone. `bytes` is the clone's size on disk.",
         "type": "object",
@@ -203211,7 +203189,26 @@
             "type": "string"
           },
           "cutFrom": {
-            "$ref": "#/components/schemas/WorkspaceFrom"
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string"
+              },
+              "landed": {
+                "type": "boolean"
+              },
+              "workspace": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "commit",
+              "landed",
+              "workspace"
+            ]
+          },
+          "cutFromUnread": {
+            "type": "string"
           },
           "head": {
             "$ref": "#/components/schemas/WorkspaceCut"

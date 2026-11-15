@@ -46,6 +46,7 @@ import {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { z } from "zod";
 import type {
+  AccountMoveBody as AccountMoveBodyType,
   AgentAuth as AgentAuthType,
   AgentStatus as AgentStatusType,
   ArtifactChangeBy as ArtifactChangeByType,
@@ -65,7 +66,6 @@ import type {
   InstallsRecord as InstallsRecordType,
   InstanceKind as InstanceKindType,
   InstanceTitleSource as InstanceTitleSourceType,
-  ItemBlock as ItemBlockType,
   KeepAliveStopped as KeepAliveStoppedType,
   LandingPhase as LandingPhaseType,
   LfsOfferAnswer as LfsOfferAnswerType,
@@ -97,9 +97,26 @@ import type {
   TrimOfferAnswer as TrimOfferAnswerType,
   WorkItemSubmission as WorkItemSubmissionType,
   WorkOrigin as WorkOriginType,
-  WorkspaceFrom as WorkspaceFromType,
   WorkspaceState as WorkspaceStateType,
 } from "./stored-types";
+
+const AccountMoveBodyShape = declared(
+  z.union([
+    AccountMoveSchema.options[0].omit({ kind: true }),
+    AccountMoveSchema.options[3].omit({ kind: true }),
+    AccountMoveSchema.options[7].omit({ kind: true }),
+    AccountMoveSchema.options[1].omit({ kind: true }),
+    AccountMoveSchema.options[2].omit({ kind: true }),
+    AccountMoveSchema.options[4].omit({ kind: true }),
+    AccountMoveSchema.options[5].omit({ kind: true }),
+    AccountMoveSchema.options[6].omit({ kind: true }),
+  ]),
+  "AccountMoveBody",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const AccountMoveBodySchema: z.ZodType<AccountMoveBodyType> =
+  AccountMoveBodyShape;
+export type AccountMoveBodyOutput = z.output<typeof AccountMoveBodyShape>;
 
 const AgentAuthShape = declared(
   z.union([AuthStateShape, z.literal("unknown")]),
@@ -493,18 +510,6 @@ export const InstanceTitleSourceSchema: z.ZodType<InstanceTitleSourceType> =
 export type InstanceTitleSourceOutput = z.output<
   typeof InstanceTitleSourceShape
 >;
-
-const ItemBlockShape = declared(
-  z.object({
-    kind: z.enum(["type", "machine", "account"]),
-    name: z.string(),
-    since: z.number(),
-  }),
-  "ItemBlock",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const ItemBlockSchema: z.ZodType<ItemBlockType> = ItemBlockShape;
-export type ItemBlockOutput = z.output<typeof ItemBlockShape>;
 
 const KeepAliveStoppedShape = declared(
   z.literal("stopped-cap"),
@@ -958,15 +963,6 @@ const WorkOriginShape = declared(
 );
 export const WorkOriginSchema: z.ZodType<WorkOriginType> = WorkOriginShape;
 export type WorkOriginOutput = z.output<typeof WorkOriginShape>;
-
-const WorkspaceFromShape = declared(
-  z.object({ commit: z.string(), landed: z.boolean(), workspace: z.string() }),
-  "WorkspaceFrom",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const WorkspaceFromSchema: z.ZodType<WorkspaceFromType> =
-  WorkspaceFromShape;
-export type WorkspaceFromOutput = z.output<typeof WorkspaceFromShape>;
 
 const WorkspaceStateShape = declared(
   z.enum(["active", "held", "archived"]),
