@@ -15097,42 +15097,6 @@
       "refused"
     ]
   },
-  "tracker_links.synced": {
-    "type": "object",
-    "properties": {
-      "description": {
-        "type": "string"
-      },
-      "labels": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "stage": {
-        "type": "string"
-      },
-      "state": {
-        "type": "string"
-      },
-      "status": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "title": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "description",
-      "labels",
-      "stage",
-      "state",
-      "title"
-    ]
-  },
   "tree_stops.by": {
     "anyOf": [
       {

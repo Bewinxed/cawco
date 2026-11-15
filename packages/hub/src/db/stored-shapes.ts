@@ -92,7 +92,6 @@ import type {
   TaskEdgeKind as TaskEdgeKindType,
   ToolCallKeyState as ToolCallKeyStateType,
   TrackerCursor as TrackerCursorType,
-  TrackerSynced as TrackerSyncedType,
   TrashedRows as TrashedRowsType,
   TrashKind as TrashKindType,
   TrimOfferAnswer as TrimOfferAnswerType,
@@ -891,22 +890,6 @@ const TrackerCursorShape = declared(
 export const TrackerCursorSchema: z.ZodType<TrackerCursorType> =
   TrackerCursorShape;
 export type TrackerCursorOutput = z.output<typeof TrackerCursorShape>;
-
-const TrackerSyncedShape = declared(
-  z.object({
-    description: z.string(),
-    labels: z.array(z.string()),
-    stage: z.string(),
-    state: z.string(),
-    status: z.string().nullable().optional(),
-    title: z.string(),
-  }),
-  "TrackerSynced",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const TrackerSyncedSchema: z.ZodType<TrackerSyncedType> =
-  TrackerSyncedShape;
-export type TrackerSyncedOutput = z.output<typeof TrackerSyncedShape>;
 
 const TrashKindShape = declared(
   z.enum([

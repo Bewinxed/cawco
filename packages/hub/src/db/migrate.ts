@@ -39,6 +39,7 @@ import { logQueuedUnread } from "./queued-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
 
 /** Where a step's work runs. */
 type Step =
@@ -165,6 +166,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every server's platforms and the fleet's routes 0406 keeps as not read, read before it runs.
       logPlatformsRoutesUnread(client);
+    },
+  },
+  {
+    name: "tracker-baselines-unread",
+    before: "0407_tracker_baseline_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every tracker baseline 0407 keeps as not read, its link's merge held, read before it runs.
+      logTrackerBaselinesUnread(client);
     },
   },
   {

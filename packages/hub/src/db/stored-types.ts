@@ -615,26 +615,6 @@ export interface TrackerCursor {
   since: number;
 }
 
-/**
- * What a task and its issue last agreed on (tracker.ts): each field the
- * tracker is the record of, and the stage that agreed with the issue's
- * state. A side whose value moved off it changed that field.
- */
-export interface TrackerSynced {
-  description: string;
-  labels: string[];
-  /** The stage the task stood in when they agreed. */
-  stage: string;
-  /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
-  state: string;
-  /**
-   * GitHub: the Status option its Project item stood in (null: not on the
-   * Project, or no Status); absent until the binding had a Project.
-   */
-  status?: string | null;
-  title: string;
-}
-
 /* -------------------------------------------- closed sets of text columns */
 
 /** Whether a machine's agent is connected (schema `agents.status`). */

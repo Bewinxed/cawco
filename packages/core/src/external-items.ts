@@ -51,6 +51,13 @@ export interface ExternalActor {
 /** One external item a task links, as the board draws it. */
 export interface ExternalRef {
   author: ExternalActor | null;
+  /**
+   * Set on a task's record link while the tracker sync's baseline with its
+   * issue (what the two last agreed on) does not read: its sync is held,
+   * nothing pulled into the task or pushed from it, until a sync finds the
+   * task and the issue agreeing.
+   */
+  baselineUnread?: true;
   /** The source's own id: GitHub's node id, Linear's uuid; empty until the item was read. */
   id: string;
   kind: ExternalKind;
