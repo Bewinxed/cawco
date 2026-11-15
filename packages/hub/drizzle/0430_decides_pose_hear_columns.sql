@@ -1,0 +1,34 @@
+-- How he hears of the Advisor's and Common practice's answers
+-- (`decides_settings.hear`, JSON) is `advisor_hear` and `practice_hear`,
+-- and the pose each of Caw's flock wears (`decides_settings.pictures`,
+-- JSON) is `caw_pose`, `advisor_pose`, `practice_pose` and `asker_pose`
+-- (db/decides.ts).
+--
+-- A value never set stays null: every member as core's built-ins have it.
+-- Each member's value that reads (one of core `HEARS`, one of core
+-- `CAW_POSE_IDS`) is placed as it is, whether or not the rest reads. A
+-- member's value left out stays null.
+--
+-- A value that is there and does not read whole (not JSON, not an object,
+-- or a member's value that is not one of its set) is kept as stored in
+-- `hear_unread` or `pictures_unread`, what of it read placed beside it.
+-- While `hear_unread` is set, a member it did not place hears `each`: no
+-- answer is kept from him that he did not choose to hear later. A member a
+-- pose did not place wears its default, which decides nothing. A save
+-- that sets every member clears it. Today's reader threw on either. The
+-- step before this migration (db/migrate.ts `decides-settings-unread`)
+-- logs each by its row and why.
+--
+-- Every JSON function sits inside a CASE that proved its column JSON:
+-- SQLite may run either side of an AND first.
+ALTER TABLE `decides_settings` ADD `advisor_hear` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `practice_hear` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `hear_unread` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `caw_pose` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `advisor_pose` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `practice_pose` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `asker_pose` text;--> statement-breakpoint
+ALTER TABLE `decides_settings` ADD `pictures_unread` text;--> statement-breakpoint
+UPDATE `decides_settings` SET `advisor_hear` = CASE WHEN json_valid(hear) THEN CASE WHEN CASE WHEN json_valid(hear) THEN coalesce((json_type(hear, '$') IN ('object') AND (json_type(hear, '$.advisor') IN ('text') AND (json_type(hear, '$.advisor') = 'text' AND json_extract(hear, '$.advisor') IN ('each', 'later')))), 0) ELSE 0 END THEN json_extract(hear, '$.advisor') END END, `practice_hear` = CASE WHEN json_valid(hear) THEN CASE WHEN CASE WHEN json_valid(hear) THEN coalesce((json_type(hear, '$') IN ('object') AND (json_type(hear, '$.practice') IN ('text') AND (json_type(hear, '$.practice') = 'text' AND json_extract(hear, '$.practice') IN ('each', 'later')))), 0) ELSE 0 END THEN json_extract(hear, '$.practice') END END, `hear_unread` = CASE WHEN `hear` IS NULL THEN NULL WHEN CASE WHEN json_valid(hear) THEN coalesce((json_type(hear, '$') IN ('object') AND (json_type(hear, '$.advisor') IS NULL OR (json_type(hear, '$.advisor') IN ('text') AND (json_type(hear, '$.advisor') = 'text' AND json_extract(hear, '$.advisor') IN ('each', 'later')))) AND (json_type(hear, '$.practice') IS NULL OR (json_type(hear, '$.practice') IN ('text') AND (json_type(hear, '$.practice') = 'text' AND json_extract(hear, '$.practice') IN ('each', 'later'))))), 0) ELSE 0 END THEN NULL ELSE CAST(`hear` AS TEXT) END, `caw_pose` = CASE WHEN json_valid(pictures) THEN CASE WHEN CASE WHEN json_valid(pictures) THEN coalesce((json_type(pictures, '$') IN ('object') AND (json_type(pictures, '$.caw') IN ('text') AND (json_type(pictures, '$.caw') = 'text' AND json_extract(pictures, '$.caw') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))), 0) ELSE 0 END THEN json_extract(pictures, '$.caw') END END, `advisor_pose` = CASE WHEN json_valid(pictures) THEN CASE WHEN CASE WHEN json_valid(pictures) THEN coalesce((json_type(pictures, '$') IN ('object') AND (json_type(pictures, '$.advisor') IN ('text') AND (json_type(pictures, '$.advisor') = 'text' AND json_extract(pictures, '$.advisor') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))), 0) ELSE 0 END THEN json_extract(pictures, '$.advisor') END END, `practice_pose` = CASE WHEN json_valid(pictures) THEN CASE WHEN CASE WHEN json_valid(pictures) THEN coalesce((json_type(pictures, '$') IN ('object') AND (json_type(pictures, '$.practice') IN ('text') AND (json_type(pictures, '$.practice') = 'text' AND json_extract(pictures, '$.practice') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))), 0) ELSE 0 END THEN json_extract(pictures, '$.practice') END END, `asker_pose` = CASE WHEN json_valid(pictures) THEN CASE WHEN CASE WHEN json_valid(pictures) THEN coalesce((json_type(pictures, '$') IN ('object') AND (json_type(pictures, '$.asker') IN ('text') AND (json_type(pictures, '$.asker') = 'text' AND json_extract(pictures, '$.asker') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))), 0) ELSE 0 END THEN json_extract(pictures, '$.asker') END END, `pictures_unread` = CASE WHEN `pictures` IS NULL THEN NULL WHEN CASE WHEN json_valid(pictures) THEN coalesce((json_type(pictures, '$') IN ('object') AND (json_type(pictures, '$.caw') IS NULL OR (json_type(pictures, '$.caw') IN ('text') AND (json_type(pictures, '$.caw') = 'text' AND json_extract(pictures, '$.caw') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))) AND (json_type(pictures, '$.advisor') IS NULL OR (json_type(pictures, '$.advisor') IN ('text') AND (json_type(pictures, '$.advisor') = 'text' AND json_extract(pictures, '$.advisor') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))) AND (json_type(pictures, '$.practice') IS NULL OR (json_type(pictures, '$.practice') IN ('text') AND (json_type(pictures, '$.practice') = 'text' AND json_extract(pictures, '$.practice') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying')))) AND (json_type(pictures, '$.asker') IS NULL OR (json_type(pictures, '$.asker') IN ('text') AND (json_type(pictures, '$.asker') = 'text' AND json_extract(pictures, '$.asker') IN ('ready', 'idle', 'asleep', 'head', 'smiling', 'chart', 'sheets', 'easel', 'laptop', 'rocket', 'heart', 'working', 'done', 'trying'))))), 0) ELSE 0 END THEN NULL ELSE CAST(`pictures` AS TEXT) END;--> statement-breakpoint
+ALTER TABLE `decides_settings` DROP COLUMN `hear`;--> statement-breakpoint
+ALTER TABLE `decides_settings` DROP COLUMN `pictures`;

@@ -3078,7 +3078,7 @@ export const createSends = (ctx: SendsContext) => {
     console.info(
       `[at-limit] ${ctx.sessionName(row)}'s process ended before it took its ${ctx.stepWords(plan.stage)}, so the hub starts it again on ${ctx.accountWords(row.accountId)} to take it; what waits behind the compaction goes once that ends.`
     );
-    if (plan.move?.kind === "moved") {
+    if (plan.move) {
       const move = { ...plan.move, relaunched: true as const };
       ctx.db.atLimit.patchCompaction(plan.instanceId, { move });
       ctx.sayCompaction(

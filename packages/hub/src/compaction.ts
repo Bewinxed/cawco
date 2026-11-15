@@ -19,7 +19,7 @@ import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
-import type { LimitCompaction } from "./db/at-limit";
+import type { LimitCompaction, MovedLine } from "./db/at-limit";
 import { fileDue } from "./limit-decision";
 import {
   COMPACT_FOCUS,
@@ -247,11 +247,7 @@ export const createCompaction = (ctx: CompactionContext) => {
         compactionSend(
           row,
           stepUuid(plan),
-          CARRY_ON[
-            plan.move?.kind === "moved" && plan.move.because?.kind === "refused"
-              ? "signin"
-              : "limit"
-          ],
+          CARRY_ON[plan.move?.because?.kind === "refused" ? "signin" : "limit"],
           LIMIT_ORIGIN
         );
         return;
@@ -278,7 +274,7 @@ export const createCompaction = (ctx: CompactionContext) => {
   const startCompaction = (
     row: { id: string; machineId: string },
     line: string,
-    move: AccountMove,
+    move: MovedLine,
     stopped: false | "limit" | "signin"
   ): void => {
     const plan: LimitCompaction = {
@@ -295,7 +291,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       endedStep: null,
     };
     ctx.db.atLimit.putCompaction(plan);
-    const first = move.kind === "moved" && move.compactFirst;
+    const first = move.compactFirst === true;
     console.info(
       `[at-limit] ${ctx.sessionName(row)} ${stopped ? "carries on past what stopped it, then files its open items" : "files its open items now"}, then its own /compact runs ${first ? "where it is, before its move" : "on its new account"}; everything else it is sent waits until that ends.`
     );
@@ -304,11 +300,11 @@ export const createCompaction = (ctx: CompactionContext) => {
 
   /** Says a compaction's move line again at `stage`, under its id and where it stands. */
   const sayCompaction = (
-    plan: { instanceId: string; lineId: string; move: AccountMove | null },
+    plan: { instanceId: string; lineId: string; move: MovedLine | null },
     stage: CompactStage
   ): void => {
     const [row] = ctx.db.getInstancesByIds([plan.instanceId]);
-    if (!(row && plan.move?.kind === "moved")) {
+    if (!(row && plan.move)) {
       return;
     }
     const at = ctx.db.atLimit
@@ -342,7 +338,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       ctx.releaseOwed({ instanceId: plan.instanceId });
       return;
     }
-    if (plan.move.kind === "moved" && plan.move.compactFirst) {
+    if (plan.move.compactFirst) {
       if (stage === "stopped") {
         compactFirstFailed(plan, plan.move, why);
         return;

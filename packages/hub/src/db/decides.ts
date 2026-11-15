@@ -143,22 +143,56 @@ const memberOfRow = (row: MemberRow): Member => ({
   delegateType: row.delegateType,
 });
 
+/** Each flock member's chosen pose, as the settings row holds it; a member he left alone has none. */
+const posesOf = (
+  settings: SettingsRow | undefined
+): Partial<Record<FlockMember, CawPoseId>> => {
+  const poses: [FlockMember, CawPoseId | null | undefined][] = [
+    ["caw", settings?.cawPose],
+    ["advisor", settings?.advisorPose],
+    ["practice", settings?.practicePose],
+    ["asker", settings?.askerPose],
+  ];
+  return Object.fromEntries(
+    poses.flatMap(([member, pose]) => (pose ? [[member, pose]] : []))
+  );
+};
+
+/**
+ * How he hears of `id`'s answers, as the settings row holds it: his
+ * choice, else the built-in's; while what was stored did not read
+ * (`hear_unread`), a member he has not set again hears `each`, so no answer
+ * is kept from him that he did not choose to hear later.
+ */
+const hearOf = (
+  settings: SettingsRow | undefined,
+  id: "advisor" | "practice"
+): Hear | null => {
+  const chosen =
+    id === "advisor" ? settings?.advisorHear : settings?.practiceHear;
+  if (chosen) {
+    return chosen;
+  }
+  return typeof settings?.hearUnread === "string" ? "each" : BUILT_IN[id].hear;
+};
+
 /** The built-in members with what `settings` changed of them. */
-const builtIns = (settings: SettingsRow | undefined): Member[] =>
-  BUILT_IN_MEMBERS.map((id) => {
+const builtIns = (settings: SettingsRow | undefined): Member[] => {
+  const poses = posesOf(settings);
+  return BUILT_IN_MEMBERS.map((id) => {
     const member = BUILT_IN[id];
-    const pose =
-      id === "you" ? null : (settings?.pictures?.[id] ?? member.pose);
+    const pose = id === "you" ? null : (poses[id] ?? member.pose);
     if (id === "advisor" || id === "practice") {
       return {
         ...member,
         pose,
         delegateType: settings?.[id] ?? member.delegateType,
-        hear: settings?.hear?.[id] ?? member.hear,
+        hear: hearOf(settings, id),
       };
     }
     return { ...member, pose };
   });
+};
 
 export const decidesDb = (
   db: BunSQLiteDatabase,
@@ -232,7 +266,7 @@ export const decidesDb = (
       members: all,
       kinds: listed,
       routes,
-      pictures: row?.pictures ?? {},
+      pictures: posesOf(row),
       ...(unread ? { routesUnread: true } : {}),
     };
   };
@@ -257,14 +291,36 @@ export const decidesDb = (
     },
     setBuiltIn: (change) => {
       const row = settings();
+      const hear = {
+        advisorHear: change.hear?.advisor ?? row?.advisorHear ?? null,
+        practiceHear: change.hear?.practice ?? row?.practiceHear ?? null,
+      };
+      const poses = {
+        cawPose: change.pictures?.caw ?? row?.cawPose ?? null,
+        advisorPose: change.pictures?.advisor ?? row?.advisorPose ?? null,
+        practicePose: change.pictures?.practice ?? row?.practicePose ?? null,
+        askerPose: change.pictures?.asker ?? row?.askerPose ?? null,
+      };
       writeSettings({
         ...(change.advisor === undefined ? {} : { advisor: change.advisor }),
         ...(change.practice === undefined ? {} : { practice: change.practice }),
+        // What did not read as these became columns stops counting once he
+        // has set every member it could have spoken for.
         ...(change.hear
-          ? { hear: { ...(row?.hear ?? {}), ...change.hear } }
+          ? {
+              ...hear,
+              ...(Object.values(hear).every(Boolean)
+                ? { hearUnread: null }
+                : {}),
+            }
           : {}),
         ...(change.pictures
-          ? { pictures: { ...(row?.pictures ?? {}), ...change.pictures } }
+          ? {
+              ...poses,
+              ...(Object.values(poses).every(Boolean)
+                ? { picturesUnread: null }
+                : {}),
+            }
           : {}),
       });
     },

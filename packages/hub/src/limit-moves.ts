@@ -30,6 +30,7 @@ import { pricedTokens, projectedMove, usdWords } from "./admission";
 import { accountsRead } from "./at-limit";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
+import type { MovedLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
@@ -1193,7 +1194,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       sessionId: string;
     },
     stopped: false | "limit" | "signin",
-    compact: { line: string; move: AccountMove } | undefined,
+    compact: { line: string; move: MovedLine } | undefined,
     live: boolean
   ): void => {
     if (live) {
@@ -1240,7 +1241,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     row: MoverRow,
     accountId: string,
     stopped: false | "limit" | "signin",
-    compact: { line: string; move: AccountMove } | undefined,
+    compact: { line: string; move: MovedLine } | undefined,
     laterSince: number | undefined
   ): Promise<{ kept: Kept } | { ended?: MoveEnded }> => {
     if (!(ctx.registry.agent(row.machineId) && row.sessionId)) {

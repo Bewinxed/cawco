@@ -58,7 +58,6 @@ import {
 import {
   AccountKindSchema,
   AccountMoveSchema,
-  AccountOverageSchema,
   AskStateSchema,
   AtPlanLimitSchema,
   AttemptResultSchema,
@@ -70,7 +69,6 @@ import {
   ClaudeModelUsageSchema,
   ConnectAccessSchema,
   ConnectionStateSchema,
-  ContextFillSchema,
   ContinuationJobSchema,
   DelegateAskStatusSchema,
   DelegateEventPayloadSchema,
@@ -169,6 +167,7 @@ import {
   AuthorizationServerMetadataSchema,
   CacheTtlSchema,
   CommentDirectionSchema,
+  CompactionMoveBodySchema,
   ContinueRequestSchema,
   DelegateRequestKindSchema,
   DesignCheckStateSchema,
@@ -210,7 +209,6 @@ import {
   StrandedWhySchema,
   TaskEdgeKindSchema,
   ToolCallKeyStateSchema,
-  TrackerCursorSchema,
   TrashedRowsSchema,
   TrashKindSchema,
   TrimOfferAnswerSchema,
@@ -3255,15 +3253,60 @@ export const accountReadings = sqliteTable("account_readings", {
     .primaryKey()
     .references(() => accounts.id, { onDelete: "cascade" }),
   subscription: text("subscription"),
-  overage: storedJson(AccountOverageSchema)("overage"),
   /**
-   * The account's window set as its provider's last report that named it
-   * carried (core `AccountReading.windowKinds`): the keys of its windows.
-   * Null until a report names it.
+   * Whether the account was spending extra usage past its plan, as its last
+   * report said (core `AccountOverage` `inUse`): null when no report said
+   * its extra usage, the three columns after it null with it.
    */
-  windowKinds: storedJson(z.array(z.string()))("window_kinds"),
+  overageInUse: integer("overage_in_use", { mode: "boolean" }),
+  /** Claude Code's `overageStatus`; null when it said none. */
+  overageStatus: text("overage_status"),
+  /** Claude Code's `overageDisabledReason`; null when it said none. */
+  overageDisabledReason: text("overage_disabled_reason"),
+  /** When the extra usage resets, ISO; null when nothing said. */
+  overageResetsAt: text("overage_resets_at"),
+  /**
+   * Its extra usage as it was stored, when it was there and did not read
+   * whole as it became columns (migration 0432): nothing of it is placed,
+   * and the account reads as having said none, so its extra usage never
+   * reads as on. Its next report that says it clears it.
+   */
+  overageUnread: text("overage_unread"),
+  /**
+   * A report has named the account's window set (core
+   * `AccountReading.windowKinds`): its keys are the
+   * {@link accountWindowSet} rows, none for an empty set. False until one
+   * does: the windows held are all that is known.
+   */
+  windowSetNamed: integer("window_set_named", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * The window set as it was stored, when it was there and did not read
+   * whole as a list of keys as it became rows (migration 0432): none of it
+   * is placed, and the set reads as never named, so no window counts as
+   * known by it. The next report that names a set clears it.
+   */
+  windowSetUnread: text("window_set_unread"),
   lastSeenAt: timestamp("last_seen_at").notNull(),
 });
+
+/**
+ * One key of an account's window set (core `AccountReading.windowKinds`,
+ * core usage/windows.ts `windowSetKey`), as its provider's last report that
+ * named the set carried it: a held window outside the set is gone. Read
+ * only while {@link accountReadings.windowSetNamed}.
+ */
+export const accountWindowSet = sqliteTable(
+  "account_window_set",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accountReadings.accountId, { onDelete: "cascade" }),
+    windowKey: text("window_key").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.windowKey] })]
+);
 
 /**
  * One limit window of an account's reading ({@link LimitWindow}), keyed by
@@ -3436,65 +3479,111 @@ export const owedMoves = sqliteTable("owed_moves", {
  * A session's compaction plan (server.ts `compactions`), its steps going
  * first and alone, everything else sent to it waiting at the hub meanwhile:
  *
- * - a move's (`move`), at its account's limit or ahead of one, that compacts
- *   it (core `AccountMove` `moved` with `compact`), from the move until its
- *   compaction has ended: its filing turn (`filing`, the send `filingUuid`),
- *   then its harness's `/compact` (`compacting`, the send `compactUuid`);
- * - its filing at its context threshold (`fill`, core `Compaction.fileAtPct`):
- *   the filing turn alone, no `/compact` (`compactUuid` null), its harness
- *   compacting it later on its own.
+ * - a move's (`kind` `move`), at its account's limit or ahead of one, that
+ *   compacts it (core `AccountMove` `moved` with `compact`), from the move
+ *   until its compaction has ended: its filing turn (`filing`, the send
+ *   `filingUuid`), then its harness's `/compact` (`compacting`, the send
+ *   `compactUuid`);
+ * - its filing at its context threshold (`kind` `fill`, core
+ *   `Compaction.fileAtPct`): the filing turn alone, no `/compact`
+ *   (`compactUuid` null), its harness compacting it later on its own.
  *
  * Kept here so a hub restart carries it on from where its sends stand.
  */
-export const limitCompactions = sqliteTable("limit_compactions", {
-  instanceId: sessionColumn("instance_id").primaryKey(),
-  /** `carrying`: its carry-on answers the turn its limit refused, before it files anything. */
-  stage: storedEnum(LimitCompactionStageSchema)("stage").notNull(),
-  /**
-   * Its line, said again as it goes: a move's `limit_events` id, or a
-   * filing's `session_lines` id (kind `context`).
-   */
-  lineId: text("line_id").notNull(),
-  /**
-   * The move's line as written, which each stage restates, its kind in
-   * {@link limitCompactions.moveKind}; null for a filing at the threshold,
-   * and beside {@link limitCompactions.moveUnread}.
-   */
-  move: storedJson(AccountMoveBodySchema)("move"),
-  /** What the move's line says the hub did (core `AccountMove` `kind`); null with {@link limitCompactions.move}. */
-  moveKind: storedEnum(z.enum(ACCOUNT_MOVE_KINDS))("move_kind"),
-  /**
-   * The move's line as it was stored, when it was there and its kind did
-   * not read as kinds became a column (migration 0410): not JSON, not an
-   * object, or a kind that is not one of a line's. Nothing of it is placed,
-   * and the plan reads as none: it drives no move and holds nothing back
-   * (db at-limit.ts `toCompaction`). A put of the session's plan clears it.
-   */
-  moveUnread: text("move_unread"),
-  /** The reading a filing at the threshold fired at; null for a move's. */
-  fill: storedJson(ContextFillSchema)("fill"),
-  /**
-   * What the session's records held as its filing at the threshold started
-   * (core `FiledRecords`), which what the filing wrote is counted against as
-   * its turn ends; null for a move's, and when they could not be read.
-   */
-  records: storedJson(FiledRecordsSchema)("records"),
-  /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
-  carryUuid: text("carry_uuid"),
-  filingUuid: text("filing_uuid").notNull(),
-  /** Its `/compact`'s send; null for a filing at the threshold, which sends none. */
-  compactUuid: text("compact_uuid"),
-  /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
-  compacted: integer("compacted", { mode: "boolean" }).notNull().default(false),
-  /**
-   * The step (its send's uuid) whose turn's end the hub heard, the turn's
-   * result read after its send was: the stored frame a hub that restarts
-   * before the next step went moves the compaction on from (server.ts
-   * `recoverCompaction`). Null until a step's turn ends.
-   */
-  endedStep: text("ended_step"),
-  createdAt: stampedNow("created_at"),
-});
+/** What a compaction plan is for (schema `limit_compactions.kind`): a move's, or a filing's at the threshold. */
+export const LIMIT_COMPACTION_KINDS = ["move", "fill"] as const;
+
+export const limitCompactions = sqliteTable(
+  "limit_compactions",
+  {
+    instanceId: sessionColumn("instance_id").primaryKey(),
+    /** `carrying`: its carry-on answers the turn its limit refused, before it files anything. */
+    stage: storedEnum(LimitCompactionStageSchema)("stage").notNull(),
+    /**
+     * Its line, said again as it goes: a move's `limit_events` id, or a
+     * filing's `session_lines` id (kind `context`).
+     */
+    lineId: text("line_id").notNull(),
+    /**
+     * What the plan is for: a move's (`move`, its line in the `move_`
+     * columns), or a filing's at the threshold (`fill`, its reading in the
+     * `fill_` columns).
+     */
+    kind: storedEnum(z.enum(LIMIT_COMPACTION_KINDS))("kind").notNull(),
+    /**
+     * A move's line as written (core `AccountMove` `moved`), which each stage
+     * restates, without what the columns below hold: the row mapper puts
+     * those back (db at-limit.ts). Null for a filing's, and beside
+     * {@link limitCompactions.moveUnread}.
+     */
+    move: storedJson(CompactionMoveBodySchema)("move"),
+    /** The account a move's line moves the session to (its `to`); null with {@link limitCompactions.move}. */
+    moveToAccountId: text("move_to_account_id"),
+    /** The move's compaction runs where it is, before the move (its line's `compactFirst`); null with {@link limitCompactions.move}. */
+    moveCompactFirst: integer("move_compact_first", { mode: "boolean" }),
+    /** A person asked for the move (its line's `asked`); null with {@link limitCompactions.move}. */
+    moveAsked: integer("move_asked", { mode: "boolean" }),
+    /**
+     * Claude Code refused the credential it moved from (its line's `because`
+     * `refused`), so its carry-on speaks of a sign-in; null with
+     * {@link limitCompactions.move}.
+     */
+    moveRefused: integer("move_refused", { mode: "boolean" }),
+    /**
+     * A move's line as it was stored, when it was there and did not read
+     * whole: as kinds became a column (migration 0410: not JSON, not an
+     * object, or a kind that is not one of a line's), or as the plan's move
+     * became columns (migration 0429: a line that is not a `moved` one, or
+     * that does not read whole as one), with its kind put back. Nothing of it
+     * is placed, and the plan reads as none: it drives no move and holds
+     * nothing back (db at-limit.ts `toCompaction`). A put of the session's
+     * plan clears it.
+     */
+    moveUnread: text("move_unread"),
+    /** Where a filing's harness compacts the session on its own, in tokens (core `ContextFill`); null for a move's. */
+    fillCompactsAt: integer("fill_compacts_at"),
+    /** The session's context a filing fired at, in tokens; null for a move's. */
+    fillTokens: integer("fill_tokens"),
+    /**
+     * A filing's reading as it was stored, when it was there and did not read
+     * whole as the plan's reading became columns: nothing of it is placed,
+     * and the plan reads as none, as one whose move does not read. A put of
+     * the session's plan clears it.
+     */
+    fillUnread: text("fill_unread"),
+    /**
+     * What the session's records held as its filing at the threshold started
+     * (core `FiledRecords`), which what the filing wrote is counted against as
+     * its turn ends; null for a move's, and when they could not be read.
+     */
+    records: storedJson(FiledRecordsSchema)("records"),
+    /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
+    carryUuid: text("carry_uuid"),
+    filingUuid: text("filing_uuid").notNull(),
+    /** Its `/compact`'s send; null for a filing at the threshold, which sends none. */
+    compactUuid: text("compact_uuid"),
+    /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
+    compacted: integer("compacted", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
+     * The step (its send's uuid) whose turn's end the hub heard, the turn's
+     * result read after its send was: the stored frame a hub that restarts
+     * before the next step went moves the compaction on from (server.ts
+     * `recoverCompaction`). Null until a step's turn ends.
+     */
+    endedStep: text("ended_step"),
+    createdAt: stampedNow("created_at"),
+  },
+  () => [
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
+    check(
+      "limit_compactions_kind",
+      sql`${sql.identifier("kind")} in ('move', 'fill')`
+    ),
+  ]
+);
 
 /**
  * A session whose context came within its compaction policy's `fileRoom` of
@@ -4099,22 +4188,34 @@ export const decidesSettings = sqliteTable("decides_settings", {
   advisor: text("advisor"),
   /** Common practice's delegate type; null: `research`. */
   practice: text("practice"),
-  /** How he hears of the Advisor's and Common practice's answers; absent: core `BUILT_IN`'s. */
-  hear: storedJson(
-    z.object({
-      advisor: z.enum(HEARS).optional(),
-      practice: z.enum(HEARS).optional(),
-    })
-  )("hear"),
-  /** Caw's chosen pose, and each flock member's; absent: core `DEFAULT_POSES`. */
-  pictures: storedJson(
-    z.object({
-      caw: z.enum(CAW_POSE_IDS).optional(),
-      advisor: z.enum(CAW_POSE_IDS).optional(),
-      practice: z.enum(CAW_POSE_IDS).optional(),
-      asker: z.enum(CAW_POSE_IDS).optional(),
-    })
-  )("pictures"),
+  /** How he hears of the Advisor's answers; null: core `BUILT_IN`'s, or `each` beside {@link decidesSettings.hearUnread}. */
+  advisorHear: storedEnum(z.enum(HEARS))("advisor_hear"),
+  /** How he hears of Common practice's answers; null: core `BUILT_IN`'s, or `each` beside {@link decidesSettings.hearUnread}. */
+  practiceHear: storedEnum(z.enum(HEARS))("practice_hear"),
+  /**
+   * How he hears of the two, as it was stored, when it was there and did not
+   * read whole as it became columns (migration 0430): not JSON, not an
+   * object, or a value that is not one of core `HEARS`. What read is placed
+   * beside it; a member left null hears `each` while it is set, so no
+   * answer is kept from him that he did not choose to hear later (db
+   * decides.ts `builtIns`). A save that sets both clears it.
+   */
+  hearUnread: text("hear_unread"),
+  /** Caw's chosen pose; null: core `DEFAULT_POSES`'s. */
+  cawPose: storedEnum(z.enum(CAW_POSE_IDS))("caw_pose"),
+  /** The Advisor's chosen pose; null: its default. */
+  advisorPose: storedEnum(z.enum(CAW_POSE_IDS))("advisor_pose"),
+  /** Common practice's chosen pose; null: its default. */
+  practicePose: storedEnum(z.enum(CAW_POSE_IDS))("practice_pose"),
+  /** The agent's (the asker's) chosen pose; null: its default. */
+  askerPose: storedEnum(z.enum(CAW_POSE_IDS))("asker_pose"),
+  /**
+   * The poses as they were stored, when they were there and did not read
+   * whole as they became columns (migration 0430): what read is placed
+   * beside it, and each other member wears its default pose. A save that
+   * sets all four clears it.
+   */
+  picturesUnread: text("pictures_unread"),
   /** When he last read the catch-up of answers he hears of later (the decision surface's). */
   caughtUpAt: timestamp("caught_up_at"),
 });
@@ -6321,7 +6422,22 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   targetUrl: text("target_url").notNull(),
   /** Issues opened after it become tasks; nothing older is copied. */
   boundAt: timestamp("bound_at").notNull(),
-  cursor: storedJson(TrackerCursorSchema)("cursor").notNull(),
+  /** The newest issue change its poll took in, ms: the next asks GitHub for changes since it. */
+  issuesSince: integer("issues_since").notNull(),
+  /** GitHub's ETag for the list of issue changes as it last asked it; null: none. */
+  issuesEtag: text("issues_etag"),
+  /** The newest comment its poll took in, ms. */
+  commentsSince: integer("comments_since").notNull(),
+  /** GitHub's ETag for the list of comments as it last asked it; null: none. */
+  commentsEtag: text("comments_etag"),
+  /**
+   * Where its poll stood, as it was stored, when it was there and did not
+   * read whole as it became columns (migration 0431): a list whose `since`
+   * did not read starts again from {@link trackerBindings.boundAt} with no
+   * ETag, so its next poll reads again what it may have read, and skips
+   * nothing. The next poll that goes through clears it.
+   */
+  cursorUnread: text("cursor_unread"),
   state: storedEnum(TrackerSyncStateSchema)("state").notNull(),
   /** Why it is refused, or why its last poll stopped short; null when all went through. */
   reason: text("reason"),

@@ -10,7 +10,64 @@ import {
 } from "./schema";
 import type { TaskLinkRow } from "./task-links";
 
-export type TrackerBindingRow = typeof trackerBindings.$inferSelect;
+type TrackerBindingColumns = typeof trackerBindings.$inferSelect;
+
+/**
+ * Where a tracker binding's poll stands (tracker.ts): the newest change it
+ * took in, of issues and of their comments, and GitHub's ETag for each list
+ * as it last asked it.
+ */
+export interface TrackerCursor {
+  commentsEtag: string | null;
+  /** The newest comment taken in, ms. */
+  commentsSince: number;
+  etag: string | null;
+  /** The newest issue change taken in, ms. */
+  since: number;
+}
+
+/** A project's binding as tracker.ts reads and writes it: its poll's cursor whole. */
+export type TrackerBindingRow = Omit<
+  TrackerBindingColumns,
+  | "commentsEtag"
+  | "commentsSince"
+  | "cursorUnread"
+  | "issuesEtag"
+  | "issuesSince"
+> & { cursor: TrackerCursor };
+
+/** A binding as its row holds it. */
+const bindingOf = ({
+  issuesSince,
+  issuesEtag,
+  commentsSince,
+  commentsEtag,
+  cursorUnread: _unread,
+  ...row
+}: TrackerBindingColumns): TrackerBindingRow => ({
+  ...row,
+  cursor: {
+    since: issuesSince,
+    etag: issuesEtag,
+    commentsSince,
+    commentsEtag,
+  },
+});
+
+/** A cursor's columns, as every writer writes them whole: what migration 0431 kept as not read goes with it. */
+const cursorColumns = (cursor: TrackerCursor) => ({
+  issuesSince: cursor.since,
+  issuesEtag: cursor.etag,
+  commentsSince: cursor.commentsSince,
+  commentsEtag: cursor.commentsEtag,
+  cursorUnread: null,
+});
+
+/** A binding's columns, its cursor's among them. */
+const bindingColumns = ({ cursor, ...row }: TrackerBindingRow) => ({
+  ...row,
+  ...cursorColumns(cursor),
+});
 
 /**
  * What a task and its issue last agreed on (tracker.ts), the baseline of
@@ -258,13 +315,15 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
     );
   };
   return {
-    binding: (projectId) =>
-      db
+    binding: (projectId) => {
+      const row = db
         .select()
         .from(trackerBindings)
         .where(eq(trackerBindings.projectId, projectId))
-        .get(),
-    bindings: () => db.select().from(trackerBindings).all(),
+        .get();
+      return row ? bindingOf(row) : undefined;
+    },
+    bindings: () => db.select().from(trackerBindings).all().map(bindingOf),
     bind: (row) => {
       db.transaction((tx) => {
         const was = tx
@@ -278,9 +337,13 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
         ) {
           forget(tx, row.projectId);
         }
+        const values = bindingColumns(row);
         tx.insert(trackerBindings)
-          .values(row)
-          .onConflictDoUpdate({ target: trackerBindings.projectId, set: row })
+          .values(values)
+          .onConflictDoUpdate({
+            target: trackerBindings.projectId,
+            set: values,
+          })
           .run();
         tx.update(projects)
           .set({ tracker: row.provider })
@@ -358,9 +421,9 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
           .run();
       });
     },
-    updateBinding: (projectId, patch) => {
+    updateBinding: (projectId, { cursor, ...patch }) => {
       db.update(trackerBindings)
-        .set(patch)
+        .set({ ...patch, ...(cursor ? cursorColumns(cursor) : {}) })
         .where(eq(trackerBindings.projectId, projectId))
         .run();
     },
