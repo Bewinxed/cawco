@@ -1,12 +1,16 @@
 /**
  * A workspace lives exactly as long as its work item (workspaces.ts
  * `settle`). When the item ends, the hub settles its workspace: once nothing
- * holds it (a session of its items attached, an artifact showing what it
- * serves that still waits on someone), its machine closes its boundary, reads on the host what its clone
- * holds that is nowhere else, and either deletes it all (retired: its work
- * landed, itself or through a workspace cut from it, or there was none) or
+ * runs in it (a session of its items attached, a stage serving from it,
+ * which sleeps half an hour after its last use) and nothing it serves waits
+ * on the person or on a parent's turn, its machine closes its boundary,
+ * reads on the host what its clone holds that is nowhere else, and either
+ * deletes it all (retired: its work landed, itself or through a workspace
+ * cut from it, or there was none), carries it off (its items land nothing,
+ * or its starter will never decide it: a routine's run, an ended parent) or
  * keeps it (held: the session that started its work is told, and continues
- * it or discards it). A machine's disk filled on
+ * it or discards it). An artifact's row alone holds nothing (the owner's
+ * pick on 2026-11-15: "By itself, once nothing in it is unique"). A machine's disk filled on
  * 2026-10-14 because nothing removed a workspace once its work was over; on
  * 2026-10-16 the owner called keeping every finished workspace until someone
  * archived it "a terrible working model".
@@ -22,8 +26,10 @@
  * asleep or ended, an artifact removed. This sweep is the look that catches
  * what no event reached (a hub restarted, a machine away at the time): every
  * {@link RETIRE_SWEEP_MS}, each active workspace on every online machine is
- * settled, and each archived one whose clone its machine still has is closed
- * again (workspaces.ts `closeLeftClones`). The same look keeps up the server
+ * settled (one whose clone is gone from its machine holds nothing it
+ * serves), each held one whose starter will never decide it is carried off,
+ * and each archived one whose clone its machine still has is closed again
+ * (workspaces.ts `settleOn`). The same look keeps up the server
  * of each preview waiting on the person, which would otherwise sleep once its
  * idle half hour ran out (artifacts service `keepWaitingUp`).
  */

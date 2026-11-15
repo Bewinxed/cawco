@@ -164,6 +164,8 @@ export interface DocMeta {
   ownSend: boolean;
   /** Its page's hash: its program's for a decision page, its HTML's for a page, its canvas address's for a component. */
   pageHash: string;
+  /** When the parent a handed artifact waits on ended its turn after its maker's report without opening it: passed over, it holds its maker's workspace no more (hub artifacts service `turnEnded`). Cleared as it is handed again. */
+  passedAt: string;
   /** Excalidraw's pen mode, once a pen touched a canvas: its screen's to write. */
   penDetected: boolean;
   penMode: boolean;
@@ -238,6 +240,7 @@ export const META_WRITERS = {
   name: "hub",
   ownSend: "hub",
   pageHash: "hub",
+  passedAt: "hub",
   penDetected: "canvas",
   penMode: "canvas",
   pictureAt: "hub",

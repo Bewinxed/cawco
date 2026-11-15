@@ -118,6 +118,7 @@ import {
 import {
   excludedPaths,
   IGNORED_STATUS,
+  isPlace,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { ElysiaStatus, problem } from "elysia";
@@ -6466,7 +6467,7 @@ export const createWorkItems = ({
         return [];
       }
       const titled = new Map<string, string>();
-      for (const row of workspaces.owedFrom(workspace)) {
+      for (const { row } of workspaces.owedFrom(workspace)) {
         titled.set(row.heldFor ?? row.id, row.title);
       }
       return [...titled].map(([one, title]) => ({ id: one, title }));
@@ -6511,15 +6512,23 @@ export const createWorkItems = ({
     },
 
     /**
-     * Place `placeId`'s stage clones settled soon (workspaces.ts `settleSoon`): its
-     * sheet stage slept, failed or stopped, and with it its hold.
+     * The clone a stage of `key` ran in settled soon (workspaces.ts
+     * `settleSoon`): it slept, and with it its hold. A place's (`key` its
+     * place's id) is its stage clone; any other's, the workspace `key` is.
      */
-    settleStagesOf(placeId: string): void {
-      const [workspace] = db.workspacesNamed(stageCloneId(placeId));
+    settleStagesOf(key: string): void {
+      if (!isPlace(key)) {
+        const [workspace] = db.workspacesNamed(key);
+        if (workspace?.id === key && workspace.state === "active") {
+          workspaces.settleSoon(workspace.id);
+        }
+        return;
+      }
+      const [workspace] = db.workspacesNamed(stageCloneId(key));
       const member = workspace && workspaceOf(workspace);
       if (
         member?.kind === "stageClone" &&
-        member.place === placeId &&
+        member.place === key &&
         member.row.state === "active"
       ) {
         workspaces.settleSoon(workspace.id);

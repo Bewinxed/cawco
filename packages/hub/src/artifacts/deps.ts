@@ -388,6 +388,12 @@ export interface ArtifactServiceDeps {
    * pointed at ends with the row (db `onArtifactsGone`), not here.
    */
   removed?: (row: ArtifactRow) => void;
+  /**
+   * Whether the session's work reports to anyone (work-items.ts
+   * `reportees`): delegated work's does, to the session that started it,
+   * but not while that is its project's Caw and he is off.
+   */
+  reportsUp: (instance: InstanceRow) => boolean;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**
@@ -519,6 +525,8 @@ export interface ArtifactServiceDeps {
    * writer's ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
+  /** Whether a send to the session is still unread (a keep-alive is none): its next turn reads it. */
+  unread: (instanceId: string) => boolean;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
   unserve: (machineId: string, workspace: string, port: number) => void;
   /**

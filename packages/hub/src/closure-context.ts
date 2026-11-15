@@ -1261,7 +1261,7 @@ export interface ClosureContext {
   speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
-  stageHeard: (frame: StageFrame) => void;
+  stageHeard: (machineId: string, frame: StageFrame) => void;
   stalledNow: () => string[];
   stallOf: (_instanceId: string) => Stall | undefined;
   startCompaction: (

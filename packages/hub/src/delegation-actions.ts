@@ -1224,7 +1224,7 @@ function repeatOfRefused(
  * to a carry), the hold being its stopper's to decide (workspaces.ts
  * `carriesOff`); or retiring, holding nothing that is nowhere else, with a
  * handoff cutting it again; or, holding nothing but serving an artifact
- * (`serving`, work-items.ts `serving`: the hold `previewedBy` reads), staying
+ * (`serving`, work-items.ts `serving`: the hold `servedHold` reads), staying
  * while it serves that, each by its link. A read that failed says so, and
  * that a hold is told as it comes (workspaces.ts `heldNotice`).
  */

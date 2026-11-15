@@ -289,7 +289,6 @@ import {
   CONTROL_WORKSPACE_OUTPUTS,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
 import type { FolderWeight } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
@@ -749,7 +748,7 @@ import {
   sendFrame as writeFrame,
 } from "./wire-socket";
 import { workItemCalls } from "./work-item-calls";
-import { isLive } from "./work-item-state";
+import { isHubParent, isLive } from "./work-item-state";
 import {
   blockWords,
   createWorkItems,
@@ -4619,6 +4618,95 @@ export const createServer = (
     heard: (decided) => push.decided(decided),
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
+  /**
+   * Each workspace's stages as their machines last said, by its id (a
+   * place's sheet stages by the place's), then by port, and when: what
+   * holds a clone while it runs (workspaces.ts `stageRuns`). A stage the
+   * daemon ends says nothing more (agent stage.ts `stopOne`), so the hub
+   * forgets it itself: a machine's own as it registers, which states each
+   * stage again (agent stage.ts `tellStages`); a workspace's as it leaves
+   * `active`; a server's as the hub stops it (`unserve`).
+   */
+  const workspaceStages = new Map<
+    string,
+    {
+      machineId: string;
+      ports: Map<number, { at: number; status: StageStatus }>;
+    }
+  >();
+  /** When each machine last registered, until it has said again what its stages are ({@link STAGES_RESTATED_MS}). */
+  const stagesRestating = new Map<string, number>();
+  /**
+   * How long after a machine registers every clone on it is held for its
+   * stages, which it states again once the hub acknowledges it (agent
+   * daemon.ts `tellStages` on the register ack). Ours: two sweeps' minutes,
+   * against a register's return steps that may take some seconds; a hub
+   * restarted under a preview someone has open would otherwise retire the
+   * clone it serves from.
+   */
+  const STAGES_RESTATED_MS = 2 * 60_000;
+  /** A stage in one of these runs in its clone. */
+  const STAGE_RUNNING: ReadonlySet<StageStatus> = new Set([
+    "starting",
+    "waking",
+    "live",
+  ]);
+  /**
+   * Why the stages of `key` (a workspace's id, or a place's for its stage
+   * clone) on machine `machineId` hold its clone, in words: its machine
+   * registered a moment ago and has not said them again yet, one runs, or
+   * one failed less than {@link STAGE_IDLE_MS} ago (the person is likely
+   * fixing what failed, and a clone archived now installs all over again).
+   * Asleep, it holds nothing: it slept for want of use, half an hour after
+   * its last viewer left (agent stage.ts `watch`).
+   */
+  const stageHold = (key: string, machineId: string): string | undefined => {
+    const since = stagesRestating.get(machineId);
+    if (since !== undefined && Date.now() - since < STAGES_RESTATED_MS) {
+      return "its machine registered a moment ago and has not yet said again which stages run in it";
+    }
+    for (const [port, { at, status }] of workspaceStages.get(key)?.ports ??
+      []) {
+      if (STAGE_RUNNING.has(status)) {
+        return `its stage on port ${port} is ${status === "live" ? "serving" : status}`;
+      }
+      if (status === "error" && Date.now() - at < STAGE_IDLE_MS) {
+        return `its stage on port ${port} failed a short while ago`;
+      }
+    }
+  };
+  /** Machine `machineId` registers: its stages are forgotten, to be stated again ({@link stagesRestating}). */
+  const stagesRestate = (machineId: string): void => {
+    stagesRestating.set(machineId, Date.now());
+    for (const [key, stages] of workspaceStages) {
+      if (stages.machineId === machineId) {
+        workspaceStages.delete(key);
+      }
+    }
+  };
+  /**
+   * Whether a session is over for good: discarded, stranded, or refused any
+   * input for good (its conversation gone, its item closed or superseded,
+   * its workspace archived); never a machine away or a sign-in to make.
+   * Its asks leave Needs you (artifacts deps `finished`, rule 4), and the
+   * held work it started goes to a carry (workspaces.ts `starterGone`).
+   */
+  const overForGood = (instance: InstanceRow): boolean => {
+    if (instance.status === "discarded" || stranded(instance)) {
+      return true;
+    }
+    const refused = inputRefusal(instance.id, {
+      kind: "system",
+      name: ARTIFACT_ORIGIN,
+    });
+    const kind = refused?.refusal?.kind;
+    return (
+      !!refused?.gone ||
+      kind === "item-closed" ||
+      kind === "item-superseded" ||
+      kind === "workspace-archived"
+    );
+  };
   const artifacts: Artifacts = createArtifacts({
     decides: {
       routed: (asker, row, cards, all, state) =>
@@ -4702,23 +4790,7 @@ export const createServer = (
     instances: (ids) => db.getInstancesByIds(ids),
     // The taker's own rule (artifacts/taker.ts): ended, or a send refused.
     ended: (instance) => !!takesNoInput(instance, artifactRefusal),
-    // Over for good (Needs you's rule 4), never a machine away or a sign-in to make.
-    finished: (instance) => {
-      if (instance.status === "discarded" || stranded(instance)) {
-        return true;
-      }
-      const refused = inputRefusal(instance.id, {
-        kind: "system",
-        name: ARTIFACT_ORIGIN,
-      });
-      const kind = refused?.refusal?.kind;
-      return (
-        !!refused?.gone ||
-        kind === "item-closed" ||
-        kind === "item-superseded" ||
-        kind === "workspace-archived"
-      );
-    },
+    finished: (instance) => overForGood(instance),
     acknowledged: () => noticesSeen.ids(),
     needsMoved: () => artifactLane.moved(),
     questionsMoved: (artifactId) =>
@@ -4747,6 +4819,11 @@ export const createServer = (
     stranded,
     itemEnded,
     itemLive,
+    reportsUp: (instance) => workItems.reportees(instance).length > 0,
+    unread: (instanceId) =>
+      db
+        .sendsIn(instanceId, ["pending"])
+        .some((send) => !isKeepAlive(send.body)),
     // Cold as handoff's check finds it: what it left, its project takes up.
     cold: (instance) => {
       const [row] = db.getInstancesByIds([instance.id]);
@@ -5071,6 +5148,8 @@ export const createServer = (
       return answer.result as FolderWeight;
     },
     unserve: (machineId, workspace, port) => {
+      // Ended, the server says nothing more: it holds its clone no more.
+      workspaceStages.get(workspace)?.ports.delete(port);
       detach(
         callAgent(machineId, STAGE_UNSERVE, [workspace, port], BUSY_TIMEOUT_MS),
         "preview server stop"
@@ -7980,41 +8059,22 @@ export const createServer = (
     db,
     notice: noticeProject,
   });
-  /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (workspaces.ts `stageRuns`). */
-  const placeStages = new Map<
-    string,
-    Map<number, { at: number; status: StageStatus }>
-  >();
-  /** A stage in one of these runs in its clone. */
-  const STAGE_RUNNING: ReadonlySet<StageStatus> = new Set([
-    "starting",
-    "waking",
-    "live",
-  ]);
   /**
-   * Why a place's stage holds its clone, in words: one runs, or one failed
-   * less than {@link STAGE_IDLE_MS} ago (the person is likely fixing what
-   * failed, and a clone archived now installs all over again). Asleep, it
-   * holds nothing: it slept for want of use.
+   * A stage frame of machine `machineId` kept, a place's sheet stage's or
+   * any workspace's preview server's or sheet's alike: one that fell asleep
+   * settles the clone it ran in (work-items.ts `settleStagesOf`), as nothing
+   * runs there now.
    */
-  const stageHold = (placeId: string): string | undefined => {
-    for (const { at, status } of placeStages.get(placeId)?.values() ?? []) {
-      if (STAGE_RUNNING.has(status)) {
-        return `its sheet stage is ${status === "live" ? "serving" : status}`;
-      }
-      if (status === "error" && Date.now() - at < STAGE_IDLE_MS) {
-        return "its sheet stage failed a short while ago";
-      }
-    }
-  };
-  /** A place's stage frame kept; one that fell asleep settles the place's stage clone. */
-  const stageHeard = (frame: StageFrame): void => {
-    if (!isPlace(frame.workspace)) {
-      return;
-    }
-    const ports = placeStages.get(frame.workspace) ?? new Map();
-    ports.set(frame.port, { status: frame.state.status, at: Date.now() });
-    placeStages.set(frame.workspace, ports);
+  const stageHeard = (machineId: string, frame: StageFrame): void => {
+    const stages = workspaceStages.get(frame.workspace) ?? {
+      machineId,
+      ports: new Map(),
+    };
+    stages.ports.set(frame.port, {
+      status: frame.state.status,
+      at: Date.now(),
+    });
+    workspaceStages.set(frame.workspace, stages);
     if (frame.state.status === "asleep") {
       workItems.settleStagesOf(frame.workspace);
     }
@@ -8067,6 +8127,16 @@ export const createServer = (
       // `owedFrom`); released as the person answers the page that showed it.
       servedOwed: (served) => artifacts.servedOwed(served),
       makingFrom: (id) => artifacts.makingFrom(id),
+      // A routine's or design check's run, or a parent gone or over for
+      // good, never decides the work its clone holds (workspaces.ts
+      // `startedByNoOne`): it goes to a carry.
+      starterGone: (parentInstanceId) => {
+        if (isHubParent(parentInstanceId)) {
+          return true;
+        }
+        const [parent] = db.getInstancesByIds([parentInstanceId]);
+        return !parent || overForGood(parent);
+      },
       // A send that wakes its session holds its finished item's workspace.
       sendWakes: (instanceId) => {
         const [row] = db.getInstancesByIds([instanceId]);
@@ -8083,7 +8153,13 @@ export const createServer = (
         );
       },
       launchesOn: nextLaunchOn,
-      workspaceChanged: (workspace) => publishInstances(workspace.machineId),
+      workspaceChanged: (workspace) => {
+        // Archived or held, nothing runs in it: a stage it had is over.
+        if (workspace.state !== "active") {
+          workspaceStages.delete(workspace.id);
+        }
+        publishInstances(workspace.machineId);
+      },
     },
     // What a landing and its gate read of the hub (landing-run.ts `LandingsHub`).
     forLandings: {
@@ -12286,6 +12362,8 @@ export const createServer = (
     if (!registerProven(ws, message)) {
       return;
     }
+    // It states each stage again once acknowledged (agent `tellStages`).
+    stagesRestate(message.machineId);
     await runMachineReturn(machineReturnSteps, {
       ws,
       message,

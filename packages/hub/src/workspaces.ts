@@ -45,6 +45,7 @@ import {
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
+import type { ServedOwed } from "./artifacts/served";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
@@ -296,8 +297,8 @@ type WaitingWords = (ws: string, links: readonly string[]) => string;
  * createWorkspaces} `holdsOf`), and its words: a place's stage that runs
  * (a stage clone's only hold), an item's landing that still runs, a
  * session attached there, a message on its way to one, a continuation
- * under way, an artifact showing what it serves, a project's folder inside
- * it.
+ * under way, a stage running in it or an artifact it serves still owed, a
+ * project's folder inside it.
  */
 interface WorkspaceHold {
   kind:
@@ -338,7 +339,7 @@ export interface WorkspacesHub {
   /**
    * Whether a create is making a preview from workspace `id` now, its
    * server started and its row not yet written (artifacts service
-   * `makingFrom`): its retirement waits for it ({@link previewedBy}).
+   * `makingFrom`): its retirement waits for it ({@link servedHold}).
    */
   readonly makingFrom?: (id: string) => boolean;
   /**
@@ -350,16 +351,30 @@ export interface WorkspacesHub {
   readonly sendWakes: (instanceId: string) => boolean;
   /**
    * Of the artifacts a workspace serves, those its retirement still waits
-   * on (artifacts service `servedOwed`): each still asked of the person or
-   * a parent, or shown on a page that still is ({@link owedFrom}).
+   * on, with why (artifacts service `servedOwed`): it or a page showing it
+   * waits on the person, it or such a page is handed up to a parent that has
+   * not had its turn on it, or it is a folder preview looked at within the
+   * half hour ({@link owedFrom}).
    */
-  readonly servedOwed?: (served: readonly ArtifactRow[]) => ArtifactRow[];
+  readonly servedOwed: (served: readonly ArtifactRow[]) => ServedOwed[];
   /**
-   * Why place `placeId`'s sheet stage holds its stage clone, in words: it
-   * starts, wakes or serves as its machine last said (core `StageFrame`).
-   * Nothing once every stage of the place sleeps, failed or was never heard.
+   * Why the stages of `key` on machine `machineId` hold the clone they run
+   * in, in words (server.ts `stageHold`): `key` a workspace's id for its
+   * preview servers and sheets, a place's for its stage clone. One starts,
+   * wakes or serves as its machine last said (core `StageFrame`), or its
+   * machine registered a moment ago and has not said them again. Nothing
+   * once every one sleeps (agent stage.ts: half an hour unused), failed or
+   * was never heard.
    */
-  readonly stageRuns?: (placeId: string) => string | undefined;
+  readonly stageRuns: (key: string, machineId: string) => string | undefined;
+  /**
+   * Whether the session that started an item's work, its `parentInstanceId`,
+   * will never decide held work: a routine's or a design check's run, which
+   * no session started, a session the hub holds no row of, or one over for
+   * good (server.ts `overForGood`). Its unique work goes to a carry and the
+   * workspace with it ({@link closeSettled}), nobody asked.
+   */
+  readonly starterGone: (parentInstanceId: string) => boolean;
   /**
    * Of the artifacts a workspace serves, those waiting on the person, with
    * the decision pages waiting on the person that show one of them
@@ -440,6 +455,7 @@ export const createWorkspaces = ({
   sendWakes,
   servedOwed,
   stageRuns,
+  starterGone,
   waitingOnPerson,
   workspaceChanged,
 }: WorkspacesDeps) => {
@@ -603,6 +619,18 @@ export const createWorkspaces = ({
     );
   };
   /**
+   * Whether the session that started a workspace's work, its latest item's
+   * parent, will never decide what its clone holds (`starterGone`): a
+   * routine's run, or a parent that ended. Its unique work is saved to a
+   * carry and the workspace removed, nobody asked (the owner's rule that
+   * unlanded work is never deleted, kept by the carry, commit dbe1d52294;
+   * tsk-327, 2026-11-15).
+   */
+  const startedByNoOne = (items: readonly WorkItemRow[]): boolean => {
+    const [latest] = items;
+    return !!latest?.parentInstanceId && starterGone(latest.parentInstanceId);
+  };
+  /**
    * Tells the session that started a workspace's work, its latest item's
    * parent, as a notice, that the workspace retired with its commits in a
    * carry ({@link carriesOff}): where that carry is, and that a handoff or
@@ -721,7 +749,8 @@ export const createWorkspaces = ({
    * ({@link WorkspaceUnlanded}), or with `discard` saved to a carry first
    * ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot write
    * one refuses), and so with `carry` (its items land none,
-   * {@link carriesOff}), whose carry it is cut again with; `skip`, its
+   * {@link carriesOff}, or its starter never decides, {@link
+   * startedByNoOne}), whose carry it is cut again with; `skip`, its
    * items' handed-over outputs. The commits its
    * `from` cuts landed are not its own ({@link landedFrom}). Archived, its
    * places go with it and its row says so, with the carry and where its
@@ -847,7 +876,7 @@ export const createWorkspaces = ({
    * whose row names it (db artifacts.ts `previewing`: a port preview or a
    * sheet naming it, a folder preview inside its clone or scratch dir), a
    * held next version among them. Its retirement waits on those still owed
-   * ({@link owedFrom}); its archive or discard, on purpose, refuses
+   * ({@link owedFrom}), never on a row as such; its archive or discard, on purpose, refuses
    * while any of them, or a decision page showing one, waits on the person
    * ({@link waitingFrom}). A Linux view's path is the person's folder, so a
    * folder preview there is not the workspace's; a port preview naming it
@@ -869,29 +898,38 @@ export const createWorkspaces = ({
     return [...rows.values()];
   };
   /**
-   * What a workspace serves that its retirement still waits on (artifacts
-   * service `servedOwed`): everything it serves, but for what a decision
-   * page showed and the person has since answered. On 2026-11-08 a page's
-   * answer left the workspaces behind it standing for as long as their
-   * artifacts' rows stood, which is until someone deletes them.
+   * What a workspace serves that its retirement still waits on, with why
+   * (artifacts service `servedOwed`). On 2026-11-15 a workspace was held by
+   * every artifact row naming it, and a row lives until someone deletes it:
+   * 106 finished workspaces on one machine were kept "for what they serve",
+   * 92 of them with no folder left.
    */
-  const owedFrom = (workspace: WorkspaceRow): ArtifactRow[] => {
-    const served = servedFrom(workspace);
-    return servedOwed ? servedOwed(served) : served;
+  const owedFrom = (workspace: WorkspaceRow): ServedOwed[] =>
+    servedOwed(servedFrom(workspace));
+  /** Why an artifact owed ({@link owedFrom}) holds its workspace, in words. */
+  const OWED_WORDS: Record<ServedOwed["why"], string> = {
+    handed: "is handed up to a session that has not had its turn on it yet",
+    looked: "was on the person's screen less than half an hour ago",
+    waits: "waits on the person",
   };
   /**
-   * What a workspace serves and still owes ({@link owedFrom}), in words, or
-   * nothing. On 2026-10-15 a workspace was retired while it served the
-   * owner's two open previews. Retirement waits for every one ({@link
-   * holdsOf}); an archive or discard on purpose refuses only on those
-   * waiting on the person ({@link waitingFrom}), and ends the served
-   * servers of the rest, whose rows stay, reading as a server that isn't
-   * running.
+   * THE ONE READ OF WHAT A WORKSPACE SERVES THAT HOLDS IT, in words, or
+   * nothing: a stage running in it (`stageRuns`: a preview's server or a
+   * sheet in use, which sleeps half an hour after its last use), an
+   * artifact it serves still owed ({@link owedFrom}), or a preview being
+   * made from it. A row alone holds nothing: an artifact that asks nothing
+   * of anyone is kept up only while it is used, and once its workspace goes
+   * it stays in its lists, saying so. The hub keeps awake only what waits
+   * on the person (artifacts service `keepWaitingUp`).
    */
-  const previewedBy = (workspace: WorkspaceRow): string | undefined => {
-    const shown = [...new Set(owedFrom(workspace).map((one) => one.name))];
-    if (shown.length > 0) {
-      return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
+  const servedHold = (workspace: WorkspaceRow): string | undefined => {
+    const stage = stageRuns(workspace.id, workspace.machineId);
+    if (stage) {
+      return stage;
+    }
+    const [owed] = owedFrom(workspace);
+    if (owed) {
+      return `the artifact ${owed.row.name} ${OWED_WORDS[owed.why]}`;
     }
     // A create's server started there before its row names it: on
     // 2026-11-04 a hand-up's workspace retired between the two, its server
@@ -966,9 +1004,11 @@ export const createWorkspaces = ({
    *   those sessions there, a continuation of one of them being prepared or
    *   under way (it reads the clone and its new session starts there,
    *   taking the item on);
-   * - and, but for a host-scope folder, which has no clone: an artifact
-   *   previewing it ({@link previewedBy}), or a project's folder inside it
-   *   ({@link placesIn}).
+   * - and, but for a host-scope folder, which has no clone: what it serves
+   *   that holds it ({@link servedHold}), or a project's folder inside it
+   *   ({@link placesIn}); neither for one whose copy its machine just said
+   *   is gone (`clones`, {@link copyGone}): nothing can be served from it,
+   *   and nothing unique is in it.
    *
    * On 2026-10-17 one was retired between the check that its clone was
    * there and a continuation's read of it (attach-continue, "could not read
@@ -976,18 +1016,19 @@ export const createWorkspaces = ({
    */
   const holdsOf = (
     workspace: WorkspaceRow,
-    items: readonly WorkItemRow[]
+    items: readonly WorkItemRow[],
+    clones?: ReadonlySet<string>
   ): WorkspaceHold[] => {
     const member = workspaceOf(workspace);
     if (member.kind === "stageClone") {
-      const stage = stageRuns?.(member.place);
+      const stage = stageRuns(member.place, workspace.machineId);
       return stage ? [{ kind: "stage", words: stage }] : [];
     }
     const holds = heldByItems(items);
-    if (member.kind === "hostFolder") {
+    if (member.kind === "hostFolder" || copyGone(workspace, clones)) {
       return holds;
     }
-    const served = previewedBy(workspace);
+    const served = servedHold(workspace);
     if (served) {
       holds.push({ kind: "served", words: served });
     }
@@ -997,6 +1038,20 @@ export const createWorkspaces = ({
     }
     return holds;
   };
+  /**
+   * Whether `workspace`'s own copy, a clone at `~/.worktrees/<name>-<id8>`
+   * (agent workspace.ts), is not among the folders its machine listed there
+   * this sweep (`clones`, {@link clonesOn}); false with no list. On
+   * 2026-11-15, 92 active rows on one machine named a folder gone long ago.
+   */
+  const copyGone = (
+    workspace: WorkspaceRow,
+    clones: ReadonlySet<string> | undefined
+  ): boolean =>
+    clones !== undefined &&
+    ownCopy(workspace) &&
+    workspace.path.endsWith(`-${workspace.id.slice(0, 8)}`) &&
+    !clones.has(workspace.path);
   /** What a workspace's ended items hold it by ({@link holdsOf}): an item's landing, then its sessions'. */
   const heldByItems = (items: readonly WorkItemRow[]): WorkspaceHold[] => {
     const holds: WorkspaceHold[] = [];
@@ -1165,16 +1220,18 @@ export const createWorkspaces = ({
   /**
    * A settled workspace closed on its machine ({@link closeWorkspace}): a
    * `keep`, or a `carry` when its items land none ({@link carriesOff}),
-   * whose parent is told where the carry is ({@link carryNotice}); retired,
-   * its gate workspaces go with it.
+   * whose parent is told where the carry is ({@link carryNotice}), or when
+   * its starter never decides ({@link startedByNoOne}), told to no one;
+   * retired, its gate workspaces go with it.
    */
   const closeSettled = async (
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
   ) => {
+    const noOne = startedByNoOne(items);
     const closed = await closeWorkspace(
       workspace,
-      carriesOff(items) ? "carry" : "keep",
+      carriesOff(items) || noOne ? "carry" : "keep",
       handedOver(workspace)
     );
     if (closed instanceof ElysiaStatus) {
@@ -1187,7 +1244,8 @@ export const createWorkspaces = ({
       const held: Settled = { kind: "held", held: closed.held };
       return held;
     }
-    if (closed.carry) {
+    // A starter that never decides is told nothing: it reads nothing.
+    if (closed.carry && !noOne) {
       carryNotice(closed.workspace, closed.carry);
     }
     const unclosed = await closeChecks(workspace);
@@ -1200,10 +1258,62 @@ export const createWorkspaces = ({
     const retired: Settled = { kind: "retired", carry: closed.carry };
     return retired;
   };
+  /** {@link closeSettled}, its failure counted ({@link settleFailed}) and answered as `failed`. */
+  const closeOrFail = async (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[]
+  ): Promise<Settled> => {
+    const failed = (reason: string): Settled => {
+      settleFailed(workspace, reason);
+      return { kind: "failed", reason };
+    };
+    try {
+      const closed = await closeSettled(workspace, items);
+      return closed instanceof ElysiaStatus
+        ? failed(closed.response.detail)
+        : closed;
+    } catch (error) {
+      return failed(error instanceof Error ? error.message : String(error));
+    }
+  };
   /** Each archived workspace whose folder is being cleared ({@link closeLeftClones}), from its turn's start: a cut again of it waits for that ({@link recut}). */
   const reclosing = new Map<string, Promise<void>>();
-  /** The last reason each machine's folders could not be listed ({@link closeLeftClones}): one line per change, not per sweep. */
+  /** The last reason each machine's folders could not be listed ({@link clonesOn}): one line per change, not per sweep. */
   const listFailures = new Map<string, string>();
+  /**
+   * The folders directly under machine `machineId`'s `~/.worktrees`, as its
+   * machine lists them now ({@link CONTROL_WORKSPACE_CLONES}), read once per
+   * sweep: what tells an archived workspace's clone left standing
+   * ({@link closeLeftClones}) and an active one's copy gone
+   * ({@link copyGone}). Undefined, logged once, when it could not list them.
+   */
+  const clonesOn = async (
+    machineId: string
+  ): Promise<ReadonlySet<MachinePath> | undefined> => {
+    try {
+      const folders = (await call(
+        machineId,
+        CONTROL_WORKSPACE_CLONES,
+        []
+      )) as string[];
+      listFailures.delete(machineId);
+      return new Set(
+        folders.flatMap((folder) => {
+          const path = db.machinePathOn(machineId, folder);
+          return path instanceof MachinePathRefused ? [] : [path];
+        })
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      if (listFailures.get(machineId) !== reason) {
+        listFailures.set(machineId, reason);
+        console.warn(
+          `[workspaces] ${machineName(db, machineId)} did not list its ~/.worktrees, so no archived workspace's clone there was looked for, and no active one's was found gone: ${reason}`
+        );
+      }
+      return undefined;
+    }
+  };
   /**
    * Each archived workspace on `machineId` whose folder its machine still has
    * ({@link CONTROL_WORKSPACE_CLONES}) cleared in its turn: its machine's
@@ -1217,32 +1327,11 @@ export const createWorkspaces = ({
    * that cut.
    */
   const closeLeftClones = async (
-    machineId: string
+    machineId: string,
+    clones: ReadonlySet<MachinePath>
   ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> => {
-    let folders: string[];
-    try {
-      folders = (await call(
-        machineId,
-        CONTROL_WORKSPACE_CLONES,
-        []
-      )) as string[];
-      listFailures.delete(machineId);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      if (listFailures.get(machineId) !== reason) {
-        listFailures.set(machineId, reason);
-        console.warn(
-          `[workspaces] ${machineName(db, machineId)} did not list its ~/.worktrees, so no archived workspace's clone there was looked for: ${reason}`
-        );
-      }
-      return [];
-    }
     const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
-    const paths = folders.flatMap((folder) => {
-      const path = db.machinePathOn(machineId, folder);
-      return path instanceof MachinePathRefused ? [] : [path];
-    });
-    for (const left of db.archivedWorkspacesAt(machineId, paths)) {
+    for (const left of db.archivedWorkspacesAt(machineId, [...clones])) {
       if (workspaceTurns.has(left.id) || recutting.has(left.id)) {
         continue;
       }
@@ -1297,7 +1386,7 @@ export const createWorkspaces = ({
    * as an interrupt and a stop do), once per set of ended items; the
    * boundary and the sessions run on, so a handoff resumes one there. Not
    * while its landing runs ({@link WorkspacesDeps.landingRuns}), an artifact shows what it serves
-   * ({@link previewedBy}: once the artifact goes, the next settle ends it),
+   * ({@link servedHold}: once it holds no more, the next settle ends it),
    * a project's folder is inside it ({@link placesIn}), or a message or
    * continuation is on its way to one of its sessions (its new turn's work
    * is not left work). Why: a done delegate stays awake until it is at rest
@@ -1367,9 +1456,13 @@ export const createWorkspaces = ({
    * left running there ends meanwhile ({@link endLeftWork}). Its sessions are
    * not ended: each is asleep or gone already, and a handoff to one goes on
    * in a clone cut again ({@link recut}). A gate workspace goes with its
-   * source.
+   * source. `clones`, the folders its machine listed this sweep, tells a
+   * copy gone ({@link copyGone}).
    */
-  const settle = async (id: string): Promise<Settled> => {
+  const settle = async (
+    id: string,
+    clones?: ReadonlySet<string>
+  ): Promise<Settled> => {
     const [workspace] = db.workspacesNamed(id);
     if (workspace?.state !== "active") {
       return { kind: "none" };
@@ -1385,24 +1478,13 @@ export const createWorkspaces = ({
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
-    const holds = holdsOf(workspace, items);
+    const holds = holdsOf(workspace, items, clones);
     const [hold] = holds;
     if (hold) {
       endLeftWork(workspace, items, holds);
       return { kind: "deferred", hold: hold.words };
     }
-    const failed = (reason: string): Settled => {
-      settleFailed(workspace, reason);
-      return { kind: "failed", reason };
-    };
-    try {
-      const closed = await closeSettled(workspace, items);
-      return closed instanceof ElysiaStatus
-        ? failed(closed.response.detail)
-        : closed;
-    } catch (error) {
-      return failed(error instanceof Error ? error.message : String(error));
-    }
+    return await closeOrFail(workspace, items);
   };
   /**
    * A host-scope workspace settled ({@link settle}): it has no clone, so
@@ -1540,16 +1622,20 @@ export const createWorkspaces = ({
    * THE way a workspace is settled ({@link settle}), in its turn: asked while
    * one runs, one more runs after it, shared by every caller asking before
    * it begins. The events, the sweep and a read of what the workspace holds
-   * all come here. Never rejects.
+   * all come here. Never rejects. `clones`: the sweep's list of its
+   * machine's folders ({@link clonesOn}).
    */
-  const settleNow = (id: string): Promise<Settled> => {
+  const settleNow = (
+    id: string,
+    clones?: ReadonlySet<string>
+  ): Promise<Settled> => {
     const queued = settleQueued.get(id);
     if (queued !== undefined) {
       return queued;
     }
     const run = inWorkspaceTurn(id, () => {
       settleQueued.delete(id);
-      return settle(id);
+      return settle(id, clones);
     }).catch((error: unknown): Settled => {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(`[workspaces] ${id}: its settle failed: ${reason}`);
@@ -1563,34 +1649,74 @@ export const createWorkspaces = ({
     soon(() => detach(settleNow(id), `settle ${id}`));
   };
   /**
+   * A held workspace whose items have all ended and whose starter will
+   * never decide it ({@link startedByNoOne}) closed with its unique work in a
+   * carry ({@link closeSettled}), once nothing holds it ({@link holdsOf}):
+   * on 2026-11-15, 19 such sat held on one machine, 16 of them a routine's
+   * runs, each told to no one. One whose starter can still decide stays
+   * held for it.
+   */
+  const carryHeld = async (
+    id: string,
+    clones?: ReadonlySet<string>
+  ): Promise<Settled> => {
+    const [workspace] = db.workspacesNamed(id);
+    if (workspace?.state !== "held") {
+      return { kind: "none" };
+    }
+    const items = db.workItemsIn(workspace.id);
+    if (!(settlable(workspace, items) && startedByNoOne(items))) {
+      return { kind: "none" };
+    }
+    const [hold] = holdsOf(workspace, items, clones);
+    if (hold) {
+      return { kind: "deferred", hold: hold.words };
+    }
+    return await closeOrFail(workspace, items);
+  };
+  /**
    * {@link settle} for each active workspace on `machineId`, one after
-   * another, then each archived one whose clone is still there closed
-   * again ({@link closeLeftClones}): the sweep's look (workspace-retire.ts).
-   * A timed look passes over a workspace whose last settle failed until its
-   * wait is over ({@link settleFailed}); a look someone `asked` for tries
-   * it now. Answers each one's outcome by id.
+   * another, then each held one whose starter will never decide it carried
+   * off ({@link carryHeld}), then each archived one whose clone is still
+   * there closed again ({@link closeLeftClones}): the sweep's look
+   * (workspace-retire.ts), its machine's folders listed once for all of
+   * them ({@link clonesOn}). A timed look passes over a workspace whose last
+   * settle failed until its wait is over ({@link settleFailed}); a look
+   * someone `asked` for tries it now. Answers each one's outcome by id.
    */
   const settleOn = async (
     machineId: string,
     asked: boolean
   ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> => {
     const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
+    const clones = await clonesOn(machineId);
+    // Something runs in its turn now, or its last settle failed and its
+    // wait is not over: a later look settles it.
+    const passedOver = (workspace: WorkspaceRow): boolean =>
+      workspaceTurns.has(workspace.id) ||
+      recutting.has(workspace.id) ||
+      (!asked && (settleFailures.get(workspace.id)?.retryAt ?? 0) > Date.now());
     for (const workspace of db.activeWorkspacesOn(machineId)) {
-      // Something runs in its turn now, or its last settle failed and its
-      // wait is not over: a later look settles it.
-      if (
-        workspaceTurns.has(workspace.id) ||
-        (!asked &&
-          (settleFailures.get(workspace.id)?.retryAt ?? 0) > Date.now())
-      ) {
-        continue;
+      if (!passedOver(workspace)) {
+        done.push({
+          workspace,
+          outcome: await settleNow(workspace.id, clones),
+        });
       }
-      done.push({
-        workspace,
-        outcome: await settleNow(workspace.id),
-      });
     }
-    done.push(...(await closeLeftClones(machineId)));
+    for (const workspace of db.heldWorkspaces()) {
+      if (workspace.machineId === machineId && !passedOver(workspace)) {
+        done.push({
+          workspace,
+          outcome: await inWorkspaceTurn(workspace.id, () =>
+            carryHeld(workspace.id, clones)
+          ),
+        });
+      }
+    }
+    if (clones) {
+      done.push(...(await closeLeftClones(machineId, clones)));
+    }
     return done;
   };
   /**

@@ -136,6 +136,8 @@ export const createVersions = (ctx: VersionsContext) => {
     docs.transact(next.id, "hub", (doc) => {
       const meta = docMeta(doc);
       meta.set("handed", true);
+      // Forked whole: a pass over an earlier hand is not one of this.
+      meta.delete("passedAt");
       meta.set("forkedAt", row.seq);
     });
     return { fresh: true, next };
@@ -282,7 +284,11 @@ export const createVersions = (ctx: VersionsContext) => {
     const was = isHanded(row);
     const waiting = was && before?.madeBy === making.maker.id;
     const meta = docMeta(docs.doc(row.id));
-    docs.transact(row.id, "hub", () => meta.set("handed", true));
+    // Handed again: its parent has its turn on it again.
+    docs.transact(row.id, "hub", () => {
+      meta.set("handed", true);
+      meta.delete("passedAt");
+    });
     const unready = await readied(ready, () => {
       if (!was) {
         docs.transact(row.id, "hub", () => meta.delete("handed"));

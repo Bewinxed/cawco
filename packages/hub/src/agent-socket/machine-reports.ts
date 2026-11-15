@@ -48,7 +48,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     if (kind === "stage") {
       const frame = body;
       ctx.artifacts.staged(message.machineId, frame);
-      ctx.stageHeard(frame);
+      ctx.stageHeard(message.machineId, frame);
       return "stop";
     }
     return "continue";

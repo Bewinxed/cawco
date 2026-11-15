@@ -5,7 +5,6 @@
  */
 
 import type { ArtifactDoes } from "@cawco/core/artifact-kinds";
-import type { ArtifactPending } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { ChangedItem, MetaMap } from "@cawco/core/doc-meta";
@@ -114,7 +113,6 @@ export interface KindContext {
         typeof problem<404, { code: "artifact-parent-gone"; detail: string }>
       >;
   pagesShowing: () => Map<string, ArtifactRow[]>;
-  pendingFor: (row: ArtifactRow) => ArtifactPending | null;
   personChangedAfter: (
     row: ArtifactRow,
     since: number,

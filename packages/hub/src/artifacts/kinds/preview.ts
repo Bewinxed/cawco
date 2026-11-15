@@ -83,7 +83,6 @@ export type PreviewKindContext = Pick<
   | "ofTree"
   | "ownerFor"
   | "pagesShowing"
-  | "pendingFor"
   | "waitsOnPerson"
 >;
 
@@ -103,8 +102,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         continue;
       }
       const waits =
-        ctx.pendingFor(row) !== null ||
-        (pages.get(row.id) ?? []).some(waitsOnPerson);
+        waitsOnPerson(row) || (pages.get(row.id) ?? []).some(waitsOnPerson);
       if (
         waits &&
         deps.workspaces(served.workspace).some((one) => one.state === "active")
@@ -174,7 +172,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * The workspaces a create is making a preview from, by how many creates:
    * from its server's start ({@link serveFirst}) until its row names the
    * workspace ({@link placed}), when the row holds it instead. Its
-   * retirement waits while any does (workspaces.ts `previewedBy`).
+   * retirement waits while any does (workspaces.ts `servedHold`).
    */
   const makingIn = new Map<string, number>();
   /** `source`'s workspace held while a create makes a preview from it ({@link makingIn}); what lets it go. */

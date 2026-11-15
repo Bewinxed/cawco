@@ -8,6 +8,18 @@ import { join } from "node:path";
 import { type CanvasSpec, canvasOf } from "@cawco/core/stage";
 import type { ArtifactRow } from "../db/artifacts";
 
+/**
+ * An artifact a workspace serves that its retirement still waits on, and
+ * why (`servedOwed`): it or a page showing it waits on the person, it or
+ * such a page is handed up to a parent that has not had its turn on it, or
+ * it is a folder preview the person looked at within the half hour a stage
+ * stays up unused.
+ */
+export interface ServedOwed {
+  row: ArtifactRow;
+  why: "handed" | "looked" | "waits";
+}
+
 /** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
 export const servedOf = (
   row: Pick<ArtifactRow, "kind" | "source">
