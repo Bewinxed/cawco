@@ -297,7 +297,7 @@ export const createHistory = (ctx: HistoryContext) => {
         message: harnessRefusedWords.updatingUnread(
           name,
           ctx.machineName(machineId),
-          cell.to
+          cell
         ),
       };
     }
