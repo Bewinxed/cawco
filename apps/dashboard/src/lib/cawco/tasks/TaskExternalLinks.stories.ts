@@ -346,3 +346,11 @@ export const LongTitle = {
     ],
   },
 };
+
+/** The record whose tracker sync is held (its baseline does not read), beside a pull request it closes: one line under its title says the hold. */
+export const SyncHeld = {
+  args: {
+    links: [{ ...record, baselineUnread: true }, closesOpen],
+    comments: recordComments.slice(0, 2),
+  },
+};
