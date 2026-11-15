@@ -127,16 +127,17 @@ import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { DelegateTypesShape } from "./db/delegate-types";
-import type {
-  BoardInstanceRow,
-  InstanceKind,
-  PublicInstanceRow,
-} from "./db/instances";
+import type { BoardInstanceRow, PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
-import type { ContinuationSource, StoredSendRefusal } from "./db/stored-types";
+import type {
+  ContinuationSource,
+  InstanceKind,
+  LimitCompactionStage,
+  StoredSendRefusal,
+} from "./db/stored-types";
 import type { Undoable } from "./db/trash";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
@@ -1301,7 +1302,7 @@ export interface ClosureContext {
   ) => boolean;
   stepping: Set<string>;
   stepUuids: (plan: LimitCompaction) => string[];
-  stepWords: (stage: "compacting" | "filing" | "carrying") => string;
+  stepWords: (stage: LimitCompactionStage) => string;
   stopCompaction: (instanceId: string) => void;
   stopDispatches: Map<
     string,

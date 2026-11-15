@@ -9,7 +9,7 @@
  * The kinds of work a starter names, each drawn by the dashboard as its
  * Solar duotone glyph (StarterCards).
  */
-const STARTER_GLYPHS = [
+export const STARTER_GLYPHS = [
   "brief",
   "bug",
   "calendar",

@@ -27,7 +27,6 @@ import {
   queuedTaskStarts,
   queuedWorkItemGlobs,
   queuedWorkItems,
-  type WorkspaceState,
   workItemGatePasses,
   workItemGlobs,
   workItemLandedChecks,
@@ -35,7 +34,7 @@ import {
   workspaceCreates,
   workspaces,
 } from "./schema";
-import type { GatePass, WorkLanding } from "./stored-types";
+import type { GatePass, WorkLanding, WorkspaceState } from "./stored-types";
 
 /** A session of the project, as its removal needs it. */
 export interface HeldSession {

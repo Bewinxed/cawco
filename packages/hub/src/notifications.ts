@@ -78,6 +78,7 @@ import {
   type PresenceDevice,
 } from "@cawco/core/notifications";
 import { plainAddress } from "@cawco/core/public-address";
+import { MachineStateSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { Elysia, t } from "elysia";
@@ -1147,6 +1148,15 @@ export const createNotifications = ({
       // its agent reads none then (`reportActivity`), and a word that
       // crossed the switch is dropped here.
       if (!db.presence.counted().has(machineId)) {
+        return;
+      }
+      // A state this build does not know (a newer agent's) is no word on
+      // the person: dropped, as `presence_clients.machine` holds only the
+      // states this hub reads.
+      if (!MachineStateSchema.safeParse(activity.state).success) {
+        console.log(
+          `[presence] machine ${machineId.slice(0, 8)}: a state this hub does not know, ${JSON.stringify(activity.state)}; dropped`
+        );
         return;
       }
       const now = Date.now();

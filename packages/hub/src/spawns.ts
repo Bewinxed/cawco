@@ -22,7 +22,7 @@ import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import { StartsHeld } from "./continuations";
 import type { DbShape } from "./db/index";
-import type { InstanceKind } from "./db/instances";
+import type { InstanceKind } from "./db/stored-types";
 import { handleId, isHandle } from "./handles";
 import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";

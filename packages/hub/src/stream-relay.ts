@@ -33,7 +33,11 @@ import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
-import { RelayPortsSchema, RelayReachSchema } from "@cawco/core/stored-shapes";
+import {
+  RelayPortsSchema,
+  RelayReachSchema,
+  StreamRelayStateSchema,
+} from "@cawco/core/stored-shapes";
 import {
   RELAY_CERTIFY,
   RELAY_REMOVE,
@@ -412,9 +416,17 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     ({ progress } = frame);
+    // A state this build does not know (a newer agent's) leaves the kept
+    // one: `stream_relay.state` holds only the states this hub reads.
+    const state = StreamRelayStateSchema.safeParse(frame.state);
+    if (!state.success) {
+      console.warn(
+        `[stream-relay] ${frame.machineId}: its state ${JSON.stringify(frame.state)} is none this hub knows, so the relay's kept state stands`
+      );
+    }
     // The machine's word on its relay, taken into CawCo's types as it is kept.
     update({
-      state: frame.state,
+      ...(state.success ? { state: state.data } : {}),
       ports: received(RelayPortsSchema, frame.ports, "a machine's relay frame"),
       why: frame.why ?? null,
       whyCommand: frame.command ?? null,

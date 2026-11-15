@@ -11,6 +11,7 @@ import {
   limitHolds,
   limitStops,
 } from "./schema";
+import type { LimitCompactionStage } from "./stored-types";
 
 /** A session waiting out its account's limit. */
 export interface LimitHold {
@@ -57,7 +58,7 @@ interface CompactionSteps {
   instanceId: string;
   /** Its line, said again as it goes: a move's `limit_events` id, a filing's `session_lines` id. */
   lineId: string;
-  stage: "carrying" | "filing" | "compacting";
+  stage: LimitCompactionStage;
 }
 
 /**

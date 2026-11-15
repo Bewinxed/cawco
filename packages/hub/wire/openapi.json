@@ -43233,14 +43233,6 @@
           "type"
         ]
       },
-      "GetApiInstances200Kind": {
-        "type": "string",
-        "enum": [
-          "mainline",
-          "scratch",
-          "summariser"
-        ]
-      },
       "GetApiRulesByIdActivity200Status": {
         "type": "string",
         "enum": [
@@ -45375,6 +45367,15 @@
           "rev"
         ]
       },
+      "InstanceKind": {
+        "description": "What a session row is (schema `instances.kind`): a mainline session, a scratch spin-off, or a summariser.",
+        "type": "string",
+        "enum": [
+          "mainline",
+          "scratch",
+          "summariser"
+        ]
+      },
       "InstanceRow": {
         "type": "object",
         "properties": {
@@ -45518,7 +45519,7 @@
             "type": "string"
           },
           "origin": {
-            "$ref": "#/components/schemas/SessionOrigin",
+            "$ref": "#/components/schemas/InstanceRowOrigin",
             "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
           },
           "owedMove": {
@@ -45529,7 +45530,7 @@
                 "type": "string"
               },
               "waits": {
-                "$ref": "#/components/schemas/InstanceRowWaits"
+                "$ref": "#/components/schemas/OwedMoveWait"
               }
             },
             "required": [
@@ -45702,19 +45703,20 @@
           "unread"
         ]
       },
+      "InstanceRowOrigin": {
+        "type": "string",
+        "enum": [
+          "check",
+          "delegate",
+          "person",
+          "project"
+        ]
+      },
       "InstanceRowTitleSource": {
         "type": "string",
         "enum": [
           "agent",
           "owner"
-        ]
-      },
-      "InstanceRowWaits": {
-        "type": "string",
-        "enum": [
-          "machine",
-          "turn",
-          "work"
         ]
       },
       "InstanceStatus": {
@@ -49546,6 +49548,15 @@
           "step"
         ]
       },
+      "OwedMoveWait": {
+        "description": "What a move a session owes waits on before it runs: the session's turn's\nend; the work its process holds for later (a background task) ending, or\nthe restart bound; or its machine connected again (hub `owed_moves.waits`).",
+        "type": "string",
+        "enum": [
+          "machine",
+          "turn",
+          "work"
+        ]
+      },
       "OwnerDevice": {
         "description": "A paired device, as `GET /api/devices` lists it. Its token never leaves the hub but once.",
         "type": "object",
@@ -51229,6 +51240,13 @@
         "enum": [
           "moved",
           "pending"
+        ]
+      },
+      "PostApiWorkspacesByIdArchive200Kind": {
+        "type": "string",
+        "enum": [
+          "folder",
+          "repo"
         ]
       },
       "PresenceDevice": {
@@ -55229,16 +55247,6 @@
         "required": [
           "content",
           "path"
-        ]
-      },
-      "SessionOrigin": {
-        "description": "Who started a session, stamped by the hub as it starts from who asked,\nnever from what the start carried: `person`, a person's own start (the\nNew session form, a move); `delegate`, a `delegate` call (a work item,\na routine's run and a design check among them); `project`, started by\nits project's events (the session they reach); `check`, an agent's `start_session`, a start\nfrom a page in an agent's own browser, and the hub's own workers. Only a\nperson's sessions stand at a project's top in the rails; every other one\nnests under the session that started it.",
-        "type": "string",
-        "enum": [
-          "check",
-          "delegate",
-          "person",
-          "project"
         ]
       },
       "SessionPlan": {
@@ -61711,14 +61719,6 @@
           "bytes",
           "dirty",
           "stashes"
-        ]
-      },
-      "WorkspaceKind": {
-        "description": "What a workspace was made from: a repository's root, which lands by git\n(rebase onto its base, the merge checks, push), or any other folder, which\nlands by its change set ({@link CONTROL_WORKSPACE_APPLY}).",
-        "type": "string",
-        "enum": [
-          "folder",
-          "repo"
         ]
       },
       "WorkspaceRef": {
@@ -83995,7 +83995,7 @@
               "$ref": "#/components/schemas/KeepAlive"
             },
             "kind": {
-              "$ref": "#/components/schemas/GetApiInstances200Kind"
+              "$ref": "#/components/schemas/InstanceKind"
             },
             "lastError": {
               "type": "string"
@@ -84029,7 +84029,7 @@
               "type": "string"
             },
             "origin": {
-              "$ref": "#/components/schemas/SessionOrigin"
+              "$ref": "#/components/schemas/InstanceRowOrigin"
             },
             "owedMove": {
               "type": "object",
@@ -84038,7 +84038,7 @@
                   "type": "string"
                 },
                 "waits": {
-                  "$ref": "#/components/schemas/InstanceRowWaits"
+                  "$ref": "#/components/schemas/OwedMoveWait"
                 }
               },
               "required": [
@@ -109918,7 +109918,7 @@
             "$ref": "#/components/schemas/KeepAlive"
           },
           "kind": {
-            "$ref": "#/components/schemas/GetApiInstances200Kind"
+            "$ref": "#/components/schemas/InstanceKind"
           },
           "lastError": {
             "type": "string"
@@ -109952,7 +109952,7 @@
             "type": "string"
           },
           "origin": {
-            "$ref": "#/components/schemas/SessionOrigin"
+            "$ref": "#/components/schemas/InstanceRowOrigin"
           },
           "parentInstanceId": {
             "type": "string"
@@ -201493,7 +201493,7 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/WorkspaceKind"
+            "$ref": "#/components/schemas/PostApiWorkspacesByIdArchive200Kind"
           },
           "machineId": {
             "type": "string"
