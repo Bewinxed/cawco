@@ -100,12 +100,7 @@ export const harnessRefusedWords = {
   ) => {
     const verb = firstCopy(cell) ? "installing" : "updating";
     const what = `${name} on ${machine}${cell.to ? ` to ${cell.to}` : ""}`;
-    if (cell.startedBy === "cawco") {
-      return `CawCo is ${verb} ${what}`;
-    }
-    return cell.startedBy === "person"
-      ? `You started ${verb} ${what}`
-      : `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${what}`;
+    return `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${what}`;
   },
   /**
    * A stored conversation read through the harness's CLI whose read failed
@@ -144,7 +139,7 @@ export const harnessRefusedWords = {
   notDeletedTitle: "A conversation wasn't deleted",
   /** Its body: where, how often, the machine's last words, and that CawCo goes on trying. */
   notDeleted: (name: string, machine: string, tries: number, said: string) =>
-    `${name} on ${machine} didn't delete this conversation's stored transcript in ${tries} tries. The last said: ${said}${SENTENCE_END.test(said) ? "" : "."} CawCo keeps trying every few minutes, and this goes once it's deleted.`,
+    `${name} on ${machine} didn't delete this conversation's stored transcript in ${tries} tries. The last said: ${said}${SENTENCE_END.test(said) ? "" : "."} It is retried every few minutes.`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**
