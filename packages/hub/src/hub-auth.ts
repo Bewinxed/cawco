@@ -41,6 +41,7 @@ import {
   type HubAuthState,
   MACHINE_PROOF_HEADER,
   MACHINE_PROOF_SKEW_MS,
+  OWNER_SCHEME,
   type OwnerDevice,
   ownerCookie,
   ownerTokenOf,
@@ -711,6 +712,21 @@ export const createHubAuth = ({
     });
   };
 
+  /**
+   * A browser socket cannot set `Authorization`: the dashboard socket's
+   * upgrade may carry the owner's token as `?token=` (the Chrome extension's).
+   */
+  const withQueryToken = (header: Headers, url: URL): Headers => {
+    const token =
+      url.pathname === "/ws/dashboard" ? url.searchParams.get("token") : null;
+    return token
+      ? (name) =>
+          name === "authorization" && !header(name)
+            ? `${OWNER_SCHEME} ${token}`
+            : header(name)
+      : header;
+  };
+
   /** Each request's caller as the gate classified it, for its handler ({@link callerOf}). */
   const gated = new WeakMap<Request, Caller>();
 
@@ -720,8 +736,9 @@ export const createHubAuth = ({
    * the one a dashboard relay says its page came from.
    */
   const gate = (request: Request, address: string | null, set: RouteSet) => {
-    const path = new URL(request.url).pathname;
-    const header: Headers = (name) => request.headers.get(name);
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const header = withQueryToken((name) => request.headers.get(name), url);
     // A command route's join wait asks after its own row with its install's
     // code, admitted or not: the code is heard before anything is refused.
     const code = request.method === "GET" ? header(INSTALL_CODE_HEADER) : null;
@@ -1041,11 +1058,12 @@ export const createHubAuth = ({
     if (known) {
       return known;
     }
-    const header: Headers = (name) => request.headers.get(name);
+    const url = new URL(request.url);
+    const header = withQueryToken((name) => request.headers.get(name), url);
     return classify(
       header,
       request.method,
-      new URL(request.url).pathname,
+      url.pathname,
       clientAddress(header, address)
     );
   };

@@ -72,6 +72,8 @@ const qrSvg = (fidoUri: string, label: string): string => {
 async function render(state: BridgeState) {
   const { hubUrl } = await chrome.storage.sync.get("hubUrl");
   const hubValue = typeof hubUrl === "string" ? hubUrl : "";
+  const { hubToken } = await chrome.storage.sync.get("hubToken");
+  const tokenValue = typeof hubToken === "string" ? hubToken : "";
   const { qr } = state;
   const rp = qr?.rpOrigin?.replace(/^https?:\/\//u, "");
   const lines = [
@@ -93,6 +95,8 @@ async function render(state: BridgeState) {
     <div class="setup">
       <label for="hub-url">Hub URL</label>
       <input id="hub-url" type="url" placeholder="https://your-hub.ts.net:3455" value="${escape(hubValue)}" />
+      <label for="hub-token">Owner token</label>
+      <input id="hub-token" type="password" autocomplete="off" value="${escape(tokenValue)}" />
       <button id="save-hub">Save</button>
     </div>
   `;
@@ -103,8 +107,11 @@ async function render(state: BridgeState) {
   document.getElementById("save-hub")?.addEventListener("click", () => {
     const input = document.getElementById("hub-url") as HTMLInputElement;
     const url = input.value.trim();
+    const token = (
+      document.getElementById("hub-token") as HTMLInputElement
+    ).value.trim();
     if (url) {
-      chrome.storage.sync.set({ hubUrl: url });
+      chrome.storage.sync.set({ hubUrl: url, hubToken: token });
     }
   });
 }
@@ -117,7 +124,7 @@ const read = async (): Promise<BridgeState> => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "session" && changes[STATE_KEY]) {
     render(changes[STATE_KEY].newValue as BridgeState);
-  } else if (area === "sync" && changes.hubUrl) {
+  } else if (area === "sync" && (changes.hubUrl || changes.hubToken)) {
     read().then(render);
   }
 });

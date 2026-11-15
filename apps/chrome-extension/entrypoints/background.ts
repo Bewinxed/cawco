@@ -95,12 +95,14 @@ export default defineBackground(() => {
     }
   };
 
-  const hubSocketUrl = (hubUrl: string): string => {
+  const hubSocketUrl = (hubUrl: string, token: string): string => {
     const url = new URL(hubUrl);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.pathname = "/ws/dashboard";
+    // A browser socket sets no headers: the owner's token rides the query.
     url.search = new URLSearchParams({
       protocol: String(WIRE_PROTOCOL),
+      ...(token ? { token } : {}),
     }).toString();
     return url.toString();
   };
@@ -109,7 +111,10 @@ export default defineBackground(() => {
     clearTimeout(reconnect);
     socket?.close();
     socket = undefined;
-    const { hubUrl } = await chrome.storage.sync.get("hubUrl");
+    const { hubUrl, hubToken } = await chrome.storage.sync.get([
+      "hubUrl",
+      "hubToken",
+    ]);
     if (typeof hubUrl !== "string" || !hubUrl) {
       setState({ hub: "idle" });
       return;
@@ -117,7 +122,9 @@ export default defineBackground(() => {
     setState({ hub: "connecting" });
     let ws: WebSocket;
     try {
-      ws = new WebSocket(hubSocketUrl(hubUrl));
+      ws = new WebSocket(
+        hubSocketUrl(hubUrl, typeof hubToken === "string" ? hubToken : "")
+      );
     } catch {
       setState({ hub: "closed" });
       return;
@@ -187,7 +194,7 @@ export default defineBackground(() => {
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "sync" && changes.hubUrl) {
+    if (area === "sync" && (changes.hubUrl || changes.hubToken)) {
       connect();
     }
   });
