@@ -699,14 +699,10 @@ const partsSection = (parts: string[]): string =>
   `## Your parts\n\nThis task is a whole, and you coordinate it. Start each part with task_start when it is ready (each attempt reports to you), steer them with handoff, and read their reports. While you run, the hub starts none of them itself. The task closes once every part is done and you have called finish_item.\n\n${parts.map((part) => `- ${part}`).join("\n")}`;
 
 /**
- * How an attempt hands in its work (task-tools.ts `task_result`): what the
- * task's review shows. The person judged the work when they asked for it,
- * so a hand-in says it is done in a line, names only what needs them, and
- * carries the thing itself where a person can use it. The commit is the
- * evidence: the hub lands it and runs the checks on it.
+ * The brief's pointer to an attempt's hand-in: what it holds is the tool's
+ * own to say (task-tools.ts `task_result`), once.
  */
-const RESULT_LINE =
-  'Before finish_item, hand your work in with task_result. The person judged this work when they asked for it; they read your hand-in to learn that it is done and what needs them. `summary`: one line saying what is done. `check`: each caveat, what is left undone, each defect you found, and each thing the person must look at or decide, one line each; empty when there is none. `artifacts`: the thing itself, where a person can use it: the screen or component running (artifact_create as a preview, first, `kind: "artifact"`, its `artifactId`, `primary: true`), a post or document as it will read, each file by its path from the project folder, each link by its url; empty for work a person cannot open and use.';
+const RESULT_LINE = "Before finish_item, hand your work in with task_result.";
 
 /** The most comments a brief carries: the newest. */
 const BRIEF_COMMENTS_MAX = 20;

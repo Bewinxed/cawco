@@ -195,25 +195,26 @@ const forgeWriteOf = (asked: {
 };
 
 /**
- * What `finish_item` says: the report is all the parent reads, carrying
- * only what the parent must attend to (the commits are the evidence), and
- * what the hub does
- * with the work: the session's own work item's landing (`lands`), so a
- * delegate is never told the hub pushes to the base branch when it does not;
- * a host-scope item hands in its report and its `$TMPDIR/outputs/`.
+ * What `finish_item` says, the one place a report's content is told: the
+ * report is all the parent reads; the commits are the evidence, so it holds
+ * the work's loose ends and nothing else (the owner's rule, 2026-11-15); and
+ * what the hub does with the work, the session's own work item's landing
+ * (`lands`), so a delegate is never told the hub pushes to the base branch
+ * when it does not; a host-scope item hands in its report and its
+ * `$TMPDIR/outputs/`.
  */
 const finishItemDescription = (lands: ItemEnd = "main"): string => {
+  const alone =
+    " Your parent reads this report alone; chat messages reach no one.";
   // Prompting Claude Fable 5.2, "Make reports easy to follow": the parent
   // reads the report having seen none of the work behind it.
   const reader =
     " Write it for a reader who saw none of your tool calls or files: key points first, in plain full sentences, no term you coined during the work.";
-  const reads = ` Your parent reads this report alone; chat messages reach no one.${reader} A report pointing at a chat message is refused.`;
-  // The owner's rule (2026-11-15): the commit is the evidence, and a report
-  // notes only what its reader must pay attention to.
-  const owed =
-    "each caveat, what is left undone, each defect found, and what your boundary could not run";
-  const commits = ` Your parent reads this report alone; chat messages reach no one.${reader} Your commits are the evidence and the hub checks them: \`summary\` says only what your parent must attend to: ${owed}. A report pointing at a chat message is refused.`;
-  const whole = ` Your parent reads this report alone; chat messages reach no one.${reader} \`summary\` carries the deliverable whole, or names the file in $TMPDIR/outputs/ holding a long one, then only what your parent must attend to: ${owed}. A report pointing at a chat message is refused.`;
+  const refused = " A report pointing at a chat message is refused.";
+  const ends =
+    "the work's loose ends: each caveat, what is left undone, each defect found, what your boundary could not run. With none, one line saying so";
+  const commits = `${alone}${reader} Your commits are the evidence and the hub checks them, so \`summary\` is ${ends}.${refused}`;
+  const whole = `${alone}${reader} \`summary\` carries the deliverable whole, or names the file in $TMPDIR/outputs/ holding a long one, then ${ends}.${refused}`;
   const gate = "the merge checks your project's gate.md names";
   const back =
     " A failed check or a conflict comes back with its output: fix, commit, call again.";
@@ -223,7 +224,7 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
     " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
   switch (lands) {
     case "host":
-      return `Finish your work item. Nothing is landed: you ran on the machine itself.${reads} \`summary\` carries the findings and changes whole, then only what your parent must attend to: ${owed}. In a project, files you leave in $TMPDIR/outputs/ are copied to its folder's assets/, readable from any machine; the report names each path.${close}`;
+      return `Finish your work item. Nothing is landed: you ran on the machine itself.${alone}${reader} \`summary\` carries the findings and changes whole, then ${ends}.${refused} In a project, files you leave in $TMPDIR/outputs/ are copied to its folder's assets/, readable from any machine; the report names each path.${close}`;
     case "branch":
       return `Finish your work item. Commit and do not push.${commits} Then ${gate} runs on your commits and the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
     case "pr":
@@ -670,7 +671,7 @@ export function handoffTools(view: ToolView) {
     ),
     handoffTool(
       "delegate",
-      "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks (its project's gate.md lists them): what is done, then only caveats, what is left undone and defects it found.\n\n" +
+      "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks (its project's gate.md lists them): its commits are the evidence, its report the loose ends you pick up.\n\n" +
         "A delegate costs a whole session: it reads the code again from nothing, its workspace is cut and its checks run, and you wait for its report. " +
         "That pays off for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs, independent pieces run at once. " +
         "It does not for one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, or what the user wants to watch: do those yourself.\n\n" +
@@ -908,7 +909,7 @@ export function handoffTools(view: ToolView) {
           .trim()
           .min(1)
           .describe(
-            "One or two plain sentences: what changed and whether it passed. No ids or file names."
+            "What is done, in one or two plain sentences. No ids or file names."
           ),
         // What it carries is the tool's description's to say, once.
         summary: z.string(),
