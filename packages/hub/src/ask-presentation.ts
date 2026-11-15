@@ -20,8 +20,6 @@ import {
 import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
-import { ParkedAskShape } from "@cawco/core/stored-shapes";
-import { z } from "zod";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
@@ -51,51 +49,60 @@ const withOpenUrl = (
 };
 
 /**
- * The copy of a parked ask that leaves the hub for a client (a dashboard, the
- * apps, `/api/pending`): its tool input with every secret hidden, as the card
- * shows it. The ledger keeps the original, and {@link answeredWithOriginal}
- * puts it back on the way in, so an Approve runs the call as it was asked. A
- * question is left whole: its answer is written into its input.
+ * A parked ask as it leaves the hub for a client, an app or a parent session
+ * (a dashboard and app broadcast, `GET /api/pending`, an ask escalated to
+ * the person, an ask handed to its delegate's parent): its tool input with
+ * every secret hidden by field, as the card shows it. Each value under a
+ * field core `redact` reads as secret is `(hidden)` (an `env` or `headers`
+ * map by its keys), and a connector write's `config.url` is cut to its open
+ * part. A question is left whole: its answer is written into its input.
+ *
+ * The ledger keeps the original, and {@link answeredWithOriginal} puts it
+ * back on the way in, so an Approve runs the call as it was asked. Each of
+ * those senders takes only this type; a machine's send alone takes the ask
+ * itself (wire-socket.ts `sendToClient`, `sendToMachine`). TypeScript reads
+ * a class with a `#` field by name, and its constructor is private, so
+ * {@link AskCard.of} is the one place a card is made.
  */
-export const clientAsk = (ask: ParkedAsk): ParkedAsk => {
-  const { payload } = ask;
-  if (!isPermission(payload)) {
-    return ask;
+export class AskCard {
+  readonly #ask: ParkedAsk;
+
+  private constructor(ask: ParkedAsk) {
+    this.#ask = ask;
   }
-  const input = Object.fromEntries(
-    Object.entries(payload.input).map(([key, value]) => [
-      key,
-      redact(key, value),
-    ])
-  );
-  return {
-    ...ask,
-    payload: {
-      ...payload,
-      input: MCP_SERVERS_WRITE.test(payload.toolName)
-        ? withOpenUrl(input)
-        : input,
-    },
-  };
-};
 
-/** An envelope whose payload says it is a permission request, by its kind alone. */
-const PERMISSION_KIND = z.object({ kind: z.literal("permission_request") });
+  /** The card of a parked ask, its input hidden by field. */
+  static of(ask: ParkedAsk): AskCard {
+    const { payload } = ask;
+    if (!isPermission(payload)) {
+      return new AskCard(ask);
+    }
+    const input = Object.fromEntries(
+      Object.entries(payload.input).map(([key, value]) => [
+        key,
+        redact(key, value),
+      ])
+    );
+    return new AskCard({
+      ...ask,
+      payload: {
+        ...payload,
+        input: MCP_SERVERS_WRITE.test(payload.toolName)
+          ? withOpenUrl(input)
+          : input,
+      },
+    });
+  }
 
-/**
- * {@link clientAsk} for an envelope read as it arrives. The payload's kind
- * decides: a permission request is read as a `ParkedAsk` (one that is not
- * throws, a fault in the hub's own handling) and redacted; any other
- * envelope passes whole.
- */
-export const clientCopy = (envelope: Envelope): Envelope =>
-  PERMISSION_KIND.safeParse(envelope.payload).success
-    ? clientAsk(ParkedAskShape.parse(envelope))
-    : envelope;
+  /** The ask as its card shows it: what goes on the wire. */
+  get ask(): ParkedAsk {
+    return this.#ask;
+  }
+}
 
 /**
  * An answer to a parked permission, carrying the call's own input: clients
- * only ever held the redacted copy ({@link clientCopy}), so the input they
+ * only ever held its card ({@link AskCard}), so the input they
  * echo back is replaced by the ledger's.
  */
 export const answeredWithOriginal = (

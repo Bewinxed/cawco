@@ -47,7 +47,7 @@ import type {
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
-import type { FramePayload, PreviewFrame } from "@cawco/core/frames";
+import type { PreviewFrame } from "@cawco/core/frames";
 import type {
   HandoverCommand,
   HandoverEvent,
@@ -236,7 +236,12 @@ import type { turnState } from "./turn-state";
 import type { turnUsageOf } from "./turn-usage";
 import type { UsageCounter } from "./usage-count";
 import type { WelcomeConverge } from "./welcome-converge";
-import type { HubSocket } from "./wire-socket";
+import type {
+  ClientPayload,
+  ClientSocket,
+  MachineSocket,
+  SendToClient,
+} from "./wire-socket";
 import type { WorkItemCallsDeps } from "./work-item-calls";
 import type { createWorkItems } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
@@ -321,7 +326,7 @@ export interface ClosureContext {
   anchors: Map<string, string>;
   announceMcp: () => void;
   announceSkill: (name: string, source: string) => void;
-  answeredFrom: (socket: HubSocket) => AnswerFrom;
+  answeredFrom: (socket: ClientSocket) => AnswerFrom;
   answeringPermissions: Map<
     string,
     { answer: AskAnswer; outcome?: "answered" | "cancelled" | undefined }
@@ -412,7 +417,7 @@ export interface ClosureContext {
   callAgent: SessionCallsDeps["callAgent"];
   callFs: (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     op: Omit<FsPayload, "requestId">
   ) => Promise<Bounded<ControlResult>>;
   cancelContinuation: (
@@ -556,7 +561,7 @@ export interface ClosureContext {
   forkNoticeFor: (instanceId: string) => string | undefined;
   forward: (
     envelope: Envelope<unknown>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     remember?: boolean
   ) => boolean;
   gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
@@ -688,7 +693,7 @@ export interface ClosureContext {
   keepCustody: (machineId: string, custody: SessionCustody) => void;
   keepFleetReport: (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     peeked: FleetSyncReport,
     riding: RidingChanges | undefined
   ) => void;
@@ -879,7 +884,7 @@ export interface ClosureContext {
   outcomeOf: SessionCallsDeps["outcomeOf"];
   owedAfterBoard: (
     broken: ReturnType<ClosureContext["laws"]["broken"]>
-  ) => FramePayload[];
+  ) => ClientPayload[];
   owedCarries: Map<string, Promise<void>>;
   owedMoves: {
     get: (instanceId: string) => OwedMove | undefined;
@@ -907,7 +912,7 @@ export interface ClosureContext {
     {
       /** Presses that came while it ran, by their own request ids: each answered with its answer (relay-control.ts). */
       joined?: {
-        dashboard: HubSocket;
+        dashboard: ClientSocket;
         requestId: string;
         replyAsFrame: boolean;
       }[];
@@ -1033,7 +1038,7 @@ export interface ClosureContext {
     result: unknown
   ) => void;
   recordSessionAddress: (
-    agent: HubSocket,
+    agent: MachineSocket,
     machineId: string,
     claim: SessionAddress
   ) => void;
@@ -1095,12 +1100,12 @@ export interface ClosureContext {
   ) => string | null | undefined;
   restarts: ReturnType<typeof hubRestarts>;
   restore: (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     reattachOnly?: boolean | "busy" | "inspect" | undefined
   ) => void;
   resumeSpawn: (
-    agent: HubSocket,
+    agent: MachineSocket,
     machineId: string,
     row: PublicInstanceRow,
     relaunch?: boolean,
@@ -1145,13 +1150,12 @@ export interface ClosureContext {
     plan: ReturnType<DbShape["atLimit"]["compaction"]>,
     to: string
   ) => void;
-  say: (payload: FramePayload) => void;
+  say: (payload: ClientPayload) => void;
   sayCompaction: (
     plan: { instanceId: string; lineId: string; move: MovedLine | null },
     stage: CompactStage
   ) => void;
-  sendAnswerable: <T extends Envelope>(socket: HubSocket, frame: T) => T;
-  sendFrame: (socket: HubSocket, frame: unknown) => void;
+  sendAnswerable: <T extends Envelope>(socket: MachineSocket, frame: T) => T;
   sendFromHub: (
     machineId: string,
     instanceId: string,
@@ -1179,6 +1183,10 @@ export interface ClosureContext {
     | undefined;
   /** Each session's sends still pending, by count (sends.ts `pendingSends`). */
   sendsPending: { count: (instanceId: string) => number };
+  /** A frame to a client's socket (wire-socket.ts). */
+  sendToClient: SendToClient;
+  /** The hub's command to a machine's socket, as it is (wire-socket.ts). */
+  sendToMachine: (socket: MachineSocket, frame: object) => void;
   sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
@@ -1424,7 +1432,7 @@ export interface ClosureContext {
   usageCounter: UsageCounter;
   waitingForProcess: Set<string>;
   wakeForSend: (
-    agent: HubSocket,
+    agent: MachineSocket,
     machineId: string,
     instanceId: string,
     paced?: boolean

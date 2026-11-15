@@ -10,7 +10,7 @@ import type {
 import type { ParkedAsk } from "@cawco/core/frames";
 import type { Envelope } from "@cawco/core/protocol";
 import { Elysia, problem, t } from "elysia";
-import { clientAsk } from "../ask-presentation";
+import { AskCard } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import {
   askCollapseId,
@@ -124,7 +124,7 @@ export const pendingRoutes = ({
     // `artifact.needs` frame (artifacts/lane.ts): the lane whole, from
     // the hub, which no session's ask names.
     .get("/api/pending", (): (ParkedAsk | Envelope<ArtifactNeedsFrame>)[] => [
-      ...pending.list().map(clientAsk),
+      ...pending.list().map((ask) => AskCard.of(ask).ask),
       { verb: "frames", machineId: "hub", payload: artifactLane.frame() },
     ])
     // Needs you's artifacts and their notices as they stand (core

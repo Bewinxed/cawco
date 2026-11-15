@@ -1,6 +1,6 @@
 /** A control's answer finding who waits on it, and the fan-out to dashboards. */
 
-import { clientAsk } from "../ask-presentation";
+import { AskCard } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import { type ControlResult, peekToolStatus } from "../machine-answers";
 import { externalizeImages } from "../media";
@@ -20,7 +20,7 @@ export type ControlRepliesContext = Pick<
   | "publishInstances"
   | "registry"
   | "rewinds"
-  | "sendFrame"
+  | "sendToClient"
   | "streams"
   | "transcripts"
   | "waiting"
@@ -46,7 +46,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
           requestId: joined.requestId,
         };
         if (joined.replyAsFrame) {
-          ctx.sendFrame(joined.dashboard, {
+          ctx.sendToClient(joined.dashboard, {
             ...message,
             requestId: joined.requestId,
             payload: result,
@@ -149,7 +149,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
         ? ctx.registry.takeRequester(message.requestId)
         : undefined;
     if (requester) {
-      ctx.sendFrame(requester, message);
+      ctx.sendToClient(requester, message);
     }
     // An acknowledged command's reply is that command's news and nobody
     // else's — the same rule as the line above, in the newer dialect.
@@ -178,8 +178,8 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
         message.payload as TranscriptPayload
       );
     } else if (kind === "permission_request") {
-      // A parked ask goes out as the ledger's copy with its secrets hidden;
-      // the ledger keeps the call as it was asked. One that is not parked is
+      // A parked ask goes out as its card, its secrets hidden
+      // (`AskCard`); the ledger keeps the call as it was asked. One that is not parked is
       // a fault in the stages before this one.
       const ask = message.requestId
         ? ctx.pending.get(message.requestId)
@@ -189,7 +189,7 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
           `Permission request ${message.requestId ?? "(no id)"} reached the fan-out without being parked.`
         );
       }
-      ctx.registry.broadcast(clientAsk(ask));
+      ctx.registry.broadcast(AskCard.of(ask));
     } else {
       ctx.registry.broadcast(message);
     }

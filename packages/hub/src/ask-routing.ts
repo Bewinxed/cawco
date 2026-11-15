@@ -1,5 +1,4 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
-import type { FramePayload } from "@cawco/core/frames";
 import { DELEGATE_WAIT_ORIGIN } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { DelegateWaitAbout } from "@cawco/core/injected";
@@ -15,7 +14,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
-import { clientAsk } from "./ask-presentation";
+import { AskCard } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
@@ -355,7 +354,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       console.log(
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
-      ctx.registry.broadcast(clientAsk(parked));
+      ctx.registry.broadcast(AskCard.of(parked));
       ctx.push.onAsk(parked);
       // Its parent, if it can still be woken, hears it is the person's now.
       ctx.delegateWaits.asked(parked, true);
@@ -411,11 +410,13 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       : undefined;
   };
 
+  /** Hands `parent` its delegate's parked ask as its own to answer, as the ask's card (`AskCard`). */
   const deliverDelegateAsk = (
     delegate: InstanceRow,
     parent: { id: string; machineId: string },
-    ask: { requestId?: string; payload: unknown }
+    card: AskCard
   ): void => {
+    const { ask } = card;
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
     const instruction =
@@ -466,14 +467,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
           toolName === ASK_USER_QUESTION
             ? "question"
             : "tool",
-        payload: {
-          input: (
-            ask.payload as Extract<
-              FramePayload,
-              { kind: "permission_request" }
-            > | null
-          )?.input,
-        },
+        payload: { input: ask.payload.input },
         status: "pending",
       })
     );

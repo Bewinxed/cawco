@@ -1,8 +1,14 @@
 import type { ErrorFrame } from "@cawco/core/frames";
 import type { Envelope, Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
+import type { AskCard } from "./ask-presentation";
 import { HubLifetime, type HubLifetimeShape } from "./lifetime";
-import { type HubSocket, sendFrame } from "./wire-socket";
+import {
+  type ClientFrame,
+  type ClientSocket,
+  type MachineSocket,
+  sendToClient,
+} from "./wire-socket";
 
 /**
  * The hub's answer to a frame it will not act on, on every socket: an `error`
@@ -47,10 +53,16 @@ export const envelopeFault = (frame: unknown): string => {
 
 export interface RegistryShape {
   /** `older`: the page behind the socket was built for a wire before this hub's. */
-  readonly addDashboard: (socket: HubSocket, older: boolean) => void;
+  readonly addDashboard: (socket: ClientSocket, older: boolean) => void;
   readonly address: (machineId: string) => string | undefined;
-  readonly agent: (machineId: string) => HubSocket | undefined;
-  readonly broadcast: (envelope: Envelope) => void;
+  readonly agent: (machineId: string) => MachineSocket | undefined;
+  /**
+   * An envelope to every dashboard and app socket; a parked ask goes as its
+   * card alone (ask-presentation.ts `AskCard`, wire-socket.ts `ClientFrame`).
+   */
+  readonly broadcast: <F extends Envelope>(
+    envelope: ClientFrame<F> | AskCard
+  ) => void;
   /**
    * A move of the board. A page on this hub's wire gets `delta`. An older one
    * cannot read it and gets the snapshot instead: the one frame every build
@@ -64,7 +76,7 @@ export interface RegistryShape {
   readonly dashboardOrigins: () => readonly string[];
   /** Returns the machine the socket was registered as, if it was an agent. */
   readonly dropAgent: (socketId: string) => string | undefined;
-  readonly dropDashboard: (socket: HubSocket) => void;
+  readonly dropDashboard: (socket: ClientSocket) => void;
   readonly machineIds: () => string[];
   /**
    * Remembers the origin a dashboard just connected from, if it is one worth
@@ -82,11 +94,11 @@ export interface RegistryShape {
   ) => void;
   readonly registerAgent: (
     machineId: string,
-    socket: HubSocket,
+    socket: MachineSocket,
     address?: string
   ) => void;
   /** Routes the reply to a forwarded `control` back to the dashboard that asked. */
-  readonly rememberRequester: (requestId: string, socket: HubSocket) => void;
+  readonly rememberRequester: (requestId: string, socket: ClientSocket) => void;
   /**
    * The most recent usable dashboard origin on https, or nothing if none has
    * connected over https: the only address OpenRouter's sign-in returns to
@@ -94,7 +106,7 @@ export interface RegistryShape {
    */
   readonly secureDashboardOrigin: () => string | undefined;
   /** Consumes the route — a `requestId` is answered once. */
-  readonly takeRequester: (requestId: string) => HubSocket | undefined;
+  readonly takeRequester: (requestId: string) => ClientSocket | undefined;
 }
 
 /**
@@ -148,13 +160,13 @@ export class Registry extends Context.Service<Registry, RegistryShape>()(
 ) {}
 
 const make = (lifetime: HubLifetimeShape): RegistryShape => {
-  const agents = new Map<string, HubSocket>();
+  const agents = new Map<string, MachineSocket>();
   const addresses = new Map<string, string>();
   /** One entry per dashboard socket. A session's own frames reach it through `stream.ts`. */
-  const dashboards = new Map<string, HubSocket>();
+  const dashboards = new Map<string, ClientSocket>();
   /** The dashboard sockets whose page was built for an older wire, by id. */
   const older = new Set<string>();
-  const requesters = new Map<string, { socket: HubSocket; at: number }>();
+  const requesters = new Map<string, { socket: ClientSocket; at: number }>();
   /**
    * Every origin a dashboard reached this hub from, newest first, each once.
    * Kept rather than derived because the hub has no other way to learn them —
@@ -233,12 +245,12 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     },
     broadcast: (envelope) => {
       for (const socket of dashboards.values()) {
-        sendFrame(socket, envelope);
+        sendToClient(socket, envelope);
       }
     },
     broadcastTyped: (frame) => {
       for (const socket of dashboards.values()) {
-        sendFrame(socket, frame);
+        sendToClient(socket, frame);
       }
     },
     broadcastBoard: (delta, snapshot) => {
@@ -246,9 +258,9 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
       for (const socket of dashboards.values()) {
         if (older.has(socket.id)) {
           whole ??= snapshot();
-          sendFrame(socket, whole);
+          sendToClient(socket, whole);
         } else {
-          sendFrame(socket, delta);
+          sendToClient(socket, delta);
         }
       }
     },

@@ -423,7 +423,7 @@ export type SendsContext = Pick<
   | "reconnectingFor"
   | "registry"
   | "sayCompaction"
-  | "sendFrame"
+  | "sendToMachine"
   | "sendRefusal"
   | "sessionName"
   | "silentWords"
@@ -2665,7 +2665,7 @@ export const createSends = (ctx: SendsContext) => {
     const asSent = envelope.payload;
     if (agent && !owed) {
       toldMove(envelope);
-      ctx.sendFrame(agent, presenced(envelope));
+      ctx.sendToMachine(agent, presenced(envelope));
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
     // or its item's finish.
@@ -3199,7 +3199,7 @@ export const createSends = (ctx: SendsContext) => {
       delivery,
       envelope,
     });
-    ctx.sendFrame(agent, presenced(envelope));
+    ctx.sendToMachine(agent, presenced(envelope));
   };
 
   /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */

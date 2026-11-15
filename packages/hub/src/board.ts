@@ -12,7 +12,7 @@ import type { HubContext } from "./hub-context";
 import type { KeepAliveRow } from "./keep-alive";
 import { keepAliveState } from "./keep-alive";
 import { previewTargets } from "./preview";
-import type { HubSocket } from "./wire-socket";
+import type { ClientSocket } from "./wire-socket";
 import { isHubParent } from "./work-item-state";
 
 export type BoardContext = Pick<
@@ -49,7 +49,7 @@ export type BoardContext = Pick<
   | "pulses"
   | "registry"
   | "ruleEngine"
-  | "sendFrame"
+  | "sendToClient"
   | "sendsPending"
   | "storedRecent"
   | "shownFrame"
@@ -437,13 +437,13 @@ export const createBoard = (ctx: BoardContext) => {
    * `browser_list` frame after, never polling. Then each passkey QR still in
    * time, which the take-over view draws over its stream.
    */
-  const greetDashboard = (ws: HubSocket, older: boolean): void => {
+  const greetDashboard = (ws: ClientSocket, older: boolean): void => {
     const board = ctx.laws.hold(() => instancesFrame(""));
     const broken = ctx.laws.broken();
     if (board) {
-      ctx.sendFrame(ws, board);
+      ctx.sendToClient(ws, board);
       for (const payload of ctx.owedAfterBoard(broken)) {
-        ctx.sendFrame(ws, {
+        ctx.sendToClient(ws, {
           verb: "frames",
           machineId: "hub",
           payload,
@@ -452,7 +452,7 @@ export const createBoard = (ctx: BoardContext) => {
       // Then Recent's stored transcripts, whole (stored-recent.ts).
       const stored = ctx.laws.hold(ctx.storedRecent.now);
       if (stored) {
-        ctx.sendFrame(ws, {
+        ctx.sendToClient(ws, {
           verb: "frames",
           machineId: "hub",
           payload: { kind: "stored", stored },
@@ -460,7 +460,7 @@ export const createBoard = (ctx: BoardContext) => {
       }
     }
     if (!older) {
-      ctx.sendFrame(ws, {
+      ctx.sendToClient(ws, {
         verb: "frames",
         machineId: "hub",
         payload: { kind: "browser_list", browsers: ctx.browsers.list() },
@@ -468,7 +468,7 @@ export const createBoard = (ctx: BoardContext) => {
       // Then each passkey QR still in time, so a page opened or reloaded
       // after the prompt appeared still shows it over the take-over.
       for (const payload of ctx.browsers.passkeyQrs()) {
-        ctx.sendFrame(ws, {
+        ctx.sendToClient(ws, {
           verb: "frames",
           machineId: "hub",
           payload,
