@@ -230,6 +230,20 @@ export interface ToolSignin {
   state: "signed-in" | "signed-out" | "unknown";
 }
 
+/**
+ * A {@link ToolSignin} in its machine's own words: its state the string the
+ * machine sent, which may be one this build does not know (a newer
+ * agent's). What the hub keeps (`agent_tools.signin`), and reads as a
+ * {@link ToolSignin}, a state it does not know read as `unknown` (hub db
+ * machines.ts `toolStatusOf`).
+ */
+export type NamedToolSignin = Omit<ToolSignin, "state"> & { state: string };
+
+/** A {@link ToolStatus} as its machine sent it, its sign-in in the machine's own words ({@link NamedToolSignin}). */
+export type ReportedToolStatus = Omit<ToolStatus, "signin"> & {
+  signin?: NamedToolSignin;
+};
+
 /** A tool's sign-in begun on a machine: the link the person opens, and until when it is kept (ms epoch). */
 export interface ToolSigninChallenge {
   expiresAt: number;

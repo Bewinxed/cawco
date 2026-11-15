@@ -32653,7 +32653,7 @@
             "description": "Last-known tool status by tool id (NEW.md §10)."
           },
           "unknownHarnesses": {
-            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
             "type": "array",
             "items": {
               "type": "string"
@@ -75935,7 +75935,7 @@
               "description": "Last-known tool status by tool id (NEW.md §10)."
             },
             "unknownHarnesses": {
-              "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+              "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
               "type": "array",
               "items": {
                 "type": "string"
@@ -149822,7 +149822,7 @@
             "description": "Last-known tool status by tool id (NEW.md §10)."
           },
           "unknownHarnesses": {
-            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
             "type": "array",
             "items": {
               "type": "string"
@@ -150313,7 +150313,7 @@
             "description": "Last-known tool status by tool id (NEW.md §10)."
           },
           "unknownHarnesses": {
-            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: one this hub does not know, or one whose\nsign-in word or refusal it does not know (a newer agent's report). Kept\nas reported, never among {@link harnesses}. Absent when there are none.",
             "type": "array",
             "items": {
               "type": "string"

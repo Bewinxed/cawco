@@ -43,7 +43,7 @@ import {
   CANVAS_SCREEN_CLOSE,
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
-import type { MachineCapabilities } from "@cawco/core/capabilities";
+import type { NamedMachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import {
@@ -221,17 +221,17 @@ import {
 } from "@cawco/core/stage";
 import {
   FleetSyncReportSchema,
-  MachineCapabilitiesSchema,
   NamedHarnessReportSchema,
+  NamedMachineCapabilitiesSchema,
+  NamedToolSigninSchema,
   OpenCodeGoLimitsSchema,
-  ToolSigninSchema,
 } from "@cawco/core/stored-shapes";
 import type { CommandAck } from "@cawco/core/stream";
 import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import type { ToolStatus } from "@cawco/core/tools";
+import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
@@ -390,7 +390,7 @@ import {
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { ContinuationRow } from "./db/continuations";
-import type { AgentAuth } from "./db/machines";
+import { type AgentAuth, accountReportOf } from "./db/machines";
 import { SPLIT_CONTINUATIONS, TAG_MARKERS } from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
@@ -1094,26 +1094,26 @@ const AUTH_STATES: readonly AgentAuth[] = [
   "unreadable-credentials",
 ];
 
-/** What is kept of a tool's status a machine reported. */
-const keptToolStatus = (tool: ToolStatus): ToolStatus =>
+/** What is kept of a tool's status a machine reported: its sign-in in the machine's own words (core `NamedToolSignin`). */
+const keptToolStatus = (tool: ReportedToolStatus): ReportedToolStatus =>
   tool.signin
     ? {
         ...tool,
         signin: received(
-          ToolSigninSchema,
+          NamedToolSigninSchema,
           tool.signin,
           "a machine's report beat (a tool's sign-in)"
         ),
       }
     : tool;
 
-/** What is kept of what a machine reported it can do. */
+/** What is kept of what a machine reported it can do, in its own words (core `NamedMachineCapabilities`). */
 const keptCapabilities = (
-  capabilities: MachineCapabilities | undefined
-): MachineCapabilities | undefined =>
+  capabilities: NamedMachineCapabilities | undefined
+): NamedMachineCapabilities | undefined =>
   capabilities &&
   received(
-    MachineCapabilitiesSchema,
+    NamedMachineCapabilitiesSchema,
     capabilities,
     "a machine's report beat (its capabilities)"
   );
@@ -12377,12 +12377,10 @@ export const createServer = (
     // dashboard clears the machine's row (its Unlock offer) now.
     // A report whose dirs did not answer carries no word, and the
     // row keeps the last one.
-    const claudeWord = claudeReport?.auth;
-    if (
-      claudeWord &&
-      AUTH_STATES.includes(claudeWord) &&
-      db.setAgentAuth(machineId, claudeWord)
-    ) {
+    const claudeWord = AUTH_STATES.find(
+      (state) => state === claudeReport?.auth
+    );
+    if (claudeWord && db.setAgentAuth(machineId, claudeWord)) {
       publishInstances(machineId);
     }
     // Where each Claude account is signed in on this machine, as
@@ -12391,7 +12389,7 @@ export const createServer = (
     const claudeAccounts = claudeReport?.accounts;
     if (claudeAccounts) {
       syncAccounts(machineId, "claude", {
-        reports: claudeAccounts,
+        reports: claudeAccounts.map(accountReportOf),
         unread: claudeReport?.unreadAccounts ?? [],
       });
     }

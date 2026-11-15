@@ -14,6 +14,7 @@ import { ASK_STORED, type AskState } from "@cawco/core/asks";
 import type { BlockPage, BlockWidth } from "@cawco/core/blocks";
 import type { ConnectionState } from "@cawco/core/connections";
 import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
+import { everyOf } from "@cawco/core/every-of";
 import { MEMORY_ROLES, type MemoryRole } from "@cawco/core/fleet";
 import type { FleetScope } from "@cawco/core/fleet-placement";
 import type { ConnectAccess } from "@cawco/core/frames";
@@ -75,13 +76,14 @@ import {
   FleetSyncReportSchema,
   GithubProjectSchema,
   HookHandlerSchema,
-  MachineCapabilitiesSchema,
   McpPlatformSchema,
   ModelInfoSchema,
   MoveEndedSchema,
   MoveStageSchema,
   NamedHarnessReportSchema,
+  NamedMachineCapabilitiesSchema,
   NamedMoveRequestSchema,
+  NamedToolSigninSchema,
   NeutralUserMessageSchema,
   OpenCodeGoLimitsSchema,
   OrphanedCommentsSchema,
@@ -103,7 +105,6 @@ import {
   SkillFileSchema,
   SpawnPayloadSchema,
   StoppedCommandsSchema,
-  ToolSigninSchema,
   WaitWitnessSchema,
   WorkspaceCutSchema,
   WorkspaceHoldingSchema,
@@ -273,7 +274,8 @@ export interface PriorConversation {
 
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
-  machineCapabilities: storedJson(MachineCapabilitiesSchema)(
+  /** What the machine has installed, in its own words (core `NamedMachineCapabilities`). */
+  machineCapabilities: storedJson(NamedMachineCapabilitiesSchema)(
     "machine_capabilities"
   ),
   machineId: machineColumn("machine_id").primaryKey(),
@@ -362,7 +364,7 @@ export const agentTools = sqliteTable(
     method: text("method"),
     detail: text("detail"),
     /** For a tool with its own sign-in: whether it is signed in there, as the machine last read it. */
-    signin: storedJson(ToolSigninSchema)("signin"),
+    signin: storedJson(NamedToolSigninSchema)("signin"),
     /** When this was learnt. */
     at: timestamp("at").notNull(),
   },
@@ -859,6 +861,16 @@ export const projectTaskFields = sqliteTable(
  */
 export type PlaceKind = "checkout" | "hub";
 
+/**
+ * Every {@link PlaceKind}: `workspace` went with migration 0322, which
+ * deleted those places. The union stays written out, not indexed off this
+ * list: the apps' schema names it `PlaceKind` only while it is one.
+ */
+export const PLACE_KINDS = everyOf<PlaceKind>()(["checkout", "hub"]);
+
+/** {@link PLACE_KINDS} as a column's set, typed by its name, which the API's schema reads. */
+const PlaceKindSchema: z.ZodType<PlaceKind> = z.enum(PLACE_KINDS);
+
 /** A project's folder on the hub, relative to the hub's data (db `hubPlacePath`). */
 export type HubFolder = `projects/${string}`;
 
@@ -892,7 +904,7 @@ export const projectPlaces = sqliteTable(
     machineId: machineColumn("machine_id").notNull(),
     /** Absolute on its machine; the hub's own folder (kind `hub`) is relative to the hub's data. */
     path: text("path").$type<PlacePath>().notNull(),
-    kind: text("kind").$type<PlaceKind>().notNull(),
+    kind: storedEnum(PlaceKindSchema)("kind").notNull(),
     /**
      * The project's primary checkout: where it is worked on first, and what a
      * client names it by. Exactly one checkout per project once it has any,
