@@ -49,6 +49,7 @@ import { MachineProblem, silentProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { filingPrompt } from "./open-items";
 import { askEnvelope } from "./pending";
+import { redacted } from "./redactor";
 import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
 import { received } from "./stored-json";
@@ -278,8 +279,13 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       summariseInputTokens: prompt ? estimateTokens(prompt.length) : 0,
       openingTokens: asksOnly
         ? estimateTokens(asksOpening(source, extracted.asks, note).length)
-        : estimateTokens(openingMessage(source, "", extracted, note).length) +
-          SUMMARY_CAP_TOKENS,
+        : estimateTokens(
+            openingMessage(
+              source,
+              redacted({ summary: "", artifacts: extracted.artifacts }),
+              { tail: extracted.tail, note }
+            ).length
+          ) + SUMMARY_CAP_TOKENS,
       compacted: read.compacted,
       entries: read.entries,
     };
@@ -637,10 +643,14 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         )
       : openingMessage(
           row.prepared.source,
-          row.summary ?? undefined,
-          row.prepared.extracted,
-          row.request.note,
-          row.openItems ?? undefined
+          // The summariser's summary, the source's tool calls and git and
+          // its filed open items: its agents' words, through the redactor.
+          redacted({
+            artifacts: row.prepared.extracted.artifacts,
+            ...(row.summary ? { summary: row.summary } : {}),
+            ...(row.openItems ? { open: row.openItems } : {}),
+          }),
+          { tail: row.prepared.extracted.tail, note: row.request.note }
         );
 
   /** A continuation's start, as the hub's log line says it. */

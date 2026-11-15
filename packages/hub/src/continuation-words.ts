@@ -5,10 +5,11 @@
  * continuation-read.ts); this file only decides the words.
  */
 import { SUMMARY_CAP_TOKENS } from "@cawco/core/continuation";
-import { blocksOf, type Extracted } from "@cawco/core/continuation-read";
+import { blocksOf } from "@cawco/core/continuation-read";
 import type { GitChanges } from "@cawco/core/session/controls";
 import type { SessionMessage } from "@cawco/core/session-messages";
 import type { ContinuationSource } from "./db/stored-types";
+import { passedValue, type Redacted, type Typed } from "./redactor";
 
 /** Lines of git output the artifact index carries before it says how many it cut. */
 const GIT_LINES_SHOWN = 200;
@@ -126,17 +127,41 @@ export function summariserPrompt(
 }
 
 /**
- * The new session's first message, in the order it should be read. `open`:
- * the source's Open items section (open-items.ts), built from its records
- * as the opening is sent; absent while sizing, before anything is filed.
+ * What of a continuation's opening its agents wrote: the summariser's
+ * summary of the source (absent while the session is short enough to carry
+ * whole), the artifact index (its tool calls and git), and its Open items
+ * section (open-items.ts, from the records it filed; absent while sizing,
+ * before anything is filed). One session's words reaching another: only as
+ * the redactor passed them (redactor.ts).
  */
-export function openingMessage(
+export interface AgentOpening {
+  artifacts: string;
+  open?: string;
+  summary?: string;
+}
+
+/**
+ * What of a continuation's opening is the conversation's own: its last
+ * turns verbatim (the person's messages among them) and the person's note,
+ * carried whole.
+ */
+export interface PersonOpening {
+  note: string | undefined;
+  tail: string;
+}
+
+/**
+ * The new session's first message, in the order it should be read: the
+ * agents' part (`agent`, which only the redactor makes) and the person's
+ * (`person`, whole), put together here alone.
+ */
+export function openingMessage<F extends Redacted<AgentOpening>>(
   source: ContinuationSource,
-  summary: string | undefined,
-  extracted: Extracted,
-  note: string | undefined,
-  open?: string
+  agent: Typed<F>,
+  person: PersonOpening
 ): string {
+  const { summary, open, artifacts } = passedValue(agent);
+  const { tail, note } = person;
   return [
     `Continuing session "${source.title}" (instance ${source.instanceId}, ${source.harness}, ${source.model}, in ${source.cwd}).`,
     "",
@@ -147,10 +172,10 @@ export function openingMessage(
     ...(open ? ["", open] : []),
     "",
     "## Artifact index",
-    extracted.artifacts,
+    artifacts,
     "",
     "## The last turns, verbatim",
-    extracted.tail,
+    tail,
     ...(note ? ["", `Next: ${note}`] : []),
   ].join("\n");
 }
