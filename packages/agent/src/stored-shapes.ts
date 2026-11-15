@@ -165,10 +165,27 @@ const ToolInstallRecordShape = declared(
 );
 export type ToolInstallRecordOutput = z.output<typeof ToolInstallRecordShape>;
 
+const ToolInstallUnderwayShape = declared(
+  z.object({
+    at: z.number(),
+    from: z.string().optional(),
+    method: z.string().optional(),
+    path: z.string().optional(),
+    pid: z.number(),
+    to: z.string().optional(),
+  }),
+  "ToolInstallUnderway",
+  "packages/agent/src/tools.ts"
+);
+export type ToolInstallUnderwayOutput = z.output<
+  typeof ToolInstallUnderwayShape
+>;
+
 const ToolInstallsShape = declared(
   z.object({
     installs: z.record(z.string(), ToolInstallRecordShape),
     tookOverAt: z.number().optional(),
+    underway: z.record(z.string(), ToolInstallUnderwayShape).optional(),
   }),
   "ToolInstalls",
   "packages/agent/src/tools.ts"
