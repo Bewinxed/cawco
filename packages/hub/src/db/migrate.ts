@@ -40,6 +40,7 @@ import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
 import { logMovesUnread } from "./move-states-unread";
 import { logOutputsUnread } from "./outputs-unread";
+import { logOwedSendsUnread } from "./owed-sends-unread";
 import { logPassScopesUnread } from "./pass-scopes-unread";
 import { logPlatformsRoutesUnread } from "./platforms-routes-unread";
 import { logQueuedUnread } from "./queued-unread";
@@ -287,6 +288,16 @@ export const MIGRATION_STEPS: readonly Step[] = [
       // the hub's key and placed in 0419's columns, each secret sealed alone,
       // before 0420 drops the sealed values (sealed-facts-unread.ts).
       placeSealedFacts(client, "migration");
+    },
+  },
+  {
+    name: "owed-sends-unread",
+    before: "0421_sent_owed_held",
+    at: "migrator",
+    run: (client) => {
+      // Every owed send whose owed envelope 0421 does not fold as it
+      // stands, read before it runs.
+      logOwedSendsUnread(client);
     },
   },
   {

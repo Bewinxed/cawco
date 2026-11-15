@@ -1243,8 +1243,8 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       noteContinued(job, source);
       // What it was handed and never read goes with what it was owed.
       for (const send of ctx.db.sendsIn(source.id, ["pending"])) {
-        if (!send.owed && send.envelope) {
-          ctx.db.holdSend(send.uuid, send.envelope);
+        if (!send.owedHeld) {
+          ctx.db.oweAgain(send.uuid);
         }
       }
       ctx.dropCompaction(source.id, plan);

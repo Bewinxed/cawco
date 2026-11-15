@@ -41,8 +41,9 @@ export interface SendsDb {
    */
   readonly handBackTurn: (id: string, from: number, at: number) => boolean;
   /**
-   * A pending send no process took, owed again whole (`envelope`) until the
-   * session's next start; false when it is no longer pending.
+   * A pending send its machine handed back whole (`envelope`, what the
+   * machine was handed), owed again as it came back until the session's
+   * next start; false when it is no longer pending.
    */
   readonly holdSend: (uuid: string, envelope: Envelope<SendPayload>) => boolean;
   /** Keeps a pending send whole, as its machine was handed it. */
@@ -108,13 +109,13 @@ export interface SendsDb {
    */
   readonly openTurn: (id: string, at: number) => boolean;
   /**
-   * A pending send its process went away without reading, owed again from
-   * the envelope its record kept ({@link sentMessages.envelope}). False when
-   * it is no longer pending or kept none (a record from before envelopes
-   * were kept).
+   * A pending send its process went away without reading, owed again: the
+   * hub holds it ({@link sentMessages.owedHeld}) and hands the envelope its
+   * record kept ({@link sentMessages.envelope}). False when it is no longer
+   * pending or kept none (a record from before envelopes were kept).
    */
   readonly oweAgain: (uuid: string) => boolean;
-  /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
+  /** The sends still owed to their machine ({@link sentMessages.owedHeld}), pending, in the order accepted: a session's, or a machine's. */
   readonly owedSends: (
     of: { instanceId: string } | { machineId: string }
   ) => SentMessageRow[];
@@ -149,8 +150,12 @@ export interface SendsDb {
     instanceId: string,
     states: SentMessageRow["state"][]
   ) => SentMessageRow[];
-  /** Takes a send's owed envelope, once: the envelope, or undefined when another took it first. */
-  readonly takeOwedSend: (uuid: string) => Envelope<SendPayload> | undefined;
+  /**
+   * Takes a send out of the hub's keeping ({@link sentMessages.owedHeld}),
+   * once: true when this took it, false when another took it first or it
+   * was not owed.
+   */
+  readonly takeOwedSend: (uuid: string) => boolean;
   /**
    * Pending sends handed to a machine before the hub kept each whole
    * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
@@ -244,7 +249,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .where(
           and(
             eq(sentMessages.state, "pending"),
-            isNotNull(sentMessages.owed),
+            eq(sentMessages.owedHeld, true),
             or(
               isNull(sentMessages.hold),
               inArray(sentMessages.hold, [...holds])
@@ -272,7 +277,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
                     .where(eq(instances.machineId, of.machineId))
                 ),
             eq(sentMessages.state, "pending"),
-            isNotNull(sentMessages.owed)
+            eq(sentMessages.owedHeld, true)
           )
         )
         .orderBy(asc(sentMessages.acceptedAt))
@@ -280,7 +285,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
     holdSend: (uuid, envelope) =>
       db
         .update(sentMessages)
-        .set({ owed: envelope })
+        .set({ owedHeld: true, envelope })
         .where(
           and(eq(sentMessages.uuid, uuid), eq(sentMessages.state, "pending"))
         )
@@ -289,7 +294,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
     oweAgain: (uuid) =>
       db
         .update(sentMessages)
-        .set({ owed: sql`${sentMessages.envelope}` })
+        .set({ owedHeld: true })
         .where(
           and(
             eq(sentMessages.uuid, uuid),
@@ -307,7 +312,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
           and(
             eq(sentMessages.state, "pending"),
             isNull(sentMessages.envelope),
-            isNull(sentMessages.owed),
+            eq(sentMessages.owedHeld, false),
             isNotNull(sentMessages.body)
           )
         )
@@ -469,30 +474,22 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .from(instances)
         .where(eq(instances.id, id))
         .get()?.at ?? null,
-    takeOwedSend: (uuid) => {
-      const owed = db
-        .select({ owed: sentMessages.owed })
-        .from(sentMessages)
-        .where(eq(sentMessages.uuid, uuid))
-        .get()?.owed;
-      if (!owed) {
-        return;
-      }
-      const taken = db
+    takeOwedSend: (uuid) =>
+      db
         .update(sentMessages)
-        .set({ owed: null, hold: null })
-        .where(and(eq(sentMessages.uuid, uuid), isNotNull(sentMessages.owed)))
+        .set({ owedHeld: false, hold: null })
+        .where(
+          and(eq(sentMessages.uuid, uuid), eq(sentMessages.owedHeld, true))
+        )
         .returning({ uuid: sentMessages.uuid })
-        .all();
-      return taken.length > 0 ? owed : undefined;
-    },
+        .all().length === 1,
     updateSend: (uuid, change) =>
       db
         .update(sentMessages)
         // A send no longer pending is handed on no more: what it was is its body.
         .set(
           change.state && change.state !== "pending"
-            ? { ...change, envelope: null, owed: null, hold: null }
+            ? { ...change, envelope: null, owedHeld: false, hold: null }
             : change
         )
         .where(eq(sentMessages.uuid, uuid))

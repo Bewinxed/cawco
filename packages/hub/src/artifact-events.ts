@@ -161,8 +161,8 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         continue;
       }
       // Read before the withdrawal, which clears what the record held.
-      const images = picturesOf(row.owed ?? row.envelope);
-      const attachments = attachmentsOf(row.owed ?? row.envelope);
+      const images = picturesOf(row.envelope);
+      const attachments = attachmentsOf(row.envelope);
       const outcome = await ctx
         .withdrawPending(row, instance.machineId)
         .catch((error: unknown) => {

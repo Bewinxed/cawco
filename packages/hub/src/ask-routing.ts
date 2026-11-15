@@ -191,7 +191,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       // or its parent.
       const [row] = ctx.db.getInstancesByIds([instanceId]);
       const keptAtRest = (send: SentMessageRow): boolean =>
-        !!(send.owed && row) &&
+        !!(send.owedHeld && row) &&
         !ctx.startsTurnIn(
           { ...row, status: "stopped" },
           send.body as SentMessage

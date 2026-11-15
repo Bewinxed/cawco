@@ -2191,9 +2191,10 @@ export const createServer = (
   const {
     agentProtocols,
     binaryUpdateStates,
+    heardBinaryUpdate,
     machineCustody,
     forget: forgetMachineRuntime,
-  } = createMachineRuntime();
+  } = createMachineRuntime((machineId) => machineName(machineId));
   const { askedProjectName, createOrJoinProject, leadHome, workPlaceOf } =
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
@@ -3519,7 +3520,8 @@ export const createServer = (
       .owedSends({ instanceId: row.id })
       .some(
         (send) =>
-          send.owed !== null && startsTurnIn(row, send.owed.payload.message)
+          send.envelope !== null &&
+          startsTurnIn(row, send.envelope.payload.message)
       );
   /**
    * Whether `row` has no process and what is owed to it is only what may not
@@ -11432,7 +11434,7 @@ export const createServer = (
       !reading.instances.includes(row.id) &&
       !!registry.agent(row.machineId) &&
       // What is owed at the hub never reached the process.
-      db.sendsIn(row.id, ["pending"]).every((send) => send.owed) &&
+      db.sendsIn(row.id, ["pending"]).every((send) => send.owedHeld) &&
       !pending.list().some((ask) => ask.instanceId === row.id)
     );
   };
@@ -11656,7 +11658,7 @@ export const createServer = (
       (!row.parentInstanceId &&
         db
           .sendsIn(row.id, ["read", "pending", "failed"])
-          .filter((send) => !(send.owed || isKeepAlive(send.body)))
+          .filter((send) => !(send.owedHeld || isKeepAlive(send.body)))
           .at(-1)?.body.origin?.kind === "human"),
     machineName,
     noticed: (notice) => {
@@ -11726,7 +11728,7 @@ export const createServer = (
     startedBy: (row) => {
       const body = db
         .sendsIn(row.id, ["read", "pending", "failed"])
-        .filter((send) => !(send.owed || isKeepAlive(send.body)))
+        .filter((send) => !(send.owedHeld || isKeepAlive(send.body)))
         .at(-1)?.body;
       return body?.origin ? { origin: body.origin } : undefined;
     },
@@ -12073,7 +12075,9 @@ export const createServer = (
           hostsHub: row.machineId === ownMachineIdRead,
         })),
     setState: (machineId, state) => {
-      const known = binaryUpdateOf(state);
+      const read = binaryUpdateOf(state);
+      heardBinaryUpdate(machineId, read);
+      const known = read.state;
       if (known) {
         const moved = !sameBinaryUpdate(
           binaryUpdateStates.get(machineId),
@@ -12905,6 +12909,10 @@ export const createServer = (
     if (!speaksForMachine(ws, message)) {
       return;
     }
+    heardBinaryUpdate(message.machineId, {
+      state: agentFrame.binaryUpdate,
+      dropped: agentFrame.binaryUpdatePhaseDropped,
+    });
     doing(`${message.verb} from machine ${message.machineId}`);
     contact.heard(
       message.machineId,

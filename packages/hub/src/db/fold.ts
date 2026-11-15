@@ -181,7 +181,7 @@ export const foldDb = (core: DbCore): FoldDb => {
           reason: null,
           refusal: null,
           anchor: null,
-          owed: null,
+          owedHeld: false,
           envelope: null,
           delivery: null,
           held: false,
@@ -225,8 +225,7 @@ export const foldDb = (core: DbCore): FoldDb => {
         sent_messages: () =>
           tx.run(
             sql`UPDATE ${sentMessages} SET instance_id = ${survivorId},
-        owed = CASE WHEN owed IS NULL THEN NULL ELSE json_set(owed, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END,
-        envelope = CASE WHEN envelope IS NULL THEN NULL ELSE json_set(envelope, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END
+        envelope = CASE WHEN json_valid(envelope) THEN json_set(envelope, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) ELSE envelope END
         WHERE instance_id IN (${idList(gone)})`
           ),
         // Its identity too: the session it is now holds its own.

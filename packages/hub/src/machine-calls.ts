@@ -136,7 +136,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     let again = 0;
     for (const instanceId of instanceIds) {
       for (const send of ctx.db.sendsIn(instanceId, ["pending"])) {
-        if (send.owed || send.held || !(send.delivery && send.envelope)) {
+        if (send.owedHeld || send.held || !(send.delivery && send.envelope)) {
           continue;
         }
         const { envelope } = send;

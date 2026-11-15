@@ -493,7 +493,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       sendStep(row, plan);
       return false;
     }
-    if (sent.owed && sent.state === "pending") {
+    if (sent.owedHeld && sent.state === "pending") {
       ctx.releaseOne(sent);
       return false;
     }

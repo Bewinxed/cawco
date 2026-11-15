@@ -2892,6 +2892,13 @@
       "when": 1794745003338,
       "tag": "0420_connection_sealed_dropped",
       "breakpoints": true
+    },
+    {
+      "idx": 421,
+      "version": "6",
+      "when": 1794750446177,
+      "tag": "0421_sent_owed_held",
+      "breakpoints": true
     }
   ]
 }
