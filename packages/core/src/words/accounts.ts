@@ -478,7 +478,7 @@ export const accountsWords = {
      * saved again.
      */
     policyUnread: (stalled: string) =>
-      `${stalled} · Its provider’s saved at-limit policy can’t be read, so CawCo moves, compacts and files nothing by itself until it is saved again in Configure › Accounts`,
+      `${stalled} · Saved at-limit policy unreadable: no automatic moves, compaction or filing until saved in Configure › Accounts`,
   },
 
   // ── A session held past the cutoff, in Needs you (hub at-limit.ts `goneStale`) ─
