@@ -2677,8 +2677,9 @@ const OWED_AT = Date.UTC(2026, 9, 5);
  * record from before envelopes were kept), an envelope alone (a send its
  * machine has), owed differing from its kept envelope (one its machine
  * handed back, the hub's reminder and the person's presence folded into
- * its words), and two owed envelopes that do not read: not JSON, and JSON
- * with no message beside a kept envelope that reads.
+ * its words), and two owed envelopes that do not read: JSON with no
+ * message beside a kept envelope that reads, and one not JSON with none
+ * kept.
  */
 function seedOwedSends(dbPath: string): void {
   const sqlite = new Database(dbPath);
