@@ -180,7 +180,7 @@ function seedTasks(db: HubDb, projects: string[]): void {
         todosTotal: 3,
         problem: null,
         budgetUnread: null,
-        outputsUnread: null,
+        listsUnread: null,
         hash: Bun.hash(`${projectId}-${t}`).toString(16),
         updatedAt: new Date(Date.UTC(2026, 9, 2) + t * HOUR_MS),
       }))
@@ -707,8 +707,9 @@ const FIRST_OUTPUTS = FIRST_GATED + 12;
  * file's list, `[]` for none) and as a hand edit could: none (null, `[]`),
  * one path, several, a path kept twice; a list that is not JSON, JSON
  * `null`, an object; one that reads in part (a number and a null among
- * paths); and a task whose file's outputs line did not read, as the index
- * held it.
+ * paths); and tasks whose file's outputs, owns, checks, accounts, waits_on
+ * or labels line was left open, as the index held them (labels' is shown
+ * and read on, so its row is not read again).
  */
 function seedOutputs(dbPath: string): void {
   const sqlite = new Database(dbPath);
@@ -751,6 +752,11 @@ function seedOutputs(dbPath: string): void {
     [4, "post.md", null],
     [5, JSON.stringify(["post.md", 7]), null],
     [6, "[]", "outputs: is not a list like [a, b]."],
+    [7, "[]", "owns: is not a list like [a, b]."],
+    [8, "[]", "checks: is not a list like [a, b]."],
+    [9, "[]", "accounts: is not a list like [a, b]."],
+    [10, "[]", 'waits_on: is not a list like [138, "<artifact id>#<card>"].'],
+    [11, "[]", "labels: is not a list like [a, b]."],
   ];
   for (const [number, list, problem] of taskLists) {
     sqlite.run(

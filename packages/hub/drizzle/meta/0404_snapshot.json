@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8768244f-aad7-4892-97c1-3220d7f8e906",
+  "id": "00798d8e-6af0-43c6-974f-03599396445d",
   "prevId": "f8c29df2-3274-4ffd-94c8-2f178f25569b",
   "tables": {
     "account_bench": {
@@ -9620,8 +9620,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "outputs_unread": {
-          "name": "outputs_unread",
+        "lists_unread": {
+          "name": "lists_unread",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

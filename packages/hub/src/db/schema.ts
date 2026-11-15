@@ -824,12 +824,13 @@ export const projectTasks = sqliteTable(
      */
     budgetUnread: text("budget_unread"),
     /**
-     * What its `outputs:` line holds that does not read (task-file.ts
-     * `outputsUnread`); null when it reads or there is none. While set, no
-     * attempt at the task starts, and its `startProblem` says why: a list
-     * of outputs that does not read is never read as none.
+     * What its lines that govern an attempt (`outputs:`, `owns:`, `checks:`,
+     * `accounts:`, `waits_on:`) hold that does not read as their lists
+     * (task-file.ts `listsUnread`); null when they read or there are none.
+     * While set, no attempt at the task starts, and its `startProblem` says
+     * why: an entry such a line leaves out would widen what it does.
      */
-    outputsUnread: text("outputs_unread"),
+    listsUnread: text("lists_unread"),
     /** sha256 hex of the file's content as indexed. */
     hash: text("hash").notNull(),
     /** When the hub last saw the content change. */

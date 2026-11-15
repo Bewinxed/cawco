@@ -58847,6 +58847,10 @@
               "$ref": "#/components/schemas/ExternalRef"
             }
           },
+          "listsUnread": {
+            "description": "What its `outputs:`, `owns:`, `checks:`, `accounts:` or `waits_on:`\nline holds that does not read as its list (task-file.ts\n`GOVERNING_LISTS`); null when they read or there are none. While set,\nno attempt at it starts (dispatch.ts `startable`), and `startProblem`\nsays why.",
+            "type": "string"
+          },
           "liveAttempt": {
             "description": "An attempt at it is starting or running.",
             "type": "boolean"
@@ -58863,10 +58867,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "outputsUnread": {
-            "description": "What its `outputs:` line holds that does not read as a list; null when\nit reads or there is none. While set, no attempt at it starts\n(dispatch.ts `startable`), and `startProblem` says why.",
-            "type": "string"
           },
           "owns": {
             "description": "Globs of the repository's files an attempt owns.",
@@ -168112,6 +168112,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-list-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-move-not-session"
                 ]
               },
@@ -168185,42 +168221,6 @@
                 "type": "string",
                 "enum": [
                   "dispatch-nowhere"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "dispatch-outputs-unread"
                 ]
               },
               "detail": {
@@ -178761,6 +178761,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-list-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-move-not-session"
                 ]
               },
@@ -178834,42 +178870,6 @@
                 "type": "string",
                 "enum": [
                   "dispatch-nowhere"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "dispatch-outputs-unread"
                 ]
               },
               "detail": {
@@ -182359,6 +182359,10 @@
               "$ref": "#/components/schemas/ExternalRef"
             }
           },
+          "listsUnread": {
+            "description": "What its `outputs:`, `owns:`, `checks:`, `accounts:` or `waits_on:`\nline holds that does not read as its list (task-file.ts\n`GOVERNING_LISTS`); null when they read or there are none. While set,\nno attempt at it starts (dispatch.ts `startable`), and `startProblem`\nsays why.",
+            "type": "string"
+          },
           "liveAttempt": {
             "description": "An attempt at it is starting or running.",
             "type": "boolean"
@@ -182375,10 +182379,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "outputsUnread": {
-            "description": "What its `outputs:` line holds that does not read as a list; null when\nit reads or there is none. While set, no attempt at it starts\n(dispatch.ts `startable`), and `startProblem` says why.",
-            "type": "string"
           },
           "owns": {
             "description": "Globs of the repository's files an attempt owns.",
@@ -187049,6 +187049,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-list-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-move-not-session"
                 ]
               },
@@ -187122,42 +187158,6 @@
                 "type": "string",
                 "enum": [
                   "dispatch-nowhere"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "dispatch-outputs-unread"
                 ]
               },
               "detail": {

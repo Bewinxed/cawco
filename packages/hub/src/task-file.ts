@@ -210,13 +210,13 @@ export interface ParsedTask {
   extra: Record<string, ExtraValue>;
   fields: TaskFields;
   /**
-   * What its `outputs:` line holds that does not read as a list, quoted
-   * from the line (the line's problem is in `problems` too); null when it
-   * reads or there is none. While set, no attempt at it starts (dispatch.ts
-   * `startable`): outputs that do not read are never read as none, which
-   * would land the files they name on the base branch.
+   * What its lines of {@link GOVERNING_LISTS} hold that does not read as
+   * their lists, one sentence each, quoted (in `problems` too); null when
+   * they read or there are none. While set, no attempt at it starts
+   * (dispatch.ts `startable`): an entry such a line leaves out would widen
+   * what its attempt does.
    */
-  outputsUnread: string | null;
+  listsUnread: string | null;
   /** What in the file could not be read, one sentence each. */
   problems: string[];
   sections: TaskSection[];
@@ -407,6 +407,38 @@ export const listOf = (line: FrontMatterLine): string[] | undefined => {
   return [unquoted(value)];
 };
 
+/** A block list's item line once its comment is off: `- item`, or `-` alone (an empty item). */
+const BLOCK_ITEM = /^-(?:\s|$)/u;
+
+/**
+ * What of a list field's line does not read as its list, one sentence each,
+ * quoted: an inline list left open, a line under a block list that is not a
+ * `- item`, or a line under a value already on the key's line. Empty when
+ * it reads whole; {@link listOf} reads what does. `like` is how the field's
+ * list is written.
+ */
+const listUnread = (
+  field: string,
+  line: FrontMatterLine,
+  like = "[a, b]"
+): string[] => {
+  const value = withoutComment(line.value);
+  const open =
+    value.startsWith("[") && !value.endsWith("]")
+      ? [`${field}: “${value}” is not a list like ${like}.`]
+      : [];
+  const stray = line.under
+    .map((under) => withoutComment(under))
+    .filter(
+      (under) => under !== "" && (value !== "" || !BLOCK_ITEM.test(under))
+    )
+    .map(
+      (under) =>
+        `${field}: “${under}” is not an item of its list; write each item on its own line as - item, or the list as ${like}.`
+    );
+  return [...open, ...stray];
+};
+
 /** A scalar as front matter writes it: bare when YAML would read it back as the same string. */
 const renderScalar = (value: string): string =>
   BARE_SCALAR.test(value) && !value.endsWith(" ") && !YAML_WORDS.test(value)
@@ -505,17 +537,14 @@ const emptyFields = (): TaskFields => ({
   accounts: [],
 });
 
+/** How `waits_on:` is written. */
+const WAITS_LIKE = '[138, "<artifact id>#<card>"]';
+
 /** `waits_on:`, each target as wait-targets.ts keeps it; what reads as none goes to `problems`. */
 const readWaits = (line: FrontMatterLine, problems: string[]): string[] => {
-  const items = listOf(line);
-  if (!items) {
-    problems.push(
-      'waits_on: is not a list like [138, "<artifact id>#<card>"].'
-    );
-    return [];
-  }
+  problems.push(...listUnread("waits_on", line, WAITS_LIKE));
   const kept: string[] = [];
-  for (const item of items) {
+  for (const item of listOf(line) ?? []) {
     const target = waitTarget(item);
     if (target) {
       kept.push(waitHandle(target));
@@ -530,15 +559,11 @@ const readWaits = (line: FrontMatterLine, problems: string[]): string[] => {
 
 /** `links:`, each an external item's URL (core `refOfUrl`); what names none goes to `problems`. */
 const readLinks = (line: FrontMatterLine, problems: string[]): string[] => {
-  const items = listOf(line);
-  if (!items) {
-    problems.push(
-      'links: is not a list like ["https://github.com/acme/app/pull/418"].'
-    );
-    return [];
-  }
+  problems.push(
+    ...listUnread("links", line, '["https://github.com/acme/app/pull/418"]')
+  );
   const kept: string[] = [];
-  for (const item of items) {
+  for (const item of listOf(line) ?? []) {
     if (refOfUrl(item)) {
       kept.push(item.trim());
     } else {
@@ -581,16 +606,14 @@ const readFoundIn = (
   return null;
 };
 
+/** A list field's items as {@link listOf} reads them; each part of its line that does not read goes to `problems`, quoted. */
 const readList = (
   field: string,
   line: FrontMatterLine,
   problems: string[]
 ): string[] => {
-  const items = listOf(line);
-  if (!items) {
-    problems.push(`${field}: is not a list like [a, b].`);
-  }
-  return items ?? [];
+  problems.push(...listUnread(field, line));
+  return listOf(line) ?? [];
 };
 
 const LANDS: ReadonlySet<string> = new Set(LANDS_MODES);
@@ -650,6 +673,26 @@ const readBudget = (
   }
   return Object.keys(budget).length > 0 ? budget : null;
 };
+
+/**
+ * The list fields an entry left out of would widen what an attempt does,
+ * so a line of one that does not read whole holds every attempt
+ * ({@link ParsedTask} `listsUnread`): `outputs` (a declared output not
+ * passed over lands on the base branch), `owns` (a glob not claimed lets an
+ * overlapping item run beside it), `checks` (a command not listed is not
+ * run), `accounts` (a list left with no account reads as every account,
+ * and which were meant is unknown) and `waits_on` (a wait not kept starts
+ * it before what it waits on settles). The others narrow what an attempt is given
+ * or only sort and draw it (`context`, `labels`, `links`): what does not
+ * read is a problem the board shows, and the rest is read.
+ */
+const GOVERNING_LISTS: ReadonlySet<string> = new Set([
+  "outputs",
+  "owns",
+  "checks",
+  "accounts",
+  "waits_on",
+] satisfies readonly TaskField[]);
 
 const LIST_FIELDS: ReadonlySet<string> = new Set([
   "checks",
@@ -1069,14 +1112,18 @@ export class TaskDoc {
       problems.push("The front matter names no stage.");
     }
     const budgetUnread: string[] = [];
-    const outputsUnread: string[] = [];
+    const listsUnread: string[] = [];
     for (const line of this.front ?? []) {
       if (line.key === "budget") {
         readBudget(line, budgetUnread);
       }
-      if (line.key === "outputs" && !listOf(line)) {
-        outputsUnread.push(
-          `outputs: “${withoutComment(line.value)}” is not a list like [a, b].`
+      if (line.key !== undefined && GOVERNING_LISTS.has(line.key)) {
+        listsUnread.push(
+          ...listUnread(
+            line.key,
+            line,
+            line.key === "waits_on" ? WAITS_LIKE : undefined
+          )
         );
       }
     }
@@ -1117,7 +1164,7 @@ export class TaskDoc {
         })),
       problems,
       budgetUnread: budgetUnread.join(" ") || null,
-      outputsUnread: outputsUnread.join(" ") || null,
+      listsUnread: listsUnread.join(" ") || null,
     };
   }
 
