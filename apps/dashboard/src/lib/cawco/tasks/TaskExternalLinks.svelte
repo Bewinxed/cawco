@@ -24,6 +24,9 @@
    * A link whose last read stopped short keeps its row: the failed glyph,
    * what we last knew of its title, the source's words verbatim and Retry.
    * One not read yet keeps the row's height: a bar where its title goes.
+   * The record whose tracker sync is held (its baseline does not read,
+   * `baselineUnread`) says so in one line under its title, in the
+   * needs-you ink: the sync waits on the task and its issue matching.
    *
    * Its rows and heads stand `space-2` in from its own edges, the inset a
    * row's hover fills: a host lines its words up with its column by
@@ -272,6 +275,14 @@
             role="alert"
           >
             {sentence}
+          </p>
+        {/if}
+        {#if link.baselineUnread}
+          <p
+            class="m-0 max-w-c-measure type-body text-pretty wrap-anywhere text-status-attn-ink"
+            data-slot="link-held"
+          >
+            {words.baselineUnread}
           </p>
         {/if}
         <span
