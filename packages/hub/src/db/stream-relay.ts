@@ -1,10 +1,10 @@
 import type {
-  RelayPortHealth,
+  RelayPortName,
   RelayPorts,
   RelayReach,
   StreamRelayState,
 } from "@cawco/core/stream-relay";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   STREAM_JOURNEY_ID,
@@ -20,8 +20,6 @@ import type { RelayNameState } from "./stored-types";
 /** The fleet's stream relay as stored; its secret opened (null when the hub's key does not open it). */
 export interface StoredRelay {
   address: string;
-  checkedAt: number | null;
-  health: RelayPortHealth[];
   hostname: string | null;
   machineId: string;
   ports: RelayPorts | null;
@@ -39,14 +37,7 @@ export interface StoredRelay {
 type RelayChange = Partial<
   Pick<
     StoredRelay,
-    | "state"
-    | "ports"
-    | "reach"
-    | "why"
-    | "whyCommand"
-    | "health"
-    | "checkedAt"
-    | "wanted"
+    "state" | "ports" | "reach" | "why" | "whyCommand" | "wanted"
   >
 >;
 
@@ -74,9 +65,50 @@ export interface StoredProof {
   device: string;
   deviceId: string;
   outside: boolean;
-  ports: string[];
+  /** The chips of the URLs that answered, in the order the relay lists them; empty when none did. */
+  ports: RelayPortName[];
   refused: boolean;
 }
+
+/** The proved ports' columns. */
+interface ProvedColumns {
+  provedTcp: boolean;
+  provedTls: boolean;
+  provedUdp: boolean;
+}
+
+/** A proof's chips out of its columns, in the order the relay lists its URLs. */
+const chipsOf = (row: ProvedColumns): RelayPortName[] => [
+  ...(row.provedUdp ? (["udp 3478"] as const) : []),
+  ...(row.provedTcp ? (["tcp 3478"] as const) : []),
+  ...(row.provedTls ? (["tls 5349"] as const) : []),
+];
+
+/** A proof's chips into its columns: a proof written replaces one kept as not read. */
+const provedColumnsOf = (ports: readonly RelayPortName[]) => ({
+  provedUdp: ports.includes("udp 3478"),
+  provedTcp: ports.includes("tcp 3478"),
+  provedTls: ports.includes("tls 5349"),
+  portsUnread: null,
+});
+
+/** The relay's ports out of their columns: null unless all three were said. */
+const portsOf = (row: {
+  portTcp: boolean | null;
+  portTls: boolean | null;
+  portUdp: boolean | null;
+}): RelayPorts | null =>
+  row.portUdp === null || row.portTcp === null || row.portTls === null
+    ? null
+    : { udp: row.portUdp, tcp: row.portTcp, tls: row.portTls };
+
+/** The relay's ports into their columns: ports said replace any kept as not read. */
+const portColumnsOf = (ports: RelayPorts | null) => ({
+  portUdp: ports?.udp ?? null,
+  portTcp: ports?.tcp ?? null,
+  portTls: ports?.tls ?? null,
+  portsUnread: null,
+});
 
 /** The rows stream-relay.ts and relay-journey.ts keep: the relay's one row, the journey's, each device's proof, and when the setup card was answered. */
 export interface StreamRelayDb {
@@ -93,6 +125,7 @@ export interface StreamRelayDb {
   /** The journey begun (or begun again), through `domain` when one was seen. */
   readonly journeyOpen: (domain: string | null) => void;
   readonly journeyUpdate: (change: Partial<StoredJourney>) => void;
+  /** Each device's last proof whose chips read: one a hub before migration 0416 kept as not read proves nothing, and is no proof. */
   readonly proofs: () => StoredProof[];
   readonly proofsForget: () => void;
   readonly proved: (proof: StoredProof) => void;
@@ -126,12 +159,10 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
           secret: row.secret,
           wanted: row.wanted,
           state: row.state,
-          ports: row.ports,
+          ports: portsOf(row),
           reach: row.reach,
           why: row.why,
           whyCommand: row.whyCommand,
-          health: row.health,
-          checkedAt: time(row.checkedAt),
         }
       : null;
   },
@@ -143,12 +174,10 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
       secret,
       wanted: true,
       state: "starting" as const,
-      ports: null,
+      ...portColumnsOf(null),
       reach: null,
       why: null,
       whyCommand: null,
-      health: [],
-      checkedAt: null,
       createdAt: new Date(),
     };
     db.insert(streamRelay)
@@ -157,10 +186,10 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
       .run();
   },
   update: (change) => {
-    const { checkedAt, ...rest } = change;
+    const { ports, ...rest } = change;
     const set = {
       ...rest,
-      ...(checkedAt === undefined ? {} : { checkedAt: toDate(checkedAt) }),
+      ...(ports === undefined ? {} : portColumnsOf(ports)),
     };
     if (Object.keys(set).length === 0) {
       return;
@@ -233,10 +262,27 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
     db
       .select()
       .from(streamRelayProofs)
+      .where(isNull(streamRelayProofs.portsUnread))
       .all()
-      .map((row) => ({ ...row, at: row.at.getTime() })),
-  proved: (proof) => {
-    const row = { ...proof, at: new Date(proof.at) };
+      .map(
+        ({
+          provedUdp,
+          provedTcp,
+          provedTls,
+          portsUnread: _portsUnread,
+          ...row
+        }) => ({
+          ...row,
+          ports: chipsOf({ provedUdp, provedTcp, provedTls }),
+          at: row.at.getTime(),
+        })
+      ),
+  proved: ({ ports, ...proof }) => {
+    const row = {
+      ...proof,
+      ...provedColumnsOf(ports),
+      at: new Date(proof.at),
+    };
     db.insert(streamRelayProofs)
       .values(row)
       .onConflictDoUpdate({ target: streamRelayProofs.deviceId, set: row })

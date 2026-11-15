@@ -67,7 +67,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
-import type { MoveRow } from "./db/moves";
+import type { MoveHold, MoveRow } from "./db/moves";
 import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
 import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
@@ -384,16 +384,15 @@ export const createMoves = (deps: MovesDeps) => {
     }
   };
 
-  /** Whether a move still holds `instanceId`'s row: the move's to cancel, not a row to remove. */
-  const holds = (instanceId: string): boolean =>
-    db
-      .moveRows()
-      .some(
-        (row) =>
-          row.state.targetInstanceId === instanceId &&
-          row.stage !== "started" &&
-          row.stage !== "cancelled"
-      );
+  /**
+   * What still holds `instanceId`'s row, by the move's columns: a move the
+   * hub runs (`move`: the move's to cancel, not a row to remove), or one
+   * whose state does not read (`unread`: never woken, as the move can't
+   * say it reached its start; the person may remove it). Undefined when
+   * none does.
+   */
+  const holds = (instanceId: string): MoveHold | undefined =>
+    db.moveHolding(instanceId);
 
   /** Deletes a started or cancelled job once it has been kept a while. */
   const forgetLater = (row: MoveRow): void => {
@@ -1569,9 +1568,7 @@ export const createMoves = (deps: MovesDeps) => {
    * dismissed card cancels. False for every other ask.
    */
   const answer = (requestId: string, result: PermissionResult): boolean => {
-    const row = db
-      .moveRows()
-      .find((one) => one.stage === "approval" && one.state.askId === requestId);
+    const row = db.moveAwaiting(requestId);
     if (!row?.state.ask) {
       return false;
     }
@@ -1649,6 +1646,25 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   /**
+   * A move whose state, as a hub before migration 0415 stored it, does not
+   * read goes no further: the session row it names says so in its error,
+   * and stays held (never woken; the person may remove it).
+   */
+  const unreadRowsSay = (): void => {
+    for (const move of db.movesUnread()) {
+      if (
+        db.settleMovingInstance(
+          move.targetInstanceId,
+          "error",
+          spawnWords.form.moveUnread
+        )
+      ) {
+        deps.rowsChanged(move.targetMachineId);
+      }
+    }
+  };
+
+  /**
    * At the hub's start: every job goes on from its record, its session's
    * row held as its stage says (a move begun before rows were held gets its
    * row now), and the settled ones are let go later.
@@ -1672,6 +1688,7 @@ export const createMoves = (deps: MovesDeps) => {
         deps.settle(envelope.requestId, "cancelled");
       }
     }
+    unreadRowsSay();
     for (const row of db.moveRows()) {
       if (row.stage === "started" || row.stage === "cancelled") {
         forgetLater(row);

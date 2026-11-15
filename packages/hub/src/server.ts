@@ -1796,6 +1796,7 @@ export const createServer = (
     prepareContinuation,
     settledContinuation,
     startContinuation,
+    unreadAskersFail,
   } = createContinuations(ctx);
   const {
     cacheExpiry,
@@ -3423,7 +3424,7 @@ export const createServer = (
     status: string;
   }): boolean =>
     relaunchOf(row).kind !== "refused" &&
-    !moves.holds(row.id) &&
+    moves.holds(row.id) === undefined &&
     !launchInFlight(row.id) &&
     (row.status === "sleeping" ||
       row.status === "error" ||
@@ -11606,6 +11607,8 @@ export const createServer = (
   // An approved ask this hub was running when it went is told, never run
   // again; the asks of sessions that ended meanwhile are withdrawn.
   hubAsks.boot();
+  // An open continuation whose asker no longer reads goes no further.
+  unreadAskersFail();
 
   /**
    * A leak said by the session the machine runs, not told before: its row and

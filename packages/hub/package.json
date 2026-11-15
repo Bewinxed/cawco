@@ -12,6 +12,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "asks-passes": "bun scripts/asks-passes.ts",
+    "continuations-moves-relay": "bun scripts/continuations-moves-relay.ts",
     "db:generate": "NODE_PATH=$PWD/node_modules bun node_modules/drizzle-kit/bin.cjs generate",
     "db:push": "NODE_PATH=$PWD/node_modules CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun node_modules/drizzle-kit/bin.cjs push",
     "dev": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun --watch src/index.ts",

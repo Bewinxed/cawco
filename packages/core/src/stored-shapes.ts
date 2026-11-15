@@ -2913,25 +2913,6 @@ export const RefusalReachSchema: z.ZodType<RefusalReachType> =
   RefusalReachShape;
 export type RefusalReachOutput = z.output<typeof RefusalReachShape>;
 
-const RelayPortNameShape = declared(
-  z.enum(["udp 3478", "tcp 3478", "tls 5349"]),
-  "RelayPortName",
-  "packages/core/src/stream-relay.ts"
-);
-export type RelayPortNameOutput = z.output<typeof RelayPortNameShape>;
-
-const RelayPortHealthShape = declared(
-  z.object({
-    error: z.string().optional(),
-    port: RelayPortNameShape,
-    up: z.boolean(),
-  }),
-  "RelayPortHealth",
-  "packages/core/src/stream-relay.ts"
-);
-export const RelayPortHealthSchema = RelayPortHealthShape;
-export type RelayPortHealthOutput = z.output<typeof RelayPortHealthShape>;
-
 const RelayPortsShape = declared(
   z.object({ tcp: z.boolean(), tls: z.boolean(), udp: z.boolean() }),
   "RelayPorts",

@@ -107,8 +107,6 @@ import {
   ProjectNoteSchema,
   ProjectOfferReasonSchema,
   RefusalReachSchema,
-  RelayPortHealthSchema,
-  RelayPortsSchema,
   RelayReachSchema,
   RoutineMadeBySchema,
   RuleMatchKindSchema,
@@ -177,7 +175,6 @@ import {
   CacheTtlSchema,
   CommentDirectionSchema,
   ConnectionSecretSchema,
-  ContinuationAskerSchema,
   ContinueRequestSchema,
   DelegateRequestKindSchema,
   DesignCheckStateSchema,
@@ -193,6 +190,7 @@ import {
   LfsOfferAnswerSchema,
   LimitCompactionStageSchema,
   McpAuthModeSchema,
+  MoveAskerSchema,
   MoveStateShape,
   OAuthClientInformationFullSchema,
   OAuthDiscoveryStateSchema,
@@ -225,7 +223,11 @@ import {
   WorkOriginSchema,
   WorkspaceStateSchema,
 } from "./stored-shapes";
-import type { ItemBlock, SessionLineKind } from "./stored-types";
+import type {
+  ContinuationAsker,
+  ItemBlock,
+  SessionLineKind,
+} from "./stored-types";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 /** A time column a row's insert stamps with now, unless given one. */
@@ -4183,48 +4185,82 @@ export const claudeContextWindows = sqliteTable("claude_context_windows", {
  * is kept a few minutes so a dashboard that was away can still hear how it
  * ended, then deleted.
  */
-export const continuations = sqliteTable("continuations", {
-  id: text("id").primaryKey(),
-  sourceInstanceId: sessionColumn("source_instance_id").notNull(),
-  /** The request as asked, and its inputs as read then (continuations.ts). */
-  request: storedJson(ContinueRequestSchema)("request").notNull(),
-  prepared: storedJson(PreparedContinuationSchema)("prepared").notNull(),
-  /** The summariser answering now; a resumed job may have replaced it. */
-  summariserInstanceId: sessionColumn("summariser_instance_id"),
-  /** Minted when the job is: the new session is started under this id. */
-  targetInstanceId: sessionColumn("target_instance_id").notNull(),
-  /** The send the opening goes out as, so it is sent once whatever restarts. */
-  openingUuid: text("opening_uuid").notNull(),
-  /** The summariser's answer, kept once read so a restart never asks again. */
-  summary: text("summary"),
-  /** The source's Open items section (open-items.ts), read from its records once before the opening goes. */
-  openItems: text("open_items"),
-  stage: storedEnum(ContinuationJobSchema.shape.stage)("stage").notNull(),
-  error: text("error"),
-  /**
-   * Who asked for it. A person's own Continue starts a separate session;
-   * anything else's continuation is folded into one session with its source
-   * once its opening has gone (continuations.ts `foldContinued`).
-   */
-  askedBy: storedJson(ContinuationAskerSchema)("asked_by")
-    .notNull()
-    .default({ kind: "person" }),
-  /**
-   * While the job waits (`waiting`): the work in flight its source's process
-   * holds, which ending it would lose (core `CONTROL_WORK_IN_FLIGHT`), since
-   * when that has run (null when not known), and since when the job has
-   * waited, the bound counting from then (continuations.ts `waitStep`).
-   */
-  waiting: storedJson(
-    z.object({
-      from: z.number(),
-      since: z.number().nullable(),
-      why: z.string(),
-    })
-  )("waiting"),
-  createdAt: timestamp("created_at").notNull(),
-  updatedAt: timestamp("updated_at").notNull(),
-});
+export const continuations = sqliteTable(
+  "continuations",
+  {
+    id: text("id").primaryKey(),
+    sourceInstanceId: sessionColumn("source_instance_id").notNull(),
+    /** The request as asked, and its inputs as read then (continuations.ts). */
+    request: storedJson(ContinueRequestSchema)("request").notNull(),
+    prepared: storedJson(PreparedContinuationSchema)("prepared").notNull(),
+    /** The summariser answering now; a resumed job may have replaced it. */
+    summariserInstanceId: sessionColumn("summariser_instance_id"),
+    /** Minted when the job is: the new session is started under this id. */
+    targetInstanceId: sessionColumn("target_instance_id").notNull(),
+    /** The send the opening goes out as, so it is sent once whatever restarts. */
+    openingUuid: text("opening_uuid").notNull(),
+    /** The summariser's answer, kept once read so a restart never asks again. */
+    summary: text("summary"),
+    /** The source's Open items section (open-items.ts), read from its records once before the opening goes. */
+    openItems: text("open_items"),
+    stage: storedEnum(ContinuationJobSchema.shape.stage)("stage").notNull(),
+    error: text("error"),
+    /**
+     * Who asked for it (stored-types.ts `ContinuationAsker`), by kind: a
+     * person's own Continue starts a separate session; anything else's
+     * continuation is folded into one session with its source once its
+     * opening has gone (continuations.ts `foldContinued`), and a move's is
+     * its source's move while it runs (limit-moves.ts `moveJobOf`).
+     */
+    askedByKind: storedEnum(
+      z.enum([
+        "person",
+        "session",
+        "task",
+        "move",
+      ] as const satisfies readonly ContinuationAsker["kind"][])
+    )("asked_by_kind")
+      .notNull()
+      .default("person"),
+    /** The session or task that asked, for `session` and `task`; null otherwise. */
+    askedById: text("asked_by_id"),
+    /** A move's own fields, for `move`; null otherwise. */
+    askedByMove: storedJson(MoveAskerSchema)("asked_by_move"),
+    /**
+     * The asker as a hub before migration 0414 stored it, when it did not
+     * read whole: the job is then the person's (`asked_by_kind`), so it is
+     * neither folded nor a move, and an open one fails as the hub starts
+     * (continuations.ts `unreadAskersFail`). Null on every row written since.
+     */
+    askedByUnread: text("asked_by_unread"),
+    /**
+     * While the job waits (`waiting`): since when the job has waited, the
+     * bound counting from then (continuations.ts `waitStep`), the work in
+     * flight its source's process holds, which ending it would lose (core
+     * `CONTROL_WORK_IN_FLIGHT`), and since when that has run (null when not
+     * known). `waiting_from` and `waiting_why` are null together, when the
+     * job does not wait.
+     */
+    waitingFrom: integer("waiting_from"),
+    waitingSince: integer("waiting_since"),
+    waitingWhy: text("waiting_why"),
+    /**
+     * The wait as a hub before migration 0414 stored it, when it did not
+     * read whole: none of it placed, so the job's bound counts from when it
+     * next looks, never sooner. Null on every row written since.
+     */
+    waitingUnread: text("waiting_unread"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [
+    // A session's move job, and whether a job folds, by its asker's kind.
+    index("continuations_source_asker").on(
+      table.sourceInstanceId,
+      table.askedByKind
+    ),
+  ]
+);
 
 /** The lines a session's machine says about it, which the hub keeps as said. */
 export type MachineLineKind = Extract<
@@ -4360,16 +4396,40 @@ export const moves = sqliteTable(
     projectId: projectKey(),
     stage: storedEnum(MoveStageSchema)("stage").notNull(),
     /**
-     * Everything the job has learned and decided, as moves.ts keeps it, read
-     * and written whole, but the machines it names, which are its columns.
+     * Everything the job has learned and decided, as moves.ts keeps it
+     * (`MoveState`), read and written whole, but what its columns hold: the
+     * machines it names, its session's id, its parked ask and whether it
+     * was approved. Null when the state a hub before migration 0415 stored
+     * did not read whole (`state_unread`).
      */
-    state: storedJson(
+    learned: storedJson(
       MoveStateShape.omit({
         sourceMachineId: true,
         targetMachineId: true,
         stopOn: true,
+        targetInstanceId: true,
+        askId: true,
+        approved: true,
       })
-    )("state").notNull(),
+    )("learned"),
+    /**
+     * The session the move starts (`MoveState.targetInstanceId`): its row is
+     * held under this id from the move's start (moves.ts `holds`). Null only
+     * on a state that did not read whole and named none.
+     */
+    targetInstanceId: sessionColumn("target_instance_id"),
+    /** The ask parked for the person's "Move it" (`MoveState.askId`); null when none was. */
+    askId: text("ask_id"),
+    /** The person said "Move it" (`MoveState.approved`). */
+    approved: integer("approved", { mode: "boolean" }).notNull().default(false),
+    /**
+     * The state as a hub before migration 0415 stored it, when it did not
+     * read whole: the job is no move the hub runs, shows, answers or
+     * cancels; the session row it names stays held, never woken, and is
+     * marked failed as the hub starts (moves.ts `resume`). Null on every row
+     * written since.
+     */
+    stateUnread: text("state_unread"),
     /** The machine the project moves from (`MoveState.sourceMachineId`). */
     sourceMachineId: machineColumn("source_machine_id").notNull(),
     /** The machine it moves to (`MoveState.targetMachineId`). */
@@ -4384,6 +4444,8 @@ export const moves = sqliteTable(
   (table) => [
     index("moves_machines").on(table.targetMachineId, table.sourceMachineId),
     index("moves_stop_on").on(table.stopOn),
+    index("moves_target_instance").on(table.targetInstanceId),
+    index("moves_ask").on(table.askId),
   ]
 );
 
@@ -5223,8 +5285,10 @@ export const STREAM_RELAY_ID = "relay";
  * The fleet's stream relay (stream-relay.ts) — one row, keyed `'relay'`,
  * following the {@link previewSettings} precedent: the machine that runs it,
  * the address and DNS name it is reached by, the shared secret coturn checks
- * credentials against (sealed), and what its machine and the hub's health
- * check last said. No row: the fleet has no relay.
+ * credentials against (sealed), and what its machine last said. Each
+ * port's answer to the hub's health check is kept in memory
+ * (stream-relay.ts `health`): the hub asks again every minute and after
+ * each frame. No row: the fleet has no relay.
  */
 export const streamRelay = sqliteTable("stream_relay", {
   /** Always `'relay'`. */
@@ -5243,18 +5307,22 @@ export const streamRelay = sqliteTable("stream_relay", {
   state: storedEnum(StreamRelayStateSchema)("state")
     .notNull()
     .default("starting"),
-  /** What its machine has bound, as its last frame said. */
-  ports: storedJson(RelayPortsSchema)("ports"),
+  /**
+   * What its machine has bound, as its last frame said (core `RelayPorts`):
+   * its plain listener on UDP and on TCP, and its TLS listener. Null
+   * together before a frame said, and when what a hub before migration
+   * 0412 stored did not read whole (`ports_unread`), until the next frame.
+   */
+  portUdp: integer("port_udp", { mode: "boolean" }),
+  portTcp: integer("port_tcp", { mode: "boolean" }),
+  portTls: integer("port_tls", { mode: "boolean" }),
+  /** The ports as a hub before migration 0416 stored them, when they did not read whole; null once a frame has said them since. */
+  portsUnread: text("ports_unread"),
   /** Its machine's own LAN and tailnet addresses, as its last live frame said: every browser's mint carries them. */
   reach: storedJson(RelayReachSchema)("reach"),
   why: text("why"),
   /** The command `why` names as its fix, word for word inside it (shown as code). */
   whyCommand: text("why_command"),
-  /** Each port's last STUN answer. */
-  health: storedJson(z.array(RelayPortHealthSchema))("health")
-    .notNull()
-    .default(sql`'[]'`),
-  checkedAt: timestamp("checked_at"),
   createdAt: stampedNow("created_at"),
 });
 
@@ -5353,10 +5421,27 @@ export const streamRelayProofs = sqliteTable("stream_relay_proofs", {
   address: text("address"),
   /** Its public address differs from the relay's. */
   outside: integer("outside", { mode: "boolean" }).notNull(),
-  /** The chips of the URLs that answered; empty when none did. */
-  ports: storedJson(z.array(z.string()))("ports")
+  /**
+   * Which of the relay's URLs answered there, by its chip (core
+   * `RelayPortName`): UDP 3478, TCP 3478, TLS 5349. None: no URL did, and
+   * the device proved nothing.
+   */
+  provedUdp: integer("proved_udp", { mode: "boolean" })
     .notNull()
-    .default(sql`'[]'`),
+    .default(false),
+  provedTcp: integer("proved_tcp", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  provedTls: integer("proved_tls", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * The chips as a hub before migration 0416 stored them, when they did not
+   * read whole: the proof proves no port and is not read as a proof
+   * (relay-journey.ts): the device proves the relay again. Null on every
+   * proof written since.
+   */
+  portsUnread: text("ports_unread"),
   /** A URL refused its credential (a 401), not unreachable. */
   refused: integer("refused", { mode: "boolean" }).notNull().default(false),
   at: timestamp("at").notNull(),
