@@ -62,7 +62,7 @@ import { answerPermission } from "./pending";
 import type { AnyProblem } from "./refusal";
 import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
-import type { HubSocket } from "./wire-socket";
+import type { ClientSocket } from "./wire-socket";
 
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
@@ -175,7 +175,7 @@ export type RelayControlContext = Pick<
   | "recordDelegateAnswer"
   | "registry"
   | "relaunchOnAccount"
-  | "sendFrame"
+  | "sendToClient"
   | "sessionIdle"
   | "silentWords"
   | "streams"
@@ -436,7 +436,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
 
   const relayPermissionAnswer = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const answer = peekAnswer(message.payload);
@@ -466,7 +466,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     const correlationId = message.requestId ?? message.payload.requestId;
     const reply = (frame: ControlResult): void => {
       if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
+        ctx.sendToClient(dashboard, {
           ...message,
           verb: "frames",
           payload: frame,
@@ -548,7 +548,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    */
   const relayModelCrossing = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const { instanceId, payload } = message;
@@ -567,7 +567,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     const requestId = message.requestId ?? payload.requestId;
     const receipt = (frame: ControlResult): void => {
       if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
+        ctx.sendToClient(dashboard, {
           ...message,
           verb: "frames",
           payload: frame,
@@ -611,7 +611,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
 
   const relayControl = (
     asked: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
@@ -634,7 +634,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         error: hubOwned,
       };
       if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
+        ctx.sendToClient(dashboard, {
           ...message,
           verb: "frames",
           payload: frame,
@@ -681,7 +681,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
           ok: true,
         };
         if (replyAsFrame) {
-          ctx.sendFrame(dashboard, {
+          ctx.sendToClient(dashboard, {
             ...message,
             verb: "frames",
             payload: frame,

@@ -46,7 +46,7 @@ import {
 import { projectRowsFor, unbound } from "./project-placements";
 import { resolveSkill } from "./skills";
 import { unreachable } from "./unreachable";
-import type { HubSocket } from "./wire-socket";
+import type { MachineSocket } from "./wire-socket";
 
 /**
  * How long a session is given to take fleet MCP changes and say what each
@@ -92,7 +92,7 @@ export type FleetSourcesContext = Pick<
   | "readSkillFolder"
   | "registry"
   | "sendAnswerable"
-  | "sendFrame"
+  | "sendToMachine"
   | "toolsMayHaveChanged"
 >;
 
@@ -213,7 +213,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    */
   const refreshSessions = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     methods: readonly string[]
   ): void => {
     if (methods.length === 0) {
@@ -231,7 +231,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
           method,
           args: [],
         };
-        ctx.sendFrame(agent, {
+        ctx.sendToMachine(agent, {
           verb: "control",
           machineId,
           instanceId: row.id,
@@ -359,7 +359,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
    */
   const callFs = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     op: Omit<FsPayload, "requestId">
   ): Promise<Bounded<ControlResult>> => {
     const requestId = crypto.randomUUID();

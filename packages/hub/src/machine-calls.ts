@@ -34,7 +34,7 @@ import {
 } from "./skills";
 import { MACHINE_DISCONNECTED } from "./spawns";
 import { unreachable } from "./unreachable";
-import type { HubSocket } from "./wire-socket";
+import type { MachineSocket } from "./wire-socket";
 import { caughtUp } from "./wire-socket";
 
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
@@ -50,7 +50,7 @@ export type MachineCallsContext = Pick<
   | "machinePresence"
   | "presenced"
   | "registry"
-  | "sendFrame"
+  | "sendToMachine"
   | "silentWords"
   | "skillChoices"
   | "unansweredError"
@@ -103,7 +103,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         call.again
       ) {
         call.socketId = agent.id;
-        ctx.sendFrame(agent, call.again);
+        ctx.sendToMachine(agent, call.again);
         again += 1;
       }
     }
@@ -140,7 +140,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
           continue;
         }
         const { envelope } = send;
-        ctx.sendFrame(
+        ctx.sendToMachine(
           agent,
           envelope.verb === "send"
             ? ctx.presenced(envelope as Envelope<SendPayload>)
@@ -251,10 +251,10 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
 
   /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
   const sendAnswerable = <T extends Envelope>(
-    socket: HubSocket,
+    socket: MachineSocket,
     frame: T
   ): T => {
-    ctx.sendFrame(socket, frame);
+    ctx.sendToMachine(socket, frame);
     return frame;
   };
 
@@ -300,7 +300,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
       } satisfies Envelope<ControlPayload>;
       // Away: held, with no socket, for its machine's next register.
       if (agent) {
-        ctx.sendFrame(agent, frame);
+        ctx.sendToMachine(agent, frame);
       }
       return frame;
     });
@@ -576,7 +576,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
               } satisfies ControlPayload,
             } satisfies Envelope<ControlPayload>;
             if (agent) {
-              ctx.sendFrame(agent, frame);
+              ctx.sendToMachine(agent, frame);
             }
             return frame;
           },
