@@ -35,7 +35,7 @@ import type { PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
 import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
 import type { MoveOffWhy, StoredRow } from "./hub-shapes";
-import { cacheWarmNow, promptCacheExpiresAt } from "./keep-alive";
+import { cacheWarmNow, measuredCold, promptCacheExpiresAt } from "./keep-alive";
 import {
   type AccountsRead,
   type CompactionPlan,
@@ -976,7 +976,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   const cacheExpiry = (
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number]
   ): number | null => {
-    if (row.cacheCold) {
+    if (measuredCold(row)) {
       return null;
     }
     const expires = promptCacheExpiresAt(row);

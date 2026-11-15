@@ -1474,6 +1474,7 @@ public enum OpenEnums {
     /// `#/components/schemas/BuiltOnSince`.
     public enum BuiltOnSince: OpenEnum {
         case decidedDifferently
+        case maybeDecidedDifferently
         case reopened
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
@@ -1481,6 +1482,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "decided differently": self = .decidedDifferently
+            case "maybe decided differently": self = .maybeDecidedDifferently
             case "reopened": self = .reopened
             default: self = .unrecognized(rawValue)
             }
@@ -1489,6 +1491,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .decidedDifferently: "decided differently"
+            case .maybeDecidedDifferently: "maybe decided differently"
             case .reopened: "reopened"
             case let .unrecognized(rawValue): rawValue
             }
@@ -1498,7 +1501,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.decidedDifferently, .reopened]
+        public static let allCases: [Self] = [.decidedDifferently, .maybeDecidedDifferently, .reopened]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

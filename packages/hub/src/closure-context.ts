@@ -1455,7 +1455,9 @@ export interface ClosureContext {
     | "cacheTtl"
     | "contextTokens"
     | "contextReadAt"
-    | "cacheCold"
+    | "cacheColdAt"
+    | "cacheColdReason"
+    | "cacheColdUnread"
     | "keepAliveTurn"
   > & { keepAlive: KeepAlive })[];
   withPresence: (rows: AgentRow[]) => AgentRow[];

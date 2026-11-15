@@ -317,7 +317,8 @@ export const workItemRoutes = (
           ? workItemOut(
               item,
               ctx.db.landedChecks(item.id),
-              ctx.db.workItemOutputs(item.id)
+              ctx.db.workItemOutputs(item.id),
+              ctx.db.workItemWaits(item.id)
             )
           : problem(404, {
               code: "no-work-item",

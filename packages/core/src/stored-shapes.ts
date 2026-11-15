@@ -3687,14 +3687,6 @@ export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
   TrackerSyncStateShape;
 export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
 
-const WaitWitnessShape = declared(
-  z.object({ target: z.string(), value: z.string() }),
-  "WaitWitness",
-  "packages/core/src/task-views.ts"
-);
-export const WaitWitnessSchema = WaitWitnessShape;
-export type WaitWitnessOutput = z.output<typeof WaitWitnessShape>;
-
 const WorkspaceCutShape = declared(
   z.object({
     branch: z.string(),

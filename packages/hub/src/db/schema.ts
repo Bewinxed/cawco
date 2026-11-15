@@ -128,8 +128,6 @@ import {
   ToolCopySchema,
   ToolWantsSchema,
   TrackerSyncStateSchema,
-  WaitWitnessSchema,
-  WorkspaceCutSchema,
   WorkspaceHoldingSchema,
   WorkspaceKindSchema,
 } from "@cawco/core/stored-shapes";
@@ -142,10 +140,7 @@ import type { LimitWindow } from "@cawco/core/usage/types";
 import { USAGE_HARNESSES } from "@cawco/core/usage/types";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
-import type {
-  WorkspaceCut,
-  WorkspaceHolding,
-} from "@cawco/core/workspace/controls";
+import type { WorkspaceHolding } from "@cawco/core/workspace/controls";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -1163,12 +1158,24 @@ export const instances = sqliteTable("instances", {
   lastRequestAt: timestamp("last_request_at"),
   contextTokens: integer("context_tokens"),
   contextReadAt: timestamp("context_read_at"),
-  cacheCold: storedJson(
-    z.object({
-      reason: z.string(),
-      at: z.number(),
-    })
-  )("cache_cold"),
+  /**
+   * When a keep-alive ping read under 90% from the session's cache, epoch ms
+   * on the hub's clock, with {@link cacheColdReason} (keep-alive.ts
+   * `keepAliveResult`): its cache is cold until a real turn warms it. Null
+   * together: not measured cold.
+   */
+  cacheColdAt: integer("cache_cold_at"),
+  /** What that ping read, in words ("ping read 12%"); null with {@link cacheColdAt}. */
+  cacheColdReason: text("cache_cold_reason"),
+  /**
+   * The cold reading as it was stored, when it was there and did not read
+   * whole as it became {@link cacheColdAt} and {@link cacheColdReason}
+   * (migration 0425). Only a measured miss wrote one, and only a real turn
+   * cleared it, so the session reads as cold (keep-alive.ts `measuredCold`)
+   * until a real turn warms it or a ping measures it again, either of which
+   * clears this.
+   */
+  cacheColdUnread: text("cache_cold_unread"),
   /** In-flight ping identity survives a hub or agent restart. */
   keepAliveTurn: text("keep_alive_turn"),
   /**
@@ -1723,9 +1730,21 @@ export const workspaces = sqliteTable(
      * again (workspaces.ts `recuttable`). One whose item landed none retires
      * with its commits in a carry: its head names that carry, and where its
      * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
-     * it retires.
+     * it retires. Its branch, its commit and its carry (core `WorkspaceCut`):
+     * the branch and commit null together; the carry null for one with
+     * none (workspaces.ts `headOf`).
      */
-    head: storedJson(WorkspaceCutSchema)("head").$type<WorkspaceCut>(),
+    headBranch: text("head_branch"),
+    headCommit: text("head_commit"),
+    headCarry: text("head_carry"),
+    /**
+     * Its head as it was stored, when it was there and did not read whole as
+     * it became {@link workspaces.headBranch}, `headCommit` and `headCarry`
+     * (migration 0428): none of it is placed, so it is no known head and the
+     * workspace is not cut again (workspaces.ts `recuttable`, core work.ts
+     * `headUnread`). Cleared as its head is next written.
+     */
+    headUnread: text("head_unread"),
     /**
      * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
      * workspaces.ts `recut`; rebased as it landed, landing-run.ts `landOnBase`)
@@ -1851,12 +1870,13 @@ export const workItems = sqliteTable(
      */
     outputsUnread: text("outputs_unread"),
     /**
-     * What an attempt at a task was dispatched on (dispatch.ts): each card
-     * or pin its task waited on, its own or its parts' chain's, and the
-     * value it settled with then (task-waits.ts `value`). A card answered
-     * differently since is told by its value, not its time. Null: none.
+     * What an attempt at a task was dispatched on, as it was stored, when it
+     * was there and did not read whole as it became {@link workItemWaits}
+     * rows (migration 0427): what of it read is placed, and each card or pin
+     * its task waits on that no placed row names counts as possibly decided
+     * differently since (tasks.ts `builtOnOf`, `tellMoved`).
      */
-    waitedOn: storedJson(z.array(WaitWitnessSchema))("waited_on"),
+    waitsUnread: text("waits_unread"),
     /**
      * What its session handed in on its task (`task_result`): its words,
      * what to check, and its artifacts. A later call replaces it. Null:
@@ -1972,14 +1992,28 @@ export const workItems = sqliteTable(
     background: integer("background", { mode: "boolean" })
       .notNull()
       .default(false),
-    /** Routine waits since the last message handed to the parent. */
-    waitHistory: storedJson(
-      z.object({
-        count: z.number(),
-        until: z.number(),
-        reason: z.string(),
-      })
-    )("wait_history"),
+    /**
+     * How many waits it declared since the last message handed to its parent
+     * (work-items.ts `waitSummary`, `delivered`); 0: none.
+     */
+    waitCount: integer("wait_count").notNull().default(0),
+    /**
+     * The last of those waits once it is over: until when, and why. A live
+     * wait is {@link waitUntil} and {@link waitReason}, which this takes as
+     * the wait clears (project-work.ts `updateWorkItem`); null while a wait
+     * is live, and while none was counted.
+     */
+    waitLastUntil: timestamp("wait_last_until"),
+    waitLastReason: text("wait_last_reason"),
+    /**
+     * Its waits since the last delivered message as they were stored, when
+     * they were there and did not read whole as they became
+     * {@link waitCount}, {@link waitLastUntil} and {@link waitLastReason}
+     * (migration 0426): none of it is placed, and its parent's next message
+     * says its waits do not read (core work.ts `waitsUnread`). Cleared with
+     * the count as a message is delivered.
+     */
+    waitHistoryUnread: text("wait_history_unread"),
     /** The `finish_item` the running landing answers, kept while it runs. */
     submission: storedJson(WorkItemSubmissionSchema)("submission"),
     /**
@@ -2260,6 +2294,26 @@ export const workItemGatePasses = sqliteTable(
       columns: [table.itemId, table.passKey, table.command, table.stage],
     }),
   ]
+);
+
+/**
+ * What an attempt at a task was dispatched on (dispatch.ts): each card or
+ * pin its task waited on, its own or its parts' chain's, and the value it
+ * settled with then (task-waits.ts `value`), one row each, read in the order
+ * kept (rowid). A card answered differently since is told by its value, not
+ * its time. None: it waited on none.
+ */
+export const workItemWaits = sqliteTable(
+  "work_item_waits",
+  {
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    /** The wait as its task's file keeps it (core wait-targets.ts). */
+    target: text("target").notNull(),
+    value: text("value").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.target] })]
 );
 
 /** The globs a queued delegate's request owns (`owns`), one row each: what holds it back. */

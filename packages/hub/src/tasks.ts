@@ -112,7 +112,7 @@ import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { workWords } from "@cawco/core/words/work";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import type { WorkItemRow } from "./db/project-work";
+import type { WorkItemAttempt } from "./db/project-work";
 import type { Tracker } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
 import type { TaskIndexRow } from "./db/task-index";
@@ -365,7 +365,7 @@ export interface TaskStore {
   readonly attempts: (
     projectId: string
   ) => Pick<
-    WorkItemRow,
+    WorkItemAttempt,
     | "createdAt"
     | "endedAt"
     | "error"
@@ -379,6 +379,7 @@ export interface TaskStore {
     | "taskResult"
     | "unmetAt"
     | "waitedOn"
+    | "waitsUnread"
   >[];
   /**
    * The comments a task carried from outside sources, either way, as the
@@ -1187,7 +1188,7 @@ const attemptOf = (
   endedAt: item.endedAt?.getTime() ?? null,
   endedHow: endedHowOf(item),
   headline: item.headline?.trim() || null,
-  waitedOn: item.waitedOn ?? [],
+  waitedOn: item.waitedOn,
 });
 
 /** The newest attempt that finished with a report, as a task's read shows it ({@link TaskResult}). */
@@ -1837,6 +1838,20 @@ export const createTasks = (store: TaskStore) => {
         .map((item) => item.id)
     );
 
+  /**
+   * The project's attempts whose witnesses were kept as not read (work_items
+   * `waitsUnread`, migration 0427), by id: each card or pin their task waits
+   * on that no placed witness names counts as possibly decided differently
+   * since ({@link unwitnessed}).
+   */
+  const waitsUnreadIn = (projectId: string): Set<string> =>
+    new Set(
+      store
+        .attempts(projectId)
+        .filter((item) => item.waitsUnread !== null)
+        .map((item) => item.id)
+    );
+
   /** The tasks whose hook start waits for a slot. */
   const queuedIn = (projectId: string): Set<string> =>
     new Set(store.queuedStarts?.(projectId) ?? []);
@@ -1860,6 +1875,8 @@ export const createTasks = (store: TaskStore) => {
     unmet: Set<string>;
     /** The tasks that wait on each task, by id. */
     waitersOf: Map<string, string[]>;
+    /** The attempts whose witnesses do not read ({@link waitsUnreadIn}). */
+    waitsUnread: Set<string>;
     world: WaitWorld;
   }
 
@@ -1888,6 +1905,7 @@ export const createTasks = (store: TaskStore) => {
     return {
       attempts: attemptsByTask(projectId),
       unmet: unmetIn(projectId),
+      waitsUnread: waitsUnreadIn(projectId),
       byId,
       partsOf,
       waitersOf,
@@ -1962,12 +1980,39 @@ export const createTasks = (store: TaskStore) => {
     return unsettledFirst(waits);
   };
 
-  /** The cards and pins a done attempt was dispatched on whose value moved since. */
+  /**
+   * The cards and pins of `waits` that none of `attempt`'s witnesses names:
+   * what an attempt whose witnesses do not read may have been dispatched on
+   * with another value.
+   */
+  const unwitnessed = <Wait extends WaitState>(
+    waits: readonly Wait[],
+    attempt: TaskAttempt
+  ): Wait[] => {
+    const witnessed = new Set(
+      attempt.waitedOn.map((witness) => witness.target)
+    );
+    return waits.filter(
+      (wait) =>
+        (wait.kind === "card" || wait.kind === "pin") &&
+        !witnessed.has(wait.target)
+    );
+  };
+
+  /**
+   * The cards and pins a done attempt was dispatched on whose value moved
+   * since; for one whose witnesses do not read, each of `waits` none of them
+   * names besides, as possibly decided differently.
+   */
   const builtOnOf = (
     context: FlagContext,
-    attempt: TaskAttempt | undefined
-  ): BuiltOn[] =>
-    (attempt?.waitedOn ?? []).flatMap((witness) => {
+    attempt: TaskAttempt | undefined,
+    waits: readonly TaskWait[]
+  ): BuiltOn[] => {
+    if (!attempt) {
+      return [];
+    }
+    const moved = attempt.waitedOn.flatMap((witness): BuiltOn[] => {
       const now = settleIn(context, witness.target);
       if (now.value === witness.value) {
         return [];
@@ -1984,6 +2029,19 @@ export const createTasks = (store: TaskStore) => {
         },
       ];
     });
+    if (!context.waitsUnread.has(attempt.workItemId)) {
+      return moved;
+    }
+    return [
+      ...moved,
+      ...unwitnessed(waits, attempt).map((wait): BuiltOn => ({
+        target: wait.target,
+        label: wait.label,
+        href: wait.href,
+        since: taskLinkWords.maybeDecidedDifferently,
+      })),
+    ];
+  };
 
   /** What a task's attempts and edges say, against the project's other tasks as indexed. */
   const flagsOf = (
@@ -2028,7 +2086,8 @@ export const createTasks = (store: TaskStore) => {
         kind === "done"
           ? builtOnOf(
               context,
-              attempts.find((attempt) => attempt.state === "done")
+              attempts.find((attempt) => attempt.state === "done"),
+              waits
             )
           : [],
       // An attempt sent back unmet counts as failed: dispatch leaves the
@@ -4941,9 +5000,16 @@ export const createTasks = (store: TaskStore) => {
 
   /**
    * A task's live attempt hears once each card or pin it was dispatched on
-   * whose value moved since; an attempt no longer live leaves the record.
+   * whose value moved since; an attempt whose witnesses do not read
+   * (`waitsUnread`, {@link waitsUnreadIn}) hears once each card or pin its
+   * task waits on that none of them names, as possibly answered differently.
+   * An attempt no longer live leaves the record.
    */
-  const tellMoved = (projectId: string, task: TaskSummary): void => {
+  const tellMoved = (
+    projectId: string,
+    task: TaskSummary,
+    waitsUnread: ReadonlySet<string>
+  ): void => {
     for (const ended of task.attempts.filter(
       (attempt) => !isLive(attempt.state)
     )) {
@@ -4965,6 +5031,33 @@ export const createTasks = (store: TaskStore) => {
       store.tell?.(
         live.instanceId,
         `[CawCo] ${markdownLink(now.label, now.href)}, which ${linked(projectId, task)} was started on, ${now.value === null ? taskLinkWords.wasReopened : taskLinkWords.wasAnsweredDifferently} since. Read it again before you build on it.`
+      );
+    }
+    if (waitsUnread.has(live.workItemId)) {
+      tellUnwitnessed(projectId, task, live, heard);
+    }
+  };
+
+  /**
+   * A live attempt whose witnesses do not read hears once, in `heard`, each
+   * card or pin its task waits on that none of them names ({@link
+   * unwitnessed}): it may have been answered differently since.
+   */
+  const tellUnwitnessed = (
+    projectId: string,
+    task: TaskSummary,
+    live: TaskAttempt,
+    heard: Set<string>
+  ): void => {
+    for (const wait of unwitnessed(task.waits, live)) {
+      const key = `${wait.target}\0unread`;
+      if (heard.has(key)) {
+        continue;
+      }
+      heard.add(key);
+      store.tell?.(
+        live.instanceId,
+        `[CawCo] ${markdownLink(wait.label, wait.href)}, which ${linked(projectId, task)} waits on, ${taskLinkWords.mayHaveMoved} Read it again before you build on it.`
       );
     }
   };
@@ -5989,8 +6082,9 @@ export const createTasks = (store: TaskStore) => {
         return list;
       }
       emit({ kind: "changed", projectId });
+      const waitsUnread = waitsUnreadIn(projectId);
       for (const task of list.tasks) {
-        tellMoved(projectId, task);
+        tellMoved(projectId, task, waitsUnread);
       }
     },
 

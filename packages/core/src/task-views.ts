@@ -177,13 +177,17 @@ export interface TaskWait extends WaitState {
 
 /**
  * A card or pin a done task's attempt was dispatched on whose value moved
- * since: answered differently, or reopened. Nothing reopens on its own.
+ * since: answered differently, or reopened; or, its attempt's record of
+ * what it was dispatched on not reading, one that record does not name,
+ * maybe decided differently. Nothing reopens on its own.
  */
 export interface BuiltOn {
   href: string;
   label: string;
   since:
-    typeof taskLinkWords.decidedDifferently | typeof taskLinkWords.reopened;
+    | typeof taskLinkWords.decidedDifferently
+    | typeof taskLinkWords.reopened
+    | typeof taskLinkWords.maybeDecidedDifferently;
   target: string;
 }
 
