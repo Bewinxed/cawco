@@ -51,10 +51,12 @@ import type {
   ItemBlock as ItemBlockType,
   PreparedContinuation as PreparedContinuationType,
   Proposal as ProposalType,
+  SendHold as SendHoldType,
   StoredSendRefusal as StoredSendRefusalType,
   TrackerCursor as TrackerCursorType,
   TrackerSynced as TrackerSyncedType,
   TrashedRows as TrashedRowsType,
+  TrashKind as TrashKindType,
   WorkItemSubmission as WorkItemSubmissionType,
   WorkspaceFrom as WorkspaceFromType,
 } from "./stored-types";
@@ -434,6 +436,31 @@ const ProposalShape = declared(
 export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
 export type ProposalOutput = z.output<typeof ProposalShape>;
 
+const SendHoldShape = declared(
+  z.enum([
+    "agent",
+    "behind",
+    "blocked",
+    "build",
+    "compacting",
+    "filing",
+    "finishing",
+    "held",
+    "hub",
+    "limit",
+    "paused",
+    "recut",
+    "resting",
+    "signin",
+    "starting",
+    "update",
+  ]),
+  "SendHold",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const SendHoldSchema: z.ZodType<SendHoldType> = SendHoldShape;
+export type SendHoldOutput = z.output<typeof SendHoldShape>;
+
 const StoredSendRefusalShape = declared(
   z.union([
     SendRefusalShape,
@@ -475,6 +502,27 @@ const TrackerSyncedShape = declared(
 export const TrackerSyncedSchema: z.ZodType<TrackerSyncedType> =
   TrackerSyncedShape;
 export type TrackerSyncedOutput = z.output<typeof TrackerSyncedShape>;
+
+const TrashKindShape = declared(
+  z.enum([
+    "rule",
+    "hook",
+    "skill",
+    "plugin",
+    "marketplace",
+    "agent",
+    "mcp",
+    "delegateType",
+    "memory",
+    "memoryDoc",
+    "connection",
+    "harnessConfig",
+  ]),
+  "TrashKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const TrashKindSchema: z.ZodType<TrashKindType> = TrashKindShape;
+export type TrashKindOutput = z.output<typeof TrashKindShape>;
 
 const TrashedRowsShape = declared(
   z.object({

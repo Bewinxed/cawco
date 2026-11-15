@@ -13,7 +13,7 @@ import { BINARY_UPDATE_PHASES } from "./binary-updates";
 import type { MachineCapabilities } from "./capabilities";
 import type { FleetHeld } from "./fleet";
 import type { FramePayload } from "./frames";
-import type { MachineHarnessReport } from "./harness";
+import type { ReportedHarness } from "./harness";
 import type { ServingPreview } from "./preview/upstream";
 import type {
   BuildInfo,
@@ -66,8 +66,8 @@ interface AgentFrameReads {
   fleetHeld: FleetHeld | undefined;
   /** The harness a frame names. */
   harness: string | undefined;
-  /** The report beat's word on what each harness adapter on the machine can do. */
-  harnesses: MachineHarnessReport[] | undefined;
+  /** The report beat's word on what each harness adapter on the machine can do, by the machine's own name for each harness. */
+  harnesses: ReportedHarness[] | undefined;
   /** A beat's fields as they were sent: a beat sent no object is refused by destructuring it. */
   heartbeat: HeartbeatPayload;
   /** The machine's home folder its register says, when it is an absolute path. */
@@ -244,15 +244,16 @@ export const binaryUpdateOf = (
     : undefined;
 };
 
-const harnessesOf = (value: unknown): MachineHarnessReport[] | undefined => {
+const harnessesOf = (value: unknown): ReportedHarness[] | undefined => {
   if (!Array.isArray(value)) {
     return undefined;
   }
   return value.filter(
-    (report): report is MachineHarnessReport =>
+    (report): report is ReportedHarness =>
       typeof report === "object" &&
       report !== null &&
-      typeof (report as MachineHarnessReport).harness === "string"
+      "harness" in report &&
+      typeof report.harness === "string"
   );
 };
 

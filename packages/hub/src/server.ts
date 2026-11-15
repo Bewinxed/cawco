@@ -79,6 +79,7 @@ import {
 import type {
   AgentBusyReport,
   HarnessReport,
+  NamedHarnessReport,
   SessionCredentialInstall,
 } from "@cawco/core/harness";
 import {
@@ -220,8 +221,8 @@ import {
 } from "@cawco/core/stage";
 import {
   FleetSyncReportSchema,
-  HarnessReportSchema,
   MachineCapabilitiesSchema,
+  NamedHarnessReportSchema,
   OpenCodeGoLimitsSchema,
   ToolSigninSchema,
 } from "@cawco/core/stored-shapes";
@@ -12340,13 +12341,17 @@ export const createServer = (
    * dir was asked) is filed all the same, its word `unauthenticated` (no
    * account can run on it; the machine's own word stays): the refusal is the
    * report, and the dashboard puts it, with its fix, where Claude would
-   * start.
+   * start. Each is filed by the machine's own name for its harness, one
+   * this hub does not run included (a newer agent's): its read narrows it
+   * (db machines.ts `harnessesByMachine`). Filed as a harness this hub
+   * runs, such a report failed its write and took the beat's every other
+   * report with it.
    */
   const harnessesReported = (
     machineId: string,
     reported: NonNullable<AgentFrame["harnesses"]>
   ): void => {
-    const filed = reported.flatMap((report): HarnessReport[] => {
+    const filed = reported.flatMap((report): NamedHarnessReport[] => {
       const auth =
         report.auth ??
         harnessReportOf(machineId, report.harness)?.auth ??
@@ -12354,7 +12359,7 @@ export const createServer = (
       return auth
         ? [
             received(
-              HarnessReportSchema,
+              NamedHarnessReportSchema,
               { ...report, auth },
               "a machine's report beat (a harness's report)"
             ),
@@ -12363,9 +12368,10 @@ export const createServer = (
     });
     db.mergeAgentHarnesses(machineId, filed);
     capabilityReports.delete(machineId);
-    const claudeReport = reported.find(
-      (report) => traitsOf(report.harness).accountDir
-    );
+    const claudeReport = reported.find((report) => {
+      const harness = harnessNamed(report.harness);
+      return harness !== undefined && traitsOf(harness).accountDir;
+    });
     // The machine's word on Claude moves with its Claude report,
     // not only at its register: a keychain unlocked from the
     // dashboard clears the machine's row (its Unlock offer) now.

@@ -1083,7 +1083,7 @@ try {
       `A migration's foreign keys don't match the schema (drizzle-kit 0.31 drops an added column's ON DELETE and ON UPDATE, drizzle-orm#5619: write the clause into the migration by hand):\n${drift.join("\n")}`
     );
   }
-  // Every stored JSON row reads as its column's schema once migrated: a
+  // Every stored row (JSON, or a closed set of text) reads as its column's schema once migrated: a
   // shape changed without a migration for its rows fails here.
   const stored = new Database(dbPath, { readwrite: true });
   const { hubSecrets } = await import("../src/secret-box");
@@ -1097,7 +1097,7 @@ try {
   stored.close();
   if (shapes.failures.length > 0) {
     throw new Error(
-      `Stored JSON rows that are not their column's shape: a migration is missing.\n${storedRowsReport(shapes).join("\n")}`
+      `Stored rows that are not their column's shape: a migration is missing.\n${storedRowsReport(shapes).join("\n")}`
     );
   }
   // Every pick a page's doc keeps reads as one once the hub started: a
@@ -1143,7 +1143,7 @@ try {
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored rows in ${shapes.columns} columns (${shapes.sets} of them closed sets of text) are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

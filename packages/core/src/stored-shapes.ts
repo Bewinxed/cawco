@@ -260,6 +260,14 @@ const ArtifactThumbnailShape = declared(
 export const ArtifactThumbnailSchema = ArtifactThumbnailShape;
 export type ArtifactThumbnailOutput = z.output<typeof ArtifactThumbnailShape>;
 
+const AtPlanLimitShape = declared(
+  z.enum(["move", "extra-usage"]),
+  "AtPlanLimit",
+  "packages/core/src/accounts.ts"
+);
+export const AtPlanLimitSchema = AtPlanLimitShape;
+export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
+
 const ArtifactBaseShape = declared(
   z.object({ name: z.string().optional(), primary: z.boolean().optional() }),
   "ArtifactBase",
@@ -644,6 +652,37 @@ const ContextLineShape = declared(
 );
 export const ContextLineSchema = ContextLineShape;
 export type ContextLineOutput = z.output<typeof ContextLineShape>;
+
+const ContinuationJobShape = declared(
+  z.object({
+    error: z.string().optional(),
+    id: z.string(),
+    inPlace: z.literal(true).optional(),
+    sourceInstanceId: z.string(),
+    stage: z.enum([
+      "waiting",
+      "filing",
+      "summarising",
+      "starting",
+      "started",
+      "failed",
+      "cancelled",
+    ]),
+    summariserInstanceId: z.string().optional(),
+    targetInstanceId: z.string(),
+    waiting: z
+      .object({
+        since: z.number().nullable(),
+        until: z.number(),
+        why: z.string(),
+      })
+      .optional(),
+  }),
+  "ContinuationJob",
+  "packages/core/src/protocol.ts"
+);
+export const ContinuationJobSchema = ContinuationJobShape;
+export type ContinuationJobOutput = z.output<typeof ContinuationJobShape>;
 
 export const ExtractedShape = declared(
   z.object({
@@ -1547,141 +1586,6 @@ const GithubProjectShape = declared(
 export const GithubProjectSchema = GithubProjectShape;
 export type GithubProjectOutput = z.output<typeof GithubProjectShape>;
 
-const AccountIdentityShape = declared(
-  z.object({
-    email: z.string(),
-    organization: z.string(),
-    orgId: z.string().nullable(),
-  }),
-  "AccountIdentity",
-  "packages/core/src/accounts.ts"
-);
-export type AccountIdentityOutput = z.output<typeof AccountIdentityShape>;
-
-const AccountKindShape = declared(
-  z.enum(["subscription", "console", "oauth", "api_key"]),
-  "AccountKind",
-  "packages/core/src/accounts.ts"
-);
-export type AccountKindOutput = z.output<typeof AccountKindShape>;
-
-const AccountProviderShape = declared(
-  z.string(),
-  "AccountProvider",
-  "packages/core/src/accounts.ts"
-);
-export type AccountProviderOutput = z.output<typeof AccountProviderShape>;
-
-const AccountReportShape = declared(
-  z.object({
-    account: z.string(),
-    identity: AccountIdentityShape.optional(),
-    kind: AccountKindShape.optional(),
-    loggedIn: z.boolean(),
-    provider: AccountProviderShape.optional(),
-  }),
-  "AccountReport",
-  "packages/core/src/accounts.ts"
-);
-export type AccountReportOutput = z.output<typeof AccountReportShape>;
-
-const AuthStateShape = declared(
-  z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
-  "AuthState",
-  "packages/core/src/session-messages.ts"
-);
-export type AuthStateOutput = z.output<typeof AuthStateShape>;
-
-const HarnessCapabilitiesShape = declared(
-  z.object({
-    compaction: z.boolean(),
-    contextUsage: z.boolean(),
-    costUsd: z.boolean(),
-    deleteSession: z.boolean(),
-    effort: z.boolean(),
-    fleet: z.boolean(),
-    fork: z.boolean(),
-    getSessionMessages: z.boolean(),
-    handoff: z.boolean(),
-    hooks: z.boolean(),
-    images: z.boolean(),
-    interrupt: z.boolean(),
-    listSessions: z.boolean(),
-    mcpControl: z.boolean(),
-    mcpStatus: z.boolean(),
-    permissionModes: z.array(PermissionModeShape),
-    plugins: z.boolean(),
-    reloadSkills: z.boolean(),
-    renameSession: z.boolean(),
-    rewind: z.boolean(),
-    setModel: z.boolean(),
-    skills: z.boolean(),
-    subagents: z.boolean(),
-    supportedCommands: z.boolean(),
-    supportedModels: z.boolean(),
-    tagSession: z.boolean(),
-    tasks: z.boolean(),
-    thinking: z.boolean(),
-  }),
-  "HarnessCapabilities",
-  "packages/core/src/harness.ts"
-);
-export type HarnessCapabilitiesOutput = z.output<
-  typeof HarnessCapabilitiesShape
->;
-
-const ModelInfoShape = declared(
-  z.object({
-    contextWindow: z.number().optional(),
-    defaultEffort: z.string().nullable().optional(),
-    description: z.string().optional(),
-    displayName: z.string(),
-    released: z.string().optional(),
-    resolvedModel: z.string().optional(),
-    supportedEffortLevels: z.array(z.string()).optional(),
-    supportsAdaptiveThinking: z.boolean().optional(),
-    supportsAutoMode: z.boolean().optional(),
-    supportsEffort: z.boolean().optional(),
-    supportsFastMode: z.boolean().optional(),
-    supportsThinkingOff: z.boolean().optional(),
-    value: z.string(),
-  }),
-  "ModelInfo",
-  "packages/core/src/harness/kinds.ts"
-);
-export const ModelInfoSchema = ModelInfoShape;
-export type ModelInfoOutput = z.output<typeof ModelInfoShape>;
-
-const SignInFaultShape = declared(
-  z.object({ at: z.number(), provider: z.string(), words: z.string() }),
-  "SignInFault",
-  "packages/core/src/harness.ts"
-);
-export const SignInFaultSchema = SignInFaultShape;
-export type SignInFaultOutput = z.output<typeof SignInFaultShape>;
-
-const HarnessReportShape = declared(
-  z.object({
-    accounts: z.array(AccountReportShape).optional(),
-    auth: AuthStateShape,
-    authReason: z.string().optional(),
-    capabilities: HarnessCapabilitiesShape,
-    harness: HarnessKindShape,
-    installed: z.boolean(),
-    modelNames: z.record(z.string(), z.string()).optional(),
-    models: z.array(ModelInfoShape).optional(),
-    modelsUnread: z.string().optional(),
-    refused: z.enum(["not-installed", "version"]).optional(),
-    signInFaults: z.array(SignInFaultShape).optional(),
-    unreadAccounts: z.array(z.string()).optional(),
-    version: z.string().optional(),
-  }),
-  "HarnessReport",
-  "packages/core/src/harness.ts"
-);
-export const HarnessReportSchema = HarnessReportShape;
-export type HarnessReportOutput = z.output<typeof HarnessReportShape>;
-
 const InstallRouteShape = declared(
   z.enum(["ssh", "command"]),
   "InstallRoute",
@@ -1867,6 +1771,28 @@ const McpPlatformShape = declared(
 export const McpPlatformSchema = McpPlatformShape;
 export type McpPlatformOutput = z.output<typeof McpPlatformShape>;
 
+const ModelInfoShape = declared(
+  z.object({
+    contextWindow: z.number().optional(),
+    defaultEffort: z.string().nullable().optional(),
+    description: z.string().optional(),
+    displayName: z.string(),
+    released: z.string().optional(),
+    resolvedModel: z.string().optional(),
+    supportedEffortLevels: z.array(z.string()).optional(),
+    supportsAdaptiveThinking: z.boolean().optional(),
+    supportsAutoMode: z.boolean().optional(),
+    supportsEffort: z.boolean().optional(),
+    supportsFastMode: z.boolean().optional(),
+    supportsThinkingOff: z.boolean().optional(),
+    value: z.string(),
+  }),
+  "ModelInfo",
+  "packages/core/src/harness/kinds.ts"
+);
+export const ModelInfoSchema = ModelInfoShape;
+export type ModelInfoOutput = z.output<typeof ModelInfoShape>;
+
 const EndedTaskShape = declared(
   z.object({
     description: z.string(),
@@ -1957,6 +1883,26 @@ export const MoveSnapshotResultShape = declared(
 );
 export type MoveSnapshotResultOutput = z.output<typeof MoveSnapshotResultShape>;
 
+export const MoveStepShape = declared(
+  z.enum(MOVE_JOB_STEPS),
+  "MoveStep",
+  "packages/core/src/move.ts"
+);
+export type MoveStepOutput = z.output<typeof MoveStepShape>;
+
+const MoveStageShape = declared(
+  z.union([
+    MoveStepShape,
+    z.literal("started"),
+    z.literal("failed"),
+    z.literal("cancelled"),
+  ]),
+  "MoveStage",
+  "packages/core/src/move.ts"
+);
+export const MoveStageSchema = MoveStageShape;
+export type MoveStageOutput = z.output<typeof MoveStageShape>;
+
 export const MoveAskShape = declared(
   z.object({
     bigFiles: z.array(MoveLargeFileShape),
@@ -1971,13 +1917,6 @@ export const MoveAskShape = declared(
 );
 export type MoveAskOutput = z.output<typeof MoveAskShape>;
 
-export const MoveStepShape = declared(
-  z.enum(MOVE_JOB_STEPS),
-  "MoveStep",
-  "packages/core/src/move.ts"
-);
-export type MoveStepOutput = z.output<typeof MoveStepShape>;
-
 export const MoveErrorShape = declared(
   z.object({
     detail: z.string().optional(),
@@ -1988,18 +1927,6 @@ export const MoveErrorShape = declared(
   "packages/core/src/move.ts"
 );
 export type MoveErrorOutput = z.output<typeof MoveErrorShape>;
-
-const MoveStageShape = declared(
-  z.union([
-    MoveStepShape,
-    z.literal("started"),
-    z.literal("failed"),
-    z.literal("cancelled"),
-  ]),
-  "MoveStage",
-  "packages/core/src/move.ts"
-);
-export type MoveStageOutput = z.output<typeof MoveStageShape>;
 
 export const MoveJobShape = declared(
   z.object({
@@ -2051,6 +1978,126 @@ export const MachinePathShape = declared(
   "packages/core/src/machine-path.ts"
 );
 export type MachinePathOutput = z.output<typeof MachinePathShape>;
+
+const AccountIdentityShape = declared(
+  z.object({
+    email: z.string(),
+    organization: z.string(),
+    orgId: z.string().nullable(),
+  }),
+  "AccountIdentity",
+  "packages/core/src/accounts.ts"
+);
+export type AccountIdentityOutput = z.output<typeof AccountIdentityShape>;
+
+const AccountKindShape = declared(
+  z.enum(["subscription", "console", "oauth", "api_key"]),
+  "AccountKind",
+  "packages/core/src/accounts.ts"
+);
+export type AccountKindOutput = z.output<typeof AccountKindShape>;
+
+const AccountProviderShape = declared(
+  z.string(),
+  "AccountProvider",
+  "packages/core/src/accounts.ts"
+);
+export type AccountProviderOutput = z.output<typeof AccountProviderShape>;
+
+const AccountReportShape = declared(
+  z.object({
+    account: z.string(),
+    identity: AccountIdentityShape.optional(),
+    kind: AccountKindShape.optional(),
+    loggedIn: z.boolean(),
+    provider: AccountProviderShape.optional(),
+  }),
+  "AccountReport",
+  "packages/core/src/accounts.ts"
+);
+export type AccountReportOutput = z.output<typeof AccountReportShape>;
+
+const AuthStateShape = declared(
+  z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
+  "AuthState",
+  "packages/core/src/session-messages.ts"
+);
+export type AuthStateOutput = z.output<typeof AuthStateShape>;
+
+const HarnessCapabilitiesShape = declared(
+  z.object({
+    compaction: z.boolean(),
+    contextUsage: z.boolean(),
+    costUsd: z.boolean(),
+    deleteSession: z.boolean(),
+    effort: z.boolean(),
+    fleet: z.boolean(),
+    fork: z.boolean(),
+    getSessionMessages: z.boolean(),
+    handoff: z.boolean(),
+    hooks: z.boolean(),
+    images: z.boolean(),
+    interrupt: z.boolean(),
+    listSessions: z.boolean(),
+    mcpControl: z.boolean(),
+    mcpStatus: z.boolean(),
+    permissionModes: z.array(PermissionModeShape),
+    plugins: z.boolean(),
+    reloadSkills: z.boolean(),
+    renameSession: z.boolean(),
+    rewind: z.boolean(),
+    setModel: z.boolean(),
+    skills: z.boolean(),
+    subagents: z.boolean(),
+    supportedCommands: z.boolean(),
+    supportedModels: z.boolean(),
+    tagSession: z.boolean(),
+    tasks: z.boolean(),
+    thinking: z.boolean(),
+  }),
+  "HarnessCapabilities",
+  "packages/core/src/harness.ts"
+);
+export type HarnessCapabilitiesOutput = z.output<
+  typeof HarnessCapabilitiesShape
+>;
+
+const SignInFaultShape = declared(
+  z.object({ at: z.number(), provider: z.string(), words: z.string() }),
+  "SignInFault",
+  "packages/core/src/harness.ts"
+);
+export const SignInFaultSchema = SignInFaultShape;
+export type SignInFaultOutput = z.output<typeof SignInFaultShape>;
+
+const HarnessReportShape = declared(
+  z.object({
+    accounts: z.array(AccountReportShape).optional(),
+    auth: AuthStateShape,
+    authReason: z.string().optional(),
+    capabilities: HarnessCapabilitiesShape,
+    harness: HarnessKindShape,
+    installed: z.boolean(),
+    modelNames: z.record(z.string(), z.string()).optional(),
+    models: z.array(ModelInfoShape).optional(),
+    modelsUnread: z.string().optional(),
+    refused: z.enum(["not-installed", "version"]).optional(),
+    signInFaults: z.array(SignInFaultShape).optional(),
+    unreadAccounts: z.array(z.string()).optional(),
+    version: z.string().optional(),
+  }),
+  "HarnessReport",
+  "packages/core/src/harness.ts"
+);
+export type HarnessReportOutput = z.output<typeof HarnessReportShape>;
+
+const NamedHarnessReportShape = declared(
+  HarnessReportShape.omit({ harness: true }).extend({ harness: z.string() }),
+  "NamedHarnessReport",
+  "packages/core/src/harness.ts"
+);
+export const NamedHarnessReportSchema = NamedHarnessReportShape;
+export type NamedHarnessReportOutput = z.output<typeof NamedHarnessReportShape>;
 
 const MoveRequestShape = declared(
   z.object({
@@ -2812,6 +2859,30 @@ const ReportAnswerShape = declared(
 export const ReportAnswerSchema = ReportAnswerShape;
 export type ReportAnswerOutput = z.output<typeof ReportAnswerShape>;
 
+const RuleMatchKindShape = declared(
+  z.enum(["phrase", "regex", "meaning"]),
+  "RuleMatchKind",
+  "packages/core/src/rules.ts"
+);
+export const RuleMatchKindSchema = RuleMatchKindShape;
+export type RuleMatchKindOutput = z.output<typeof RuleMatchKindShape>;
+
+const RuleTimingShape = declared(
+  z.enum(["turn", "message", "immediate"]),
+  "RuleTiming",
+  "packages/core/src/rules.ts"
+);
+export const RuleTimingSchema = RuleTimingShape;
+export type RuleTimingOutput = z.output<typeof RuleTimingShape>;
+
+const RuleWatchShape = declared(
+  z.enum(["text", "thinking", "both"]),
+  "RuleWatch",
+  "packages/core/src/rules.ts"
+);
+export const RuleWatchSchema = RuleWatchShape;
+export type RuleWatchOutput = z.output<typeof RuleWatchShape>;
+
 const ScratchWorktreeShape = declared(
   z.object({ dir: z.string(), path: z.string(), root: z.string() }),
   "ScratchWorktree",
@@ -2827,6 +2898,14 @@ const SessionCommandsShape = declared(
 );
 export const SessionCommandsSchema = SessionCommandsShape;
 export type SessionCommandsOutput = z.output<typeof SessionCommandsShape>;
+
+const SessionEndIntentShape = declared(
+  z.enum(["stop", "discard", "delete", "delete-transcript"]),
+  "SessionEndIntent",
+  "packages/core/src/protocol.ts"
+);
+export const SessionEndIntentSchema = SessionEndIntentShape;
+export type SessionEndIntentOutput = z.output<typeof SessionEndIntentShape>;
 
 const SessionToolingShape = declared(
   z.object({

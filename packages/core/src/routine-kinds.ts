@@ -1,5 +1,5 @@
 /** Every {@link RoutineTarget}. */
-const ROUTINE_TARGETS = [
+export const ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
   "conversation",

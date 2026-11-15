@@ -21,11 +21,12 @@ import type {
   FleetHarnessConfig,
   HarnessConfigKind,
 } from "@cawco/core/harness-config";
-import type {
-  FleetHook,
-  HookEvent,
-  HookHandler,
-  HookVersion,
+import {
+  type FleetHook,
+  type HookEvent,
+  type HookHandler,
+  type HookVersion,
+  hookEventNamed,
 } from "@cawco/core/hooks";
 import { and, desc, eq, isNull, notInArray, type SQL } from "drizzle-orm";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
@@ -283,6 +284,20 @@ const hookOf = (row: {
   ...(row.projectId ? { projectId: row.projectId } : {}),
   ...(row.areaId ? { areaId: row.areaId } : {}),
 });
+
+/**
+ * A stored hook row as this build reads it: its event is kept as text, the
+ * harness's own name for it (a newer Claude Code's event a newer build
+ * stored included), and read as one of the events this build knows. A row
+ * of any other event is none this build can show, check or place: it is
+ * left out, and stays stored for a build that knows its event.
+ */
+const storedHookOf = (
+  row: Omit<Parameters<typeof hookOf>[0], "event"> & { event: string }
+): FleetHook | undefined => {
+  const event = hookEventNamed(row.event);
+  return event ? hookOf({ ...row, event }) : undefined;
+};
 
 /** A stored harness config row in the shape both ends of the fleet share; none for settings the hub's key does not open. */
 const harnessConfigOf = (
@@ -1044,7 +1059,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           .from(fleetHooks)
           .where(eq(fleetHooks.enabled, true))
           .all()
-          .map(hookOf),
+          .flatMap((row) => storedHookOf(row) ?? []),
         // A disabled row is placed nowhere, as a disabled hook is not.
         harnessConfig: listHarnessConfig().filter((row) => row.enabled),
         // Always sent: a machine spawns nothing until it has heard it.
@@ -1448,7 +1463,12 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
       return agentFile(row);
     },
     listFleetHooks: () =>
-      db.select().from(fleetHooks).orderBy(fleetHooks.name).all().map(hookOf),
+      db
+        .select()
+        .from(fleetHooks)
+        .orderBy(fleetHooks.name)
+        .all()
+        .flatMap((row) => storedHookOf(row) ?? []),
     listHarnessConfig,
     getHarnessConfig: (kind, name) => {
       const row = db
@@ -1501,7 +1521,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         .from(fleetHooks)
         .where(eq(fleetHooks.id, id))
         .get();
-      return row ? hookOf(row) : undefined;
+      return row ? storedHookOf(row) : undefined;
     },
     putFleetHook: (hook) => {
       const values = {
@@ -1587,7 +1607,9 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         .from(fleetHookHistory)
         .where(eq(fleetHookHistory.id, id))
         .get();
-      if (!row) {
+      // A version of an event this build does not know is none it can restore ({@link storedHookOf}).
+      const event = row && hookEventNamed(row.event);
+      if (!(row && event)) {
         return;
       }
       return {
@@ -1597,7 +1619,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         hash: row.hash,
         source: row.source,
         createdAt: row.createdAt.toISOString(),
-        event: row.event,
+        event,
         ...(row.matcher ? { matcher: row.matcher } : {}),
         enabled: row.enabled,
         handler: row.handler,

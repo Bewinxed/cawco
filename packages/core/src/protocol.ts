@@ -803,6 +803,12 @@ export interface AgentRow {
    * Last-known tool status by tool id (NEW.md §10).
    */
   tools?: Record<string, ToolStatus>;
+  /**
+   * Harnesses the machine reported that this hub cannot run, by the
+   * machine's own name for each: a newer agent's. Kept as reported, never
+   * among {@link harnesses}. Absent when there are none.
+   */
+  unknownHarnesses?: string[];
 }
 
 export type SessionCustody =

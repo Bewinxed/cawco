@@ -32651,6 +32651,13 @@
           "tools": {
             "type": "object",
             "description": "Last-known tool status by tool id (NEW.md §10)."
+          },
+          "unknownHarnesses": {
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -75926,6 +75933,13 @@
             "tools": {
               "type": "object",
               "description": "Last-known tool status by tool id (NEW.md §10)."
+            },
+            "unknownHarnesses": {
+              "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
@@ -149806,6 +149820,13 @@
           "tools": {
             "type": "object",
             "description": "Last-known tool status by tool id (NEW.md §10)."
+          },
+          "unknownHarnesses": {
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -150290,6 +150311,13 @@
           "tools": {
             "type": "object",
             "description": "Last-known tool status by tool id (NEW.md §10)."
+          },
+          "unknownHarnesses": {
+            "description": "Harnesses the machine reported that this hub cannot run, by the\nmachine's own name for each: a newer agent's. Kept as reported, never\namong {@link harnesses}. Absent when there are none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [

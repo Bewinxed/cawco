@@ -32,6 +32,14 @@ export type SessionSignalsContext = Pick<
   | "workItems"
 >;
 
+/**
+ * The effort a session's `EFFORT_READ` names, as the harness named it, a
+ * level this build does not know included (the row's read narrows it, db
+ * instances.ts `sessionEfforts`); `none` when it names none.
+ */
+const effortNamed = (effort: unknown): string =>
+  typeof effort === "string" ? effort : EFFORT_NONE;
+
 export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
   const sessionNamed = onSessionFrame(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
@@ -201,7 +209,7 @@ export const sessionSignalStagesOf = (ctx: SessionSignalsContext) => {
     ) {
       const { effort } = frame.message;
       const level = isEffortLevel(effort) ? effort : EFFORT_NONE;
-      if (ctx.db.noteInstanceEffort(instanceId, level)) {
+      if (ctx.db.noteInstanceEffort(instanceId, effortNamed(effort))) {
         ctx.publishInstances(message.machineId);
       }
       // Launched with no effort of its own: this is what its

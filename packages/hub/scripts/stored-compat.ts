@@ -1,8 +1,9 @@
 /**
  * Every row a hub wrote under an earlier build still reads at this one.
  *
- * Each stored JSON column (hub stored-json.ts `storedJson`) is parsed
- * against its zod schema on every read, and the hub stops at boot on the
+ * Each stored column (hub stored-json.ts: `storedJson`'s JSON,
+ * `storedEnum`'s closed sets of text) is parsed against its zod schema on
+ * every read, and the hub stops at boot on the
  * first row that fails (`StoredShapeError`). So a change that makes a
  * column's shape narrower than it was (a value the old shape took that the
  * new one does not) must rewrite that column's rows in a migration added in
@@ -28,7 +29,8 @@
  *   one changes nothing here;
  * - a key a row holds that its type never declared, or declared once with
  *   another type (stored-rows.ts reports these as `undeclared`);
- * - a plain text column that becomes a stored JSON one: it reads as new;
+ * - a plain text column that becomes a stored one (JSON, or a closed set
+ *   of text): it reads as new, and its rows are read by migrations:check;
  * - a union whose first option reads a row as the wrong member.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -97,10 +99,16 @@ const codeMarks = (def: {
 const marksOf = (schema: Schema): string[] =>
   typeof schema["x-code"] === "string" ? schema["x-code"].split(",") : [];
 
-/** Every stored JSON column's shape as JSON Schema, by `table.column`, keys sorted. */
+/** The closed sets of text among the stored columns (`storedEnum`), by `table.column`. */
+const sets: string[] = [];
+
+/** Every stored column's shape as JSON Schema, by `table.column`, keys sorted. */
 const columnShapes = async (): Promise<Record<string, Schema>> => {
   const shapes: Record<string, Schema> = {};
   for (const { table, column, shape } of await storedColumns()) {
+    if (shape.text) {
+      sets.push(`${table}.${column}`);
+    }
     const { $schema: _, ...json }: Schema = z.toJSONSchema(shape.schema, {
       // What a read accepts: a row is anything the base's read took.
       io: "input",
@@ -532,7 +540,7 @@ const tagsNow = journalTags(readFileSync(join(ROOT, JOURNAL), "utf8"));
 for (const entry of REWRITES) {
   if (!(entry.column in shapes)) {
     problems.push(
-      `stored-compat: REWRITES names ${entry.column}, which is no stored JSON column (${SCRIPT})`
+      `stored-compat: REWRITES names ${entry.column}, which is no stored column (${SCRIPT})`
     );
   }
   if (!tagsNow.includes(entry.migration)) {
@@ -578,7 +586,7 @@ for (const [commit, label] of byCommit) {
   for (const [key, shape] of Object.entries(was)) {
     const column = renamed(key, added);
     if (!(column in shapes)) {
-      // Dropped, or no longer stored JSON: no read parses it.
+      // Dropped, or no longer a stored column: no read parses it.
       continue;
     }
     const reasons = narrowings(shape, shapes[column]);
@@ -622,7 +630,8 @@ const code = Object.entries(shapes)
   .map(([column]) => column);
 console.log(
   [
-    `stored-compat: ${Object.keys(shapes).length} stored JSON columns${compared.length > 0 ? ` read every row ${compared.join(" and ")} could hold` : ""}`,
+    `stored-compat: ${Object.keys(shapes).length} stored columns${compared.length > 0 ? ` read every row ${compared.join(" and ")} could hold` : ""}`,
+    `${sets.length} of them closed sets of text: ${sets.toSorted().join(", ")}`,
     ...unrecorded,
     ...(rewritten.length > 0
       ? [`${rewritten.length} narrowed and rewritten: ${rewritten.join(", ")}`]
