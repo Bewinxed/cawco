@@ -45,8 +45,11 @@ const CARRY = z.object({ by: z.literal("hub"), tool: z.string() });
 
 /**
  * What an `approve` ask asks: the CawCo call the hub runs on yes, by the
- * tool's own name and the input the card shows, and what its source is (an
- * install's or a link's, hub source-facts.ts) as read when it was asked.
+ * tool's own name and the input the card shows (the hub's redactor: every
+ * credential cut), and what its source is (an install's or a link's, hub
+ * source-facts.ts) as read when it was asked. The call's own input is kept
+ * sealed beside it (hub db/asks.ts `asks.input_sealed`), opened only when
+ * the approved call runs.
  */
 const APPROVE_ASKED = z.object({
   tool: z.string(),
@@ -58,28 +61,29 @@ const APPROVE = APPROVE_ASKED.extend({ kind: z.literal("approve") });
 
 /**
  * What a `permit` ask asks: the tool call a session's harness was halted on
- * when its process went, by the harness's own tool name and input. Approved,
- * it is granted once ({@link sameCall}); nothing runs until the session
- * makes the call again, in the turn that reads the answer.
+ * when its process went, by the harness's own tool name, the input as its
+ * card shows it (the hub's redactor: every credential cut), and `digest`, a
+ * keyed digest of the call as it was asked ({@link callKey}, hub
+ * call-digest.ts). Approved, it is granted once, to the session's next call
+ * whose digest is the same; nothing runs until the session makes the call
+ * again, in the turn that reads the answer. The call's own input is kept
+ * nowhere.
  */
 const PERMIT_ASKED = z.object({
   tool: z.string(),
   input: z.record(z.string(), z.unknown()),
+  digest: z.string(),
 });
 const PERMIT = PERMIT_ASKED.extend({ kind: z.literal("permit") });
 export type AskedPermit = z.infer<typeof PERMIT>;
 
 /**
- * Whether two tool calls are the same call, as a permit's grant matches the
- * one its session makes again: the same tool with the same input, a shell
- * command's `description` aside (the model words it afresh; it runs nothing).
+ * A tool call as one text, the same for the same call: its input in
+ * canonical JSON, a shell command's `description` aside (the model words it
+ * afresh; it runs nothing). What a permit's grant matches the call its
+ * session makes again by, through a keyed digest of it (hub call-digest.ts).
  */
-export const sameCall = (
-  a: { tool: string; input: Record<string, unknown> },
-  b: { tool: string; input: Record<string, unknown> }
-): boolean => a.tool === b.tool && callKey(a) === callKey(b);
-
-const callKey = ({
+export const callKey = ({
   tool,
   input,
 }: {

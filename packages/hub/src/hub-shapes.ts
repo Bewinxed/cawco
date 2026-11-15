@@ -162,8 +162,8 @@ export interface ContinueOutcome {
   targetInstanceId: string;
 }
 
-/** A socket the hub may close, and the address it came from. */
-export type AuthSocket = HubSocket & {
+/** A socket the hub may close, and the address it came from; `S` says whose line it is (wire-socket.ts). */
+export type AuthSocket<S extends HubSocket = HubSocket> = S & {
   close: (code?: number, reason?: string) => void;
   /** Its upgrade's headers: the SSH door's mark among them (ssh-door.ts). */
   readonly headers?: Record<string, string | undefined>;

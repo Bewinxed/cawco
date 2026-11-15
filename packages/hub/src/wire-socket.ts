@@ -8,7 +8,18 @@
  * behind one large frame, the next ones to a slow dashboard or agent were
  * lost without a word (measured, Bun 1.4.2: after a 64 MB frame the next
  * frame's `send()` returned 0 and it never arrived). `HubSocket` carries no
- * `send`; {@link sendFrame} is the one way out.
+ * `send`; {@link sendToClient} and {@link sendToMachine} are the ways out.
+ *
+ * TWO PEERS, TWO DOORS. A line is opened as a machine's (an agent) or a
+ * client's (a dashboard, the apps, an artifact tab), and each send names
+ * the peer it is for: a client is sent what a screen reads, a machine the
+ * hub's command as it is (a machine runs it, keys and an approved call's
+ * input included). Each peer's socket is its own type ({@link MachineSocket},
+ * {@link ClientSocket}), given only by the line opened for it
+ * ({@link machineSocket}, {@link clientSocket}), which stamps the handle
+ * with its peer under a symbol only this module holds, so a send through
+ * the other peer's door does not compile; one that reached it anyway throws
+ * before anything goes.
  *
  * WHEN A PEER STOPS READING. A socket that takes nothing for
  * `WIRE_STALL_MS` while frames wait is closed (1013, try again later); one
@@ -19,6 +30,8 @@
  * reconnects, registers, and the register ack's ledger tells it where every
  * session's frames resume (server.ts `registerAck`).
  */
+
+import type { Envelope } from "@cawco/core/protocol";
 import {
   announcesParts,
   Inbox,
@@ -29,22 +42,36 @@ import {
   WireAssembler,
   WireError,
 } from "@cawco/core/wire";
+import { AskCard } from "./pending";
 
 type RawSocket = ServerSocketLike;
 
 /**
  * One socket, as everything in the hub holds it: its id, and nothing to send
  * with. Elysia builds a fresh handle per callback, so sockets are compared by
- * `id` only, and every frame goes out through {@link sendFrame}.
+ * `id` only, and every frame goes out through {@link sendToClient} or {@link sendToMachine}.
  */
 export interface HubSocket {
   readonly id: string;
 }
 
+/** Who reads a line: a machine's agent, or a client (a dashboard, the apps, an artifact tab). */
+export type Peer = "machine" | "client";
+
+/** The key a handle's peer is stamped under ({@link machineSocket}, {@link clientSocket}): held by this module alone. */
+const PEER: unique symbol = Symbol("cawco wire peer");
+
+/** A machine's socket: its line was opened for a machine ({@link machineSocket}). */
+export type MachineSocket = HubSocket & { readonly [PEER]: "machine" };
+
+/** A client's socket (a dashboard, the apps, an artifact tab): its line was opened for a client ({@link clientSocket}). */
+export type ClientSocket = HubSocket & { readonly [PEER]: "client" };
+
 interface Line {
   assembler: WireAssembler;
   inbox: Inbox;
   outbox: Outbox;
+  peer: Peer;
   raw: RawSocket;
   /** Frames the socket has handed the hub so far: what {@link caughtUp} watches go still. */
   received: number;
@@ -61,7 +88,7 @@ const rawOf = (socket: HubSocket): RawSocket =>
 const lines = new Map<string, Line>();
 
 /**
- * Opens the socket's line. `compress`: every frame to a dashboard goes out
+ * Opens the socket's line for `peer`. Every frame to a client goes out
  * deflated. The route negotiates permessage-deflate, but Bun compresses only
  * a message sent with the flag set: negotiated alone, a 1.8 MB board went out
  * as 1.8 MB, and with it as 58 KB, half a minute of an empty board on a
@@ -69,11 +96,12 @@ const lines = new Map<string, Line>();
  */
 export const openLine = (
   socket: HubSocket & { query: Record<string, string | undefined> },
-  compress: boolean
+  peer: Peer
 ): void => {
   const raw = rawOf(socket);
   lines.set(socket.id, {
     raw,
+    peer,
     assembler: new WireAssembler(),
     inbox: new Inbox(),
     received: 0,
@@ -81,15 +109,81 @@ export const openLine = (
     // agent not yet updated, a tab not yet reloaded): it is sent every
     // message whole, as that build reads them (`WIRE_PARTS_PARAM`).
     outbox: new Outbox(
-      serverTransport(raw, compress),
+      serverTransport(raw, peer === "client"),
       announcesParts(socket.query)
     ),
   });
 };
 
-/** The one way a frame leaves the hub for a socket. */
-export const sendFrame = (socket: HubSocket, frame: unknown): void => {
-  lines.get(socket.id)?.outbox.send(frame);
+/**
+ * `socket` as its peer's own type, read off the line its route opened
+ * ({@link openLine}): every callback of a route is handed a fresh handle,
+ * which each takes as its peer's socket here. A line opened for the other
+ * peer throws (module: two doors); a closed one is still its peer's.
+ */
+export const machineSocket = <S extends HubSocket>(
+  socket: S
+): S & MachineSocket => {
+  lineFor(socket, "machine");
+  return Object.assign(socket, { [PEER]: "machine" as const });
+};
+
+/** {@link machineSocket}'s twin for a client's line. */
+export const clientSocket = <S extends HubSocket>(
+  socket: S
+): S & ClientSocket => {
+  lineFor(socket, "client");
+  return Object.assign(socket, { [PEER]: "client" as const });
+};
+
+/** The socket's line, when it is still open; one opened for another peer throws (module: two doors). */
+const lineFor = (socket: HubSocket, peer: Peer): Line | undefined => {
+  const line = lines.get(socket.id);
+  if (line && line.peer !== peer) {
+    throw new Error(
+      `A frame for a ${peer} was sent on socket ${socket.id}, a ${line.peer}'s line.`
+    );
+  }
+  return line;
+};
+
+/** What leaves for a client: an envelope, a `{ type }` message, or a session stream frame. */
+export type ClientFrame =
+  Envelope | { readonly type: string } | { readonly kind: string };
+
+/** Whether `frame` is an envelope carrying an ask (a `permission_request` payload). */
+const isAskFrame = (frame: ClientFrame): boolean =>
+  "payload" in frame &&
+  typeof frame.payload === "object" &&
+  frame.payload !== null &&
+  "kind" in frame.payload &&
+  frame.payload.kind === "permission_request";
+
+/**
+ * A frame to a client's socket (a dashboard, the apps, an artifact tab). An
+ * ask goes only as its card (pending.ts `AskCard`, its input as the card
+ * shows it); an ask frame that is not one throws before anything is written,
+ * so a call's own input never leaves whole.
+ */
+export const sendToClient = <F extends ClientFrame>(
+  socket: ClientSocket,
+  frame: F | AskCard
+): void => {
+  if (frame instanceof AskCard) {
+    lineFor(socket, "client")?.outbox.send(frame.ask);
+    return;
+  }
+  if (isAskFrame(frame)) {
+    throw new Error(
+      `An ask leaves the hub only as its card (pending.ts AskCard): request ${"requestId" in frame ? String(frame.requestId) : "(no id)"} was not sent.`
+    );
+  }
+  lineFor(socket, "client")?.outbox.send(frame);
+};
+
+/** The hub's command to a machine's socket, as it is: the machine runs it. */
+export const sendToMachine = (socket: MachineSocket, frame: object): void => {
+  lineFor(socket, "machine")?.outbox.send(frame);
 };
 
 /** The socket's own `drain`: what waits goes on. */

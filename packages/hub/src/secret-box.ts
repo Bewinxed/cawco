@@ -12,6 +12,7 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHmac,
   hkdfSync,
   randomBytes,
 } from "node:crypto";
@@ -139,6 +140,25 @@ let hub: SecretBox | undefined;
 export const hubSecrets = (): SecretBox => {
   hub ??= makeSecretBox();
   return hub;
+};
+
+/** Each use's derived key, by its label, made once. */
+const derived = new Map<string, Buffer>();
+
+/**
+ * `text`'s keyed digest (HMAC-SHA256, base64url) under the key the hub's
+ * box derives for `label` ({@link SecretBox.derive}): the same text gives
+ * the same digest while the key file stands, and nothing without the key
+ * makes one or reads `text` back from it. What a value is matched by when
+ * the value itself is kept nowhere (call-digest.ts).
+ */
+export const keyedDigest = (label: string, text: string): string => {
+  let key = derived.get(label);
+  if (!key) {
+    key = hubSecrets().derive(label);
+    derived.set(label, key);
+  }
+  return createHmac("sha256", key).update(text).digest("base64url");
 };
 
 /** Sealed values already said not to open, so each is said once. */

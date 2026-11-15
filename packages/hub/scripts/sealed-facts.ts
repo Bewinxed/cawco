@@ -23,32 +23,11 @@
  * without its key.
  */
 import { Database } from "bun:sqlite";
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdtempSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { databaseNamed, keyBeside } from "./key-beside";
 
-const [path] = process.argv.slice(2);
-if (!path) {
-  console.error("sealed-facts: name the database: bun run sealed-facts <path>");
-  process.exit(2);
-}
-const scratch = mkdtempSync(join(tmpdir(), "cawco-sealed-facts-"));
+const path = databaseNamed("sealed-facts");
+const { keyed, remove } = keyBeside(path);
 try {
-  const key = join(dirname(resolve(path)), "secrets.key");
-  const keyed = existsSync(key);
-  if (keyed) {
-    copyFileSync(key, join(scratch, "secrets.key"));
-    chmodSync(join(scratch, "secrets.key"), 0o600);
-  }
-  // The hub's box reads its key beside CAWCO_DB_PATH (secret-box.ts): the
-  // scratch folder's, set before the hub's modules load.
-  process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
   const { hubSecrets } = await import("../src/secret-box");
   const { sealedFactsKept } = await import("../src/db/sealed-facts-unread");
   const client = new Database(path, { readonly: true });
@@ -119,5 +98,5 @@ try {
   }
   client.close();
 } finally {
-  rmSync(scratch, { recursive: true, force: true });
+  remove();
 }

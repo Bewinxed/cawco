@@ -6,8 +6,8 @@
  * (db/owned-rows.ts). Each is a custom text column carrying its owner in its
  * config, as a stored JSON column carries its shape (stored-json.ts).
  */
-import { is } from "drizzle-orm";
-import { customType, SQLiteCustomColumn } from "drizzle-orm/sqlite-core";
+import { customType } from "drizzle-orm/sqlite-core";
+import { declaredConfigOf } from "../stored-json";
 
 /** What a marked column names. */
 export type OwnerKind = "session" | "machine" | "project";
@@ -44,14 +44,6 @@ const isOwnerConfig = (value: unknown): value is OwnerConfig =>
 
 /** What `column` was declared to name, if it names an owner. */
 export const ownerOf = (column: unknown): OwnerKind | undefined => {
-  if (!is(column, SQLiteCustomColumn)) {
-    return;
-  }
-  // `config` is protected in Drizzle's types and public at runtime (column.js `this.config = config`).
-  const config: unknown = Reflect.get(column, "config");
-  const declared =
-    typeof config === "object" && config !== null && "fieldConfig" in config
-      ? config.fieldConfig
-      : undefined;
+  const declared = declaredConfigOf(column);
   return isOwnerConfig(declared) ? declared.owner : undefined;
 };

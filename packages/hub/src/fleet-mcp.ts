@@ -25,6 +25,7 @@ import { z } from "zod";
 import type { DbShape } from "./db";
 import { SIGN_IN_TAKEN } from "./db/mcp-servers";
 import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
+import { knownInResponse } from "./known-values";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
@@ -1199,11 +1200,14 @@ export class FleetMcp {
       });
     }
     try {
-      return await this.#relay.handle(
-        name,
-        row.generation,
-        request,
-        (exchange) => this.#upstream(name, exchange)
+      // The upstream's answer, to a call made with the hub's sign-in, goes
+      // to the session with every secret the hub knows replaced in it
+      // (known-values.ts), its refusals and errors included.
+      return knownInResponse(
+        this.#db.knownValues,
+        await this.#relay.handle(name, row.generation, request, (exchange) =>
+          this.#upstream(name, exchange)
+        )
       );
     } catch (error) {
       if (!this.#db.getMcpOauth(name)?.tokens) {

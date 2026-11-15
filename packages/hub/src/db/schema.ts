@@ -23,6 +23,7 @@ import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { everyOf } from "@cawco/core/every-of";
 import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
+import { secretValuesOf } from "@cawco/core/fleet-secrets";
 import {
   HARNESSES,
   type HarnessKind,
@@ -49,6 +50,7 @@ import {
   ROUTINE_RUN_STATES,
   ROUTINE_TARGETS,
 } from "@cawco/core/routine-kinds";
+import { credentialsIn } from "@cawco/core/secret-shapes";
 import { SEND_STATES } from "@cawco/core/session-messages";
 import {
   STARTER_GLYPHS,
@@ -155,9 +157,9 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
-import { hubSecrets, openOrNull } from "../secret-box";
 import { storedEnum, storedJson } from "../stored-json";
 import { machineColumn, projectColumn, sessionColumn } from "./owner-columns";
+import { sealedJson, sealedText } from "./sealed-columns";
 import {
   AccountMoveBodySchema,
   AgentAuthSchema,
@@ -284,27 +286,6 @@ const areaKey = () =>
   text("area_id")
     .notNull()
     .references(() => areas.id, { onDelete: "cascade" });
-
-/**
- * A secret column (secret-box.ts): sealed on every write, opened on every
- * read, the one path either way. A value the hub's key does not open reads
- * as null: no secret, so the feature that holds it asks for it again.
- */
-const sealedText = customType<{ data: string | null; driverData: string }>({
-  dataType: () => "text",
-  toDriver: (value) => hubSecrets().seal(value ?? ""),
-  fromDriver: (value) => openOrNull(value),
-});
-
-/**
- * A secret JSON column: the value's JSON, sealed as {@link sealedText} is,
- * and checked against its schema once it is opened (hub stored-json.ts).
- */
-const sealedJson = <S extends z.ZodType>(schema: S) =>
-  storedJson(schema, {
-    close: (json) => hubSecrets().seal(json),
-    open: (raw) => openOrNull(raw),
-  });
 
 /** A send as its machine is handed it (`Envelope<SendPayload>`). */
 const SendEnvelopeSchema: z.ZodType<Envelope<SendPayload>> =
@@ -2534,7 +2515,7 @@ export const mcpServers = sqliteTable("mcp_servers", {
   /** The name sessions see, and the key the entry takes in `~/.claude.json`. */
   name: text("name").primaryKey(),
   /** Sealed: a server's headers and env carry its keys. Null when the hub's key does not open it. */
-  config: sealedJson(FleetMcpConfigSchema)("config").notNull(),
+  config: sealedJson(FleetMcpConfigSchema, secretValuesOf)("config").notNull(),
   authMode: storedEnum(McpAuthModeSchema)("auth_mode")
     .notNull()
     .default("direct"),
@@ -2615,11 +2596,14 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   ).notNull(),
   issuer: text("issuer").notNull(),
   metadata: storedJson(AuthorizationServerMetadataSchema)("metadata").notNull(),
-  client: sealedJson(OAuthClientInformationFullSchema)("client"),
-  tokens: sealedJson(OAuthTokensSchema)("tokens"),
+  client: sealedJson(OAuthClientInformationFullSchema, credentialsIn)("client"),
+  tokens: sealedJson(OAuthTokensSchema, credentialsIn)("tokens"),
   expiresAt: timestamp("expires_at"),
   /** The client the stored tokens were issued to; refreshing them must use that one. */
-  tokenClient: sealedJson(OAuthClientInformationFullSchema)("token_client"),
+  tokenClient: sealedJson(
+    OAuthClientInformationFullSchema,
+    credentialsIn
+  )("token_client"),
   /**
    * A sign-in under way (fleet-mcp.ts `start`): the `state` its redirect
    * brings back, found by this column, null once it is taken or when none
@@ -3992,7 +3976,10 @@ export const fleetHarnessConfig = sqliteTable("fleet_harness_config", {
   /** A disabled row stays here and is placed nowhere. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   /** Claude Code settings. Null for the other kinds, and when the hub's key does not open it. */
-  settings: sealedJson(z.record(z.string(), z.unknown()))("settings"),
+  settings: sealedJson(
+    z.record(z.string(), z.unknown()),
+    credentialsIn
+  )("settings"),
   /** An OpenCode plugin's or pi extension's source. */
   module: text("module"),
   /** An OpenCode plugin's or pi extension's npm package, `<name>@<version>`. */
@@ -6181,8 +6168,11 @@ export const connectionSecrets = sqliteTable("connection_secrets", {
     .primaryKey()
     .references(() => connections.id, { onDelete: "cascade" }),
   key: sealedText("key"),
-  tokens: sealedJson(OAuthTokensSchema)("tokens"),
-  client: sealedJson(OAuthClientInformationMixedSchema)("client"),
+  tokens: sealedJson(OAuthTokensSchema, credentialsIn)("tokens"),
+  client: sealedJson(
+    OAuthClientInformationMixedSchema,
+    credentialsIn
+  )("client"),
   verifier: sealedText("verifier"),
   appPrivateKey: sealedText("app_private_key"),
   appClientSecret: sealedText("app_client_secret"),
@@ -6742,8 +6732,26 @@ export const parkedAsks = sqliteTable(
     requestId: text("request_id").primaryKey(),
     instanceId: sessionColumn("instance_id"),
     machineId: machineColumn("machine_id").notNull(),
-    /** The `permission_request` envelope, `raisedAt` stamped on its payload. */
+    /**
+     * The `permission_request` envelope as every screen reads it (its input
+     * as its card shows it, card-input.ts `cardOf`), `raisedAt`
+     * stamped on its payload.
+     */
     envelope: storedJson(ParkedAskShape)("envelope").notNull(),
+    /**
+     * The call's own input, as it was asked, sealed under the hub's key
+     * (secret-box.ts): opened only where an Approve sends it to its machine
+     * (ask-presentation.ts `answeredWithOriginal`); migration 0434's step
+     * sealed the input every row held before (db/parked-inputs.ts).
+     */
+    inputSealed: text("input_sealed").notNull(),
+    /**
+     * The keyed digest of the call as it was asked (call-digest.ts): what a
+     * prompt kept as a permit when its process goes is matched by (asks.ts
+     * `keep`), so keeping one opens nothing. Migration 0436's step made it
+     * for every row parked before (db/asks-inputs.ts).
+     */
+    callDigest: text("call_digest").notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
 );
@@ -6786,6 +6794,13 @@ export const asks = sqliteTable(
     lapsedAt: integer("lapsed_at"),
     /** What was asked, who answered, what the call said (core `ASK_KEPT`); every writer sets it and clears `record_unread`. Null: `record_unread` set. */
     kept: storedJson(ASK_KEPT)("kept"),
+    /**
+     * An approval's call input as it was asked, sealed under the hub's key
+     * (secret-box.ts): `kept` holds the card's input alone. Opened only when
+     * the approved call runs (asks.ts `carryOut`). Null for a question and a
+     * permit, whose call is matched by its digest (`kept`'s `digest`).
+     */
+    inputSealed: text("input_sealed"),
     /**
      * A record that did not read whole when it became columns (migration
      * 0408), as it was stored, `kept` null beside it; what of it read is

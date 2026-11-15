@@ -39,10 +39,15 @@
  * and heads migrations 0425 to 0428 lift into columns and rows
  * ({@link seedColdWaitsHeads}), and the compaction plans, Who decides
  * settings, tracker cursors and account readings migrations 0429 to 0432
- * lift into columns ({@link seedPlansSettingsCursorsReadings}), written to
- * fixtures/lists-db.sqlite.gz: the migration check runs over both.
+ * lift into columns ({@link seedPlansSettingsCursorsReadings}), the
+ * parked asks whose call input migration 0434 seals ({@link seedParkedAsks}),
+ * and a transcript line quoting a session credential and a sealed MCP env
+ * value, which the known values replace ({@link seedKnownValues},
+ * {@link seedKnownLine}), written to fixtures/lists-db.sqlite.gz: the
+ * migration check runs over both.
  */
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -51,6 +56,16 @@ import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { ContinuationAsker } from "../src/db/stored-types";
+import {
+  KNOWN_CREDENTIAL,
+  KNOWN_ENV_NAME,
+  KNOWN_ENV_VALUE,
+  KNOWN_LINE,
+  KNOWN_PATH,
+  KNOWN_SERVER,
+  PARKED_KEY,
+  PARKED_TOKEN,
+} from "./fixture-db-values";
 import { hubInProcess, writeFixtureKey } from "./hub-in-process";
 import { newestNightly } from "./shipped";
 
@@ -1323,11 +1338,21 @@ function seedAsks(db: HubDb, sessions: Seeded[]): void {
     blocks: true,
     waiting: "Deleting finished tasks older than the cut",
   };
-  const permit = (command: string) => ({
-    kind: "permit" as const,
-    tool: "Bash",
-    input: { command, description: "Run the release proof" },
-  });
+  // The build this fixture is seeded at keeps no digest on a permit (its
+  // type has none, and a write that holds one is refused): migration 0436's
+  // step makes it from the input it kept. This build's type has one, so it
+  // is here, and left out of what the seeded build writes.
+  const permit = (command: string) =>
+    Object.defineProperty(
+      {
+        kind: "permit" as const,
+        tool: "Bash",
+        input: { command, description: "Run the release proof" },
+        digest: "",
+      },
+      "digest",
+      { enumerable: false }
+    );
   const installing = raised(first.id);
   db.asks.add({
     ...installing,
@@ -1407,8 +1432,24 @@ function seedAsks(db: HubDb, sessions: Seeded[]): void {
     behavior: "deny",
     message: "",
   });
-  answered(raised(third.id), permit("git push origin main"), 26, {
-    behavior: "allow",
+  answered(
+    raised(third.id),
+    permit(`GITHUB_TOKEN=${PARKED_TOKEN} git push origin main`),
+    26,
+    { behavior: "allow" }
+  );
+  // An open approval whose call carries a key, as the person was asked it.
+  db.asks.add({
+    ...raised(first.id),
+    asked: approve("admin_mcp_servers_write", {
+      action: "add",
+      name: "search",
+      config: {
+        url: "https://search.example/mcp",
+        headers: { Authorization: `Bearer ${PARKED_KEY}` },
+      },
+      reason: "Search the release notes.",
+    }),
   });
   answered(raised(third.id), permit("bun run check"), 27, {
     behavior: "allow",
@@ -3346,6 +3387,138 @@ function seedColdWaitsHeads(dbPath: string): void {
  *   named, never named, empty, with a key named twice, with a key that is
  *   not text, and not JSON.
  */
+/**
+ * Asks a session's process is parked on, kept across the hub's restarts
+ * (`parked_asks`), whose call input migration 0434's step seals: a Bash
+ * call whose command carries a credential-shaped token and an MCP call
+ * whose input names a key by its field, both as the hub kept them (the
+ * envelope whole, its input in it). Each token is made here and holds no
+ * real credential.
+ */
+function seedParkedAsks(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const [session] = sqlite
+    .query<{ id: string; machineId: string }, []>(
+      "SELECT id, machine_id AS machineId FROM instances WHERE status = 'starting' ORDER BY id LIMIT 1"
+    )
+    .all();
+  if (!session) {
+    throw new Error("the lists fixture's parked asks need a session starting");
+  }
+  const envelope = (requestId: string, payload: object) =>
+    JSON.stringify({
+      verb: "frames",
+      machineId: session.machineId,
+      instanceId: session.id,
+      requestId,
+      payload: {
+        kind: "permission_request",
+        instanceId: session.id,
+        requestId,
+        raisedAt: KEPT_AT,
+        harness: "claude",
+        ...payload,
+      },
+    });
+  const asks: [string, string][] = [
+    [
+      "parked-bash",
+      envelope("parked-bash", {
+        toolName: "Bash",
+        input: {
+          command: `GITHUB_TOKEN=${PARKED_TOKEN} git push origin main`,
+          description: "Push the release branch",
+        },
+        presentation: {
+          asker: "Fixture session",
+          summary: "Run a command",
+          command: `GITHUB_TOKEN=${PARKED_TOKEN} git push origin main`,
+          detail: "Push the release branch",
+          changes: [],
+          fields: [],
+        },
+      }),
+    ],
+    [
+      "parked-mcp",
+      envelope("parked-mcp", {
+        toolName: "mcp__search__query",
+        input: { apiKey: PARKED_KEY, query: "release notes" },
+        presentation: {
+          asker: "Fixture session",
+          summary: "Use search's query",
+          changes: [],
+          fields: [{ key: "query", value: "release notes" }],
+        },
+      }),
+    ],
+  ];
+  for (const [requestId, stored] of asks) {
+    sqlite.run(
+      "INSERT INTO parked_asks (request_id, instance_id, machine_id, envelope) VALUES (?, ?, ?, ?)",
+      [requestId, session.id, session.machineId, stored]
+    );
+  }
+  sqlite.close();
+}
+
+/**
+ * A fleet MCP server the hub keeps sealed (`mcp_servers.config`), started on
+ * the machine with an `env` value under a credential's name, a known value
+ * (src/known-values.ts), and one under a path's name, which is not.
+ */
+function seedKnownValues(db: HubDb): void {
+  db.putMcpServer({
+    name: KNOWN_SERVER,
+    config: {
+      command: "npx",
+      args: ["-y", "@example/release-notes-mcp"],
+      env: { [KNOWN_ENV_NAME]: KNOWN_ENV_VALUE, CHROME_PATH: KNOWN_PATH },
+    },
+  });
+}
+
+/**
+ * A session's credential, kept as its hash (`session_identities`, as
+ * session-identity.ts `mint` keeps it), and a line the hub keeps in that
+ * session's transcript (`session_lines`, fleet watch's) quoting the
+ * credential and the MCP server's env values ({@link seedKnownValues}), as
+ * it was stored before the known values were replaced where text enters
+ * the hub: what migrations:check runs through the known values, and
+ * known-values-count counts.
+ */
+function seedKnownLine(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const [session] = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE id NOT IN (SELECT instance_id FROM session_identities) ORDER BY id LIMIT 1"
+    )
+    .all();
+  if (!session) {
+    throw new Error(
+      "the lists fixture's known values need a session with no credential"
+    );
+  }
+  sqlite.run(
+    "INSERT INTO session_identities (instance_id, credential_hash, installed_at) VALUES (?, ?, ?)",
+    [
+      session.id,
+      createHash("sha256").update(KNOWN_CREDENTIAL).digest("hex"),
+      KEPT_AT,
+    ]
+  );
+  sqlite.run(
+    "INSERT INTO session_lines (instance_id, kind, id, at, content, stayed) VALUES (?, 'watch', ?, ?, ?, NULL)",
+    [
+      session.id,
+      KNOWN_LINE,
+      KEPT_AT,
+      `Fleet watch: this session ran \`${KNOWN_ENV_NAME}=${KNOWN_ENV_VALUE} CHROME_PATH=${KNOWN_PATH} bun run release-notes\` four times, and printed CAWCO_SESSION_CREDENTIAL=${KNOWN_CREDENTIAL} in its tool result.`,
+    ]
+  );
+  sqlite.close();
+}
+
 function seedPlansSettingsCursorsReadings(dbPath: string): void {
   const sqlite = new Database(dbPath);
   const sessions = sqlite
@@ -3539,6 +3712,7 @@ async function seed(
     seedMoves(db, projects);
     seedSessionPlans(db, sessions);
     await seedSealedFacts(db, dbPath);
+    seedKnownValues(db);
   }
   lifetime.close();
   if (withLists) {
@@ -3563,6 +3737,8 @@ async function seed(
     seedMachineColumns(dbPath);
     seedColdWaitsHeads(dbPath);
     seedPlansSettingsCursorsReadings(dbPath);
+    seedParkedAsks(dbPath);
+    seedKnownLine(dbPath);
   }
 }
 
@@ -3609,7 +3785,12 @@ const tree = mkdtempSync(join(tmpdir(), "cawco-fixture-tree-"));
 try {
   run(["git", "worktree", "add", "--detach", tree, at], HUB);
   run([process.execPath, "install", "--frozen-lockfile"], tree);
-  for (const name of ["fixture-db.ts", "hub-in-process.ts", "shipped.ts"]) {
+  for (const name of [
+    "fixture-db.ts",
+    "fixture-db-values.ts",
+    "hub-in-process.ts",
+    "shipped.ts",
+  ]) {
     copyFileSync(
       join(import.meta.dir, name),
       join(tree, "packages/hub/scripts", name)

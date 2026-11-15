@@ -108,6 +108,9 @@ export const mcpWords = {
   urlKeyCleared: "Key cleared when you save.",
   urlKeyKeep: "Keep key",
   /** What the hub answers a write that names a secret it holds none of. */
+  /** What the hub answers an adoption whose config holds a secret the hub already keeps: it reached the hub replaced (hub known-values.ts), not as the machine wrote it. */
+  heldValueAdopted: (machine: string, name: string) =>
+    `${name} on ${machine} uses a secret the fleet already holds, so the hub read it replaced, not as written. Add the server by hand with its values.`,
   secretNotHeld: (field: string, key: string) =>
     `${key} in ${field} is marked as set, but this server holds no value for it. Send the value.`,
   /** What the hub answers a write that names a secret as something other than a string, null or the set mark. */

@@ -204,7 +204,10 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
       if (sender && parent) {
         ctx.delegateWaits.asked(message);
       } else if (!run.internal) {
-        ctx.push.onAsk(message);
+        const card = ctx.pending.card(requestId);
+        if (card) {
+          ctx.push.onAsk(card);
+        }
       }
     }
     return "continue";

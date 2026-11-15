@@ -62,7 +62,7 @@ import { answerPermission } from "./pending";
 import type { AnyProblem } from "./refusal";
 import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
-import type { HubSocket } from "./wire-socket";
+import type { ClientSocket } from "./wire-socket";
 
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
@@ -175,7 +175,7 @@ export type RelayControlContext = Pick<
   | "recordDelegateAnswer"
   | "registry"
   | "relaunchOnAccount"
-  | "sendFrame"
+  | "sendToClient"
   | "sessionIdle"
   | "silentWords"
   | "streams"
@@ -263,8 +263,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     if (!parked || parked.instanceId !== instanceId) {
       throw new Error("That request is no longer pending.");
     }
-    // Clients held the ask with its secrets hidden; the call runs as asked.
-    const result = answeredWithOriginal(parked, answer);
+    // Clients held the ask with its secrets hidden; the call runs as asked,
+    // its input opened from its seal here alone.
+    const result = answeredWithOriginal(parked, answer, () =>
+      ctx.pending.asAsked(requestId)
+    );
     if (ctx.answeringPermissions.has(requestId)) {
       throw new Error("That request is already being answered.");
     }
@@ -434,9 +437,31 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     );
   };
 
+  /**
+   * A control's answer to the page that sent it: a frame on its socket
+   * (`replyAsFrame`), or its command's ack.
+   */
+  const answerControl = (
+    message: Envelope<ControlPayload>,
+    dashboard: ClientSocket,
+    replyAsFrame: boolean,
+    requestId: string,
+    frame: ControlResult
+  ): void => {
+    if (replyAsFrame) {
+      ctx.sendToClient(dashboard, {
+        ...message,
+        verb: "frames",
+        payload: frame,
+      });
+    } else {
+      ctx.streams.settleCommand(requestId, frame);
+    }
+  };
+
   const relayPermissionAnswer = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const answer = peekAnswer(message.payload);
@@ -464,17 +489,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         failed(error instanceof Error ? error.message : String(error))
     );
     const correlationId = message.requestId ?? message.payload.requestId;
-    const reply = (frame: ControlResult): void => {
-      if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(correlationId, frame);
-      }
-    };
+    const reply = (frame: ControlResult): void =>
+      answerControl(message, dashboard, replyAsFrame, correlationId, frame);
     const failed = (reason: string): void => {
       console.error(
         `[hub] dashboard permission.answer ${answer?.requestId ?? "(no request)"} failed: ${reason}`
@@ -548,7 +564,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    */
   const relayModelCrossing = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const { instanceId, payload } = message;
@@ -565,17 +581,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       return false;
     }
     const requestId = message.requestId ?? payload.requestId;
-    const receipt = (frame: ControlResult): void => {
-      if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(requestId, frame);
-      }
-    };
+    const receipt = (frame: ControlResult): void =>
+      answerControl(message, dashboard, replyAsFrame, requestId, frame);
     // The receipt is sent when the move is decided, or when deciding it
     // threw: a move that failed says so on the command that asked for it.
     const move = crossModel(instanceId, asked).then(
@@ -611,7 +618,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
 
   const relayControl = (
     asked: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
@@ -627,21 +634,12 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     const hubOwned = hubOwnedControl(message.payload.method);
     if (hubOwned) {
       const requestId = message.requestId ?? message.payload.requestId;
-      const frame: ControlResult = {
+      answerControl(message, dashboard, replyAsFrame, requestId, {
         kind: "control_result",
         requestId,
         ok: false,
         error: hubOwned,
-      };
-      if (replyAsFrame) {
-        ctx.sendFrame(dashboard, {
-          ...message,
-          verb: "frames",
-          payload: frame,
-        });
-      } else {
-        ctx.streams.settleCommand(requestId, frame);
-      }
+      });
       return true;
     }
     if (relayPermissionAnswer(message, dashboard, replyAsFrame)) {
@@ -675,20 +673,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
           ctx.endSession(row.id, "delete-transcript", { kind: "person" });
         }
         const requestId = message.requestId ?? message.payload.requestId;
-        const frame: ControlResult = {
+        answerControl(message, dashboard, replyAsFrame, requestId, {
           kind: "control_result",
           requestId,
           ok: true,
-        };
-        if (replyAsFrame) {
-          ctx.sendFrame(dashboard, {
-            ...message,
-            verb: "frames",
-            payload: frame,
-          });
-        } else {
-          ctx.streams.settleCommand(requestId, frame);
-        }
+        });
         return true;
       }
     }

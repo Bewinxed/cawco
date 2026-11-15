@@ -89,7 +89,7 @@ import {
   MEMORY_PROPOSAL_TOOL,
   PROJECT_SETTINGS_TOOL,
 } from "@cawco/core/permission-presentation";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { TurnWakes } from "@cawco/core/session-messages";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
@@ -127,6 +127,7 @@ import {
   turnCollapseId,
 } from "./notifications";
 
+import type { AskCard } from "./pending";
 import type { Decided } from "./settling";
 import type { TaskEvent } from "./tasks";
 
@@ -1718,11 +1719,12 @@ export const createPush = ({
 
   return {
     /**
-     * A session is blocked on you: a permission or a question.
-     * Call wherever the ask reaches the operator; a request is pushed once
-     * however often it is called.
+     * A session is blocked on you: a permission or a question, as its card
+     * (pending.ts `AskCard`). Call wherever the ask reaches the operator; a
+     * request is pushed once however often it is called.
      */
-    onAsk(envelope: Envelope): void {
+    onAsk(card: AskCard): void {
+      const envelope = card.ask;
       const payload = envelope.payload as Partial<PermissionRequestFrame> & {
         /** An ask no session row stands behind names its project itself (a memory proposal, memory.ts). */
         projectId?: string;

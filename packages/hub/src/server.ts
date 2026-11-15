@@ -5,11 +5,7 @@ import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
-import {
-  type AgentFrame,
-  binaryUpdateOf,
-  decodeAgentFrame,
-} from "@cawco/core/agent-frame";
+import { type AgentFrame, binaryUpdateOf } from "@cawco/core/agent-frame";
 import type { ArchiveView } from "@cawco/core/archive";
 import { unparked } from "@cawco/core/artifact-needs";
 import {
@@ -339,7 +335,7 @@ import {
   takeSentWrites,
 } from "./artifacts/sync";
 import { takesNoInput } from "./artifacts/taker";
-import { clientCopy, createAskPresenter } from "./ask-presentation";
+import { createAskPresenter } from "./ask-presentation";
 import { createAskRouting } from "./ask-routing";
 import { createAsks } from "./asks";
 import { createAtLimit } from "./at-limit";
@@ -481,6 +477,7 @@ import {
   keepAliveState,
 } from "./keep-alive";
 import { isBlockProgram, moveKeptBlocks, pageSourcePaths } from "./kept-blocks";
+import { frameOf } from "./known-values";
 import { boardTitle, sessionLabel } from "./labels";
 import { landedDiff } from "./landed";
 import { landingBranch } from "./landing-run";
@@ -741,12 +738,17 @@ import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
 import { WelcomeConverge } from "./welcome-converge";
 import {
+  type ClientSocket,
+  clientSocket,
   closeLine,
   drainLine,
   type HubSocket,
+  type MachineSocket,
+  machineSocket,
   openLine,
   receiveFrame,
-  sendFrame as writeFrame,
+  sendToClient,
+  sendToMachine as writeToMachine,
 } from "./wire-socket";
 import { workItemCalls } from "./work-item-calls";
 import { isHubParent, isLive } from "./work-item-state";
@@ -1210,7 +1212,7 @@ export interface ServerOptions {
 }
 
 /** A machine's socket: one the hub may close, from an address. */
-type AgentSocket = AuthSocket & { remoteAddress: string };
+type AgentSocket = AuthSocket<MachineSocket> & { remoteAddress: string };
 
 /**
  * One verb of a machine's socket, handled once its envelope is decoded and
@@ -1223,7 +1225,7 @@ type AgentVerb = (
 ) => void | Promise<void>;
 
 /** A dashboard's (or the app's) socket: its upgrade's headers, from an address. */
-type DashboardSocket = HubSocket & {
+type DashboardSocket = ClientSocket & {
   headers: Record<string, string | undefined>;
   remoteAddress: string;
 };
@@ -1469,7 +1471,8 @@ export const createServer = (
     processAt: () => processAt,
     push: () => push,
     sayCompaction: () => sayCompaction,
-    sendFrame: () => sendFrame,
+    sendToClient: () => sendToClient,
+    sendToMachine: () => sendToMachine,
     sendRefusal: () => sendRefusal,
     silentWords: () => silentWords,
     startHold: () => startHold,
@@ -2387,14 +2390,14 @@ export const createServer = (
     processAt.set(instanceId, Date.now());
     return waitingForProcess.delete(instanceId);
   };
-  /** The one way a frame leaves this hub: a start or attach sent is a process event. */
-  const sendFrame = (socket: HubSocket, frame: unknown): void => {
+  /** The one way a command leaves this hub for a machine: a start or attach sent is a process event. */
+  const sendToMachine = (socket: MachineSocket, frame: object): void => {
     const envelope = frame as Partial<Envelope<Partial<SpawnPayload>>>;
     const instanceId = envelope.instanceId ?? envelope.payload?.instanceId;
     if (envelope.verb === "spawn" && instanceId) {
       processEvent(instanceId);
     }
-    writeFrame(socket, frame);
+    writeToMachine(socket, frame);
   };
 
   /**
@@ -2507,8 +2510,15 @@ export const createServer = (
     instance: (id) => db.getInstancesByIds([id])[0],
     owned: (requestId) => db.asks.get(requestId)?.asked.kind,
     handed: (requestId) => db.delegateAsk(requestId) !== undefined,
-    hand: (asker, parent, ask) =>
-      deliverDelegateAsk(asker, parent, clientCopy(ask)),
+    hand: (asker, parent, ask) => {
+      const card = pending.card(ask.requestId ?? "");
+      if (!card) {
+        throw new Error(
+          `Ask ${ask.requestId ?? "(no id)"} was handed to its parent without being parked.`
+        );
+      }
+      deliverDelegateAsk(asker, parent, card);
+    },
     tell: ({ asker, depth, parent, requestId, mark, what }, line, body) =>
       tellParentOfWait(
         parent,
@@ -2540,7 +2550,14 @@ export const createServer = (
       requestId,
       () => pending.remember(requestId, envelope, outlivesHub),
       () => {
-        registry.broadcast(clientCopy(envelope));
+        // The ledger's card, as every screen reads it (`/api/pending`).
+        const card = pending.card(requestId);
+        if (!card) {
+          throw new Error(
+            `Ask ${requestId} was published without being parked.`
+          );
+        }
+        registry.broadcastAsk(card);
         // A browser ask is read by its session's artifact tabs too.
         if ((envelope.payload as PermissionRequestFrame).browserAsk) {
           artifactSessions.refresh(envelope.instanceId);
@@ -2549,7 +2566,7 @@ export const createServer = (
           !existed &&
           (envelope.payload as { routedTo?: string }).routedTo !== "parent"
         ) {
-          push.onAsk(envelope);
+          push.onAsk(card);
         }
       }
     );
@@ -2727,7 +2744,13 @@ export const createServer = (
     if (!row || endedForGood(row.id)) {
       return false;
     }
-    hubAsks.keep(parked, row);
+    // The ledger holds the card's input and the call's digest; the permit
+    // kept is matched by that digest (asks.ts `keep`), so nothing is opened.
+    const digest = pending.callDigest(parked.requestId ?? "");
+    if (!digest) {
+      return false;
+    }
+    hubAsks.keep(parked, row, digest);
     return true;
   };
   /**
@@ -3159,7 +3182,7 @@ export const createServer = (
     }
   };
   const recordSessionAddress = (
-    agent: HubSocket,
+    agent: MachineSocket,
     machineId: string,
     claim: SessionAddress
   ): void => {
@@ -3181,7 +3204,7 @@ export const createServer = (
         lifecycle.deliveryFailed(row.id);
       }
     }
-    sendFrame(agent, {
+    sendToMachine(agent, {
       verb: "control",
       machineId,
       instanceId: claim.instanceId,
@@ -4091,7 +4114,7 @@ export const createServer = (
         sent.set(delta.generation, riding);
         fleetMcpRiding.set(machineId, sent);
       }
-      sendFrame(agent, {
+      sendToMachine(agent, {
         verb: "control",
         machineId,
         payload: {
@@ -5595,9 +5618,10 @@ export const createServer = (
         remoteAddress: string;
       },
     >(
-      handle: (ws: S, message: unknown) => void
+      handle: (ws: S & ClientSocket, message: unknown) => void
     ) =>
-    (ws: S, incoming: unknown): void =>
+    (handed: S, incoming: unknown): void => {
+      const ws = clientSocket(handed);
       // A message too long for one frame arrives as parts, read in order
       // through the socket's inbox (`wire-socket.ts`).
       receiveFrame(ws, incoming, (message) => {
@@ -5608,6 +5632,7 @@ export const createServer = (
           dashboardThrew(ws, message, error);
         }
       });
+    };
   /**
    * NO DASHBOARD MESSAGE THAT THROWS VANISHES. A message off a dashboard (or
    * the app) whose handling threw, synchronously or later, is answered so its
@@ -5628,7 +5653,7 @@ export const createServer = (
    * answered, so a send whose relay threw got no ack and no log line.
    */
   const dashboardThrew = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: unknown,
     error: unknown
   ): void => {
@@ -5645,7 +5670,7 @@ export const createServer = (
       console.error(
         `[hub] dashboard command ${String(raw.kind)} ${raw.commandId}${typeof raw.sessionId === "string" ? ` for ${raw.sessionId}` : ""} failed: ${reason}`
       );
-      sendFrame(ws, {
+      sendToClient(ws, {
         type: "command.ack",
         commandId: raw.commandId,
         stage: "failed",
@@ -5657,12 +5682,12 @@ export const createServer = (
       console.error(
         `[hub] dashboard ${message.verb}${message.instanceId ? ` for ${message.instanceId}` : ""} failed: ${reason}`
       );
-      sendFrame(ws, failure(message, reason));
+      sendToClient(ws, failure(message, reason));
       return;
     }
     const kind = typeof raw?.type === "string" ? raw.type : "message";
     console.error(`[hub] dashboard ${kind} failed: ${reason}`);
-    sendFrame(ws, refusalFrame(message, `${kind} failed: ${reason}`));
+    sendToClient(ws, refusalFrame(message, `${kind} failed: ${reason}`));
   };
   /**
    * Whether a failed agent frame carried session custody its machine waits
@@ -5670,7 +5695,9 @@ export const createServer = (
    * replaying addresses. Its machine is told to reconnect and retry.
    */
   const carriesCustody = (message: Envelope): boolean => {
-    const { kind, sessionAddresses } = decodeAgentFrame(message.payload);
+    const { kind, sessionAddresses } = frameOf(
+      db.knownValues.replaced(message)
+    );
     return (
       message.verb === "register" ||
       (message.verb === "frames" && kind === "session_address") ||
@@ -5700,7 +5727,7 @@ export const createServer = (
     const commandAnswered = streams.settleCommand(requestId, frame);
     const requester = registry.takeRequester(requestId);
     if (requester) {
-      sendFrame(requester, {
+      sendToClient(requester, {
         ...message,
         verb: "frames",
         requestId,
@@ -5749,9 +5776,10 @@ export const createServer = (
         close: (code?: number, reason?: string) => unknown;
       },
     >(
-      handle: (ws: S, message: unknown) => Promise<void>
+      handle: (ws: S & MachineSocket, message: unknown) => Promise<void>
     ) =>
-    (ws: S, incoming: unknown): void => {
+    (handed: S, incoming: unknown): void => {
+      const ws = machineSocket(handed);
       // Word from its machine as it arrives, however long the inbox holds
       // it (machine-contact.ts).
       wordFrom(ws);
@@ -5926,7 +5954,7 @@ export const createServer = (
       if (!agent) {
         return false;
       }
-      sendFrame(agent, {
+      sendToMachine(agent, {
         verb: "stop",
         machineId,
         instanceId: payload.instanceId,
@@ -6160,10 +6188,13 @@ export const createServer = (
     });
 
   /** A stored Stop survives reconnects; its caller still gets a bounded receipt. */
-  const stopFromDashboard = (dashboard: HubSocket, message: Envelope): void => {
+  const stopFromDashboard = (
+    dashboard: ClientSocket,
+    message: Envelope
+  ): void => {
     const { instanceId } = message;
     if (!instanceId) {
-      sendFrame(
+      sendToClient(
         dashboard,
         failure(message, "No session was named. Refresh, then retry.")
       );
@@ -6189,7 +6220,7 @@ export const createServer = (
           );
         }
       }
-      sendFrame(dashboard, {
+      sendToClient(dashboard, {
         ...message,
         verb: "frames",
         requestId,
@@ -6306,13 +6337,13 @@ export const createServer = (
   /** Registers a socket's correlation before dispatch; Ledger commands own their ack route. */
   const forward = (
     envelope: Envelope,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     remember = true
   ): boolean => {
     let outgoing = envelope;
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
-      sendFrame(
+      sendToClient(
         dashboard,
         failure(envelope, commandAwayWords(envelope.machineId))
       );
@@ -6337,7 +6368,7 @@ export const createServer = (
         registry.rememberRequester(requestId, dashboard);
       }
     }
-    sendFrame(agent, outgoing);
+    sendToMachine(agent, outgoing);
     return true;
   };
 
@@ -6363,7 +6394,7 @@ export const createServer = (
    * board that reports 178 live sessions and one that reports 42.
    */
   const restore = (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     reattachOnly: SpawnPayload["reattachOnly"] = false
   ): void => {
@@ -6420,7 +6451,7 @@ export const createServer = (
    * skipped. Marked restoring, then attaching, before its spawn goes.
    */
   const reattach = (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     asked: NamedSpawn,
     reattachOnly: NonNullable<SpawnPayload["reattachOnly"]>
@@ -6436,7 +6467,7 @@ export const createServer = (
     ) {
       publishInstances(row.machineId);
     }
-    sendFrame(agent, {
+    sendToMachine(agent, {
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
@@ -6454,7 +6485,7 @@ export const createServer = (
    * spawn goes.
    */
   const relaunch = (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     asked: NamedSpawn
   ): void => {
@@ -6619,7 +6650,7 @@ export const createServer = (
    * before the socket's inbox works it, or its agent's ping. Only the
    * machine's registered connection speaks for it.
    */
-  const wordFrom = (ws: HubSocket): void => {
+  const wordFrom = (ws: MachineSocket): void => {
     const machineId = socketMachines.get(ws.id);
     if (machineId !== undefined && registry.agent(machineId)?.id === ws.id) {
       contact.heard(machineId);
@@ -6648,7 +6679,7 @@ export const createServer = (
     ws.remoteAddress ??
     null;
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
-  const dashboardDevices = new Map<AuthSocket, string | null>();
+  const dashboardDevices = new Map<AuthSocket<ClientSocket>, string | null>();
   /**
    * Each dashboard socket opened from a page in an agent's own browser, by
    * its id: the gate id its DevTools gate marked the page with (core
@@ -6664,7 +6695,7 @@ export const createServer = (
    */
   const artifactDevices = new Map<
     string,
-    { device: string | null; socket: AuthSocket }
+    { device: string | null; socket: AuthSocket<ClientSocket> }
   >();
   /**
    * Closes an artifact tab's socket for it to open again as what its device
@@ -6684,7 +6715,7 @@ export const createServer = (
   const dashboardClients = new Map<string, AnswerFrom>();
   /** `page`: the origin it sent, if any; `device`: the paired device it came as. */
   const noteDashboardClient = (
-    socket: HubSocket,
+    socket: ClientSocket,
     page: string | undefined | null,
     device: { name: string } | null | undefined
   ): void => {
@@ -6693,7 +6724,7 @@ export const createServer = (
       ...(device ? { name: device.name } : {}),
     });
   };
-  const answeredFrom = (socket: HubSocket): AnswerFrom => {
+  const answeredFrom = (socket: ClientSocket): AnswerFrom => {
     const from = dashboardClients.get(socket.id);
     if (!from) {
       throw new Error(
@@ -6756,12 +6787,15 @@ export const createServer = (
    * admitted is held, told it waits, and listed for the person to Admit.
    * Neither touches the machine's real connection.
    */
-  const registerProven = (ws: AuthSocket, message: Envelope): boolean => {
+  const registerProven = (
+    ws: AuthSocket<MachineSocket>,
+    message: Envelope
+  ): boolean => {
     const bound = socketMachines.get(ws.id) ?? waitingSockets.get(ws.id);
     if (bound && bound !== message.machineId) {
       const fault = `register refused: this connection registered as machine ${bound}, not ${message.machineId}`;
       console.warn(`[hub-auth] ${fault}`);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToMachine(ws, refusalFrame(message, fault));
       return false;
     }
     const nonce = machineNonces.get(ws.id);
@@ -6784,7 +6818,7 @@ export const createServer = (
     if (verdict === "wrong") {
       const fault = `register refused: machine ${message.machineId} is admitted with a key, and this connection did not prove it. If this is that machine and it lost its key, add it again over SSH, which gives it a new key, or remove it from Machines and admit it again.`;
       console.warn(`[hub-auth] ${fault} (from ${socketAddress(ws)})`);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToMachine(ws, refusalFrame(message, fault));
       ws.close(4403, "machine key not proven");
       return false;
     }
@@ -6808,7 +6842,7 @@ export const createServer = (
    * A held connection that registers again proving the key (its register
    * lapsed and went again once the key was there) is held no more.
    */
-  const unhold = (ws: AuthSocket, machineId: string): void => {
+  const unhold = (ws: AuthSocket<MachineSocket>, machineId: string): void => {
     if (waitingSockets.get(ws.id) === machineId) {
       waitingSockets.delete(ws.id);
       hubAuth.released(machineId, ws.id);
@@ -6817,11 +6851,11 @@ export const createServer = (
 
   /** The person's refusal, said on `ws` before the hub closes it, so the machine's install ends with it. */
   const refuseSocket = (
-    ws: AuthSocket,
+    ws: AuthSocket<MachineSocket>,
     machineId: string,
     reason: string
   ): void => {
-    sendFrame(ws, {
+    sendToMachine(ws, {
       verb: "admission",
       machineId,
       payload: { kind: "refused", message: reason },
@@ -6830,7 +6864,10 @@ export const createServer = (
   };
 
   /** A connection that proved no key, from a machine never admitted: held, told it waits, listed for the person. */
-  const holdWaiting = (ws: AuthSocket, message: Envelope): void => {
+  const holdWaiting = (
+    ws: AuthSocket<MachineSocket>,
+    message: Envelope
+  ): void => {
     const identity = message.payload as {
       hostname?: unknown;
       os?: unknown;
@@ -6858,7 +6895,7 @@ export const createServer = (
       // while setting up) never closed its own, and heartbeated into "register
       // first" refusals on it until its register lapsed.
       admit: (key) => {
-        sendFrame(ws, {
+        sendToMachine(ws, {
           verb: "admission",
           machineId: message.machineId,
           payload: { kind: "admitted", key },
@@ -6868,7 +6905,7 @@ export const createServer = (
       close: (reason) => ws.close(4403, reason),
       turnAway: (reason) => refuseSocket(ws, message.machineId, reason),
     });
-    sendFrame(ws, {
+    sendToMachine(ws, {
       verb: "admission",
       machineId: message.machineId,
       payload: {
@@ -6892,7 +6929,10 @@ export const createServer = (
    * hub that trusts its network takes the register's word, as it takes its id.
    * Synchronous: a register's socket is bound before its next frame is read.
    */
-  const takeFormerId = (ws: AuthSocket, message: Envelope): void => {
+  const takeFormerId = (
+    ws: AuthSocket<MachineSocket>,
+    message: Envelope
+  ): void => {
     const former = peek(message.payload, "formerMachineId");
     if (!former || former === message.machineId) {
       return;
@@ -6978,7 +7018,7 @@ export const createServer = (
             if (!socket || id === own) {
               continue;
             }
-            sendFrame(socket, {
+            sendToMachine(socket, {
               verb: "admission",
               machineId: id,
               payload: { kind: "admitted", key: hubAuth.mintMachineKey(id) },
@@ -7470,7 +7510,7 @@ export const createServer = (
    */
   const keepFleetReport = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     peeked: FleetSyncReport,
     riding: RidingChanges | undefined
   ): void => {
@@ -8710,7 +8750,7 @@ export const createServer = (
     }
     saidInterrupt(instanceId, why);
     const requestId = crypto.randomUUID();
-    sendFrame(agent, {
+    sendToMachine(agent, {
       verb: "control",
       machineId: row.machineId,
       instanceId,
@@ -10981,7 +11021,7 @@ export const createServer = (
     if (!agent) {
       return awayProblem(row.machineId, machineFault(row.machineId, "offline"));
     }
-    sendFrame(agent, {
+    sendToMachine(agent, {
       ...envelope,
       instanceId: row.id,
       machineId: row.machineId,
@@ -11129,8 +11169,7 @@ export const createServer = (
         ? db.getInstancesByIds([identity.instanceId])[0]
         : undefined;
     },
-    knownCredential: (token) =>
-      identities.resolve(`Bearer ${token}`) !== undefined,
+    knownValues: db.knownValues,
     toolListing: db.toolListing,
     putToolListing: db.putToolListing,
     refreshTools: (row) => {
@@ -11766,7 +11805,7 @@ export const createServer = (
    * dashboard told it is up under its id now. True when the start named a
    * former id.
    */
-  const resumeFormer = (ws: HubSocket, message: Envelope): boolean => {
+  const resumeFormer = (ws: ClientSocket, message: Envelope): boolean => {
     const named = message.instanceId;
     const now = named ? db.instanceIdOf(named) : undefined;
     if (!(named && now) || now === named) {
@@ -11775,7 +11814,7 @@ export const createServer = (
     const [row] = db.getInstancesByIds([now]);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row && agent)) {
-      sendFrame(
+      sendToClient(
         ws,
         failure(
           message,
@@ -11793,7 +11832,7 @@ export const createServer = (
       message.requestId ??
       peek(message.payload, "requestId") ??
       crypto.randomUUID();
-    sendFrame(ws, {
+    sendToClient(ws, {
       ...message,
       instanceId: now,
       machineId: row.machineId,
@@ -11813,7 +11852,7 @@ export const createServer = (
    * the machine updates.
    */
   const sendDashboardStart = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     instanceId: string,
     payload: SpawnPayload
@@ -11830,7 +11869,7 @@ export const createServer = (
     );
     const requestId = message.requestId ?? peek(message.payload, "requestId");
     if (requestId) {
-      sendFrame(ws, {
+      sendToClient(ws, {
         ...message,
         verb: "frames",
         requestId,
@@ -11861,7 +11900,7 @@ export const createServer = (
    * an agent's browser opened it (`gatedPages`): the session whose gate id
    * it is, or the session of its workspace's live item (else its newest).
    */
-  const gatedOwner = (ws: HubSocket): string | undefined => {
+  const gatedOwner = (ws: ClientSocket): string | undefined => {
     const gate = gatedPages.get(ws.id);
     if (!gate) {
       return;
@@ -11882,7 +11921,7 @@ export const createServer = (
    * that exists (`known`) keeps the origin and parent it opened with.
    */
   const dashboardStartOf = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     known: boolean,
     cwd: string
@@ -11943,7 +11982,7 @@ export const createServer = (
    * words sent.
    */
   const dashboardBegins = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     before: { projectId?: string | null } | undefined,
     payload: NamedSpawn
@@ -11958,7 +11997,7 @@ export const createServer = (
     const begins = startingSetOf({ ...payload, projectId });
     if ("refusal" in begins) {
       console.warn(spawnWords.refusedLine(begins.refusal));
-      sendFrame(ws, failure(message, begins.refusal));
+      sendToClient(ws, failure(message, begins.refusal));
       return;
     }
     return { ...start, projectId, startingSet: begins.startingSet };
@@ -11969,13 +12008,13 @@ export const createServer = (
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
   const startFromDashboard = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     asked: Awaited<ReturnType<typeof piDefaultFor>>
   ): void => {
     if (asked instanceof ElysiaStatus) {
       console.warn(spawnWords.refusedLine(asked.response.detail));
-      sendFrame(ws, failure(message, asked.response.detail));
+      sendToClient(ws, failure(message, asked.response.detail));
       return;
     }
     // A session the hub has a row for is started again (a relaunch, a
@@ -11984,13 +12023,13 @@ export const createServer = (
     const settled = settleMode(message.machineId, asked, reviveMode(before));
     if ("refusal" in settled) {
       console.warn(spawnWords.refusedLine(settled.refusal));
-      sendFrame(ws, refusedStart(message, settled));
+      sendToClient(ws, refusedStart(message, settled));
       return;
     }
     const launched = atLaunchDir(message.instanceId, settled.payload);
     if ("refusal" in launched) {
       console.warn(spawnWords.refusedLine(launched.refusal));
-      sendFrame(ws, failure(message, launched.refusal));
+      sendToClient(ws, failure(message, launched.refusal));
       return;
     }
     const { payload } = launched;
@@ -12002,7 +12041,7 @@ export const createServer = (
       : {};
     if ("refusal" in placed) {
       console.warn(spawnWords.refusedLine(placed.refusal));
-      sendFrame(ws, failure(message, placed.refusal));
+      sendToClient(ws, failure(message, placed.refusal));
       return;
     }
     // A machine inside its reconnect window takes the start on its register
@@ -12012,7 +12051,7 @@ export const createServer = (
       (registry.agent(message.machineId) ||
         machinePresence(message.machineId).kind === "reconnecting")
     )) {
-      sendFrame(
+      sendToClient(
         ws,
         failure(message, machineFault(message.machineId, "offline"))
       );
@@ -12389,7 +12428,7 @@ export const createServer = (
       machineId: message.machineId,
       verb: message.verb,
     });
-    sendFrame(ws, refusalFrame(message, fault));
+    sendToMachine(ws, refusalFrame(message, fault));
     return false;
   };
 
@@ -12397,7 +12436,7 @@ export const createServer = (
   const refuseAgentVerb: AgentVerb = (ws, message) => {
     const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
     console.warn(`[hub] ${fault}, from ${message.machineId}`);
-    sendFrame(ws, refusalFrame(message, fault));
+    sendToMachine(ws, refusalFrame(message, fault));
   };
 
   /**
@@ -12756,7 +12795,7 @@ export const createServer = (
     }
     const beatIds = agentFrame.instances;
     const tailnetServing = tailnetHttps.serving();
-    sendFrame(ws, {
+    sendToMachine(ws, {
       ...ack(message),
       payload: {
         ok: true,
@@ -12841,7 +12880,7 @@ export const createServer = (
         `[hub] launch of ${message.instanceId} refused at its start: ${grant.refusal}`
       );
     }
-    sendFrame(ws, {
+    sendToMachine(ws, {
       verb: "launch",
       machineId: message.machineId,
       instanceId: message.instanceId,
@@ -12891,15 +12930,20 @@ export const createServer = (
    */
   const agentMessage = async (
     ws: AgentSocket,
-    message: unknown
+    arrived: unknown
   ): Promise<void> => {
-    if (!isEnvelope(message)) {
-      const fault = envelopeFault(message);
-      console.warn(`[hub] agent ${fault}`, message);
-      sendFrame(ws, refusalFrame(message, fault));
+    if (!isEnvelope(arrived)) {
+      const fault = envelopeFault(arrived);
+      console.warn(`[hub] agent ${fault}`, arrived);
+      sendToMachine(ws, refusalFrame(arrived, fault));
       return;
     }
-    const agentFrame = decodeAgentFrame(message.payload);
+    // Where a machine's words enter the hub: every value the hub knows as
+    // a secret replaced before anything reads, stores or copies them
+    // (known-values.ts).
+    const admitted = db.knownValues.replaced(arrived);
+    const message = admitted.value;
+    const agentFrame = frameOf(admitted);
     if (!speaksForMachine(ws, message)) {
       return;
     }
@@ -12929,7 +12973,7 @@ export const createServer = (
     console.warn(
       `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
     );
-    sendFrame(ws, refusalFrame(message, fault));
+    sendToClient(ws, refusalFrame(message, fault));
   };
 
   /**
@@ -12945,7 +12989,7 @@ export const createServer = (
     const start = namedSpawn(message.payload as SpawnPayload);
     if ("refusal" in start) {
       console.warn(spawnWords.refusedLine(start.refusal));
-      sendFrame(ws, failure(message, start.refusal));
+      sendToClient(ws, failure(message, start.refusal));
       return;
     }
     const [known] = message.instanceId
@@ -12956,7 +13000,7 @@ export const createServer = (
       enforceRowSessionKey(known, start);
     if (why) {
       console.warn(spawnWords.refusedLine(why));
-      sendFrame(ws, failure(message, why));
+      sendToClient(ws, failure(message, why));
       return;
     }
     // A spawn that names no model runs on its harness's own default
@@ -13085,7 +13129,7 @@ export const createServer = (
     if (!isEnvelope(message)) {
       const fault = envelopeFault(message);
       console.warn(`[hub] dashboard ${fault}`, message);
-      sendFrame(ws, refusalFrame(message, fault));
+      sendToClient(ws, refusalFrame(message, fault));
       return;
     }
     const handle = Object.hasOwn(dashboardVerbs, message.verb)
@@ -13096,14 +13140,40 @@ export const createServer = (
 
   /** The one setter of an away machine's headers (machine-reads.ts `nameAwayMachine`). */
   const nameAway = nameAwayMachine(ctx);
+  /** A problem's `detail` with the hub's known values replaced, in place, before Elysia writes it; any other answer is left as it is. */
+  const knownInProblem = (answer: unknown): void => {
+    const response: unknown =
+      answer instanceof ElysiaStatus ? answer.response : undefined;
+    if (
+      typeof response === "object" &&
+      response !== null &&
+      "detail" in response &&
+      typeof response.detail === "string"
+    ) {
+      response.detail = db.knownValues.text(response.detail);
+    }
+  };
+  /** A thrown problem's detail, or any other error's message, with the hub's known values replaced, in place. */
+  const knownInThrown = (error: unknown): void => {
+    if (error instanceof ElysiaStatus) {
+      knownInProblem(error);
+    } else if (error instanceof Error) {
+      error.message = db.knownValues.text(error.message);
+    }
+  };
   return Object.assign(
     // Every body, query and params schema closed (Elysia's
     // `nonAdditionalProperties`): a field a route doesn't take is refused,
     // never dropped. Normalizing dropped it, so a caller on an old shape
     // (setup-send's `{ card }` once the show took `{ at: { card } }`,
     // 5646cadda) was answered as if it had sent nothing. No route declares
-    // a response schema, so none is held to one.
-    new Elysia({ normalize: false })
+    // a response schema, so none is held to one. A request a schema
+    // refuses is told what was wrong with it, as in development, in the
+    // binary too, which runs in production (scripts/binary/production.ts):
+    // the unknown-fields 422 and every schema's own words read Elysia's
+    // validation details, which production otherwise drops. A thrown 5xx's
+    // message is still never answered there.
+    new Elysia({ normalize: false, allowUnsafeValidationDetails: true })
       // A request with a field its route doesn't take: a 422 naming each
       // (unknown-fields.ts), before any plugin's or route's own error
       // words, which would say only that the shape was wrong.
@@ -13117,13 +13187,21 @@ export const createServer = (
           nameAway({ responseValue: error.value(), set });
           return;
         }
+        // A thrown problem skips `mapResponse` (Elysia 2.0.0-rc.4): its
+        // detail, and any other error's message (which Elysia answers as
+        // the detail outside production), has the hub's known values
+        // replaced here (known-values.ts).
+        knownInThrown(error);
         const unknown = unknownFieldsOf(error);
-        return unknown
-          ? problem(422, {
-              code: "unknown-fields",
-              detail: hubFailureWords.unknownFields(unknown.on, unknown.fields),
-            })
-          : undefined;
+        if (!unknown) {
+          return;
+        }
+        const answer = problem(422, {
+          code: "unknown-fields",
+          detail: hubFailureWords.unknownFields(unknown.on, unknown.fields),
+        });
+        knownInProblem(answer);
+        return answer;
       })
       // Every answer the hub sends, its text compressed for the client that
       // asked (core compress-answer.ts): the phone and the machines reach
@@ -13167,6 +13245,13 @@ export const createServer = (
       // deep it was made (machine-answers.ts `awayProblem`): its headers'
       // one setter, before every route.
       .mapResponse("global", nameAway)
+      // Every problem a route answers, its `detail` with the hub's known
+      // values replaced (known-values.ts) before Elysia writes it: a
+      // problem can quote a command line or an upstream's answer, and
+      // ~1,200 places make one.
+      .mapResponse("global", ({ responseValue }) => {
+        knownInProblem(responseValue);
+      })
       .use(
         previewRoutes({
           deviceOf: (request) => {
@@ -13340,13 +13425,14 @@ export const createServer = (
         // up to the largest message the wire carries. Bun has one WebSocket
         // config per server, so both routes name the same limit.
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
-        open(ws) {
-          openLine(ws, false);
+        open(handed) {
+          openLine(handed, "machine");
+          const ws = machineSocket(handed);
           // The first frame on every connection: the nonce its register
           // answers with its key's proof (hub-auth.ts).
           const nonce = randomBytes(24).toString("base64url");
           machineNonces.set(ws.id, nonce);
-          sendFrame(ws, {
+          sendToMachine(ws, {
             verb: "admission",
             machineId: "",
             payload: { kind: "challenge", nonce, hubId: hubId() },
@@ -13359,7 +13445,7 @@ export const createServer = (
         // deadline): word from its machine that waits behind no message
         // (machine-contact.ts). Bun answers it with a pong either way.
         ping(ws) {
-          wordFrom(ws);
+          wordFrom(machineSocket(ws));
         },
         message: guardedAgentMessage(agentMessage),
         close(ws) {
@@ -13429,8 +13515,9 @@ export const createServer = (
         drain(ws) {
           drainLine(ws);
         },
-        open(ws) {
-          openLine(ws, true);
+        open(handed) {
+          openLine(handed, "client");
+          const ws = clientSocket(handed);
           const { instance, artifact } = ws.params;
           // The person's alone, read here rather than at the gate (hub-auth.ts
           // lets this upgrade through): a browser cannot read the answer to a
@@ -13471,7 +13558,7 @@ export const createServer = (
             message !== null &&
             (message as { type?: unknown }).type === "heartbeat"
           ) {
-            sendFrame(ws, { type: "heartbeat" } satisfies StreamHeartbeat);
+            sendToClient(ws, { type: "heartbeat" } satisfies StreamHeartbeat);
             return;
           }
           // A page's place picker browsing a machine's folders; the reply
@@ -13483,9 +13570,10 @@ export const createServer = (
           const fault =
             "an artifact's session socket takes heartbeat and fs alone";
           console.warn(`[hub] ${fault}`, message);
-          sendFrame(ws, refusalFrame(message, fault));
+          sendToClient(ws, refusalFrame(message, fault));
         }),
-        close(ws) {
+        close(handed) {
+          const ws = clientSocket(handed);
           closeLine(ws);
           artifactDevices.delete(ws.id);
           artifactSessions.close(ws);
@@ -13493,16 +13581,17 @@ export const createServer = (
       })
       .ws("/ws/dashboard", {
         // Offered to the browser; every frame to a dashboard then goes out
-        // with the flag Bun compresses on (`openLine(ws, true)`).
+        // with the flag Bun compresses on (`openLine(ws, "client")`).
         perMessageDeflate: true,
         // The same limit as the agent route: Bun's config is server-wide.
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         drain(ws) {
           drainLine(ws);
         },
-        open(ws) {
+        open(handed) {
           // Before anything is sent to it: every frame goes through its line.
-          openLine(ws, true);
+          openLine(handed, "client");
+          const ws = clientSocket(handed);
           // The person's alone (the gate refused anyone else at the upgrade;
           // read again here, so nothing but the person ever holds one). Its
           // device is kept, so removing the device closes it.
@@ -13529,7 +13618,7 @@ export const createServer = (
             gatedPages.set(ws.id, gatedBy);
           }
           if (hubAuth.mode() === "pairing") {
-            sendFrame(ws, {
+            sendToClient(ws, {
               verb: "frames",
               machineId: "hub",
               payload: hubAuth.frame(),
@@ -13571,7 +13660,7 @@ export const createServer = (
               if (ws.readyState !== 1) {
                 return;
               }
-              sendFrame(ws, {
+              sendToClient(ws, {
                 verb: "frames",
                 machineId: "",
                 payload: {
@@ -13584,7 +13673,8 @@ export const createServer = (
           );
         },
         message: guardedDashboardMessage(dashboardMessage),
-        close(ws) {
+        close(handed) {
+          const ws = clientSocket(handed);
           closeLine(ws);
           dashboardDevices.delete(ws);
           dashboardClients.delete(ws.id);

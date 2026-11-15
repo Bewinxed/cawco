@@ -345,6 +345,8 @@ export const readStoredText = <S extends z.ZodType>(
 export interface StoredSeal {
   close: (text: string) => string;
   open: (raw: string) => string | null;
+  /** The secrets an opened value holds, by its declared leaves (db/sealed-columns.ts `sealedJson`): what the known values list (known-values.ts). */
+  secrets: (value: unknown) => readonly string[];
 }
 
 /** The row `raw` was read from, named by the registered namer. */
@@ -369,17 +371,23 @@ export interface StoredShape<S extends z.ZodType = z.ZodType> {
   text?: true;
 }
 
-/** The {@link StoredShape} a column was declared with by {@link storedJson} or {@link storedEnum}; undefined for any other column. */
-export const storedShapeOf = (column: unknown): StoredShape | undefined => {
+/** What a custom column was declared with (its custom type's config); undefined for any other column. */
+export const declaredConfigOf = (column: unknown): unknown => {
   if (!is(column, SQLiteCustomColumn)) {
     return;
   }
   // `config` is protected in Drizzle's types and public at runtime (column.js `this.config = config`).
   const config: unknown = Reflect.get(column, "config");
-  const shape =
-    typeof config === "object" && config !== null && "fieldConfig" in config
-      ? config.fieldConfig
-      : undefined;
+  return typeof config === "object" &&
+    config !== null &&
+    "fieldConfig" in config
+    ? config.fieldConfig
+    : undefined;
+};
+
+/** The {@link StoredShape} a column was declared with by {@link storedJson} or {@link storedEnum}; undefined for any other column. */
+export const storedShapeOf = (column: unknown): StoredShape | undefined => {
+  const shape = declaredConfigOf(column);
   return isStoredShape(shape) ? shape : undefined;
 };
 

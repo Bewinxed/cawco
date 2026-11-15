@@ -14,6 +14,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
+import { CREDENTIAL_MARK, SECRET_MARK } from "../known-values";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import { type MachineReadsContext, unansweredProblem } from "../machine-reads";
 import { boundFields } from "./bound-fields";
@@ -139,12 +140,23 @@ export const fleetMcpCalls = (
     const found = (asked.value.result as ConfigInspection).mcp.find(
       (row) => row.name === name && !row.managed
     );
-    return found
-      ? { config: { ...found.config } }
-      : problem(404, {
-          code: "mcp-unmanaged-unknown",
-          detail: `${machineName(machineId)} has no unmanaged MCP server ${name}`,
-        });
+    if (!found) {
+      return problem(404, {
+        code: "mcp-unmanaged-unknown",
+        detail: `${machineName(machineId)} has no unmanaged MCP server ${name}`,
+      });
+    }
+    // Every secret the hub holds was replaced where the machine's answer
+    // entered it (known-values.ts): a config that holds one is not the
+    // machine's as written, and is never stored so.
+    const said = JSON.stringify(found.config);
+    if (said.includes(SECRET_MARK) || said.includes(CREDENTIAL_MARK)) {
+      return problem(400, {
+        code: "mcp-secrets-unsettled",
+        detail: mcpWords.heldValueAdopted(machineName(machineId), name),
+      });
+    }
+    return { config: { ...found.config } };
   };
   /** Why a server's config and placement cannot be stored, or nothing. */
   const mcpWriteProblem = (

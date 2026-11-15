@@ -105,3 +105,25 @@ const SECRET_VALUE = [
 
 export const looksSecret = (value: string): boolean =>
   SECRET_VALUE.some((pattern) => pattern.test(value.trim()));
+
+/**
+ * Every string in `value`, at any depth, that is a credential: one under a
+ * field whose name reads as one ({@link isSecretName}: a token set's
+ * `access_token`, a client's `client_secret`, an `env` entry's
+ * `GITHUB_TOKEN`), and any that looks like one ({@link looksSecret}). A
+ * `DEBUG=1` or a `CHROME_PATH` is no credential and is left out.
+ */
+export const credentialsIn = (value: unknown, named = false): string[] => {
+  if (typeof value === "string") {
+    return named || looksSecret(value) ? [value] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => credentialsIn(item, named));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.entries(value).flatMap(([key, item]) =>
+      credentialsIn(item, named || isSecretName(key))
+    );
+  }
+  return [];
+};

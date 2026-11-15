@@ -5,7 +5,9 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Context, Effect, Layer } from "effect";
 import { DB_PATH } from "../config";
 import { hubId } from "../hub-id";
+import { createKnownValues, type KnownValues } from "../known-values";
 import { HubLifetime } from "../lifetime";
+import { hubSecrets } from "../secret-box";
 import { nameStoredRowsFrom } from "../stored-json";
 import {
   type AccountsDb,
@@ -70,6 +72,7 @@ import { type ProjectsDb, projectsDb } from "./projects";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import { type RulesDb, rulesDb } from "./rules";
+import { sealedColumns } from "./sealed-columns";
 import { type SendsDb, sendsDb } from "./sends";
 import type { Revocations } from "./session-identity";
 import { type SessionIdentityDb, sessionIdentityDb } from "./session-identity";
@@ -140,6 +143,8 @@ interface HubStore {
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
+  /** The exact secret values the hub mints or holds, replaced where text enters it (known-values.ts). */
+  readonly knownValues: KnownValues;
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
   /** A project's fact uses and declined rewrites (memory.ts). */
@@ -270,7 +275,8 @@ const make = async (path: string): Promise<DbShape> => {
   runOpenedSteps(db);
 
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
-  const forgetting = forgetDb(db, core.dropArtifacts, await schemaTables());
+  const tables = await schemaTables();
+  const forgetting = forgetDb(db, core.dropArtifacts, tables);
   const store: DbShape = {
     ...dataMigrationsDb(core),
     ...foldDb(core),
@@ -319,6 +325,10 @@ const make = async (path: string): Promise<DbShape> => {
     routines: routinesDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),
+    knownValues: createKnownValues(db.$client, {
+      columns: sealedColumns(tables.values()),
+      open: (sealed) => hubSecrets().open(sealed),
+    }),
     relays: relaysDb(db),
     asks: asksDb(db),
     sshMachines: sshMachinesDb(db, hubId),

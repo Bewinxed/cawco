@@ -24,6 +24,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { logAccountReadingsUnread } from "./account-readings-unread";
+import { sealAskInputs } from "./asks-inputs";
 import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
@@ -48,6 +49,7 @@ import { FILE_HASHES } from "./migration-names";
 import { logMovesUnread } from "./move-states-unread";
 import { logOutputsUnread } from "./outputs-unread";
 import { logOwedSendsUnread } from "./owed-sends-unread";
+import { sealParkedInputs } from "./parked-inputs";
 import { logPassScopesUnread } from "./pass-scopes-unread";
 import { logPlatformsRoutesUnread } from "./platforms-routes-unread";
 import { logQueuedUnread } from "./queued-unread";
@@ -411,6 +413,35 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every account's extra usage and window set 0432 keeps as not read, read before it runs.
       logAccountReadingsUnread(client);
+    },
+  },
+  {
+    name: "parked-inputs",
+    before: "0434_parked_ask_input_sealed_kept",
+    at: "migrator",
+    run: (client) => {
+      // Every parked ask's call input sealed with the hub's key into 0433's
+      // column and its envelope kept as every screen reads it, before 0434
+      // holds every row to a sealed input (parked-inputs.ts).
+      const sealed = sealParkedInputs(client);
+      console.info(
+        `[migrations] 0434: ${sealed} parked ask input(s) sealed, each envelope kept as every screen reads it`
+      );
+    },
+  },
+  {
+    name: "ask-inputs",
+    before: "0436_ask_inputs_digested_kept",
+    at: "migrator",
+    run: (client) => {
+      // Every parked ask's call digested, every permit kept by its digest
+      // and every approval's call input sealed, each record keeping the
+      // card's input, before 0436 holds every parked ask to a digest
+      // (asks-inputs.ts).
+      const done = sealAskInputs(client);
+      console.info(
+        `[migrations] 0436: ${done.parked} parked ask(s) digested, ${done.permits} permit(s) kept by their digest, ${done.approvals} approval input(s) sealed`
+      );
     },
   },
   {

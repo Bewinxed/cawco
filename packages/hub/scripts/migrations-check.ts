@@ -524,6 +524,17 @@ const sealedValues = (
   return new Map(rows.map((row) => [row.key, row.value]));
 };
 
+/** The fixture unpacked into `dir` as a hub's database, with a home beside it: its path. */
+const fixtureCopy = async (dir: string): Promise<string> => {
+  mkdirSync(join(dir, "home"), { recursive: true });
+  const path = join(dir, "hub.db");
+  await Bun.write(
+    path,
+    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
+  );
+  return path;
+};
+
 /**
  * KEY ABSENT, THEN RESTORED, on a scratch copy of the fixture before 0420
  * (db/sealed-facts-unread.ts): opened as the hub opens it with no key file
@@ -535,12 +546,7 @@ const sealedValues = (
  */
 const keyCase = async (): Promise<string> => {
   const dir = join(scratch, "case-key");
-  mkdirSync(join(dir, "home"), { recursive: true });
-  const path = join(dir, "hub.db");
-  await Bun.write(
-    path,
-    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
-  );
+  const path = await fixtureCopy(dir);
   const probe = new Database(path, { readwrite: true });
   const holds =
     probe
@@ -601,6 +607,279 @@ const keyCase = async (): Promise<string> => {
     keys.filter((key) => key.startsWith(kind)).length;
   const sealedKeys = sealed.map(([key]) => key);
   return `case key absent, then restored: ${sealed.length} sealed value(s) (${of(sealedKeys, "connection")} connection(s), ${of(sealedKeys, "sign-in")} sign-in(s)) kept as stored with no key, none deleted or rewritten, the hub opened; with the fixtures' key back, ${of(placed, "connection")} connection(s) and ${of(placed, "sign-in")} sign-in(s) placed at the next start, ${sealed.length - placed.length} still not read, as with the key there from the start`;
+};
+
+/** Each parked ask's call digest, of the database at `path`. */
+const rowsDigested = (
+  path: string
+): { requestId: string; callDigest: string }[] => {
+  const sqlite = new Database(path, { readwrite: true });
+  const rows = sqlite
+    .query<{ requestId: string; callDigest: string }, []>(
+      "SELECT request_id AS requestId, call_digest AS callDigest FROM parked_asks"
+    )
+    .all();
+  sqlite.close();
+  return rows;
+};
+
+/** Every permit's and approval's kept record and sealed input, of the database at `path`. */
+const keptAsks = (
+  path: string
+): { id: string; kind: string; kept: string; inputSealed: string | null }[] => {
+  const sqlite = new Database(path, { readwrite: true });
+  const rows = sqlite
+    .query<
+      { id: string; kind: string; kept: string; inputSealed: string | null },
+      []
+    >(
+      "SELECT id, kind, kept, input_sealed AS inputSealed FROM asks WHERE kind IN ('permit', 'approve') AND kept IS NOT NULL"
+    )
+    .all();
+  sqlite.close();
+  return rows;
+};
+
+/**
+ * KNOWN VALUES REPLACED, on the database the check's hub just opened, with
+ * the fixtures' key: the lists fixture's stored transcript line quoting a
+ * session's credential and a fleet MCP server's sealed `env` value
+ * (fixture-db.ts `seedKnownLine`), taken as a machine's frame through the
+ * known values the hub's entrances run (src/known-values.ts), comes out with
+ * each replaced by its mark, and every word around them whole, the path
+ * under a name that reads as no credential among them. One line, or none on
+ * a database without that line.
+ */
+const knownValuesCase = async (path: string): Promise<string | undefined> => {
+  const fixture = await import("./fixture-db-values");
+  const { CREDENTIAL_MARK, createKnownValues, SECRET_MARK } =
+    await import("../src/known-values");
+  const { sealedColumns } = await import("../src/db/sealed-columns");
+  const { schemaTables } = await import("../src/db/forget");
+  const { hubSecrets } = await import("../src/secret-box");
+  const sqlite = new Database(path, { readonly: true });
+  try {
+    const line = sqlite
+      .query<{ instanceId: string; content: string }, [string]>(
+        "SELECT instance_id AS instanceId, content FROM session_lines WHERE id = ?"
+      )
+      .get(fixture.KNOWN_LINE);
+    if (!line) {
+      return;
+    }
+    const known = createKnownValues(sqlite, {
+      columns: sealedColumns((await schemaTables()).values()),
+      open: (sealed) => hubSecrets().open(sealed),
+    });
+    const replaced = known.replaced({
+      verb: "frames",
+      machineId: "fixture",
+      instanceId: line.instanceId,
+      payload: { kind: "frame", line: line.content },
+    });
+    const said = replaced.value.payload.line;
+    const expected = line.content
+      .replace(fixture.KNOWN_ENV_VALUE, SECRET_MARK)
+      .replace(fixture.KNOWN_CREDENTIAL, CREDENTIAL_MARK);
+    if (
+      replaced.count !== 2 ||
+      said !== expected ||
+      !said.includes(`CHROME_PATH=${fixture.KNOWN_PATH} bun run release-notes`)
+    ) {
+      throw new Error(
+        `case known values: ${replaced.count} value(s) replaced in the stored line, where its credential and its sealed env value were two, or the words around them changed: ${said}`
+      );
+    }
+    return `case known values: a stored transcript line quoting a session's credential (matched by its hash) and a fleet MCP server's sealed env value, taken as a machine's frame, came out with each replaced (${CREDENTIAL_MARK}, ${SECRET_MARK}) and every word around them whole, the CHROME_PATH value among them`;
+  } finally {
+    sqlite.close();
+  }
+};
+
+/** What is wrong of the asks' kept records once migrated ({@link askCallsWrong}). */
+const keptWrong = async (path: string): Promise<string[]> => {
+  const { PARKED_KEY, PARKED_TOKEN } = await import("./fixture-db-values");
+  const { ASK_KEPT } = await import("@cawco/core/asks");
+  const { hubSecrets, isSealed } = await import("../src/secret-box");
+  const { callDigest } = await import("../src/call-digest");
+  const command = `GITHUB_TOKEN=${PARKED_TOKEN} git push origin main`;
+  const pushed = callDigest("Bash", {
+    command,
+    description: "Run the release proof",
+  });
+  const wrong: string[] = [];
+  let matched = 0;
+  let sealedOpen = 0;
+  const asks = keptAsks(path);
+  // The card hides a value by its field's name alone: a key under a
+  // header goes, a shell command shows as written.
+  for (const ask of asks.filter((one) => one.kept.includes(PARKED_KEY))) {
+    wrong.push(`ask ${ask.id}: its record still holds the key a field names`);
+  }
+  if (!asks.some((ask) => ask.kept.includes(command))) {
+    wrong.push("the permit's card no longer shows its command as written");
+  }
+  const digestOf = (kept: string): string => {
+    const { asked } = ASK_KEPT.parse(JSON.parse(kept));
+    return "digest" in asked ? asked.digest : "";
+  };
+  for (const ask of asks.filter((one) => one.kind === "permit")) {
+    const digest = digestOf(ask.kept);
+    matched += digest === pushed ? 1 : 0;
+    if (!digest) {
+      wrong.push(`permit ${ask.id}: no call digest`);
+    }
+  }
+  for (const ask of asks.filter((one) => one.kind === "approve")) {
+    if (ask.inputSealed && isSealed(ask.inputSealed)) {
+      sealedOpen += hubSecrets().open(ask.inputSealed).includes(PARKED_KEY)
+        ? 1
+        : 0;
+    } else {
+      wrong.push(`approval ${ask.id}: its call input is not sealed`);
+    }
+  }
+  if (matched !== 1 || sealedOpen !== 1) {
+    wrong.push(
+      `${matched} permit(s) matched the token's call by digest and ${sealedOpen} approval(s) opened to the key, where one of each was seeded`
+    );
+  }
+  return wrong;
+};
+
+/**
+ * What is wrong of the parked asks' call digests and the asks' kept
+ * records once migrated ({@link parkedCase}): a parked ask's digest is its
+ * call's, as asked (`asked`, by request id); a permit keeps its call's
+ * digest and the card's input; an approval keeps the card's input and its
+ * call's own sealed, which opens to the call as asked.
+ */
+const askCallsWrong = async (
+  path: string,
+  rows: { requestId: string; envelope: string }[],
+  asked: Map<string, string>
+): Promise<string[]> => {
+  const { ParkedAskShape } = await import("@cawco/core/stored-shapes");
+  const wrong: string[] = [];
+  const { callDigest } = await import("../src/call-digest");
+  const digests = new Map(
+    rowsDigested(path).map((row) => [row.requestId, row.callDigest])
+  );
+  for (const row of rows) {
+    const call = ParkedAskShape.parse(JSON.parse(row.envelope)).payload;
+    const input = JSON.parse(asked.get(row.requestId) ?? "{}");
+    if (digests.get(row.requestId) !== callDigest(call.toolName, input)) {
+      wrong.push(`${row.requestId}: its call digest is not its call's`);
+    }
+  }
+  return [...wrong, ...(await keptWrong(path))];
+};
+
+/**
+ * PARKED ASKS SEALED, on a scratch copy of the fixture before 0434
+ * (db/parked-inputs.ts): opened as the hub opens it, every parked ask's call
+ * input is sealed with the hub's key in `input_sealed`, its envelope keeps
+ * the card's input (by field: a key under a field named as one goes, a
+ * shell command shows as written), and no byte of a hidden key is left in
+ * the file; the sealed
+ * input opens with the fixtures' key to the call as it was asked, and is
+ * opened only where an Approve sends it (ask-presentation.ts
+ * `answeredWithOriginal`): a Decline opens nothing. Each parked ask holds
+ * its call's digest (0436); every permit keeps its call's digest in place of
+ * its input, the one whose call held a token matched by that call's digest;
+ * every approval keeps the card's input, its call's own sealed beside it.
+ * One line.
+ */
+const parkedCase = async (): Promise<string> => {
+  const dir = join(scratch, "case-parked");
+  const path = await fixtureCopy(dir);
+  const { parkedInputsToSeal } = await import("../src/db/parked-inputs");
+  const before = new Database(path, { readwrite: true });
+  const toSeal = parkedInputsToSeal(before);
+  before.close();
+  if (toSeal.length === 0) {
+    return `case parked asks sealed: the ${FIXTURE_NAME} fixture holds no parked ask; the lists fixture runs it`;
+  }
+  const { PARKED_KEY, PARKED_TOKEN } = await import("./fixture-db-values");
+  const { ParkedAskShape } = await import("@cawco/core/stored-shapes");
+  const asked = new Map(
+    toSeal.map(({ requestId, envelope }) => [
+      requestId,
+      JSON.stringify(ParkedAskShape.parse(JSON.parse(envelope)).payload.input),
+    ])
+  );
+  writeFixtureKey(dir);
+  openAsHubAlone(path);
+  const { hubSecrets, isSealed } = await import("../src/secret-box");
+  const { answeredWithOriginal } = await import("../src/ask-presentation");
+  const after = new Database(path, { readwrite: true });
+  const rows = after
+    .query<{ requestId: string; envelope: string; inputSealed: string }, []>(
+      "SELECT request_id AS requestId, envelope, input_sealed AS inputSealed FROM parked_asks"
+    )
+    .all();
+  after.close();
+  const wrong: string[] = [];
+  let opened = 0;
+  /** What a Decline would open, were it to: nothing. */
+  const declineOpens: Record<string, unknown> | undefined = undefined;
+  for (const row of rows) {
+    if (!isSealed(row.inputSealed)) {
+      wrong.push(`${row.requestId}: its input is not sealed`);
+      continue;
+    }
+    if (row.envelope.includes(PARKED_KEY)) {
+      wrong.push(
+        `${row.requestId}: its envelope still holds the key a field names`
+      );
+    }
+    if (
+      row.requestId === "parked-bash" &&
+      !row.envelope.includes(`GITHUB_TOKEN=${PARKED_TOKEN} git push`)
+    ) {
+      wrong.push(
+        `${row.requestId}: its card no longer shows its command as written`
+      );
+    }
+    const parked = ParkedAskShape.parse(JSON.parse(row.envelope));
+    const declined = answeredWithOriginal(
+      parked,
+      { behavior: "deny", message: "no" },
+      () => {
+        opened += 1;
+        return declineOpens;
+      }
+    );
+    const approved = answeredWithOriginal(parked, { behavior: "allow" }, () => {
+      opened += 1;
+      return JSON.parse(hubSecrets().open(row.inputSealed));
+    });
+    if (
+      declined.behavior !== "deny" ||
+      approved.behavior !== "allow" ||
+      JSON.stringify(approved.updatedInput) !== asked.get(row.requestId)
+    ) {
+      wrong.push(
+        `${row.requestId}: an Approve does not send the call as asked`
+      );
+    }
+  }
+  wrong.push(...(await askCallsWrong(path, rows, asked)));
+  const bytes = Buffer.from(await Bun.file(path).arrayBuffer());
+  if (bytes.includes(PARKED_KEY)) {
+    wrong.push("the key a field names is still in the file's bytes");
+  }
+  if (rows.length !== toSeal.length || opened !== rows.length) {
+    wrong.push(
+      `${toSeal.length} to seal, ${rows.length} kept, opened ${opened} time(s) for ${rows.length} Approve(s)`
+    );
+  }
+  if (wrong.length > 0) {
+    throw new Error(`case parked asks sealed: ${wrong.join("; ")}`);
+  }
+  const kept = keptAsks(path);
+  const permits = kept.filter((ask) => ask.kind === "permit").length;
+  return `case parked asks sealed: ${rows.length} parked ask(s) whose input held credentials, each input sealed in input_sealed with its call's digest and its envelope kept as its card shows it (the key under a field named as one hidden, the shell command as written); ${permits} permit(s) kept by their call's digest and ${kept.length - permits} approval(s) with their call input sealed, every record keeping the card's input; no hidden key left in the file's bytes; each parked input opened once, by its Approve, to the call as asked, and by no Decline; the permit whose call held a token matched by the digest of that call`;
 };
 
 /** The project the restore case forgets: the lists fixture's, whose tasks, tracker links and move hold the moved columns. */
@@ -1634,6 +1913,7 @@ try {
   }
   await answer(`/api/projects/${project}/tasks`);
   await answer(`/api/projects/${project}/caw`);
+  const known = await knownValuesCase(dbPath);
   lifetime.close();
   const after = read(dbPath);
   // Both ways, the fixture and a given database alike: every journal entry
@@ -1766,9 +2046,13 @@ try {
   const cases = await identityCases(dbPath, journal);
   if (!GIVEN) {
     cases.push(await keyCase());
+    cases.push(await parkedCase());
     cases.push(await restoreCase());
   }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
+  if (known) {
+    cases.push(known);
+  }
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(
     `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored rows in ${shapes.columns} columns (${shapes.sets} of them closed sets of text) are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`

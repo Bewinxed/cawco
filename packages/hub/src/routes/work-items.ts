@@ -37,6 +37,15 @@ export const workItemRoutes = (
   const calls = workItemCalls(ctx);
   return (
     new Elysia()
+      // Every route here is a session's to call (hub-auth.ts `session`), and
+      // its body reaches a brief, a report or a reason: every secret the
+      // hub knows is replaced in it as it arrives, before it is read
+      // (known-values.ts), as in a tool call's arguments.
+      .onTransform(({ body }) => {
+        if (typeof body === "object" && body !== null) {
+          ctx.db.knownValues.replaced(body);
+        }
+      })
       // What the landing gate passed on a git tree, for a release of a commit
       // holding it (scripts/release.ts, no dashboard call): the commands of
       // the steps that passed on it, as gate.md writes them.

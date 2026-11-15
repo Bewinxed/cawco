@@ -66,6 +66,7 @@ import {
   HUB_TOOLS,
 } from "./hub-tools";
 import { INGRESS_DEFINITIONS, INGRESS_TOOLS, type Ingress } from "./ingress";
+import type { KnownValues, Replaced } from "./known-values";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { bindTool, type ToolDefinition } from "./mcp-tool";
 import { MEMORY_DEFINITIONS, MEMORY_TOOLS, type Memory } from "./memory";
@@ -123,16 +124,6 @@ const LIST_DEBOUNCE_MS = 500;
 
 /** How often the lists are looked at anyway, for a change no event names. Our choice. */
 const LIST_SWEEP_MS = 30_000;
-
-/** What a session credential a call names reads as once it is replaced. */
-const REDACTED_CREDENTIAL = "[cawco credential]";
-
-/**
- * A token with a session credential's shape (32 random bytes, base64url:
- * session-identity.ts), standing on its own in the text around it.
- */
-const CREDENTIAL_TOKEN =
-  /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/gu;
 
 /**
  * Where Claude Code names a call's tool_use id in `tools/call`'s `_meta`
@@ -414,8 +405,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow
   ) => Promise<SendDelivery | AnyProblem>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
-  /** Whether `token` is a session credential the hub holds (by its hash). */
-  knownCredential: (token: string) => boolean;
+  /** The secret values the hub mints or holds, replaced in every call's arguments (known-values.ts). */
+  knownValues: KnownValues;
   /** What a listing last answered `tools/list` with, as a hash (db `toolListing`). */
   toolListing: (listing: string) => string | undefined;
   putToolListing: (listing: string, toolsHash: string) => void;
@@ -686,36 +677,6 @@ export function createDelegationMcp(options: {
         ? (context as { call?: unknown }).call
         : undefined;
     return typeof stamped === "string" && stamped ? stamped : undefined;
-  };
-
-  /**
-   * `value` with every token shaped like a session credential that hashes to
-   * one the hub holds replaced by {@link REDACTED_CREDENTIAL}, at any depth.
-   */
-  const scrubCredentials = <T>(value: T): { value: T; redacted: number } => {
-    let redacted = 0;
-    const scrub = (node: unknown): unknown => {
-      if (typeof node === "string") {
-        return node.replace(CREDENTIAL_TOKEN, (token) => {
-          if (!options.knownCredential(token)) {
-            return token;
-          }
-          redacted += 1;
-          return REDACTED_CREDENTIAL;
-        });
-      }
-      if (Array.isArray(node)) {
-        return node.map(scrub);
-      }
-      if (node !== null && typeof node === "object") {
-        return Object.fromEntries(
-          Object.entries(node).map(([key, child]) => [key, scrub(child)])
-        );
-      }
-      return node;
-    };
-    const scrubbed = scrub(value) as T;
-    return { value: scrubbed, redacted };
   };
 
   /**
@@ -1041,54 +1002,80 @@ export function createDelegationMcp(options: {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
       const { __cawco: _context, ...asked } = args;
-      // No session credential a call names is stored or passed on: every
-      // tool, by MCP or the REST door, runs on arguments with it replaced.
-      const { value: input, redacted } = scrubCredentials(asked);
-      const catalog = await catalogCall(
+      // No secret the hub knows that a call names is stored or passed on:
+      // every tool, by MCP or the REST door, runs on arguments with each
+      // replaced (known-values.ts). Its answer is replaced alike: a tool can
+      // relay an upstream's answer to a call the hub made with a key it
+      // holds (a connection's tool, a forge's, a model's).
+      const result = await run(
         binding,
         name,
         args,
-        input,
-        authorization
+        options.knownValues.replaced(asked),
+        authorization,
+        toolUseId,
+        callId,
+        cut
       );
-      if (catalog) {
-        if (redacted > 0) {
-          console.warn(
-            `[delegation] ${binding ?? "an unbound caller"} passed a session credential to ${name}; it was replaced before the call ran`
-          );
-        }
-        return catalog;
-      }
-      const actor = actorOf(binding, args, authorization);
-      if (redacted > 0) {
-        console.warn(
-          `[delegation] ${actor.id} passed a session credential to ${name}; it was replaced before the call ran`
-        );
-      }
-      // A connection's tool: run by the hub, with the connection's key, when
-      // the caller's type or project grants it (connections.ts `callAs`).
-      if (options.connections && parseConnectionTool(name)) {
-        return await options.connections.callAs(actor, name, input);
-      }
-      // The one place a role and a scope hold: what it does not list, it cannot call.
-      if (!allows(actor, name)) {
-        throw new Error(refusal(actor, name));
-      }
-      return (
-        (await route(actor, name, input, toolUseId, cut)) ??
-        (await sessionCall(actor, name, input, callId, cut))
-      );
+      return options.knownValues.replaced(result).value;
     } catch (error) {
       return {
         isError: true,
         content: [
           {
             type: "text",
-            text: error instanceof Error ? error.message : String(error),
+            // The hub's own words, which can quote an upstream's answer to
+            // a call made with a key it holds.
+            text: options.knownValues.text(
+              error instanceof Error ? error.message : String(error)
+            ),
           },
         ],
       };
     }
+  };
+
+  /** A call whose arguments had the hub's known values replaced ({@link answer}): the one way a tool runs. */
+  const run = async (
+    binding: string | null,
+    name: string,
+    args: Record<string, unknown>,
+    replaced: Replaced<Record<string, unknown>>,
+    authorization?: string,
+    toolUseId?: string,
+    callId?: string,
+    cut?: AbortSignal
+  ): Promise<CallToolResult> => {
+    const input = replaced.value;
+    if (replaced.count > 0) {
+      console.warn(
+        `[delegation] ${binding ?? "an unbound caller"} passed ${replaced.count} secret value(s) the hub holds to ${name}; each was replaced before the call ran`
+      );
+    }
+    const catalog = await catalogCall(
+      binding,
+      name,
+      args,
+      input,
+      authorization
+    );
+    if (catalog) {
+      return catalog;
+    }
+    const actor = actorOf(binding, args, authorization);
+    // A connection's tool: run by the hub, with the connection's key, when
+    // the caller's type or project grants it (connections.ts `callAs`).
+    if (options.connections && parseConnectionTool(name)) {
+      return await options.connections.callAs(actor, name, input);
+    }
+    // The one place a role and a scope hold: what it does not list, it cannot call.
+    if (!allows(actor, name)) {
+      throw new Error(refusal(actor, name));
+    }
+    return (
+      (await route(actor, name, input, toolUseId, cut)) ??
+      (await sessionCall(actor, name, input, callId, cut))
+    );
   };
 
   /** What session `actor`'s tool `name` acts through (delegation-actions.ts), what it would start held in `emitted`. */

@@ -1,0 +1,11 @@
+language js
+
+// A machine's frame is decoded only from what the known values replaced
+// (packages/hub/src/known-values.ts `frameOf`): core decodeAgentFrame is
+// called there alone in the hub, so no frame is read before every secret the
+// hub knows is replaced in it.
+`decodeAgentFrame($payload)` as $hit where {
+  $filename <: includes "packages/hub/",
+  $filename <: not includes "packages/hub/src/known-values.ts",
+  register_diagnostic(span=$hit, message="A machine's frame is decoded only by known-values.ts `frameOf`, from a Replaced envelope: every secret the hub knows is replaced before it is read.")
+}

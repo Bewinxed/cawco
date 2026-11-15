@@ -15,7 +15,6 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
-import { clientAsk } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
 import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
@@ -24,7 +23,7 @@ import type { StoredSendRefusal } from "./db/stored-types";
 import type { ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
 import { peek } from "./payload-peeks";
-import { outlivesSession } from "./pending";
+import { type AskCard, outlivesSession } from "./pending";
 import type { createSends } from "./sends";
 import { sessionWord } from "./session-word";
 
@@ -355,8 +354,11 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       console.log(
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
-      ctx.registry.broadcast(clientAsk(parked));
-      ctx.push.onAsk(parked);
+      const card = ctx.pending.card(parked.requestId ?? "");
+      if (card) {
+        ctx.registry.broadcastAsk(card);
+        ctx.push.onAsk(card);
+      }
       // Its parent, if it can still be woken, hears it is the person's now.
       ctx.delegateWaits.asked(parked, true);
     }
@@ -411,11 +413,13 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       : undefined;
   };
 
+  /** Hands `parent` its delegate's parked ask as its own to answer, as the ask's card (pending.ts `AskCard`). */
   const deliverDelegateAsk = (
     delegate: InstanceRow,
     parent: { id: string; machineId: string },
-    ask: { requestId?: string; payload: unknown }
+    card: AskCard
   ): void => {
+    const { ask } = card;
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
     const instruction =

@@ -5,9 +5,12 @@ import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { ParkedAskShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
+import { callDigest } from "./call-digest";
+import { cardOf } from "./card-input";
 import { Db, type DbShape } from "./db";
 import { parkedToolAsk } from "./parked-ask";
 import type { AnyProblem } from "./refusal";
+import { hubSecrets } from "./secret-box";
 
 /**
  * Permission and dialog requests the agent is blocked on, keyed by SDK
@@ -22,11 +25,38 @@ import type { AnyProblem } from "./refusal";
  */
 export interface PendingShape {
   /**
+   * The call's own input, as it was asked, opened from its seal: what an
+   * Approve sends its machine (ask-presentation.ts `answeredWithOriginal`),
+   * and nothing else reads. Undefined when it does not open (another key,
+   * damage) or is not an object: the ask is then withdrawn, never run with
+   * anything guessed.
+   */
+  readonly asAsked: (requestId: string) => Record<string, unknown> | undefined;
+  /**
+   * The keyed digest of the call as it was asked (call-digest.ts): what a
+   * prompt kept as a permit when its process goes is matched by (asks.ts
+   * `keep`). Reading it opens nothing.
+   */
+  readonly callDigest: (requestId: string) => string | undefined;
+  /**
+   * The parked ask as it leaves the hub ({@link AskCard}): what each of its
+   * five senders takes (the ask broadcast, `GET /api/pending`, an ask
+   * escalated to the person, an ask handed to a parent session, the ask's
+   * push). Undefined when nothing is parked under `requestId`.
+   */
+  readonly card: (requestId: string) => AskCard | undefined;
+  /** Every parked ask as it leaves the hub ({@link card}). */
+  readonly cards: () => AskCard[];
+  /**
    * A relaunch or a death answers every question its process had open; an
    * ask the hub owns stays ({@link outlivesSession}).
    */
   readonly forget: (instanceId: string) => void;
-  /** The parked ask itself, for whoever answers it away from a dashboard. */
+  /**
+   * The parked ask as its card shows it (card-input.ts `cardOf`), for
+   * the hub's own reading. Its input is the card's: the call's own is
+   * sealed ({@link asAsked}).
+   */
   readonly get: (requestId: string) => ParkedAsk | undefined;
   readonly list: () => ParkedAsk[];
   /**
@@ -224,17 +254,79 @@ export const unreadFields = (envelope: Envelope): string[] | undefined => {
     : [...new Set(read.error.issues.map((issue) => issue.path.join(".")))];
 };
 
+/** What the ledger keeps of an ask's call beside the ask as screens read it. */
+interface CallKept {
+  /** The keyed digest of the call as it was asked (call-digest.ts). */
+  callDigest: string;
+  /** The call's own input, sealed under the hub's key (secret-box.ts). */
+  inputSealed: string;
+}
+
+/**
+ * An ask as the ledger holds it: as its card shows it (card-input.ts
+ * `cardOf`), a copy of its own the ledger may stamp, and its call kept
+ * ({@link CallKept}): the input sealed, which only
+ * {@link PendingShape.asAsked} opens, and its digest, which keeping it as a
+ * permit reads ({@link PendingShape.callDigest}).
+ */
+const held = (ask: ParkedAsk): { view: ParkedAsk; call: CallKept } => ({
+  view: structuredClone(cardOf(ask)),
+  call: {
+    inputSealed: hubSecrets().seal(JSON.stringify(ask.payload.input)),
+    callDigest: callDigest(ask.payload.toolName, ask.payload.input),
+  },
+});
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The one maker of an {@link AskCard}: set by the class itself, called by this ledger alone. */
+let makeCard: (view: ParkedAsk) => AskCard;
+
+/**
+ * A parked ask as it leaves the hub, for a client, a phone or a parent
+ * session: the ledger's own view of it (its input as its card shows it,
+ * card-input.ts `cardOf`), copied as the card is made. The five
+ * senders of an ask take only this type, and the wire refuses an ask frame
+ * that is not one (wire-socket.ts `sendToClient`). TypeScript reads a class
+ * with a `#` field nominally, so no other value is one; its constructor is
+ * private and its maker is this module's ({@link PendingShape.card}).
+ */
+export class AskCard {
+  readonly #ask: ParkedAsk;
+
+  private constructor(view: ParkedAsk) {
+    this.#ask = structuredClone(view);
+  }
+
+  static {
+    makeCard = (view) => new AskCard(view);
+  }
+
+  /** The ask as its card shows it, a copy of its own for each reader. */
+  get ask(): ParkedAsk {
+    return structuredClone(this.#ask);
+  }
+}
+
 const make = (db: DbShape): PendingShape => {
   const parked = db.parkedAsks;
-  // What the hub held parked when it last stopped, by request id. The asks
-  // the hub owns join it as the presenter stamps them (`presentWith`): an ask
-  // is a `ParkedAsk` once it says what it asks.
+  const stored = parked.list();
+  // What the hub held parked when it last stopped, by request id, as every
+  // screen reads it, and each one's call kept. The asks the hub owns join
+  // them as the presenter stamps them (`presentWith`): an ask is a
+  // `ParkedAsk` once it says what it asks.
   const requests = new Map<string, ParkedAsk>(
-    parked
-      .list()
-      .flatMap((envelope) =>
-        envelope.requestId ? [[envelope.requestId, envelope] as const] : []
-      )
+    stored.flatMap(({ envelope }) =>
+      envelope.requestId ? [[envelope.requestId, envelope] as const] : []
+    )
+  );
+  const calls = new Map<string, CallKept>(
+    stored.flatMap(({ envelope, inputSealed, callDigest: digest }) =>
+      envelope.requestId
+        ? [[envelope.requestId, { inputSealed, callDigest: digest }] as const]
+        : []
+    )
   );
   const owned = ownedAsks(db);
   // A daemon replay must not resurrect a request that already left this ledger.
@@ -247,6 +339,7 @@ const make = (db: DbShape): PendingShape => {
       return false;
     }
     requests.delete(requestId);
+    calls.delete(requestId);
     parked.drop(requestId);
     settledIds.add(requestId);
     settled?.(envelope, outcome ?? "answered", said);
@@ -266,7 +359,9 @@ const make = (db: DbShape): PendingShape => {
         presenter(envelope);
         const ask = taken(envelope);
         if (ask.requestId) {
-          requests.set(ask.requestId, ask);
+          const { view, call } = held(ask);
+          requests.set(ask.requestId, view);
+          calls.set(ask.requestId, call);
         }
       }
     },
@@ -293,18 +388,41 @@ const make = (db: DbShape): PendingShape => {
         raisedAtOf(requests.get(requestId)) ??
         raisedAtOf(envelope) ??
         Date.now();
-      const ask = taken(envelope);
-      requests.set(requestId, ask);
+      const { view, call } = held(taken(envelope));
+      requests.set(requestId, view);
+      calls.set(requestId, call);
       // A process's prompt the hub now owns (asks.ts `keep`) is read back
       // from its row, no longer from the process's kept copy.
       if (outlivesHub) {
-        parked.save(requestId, ask);
+        parked.save(requestId, view, call);
       } else {
         parked.drop(requestId);
       }
       return true;
     },
     get: (requestId) => requests.get(requestId),
+    card: (requestId) => {
+      const view = requests.get(requestId);
+      return view && makeCard(view);
+    },
+    cards: () => [...requests.values()].map((view) => makeCard(view)),
+    callDigest: (requestId) => calls.get(requestId)?.callDigest,
+    asAsked: (requestId) => {
+      const sealed = calls.get(requestId)?.inputSealed;
+      if (sealed === undefined) {
+        return;
+      }
+      let input: unknown;
+      try {
+        input = JSON.parse(hubSecrets().open(sealed));
+      } catch (error) {
+        console.warn(
+          `[pending] ask ${requestId}'s sealed input does not open: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return;
+      }
+      return isRecord(input) ? input : undefined;
+    },
     unroute: (requestId) => {
       const envelope = requests.get(requestId);
       const payload = envelope?.payload;
@@ -313,9 +431,10 @@ const make = (db: DbShape): PendingShape => {
       }
       // biome-ignore lint/performance/noDelete: the payload is broadcast verbatim, so the field must be absent, not present-but-undefined.
       delete payload.routedTo;
-      if (payload.askId === undefined) {
-        parked.save(requestId, envelope);
-      } else {
+      const call = calls.get(requestId);
+      if (payload.askId === undefined && call !== undefined) {
+        parked.save(requestId, envelope, call);
+      } else if (payload.askId !== undefined) {
         db.asks.unroute(requestId);
       }
     },

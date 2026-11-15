@@ -66,6 +66,9 @@
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",
+    // A machine's frame is decoded only from what the known values replaced
+    // (packages/hub/src/known-values.ts `frameOf`).
+    "./scripts/lint/known-values-door.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
