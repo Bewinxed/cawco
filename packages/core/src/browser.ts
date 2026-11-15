@@ -452,8 +452,9 @@ export interface BrowserHandedBackFrame extends BrowserHandback {
 }
 
 /**
- * A FIDO URI extracted from a browser's page during a take-over, for the
- * person to scan with their phone's camera. The daemon sends it to the hub,
+ * The FIDO URI of a hybrid QR the daemon made for a WebAuthn ceremony in a
+ * take-over's browser (agent passkey-bridge.ts), for the person to scan with
+ * their phone's camera. The daemon sends it to the hub,
  * which broadcasts it as it arrives to every dashboard socket (the app's
  * included): a dashboard renders the QR, a Chrome extension, when present,
  * shows it as a popup, and the app starts the caBLE transport. Expires after
@@ -468,9 +469,9 @@ export interface PasskeyQrFrame {
   kind: "passkey_qr";
   /** The machine whose browser showed the QR. */
   machineId: string;
-  /** ms epoch when the QR was read from the page; it expires at `raisedAt + PASSKEY_QR_TTL_MS`. */
+  /** ms epoch when the QR was made; it expires at `raisedAt + PASSKEY_QR_TTL_MS`. */
   raisedAt: number;
-  /** The relying party's origin, when the hub could read it (`https://github.com`). */
+  /** The origin of the page that asked (`https://github.com`). */
   rpOrigin?: string;
 }
 

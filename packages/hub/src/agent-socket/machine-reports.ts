@@ -170,7 +170,7 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
   const passkeyHeard = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
     const { kind, body } = agentFrame;
-    // A FIDO URI read off a take-over's page: kept for dashboards that
+    // A FIDO URI the daemon made for a take-over's ceremony: kept for dashboards that
     // connect later, shown to every dashboard now, and the relay picks the
     // machines that scan for the phone's advert (passkey-relay.ts).
     if (kind === "passkey_qr") {

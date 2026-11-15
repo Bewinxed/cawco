@@ -66,7 +66,7 @@ import { nekoLogin } from "./container-host";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import { restoreWindows } from "./own-size";
-import { PasskeyWatch } from "./passkey-qr";
+import { PasskeyBridge } from "./passkey-bridge";
 import {
   allBrowsers,
   type BrowserRecord,
@@ -106,8 +106,8 @@ interface Held extends Kept {
   cdp?: Promise<CdpTakeover | undefined>;
   /** Views the hub counts (its sockets for neko or the CDP bridge). */
   hubViewers: number;
-  /** The watch for a WebAuthn ceremony on the page shown, on a container's browser alone (passkey-qr.ts). */
-  passkey?: Promise<PasskeyWatch | undefined>;
+  /** The bridge to the browser's WebAuthn proxy extension, on a container's browser alone (passkey-bridge.ts). */
+  passkey?: Promise<PasskeyBridge | undefined>;
   /** Since when no view was open; undefined while one is. */
   unwatchedSince?: number;
 }
@@ -120,11 +120,8 @@ export type ShieldPorts = Pick<
   "browsers" | "machineId" | "passkeyQr" | "shield"
 >;
 
-/** The last FIDO URI emitted per browser key: emit only once per unique URI. */
-const lastQr = new Map<BrowserKey, string>();
-
-/** The browsers whose passkey watch failed last, so a streak is said once. */
-const qrUnreadable = new Set<BrowserKey>();
+/** The browsers whose passkey bridge failed last, so a streak is said once. */
+const passkeyFailing = new Set<BrowserKey>();
 
 const shieldFile = (key: BrowserKey): string =>
   join(browserDir(key), "shield.json");
@@ -725,8 +722,7 @@ const release = async (
     await endView(take);
   }
   await restorePages(key);
-  lastQr.delete(key);
-  qrUnreadable.delete(key);
+  passkeyFailing.delete(key);
   setFront(key, null);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(ports, key, undefined).catch((error: unknown) =>
@@ -835,7 +831,7 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
       );
       continue;
     }
-    // While the take-over stands, its shown page is watched for a passkey QR.
+    // While the take-over stands, its browser's WebAuthn ceremonies are bridged.
     watchPasskey(ports, key, take).catch(() => undefined);
     const views = Math.max(take.hubViewers, (await take.cdp)?.viewers ?? 0);
     if (views > 0) {
@@ -855,87 +851,86 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
 };
 
 /**
- * The take-over's watch for a WebAuthn ceremony, opened at the first count
- * and opened again once its browser's DevTools connection closed, moved to
- * the page the person sees. Each passkey QR it reads off the container's
- * screen that was not sent already goes to the hub as a `passkey_qr` frame.
- * A local host's browser has no container screen to read: its dialog is on
- * the machine's own.
+ * The take-over's passkey bridge (passkey-bridge.ts), opened at the first
+ * count and opened again once its browser's DevTools connection closed. Each
+ * QR it makes for a WebAuthn ceremony goes to the hub as a `passkey_qr`
+ * frame. Only a container's browser loads the bridge extension (its image's
+ * chromium.conf).
  */
 const watchPasskey = async (
   ports: ShieldPorts,
   key: BrowserKey,
   take: Held
 ): Promise<void> => {
-  // One count's watch is still opening or moving: this count leaves it be.
+  // One count's bridge is still opening: this count leaves it be.
   if (passkeyBusy.has(key)) {
     return;
   }
   passkeyBusy.add(key);
   try {
-    await openPasskeyWatch(ports, key, take);
+    await openPasskeyBridge(ports, key, take);
   } finally {
     passkeyBusy.delete(key);
   }
 };
 
-/** The browsers whose passkey watch is being opened or moved now. */
+/** The browsers whose passkey bridge is being opened now. */
 const passkeyBusy = new Set<BrowserKey>();
 
-const openPasskeyWatch = async (
+const openPasskeyBridge = async (
   { machineId, passkeyQr }: ShieldPorts,
   key: BrowserKey,
   take: Held
 ): Promise<void> => {
-  const targetId = frontTarget(key) ?? take.targetId;
-  if (!targetId) {
-    return;
-  }
   const said = (error: unknown): void => {
-    if (!qrUnreadable.has(key)) {
-      qrUnreadable.add(key);
-      console.info(`[browser] ${key}: passkey QR not read: ${why(error)}`);
+    if (!passkeyFailing.has(key)) {
+      passkeyFailing.add(key);
+      console.info(`[browser] ${key}: passkey bridge: ${why(error)}`);
     }
   };
   // None yet, one that failed to open, or one whose browser connection closed.
   const current = await take.passkey;
-  if (!current || current.closed) {
-    const record = await readBrowser(key);
-    const containerId = record?.container?.id;
-    if (!(record && record.host === "container" && containerId)) {
-      return;
-    }
-    take.passkey = PasskeyWatch.open(
-      `http://127.0.0.1:${portsOf(record).devtools}`,
-      containerId,
-      (uri) => {
-        qrUnreadable.delete(key);
-        if (uri === lastQr.get(key)) {
-          return;
-        }
-        lastQr.set(key, uri);
-        passkeyQr({
-          kind: "passkey_qr",
-          machineId,
-          key,
-          fidoUri: uri,
-          raisedAt: Date.now(),
-        });
-        console.info(`[browser] ${key}: passkey QR read off its screen`);
-      },
-      said
-    ).catch((error: unknown): undefined => {
-      said(error);
-    });
-  }
-  const opened = await take.passkey;
-  // The take-over ended while the watch opened: endView let it go already.
-  if (!(opened && held.get(key) === take)) {
-    opened?.close();
+  if (current && !current.closed) {
     return;
   }
-  await opened.follow(targetId).catch(said);
+  const record = await readBrowser(key);
+  if (!(record && record.host === "container")) {
+    return;
+  }
+  take.passkey = PasskeyBridge.open(
+    `http://127.0.0.1:${portsOf(record).devtools}`,
+    ({ fidoUri, rpOrigin }) => {
+      passkeyFailing.delete(key);
+      passkeyQr({
+        kind: "passkey_qr",
+        machineId,
+        key,
+        fidoUri,
+        rpOrigin,
+        raisedAt: Date.now(),
+      });
+      console.info(`[browser] ${key}: passkey QR made for ${rpOrigin}`);
+    },
+    said
+  ).catch((error: unknown): undefined => {
+    said(error);
+  });
+  const opened = await take.passkey;
+  // The take-over ended while the bridge opened: endView let it go already.
+  if (opened && held.get(key) !== take) {
+    opened.close();
+  }
 };
+
+/**
+ * A phone's advert relayed to this machine for `key`: true when the
+ * take-over's passkey bridge has a ceremony that owns it.
+ */
+export const heardPasskeyAdvert = async (
+  key: BrowserKey,
+  serviceData: Buffer
+): Promise<boolean> =>
+  (await held.get(key)?.passkey)?.advert(serviceData) ?? false;
 
 const tellHub = (
   { machineId, shield }: ShieldPorts,
