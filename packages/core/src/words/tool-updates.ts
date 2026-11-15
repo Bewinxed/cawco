@@ -25,11 +25,11 @@ export const toolUpdateWords = {
   updateAll: (count: number) =>
     count === 1 ? "Update" : `Update all ${count}`,
   /** The fleet's one switch (core `ToolUpdates`): on is "update". */
-  setting: "Keep tools at the versions CawCo runs",
+  setting: "Keep tools up to date",
   /** What the switch on leaves out, which the label can't say. */
-  settingOn: "Copies you installed yourself are left alone.",
+  settingOn: "Manual installs are left alone.",
   /** What the switch off means. */
-  settingOff: "Nothing updates until you press Update.",
+  settingOff: "Nothing updates automatically.",
   /** The group's ledger: its tool column. */
   toolHead: "Tool",
   /** The ledgers' version column: the copy found. */
@@ -37,7 +37,7 @@ export const toolUpdateWords = {
   /** The ledgers' state column. */
   stateHead: "State",
   /** The group's tool cell, after the tool's name. */
-  runs: (wants: ToolWants) => `CawCo runs ${wanted(wants)}`,
+  runs: (wants: ToolWants) => `Needs ${wanted(wants)}`,
 
   /** `runs`, put there by CawCo's own install: how long ago, or within the minute (`null`). */
   updated: (ago: string | null) =>
@@ -66,21 +66,21 @@ export const toolUpdateWords = {
   showOutput: "Show output",
   hideOutput: "Hide output",
   /** `own`: its words open why CawCo leaves it. */
-  own: "Your own install",
+  own: "Manual install",
   /** That popover's head. */
   ownHead: (name: string, machine: string) => `${name} on ${machine}`,
   /** That popover's words: what it costs, and what Update does to his copy. */
   ownWhy: (name: string, wants: ToolWants) =>
-    `${name} sessions here are refused until it runs ${wanted(wants)}. Update replaces your copy with CawCo's.`,
+    `Sessions need ${name} ${wanted(wants)}. Update replaces this install.`,
   /** A copy the person installed that CawCo runs: its row's words. */
-  ownRuns: "Your own install",
+  ownRuns: "Manual install",
   /** Its press: CawCo installs its own copy, which then follows the setting. */
-  takeOver: "Hand to CawCo",
+  takeOver: "Keep up to date",
   /** Its layer's words, over the press: what the press does to his copy. */
   takeOverWhy: (name: string) =>
-    `CawCo leaves this copy alone. Hand to CawCo replaces it with a ${name} CawCo keeps up to date.`,
+    `Replaces this install with a ${name} that is kept up to date.`,
   /** `asked`: the fleet asks, and waits on the press. */
-  asked: "Waiting for you",
+  asked: "Update available",
   /** `asked` for a copy that runs while a newer release is out. */
   newer: (version: string) => `${version} is out`,
   /** `due` on a machine that is offline (its own column says offline). */
@@ -104,13 +104,13 @@ export const toolUpdateWords = {
     `Update ${name} on ${machine}`,
   /** What it means: the version, and what stands until it runs. */
   needsWant: (name: string, wants: ToolWants) =>
-    `${name} sessions there are refused until they run ${wanted(wants)}.`,
+    `Sessions there need ${name} ${wanted(wants)}.`,
   /** Where it is acted on. */
   needsPlace: "Command-line tools",
   /** A machine's line: why it waits on the person, after its version; a copy the fleet asks about says nothing more. */
   lineWhy: {
     failed: "update failed",
-    own: "your own install",
+    own: "manual install",
     asked: null,
   },
 
@@ -136,7 +136,7 @@ export const toolUpdateWords = {
     machine: string,
     to: string | undefined
   ) =>
-    `You started ${installs ? "installing" : "updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}. It goes on if you close this.`,
+    `${installs ? "Installing" : "Updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}.`,
   /**
    * A row's press on a machine its owner paused: Update all leaves it (hub
    * tool-installs.ts `updateAll`), and its own press runs now (a person's
@@ -164,5 +164,5 @@ export const toolUpdateWords = {
   },
   /** A refused harness whose CLI CawCo updates with no press, on a machine its owner paused. */
   autoPaused: (name: string, machine: string) =>
-    `CawCo updates ${name} on ${machine} once its pause ends.`,
+    `${name} on ${machine} updates when the pause ends.`,
 } as const;
