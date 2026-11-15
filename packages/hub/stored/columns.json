@@ -14352,98 +14352,21 @@
       "context"
     ]
   },
-  "session_plans.orphaned_comments": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "comments": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "at",
-              "text"
-            ]
-          }
-        },
-        "step": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "comments",
-        "step"
-      ]
-    }
+  "session_plan_steps.priority": {
+    "type": "string",
+    "enum": [
+      "high",
+      "medium",
+      "low"
+    ]
   },
-  "session_plans.steps": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "comments": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "at",
-              "text"
-            ]
-          }
-        },
-        "content": {
-          "type": "string"
-        },
-        "depth": {
-          "type": "number"
-        },
-        "id": {
-          "type": "string"
-        },
-        "priority": {
-          "type": "string",
-          "enum": [
-            "high",
-            "medium",
-            "low"
-          ]
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "in_progress",
-            "completed"
-          ]
-        },
-        "waitsOn": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "content",
-        "depth",
-        "id",
-        "status"
-      ]
-    }
+  "session_plan_steps.status": {
+    "type": "string",
+    "enum": [
+      "pending",
+      "in_progress",
+      "completed"
+    ]
   },
   "skills.files": {
     "type": "array",

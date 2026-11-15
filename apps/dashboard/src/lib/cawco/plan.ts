@@ -152,7 +152,10 @@ export function planProgress(plan: SessionPlan): {
   return todoProgress(plan.todos ?? []);
 }
 
-/** The plan has something to show: steps, a spec, or a task's agreed to-dos. */
+/** The plan has something to show: steps, a spec, a task's agreed to-dos, or that steps stored earlier do not read. */
 export const planShows = (plan: SessionPlan | undefined): boolean =>
   !!plan &&
-  (plan.steps.length > 0 || !!plan.spec || todosTree(plan).length > 0);
+  (plan.steps.length > 0 ||
+    !!plan.spec ||
+    todosTree(plan).length > 0 ||
+    !!plan.unread);

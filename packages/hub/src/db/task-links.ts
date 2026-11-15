@@ -10,8 +10,9 @@
  * new ones made from the URL alone and read from the source later, gone
  * ones taken out. So the file is the truth and this is what the source
  * holds of each URL. A plan step's wait on a pull request is a row of its
- * session's plan ({@link planLinkOwner}), kept with the steps the same way
- * (db `putSessionSteps`), so it is read and settles as a task's wait does.
+ * session's plan ({@link planLinkOwner}), kept with the steps' rows the
+ * same way (db session-plans.ts `syncPlanLinks`), so the pull request is
+ * read, and its wait settles, as a task's does.
  */
 import {
   type ExternalComment,
@@ -22,7 +23,6 @@ import {
   refOfUrl,
   type TaskLinkSummary,
 } from "@cawco/core/external-items";
-import type { PlanStep } from "@cawco/core/plan";
 import { waitTarget } from "@cawco/core/wait-targets";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -41,17 +41,11 @@ export interface FileLink {
 export const planLinkOwner = (instanceId: string): string =>
   `plan:${instanceId}`;
 
-/** The pull requests a plan's steps wait on, as the links its rows keep. */
-export const planWaitLinks = (steps: readonly PlanStep[]): FileLink[] =>
-  [
-    ...new Set(
-      steps.flatMap((step) =>
-        step.waitsOn && waitTarget(step.waitsOn)?.kind === "pr"
-          ? [step.waitsOn]
-          : []
-      )
-    ),
-  ].map((url) => ({ url, record: false }));
+/** The pull requests of what a plan's steps wait on (each once), as the links its rows keep. */
+export const planWaitLinks = (waits: readonly string[]): FileLink[] =>
+  waits
+    .filter((wait) => waitTarget(wait)?.kind === "pr")
+    .map((url) => ({ url, record: false }));
 
 /** What an inbound thing names: an item by its number (GitHub), or by the source's own id (Linear). */
 export type ItemKey =

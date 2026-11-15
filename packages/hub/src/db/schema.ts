@@ -31,7 +31,11 @@ import { HARNESS_CONFIG_KINDS } from "@cawco/core/harness-config";
 import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
-import { PLAN_EDIT_KINDS } from "@cawco/core/plan";
+import {
+  PLAN_EDIT_KINDS,
+  PLAN_STEP_PRIORITIES,
+  PLAN_STEP_STATUSES,
+} from "@cawco/core/plan";
 import {
   DELEGATE_EVENT_KINDS,
   type Envelope,
@@ -99,11 +103,9 @@ import {
   NeutralUserMessageSchema,
   OnCapSchema,
   OpenCodeGoLimitsSchema,
-  OrphanedCommentsSchema,
   OwedMoveWaitSchema,
   ParkedAskShape,
   PlaceLfsRowSchema,
-  PlanStepSchema,
   ProjectNoteSchema,
   ProjectOfferReasonSchema,
   RefusalReachSchema,
@@ -4984,19 +4986,25 @@ export const starterOutcomes = sqliteTable(
 /**
  * A session's own plan (Projects spec §5.2, `plan.ts`), as it last wrote it
  * through `todo_write`'s session scope: its steps (CawCo's list, read only
- * while its native to-do tools are denied) and its spec. Each is replaced
- * whole on a write; a harness's own list is read from the harness, never
- * stored here.
+ * while its native to-do tools are denied, one row each in
+ * {@link sessionPlanSteps}) and its spec. Each is replaced whole on a
+ * write; a harness's own list is read from the harness, never stored here.
  */
 export const sessionPlans = sqliteTable("session_plans", {
   instanceId: sessionColumn("instance_id").primaryKey(),
-  steps: storedJson(z.array(PlanStepSchema))("steps").notNull(),
-  /** The person's step comments whose step's words a write of the session's left out (core plan.ts `OrphanedComments`). */
-  orphanedComments: storedJson(z.array(OrphanedCommentsSchema))(
-    "orphaned_comments"
-  )
-    .notNull()
-    .default([]),
+  /**
+   * The steps as they were stored as JSON before migration 0418, when they
+   * did not read whole as a list of steps (with
+   * {@link sessionPlans.orphanedCommentsUnread}, the plan's other half as
+   * it was stored then): none of them is a row, and the plan says it holds
+   * steps that do not read (core `SessionPlan.unread`). The session's
+   * writes after are rows beside it and never touch it; it goes with the
+   * steps to a session that goes on from this one (db `copySessionSteps`).
+   * Null on every plan that read.
+   */
+  stepsUnread: text("steps_unread"),
+  /** The orphaned comments as they were stored beside {@link sessionPlans.stepsUnread}, when the plan did not read whole; null on every plan that read. */
+  orphanedCommentsUnread: text("orphaned_comments_unread"),
   /** The session's spec, markdown; null until it writes one. */
   spec: text("spec"),
   specAt: timestamp("spec_at"),
@@ -5008,6 +5016,93 @@ export const sessionPlans = sqliteTable("session_plans", {
   awaySeen: text("away_seen"),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/**
+ * One step of a session's plan (core plan.ts `PlanStep`), at its place in
+ * the list: what finds each session's step in progress, and each step's
+ * wait. Replaced whole with the list; goes and moves with its plan.
+ */
+export const sessionPlanSteps = sqliteTable(
+  "session_plan_steps",
+  {
+    instanceId: sessionColumn("instance_id")
+      .notNull()
+      .references(() => sessionPlans.instanceId, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    /** Its place in the list, from 0. */
+    position: integer("position").notNull(),
+    /** Stable within one list: the writer's, the step's place, or `you-…` for one the person added. */
+    id: text("id").notNull(),
+    content: text("content").notNull(),
+    depth: integer("depth").notNull(),
+    status: storedEnum(z.enum(PLAN_STEP_STATUSES))("status").notNull(),
+    /** Null where the `todo_write` that wrote it named none. */
+    priority: storedEnum(z.enum(PLAN_STEP_PRIORITIES))("priority"),
+    /** What it waits on (core wait-targets.ts), as a task's `waits_on` keeps it; null: nothing. */
+    waitsOn: text("waits_on"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.instanceId, table.position] }),
+    uniqueIndex("session_plan_steps_id").on(table.instanceId, table.id),
+    index("session_plan_steps_in_progress")
+      .on(table.instanceId, table.position)
+      .where(sql`${table.status} = 'in_progress'`),
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
+    check(
+      "session_plan_steps_status",
+      sql`${sql.identifier("status")} in ('pending', 'in_progress', 'completed')`
+    ),
+    check(
+      "session_plan_steps_priority",
+      sql`${sql.identifier("priority")} is null or ${sql.identifier("priority")} in ('high', 'medium', 'low')`
+    ),
+  ]
+);
+
+/**
+ * The person's comments on a session's plan (core plan.ts `PlanComment`),
+ * one row each: on a step (`step_id`), or orphaned, on words no step of the
+ * session's last write has (`orphan_step`, core `OrphanedComments.step`).
+ * `ord` orders them across the plan: a step's comments by it, and the
+ * orphaned ones by it, a new group wherever `orphan_step` changes.
+ */
+export const sessionPlanStepComments = sqliteTable(
+  "session_plan_step_comments",
+  {
+    instanceId: sessionColumn("instance_id")
+      .notNull()
+      .references(() => sessionPlans.instanceId, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    /** The step it is on; null when orphaned. */
+    stepId: text("step_id"),
+    /** The words of the step an orphaned comment was written on; null on a step's. */
+    orphanStep: text("orphan_step"),
+    ord: integer("ord").notNull(),
+    /** When the person wrote it, ISO 8601, as core `PlanComment.at` keeps it. */
+    at: text("at").notNull(),
+    text: text("text").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.instanceId, table.ord] }),
+    foreignKey({
+      columns: [table.instanceId, table.stepId],
+      foreignColumns: [sessionPlanSteps.instanceId, sessionPlanSteps.id],
+    })
+      .onDelete("cascade")
+      .onUpdate("cascade"),
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
+    check(
+      "session_plan_step_comments_one_place",
+      sql`(${sql.identifier("step_id")} is null) <> (${sql.identifier("orphan_step")} is null)`
+    ),
+  ]
+);
 
 /**
  * The person's changes to a session's plan (core plan.ts `PlanChange`), in

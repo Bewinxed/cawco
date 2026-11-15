@@ -2871,6 +2871,13 @@
       "when": 1794740172774,
       "tag": "0417_relay_health_dropped",
       "breakpoints": true
+    },
+    {
+      "idx": 418,
+      "version": "6",
+      "when": 1794742457978,
+      "tag": "0418_session_plan_rows",
+      "breakpoints": true
     }
   ]
 }

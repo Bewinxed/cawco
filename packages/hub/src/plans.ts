@@ -55,7 +55,7 @@ import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
-import type { PlanChangeRow } from "./db/session-plans";
+import type { PlanChangeRow, StoredPlan } from "./db/session-plans";
 
 import type { TaskEvent, Tasks } from "./tasks";
 
@@ -63,8 +63,11 @@ export interface PlansDeps {
   db: Pick<
     DbShape,
     | "artifacts"
+    | "copySessionSteps"
+    | "dropPlanWaits"
     | "getInstancesByIds"
     | "planChangesOf"
+    | "planWaits"
     | "putAwaySeen"
     | "putPlanChange"
     | "putSessionSpec"
@@ -263,24 +266,31 @@ const waitWords = (db: Pick<DbShape, "artifacts">, handle: string): string => {
 /**
  * A plan's steps as a message lists them: a box per status, nested by
  * indent, each by its link (session `session`'s, its words the label), a
- * wait by what it waits on.
+ * wait by what it waits on; then, when the plan holds steps that did not
+ * read (core `SessionPlan.unread`), that they are not listed.
  */
 export const stepLines = (
   db: Pick<DbShape, "artifacts">,
   session: string,
-  steps: PlanStep[]
-): string =>
-  steps.length === 0
-    ? "(no steps)"
-    : steps
-        .map((step) => {
-          const box = BOX[step.status];
-          const wait = step.waitsOn
-            ? ` (waiting on ${waitWords(db, step.waitsOn)})`
-            : "";
-          return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
-        })
-        .join("\n");
+  plan: Pick<StoredPlan, "steps" | "unread"> | undefined
+): string => {
+  const steps = plan?.steps ?? [];
+  const listed =
+    steps.length === 0
+      ? "(no steps)"
+      : steps
+          .map((step) => {
+            const box = BOX[step.status];
+            const wait = step.waitsOn
+              ? ` (waiting on ${waitWords(db, step.waitsOn)})`
+              : "";
+            return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
+          })
+          .join("\n");
+  return plan?.unread
+    ? `${listed}\n(Steps stored for this plan earlier do not read: they are kept as stored and not listed here.)`
+    : listed;
+};
 
 /** What one of the person's edits made of a plan's steps, and how its change reads. */
 interface Applied {
@@ -609,6 +619,7 @@ export const createPlans = (deps: PlansDeps) => {
         ? { orphanedComments: own.orphanedComments }
         : {}),
       ...(changes.length > 0 ? { changes } : {}),
+      ...(own?.unread ? { unread: true } : {}),
       ...(own?.spec && own.specAt
         ? { spec: { markdown: own.spec, at: own.specAt.toISOString() } }
         : {}),
@@ -637,31 +648,17 @@ export const createPlans = (deps: PlansDeps) => {
    * on a card once its page's Send carried a pick, for every kind of wait.
    */
   const dropSettled = async (row: InstanceRow) => {
-    const own = db.sessionPlan(row.id);
-    const waits = [
-      ...new Set(own?.steps.flatMap((step) => step.waitsOn ?? []) ?? []),
-    ];
-    if (!own || waits.length === 0) {
-      return;
-    }
-    const settled = new Set<string>();
-    for (const handle of waits) {
+    const settled: string[] = [];
+    for (const handle of db.planWaits(row.id)) {
       const state = await deps.tasks.waitState(row.projectId ?? null, handle);
       if (state instanceof ElysiaStatus) {
         return state;
       }
       if (state.settled) {
-        settled.add(handle);
+        settled.push(handle);
       }
     }
-    if (settled.size > 0) {
-      db.putSessionSteps(
-        row.id,
-        own.steps.map(({ waitsOn, ...step }) =>
-          waitsOn && !settled.has(waitsOn) ? { ...step, waitsOn } : step
-        )
-      );
-    }
+    db.dropPlanWaits(row.id, settled);
   };
 
   const settle = (instanceId: string) =>
@@ -781,21 +778,18 @@ export const createPlans = (deps: PlansDeps) => {
     ) {
       const { steps } = written;
       if (steps) {
-        const before = db.sessionPlan(row.id)?.steps ?? [];
+        const plan = db.sessionPlan(row.id);
+        const before = plan?.steps ?? [];
         const undone = db
           .unsettledPlanChanges(row.id)
           .filter((change) => undoes(steps, change));
         db.settlePlanChanges(row.id);
         if (undone.length > 0) {
           throw new Error(
-            `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(db, row.id, before)}\n\nWrite your steps again from it: the next write goes through as you give it.`
+            `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(db, row.id, plan)}\n\nWrite your steps again from it: the next write goes through as you give it.`
           );
         }
-        const kept = keepComments(
-          before,
-          db.sessionPlan(row.id)?.orphanedComments ?? [],
-          steps
-        );
+        const kept = keepComments(before, plan?.orphanedComments ?? [], steps);
         db.putSessionSteps(row.id, kept.steps, kept.orphaned);
       }
       if (written.spec !== undefined) {
@@ -901,14 +895,12 @@ export const createPlans = (deps: PlansDeps) => {
 
     /**
      * A session's steps start another's plan: the new session that goes on
-     * from an ended one. What of the ended one's waits on the person stays
+     * from an ended one, steps that did not read kept with them (db
+     * `copySessionSteps`). What of the ended one's waits on the person stays
      * its own: each artifact was asked by it (needs.ts `ArtifactAsked.by`).
      */
     copySteps(from: string, to: string): void {
-      const steps = db.sessionPlan(from)?.steps;
-      if (steps?.length) {
-        db.putSessionSteps(to, steps);
-      }
+      db.copySessionSteps(from, to);
     },
 
     /**

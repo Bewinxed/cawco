@@ -51595,6 +51595,11 @@
             "enum": [
               "plan.snapshot"
             ]
+          },
+          "unread": {
+            "description": "The plan holds steps stored before they were rows (hub migration 0418)\nthat did not read whole: kept as they were stored, none of them in\n{@link steps} or {@link orphanedComments}, and none read for anything.\nAbsent on every plan that read.",
+            "const": true,
+            "type": "boolean"
           }
         },
         "required": [
@@ -55769,6 +55774,11 @@
             "items": {
               "$ref": "#/components/schemas/TaskTodo"
             }
+          },
+          "unread": {
+            "description": "The plan holds steps stored before they were rows (hub migration 0418)\nthat did not read whole: kept as they were stored, none of them in\n{@link steps} or {@link orphanedComments}, and none read for anything.\nAbsent on every plan that read.",
+            "const": true,
+            "type": "boolean"
           }
         },
         "required": [

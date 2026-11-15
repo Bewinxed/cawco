@@ -48,6 +48,7 @@ import { logRelayPortsUnread } from "./relay-ports-unread";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
 import { logSendOriginsUnread } from "./send-origins-unread";
+import { logPlansUnread } from "./session-plans-unread";
 import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
 
 /** Where a step's work runs. */
@@ -265,6 +266,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every relay proof's chips and relay ports 0416 keeps as not read, read before it runs.
       logRelayPortsUnread(client);
+    },
+  },
+  {
+    name: "session-plans-unread",
+    before: "0418_session_plan_rows",
+    at: "migrator",
+    run: (client) => {
+      // Every session's plan 0418 keeps as not read, read before it runs.
+      logPlansUnread(client);
     },
   },
   {

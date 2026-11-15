@@ -20,16 +20,16 @@
  * budgets, at-limit policies, landings, gate passes, outputs, queued
  * starts, MCP servers' platforms, the fleet's routes, a tracker's
  * baselines, asks and preview passes, the values migrations 0410 to 0413
- * lift into columns, continuation jobs, project moves and the stream
- * relay's ports and proofs besides ({@link seedLists},
+ * lift into columns, continuation jobs, project moves, the stream
+ * relay's ports and proofs and session plans besides ({@link seedLists},
  * {@link seedBudgets}, {@link seedAtLimit}, {@link seedLanded},
  * {@link seedGatePasses}, {@link seedOutputs}, {@link seedQueued},
  * {@link seedMcpServers}, {@link seedPlatformsRoutes}, {@link seedTracker},
  * {@link seedTrackerBaselines}, {@link seedAsks}, {@link seedAsksByHand},
  * {@link seedPassScopes}, {@link seedLiftedColumns},
  * {@link seedContinuations}, {@link seedContinuationsByHand},
- * {@link seedMoves}, {@link seedMovesByHand}, {@link seedRelayPorts}),
- * written to
+ * {@link seedMoves}, {@link seedMovesByHand}, {@link seedRelayPorts},
+ * {@link seedSessionPlans}, {@link seedSessionPlansByHand}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -2177,6 +2177,168 @@ function seedRelayPorts(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the fixture's plans were written and commented on: 2026-10-04. */
+const PLANNED_AT = Date.UTC(2026, 9, 4);
+
+/** The person's comment on a step, `minutes` after {@link PLANNED_AT}. */
+const planComment = (minutes: number, text: string) => ({
+  at: new Date(PLANNED_AT + minutes * MINUTE_MS).toISOString(),
+  text,
+});
+
+/**
+ * Plans as the hub's own code writes them (`putSessionSteps`,
+ * `putSessionSpec`), every one migration 0418 places whole as rows: steps
+ * nested by depth in every status, with and without a priority, waiting on
+ * a pull request, a task and a card, the person's comments on two steps,
+ * a plan with orphaned comments in two groups, an empty list written, and
+ * a spec written alone (steps never set). {@link seedSessionPlansByHand}
+ * adds the ones that do not read.
+ */
+function seedSessionPlans(db: HubDb, sessions: Seeded[]): void {
+  const [first, second, third, fourth, fifth] = sessions.slice(60);
+  if (!(first && second && third && fourth && fifth)) {
+    throw new Error("the lists fixture's plans need five sessions");
+  }
+  db.putSessionSteps(first.id, [
+    {
+      id: "1",
+      content: "Read the migration journal and the newest snapshot",
+      depth: 0,
+      status: "completed",
+      comments: [planComment(3, "Start from 0413, not 0410.")],
+    },
+    {
+      id: "2",
+      content: "Move the session plans into rows",
+      depth: 0,
+      status: "in_progress",
+      priority: "high",
+    },
+    {
+      id: "2.1",
+      content: "Write the migration with nested json_each",
+      depth: 1,
+      status: "in_progress",
+    },
+    {
+      id: "2.2",
+      content: "Rebuild the lists fixture at the pinned commit",
+      depth: 1,
+      status: "pending",
+      priority: "low",
+      waitsOn: "https://github.com/example-org/fixture-repo/pull/482",
+      comments: [
+        planComment(9, "Keep the realistic fixture byte for byte."),
+        planComment(14, "And count it with the script afterwards."),
+      ],
+    },
+    {
+      id: "td-3",
+      content: "Report the counts",
+      depth: 0,
+      status: "pending",
+      waitsOn: "tsk-12",
+    },
+  ]);
+  db.putSessionSteps(
+    second.id,
+    [
+      {
+        id: "1",
+        content: "Pick the plan panel's stop wording",
+        depth: 0,
+        status: "pending",
+        priority: "medium",
+        waitsOn: "6f1c2a9e-3b4d-4e5f-8a7b-9c0d1e2f3a4b#stop-words",
+      },
+    ],
+    [
+      {
+        step: "Draft three wordings for the stop",
+        comments: [
+          planComment(21, "Shorter, please."),
+          planComment(22, "No exclamation marks."),
+        ],
+      },
+      {
+        step: "Ask before building",
+        comments: [planComment(30, "Fine to skip this one.")],
+      },
+    ]
+  );
+  db.putSessionSteps(third.id, [
+    {
+      id: "1",
+      content: "Wait for the host proofs",
+      depth: 0,
+      status: "completed",
+    },
+  ]);
+  db.putSessionSteps(fourth.id, []);
+  db.putSessionSpec(
+    fifth.id,
+    "## Goal\n\nMove every stored plan to rows, and say where one does not read."
+  );
+}
+
+/**
+ * Plans 0418 does not read whole, written by hand as no write of the hub's
+ * makes them, on sessions the fixture already has: steps that are not JSON,
+ * JSON null, a text, a list holding a step with no status, a step whose
+ * status no step has, a priority of null, two steps with one id, steps
+ * that read beside orphaned comments that do not (a plan partly readable),
+ * and orphaned comments that are not JSON.
+ */
+function seedSessionPlansByHand(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const sessions = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE id NOT IN (SELECT instance_id FROM session_plans) ORDER BY rowid LIMIT 9 OFFSET 80"
+    )
+    .all()
+    .map((row) => row.id);
+  const step = (stepId: string, status: string) => ({
+    id: stepId,
+    content: `Step ${stepId} of a plan written by hand`,
+    depth: 0,
+    status,
+  });
+  const plans: [string, string][] = [
+    ["{steps: [", "[]"],
+    ["null", "[]"],
+    [JSON.stringify("1. read 2. write"), "[]"],
+    [
+      JSON.stringify([
+        step("1", "completed"),
+        { id: "2", content: "No status", depth: 0 },
+      ]),
+      "[]",
+    ],
+    [JSON.stringify([step("1", "done")]), "[]"],
+    [JSON.stringify([{ ...step("1", "pending"), priority: null }]), "[]"],
+    [JSON.stringify([step("1", "completed"), step("1", "pending")]), "[]"],
+    [
+      JSON.stringify([step("1", "in_progress"), step("2", "pending")]),
+      JSON.stringify([{ step: "An old step", comments: "Keep this." }]),
+    ],
+    [JSON.stringify([step("1", "pending")]), "not json"],
+  ];
+  for (const [n, [steps, orphaned]] of plans.entries()) {
+    const instanceId = sessions[n];
+    if (!instanceId) {
+      throw new Error(
+        "the lists fixture's hand-written plans need nine sessions"
+      );
+    }
+    sqlite.run(
+      "INSERT INTO session_plans (instance_id, steps, orphaned_comments, updated_at) VALUES (?, ?, ?, ?)",
+      [instanceId, steps, orphaned, PLANNED_AT + n * MINUTE_MS]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -2195,6 +2357,7 @@ async function seed(
     seedAsks(db, sessions);
     seedContinuations(db, sessions);
     seedMoves(db, projects);
+    seedSessionPlans(db, sessions);
   }
   lifetime.close();
   if (withLists) {
@@ -2213,6 +2376,7 @@ async function seed(
     seedContinuationsByHand(dbPath);
     seedMovesByHand(dbPath);
     seedRelayPorts(dbPath);
+    seedSessionPlansByHand(dbPath);
   }
 }
 
