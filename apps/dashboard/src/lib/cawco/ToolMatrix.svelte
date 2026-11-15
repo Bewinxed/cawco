@@ -470,7 +470,7 @@
               <span class="type-label text-ink-strong"
                 >{spec.name}
                 {outdated
-                  ? `${toolStatus?.version} isn't one CawCo runs`
+                  ? `${toolStatus?.version} is out of date`
                   : "did not install"}</span
               >
               {#if toolStatus?.method}
