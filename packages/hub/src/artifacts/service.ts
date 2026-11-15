@@ -766,65 +766,101 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
   };
 
+  /** When session `instance`'s last turn ended, ms epoch; 0 when none has. */
+  const turnEndedMs = (instance: InstanceRow): number =>
+    instance.turnEndedAt ? new Date(instance.turnEndedAt).getTime() : 0;
+
+  /**
+   * THE ONE TEST OF WHETHER A HANDED ARTIFACT'S PARENT HAS HAD ITS TURN ON
+   * IT, read at a turn's end ({@link passOver}) and by the sweep
+   * ({@link handedOwed}) alike: `row` is handed to `owner` and not passed
+   * over yet, its maker is another session whose work item is over, and a
+   * turn of `owner` ended (its last end the hub holds, or `endedAt`, the one
+   * ending now) after it had its maker's report (`reportHeardAt`: when it
+   * read it; a report still unread waits for the turn that reads it). That
+   * turn was its move on it: it is passed over then, stamped
+   * `meta.passedAt`, and holds its maker's workspace no more. Read from
+   * those facts, not from a stamp alone, a parent that had its turn before
+   * the stamp existed, or while the hub was down, is not waited on until it
+   * happens to take another (2026-11-15: nine clones held so).
+   */
+  const passedNow = (
+    row: ArtifactRow,
+    owner: InstanceRow,
+    endedAt = 0
+  ): boolean => {
+    const meta = docMeta(docs.doc(row.id));
+    const maker = row.madeBy ? deps.instance(row.madeBy) : undefined;
+    if (
+      meta.get("handed") !== true ||
+      meta.has("passedAt") ||
+      !maker ||
+      maker.id === owner.id ||
+      deps.itemLive(maker)
+    ) {
+      return false;
+    }
+    const heard = deps.reportHeardAt(owner, maker);
+    const turnEnd = Math.max(turnEndedMs(owner), endedAt);
+    if (heard === "unread" || turnEnd <= heard.getTime()) {
+      return false;
+    }
+    docs.transact(row.id, "hub", (doc) =>
+      setMeta(doc, "passedAt", new Date(turnEnd).toISOString())
+    );
+    return true;
+  };
+
   /**
    * Session `instanceId`'s turn ended at `endedAt`: each artifact handed up
-   * to it (or a next version held for it) that it has not opened, whose
-   * maker's work item is over, is passed over (`meta.passedAt`), so it holds
-   * its maker's workspace no more ({@link handedOwed}). The turn that read
-   * the maker's report, or that stopped the maker, was the parent's move on
-   * it; a report still unread (a send pending for it) leaves it to the next
-   * turn. Passed over is not lost: it stays in the parent's panel menu and
-   * `delegate_list`, and a follow-up to its maker cuts the clone again.
+   * to it (or a next version held for it) that it has now had its turn on
+   * is passed over ({@link passedNow}). Passed over is not lost: it stays
+   * in the parent's panel menu and `delegate_list`, and a follow-up to its
+   * maker cuts the clone again.
    */
   const passOver = (instanceId: string, endedAt: Date): void => {
-    if (deps.unread(instanceId)) {
+    const owner = deps.instance(instanceId);
+    if (!owner) {
       return;
     }
     const heldNext = db.heldTargets();
-    // Only a delegate's make is ever handed: its maker is another session.
-    const rows = db.ofInstance(instanceId).flatMap((row) => {
+    for (const row of db.ofInstance(instanceId)) {
       const held = heldNext.has(row.id) ? db.heldOf(row.id) : undefined;
-      return [row, ...(held ? [held] : [])].filter(
-        (one) => one.madeBy !== null && one.madeBy !== instanceId
-      );
-    });
-    for (const row of rows) {
-      const maker = row.madeBy ? deps.instance(row.madeBy) : undefined;
-      if (!maker || deps.itemLive(maker)) {
-        continue;
-      }
-      const meta = docMeta(docs.doc(row.id));
-      if (meta.get("handed") === true && !meta.has("passedAt")) {
-        docs.transact(row.id, "hub", (doc) =>
-          setMeta(doc, "passedAt", endedAt.toISOString())
-        );
+      // Only a delegate's make is ever handed: its maker is another session.
+      for (const one of [row, ...(held ? [held] : [])]) {
+        if (one.madeBy !== null && one.madeBy !== instanceId) {
+          passedNow(one, owner, endedAt.getTime());
+        }
       }
     }
   };
 
   /**
    * Whether `row`, or the next version held for it, is handed up to a
-   * parent that has not had its turn on it: marked `handed` and not passed
-   * over (`meta.passedAt`, which {@link Artifacts.turnEnded} stamps once the
-   * parent's turn after its maker's report ends), while that parent can
-   * still take a turn and its maker's work reports to anyone (a project's
-   * Caw that is off hears nothing of it, work-items.ts `reportees`).
+   * parent that has not had its turn on it ({@link passedNow}, which
+   * stamps one that has), while that parent can still take a turn and its
+   * maker's work reports to anyone (a project's Caw that is off hears
+   * nothing of it, work-items.ts `reportees`).
    */
   const handedOwed = (row: ArtifactRow): boolean => {
-    const held = row.heldFor === null ? db.heldOf(row.id) : undefined;
-    const handed = [row, ...(held ? [held] : [])].find((one) => {
-      const meta = docMeta(docs.doc(one.id));
-      return meta.get("handed") === true && !meta.has("passedAt");
-    });
-    if (!handed) {
-      return false;
-    }
     const owner = holder(row);
     if (!owner || deps.finished(owner)) {
       return false;
     }
+    const held = row.heldFor === null ? db.heldOf(row.id) : undefined;
+    const handed = [row, ...(held ? [held] : [])].find((one) => {
+      const meta = docMeta(docs.doc(one.id));
+      return (
+        meta.get("handed") === true &&
+        !meta.has("passedAt") &&
+        !passedNow(one, owner)
+      );
+    });
+    if (!handed) {
+      return false;
+    }
     const maker = handed.madeBy ? deps.instance(handed.madeBy) : undefined;
-    return !maker || deps.itemLive(maker) || deps.reportsUp(maker);
+    return !!maker && (deps.itemLive(maker) || deps.reportsUp(maker));
   };
 
   /**

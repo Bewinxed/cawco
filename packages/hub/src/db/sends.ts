@@ -51,6 +51,15 @@ export interface SendsDb {
     envelope: Envelope<SendPayload>
   ) => void;
   /**
+   * The newest send to session `to` that session `from` sent it as a peer
+   * (`origin.kind` "peer", `origin.from`): a delegate's last word to its
+   * parent, its report once its item ended (ask-routing.ts `reportTo`).
+   */
+  readonly lastPeerSend: (
+    to: string,
+    from: string
+  ) => SentMessageRow | undefined;
+  /**
    * What `id` was last sent, for `list_sessions` (session-facts.ts): the
    * newest turn it read, and the person's newest message to it in any state
    * (when the person last interacted with it). Null for none.
@@ -377,6 +386,20 @@ export const sendsDb = (core: DbCore): SendsDb => {
         )
         .run();
     },
+    lastPeerSend: (to, from) =>
+      db
+        .select()
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.instanceId, to),
+            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'peer'`,
+            sql`json_extract(${sentMessages.body}, '$.origin.from') = ${from}`
+          )
+        )
+        .orderBy(desc(sentMessages.acceptedAt))
+        .limit(1)
+        .get(),
     personUnanswered: (id) => {
       const [last] = db
         .select({

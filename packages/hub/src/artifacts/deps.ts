@@ -389,6 +389,13 @@ export interface ArtifactServiceDeps {
    */
   removed?: (row: ArtifactRow) => void;
   /**
+   * When session `parent` had delegate `maker`'s report (its last word to
+   * it as a peer, db `lastPeerSend`): when it read it; `unread` while it
+   * waits to be read; the end of `maker`'s item for one that never will be
+   * (failed, cancelled) or was never sent.
+   */
+  reportHeardAt: (parent: InstanceRow, maker: InstanceRow) => Date | "unread";
+  /**
    * Whether the session's work reports to anyone (work-items.ts
    * `reportees`): delegated work's does, to the session that started it,
    * but not while that is its project's Caw and he is off.
@@ -525,8 +532,6 @@ export interface ArtifactServiceDeps {
    * writer's ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
-  /** Whether a send to the session is still unread (a keep-alive is none): its next turn reads it. */
-  unread: (instanceId: string) => boolean;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
   unserve: (machineId: string, workspace: string, port: number) => void;
   /**
