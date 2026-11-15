@@ -3,9 +3,10 @@
    * A passkey QR overlay in the take-over view: a FIDO URI from the
    * browser's page, rendered as a scannable QR for the person's phone.
    * Shows inside the browser well over the stream, auto-dismisses when
-   * the take-over ends or the QR expires. When the CawCo Chrome extension
-   * is detected, the QR is forwarded to it and a "sent to extension" line
-   * replaces the inline code. Under the QR, a line says how the hub's relay
+   * the take-over ends or the QR expires. The QR is also posted to the page's
+   * window, where the CawCo Chrome extension's content script (if installed)
+   * hears it and scans for the phone's advert; the advert comes back the same
+   * way and goes to the hub over this page's own socket. Under the QR, a line says how the hub's relay
    * of the phone's Bluetooth advert is going (scanning where, timed out, no
    * Bluetooth anywhere).
    */
@@ -14,6 +15,7 @@
   import { passkeyWords } from "@cawco/core/words/browser";
   import { IconKey } from "#lib/icons.js";
   import { appear } from "#lib/platform/motion/curves.svelte.js";
+  import { sendIfOpen } from "../hub/socket.svelte";
   import { qrPath } from "../qr-path";
   import { dismissPasskeyQr } from "../stores/passkey-qr.svelte";
   import { passkeyStatus } from "../stores/passkey-relay.svelte";
@@ -25,9 +27,6 @@
     frame: PasskeyQrFrame;
     browserKey: BrowserKey;
   } = $props();
-
-  /** Whether the Chrome extension acknowledged the QR. */
-  let sentToExtension = $state(false);
 
   /** Time left before the QR expires. */
   let expired = $state(false);
@@ -45,27 +44,46 @@
     return () => clearTimeout(timer);
   });
 
-  /** Whether the CawCo Chrome extension's content script marked this page. */
-  function extensionPresent(): boolean {
-    return "__cawco_extension" in window;
-  }
-
-  /** Try to send the FIDO URI to the CawCo Chrome extension. */
+  /** The QR goes to the CawCo Chrome extension's content script, if one listens on this page. */
   $effect(() => {
-    sentToExtension = false;
-    if (!extensionPresent()) {
-      return;
-    }
     window.postMessage(
       {
         type: "cawco:passkey_qr",
         fidoUri: frame.fidoUri,
-        origin: frame.rpOrigin,
-        expiresAt: frame.raisedAt + PASSKEY_QR_TTL_MS,
+        rpOrigin: frame.rpOrigin,
+        raisedAt: frame.raisedAt,
+        browserKey,
       },
-      "*"
+      window.location.origin
     );
-    sentToExtension = true;
+  });
+
+  /** An advert the extension captured goes to the hub over this page's own socket. */
+  $effect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window || event.origin !== window.location.origin) {
+        return;
+      }
+      const data = event.data as Record<string, unknown> | null;
+      if (data?.type !== "cawco:passkey_advert") {
+        return;
+      }
+      const { serviceData, rssi, capturedAt } = data;
+      if (
+        typeof serviceData !== "string" ||
+        typeof rssi !== "number" ||
+        typeof capturedAt !== "number"
+      ) {
+        return;
+      }
+      sendIfOpen({
+        verb: "frames",
+        machineId: "",
+        payload: { kind: "passkey_advert", serviceData, rssi, capturedAt },
+      });
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   });
 
   const code = $derived(qrPath(frame.fidoUri));
@@ -114,43 +132,32 @@
         </span>
       </div>
 
-      {#if sentToExtension}
-        <!-- QR was forwarded to the extension. -->
-        <p class="m-0 type-body text-center text-ink-muted">
-          {passkeyWords.sentToExtension}
-        </p>
-      {:else}
-        <!-- Inline QR code: the raised surface behind it, the modules in
+      <!-- Inline QR code: the raised surface behind it, the modules in
              ink-strong, as the house's PhoneQr draws its own. -->
-        <svg
-          class="block size-48 flex-none rounded-well bg-surface-raised text-ink-strong shadow-xs"
-          aria-label="Passkey QR code{rpDisplay ? ` for ${rpDisplay}` : ''}"
-          role="img"
-          viewBox="0 0 {code.size} {code.size}"
-        >
-          <path
-            d={code.path}
-            fill="currentColor"
-            shape-rendering="crispEdges"
-          />
-        </svg>
+      <svg
+        class="block size-48 flex-none rounded-well bg-surface-raised text-ink-strong shadow-xs"
+        aria-label="Passkey QR code{rpDisplay ? ` for ${rpDisplay}` : ''}"
+        role="img"
+        viewBox="0 0 {code.size} {code.size}"
+      >
+        <path d={code.path} fill="currentColor" shape-rendering="crispEdges" />
+      </svg>
 
-        <!-- Scan instructions. -->
-        <p class="m-0 type-body text-center text-pretty text-ink-muted">
-          {rpDisplay ? passkeyWords.scanTo(rpDisplay) : passkeyWords.scan}
-        </p>
+      <!-- Scan instructions. -->
+      <p class="m-0 type-body text-center text-pretty text-ink-muted">
+        {rpDisplay ? passkeyWords.scanTo(rpDisplay) : passkeyWords.scan}
+      </p>
 
-        {#if relayLine}
-          <p class="m-0 type-meta text-center text-ink-muted" role="status">
-            {relayLine}
-          </p>
-        {/if}
-
-        <!-- Extension install prompt. -->
-        <p class="m-0 type-meta text-center text-ink-subtle">
-          {passkeyWords.extensionPrompt}
+      {#if relayLine}
+        <p class="m-0 type-meta text-center text-ink-muted" role="status">
+          {relayLine}
         </p>
       {/if}
+
+      <!-- Extension install prompt. -->
+      <p class="m-0 type-meta text-center text-ink-subtle">
+        {passkeyWords.extensionPrompt}
+      </p>
 
       <!-- Dismiss button. -->
       <button
