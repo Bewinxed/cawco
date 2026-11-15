@@ -16,6 +16,8 @@ import type Docker from "dockerode";
 const BROWSER_IMAGE_FILES = [
   "Dockerfile",
   "chromium.conf",
+  "passkey-extension/background.js",
+  "passkey-extension/manifest.json",
   "policies.json",
   "preferences.json",
   "xorg.conf",
