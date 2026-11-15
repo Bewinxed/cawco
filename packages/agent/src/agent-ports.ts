@@ -10,7 +10,11 @@
  * dropped.
  */
 import type { AccountBorrowFrame } from "@cawco/core/accounts";
-import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
+import type {
+  BrowserFrame,
+  BrowserHandedBackFrame,
+  PasskeyQrFrame,
+} from "@cawco/core/browser";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MoveProgressFrame } from "@cawco/core/move";
 import type { Envelope } from "@cawco/core/protocol";
@@ -32,6 +36,8 @@ export interface AgentPorts {
   readonly moveProgress: (frame: MoveProgressFrame) => void;
   /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
   readonly opencodeAccounts: OpencodeAccountsHost;
+  /** A FIDO URI read off a take-over's passkey QR (browser/shield.ts). */
+  readonly passkeyQr: (frame: PasskeyQrFrame) => void;
   /** The stream relay's state (browser/relay.ts). */
   readonly relay: (frame: RelayFrame) => void;
   /** A take-over the agent ended itself (browser/shield.ts). */

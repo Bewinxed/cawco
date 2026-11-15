@@ -43,6 +43,7 @@ const BrowserRecordShape = declared(
         network: MachineNetworkShape.optional(),
         hostRules: z.string().optional(),
         pac: z.string().optional(),
+        bluez: z.string().optional(),
         ports: BrowserPortsShape.optional(),
         runtime: z
           .object({ endpoint: z.string(), kind: z.enum(["docker", "podman"]) })

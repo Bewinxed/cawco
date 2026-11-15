@@ -1,0 +1,8 @@
+# WXT generated
+.wxt/
+.output/
+dist/
+
+# JS compiled beside the TS source by WXT hooks.
+entrypoints/**/*.js
+wxt.config.js

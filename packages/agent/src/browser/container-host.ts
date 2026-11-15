@@ -49,6 +49,7 @@ import { stunServer } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
 import { z } from "zod";
+import { type BluezBus, standBluezBus, stopBluezBus } from "./bluez-bus";
 import { statusOf } from "./docker-status";
 import { machineNetwork, type Placement, placementOf } from "./egress";
 import { hubPacUrl } from "./hub-pac";
@@ -70,6 +71,7 @@ import {
   slotAddress,
   slotHost,
 } from "./media-network";
+import { passkeyInjector, vhciAvailable } from "./passkey-inject";
 import { machineHostOf, wantedHostRules } from "./preview-names";
 import { relayKeyOf, relayUrlsFor } from "./relay-urls";
 import type { Runtime } from "./runtime";
@@ -82,6 +84,25 @@ import {
   type Progress,
   portsOf,
 } from "./state";
+
+/**
+ * The virtual BLE adapter, up before Chromium starts, and BlueZ's bus for
+ * the container (bluez-bus.ts), through which Chromium finds it: a WebAuthn
+ * dialog offers a phone or tablet only when it finds an adapter present
+ * (passkey-inject.ts `ensureAdapter`). Without either the browser starts all
+ * the same, with no passkey relay.
+ */
+const standAdapter = async (key: BrowserKey): Promise<BluezBus | undefined> => {
+  if (!vhciAvailable()) {
+    return;
+  }
+  await passkeyInjector.ensureAdapter().catch((error: unknown) => {
+    console.warn(
+      `[browser] ${key}: no virtual BLE adapter, so no passkey relay: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  return standBluezBus(key);
+};
 
 /** Where a container in a namespace of its own reaches the machine, and so the relay on it: pasta's `--map-guest-addr`, Podman 5.3 on. */
 const MACHINE_FROM_PASTA = "host.containers.internal";
@@ -277,7 +298,8 @@ const relayExpiry = (relay: BrowserRelay): number | undefined => {
  * runtime forwards now, at its slot's address on the media network or in a
  * namespace of its own as the runtime places it (one made on the media
  * network is made again in its own), made with the STUN server named now and
- * the preview names' rules found now (preview-names.ts), and its relay
+ * the preview names' rules found now (preview-names.ts), BlueZ's bus as it
+ * is given now (bluez-bus.ts), and its relay
  * credential, for the same relay, good for a day more (or no relay asked
  * for). Otherwise a new one is made on the same volume, with the credential
  * just minted. One made before it named its STUN server has neko's own
@@ -292,6 +314,8 @@ const keptAsAsked = (
     address: string | undefined;
     hostRules: string | undefined;
     pac: string;
+    /** The host path bound for BlueZ's bus (bluez-bus.ts); none when it has none. */
+    bluez: string | undefined;
   },
   relay: BrowserRelay | undefined
 ): boolean => {
@@ -312,6 +336,7 @@ const keptAsAsked = (
     kept.stun === stunServer() &&
     kept.hostRules === now.hostRules &&
     kept.pac === now.pac &&
+    kept.bluez === now.bluez &&
     relayHolds
   );
 };
@@ -454,6 +479,7 @@ export class ContainerHost implements BrowserHost {
       })
     );
     options.progress({ state: "starting" });
+    const bluez = await standAdapter(record.key);
     const owner = await browserOwner();
     const kept = record.container;
     const volume = await this.#volumeFor(record, owner);
@@ -468,7 +494,14 @@ export class ContainerHost implements BrowserHost {
       kept &&
       keptAsAsked(
         record,
-        { image, media, address, hostRules, pac: hubPacUrl() },
+        {
+          image,
+          media,
+          address,
+          hostRules,
+          pac: hubPacUrl(),
+          bluez: bluez?.source,
+        },
         options.relay
       )
         ? await this.#exists(kept.id)
@@ -502,6 +535,7 @@ export class ContainerHost implements BrowserHost {
           network,
           address,
           hostRules,
+          bluez,
         });
       }
       started = (await this.#live(container.id, ports, placement)) ?? started;
@@ -648,10 +682,21 @@ export class ContainerHost implements BrowserHost {
       address: string | undefined;
       /** Chromium's resolver rules for the preview names (preview-names.ts); none to map. */
       hostRules: string | undefined;
+      /** BlueZ's bus for Chromium (bluez-bus.ts); none without a virtual adapter. */
+      bluez: BluezBus | undefined;
     }
   ): Promise<NonNullable<BrowserRecord["container"]>> {
-    const { image, volume, relay, media, owner, network, address, hostRules } =
-      made;
+    const {
+      image,
+      volume,
+      relay,
+      media,
+      owner,
+      network,
+      address,
+      hostRules,
+      bluez,
+    } = made;
     const { extraHosts } = machineHostOf(this.#runtime);
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
@@ -676,6 +721,7 @@ export class ContainerHost implements BrowserHost {
           }),
         }
       : undefined;
+    const vhci = vhciAvailable();
     const created = await this.#docker.createContainer({
       name: nameOf(owner, record.key),
       Image: image,
@@ -699,6 +745,8 @@ export class ContainerHost implements BrowserHost {
         `CAWCO_PAC_URL=${hubPacUrl()}`,
         // chromium.conf passes it to Chromium's --host-resolver-rules.
         ...(hostRules ? [`CAWCO_HOST_RULES=${hostRules}`] : []),
+        // Chromium's Bluetooth is BlueZ on this bus (bluez-bus.ts).
+        ...(bluez ? [bluez.env] : []),
       ],
       ...(placed.NetworkingConfig
         ? { NetworkingConfig: placed.NetworkingConfig }
@@ -718,6 +766,22 @@ export class ContainerHost implements BrowserHost {
         ...(hostRules && extraHosts.length > 0
           ? { ExtraHosts: extraHosts }
           : {}),
+        // The virtual HCI adapter for passkey relay (PasskeyInjector):
+        // mounted only when the host has /dev/vhci, so machines without
+        // the module loaded start the container unchanged.
+        ...(vhci
+          ? {
+              Devices: [
+                {
+                  PathOnHost: "/dev/vhci",
+                  PathInContainer: "/dev/vhci",
+                  CgroupPermissions: "rwm",
+                },
+              ],
+              CapAdd: ["NET_ADMIN"],
+            }
+          : {}),
+        ...(bluez ? { Binds: [bluez.bind] } : {}),
         NetworkMode: placed.NetworkMode,
         PortBindings: {
           "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
@@ -750,6 +814,7 @@ export class ContainerHost implements BrowserHost {
       stun,
       ...(hostRules ? { hostRules } : {}),
       pac: hubPacUrl(),
+      ...(bluez ? { bluez: bluez.source } : {}),
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,
@@ -757,6 +822,7 @@ export class ContainerHost implements BrowserHost {
   }
 
   async stop(record: BrowserRecord): Promise<void> {
+    stopBluezBus(record.key);
     if (!record.container) {
       return;
     }
@@ -783,6 +849,7 @@ export class ContainerHost implements BrowserHost {
   }
 
   async remove(record: BrowserRecord): Promise<void> {
+    stopBluezBus(record.key);
     const owner = await browserOwner();
     await removeContainers(this.#docker, owner, record.key, [
       record.container?.id,

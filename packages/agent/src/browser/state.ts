@@ -90,6 +90,12 @@ export interface BrowserRecord {
      * keeps its Chromium off the hub's ports. One made for another is made again.
      */
     pac?: string;
+    /**
+     * The host path bound at its `/run/dbus` for BlueZ (bluez-bus.ts): its
+     * proxy's folder, or the machine's system bus. One made with another, or
+     * none, is made again.
+     */
+    bluez?: string;
     /** The ports it was published on: one made for other ports is made again. */
     ports?: BrowserPorts;
     /** The runtime it was made on, as the record names it while that runtime is away. */

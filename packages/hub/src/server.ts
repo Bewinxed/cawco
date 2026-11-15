@@ -531,6 +531,7 @@ import {
 } from "./notifications";
 import { createOpenItems } from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
+import { createPasskeyRelay } from "./passkey-relay";
 import { peek, peekResume } from "./payload-peeks";
 import {
   type AnswerFrom,
@@ -1657,6 +1658,7 @@ export const createServer = (
     toolReleases: () => toolReleases,
     boardBase: () => boardBase,
     browsers: () => browsers,
+    passkeyRelay: () => passkeyRelay,
     continuationTable: () => continuationTable,
     damagedRecords: () => damagedRecords,
     findHears: () => findHearsPort.now(),
@@ -2823,6 +2825,18 @@ export const createServer = (
     // The gate id its browser door is (agent door.ts): its workspace's,
     // else the session's own.
     workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
+  });
+  // Passkey relay: the cascade that picks which machines scan for BLE
+  // passkey adverts when a browser needs one (passkey-relay.ts).
+  const passkeyRelay = createPasskeyRelay({
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    listAgents: () => db.listAgents(),
+    hasBle: (machineId) => browsers.relayCapability(machineId)?.hasBle ?? false,
+    machineName: (machineId) => machineName(machineId),
+    personMachines: () => db.presence.counted(),
+    broadcast: (frame) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
   });
   // The person's view of a browser, on the hub's own origin
   // (browser-routes.ts): relayed to its machine's browser listener.
@@ -12882,7 +12896,41 @@ export const createServer = (
     },
     // A machine's verbs on a dashboard's socket.
     admission: refuseDashboardVerb,
-    frames: refuseDashboardVerb,
+    // Only the Chrome extension's BLE advert: it belongs to no machine.
+    frames: (ws, message) => {
+      const body = message.payload as
+        | {
+            kind?: unknown;
+            serviceData?: unknown;
+            rssi?: unknown;
+            capturedAt?: unknown;
+          }
+        | undefined;
+      if (
+        body?.kind !== "passkey_advert" ||
+        typeof body.serviceData !== "string" ||
+        typeof body.rssi !== "number" ||
+        typeof body.capturedAt !== "number"
+      ) {
+        refuseDashboardVerb(ws, message);
+        return;
+      }
+      detach(
+        browsers.relayPasskeyAdvert(
+          "extension",
+          {
+            serviceData: body.serviceData,
+            rssi: body.rssi,
+            capturedAt: body.capturedAt,
+          },
+          {
+            captured: (key) => passkeyRelay.captured(key),
+            injected: (key) => passkeyRelay.injected(key),
+          }
+        ),
+        "relay the passkey advert"
+      );
+    },
     heartbeat: refuseDashboardVerb,
     launch: refuseDashboardVerb,
     register: refuseDashboardVerb,
@@ -13328,7 +13376,12 @@ export const createServer = (
           // read again here, so nothing but the person ever holds one). Its
           // device is kept, so removing the device closes it.
           const caller = hubAuth.classify(
-            (name) => ws.headers[name],
+            (name) =>
+              name === "authorization" &&
+              !ws.headers[name] &&
+              typeof ws.query.token === "string"
+                ? `Owner ${ws.query.token}`
+                : ws.headers[name],
             "GET",
             "/ws/dashboard",
             ws.remoteAddress ?? null

@@ -28,6 +28,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_HANDBACK,
+  BROWSER_INJECT_ADVERT,
   BROWSER_LISTEN,
   BROWSER_PAGE,
   BROWSER_REMOVE,
@@ -37,12 +38,17 @@ import {
   BROWSER_STOP,
   BROWSER_VIEWER_TOKEN,
   BROWSER_VIEWERS,
+  type BrowserInjectAdvertArgs,
   type BrowserKey,
   type BrowserPageArgs,
   type BrowserShieldArgs,
   type BrowserStartArgs,
   type BrowserViewersArgs,
   isBrowserKey,
+  PASSKEY_ADVERT_MAX_AGE_MS,
+  PASSKEY_SCAN_START,
+  PASSKEY_SCAN_STOP,
+  type PasskeyAdvertFrame,
 } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { timerMs } from "@cawco/core/clock";
@@ -224,6 +230,8 @@ import {
   watchBrowsers,
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
+import { PasskeyCapture } from "./browser/passkey-capture";
+import { passkeyInjector, vhciAvailable } from "./browser/passkey-inject";
 import {
   certifyRelay,
   relayReachChanged,
@@ -2475,6 +2483,9 @@ const attach = (
         frame.kind === "browsers" ||
         frame.kind === "browser_handback" ||
         frame.kind === "browser_list" ||
+        frame.kind === "passkey_qr" ||
+        frame.kind === "passkey_status" ||
+        frame.kind === "passkey_advert" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone" ||
         frame.kind === "catalog_moved"
@@ -3410,6 +3421,7 @@ const startDaemon = (rediscover = false) =>
       machineId: machineIdValue,
       moveProgress: framed,
       opencodeAccounts,
+      passkeyQr: framed,
       relay: framed,
       shield: framed,
       stage: framed,
@@ -3797,6 +3809,62 @@ const startDaemon = (rediscover = false) =>
       );
       return Promise.resolve(true);
     });
+    // ── Passkey proximity relay ────────────────────────────────────────
+    // Inject side: receives relayed BLE adverts from the hub and writes
+    // them into the machine's virtual HCI adapter so Chromium's caBLE
+    // discovery sees them (passkey-inject.ts). A browser container's start
+    // brings the adapter up (container-host.ts); an advert brings it up
+    // again if it was lost.
+    supervisor.declareControl(BROWSER_INJECT_ADVERT, async (args) => {
+      const { key, serviceData, capturedAt } = args as BrowserInjectAdvertArgs;
+
+      // Drop stale adverts.
+      if (Date.now() - capturedAt > PASSKEY_ADVERT_MAX_AGE_MS) {
+        return true;
+      }
+      if (!vhciAvailable()) {
+        throw new Error(
+          "Passkey relay needs the hci_vhci kernel module. Run: sudo modprobe hci_vhci"
+        );
+      }
+      const data = Buffer.from(serviceData, "base64");
+      await passkeyInjector.inject(data);
+      console.info(`[passkey] injected advert for ${key} (${data.length}B)`);
+      return true;
+    });
+
+    // Capture side: scan for the phone's FIDO BLE advert while the hub
+    // asks, and send each one hub-ward for relay (passkey-capture.ts).
+    // Lazy: nothing scans until the hub says so.
+    const passkeyCapture = new PasskeyCapture((advert) =>
+      framed({
+        kind: "passkey_advert",
+        serviceData: advert.serviceData.toString("base64"),
+        rssi: advert.rssi,
+        capturedAt: Date.now(),
+      } satisfies PasskeyAdvertFrame)
+    );
+    supervisor.declareControl(PASSKEY_SCAN_START, async (args) => {
+      const key = browserKeyOf(args);
+      if (!(await PasskeyCapture.available())) {
+        throw new Error("No BLE scanner available on this machine");
+      }
+      await passkeyCapture.start(key);
+      console.info(`[passkey] BLE scan started for ${key}`);
+      return true;
+    });
+    supervisor.declareControl(PASSKEY_SCAN_STOP, (args) => {
+      const key = browserKeyOf(args);
+      passkeyCapture.stop(key);
+      console.info(`[passkey] BLE scan stopped for ${key}`);
+      return Promise.resolve(true);
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        passkeyCapture.stopAll();
+        passkeyInjector.stop();
+      })
+    );
     // The records' watch and tick end with the daemon's scope, and one that
     // is still starting as it ends is stopped the moment it is ready.
     let unwatchBrowsers: (() => void) | undefined;

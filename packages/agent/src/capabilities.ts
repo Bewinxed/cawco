@@ -20,6 +20,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 import { mediaForwarding } from "./browser/media-forwarding";
+import { detectPasskeyRelay } from "./browser/passkey-detect";
 import { routerAddress } from "./browser/relay-reach";
 import {
   findRuntime,
@@ -243,6 +244,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   const claude = await claudeExecutable();
   const node = resolveBin("node");
   const browser = browserExecutable();
+  const passkeyRelay = await detectPasskeyRelay();
   let service: string | undefined;
   if (mac) {
     service = resolveBin("launchctl");
@@ -327,6 +329,21 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       ...runtimeFacts,
     },
     reach,
+    {
+      id: "passkey-relay",
+      available: passkeyRelay.hasBle || passkeyRelay.hasVhci,
+      installCommand: "",
+      reason: (() => {
+        const parts: string[] = [];
+        if (!passkeyRelay.hasBle) {
+          parts.push("No Bluetooth adapter found");
+        }
+        if (!passkeyRelay.hasVhci) {
+          parts.push("No vhci device; load it with `sudo modprobe hci_vhci`");
+        }
+        return parts.length > 0 ? parts.join(". ") : undefined;
+      })(),
+    },
     {
       id: "service-manager",
       available: !!service,

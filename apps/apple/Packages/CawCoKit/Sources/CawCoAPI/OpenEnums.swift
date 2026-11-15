@@ -5348,6 +5348,7 @@ public enum OpenEnums {
         case git
         case node
         case opencode
+        case passkeyRelay
         case pi
         case publicAddress
         case serviceManager
@@ -5363,6 +5364,7 @@ public enum OpenEnums {
             case "git": self = .git
             case "node": self = .node
             case "opencode": self = .opencode
+            case "passkey-relay": self = .passkeyRelay
             case "pi": self = .pi
             case "public-address": self = .publicAddress
             case "service-manager": self = .serviceManager
@@ -5379,6 +5381,7 @@ public enum OpenEnums {
             case .git: "git"
             case .node: "node"
             case .opencode: "opencode"
+            case .passkeyRelay: "passkey-relay"
             case .pi: "pi"
             case .publicAddress: "public-address"
             case .serviceManager: "service-manager"
@@ -5391,7 +5394,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .pi, .publicAddress, .serviceManager, .workspace]
+        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .passkeyRelay, .pi, .publicAddress, .serviceManager, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -6069,6 +6072,56 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.dark, .light, .page]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PasskeyRelayStatus`.
+    public enum PasskeyRelayStatus: OpenEnum {
+        case authenticated
+        case captured
+        case injected
+        case noBle
+        case scanning
+        case timeout
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "authenticated": self = .authenticated
+            case "captured": self = .captured
+            case "injected": self = .injected
+            case "no_ble": self = .noBle
+            case "scanning": self = .scanning
+            case "timeout": self = .timeout
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .authenticated: "authenticated"
+            case .captured: "captured"
+            case .injected: "injected"
+            case .noBle: "no_ble"
+            case .scanning: "scanning"
+            case .timeout: "timeout"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.authenticated, .captured, .injected, .noBle, .scanning, .timeout]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

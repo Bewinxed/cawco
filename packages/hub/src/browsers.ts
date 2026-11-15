@@ -45,6 +45,7 @@
 
 import {
   BROWSER_HANDBACK,
+  BROWSER_INJECT_ADVERT,
   BROWSER_REMOVE,
   BROWSER_ROWS,
   BROWSER_SHIELD,
@@ -53,13 +54,18 @@ import {
   type BrowserFrame,
   type BrowserHandback,
   type BrowserHandedBackFrame,
+  type BrowserInjectAdvertArgs,
   type BrowserKey,
   type BrowserListFrame,
+  type BrowserPasskeyAdvertArgs,
   type BrowserRow,
   type BrowserShieldArgs,
   type BrowserState,
   isBrowserKey,
   type ListedBrowser,
+  PASSKEY_ADVERT_MAX_AGE_MS,
+  type PasskeyQrFrame,
+  type PasskeyRelayCapability,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -194,6 +200,9 @@ const rowFrom = (
 };
 
 export const createBrowsers = (deps: BrowsersDeps) => {
+  const passkeyQrs = new Map<BrowserKey, PasskeyQrFrame>();
+  /** Each machine's passkey relay capability, from its latest browser frame. */
+  const passkeyRelayOf = new Map<string, PasskeyRelayCapability>();
   const { db } = deps;
   /** Each browser's live facts, by machine and key, from its machine's latest frame or answer. */
   const live = new Map<string, LiveBrowserFacts>();
@@ -436,11 +445,27 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       for (const row of frame.browsers) {
         noteLive(machineId, row);
       }
+      if (frame.passkeyRelay) {
+        passkeyRelayOf.set(machineId, frame.passkeyRelay);
+      } else {
+        passkeyRelayOf.delete(machineId);
+      }
       told();
+    },
+
+    /** A passkey QR extracted from a browser's page: kept per browser key, so a dashboard that connects later gets the latest. */
+    heardPasskeyQr(frame: PasskeyQrFrame): void {
+      passkeyQrs.set(frame.key, frame);
+    },
+
+    /** The latest passkey QR of each browser that has one. */
+    passkeyQrs(): PasskeyQrFrame[] {
+      return [...passkeyQrs.values()];
     },
 
     /** A take-over its machine ended, whichever way: told before the record's frame, with the page's origin. */
     heardHandback(frame: BrowserHandedBackFrame): void {
+      passkeyQrs.delete(frame.key);
       console.info(
         `[browser] ${frame.key} on ${deps.machineName(frame.machineId)} handed back (${HANDED_BACK_BY[frame.why]})`
       );
@@ -671,13 +696,128 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
     },
 
+    /**
+     * Relays the 20-byte caBLE advert the person's phone made from a passkey
+     * QR to the machine whose browser showed it, where its browser takes it
+     * in as a local BLE device (`browser.injectAdvert`).
+     */
+    async relayAdvert(
+      key: BrowserKey,
+      named: string | undefined,
+      advert: string
+    ) {
+      const machineId = machineOf(key, named);
+      if (machineId instanceof ElysiaStatus) {
+        return machineId;
+      }
+      const sent = answered<null>(
+        await deps.call(
+          machineId,
+          BROWSER_INJECT_ADVERT,
+          [
+            {
+              key,
+              serviceData: advert,
+              rssi: 0,
+              capturedAt: Date.now(),
+              sourceMachineId: machineId,
+            } satisfies BrowserInjectAdvertArgs,
+          ],
+          BROWSER_CALL_MS
+        ),
+        machineId,
+        deps.machineName(machineId),
+        "receive the passkey advert"
+      );
+      if (sent instanceof ElysiaStatus) {
+        return sent;
+      }
+    },
+
     /** Every browser of the fleet, for Settings, the project page and every browser view. */
     list(): ListedBrowser[] {
-      return db.browsers.list().map((row) => ({
-        ...row,
-        machineName: deps.machineName(row.machineId),
-        ...live.get(liveKey(row.machineId, row.key)),
-      }));
+      return db.browsers.list().map((row) => {
+        const relay = passkeyRelayOf.get(row.machineId);
+        return {
+          ...row,
+          machineName: deps.machineName(row.machineId),
+          ...live.get(liveKey(row.machineId, row.key)),
+          ...(relay ? { passkeyRelay: relay } : {}),
+        };
+      });
+    },
+
+    /**
+     * A FIDO caBLE BLE advertisement captured on `sourceMachineId`: relayed
+     * to every other machine's browser whose take-over is active, as
+     * `browser.injectAdvert`. Validates the service data and its age first.
+     * `heard` is told of each take-over's browser as it is found (the scan
+     * that caught the advert can stop) and again once the advert reached it.
+     */
+    async relayPasskeyAdvert(
+      sourceMachineId: string,
+      args: BrowserPasskeyAdvertArgs,
+      heard: {
+        captured: (key: BrowserKey) => void;
+        injected: (key: BrowserKey) => void;
+      }
+    ): Promise<void> {
+      const from = deps.machineName(sourceMachineId);
+      // The base64 of the service data must decode to exactly 20 bytes.
+      const size = Buffer.from(args.serviceData, "base64").length;
+      if (size !== 20) {
+        console.warn(
+          `[browser] passkey advert from ${from}: service data is ${size} bytes, expected 20`
+        );
+        return;
+      }
+      const age = Date.now() - args.capturedAt;
+      if (age > PASSKEY_ADVERT_MAX_AGE_MS) {
+        console.warn(
+          `[browser] passkey advert from ${from}: ${age} ms old, dropped (max ${PASSKEY_ADVERT_MAX_AGE_MS} ms)`
+        );
+        return;
+      }
+      const targets = db.browsers
+        .list()
+        .filter((row) => row.machineId !== sourceMachineId && row.takeover);
+      if (targets.length === 0) {
+        return;
+      }
+      console.info(
+        `[browser] relaying passkey advert from ${from} to ${targets.length} browser(s)`
+      );
+      await Promise.all(
+        targets.map(async ({ machineId, key }) => {
+          heard.captured(key);
+          try {
+            await deps.call(
+              machineId,
+              BROWSER_INJECT_ADVERT,
+              [
+                {
+                  key,
+                  serviceData: args.serviceData,
+                  rssi: args.rssi,
+                  capturedAt: args.capturedAt,
+                  sourceMachineId,
+                } satisfies BrowserInjectAdvertArgs,
+              ],
+              PASSKEY_ADVERT_MAX_AGE_MS
+            );
+            heard.injected(key);
+          } catch (error) {
+            console.warn(
+              `[browser] passkey inject to ${deps.machineName(machineId)} (${key}) failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        })
+      );
+    },
+
+    /** What `machineId` reported it can do for passkey relay; absent when neither is available. */
+    relayCapability(machineId: string): PasskeyRelayCapability | undefined {
+      return passkeyRelayOf.get(machineId);
     },
   };
   return browsers;
@@ -759,5 +899,25 @@ export const browserRoutes = (browsers: Browsers) =>
         }
         const removed: { ok: true } = { ok: true };
         return (await browsers.remove(key, body.machineId)) ?? removed;
+      }
+    )
+    .post(
+      "/api/browsers/:key/passkey-advert",
+      {
+        body: t.Object({
+          advert: t.String({ minLength: 1 }),
+          machineId: t.Optional(t.String({ minLength: 1 })),
+        }),
+      },
+      async ({ params, body }) => {
+        const key = keyOf(params.key);
+        if (key instanceof ElysiaStatus) {
+          return key;
+        }
+        const relayed: { ok: true } = { ok: true };
+        return (
+          (await browsers.relayAdvert(key, body.machineId, body.advert)) ??
+          relayed
+        );
       }
     );

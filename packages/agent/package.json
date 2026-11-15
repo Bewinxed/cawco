@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     "./browser": "./src/browser/browsers.ts",
+    "./passkey-inject": "./src/browser/passkey-inject.ts",
+    "./passkey-capture": "./src/browser/passkey-capture.ts",
     "./capabilities": "./src/capabilities.ts",
     "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
@@ -47,6 +49,7 @@
     "effect": "^4.0.0",
     "es-module-lexer": "3.0.4",
     "image-size": "2.0.4",
+    "jsqr": "1.4.0",
     "pdfjs-dist": "6.5.438",
     "playwright-core": "^1.65.0",
     "react": "19.3.0",

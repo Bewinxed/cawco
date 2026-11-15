@@ -133,11 +133,21 @@ export interface BrowserRow {
   why?: string;
 }
 
+/** What a machine can do for passkey relay. */
+export interface PasskeyRelayCapability {
+  /** Has a BLE adapter for capturing FIDO adverts. */
+  hasBle: boolean;
+  /** Has /dev/vhci for injecting adverts into containers. */
+  hasVhci: boolean;
+}
+
 /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
 export interface BrowserFrame {
   browsers: BrowserRow[];
   kind: "browsers";
   machineId: string;
+  /** What this machine can do for passkey relay; absent when neither is available. */
+  passkeyRelay?: PasskeyRelayCapability;
   runtime: BrowserRuntime;
 }
 
@@ -405,6 +415,8 @@ export interface ListedBrowser {
   name: string;
   /** The origin of the page the person's view shows; absent while it shows none. */
   origin?: string;
+  /** What this browser's machine can do for passkey relay; absent when neither is available. */
+  passkeyRelay?: PasskeyRelayCapability;
   /** How far an image build is, while `state` is `pulling` or `building`. */
   progress?: { done: number; total: number; what: "image" };
   /** The project of a `project:` key; null for a machine's own browser. */
@@ -439,6 +451,32 @@ export interface BrowserHandedBackFrame extends BrowserHandback {
   why: "person" | "unwatched" | "stopped";
 }
 
+/**
+ * A FIDO URI extracted from a browser's page during a take-over, for the
+ * person to scan with their phone's camera. The daemon sends it to the hub,
+ * which broadcasts it as it arrives to every dashboard socket (the app's
+ * included): a dashboard renders the QR, a Chrome extension, when present,
+ * shows it as a popup, and the app starts the caBLE transport. Expires after
+ * {@link PASSKEY_QR_TTL_MS}.
+ */
+export interface PasskeyQrFrame {
+  /** The FIDO CTAP URI the QR encodes (`FIDO:/`). */
+  fidoUri: string;
+  instanceId?: undefined;
+  /** The browser the passkey prompt appeared in. */
+  key: BrowserKey;
+  kind: "passkey_qr";
+  /** The machine whose browser showed the QR. */
+  machineId: string;
+  /** ms epoch when the QR was read from the page; it expires at `raisedAt + PASSKEY_QR_TTL_MS`. */
+  raisedAt: number;
+  /** The relying party's origin, when the hub could read it (`https://github.com`). */
+  rpOrigin?: string;
+}
+
+/** How long a passkey QR is valid, ms: the CTAP spec's 5 minutes, as the authenticator times it. */
+export const PASSKEY_QR_TTL_MS = 5 * 60_000;
+
 /** Whether `value` is a {@link BrowserKey}. */
 export const isBrowserKey = (value: unknown): value is BrowserKey =>
   typeof value === "string" && BROWSER_KEY.test(value);
@@ -447,3 +485,77 @@ const BROWSER_KEY = /^(?:project|machine):[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 
 /** A key as a name the runtime and the filesystem take: `project:abc` → `project-abc`. */
 export const browserSlug = (key: BrowserKey): string => key.replace(":", "-");
+
+/**
+ * A FIDO caBLE BLE advertisement captured on a machine the hub asked to scan
+ * (`passkey.scanStart`), sent hub-ward as a {@link PasskeyAdvertFrame}. The
+ * hub forwards it to every other machine with a live browser whose take-over
+ * is active. The service data is the raw 20-byte payload from the BLE
+ * advertisement under UUID 0000fff9-0000-1000-8000-00805f9b34fb,
+ * base64-encoded.
+ */
+export interface BrowserPasskeyAdvertArgs {
+  /** ms epoch when the advert was captured. */
+  capturedAt: number;
+  /** The RSSI of the captured advertisement (informational). */
+  rssi: number;
+  /** The raw 20-byte BLE service data, base64-encoded. */
+  serviceData: string;
+}
+
+/**
+ * Hub → daemon: inject this relayed FIDO BLE advertisement into the
+ * browser of `key`, so its Chromium's caBLE discovery sees it as a local
+ * BLE device. The service data and metadata are as the capture machine
+ * sent them.
+ */
+export const BROWSER_INJECT_ADVERT = "browser.injectAdvert";
+export interface BrowserInjectAdvertArgs {
+  /** ms epoch when the advert was captured on the source machine. */
+  capturedAt: number;
+  key: BrowserKey;
+  /** The RSSI of the original advertisement. */
+  rssi: number;
+  /** The raw 20-byte BLE service data, base64-encoded. */
+  serviceData: string;
+  /** The machine that captured it. */
+  sourceMachineId: string;
+}
+
+/** Daemon-originated: a FIDO BLE advertisement this machine captured, for the hub to relay. */
+export interface PasskeyAdvertFrame extends BrowserPasskeyAdvertArgs {
+  instanceId?: undefined;
+  kind: "passkey_advert";
+}
+
+/** How old a relayed advert may be before the inject end drops it. */
+export const PASSKEY_ADVERT_MAX_AGE_MS = 5000;
+
+// ---------------------------------------------------------------------------
+// Passkey relay: the hub tells machines to scan for BLE passkey adverts, and
+// tells dashboards how it is going.
+// ---------------------------------------------------------------------------
+
+/** Hub → daemon: start BLE scanning for the passkey advert of `key`'s take-over. */
+export const PASSKEY_SCAN_START = "passkey.scanStart";
+
+/** Hub → daemon: stop BLE scanning for `key`. */
+export const PASSKEY_SCAN_STOP = "passkey.scanStop";
+export interface PasskeyScanArgs {
+  key: BrowserKey;
+}
+
+/** The current phase of a passkey relay attempt. */
+export type PasskeyRelayStatus =
+  "scanning" | "captured" | "injected" | "authenticated" | "timeout" | "no_ble";
+
+/** Hub → dashboards: passkey relay status update. */
+export interface PasskeyStatusFrame {
+  /** The browser key that needs the passkey. */
+  key: BrowserKey;
+  kind: "passkey_status";
+  /** Which machines are scanning (machine names). */
+  scanningMachines?: string[];
+  /** Current state of the relay attempt. */
+  status: PasskeyRelayStatus;
+}

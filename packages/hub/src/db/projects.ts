@@ -40,6 +40,7 @@ import {
   type HubFolder,
   instances,
   type OpenSubagent,
+  passkeySettings,
   projectAccounts,
   projectLinks,
   projectNotes,
@@ -293,6 +294,8 @@ export interface ProjectsDb {
   }) => boolean;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
+  /** Whether passkey relay is enabled fleet-wide; false before any is set. */
+  readonly passkeyRelayEnabled: () => boolean;
   /** A project with its places, or undefined for an id the hub does not hold. */
   readonly project: (id: string) => ProjectRow | undefined;
   /** The oldest project that links `remote` (normalised). */
@@ -396,6 +399,8 @@ export interface ProjectsDb {
   readonly sessionLimits: () => SessionLimits;
   /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
   readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
+  /** Whether passkey relay is enabled fleet-wide. */
+  readonly setPasskeyRelay: (enabled: boolean) => void;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
@@ -505,6 +510,14 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
       .from(spendSettings)
       .where(eq(spendSettings.id, SPEND_SETTINGS_ID))
       .get()?.value ?? "both";
+
+  /** Whether passkey relay is enabled across the fleet (`passkey_settings`): false until set. */
+  const fleetPasskeyRelay = (): boolean =>
+    db
+      .select({ enabled: passkeySettings.enabled })
+      .from(passkeySettings)
+      .where(eq(passkeySettings.id, "passkey"))
+      .get()?.enabled ?? false;
 
   /**
    * What stands above the projects read: their areas (`areaIds`, else every
@@ -710,6 +723,13 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
     setProjectCap: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
+    setPasskeyRelay: (enabled) => {
+      db.insert(passkeySettings)
+        .values({ id: "passkey", enabled })
+        .onConflictDoUpdate({ target: passkeySettings.id, set: { enabled } })
+        .run();
+    },
+    passkeyRelayEnabled: fleetPasskeyRelay,
     setSpendOnCap: (onCap) => {
       db.insert(spendSettings)
         .values({ id: SPEND_SETTINGS_ID, onCap })

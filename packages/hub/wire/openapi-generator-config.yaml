@@ -147,6 +147,7 @@ typeOverrides:
     OwedMoveWait: OpenEnums.OwedMoveWait
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
+    PasskeyRelayStatus: OpenEnums.PasskeyRelayStatus
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PersonReadState: OpenEnums.PersonReadState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
