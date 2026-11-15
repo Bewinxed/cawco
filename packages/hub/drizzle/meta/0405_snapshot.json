@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2ad983db-1580-4946-9846-dc4727a9e868",
+  "id": "9ba598e8-c636-4bc8-ad9e-cf2357b000ea",
   "prevId": "269c2c23-f20f-41ff-9e31-a771916ef44a",
   "tables": {
     "account_bench": {
@@ -10152,6 +10152,13 @@
         "request_unread": {
           "name": "request_unread",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "held_told_at": {
+          "name": "held_told_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

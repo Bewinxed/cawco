@@ -598,8 +598,8 @@ export interface QueuedDelegate {
   queuedAt: string;
   state: "queued";
   title: string;
-  /** Held: why it never starts, its call as the hub kept it not reading (core `workWords.queuedRequestUnread`); null otherwise. */
-  unread: string | null;
+  /** Held: its kept call does not read, so it never starts (db/project-work.ts `QueuedWorkItemRow`). */
+  unreadable: boolean;
 }
 
 /**
@@ -1796,6 +1796,9 @@ export const createWorkItems = ({
       queued: {
         owns: [...new Set((request.owns ?? []).map(globOf))],
         paused: (machineId && machinePaused(machineId)) || null,
+        ...(queued.requestUnread === null
+          ? {}
+          : { unread: queued.requestUnread }),
       },
       createdAt: queued.queuedAt.getTime(),
       endedAt: null,
@@ -2751,9 +2754,9 @@ export const createWorkItems = ({
    * whose call as kept did not read (`requestUnread`), never starts: none
    * of its call is read as what it asked, so it is neither started with
    * its limits, its may-start, its outputs or its owned files read as none
-   * nor dropped with what it held. Its parent is told once a process why,
-   * as it waits for a report, and it waits in the tray until its parent
-   * withdraws it ({@link withdrawQueued}).
+   * nor dropped with what it held. Its parent is told why once, the row
+   * marked (`heldToldAt`), as it waits for a report, and it waits in the
+   * tray until its parent withdraws it ({@link withdrawQueued}).
    */
   const startQueued = async (queued: QueuedWorkItemRow): Promise<void> => {
     const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
@@ -2762,8 +2765,8 @@ export const createWorkItems = ({
       return;
     }
     if (queued.requestUnread !== null) {
-      if (!toldHeld.has(queued.id)) {
-        toldHeld.add(queued.id);
+      if (queued.heldToldAt === null) {
+        db.heldToldQueued(queued.id, new Date());
         tell(
           parent,
           workWords.queuedHeld(
@@ -2804,8 +2807,6 @@ export const createWorkItems = ({
 
   /** Queued delegates whose start is running now: a withdraw would race their filed item. */
   const startingQueued = new Set<string>();
-  /** Held queued delegates whose parent this process has told why ({@link startQueued}). */
-  const toldHeld = new Set<string>();
 
   /** The live item and the globs that hold a queued delegate back; nothing once its files are free. */
   const heldBy = (
@@ -5453,10 +5454,7 @@ export const createWorkItems = ({
           title: queued.title,
           state: "queued",
           queuedAt: queued.queuedAt.toISOString(),
-          unread:
-            queued.requestUnread === null
-              ? null
-              : workWords.queuedRequestUnread(queued.requestUnread),
+          unreadable: queued.requestUnread !== null,
           heldBy: held
             ? {
                 itemId: held.item.id,

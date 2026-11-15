@@ -612,10 +612,13 @@
     }
     return SPAN.test(at) ? `failed ${at} ago` : `failed ${at}`;
   };
-  /** Why a queued delegate waits, as its chip says it: its machine's pause, or the files it owns. */
+  /** Why a queued delegate waits, as its chip says it: held, its kept request unreadable; its machine's pause; or the files it owns. */
   const queuedWords = (item: TrayChild): string => {
     if (!item.queued) {
       return "";
+    }
+    if (item.queued.unread !== undefined) {
+      return "held: request unreadable";
     }
     return item.queued.paused
       ? `queued: ${item.queued.paused}`

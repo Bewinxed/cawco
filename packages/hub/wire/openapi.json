@@ -62045,7 +62045,7 @@
             "type": "string"
           },
           "queued": {
-            "description": "While it waits to start: the files it owns, which a live item owns too\n(`src/theme/**`), and the pause of the machine it starts on (\"obelisk is\npaused until 00:57\"), when that is what it waits for; null once it has\nstarted.",
+            "description": "While it waits to start: the files it owns, which a live item owns too\n(`src/theme/**`), and the pause of the machine it starts on (\"obelisk is\npaused until 00:57\"), when that is what it waits for; null once it has\nstarted. `unread`: held, never started, its kept call as stored, which\ndoes not read as a delegate call (hub queued_work_items.request_unread).",
             "type": "object",
             "properties": {
               "owns": {
@@ -62055,6 +62055,9 @@
                 }
               },
               "paused": {
+                "type": "string"
+              },
+              "unread": {
                 "type": "string"
               }
             },

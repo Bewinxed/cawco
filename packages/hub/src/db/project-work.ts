@@ -247,7 +247,12 @@ export type QueuedWorkItemRow = Pick<
 > &
   (
     | { request: QueuedCall; requestUnread: null }
-    | { request: QueuedPlace; requestUnread: string }
+    | {
+        request: QueuedPlace;
+        requestUnread: string;
+        /** When its parent was told it is held; null: not yet. */
+        heldToldAt: Date | null;
+      }
   );
 
 /** Its paths named as {@link MachinePath}, which the API's schema reads as the string it is on the wire. */
@@ -315,6 +320,8 @@ export interface WorkRowsDb {
     parentInstanceId: string,
     group: string
   ) => WorkItemRow[];
+  /** Marks when a held queued delegate's parent was told it is held: it is told once. */
+  readonly heldToldQueued: (id: string, at: Date) => void;
   /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
   readonly heldWorkspaces: () => WorkspaceRow[];
   /**
@@ -698,6 +705,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             queuedInstanceId,
             request,
             requestUnread,
+            heldToldAt,
             ...row
           }): QueuedWorkItemRow => {
             const owned = globs.get(row.id);
@@ -710,7 +718,12 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             };
             // The table's check keeps exactly one of the two set.
             return request === null
-              ? { ...row, request: place, requestUnread: requestUnread ?? "" }
+              ? {
+                  ...row,
+                  request: place,
+                  requestUnread: requestUnread ?? "",
+                  heldToldAt,
+                }
               : {
                   ...row,
                   request: { ...request, ...place },
@@ -750,6 +763,12 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           requestUnread: null,
         };
       }),
+    heldToldQueued: (id, at) => {
+      db.update(queuedWorkItems)
+        .set({ heldToldAt: at })
+        .where(eq(queuedWorkItems.id, id))
+        .run();
+    },
     dropQueuedWorkItem: (id) => {
       db.delete(queuedWorkItems).where(eq(queuedWorkItems.id, id)).run();
     },

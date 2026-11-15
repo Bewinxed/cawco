@@ -228,7 +228,7 @@ export const workWords = {
    * its schema, so it does not start as though it asked nothing.
    */
   queuedAskUnread: (stored: string) =>
-    `its queued start is held and will not start: what the delegate call that named it asked, “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, does not read as an attempt's ask, so the hub cannot tell its brief, its limits, what it may start or the files it owns. Start or move the task again, which replaces it`,
+    `Queued start held: delegate ask unreadable (“${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”). Starting or moving the task replaces it.`,
   /** How long a session with no minutes budget may sleep and be woken. */
   aDay: "a day",
   /** The limit of an item with a minutes budget. */
