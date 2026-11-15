@@ -36,7 +36,7 @@ export interface AgentPorts {
   readonly moveProgress: (frame: MoveProgressFrame) => void;
   /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
   readonly opencodeAccounts: OpencodeAccountsHost;
-  /** A FIDO URI read off a take-over's passkey QR (browser/shield.ts). */
+  /** The FIDO URI of a passkey QR a take-over's bridge made for a WebAuthn ceremony (browser/shield.ts). */
   readonly passkeyQr: (frame: PasskeyQrFrame) => void;
   /** The stream relay's state (browser/relay.ts). */
   readonly relay: (frame: RelayFrame) => void;

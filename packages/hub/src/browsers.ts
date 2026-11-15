@@ -453,7 +453,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       told();
     },
 
-    /** A passkey QR extracted from a browser's page: kept per browser key, so a dashboard that connects later gets the latest. */
+    /** A passkey QR made for a browser's WebAuthn ceremony: kept per browser key, so a dashboard that connects later gets the latest. */
     heardPasskeyQr(frame: PasskeyQrFrame): void {
       passkeyQrs.set(frame.key, frame);
     },

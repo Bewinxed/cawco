@@ -247,6 +247,7 @@ import {
   askedPage,
   browserViewers,
   handBackBrowser,
+  heardPasskeyAdvert,
   restoreShields,
   shieldBrowser,
 } from "./browser/shield";
@@ -3810,11 +3811,13 @@ const startDaemon = (rediscover = false) =>
       return Promise.resolve(true);
     });
     // ── Passkey proximity relay ────────────────────────────────────────
-    // Inject side: receives relayed BLE adverts from the hub and writes
-    // them into the machine's virtual HCI adapter so Chromium's caBLE
-    // discovery sees them (passkey-inject.ts). A browser container's start
-    // brings the adapter up (container-host.ts); an advert brings it up
-    // again if it was lost.
+    // Inject side: receives relayed BLE adverts from the hub. One the
+    // take-over's passkey bridge is waiting for goes to it, which meets the
+    // phone on the caBLE tunnel (passkey-bridge.ts); any other is written
+    // into the machine's virtual HCI adapter so Chromium's caBLE discovery
+    // sees it (passkey-inject.ts). A browser container's start brings the
+    // adapter up (container-host.ts); an advert brings it up again if it was
+    // lost.
     supervisor.declareControl(BROWSER_INJECT_ADVERT, async (args) => {
       const { key, serviceData, capturedAt } = args as BrowserInjectAdvertArgs;
 
@@ -3822,12 +3825,15 @@ const startDaemon = (rediscover = false) =>
       if (Date.now() - capturedAt > PASSKEY_ADVERT_MAX_AGE_MS) {
         return true;
       }
+      const data = Buffer.from(serviceData, "base64");
+      if (await heardPasskeyAdvert(key, data)) {
+        return true;
+      }
       if (!vhciAvailable()) {
         throw new Error(
           "Passkey relay needs the hci_vhci kernel module. Run: sudo modprobe hci_vhci"
         );
       }
-      const data = Buffer.from(serviceData, "base64");
       await passkeyInjector.inject(data);
       console.info(`[passkey] injected advert for ${key} (${data.length}B)`);
       return true;

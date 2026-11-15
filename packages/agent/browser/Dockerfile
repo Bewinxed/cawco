@@ -9,12 +9,10 @@ FROM ghcr.io/m1k1o/neko/chromium:3.2.0
 # desktop's pointer (xorg.conf). ibus-gtk3 is Chromium's input method
 # (chromium.conf's GTK_IM_MODULE), its module alone, with no ibus daemon.
 # bluez: BLE stack for passkey proximity relay (virtual HCI adapter, agent
-# passkey-inject.ts). x11-utils (xdpyinfo) and x11-apps (xwd) read the X display;
-# imagemagick turns xwd's dump into a PPM, which the agent reads for a passkey
-# dialog's QR (passkey-qr-capture.ts).
+# passkey-inject.ts).
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3 bluez x11-utils x11-apps imagemagick; \
+    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3 bluez; \
     apt-get clean -y; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
@@ -27,4 +25,7 @@ ENV NEKO_DESKTOP_INPUT_ENABLED=false
 
 COPY chromium.conf /etc/neko/supervisord/chromium.conf
 COPY policies.json /etc/chromium/policies/managed/policies.json
+# CawCo's WebAuthn proxy (passkey-extension/background.js), loaded by
+# chromium.conf's --load-extension and allowed by policies.json.
+COPY passkey-extension/ /opt/cawco/passkey-extension/
 COPY --chown=neko preferences.json /home/neko/.config/chromium/Default/Preferences

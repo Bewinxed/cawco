@@ -326,6 +326,8 @@ export default {
         "src/file-viewer/viewer.ts",
         // CawCo's OpenCode plugin, a Bun.build entrypoint (src/harnesses/opencode-plugin.ts, scripts/build-binary.ts) that OpenCode loads from a directory.
         "src/harnesses/opencode-plugin-module.ts",
+        // The passkey bridge's service worker, which Chromium loads from its manifest: browser/passkey-extension/manifest.json.
+        "browser/passkey-extension/background.js",
       ],
       // System binaries the passkey relay spawns: BlueZ's `bluetoothctl` (src/browser/passkey-capture.ts) and macOS's `swift` there and `system_profiler` (src/browser/passkey-detect.ts) to find and scan a BLE adapter, and systemd's `busctl` (src/browser/passkey-inject.ts) to find the virtual adapter on the system bus.
       ignoreBinaries: ["bluetoothctl", "busctl", "swift", "system_profiler"],
