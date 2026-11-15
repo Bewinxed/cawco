@@ -3711,15 +3711,6 @@ const StreamRelayStateShape = declared(
 export const StreamRelayStateSchema = StreamRelayStateShape;
 export type StreamRelayStateOutput = z.output<typeof StreamRelayStateShape>;
 
-const TrackerSyncStateShape = declared(
-  z.enum(["syncing", "synced", "refused"]),
-  "TrackerSyncState",
-  "packages/core/src/trackers.ts"
-);
-export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
-  TrackerSyncStateShape;
-export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
-
 const ToolCopyShape = declared(
   z.union([
     z.object({
@@ -3742,6 +3733,15 @@ const ToolWantsShape = declared(
 );
 export const ToolWantsSchema = ToolWantsShape;
 export type ToolWantsOutput = z.output<typeof ToolWantsShape>;
+
+const TrackerSyncStateShape = declared(
+  z.enum(["syncing", "synced", "refused"]),
+  "TrackerSyncState",
+  "packages/core/src/trackers.ts"
+);
+export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
+  TrackerSyncStateShape;
+export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
 
 const WaitWitnessShape = declared(
   z.object({ target: z.string(), value: z.string() }),

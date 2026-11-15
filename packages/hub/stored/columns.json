@@ -505,6 +505,40 @@
       "harness"
     ]
   },
+  "agent_tools.copy": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "by": {
+            "type": "string",
+            "const": "cawco"
+          },
+          "takenOver": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "by"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": "string",
+            "const": "person"
+          }
+        },
+        "required": [
+          "by"
+        ]
+      }
+    ]
+  },
   "agent_tools.signin": {
     "type": "object",
     "properties": {
@@ -523,6 +557,13 @@
       "state"
     ]
   },
+  "agent_tools.started_by": {
+    "type": "string",
+    "enum": [
+      "cawco",
+      "person"
+    ]
+  },
   "agent_tools.state": {
     "type": "string",
     "enum": [
@@ -531,6 +572,21 @@
       "installing",
       "failed",
       "unsupported"
+    ]
+  },
+  "agent_tools.wants": {
+    "type": "object",
+    "properties": {
+      "orNewer": {
+        "type": "boolean"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "orNewer",
+      "version"
     ]
   },
   "agents.auth": {
@@ -14749,6 +14805,13 @@
       "running",
       "answered",
       "interrupted"
+    ]
+  },
+  "tool_update_settings.updates": {
+    "type": "string",
+    "enum": [
+      "update",
+      "ask"
     ]
   },
   "tracker_bindings.cursor": {
