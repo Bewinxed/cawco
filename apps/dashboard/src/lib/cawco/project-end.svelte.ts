@@ -8,7 +8,8 @@
  *
  * Bringing a forgotten project back is here too, for the two places that
  * offer it: the toast after a forget, and each row of Forgotten projects
- * (`/project/forgotten`). It lands in the project's page. A refusal is never
+ * (`/project/forgotten`). It lands in the project's page, which says each
+ * row the restore held back (restore-held.svelte.ts). A refusal is never
  * a toast: it is kept (refusals.svelte.ts) and said on its row in Forgotten
  * projects, with Try again, through a reload.
  */
@@ -19,6 +20,7 @@ import { toast } from "#lib/platform/toasts.js";
 import { goto } from "$app/navigation";
 import type { ProjectRow } from "./projects";
 import { refusals } from "./refusals.svelte";
+import { restoreHeld } from "./restore-held.svelte";
 import type { EndKind } from "./stop-work.svelte";
 import { restoreProject, StandingRefusal } from "./stores/projects.svelte";
 
@@ -72,6 +74,8 @@ export async function bringBack(
   try {
     const restored = await restoreProject(id, ask);
     refusals.delete(bringBackKey(id));
+    // What it held back is said on the page it lands in.
+    restoreHeld.set(restored.id, restored.held);
     await goto(`/project/${encodeURIComponent(restored.id)}`);
     return true;
   } catch (error) {

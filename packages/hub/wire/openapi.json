@@ -52357,12 +52357,19 @@
             "$ref": "#/components/schemas/ForgottenBrings",
             "description": "What came back."
           },
+          "held": {
+            "description": "Every row held back, each named: its record stays in the trash while there is one.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestoreHeldRow"
+            }
+          },
           "id": {
             "type": "string"
           },
           "left": {
             "type": "object",
-            "description": "Rows left out, by table: a row made since holds their key, or what they named went since."
+            "description": "Rows left out, by table: those {@link held} names, counted; `browsers`: its browsers no machine keeps now."
           },
           "name": {
             "type": "string"
@@ -52370,6 +52377,7 @@
         },
         "required": [
           "brought",
+          "held",
           "id",
           "left",
           "name"
@@ -54378,6 +54386,165 @@
           "wake-ups-unknown",
           "workspace",
           "write"
+        ]
+      },
+      "RestoreHeldRow": {
+        "description": "One row a restore held back: its table, the item's title or id where it has one, and why.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Its primary key, `/`-joined when it has several; null when its table has none.",
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          },
+          "title": {
+            "description": "Its title, or its name; null when its table keeps neither.",
+            "type": "string"
+          },
+          "why": {
+            "$ref": "#/components/schemas/RestoreHeldWhy"
+          }
+        },
+        "required": [
+          "table",
+          "why"
+        ]
+      },
+      "RestoreHeldWhy": {
+        "description": "Why a row of a forgotten project's record stayed out of its restore\n(hub db forget.ts): its record stays in the trash, the row in it.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "constraint"
+                ]
+              }
+            },
+            "required": [
+              "detail",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "depends"
+                ]
+              },
+              "table": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "table"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "orphan"
+                ]
+              },
+              "parent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string"
+              },
+              "issue": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "shape"
+                ]
+              }
+            },
+            "required": [
+              "column",
+              "issue",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "table"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "taken"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unread"
+                ]
+              }
+            },
+            "required": [
+              "columns",
+              "kind"
+            ]
+          }
         ]
       },
       "ResultArtifact": {

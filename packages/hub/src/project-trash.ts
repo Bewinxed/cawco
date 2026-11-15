@@ -35,11 +35,13 @@
  *   never listed: its rows live on in the project that kept them.
  *
  * Nothing in the trash is erased: a restore moves its folder back and drops
- * its record, whose rows are live again.
+ * its record, whose rows are live again. A restore that held rows back
+ * (db forget.ts) keeps the record whole beside the trash's entries, as
+ * `<entry>.held.json`, and names each row it held back in its answer.
  */
 
 import { rmSync } from "node:fs";
-import { readdir, readFile, rm, stat } from "node:fs/promises";
+import { readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_NAME } from "@cawco/core/artifact-kinds";
 import type { BrowserKey } from "@cawco/core/browser";
@@ -50,6 +52,7 @@ import type {
   ForgottenPlace,
   ForgottenProject,
   ProjectRestored,
+  RestoreHeldRow,
 } from "@cawco/core/forgotten-project";
 import { machineCalled } from "@cawco/core/machine-names";
 import { type PlaceNesting, placeNesting } from "@cawco/core/place-nesting";
@@ -58,11 +61,17 @@ import {
   readRecord,
   writeStateFileSync,
 } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { type ProjectRows, ProjectRowsSchema } from "./db/forget";
+import {
+  migratedRows,
+  RecordMigrationsSchema,
+  recordSchema,
+} from "./db/restore-schema";
 import {
   folderCommitsCarrying,
   hasProjectFolder,
@@ -89,21 +98,31 @@ const KeptBrowserSchema = z.object({
   host: z.string(),
 });
 
+/** What every forget's record holds, whichever version wrote it. */
+const ForgottenSchema = z.object({
+  kind: z.literal("forgotten"),
+  id: z.string(),
+  name: z.string(),
+  /** ms since the epoch. */
+  forgottenAt: z.number(),
+  /** The presence id of the client that asked; null when none said. */
+  by: z.string().nullable(),
+  rows: ProjectRowsSchema,
+  /** Its browsers; none in a record written before the forget kept them. */
+  browsers: z.array(KeptBrowserSchema).default([]),
+});
+
 /** What a forget writes beside the folder, or a fold: the entry's own word on what it is. */
 const EntryRecordSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("forgotten"),
-    version: z.literal(1),
-    id: z.string(),
-    name: z.string(),
-    /** ms since the epoch. */
-    forgottenAt: z.number(),
-    /** The presence id of the client that asked; null when none said. */
-    by: z.string().nullable(),
-    rows: ProjectRowsSchema,
-    /** Its browsers; none in a record written before the forget kept them. */
-    browsers: z.array(KeptBrowserSchema).default([]),
-  }),
+  z.discriminatedUnion("version", [
+    /** Written before a record named its schema: a restore places it by its columns (db restore-schema.ts). */
+    ForgottenSchema.extend({ version: z.literal(1) }),
+    ForgottenSchema.extend({
+      version: z.literal(2),
+      /** The migrations the database had applied as it was forgotten: its rows' schema. */
+      migrations: RecordMigrationsSchema,
+    }),
+  ]),
   z.object({
     kind: z.literal("folded"),
     version: z.literal(1),
@@ -136,6 +155,16 @@ const TRASH_MACHINE = "hub";
 const recordPath = (entry: string): string =>
   join(PROJECT_TRASH_DIR, `${entry}${RECORD}`);
 
+/**
+ * A record whose restore held rows back (db forget.ts), kept whole beside
+ * the trash's entries and out of them: its project is live again. Deleting
+ * the project for good deletes it ({@link purgeTrash}).
+ */
+const HELD = ".held.json";
+
+const heldPath = (entry: string): string =>
+  join(PROJECT_TRASH_DIR, `${entry}${HELD}`);
+
 /** One entry in the trash: what it holds, read off its names. */
 interface Entry {
   at: number;
@@ -161,7 +190,8 @@ const entries = async (): Promise<Entry[]> => {
   );
   const found = new Map<string, Entry>();
   for (const one of names) {
-    const record = one.isFile() && one.name.endsWith(RECORD);
+    const record =
+      one.isFile() && one.name.endsWith(RECORD) && !one.name.endsWith(HELD);
     if (!(record || one.isDirectory())) {
       continue;
     }
@@ -438,30 +468,36 @@ const folderBrings = (
   tasksIn,
 });
 
-/** Counts by table, added. */
-/** A restore's places of a kind no longer kept (db forget.ts `retired`), said in its log. */
-const sayRetired = (
-  id: string,
-  retired: Partial<Record<string, number>>
-): void => {
-  const places = retired.project_places ?? 0;
-  if (places > 0) {
-    console.log(
-      `${projectTrashWords.restoreLine(id)} left out ${places} place(s) of a kind this hub no longer keeps: \`workspace\`, which migration 0322 deleted`
-    );
+/** Why a record's schema can't be placed (db restore-schema.ts), in words. */
+const unplacedWords = (
+  name: string,
+  placed: Extract<ReturnType<typeof recordSchema>, { ok: false }>
+): string => {
+  switch (placed.why) {
+    case "newer":
+      return projectTrashWords.schemaNewer(name, placed.unknown.length);
+    case "none":
+      return projectTrashWords.schemaNone(name);
+    case "several":
+      return projectTrashWords.schemaSeveral(
+        name,
+        placed.tags.at(0) ?? "",
+        placed.tags.at(-1) ?? ""
+      );
+    default:
+      return unhandled("record's schema", placed);
   }
 };
 
-const summed = (
-  ...counts: Record<string, number>[]
+/** How many rows of each table a restore held back. */
+const heldByTable = (
+  held: readonly RestoreHeldRow[]
 ): Record<string, number> => {
-  const sum: Record<string, number> = {};
-  for (const one of counts) {
-    for (const [table, n] of Object.entries(one)) {
-      sum[table] = (sum[table] ?? 0) + n;
-    }
+  const counts: Record<string, number> = {};
+  for (const one of held) {
+    counts[one.table] = (counts[one.table] ?? 0) + 1;
   }
-  return sum;
+  return counts;
 };
 
 /**
@@ -486,6 +522,76 @@ const newestEntry = async (id: string, forgottenAt: number | undefined) => {
       })
     : undefined;
   return { entry, record };
+};
+
+/** A forget's record, whichever version wrote it. */
+type ForgottenRecord = Extract<
+  z.infer<typeof EntryRecordSchema>,
+  { kind: "forgotten" }
+>;
+
+/**
+ * Project `id`'s record's rows as today's schema holds them: placed at the
+ * schema it was made at and brought through every migration since (db
+ * restore-schema.ts), its cut links as it keeps them; or why not, in words.
+ */
+const migratedRecord = async (id: string, record: ForgottenRecord) => {
+  const placed = recordSchema(
+    record.rows,
+    record.version === 2 ? record.migrations : undefined
+  );
+  if (!placed.ok) {
+    return problem(422, {
+      code: "restore-record-unreadable",
+      detail: unplacedWords(record.name, placed),
+    });
+  }
+  console.log(
+    `${projectTrashWords.restoreLine(id)} its record's rows, at ${placed.found === "marked" ? "the schema it names" : `${placed.found.tag}, found by its columns`}, brought through the migrations since on a scratch database`
+  );
+  const migrated = await migratedRows(id, record.rows, placed.journal).catch(
+    (error: unknown) =>
+      problem(422, {
+        code: "restore-record-unreadable",
+        detail: projectTrashWords.migrationFailed(
+          record.name,
+          error instanceof Error ? error.message : String(error)
+        ),
+      })
+  );
+  if (migrated instanceof ElysiaStatus) {
+    return migrated;
+  }
+  if (!migrated.ok) {
+    return problem(422, {
+      code: "restore-record-unreadable",
+      detail: projectTrashWords.columnMissing(record.name, migrated.missing),
+    });
+  }
+  return { tables: migrated.tables, unlinked: record.rows.unlinked };
+};
+
+/**
+ * The entry's record once its rows went back: dropped when every row did,
+ * else kept whole beside the trash's entries ({@link HELD}), out of the list
+ * of forgotten projects (the project is live), each row held back said in
+ * the log.
+ */
+const keepHeld = async (
+  id: string,
+  entry: string,
+  held: readonly RestoreHeldRow[]
+): Promise<void> => {
+  if (held.length === 0) {
+    await rm(recordPath(entry), { force: true });
+    return;
+  }
+  await rename(recordPath(entry), heldPath(entry));
+  for (const one of held) {
+    console.log(
+      `${projectTrashWords.restoreLine(id)} held back ${projectTrashWords.heldRow(one)}`
+    );
+  }
 };
 
 /** What a forgotten project held, as its record names it: what a delete for good removes of it. */
@@ -613,7 +719,7 @@ export const diskPlaces = (
     }));
 };
 
-/** Every entry of project `id` in the trash gone for good, its folder and its record: how many. */
+/** Every entry of project `id` in the trash gone for good, its folder and its record, and each record a restore held rows back in: how many entries. */
 export const purgeTrash = async (id: string): Promise<number> => {
   const mine = (await entries()).filter((one) => one.id === id);
   for (const entry of mine) {
@@ -622,6 +728,13 @@ export const purgeTrash = async (id: string): Promise<number> => {
       force: true,
     });
     await rm(recordPath(entry.entry), { force: true });
+  }
+  const held = (await readdir(PROJECT_TRASH_DIR).catch(() => [])).filter(
+    (name) =>
+      name.endsWith(HELD) && ENTRY.exec(name.slice(0, -HELD.length))?.[1] === id
+  );
+  for (const name of held) {
+    await rm(join(PROJECT_TRASH_DIR, name), { force: true });
   }
   return mine.length;
 };
@@ -731,6 +844,87 @@ export const projectTrash = (
     }
     return done;
   };
+  /**
+   * The entry's record brought back: its rows through every migration since
+   * (db restore-schema.ts), put back as today's schema holds them, the rows
+   * held back named; refused in words, each cause its own code.
+   */
+  const restoreRecord = async (
+    id: string,
+    entry: Entry,
+    record: ForgottenRecord
+  ) => {
+    const held = liveHolds(id) ?? (await folderHolds(entry, record.name));
+    if (held) {
+      return held;
+    }
+    const rows = await migratedRecord(id, record);
+    if (rows instanceof ElysiaStatus) {
+      return rows;
+    }
+    const restored = await withFolder(entry, () => {
+      const done = db.restoreProject(id, rows);
+      return done.ok ? done : notRestored(id, record.name, done);
+    });
+    if (restored instanceof ElysiaStatus) {
+      return restored;
+    }
+    await keepHeld(id, entry.entry, restored.held);
+    const left = heldByTable(restored.held);
+    // Its browsers were never moved: each its machine still keeps is its
+    // own again, its profile where it was; one removed since is gone.
+    const browsers = stillKept(record.browsers);
+    if (browsers < record.browsers.length) {
+      left.browsers = record.browsers.length - browsers;
+    }
+    const back: ProjectRestored = {
+      id,
+      name: record.name,
+      brought: bringsOf(
+        (table) => restored.back[table] ?? 0,
+        { browsers, sessions: restored.relinked.instances ?? 0 },
+        db.project(id)?.account ?? null,
+        entry.folder,
+        Object.values(restored.back).reduce((sum, n) => sum + n, 0)
+      ),
+      held: restored.held,
+      left,
+    };
+    return back;
+  };
+  /** Why the database put none of the record's rows back, in words, each cause its own code. */
+  const notRestored = (
+    id: string,
+    name: string,
+    done: Extract<ReturnType<DbShape["restoreProject"]>, { ok: false }>
+  ) => {
+    switch (done.why) {
+      case "live":
+        return problem(409, {
+          code: "restore-id-taken",
+          detail: projectTrashWords.idTaken(db.project(id)?.name ?? id, id),
+        });
+      case "place":
+        return problem(409, {
+          code: "restore-place-taken",
+          detail: projectTrashWords.placeTaken(
+            name,
+            done.holder.name,
+            done.path
+          ),
+        });
+      case "own":
+        return problem(422, {
+          code: "restore-record-unreadable",
+          detail: projectTrashWords.ownHeld(
+            name,
+            projectTrashWords.heldWhy(done.held.why)
+          ),
+        });
+      default:
+        return unhandled("restore's outcome", done);
+    }
+  };
   /** The record's browsers its machines still keep: one the person removed since is gone with its profile. */
   const stillKept = (browsers: readonly KeptBrowser[]): number =>
     browsers.filter((one) =>
@@ -808,6 +1002,7 @@ export const projectTrash = (
         ...folderBrings(await taskFiles(root), null),
         places: 1,
       },
+      held: [],
       left: {},
     };
     return restored;
@@ -955,12 +1150,13 @@ export const projectTrash = (
       makeFolderSync(PROJECT_TRASH_DIR);
       let rows: ProjectRows | undefined;
       try {
-        rows = db.forgetProject(id, (kept) =>
+        rows = db.forgetProject(id, (kept, migrations) =>
           writeStateFileSync(
             path,
             JSON.stringify({
               kind: "forgotten",
-              version: 1,
+              version: 2,
+              migrations,
               id,
               name: project.name,
               forgottenAt: at.getTime(),
@@ -1037,55 +1233,7 @@ export const projectTrash = (
       if (!record) {
         return await restoreFolder(entry, asked);
       }
-      const held = liveHolds(id) ?? (await folderHolds(entry, record.name));
-      if (held) {
-        return held;
-      }
-      const restored = await withFolder(entry, () => {
-        const done = db.restoreProject(id, record.rows);
-        if (done.ok) {
-          return done;
-        }
-        return done.why === "live"
-          ? problem(409, {
-              code: "restore-id-taken",
-              detail: projectTrashWords.idTaken(db.project(id)?.name ?? id, id),
-            })
-          : problem(409, {
-              code: "restore-place-taken",
-              detail: projectTrashWords.placeTaken(
-                record.name,
-                done.holder.name,
-                done.path
-              ),
-            });
-      });
-      if (restored instanceof ElysiaStatus) {
-        return restored;
-      }
-      // Its rows are live again: the record has nothing left to keep.
-      await rm(recordPath(entry.entry), { force: true });
-      const left = summed(restored.taken, restored.gone, restored.retired);
-      sayRetired(id, restored.retired);
-      // Its browsers were never moved: each its machine still keeps is its
-      // own again, its profile where it was; one removed since is gone.
-      const browsers = stillKept(record.browsers);
-      if (browsers < record.browsers.length) {
-        left.browsers = record.browsers.length - browsers;
-      }
-      const back: ProjectRestored = {
-        id,
-        name: record.name,
-        brought: bringsOf(
-          (table) => restored.back[table] ?? 0,
-          { browsers, sessions: restored.relinked.instances ?? 0 },
-          db.project(id)?.account ?? null,
-          entry.folder,
-          Object.values(restored.back).reduce((sum, n) => sum + n, 0)
-        ),
-        left,
-      };
-      return back;
+      return await restoreRecord(id, entry, record);
     },
   };
 };

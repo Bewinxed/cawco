@@ -17,20 +17,47 @@
  * to what was read, and a delete that took a row the walk did not read
  * throws, keeping the project whole.
  *
- * A restore puts every row back as it was, with the foreign keys deferred to
- * the commit, so the order rows go back in does not matter. A row whose key
- * another row made since holds stays out (that one stays); a row that names
- * something gone since (a session, an account) is treated as that thing's
- * delete would have treated it: its link set to null where the key says so,
- * else the row stays gone. Each cut link is set again where it still reads
- * null. Columns a migration dropped since are left out, columns it added
- * take their defaults.
+ * A restore takes the record's rows as today's schema holds them: brought
+ * through every migration since the record was made, on a scratch database
+ * (restore-schema.ts), and read there as a forget today would read them
+ * ({@link projectRowsAt}). Each goes back through drizzle's typed insert on
+ * its schema table, so every column's own read and write check runs on it
+ * (stored-json.ts), with the foreign keys deferred to the commit, so the
+ * order rows go back in does not matter. A row held back is named, with
+ * why, and so is every row that hangs off it by a foreign key:
+ *
+ * - a value a migration kept as not read (an `*_unread` column set);
+ * - a value that is not its column's shape, or one the database's own
+ *   constraints do not take;
+ * - a key another row made since holds (that one stays);
+ * - something it names that went since (a session, an account), treated as
+ *   that thing's delete would have treated it: its link set to null where
+ *   the key says so, else the row stays out.
+ *
+ * Each cut link is set again where it still reads null. A project whose own
+ * row is held back does not come back at all.
  */
-import { and, eq, type SQL, sql } from "drizzle-orm";
+import type { Database } from "bun:sqlite";
+import type {
+  RestoreHeldRow,
+  RestoreHeldWhy,
+} from "@cawco/core/forgotten-project";
+import { type AppliedRow, appliedRows } from "@cawco/core/migration-state";
+import {
+  and,
+  eq,
+  getTableColumns,
+  getTableName,
+  is,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
+import { isStoredShapeError, primaryKeyOf } from "../stored-json";
 import { type Deleter, projectPage } from "./artifacts";
-import { artifacts, PLACE_KINDS } from "./schema";
+import { artifacts } from "./schema";
 import type { Tx } from "./tx";
 
 /** A value as the record keeps it: SQLite's text, numbers and nulls as they are, a blob as base64. */
@@ -81,19 +108,13 @@ export type RowsRestored =
       back: Counts;
       /** Links set again. */
       relinked: Counts;
-      /** Rows left out: a row made since holds their key. */
-      taken: Counts;
-      /** Rows left out: what they named went since, or their table did. */
-      gone: Counts;
-      /**
-       * Rows left out: a kind no longer kept, as migration 0322 deleted the
-       * places of kind `workspace` (schema `PLACE_KINDS`). A record kept
-       * before it holds them; put back, one would not read.
-       */
-      retired: Counts;
+      /** Every row left out, each named, and why. */
+      held: RestoreHeldRow[];
     }
   /** A live project holds the id. */
   | { ok: false; why: "live" }
+  /** The project's own row is held back: nothing of it goes back. */
+  | { ok: false; why: "own"; held: RestoreHeldRow }
   /** A live project holds one of its places. */
   | {
       ok: false;
@@ -106,14 +127,20 @@ export type RowsRestored =
 export interface ForgetDb {
   /**
    * Forgets project `id` (its delete, as above), handing every row it takes
-   * and every link it cuts to `keep` first, inside the transaction: a throw
-   * from `keep` keeps the project whole. Undefined: there is no such project.
+   * and every link it cuts to `keep` first, inside the transaction, with the
+   * migrations the database has applied, as its `__drizzle_migrations`
+   * records them (the record's schema, restore-schema.ts): a throw from
+   * `keep` keeps the project whole. Undefined: there is no such project.
    */
   readonly forget: (
     id: string,
-    keep: (rows: ProjectRows) => void
+    keep: (rows: ProjectRows, migrations: AppliedRow[]) => void
   ) => ProjectRows | undefined;
-  /** Puts project `id`'s rows back (as above), or refuses when a live project holds its id or a place of it. */
+  /**
+   * Puts project `id`'s rows back (as above), `rows` as today's schema holds
+   * them (restore-schema.ts `migratedRows`), or does not when a live project
+   * holds its id or a place of it, or its own row is held back.
+   */
   readonly restore: (id: string, rows: ProjectRows) => RowsRestored;
 }
 
@@ -258,7 +285,7 @@ const cell = (table: string, column: string, value: unknown): Cell => {
 };
 
 /** A kept value as SQLite takes it back. */
-const sqliteValue = (
+export const sqliteValue = (
   kept: Cell | undefined
 ): string | number | null | Uint8Array => {
   if (kept === undefined || kept === null) {
@@ -455,9 +482,11 @@ const recordOf = (
 });
 
 export const forgetDb = (
-  db: BunSQLiteDatabase,
+  db: BunSQLiteDatabase & { $client: Database },
   /** db artifacts.ts `artifactEvents`'s `dropArtifacts`: the one way an artifact row goes, which tells its listeners. */
-  dropArtifacts: (tx: Deleter, where: SQL | undefined) => void
+  dropArtifacts: (tx: Deleter, where: SQL | undefined) => void,
+  /** {@link schemaTables}: a restore's typed insert goes through these. */
+  tables: SchemaTables
 ): ForgetDb => ({
   forget: (id, keep) =>
     db.transaction((tx) => {
@@ -469,7 +498,7 @@ export const forgetDb = (
       );
       const walked = walk(tx, roots);
       const rows = recordOf(tx, walked);
-      keep(rows);
+      keep(rows, appliedRows(db.$client));
       const before = new Map(
         [...walked.reach].map((table) => [table, countOf(tx, table)])
       );
@@ -503,74 +532,337 @@ export const forgetDb = (
       if (held) {
         return held;
       }
+      const edges = edgesOf(tx);
+      const staged = stage(rows, tables);
+      holdDependents(staged, edges);
+      const own = staged.find((one) => one.table === "projects" && one.held);
+      if (own) {
+        return { ok: false, why: "own", held: heldRow(own) };
+      }
       // Checked at the commit: rows go back in any order.
       tx.run(sql`pragma defer_foreign_keys = on`);
-      const gone: Counts = {};
-      const { inserted, taken, retired } = putBack(tx, rows, gone);
+      const inserted = putBack(tx, staged, edges);
       const relinked = relink(tx, rows);
-      settleKeys(tx, inserted);
+      const settled = settleKeys(tx, inserted);
       if (!first(tx, sql`select 1 from ${name("projects")} where id = ${id}`)) {
         throw new Error(`project ${id}'s row did not go back`);
       }
-      const back: Counts = {};
-      for (const [table, ids] of inserted) {
-        const stands = chunks([...ids]).reduce(
-          (sum, part) =>
-            sum +
-            (first<{ n: number }>(
-              tx,
-              sql`select count(*) as n from ${name(table)} where rowid in (${list(part.map((one) => sql`${one}`))})`
-            )?.n ?? 0),
-          0
-        );
-        add(back, table, stands);
-        add(gone, table, ids.size - stands);
-      }
-      return { ok: true, back, relinked, taken, gone, retired };
+      return {
+        ok: true,
+        back: standingBack(tx, inserted, settled),
+        relinked,
+        held: staged.flatMap((one) => (one.held ? [heldRow(one)] : [])),
+      };
     }),
 });
 
 /**
- * Every kept row inserted again, but one whose key a row made since holds
- * (`taken`) and one whose table went (`gone`): the rowids it went back
- * under, by table.
+ * How many inserted rows still stand, by table, once their keys are settled;
+ * each that went is held back as an orphan, by the table of what it named
+ * (`settled`, {@link settleKeys}), or none when it went with a row it hung
+ * off.
  */
-const putBack = (tx: Tx, rows: ProjectRows, gone: Counts) => {
-  const taken: Counts = {};
-  const retired: Counts = {};
-  const inserted = new Map<string, Set<number>>();
-  for (const kept of rows.tables) {
-    const now = new Set(columnsOf(tx, kept.table));
-    if (now.size === 0) {
-      add(gone, kept.table, kept.rows.length);
-      continue;
-    }
-    const used = kept.columns.flatMap((column, at) =>
-      now.has(column) ? [{ column, at }] : []
+const standingBack = (
+  tx: Tx,
+  inserted: ReadonlyMap<string, ReadonlyMap<number, Staged>>,
+  settled: ReadonlyMap<string, string>
+): Counts => {
+  const back: Counts = {};
+  for (const [table, ids] of inserted) {
+    const standing = new Set(
+      chunks([...ids.keys()]).flatMap((part) =>
+        tx
+          .all<{ [ROWID]: number }>(
+            sql`select rowid as ${name(ROWID)} from ${name(table)} where rowid in (${list(part.map((rowid) => sql`${rowid}`))})`
+          )
+          .map((one) => Number(one[ROWID]))
+      )
     );
-    const ids = inserted.get(kept.table) ?? new Set<number>();
-    inserted.set(kept.table, ids);
-    const kindAt =
-      kept.table === "project_places" ? kept.columns.indexOf("kind") : -1;
-    for (const row of kept.rows) {
-      if (kindAt >= 0 && !PLACE_KINDS.some((kind) => kind === row[kindAt])) {
-        add(retired, kept.table);
-        continue;
-      }
-      const put = first<{ [ROWID]: number }>(
-        tx,
-        sql`insert into ${name(kept.table)} (${list(used.map((one) => name(one.column)))})
-            values (${list(used.map((one) => sql`${sqliteValue(row[one.at])}`))})
-            on conflict do nothing returning rowid as ${name(ROWID)}`
-      );
-      if (put) {
-        ids.add(Number(put[ROWID]));
-      } else {
-        add(taken, kept.table);
+    add(back, table, standing.size);
+    for (const [rowid, one] of ids) {
+      if (!standing.has(rowid)) {
+        one.held = {
+          kind: "orphan",
+          parent: settled.get(`${table}\0${rowid}`) ?? null,
+        };
       }
     }
   }
-  return { inserted, taken, retired };
+  return back;
+};
+
+/**
+ * Project `id`'s rows on `db` as a forget today would record them: every row
+ * its delete would take, through every cascade, read and kept as a record
+ * keeps them, nothing deleted. A restore reads its record's rows so from the
+ * scratch database that brought them through the migrations since
+ * (restore-schema.ts): a row a migration since moved to a table of its own
+ * is read there, and one it left no longer the project's is not.
+ */
+export const projectRowsAt = (
+  db: BunSQLiteDatabase,
+  id: string
+): ProjectRows["tables"] =>
+  db.transaction(
+    (tx) =>
+      recordOf(
+        tx,
+        walk(
+          tx,
+          rootsOf(id, () => undefined)
+        )
+      ).tables
+  );
+
+/** Every table the schema declares, by its SQL name. */
+export type SchemaTables = ReadonlyMap<string, SQLiteTable>;
+
+/** Every table `./schema` declares, by its SQL name: what a restore's typed insert goes through ({@link forgetDb}). */
+export const schemaTables = async (): Promise<SchemaTables> =>
+  new Map(
+    Object.values(await import("./schema")).flatMap((value) =>
+      is(value, SQLiteTable) ? [[getTableName(value), value] as const] : []
+    )
+  );
+
+/** A row of the record, read as its table's insert takes it, and whether it is held back. */
+interface Staged {
+  /** Its values by column, as the record keeps them. */
+  cells: Record<string, Cell>;
+  held: RestoreHeldWhy | undefined;
+  /** Its primary key, `/`-joined; null when its table has none. */
+  id: string | null;
+  /** Its schema table; undefined when the schema no longer declares it. */
+  of: SQLiteTable | undefined;
+  table: string;
+  title: string | null;
+  /** Its values as its schema table's insert takes them, by key; undefined when it is held back before its insert. */
+  values: Record<string, unknown> | undefined;
+}
+
+/** A cell as a row names it: text, or a number written as text. */
+const named = (kept: Cell | undefined): string | null =>
+  typeof kept === "string" || typeof kept === "number" ? String(kept) : null;
+
+/** What a value that did not read or write says, as its column's check said it. */
+const issueOf = (error: unknown): string => {
+  if (isStoredShapeError(error)) {
+    return error.issue;
+  }
+  return error instanceof Error ? error.message : String(error);
+};
+
+/**
+ * A row's cells as its schema table's insert takes them, by key, each read
+ * as its column reads it and written as it writes it, both checks run; or
+ * the first column whose value does not read or write. A generated column
+ * is made again from what it is generated from.
+ */
+const insertValues = (
+  table: SQLiteTable,
+  cells: Record<string, Cell>
+): { values: Record<string, unknown> } | { held: RestoreHeldWhy } => {
+  const values: Record<string, unknown> = {};
+  for (const [key, column] of Object.entries(getTableColumns(table))) {
+    const stored = cells[column.name];
+    if (column.generated !== undefined || stored === undefined) {
+      continue;
+    }
+    const raw = sqliteValue(stored);
+    try {
+      const value = raw === null ? null : column.mapFromDriverValue(raw);
+      if (value !== null) {
+        column.mapToDriverValue(value);
+      }
+      values[key] = value;
+    } catch (error) {
+      return {
+        held: { kind: "shape", column: column.name, issue: issueOf(error) },
+      };
+    }
+  }
+  return { values };
+};
+
+/** Why a row's values hold it back before its insert: a value a migration kept as not read, or one that does not read or write. */
+const stagedValues = (
+  table: SQLiteTable | undefined,
+  cells: Record<string, Cell>
+): { values: Record<string, unknown> } | { held: RestoreHeldWhy } => {
+  if (!table) {
+    return { held: { kind: "table" } };
+  }
+  const unread = Object.values(getTableColumns(table))
+    .map((column) => column.name)
+    .filter(
+      (column) =>
+        column.endsWith("_unread") &&
+        cells[column] !== null &&
+        cells[column] !== undefined
+    );
+  if (unread.length > 0) {
+    return { held: { kind: "unread", columns: unread } };
+  }
+  return insertValues(table, cells);
+};
+
+/**
+ * Every row of `rows` read as its schema table reads it and written as its
+ * insert would write it ({@link stagedValues}): a value that does not read,
+ * or does not write, holds its row back, as does a value a migration kept as
+ * not read (an `*_unread` column set).
+ */
+const stage = (rows: ProjectRows, tables: SchemaTables): Staged[] =>
+  rows.tables.flatMap((kept) => {
+    const table = tables.get(kept.table);
+    const keys = table ? primaryKeyOf(table).map((column) => column.name) : [];
+    return kept.rows.map((row): Staged => {
+      const cells = Object.fromEntries(
+        kept.columns.map((column, at) => [column, row[at] ?? null])
+      );
+      const key = keys.map((one) => named(cells[one]));
+      const staged = stagedValues(table, cells);
+      return {
+        cells,
+        held: "held" in staged ? staged.held : undefined,
+        id:
+          key.length > 0 && key.every((part) => part !== null)
+            ? key.join("/")
+            : null,
+        of: table,
+        table: kept.table,
+        title: named(cells.title) ?? named(cells.name),
+        values: "values" in staged ? staged.values : undefined,
+      };
+    });
+  });
+
+/** A held row as the restore names it. */
+const heldRow = (one: Staged): RestoreHeldRow => ({
+  table: one.table,
+  title: one.title,
+  id: one.id,
+  why: one.held ?? { kind: "table" },
+});
+
+/** A tuple of cells as one key. */
+const tupleKey = (cells: (Cell | undefined)[]): string | undefined =>
+  cells.every((one) => one !== null && one !== undefined)
+    ? JSON.stringify(cells)
+    : undefined;
+
+/**
+ * Every row that hangs off a held row by a foreign key, at any depth, held
+ * back with it: it names the row it hangs off.
+ */
+const holdDependents = (staged: Staged[], edges: Edge[]): void => {
+  /** Each edge's child rows by the key they name, read once. */
+  const byKey = new Map<Edge, Map<string, Staged[]>>();
+  const childrenOf = (edge: Edge, key: string): Staged[] => {
+    let index = byKey.get(edge);
+    if (!index) {
+      index = new Map();
+      for (const one of staged) {
+        if (one.table !== edge.child) {
+          continue;
+        }
+        const at = tupleKey(edge.from.map((column) => one.cells[column]));
+        if (at !== undefined) {
+          index.set(at, [...(index.get(at) ?? []), one]);
+        }
+      }
+      byKey.set(edge, index);
+    }
+    return index.get(key) ?? [];
+  };
+  const queue = staged.filter((one) => one.held);
+  for (let next = queue.shift(); next; next = queue.shift()) {
+    const parent = next;
+    for (const edge of edges.filter((one) => one.parent === parent.table)) {
+      const key = tupleKey(edge.to.map((column) => parent.cells[column]));
+      if (key === undefined) {
+        continue;
+      }
+      for (const child of childrenOf(edge, key)) {
+        if (!child.held) {
+          child.held = {
+            kind: "depends",
+            table: parent.table,
+            title: parent.title,
+            id: parent.id,
+          };
+          queue.push(child);
+        }
+      }
+    }
+  }
+};
+
+/** A row its insert did not take, with what was said: the savepoint it was tried in rolls back. */
+class NotTaken extends Error {
+  readonly row: Staged;
+  constructor(row: Staged, options: { cause: unknown }) {
+    super(issueOf(options.cause), options);
+    this.row = row;
+  }
+}
+
+/**
+ * Every row not held back inserted through its schema table's typed insert,
+ * but one whose key a row made since holds (`taken`, which stays out): the
+ * rows that went back, by table and the rowid each went back under. A row
+ * the database's own constraints do not take is held back with every row
+ * that hangs off it, and the rest are tried again.
+ */
+const putBack = (
+  tx: Tx,
+  staged: Staged[],
+  edges: Edge[]
+): Map<string, Map<number, Staged>> => {
+  for (;;) {
+    const inserted = new Map<string, Map<number, Staged>>();
+    try {
+      tx.transaction((inner) => {
+        for (const one of staged) {
+          if (one.held || !one.of || !one.values) {
+            continue;
+          }
+          let put: { rowid: number } | undefined;
+          try {
+            put = inner
+              .insert(one.of)
+              .values(one.values)
+              .onConflictDoNothing()
+              .returning({ rowid: sql<number>`rowid` })
+              .get();
+          } catch (error) {
+            throw new NotTaken(one, { cause: error });
+          }
+          if (put) {
+            const ids = inserted.get(one.table) ?? new Map<number, Staged>();
+            ids.set(Number(put.rowid), one);
+            inserted.set(one.table, ids);
+          } else {
+            one.held = { kind: "taken" };
+          }
+        }
+      });
+      return inserted;
+    } catch (error) {
+      if (!(error instanceof NotTaken)) {
+        throw error;
+      }
+      for (const one of staged) {
+        if (one.held?.kind === "taken") {
+          one.held = undefined;
+        }
+      }
+      error.row.held = isStoredShapeError(error.cause)
+        ? { kind: "shape", column: error.cause.column, issue: error.message }
+        : { kind: "constraint", detail: error.message };
+      holdDependents(staged, edges);
+    }
+  }
 };
 
 /** Each cut link set again where its row still stands and still reads null: how many, by table. */
@@ -639,12 +931,18 @@ const placeHeld = (
  * Each restored row that names something gone since, treated as that
  * thing's delete would have treated it: its link set to null where its key
  * says so, else the row deleted (which cascades on to what hangs off it).
- * Rows that broke a key before the restore are not its business.
+ * Rows that broke a key before the restore are not its business. Answers
+ * each row it deleted, by `table\0rowid`, with the table of what it named.
  */
-const settleKeys = (tx: Tx, inserted: Map<string, Set<number>>): void => {
+const settleKeys = (
+  tx: Tx,
+  inserted: ReadonlyMap<string, ReadonlyMap<number, unknown>>
+): Map<string, string> => {
   const edges = new Map(
     edgesOf(tx).map((edge) => [`${edge.child}\0${edge.id}`, edge])
   );
+  /** Each row deleted here (`table\0rowid`), and the table of what it named. */
+  const away = new Map<string, string>();
   // Each round settles at least one row, or ends: a delete can break no
   // row it does not take with it.
   for (;;) {
@@ -653,11 +951,12 @@ const settleKeys = (tx: Tx, inserted: Map<string, Set<number>>): void => {
       if (ids.size === 0) {
         continue;
       }
-      const broken = tx.all<{ fkid: number; rowid: number }>(
+      const broken = tx.all<{ fkid: number; parent: string; rowid: number }>(
         sql`select * from pragma_foreign_key_check(${table})`
       );
       for (const one of broken) {
-        if (!ids.has(Number(one.rowid))) {
+        const at = `${table}\0${one.rowid}`;
+        if (!ids.has(Number(one.rowid)) || away.has(at)) {
           continue;
         }
         const edge = edges.get(`${table}\0${one.fkid}`);
@@ -667,13 +966,13 @@ const settleKeys = (tx: Tx, inserted: Map<string, Set<number>>): void => {
           );
         } else {
           tx.run(sql`delete from ${name(table)} where rowid = ${one.rowid}`);
-          ids.delete(Number(one.rowid));
+          away.set(at, one.parent);
         }
         settled += 1;
       }
     }
     if (settled === 0) {
-      return;
+      return away;
     }
   }
 };

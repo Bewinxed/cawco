@@ -405,7 +405,8 @@ const MIGRATIONS_TABLE = sql`
  * Then what runs on the connection after the last migration. Foreign keys
  * are off for the migrations and on from then on. Each way it does not open
  * the database is kept beside it for `cawco status`, and thrown, for every
- * hub that opens one (a start, migrations:check's hub).
+ * hub that opens one (a start, migrations:check's hub, a restore's scratch
+ * copy of a forgotten project's record, restore-schema.ts).
  *
  * `journal` is the build's whole journal for every hub. Only the binary smoke
  * test's fixture (scripts/binary/smoke-runtime.ts `smoke-fixture`) passes a
@@ -419,6 +420,29 @@ export const applyMigrations = async (
   client: Database,
   path: string,
   journal: readonly JournalEntry[] = journalEntries()
+): Promise<void> => {
+  await migrateTo(db, client, path, journal);
+  client.run("PRAGMA foreign_keys = ON");
+  for (const step of MIGRATION_STEPS) {
+    if (step.at === "open") {
+      step.run(client);
+    }
+  }
+};
+
+/**
+ * {@link applyMigrations}'s migrations alone: `journal`'s pending entries,
+ * each with its `migrator` steps, and none of what runs after the last
+ * migration, with foreign keys left off. A restore builds a forgotten
+ * project's record's schema so (restore-schema.ts): `journal` is the
+ * entries the hub had applied when it was forgotten, where a step that runs
+ * after the last migration reads tables that schema may not have yet.
+ */
+export const migrateTo = async (
+  db: BunSQLiteDatabase,
+  client: Database,
+  path: string,
+  journal: readonly JournalEntry[]
 ): Promise<void> => {
   db.run(MIGRATIONS_TABLE);
   const whole = journal.at(-1)?.tag === journalEntries().at(-1)?.tag;
@@ -435,8 +459,8 @@ export const applyMigrations = async (
   );
   // Migrations rebuild tables, which SQLite does with foreign keys off; they
   // run in one transaction, where the pragma cannot change, so it is set on
-  // the connection around them. From then on every key the schema declares
-  // holds, and its cascades run.
+  // the connection around them. Once {@link applyMigrations} sets it on
+  // again, every key the schema declares holds, and its cascades run.
   client.run("PRAGMA foreign_keys = OFF");
   try {
     if (pending.length > 0) {
@@ -454,12 +478,6 @@ export const applyMigrations = async (
     }
   } finally {
     rmSync(migrating, { force: true });
-  }
-  client.run("PRAGMA foreign_keys = ON");
-  for (const step of MIGRATION_STEPS) {
-    if (step.at === "open") {
-      step.run(client);
-    }
   }
 };
 

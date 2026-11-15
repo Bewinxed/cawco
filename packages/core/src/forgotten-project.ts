@@ -109,12 +109,44 @@ export interface ForgottenProject {
   places: ForgottenPlace[];
 }
 
+/**
+ * Why a row of a forgotten project's record stayed out of its restore
+ * (hub db forget.ts): its record stays in the trash, the row in it.
+ */
+export type RestoreHeldWhy =
+  /** A migration since the record was made kept these columns' values as not read. */
+  | { kind: "unread"; columns: string[] }
+  /** The value in `column` is not that column's shape, read or written. */
+  | { kind: "shape"; column: string; issue: string }
+  /** The database's own constraint (a check, a value required) does not take the row. */
+  | { kind: "constraint"; detail: string }
+  /** It hangs off a row held back, named by its table and title or id. */
+  | { kind: "depends"; table: string; title: string | null; id: string | null }
+  /** A row made since holds its key; that one stays. */
+  | { kind: "taken" }
+  /** What it names went since: a row of `parent`, or (null) a row it hangs off that went with one. */
+  | { kind: "orphan"; parent: string | null }
+  /** Its table is no longer kept. */
+  | { kind: "table" };
+
+/** One row a restore held back: its table, the item's title or id where it has one, and why. */
+export interface RestoreHeldRow {
+  /** Its primary key, `/`-joined when it has several; null when its table has none. */
+  id: string | null;
+  table: string;
+  /** Its title, or its name; null when its table keeps neither. */
+  title: string | null;
+  why: RestoreHeldWhy;
+}
+
 /** A restore's answer: the project back, and what came back of it. */
 export interface ProjectRestored {
   /** What came back. */
   brought: ForgottenBrings;
+  /** Every row held back, each named: its record stays in the trash while there is one. */
+  held: RestoreHeldRow[];
   id: string;
-  /** Rows left out, by table: a row made since holds their key, or what they named went since. */
+  /** Rows left out, by table: those {@link held} names, counted; `browsers`: its browsers no machine keeps now. */
   left: Record<string, number>;
   name: string;
 }

@@ -603,6 +603,335 @@ const keyCase = async (): Promise<string> => {
   return `case key absent, then restored: ${sealed.length} sealed value(s) (${of(sealedKeys, "connection")} connection(s), ${of(sealedKeys, "sign-in")} sign-in(s)) kept as stored with no key, none deleted or rewritten, the hub opened; with the fixtures' key back, ${of(placed, "connection")} connection(s) and ${of(placed, "sign-in")} sign-in(s) placed at the next start, ${sealed.length - placed.length} still not read, as with the key there from the start`;
 };
 
+/** The project the restore case forgets: the lists fixture's, whose tasks, tracker links and move hold the moved columns. */
+const RESTORED = "proj-00001-8ibdf7";
+
+/** Each server the restore case seeds for {@link RESTORED}, by name, with its `platforms` as 0406 reads it. */
+const SEEDED_SERVERS = [
+  { name: "restore-every-platform", platforms: null },
+  { name: "restore-darwin-linux", platforms: '["darwin","linux"]' },
+  { name: "restore-unread-platforms", platforms: "linux and darwin" },
+] as const;
+
+/** A project's rows as a forget records them (db forget.ts `ProjectRows`'s tables). */
+interface TablesKept {
+  columns: string[];
+  rows: unknown[][];
+  table: string;
+}
+
+/**
+ * A database opened as a hub's start opens it: its migrations, then the
+ * steps that run once the store is up (db/index.ts `make`).
+ */
+const openWhole = async (path: string): Promise<void> => {
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { applyMigrations, runOpenedSteps } = await import("../src/db/migrate");
+  const db = drizzle(path);
+  try {
+    await applyMigrations(db, db.$client, path);
+    runOpenedSteps(db);
+  } finally {
+    db.$client.close();
+  }
+};
+
+/**
+ * Each table's rows as text, sorted, a sealed value opened with this
+ * process's hub key: two databases holding the same rows read the same,
+ * whatever nonce sealed them.
+ */
+const rowsText = async (
+  tables: readonly TablesKept[]
+): Promise<Map<string, string[]>> => {
+  const { hubSecrets, isSealed } = await import("../src/secret-box");
+  const opened = (value: unknown) =>
+    typeof value === "string" && isSealed(value)
+      ? { opened: hubSecrets().open(value) }
+      : value;
+  return new Map(
+    tables.map((kept) => [
+      kept.table,
+      kept.rows
+        .map((row) =>
+          JSON.stringify(
+            Object.fromEntries(
+              kept.columns.map((column, index) => [column, opened(row[index])])
+            )
+          )
+        )
+        .toSorted(),
+    ])
+  );
+};
+
+/** Each of `from`'s rows `than` does not hold, by table, a row held twice counted twice. */
+const rowsBeyond = (
+  from: Map<string, string[]>,
+  than: Map<string, string[]>
+): [string, string][] =>
+  [...from].flatMap(([table, texts]) => {
+    const unmatched = [...(than.get(table) ?? [])];
+    return texts.flatMap((text): [string, string][] => {
+      const found = unmatched.indexOf(text);
+      if (found < 0) {
+        return [[table, text]];
+      }
+      unmatched.splice(found, 1);
+      return [];
+    });
+  });
+
+/**
+ * The lists fixture unpacked twice at its base schema, {@link SEEDED_SERVERS}
+ * seeded in both for {@link RESTORED}: `forgotten`, where it is forgotten,
+ * and `stayed`, where it stays. Undefined: the fixture's schema is past the
+ * moved columns, or holds no such project.
+ */
+const seededCopies = async (dir: string) => {
+  const forgotten = join(dir, "forgotten.db");
+  const stayed = join(dir, "stayed.db");
+  await Bun.write(
+    forgotten,
+    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
+  );
+  const base = new Database(forgotten, { readwrite: true });
+  try {
+    const fits =
+      base
+        .query<{ there: number }, [string]>(
+          "SELECT (SELECT count(*) FROM pragma_table_info('mcp_servers') WHERE name = 'platforms') + (SELECT count(*) FROM pragma_table_info('moves') WHERE name = 'state') + (SELECT count(*) FROM projects WHERE id = ?1) AS there"
+        )
+        .get(RESTORED)?.there === 3;
+    const config = base
+      .query<{ config: string }, []>(
+        "SELECT config FROM mcp_servers WHERE project_id IS NOT NULL LIMIT 1"
+      )
+      .get()?.config;
+    if (!(fits && config)) {
+      return;
+    }
+    for (const server of SEEDED_SERVERS) {
+      base.run(
+        "INSERT INTO mcp_servers (name, config, scope, project_id, platforms, created_at) VALUES (?, ?, 'local', ?, ?, ?)",
+        [server.name, config, RESTORED, server.platforms, Date.now()]
+      );
+    }
+    const entries = journalEntries(join(HUB, "drizzle"));
+    const { pending } = migrationState(appliedRows(base), entries);
+    base.run(`VACUUM INTO '${stayed.replaceAll("'", "''")}'`);
+    return {
+      forgotten,
+      stayed,
+      baseTag: entries.filter((entry) => !pending.includes(entry)).at(-1)?.tag,
+    };
+  } finally {
+    base.close();
+  }
+};
+
+/** {@link RESTORED} forgotten on the database at `path` by today's forget (db forget.ts), at that database's schema: its record. */
+const forgottenAt = async (path: string) => {
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { forgetDb, schemaTables } = await import("../src/db/forget");
+  const { artifactEvents } = await import("../src/db/artifacts");
+  const db = drizzle(path);
+  // As the hub's connection holds them (db/migrate.ts): a forget cascades.
+  db.$client.run("PRAGMA foreign_keys = ON");
+  const marks: AppliedRow[][] = [];
+  const kept = forgetDb(
+    db,
+    artifactEvents(db).dropArtifacts,
+    await schemaTables()
+  ).forget(RESTORED, (_kept, applied) => {
+    marks.push(applied);
+  });
+  db.$client.close();
+  const [migrations] = marks;
+  if (!(kept && migrations)) {
+    throw new Error(`case restore: ${RESTORED} was not forgotten`);
+  }
+  return { rows: kept, migrations };
+};
+
+/**
+ * The record's rows at today's schema (db restore-schema.ts), at the schema
+ * it names; and the entry its columns alone place it at, which must bring
+ * the same rows.
+ */
+const migratedRecord = async (
+  record: Awaited<ReturnType<typeof forgottenAt>>
+) => {
+  const { migratedRows, recordSchema } =
+    await import("../src/db/restore-schema");
+  const marked = recordSchema(record.rows, record.migrations);
+  const found = recordSchema(record.rows, undefined);
+  if (!(marked.ok && found.ok && typeof found.found === "object")) {
+    throw new Error(
+      `case restore: the record's schema was not placed: ${JSON.stringify(marked.ok ? found : marked)}`
+    );
+  }
+  const migrated = await migratedRows(RESTORED, record.rows, marked.journal);
+  const byColumns = await migratedRows(RESTORED, record.rows, found.journal);
+  if (!(migrated.ok && byColumns.ok)) {
+    throw new Error(
+      `case restore: the record's rows did not go in at its schema: ${JSON.stringify(migrated.ok ? byColumns : migrated)}`
+    );
+  }
+  const atNamed = await rowsText(migrated.tables);
+  const atFound = await rowsText(byColumns.tables);
+  const differ = [
+    ...rowsBeyond(atNamed, atFound),
+    ...rowsBeyond(atFound, atNamed),
+  ];
+  if (differ.length > 0) {
+    throw new Error(
+      `case restore: the record placed by its columns at ${found.found.tag} brings other rows than at the schema it names: ${differ
+        .slice(0, 5)
+        .map(([table, text]) => `${table} ${text.slice(0, 200)}`)
+        .join("; ")}`
+    );
+  }
+  return { tables: migrated.tables, foundTag: found.found.tag };
+};
+
+/** {@link RESTORED}'s rows on the database at `path`, as a forget would record them, as text ({@link rowsText}). */
+const rowsOn = async (path: string): Promise<Map<string, string[]>> => {
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { projectRowsAt } = await import("../src/db/forget");
+  const db = drizzle(path);
+  try {
+    return await rowsText(projectRowsAt(db, RESTORED));
+  } finally {
+    db.$client.close();
+  }
+};
+
+/** The rows `migrated` restored onto the database at `path` (db forget.ts `restore`), its cut links from `record`. */
+const restoredOn = async (
+  path: string,
+  migrated: TablesKept[],
+  record: Awaited<ReturnType<typeof forgottenAt>>
+) => {
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { forgetDb, schemaTables } = await import("../src/db/forget");
+  const { artifactEvents } = await import("../src/db/artifacts");
+  const { ProjectRowsSchema } = await import("../src/db/forget");
+  const db = drizzle(path);
+  db.$client.run("PRAGMA foreign_keys = ON");
+  try {
+    const restored = forgetDb(
+      db,
+      artifactEvents(db).dropArtifacts,
+      await schemaTables()
+    ).restore(
+      RESTORED,
+      ProjectRowsSchema.parse({
+        tables: migrated,
+        unlinked: record.rows.unlinked,
+      })
+    );
+    if (!restored.ok) {
+      throw new Error(
+        `case restore: not restored: ${JSON.stringify(restored)}`
+      );
+    }
+    return restored;
+  } finally {
+    db.$client.close();
+  }
+};
+
+/** The value `column` holds in `table`'s row named `name`, of `rows` ({@link rowsText}). */
+const valueIn = (
+  rows: Map<string, string[]>,
+  table: string,
+  name: string,
+  column: string
+): unknown =>
+  (rows.get(table) ?? [])
+    .map((text) => z.record(z.string(), z.unknown()).parse(JSON.parse(text)))
+    .find((row) => row.name === name)?.[column];
+
+/**
+ * A FORGOTTEN PROJECT RESTORED ACROSS MIGRATIONS, on scratch copies of the
+ * lists fixture at its base schema (db/restore-schema.ts, db/forget.ts):
+ * {@link RESTORED}, its tasks' outputs (0404), tracker links' baselines
+ * (0407) and move's state (0415) as the fixture seeded them, and three MCP
+ * servers seeded for it, their platforms null, set, and not readable (0406),
+ * is forgotten at the base schema by today's forget; the copy is opened as
+ * a hub (every migration since), and the record restored onto it. A second
+ * copy, where the project stayed, opened the same way, is how the
+ * migrations place its rows on a live hub: the restored project holds
+ * exactly those rows, but the ones held back, each of them a value a
+ * migration kept as not read or a row hanging off one, named with why. The
+ * record's schema found from its columns alone (a record made before
+ * records named their migrations) brings the same rows. One line.
+ */
+const restoreCase = async (): Promise<string> => {
+  const dir = join(scratch, "case-restore");
+  mkdirSync(dir, { recursive: true });
+  const copies = await seededCopies(dir);
+  if (!copies) {
+    return `case restore across migrations: the ${FIXTURE_NAME} fixture's schema is past the moved columns or has no ${RESTORED}; the lists fixture runs it`;
+  }
+  const record = await forgottenAt(copies.forgotten);
+  await openWhole(copies.forgotten);
+  await openWhole(copies.stayed);
+  const { tables, foundTag } = await migratedRecord(record);
+  const restored = await restoredOn(copies.forgotten, tables, record);
+  const after = await rowsOn(copies.forgotten);
+  const placed = await rowsOn(copies.stayed);
+  const added = rowsBeyond(after, placed);
+  if (added.length > 0) {
+    throw new Error(
+      `case restore: the restore put back rows the migrations do not place: ${added
+        .slice(0, 5)
+        .map(([table, text]) => `${table} ${text.slice(0, 200)}`)
+        .join("; ")}`
+    );
+  }
+  const { projectTrashWords } = await import("@cawco/core/words/project-trash");
+  const { held } = restored;
+  const missed = rowsBeyond(placed, after);
+  const unexplained = held.filter(
+    (one) => one.why.kind !== "unread" && one.why.kind !== "depends"
+  );
+  if (unexplained.length > 0 || missed.length !== held.length) {
+    throw new Error(
+      `case restore: ${missed.length} row(s) the migrations place did not come back and ${held.length} were held back, ${unexplained.length} of them for a reason no migration gave: ${[...unexplained.map(projectTrashWords.heldRow), ...missed.slice(0, 5).map(([table, text]) => `${table} ${text.slice(0, 160)}`)].join("; ")}`
+    );
+  }
+  const unread = held.find(
+    (one) =>
+      one.table === "mcp_servers" && one.id === "restore-unread-platforms"
+  );
+  if (!unread) {
+    throw new Error(
+      "case restore: the server whose platforms do not read was not held back"
+    );
+  }
+  if (
+    valueIn(
+      after,
+      "mcp_servers",
+      "restore-every-platform",
+      "every_platform"
+    ) !== 1 ||
+    valueIn(after, "mcp_servers", "restore-darwin-linux", "every_platform") !==
+      0
+  ) {
+    throw new Error(
+      "case restore: a server's null platforms did not come back as every platform, or its set ones as some"
+    );
+  }
+  const count = (table: string) => after.get(table)?.length ?? 0;
+  const back = Object.values(restored.back).reduce((sum, n) => sum + n, 0);
+  const of = (kind: string) =>
+    held.filter((one) => one.why.kind === kind).length;
+  return `case restore across migrations: ${RESTORED} forgotten at ${copies.baseTag}, its schema the record names and, found from its columns alone, ${foundTag}, bringing the same rows; restored on today's schema: ${back} rows back in ${Object.keys(restored.back).length} tables, each as the migrations place it on a hub where it stayed (${count("mcp_server_platforms")} server platform rows, ${count("project_task_outputs")} task outputs, ${count("tracker_link_synced_labels")} tracker labels, ${count("moves")} moves), ${held.length} held back and named (${of("unread")} kept as not read, ${of("depends")} hanging off one), as "${projectTrashWords.heldRow(unread)}"`;
+};
+
 /**
  * Rows in every table, and how many migrations the database records.
  * Opened read-write, on the scratch copy only: the fixture is a WAL database
@@ -1275,6 +1604,7 @@ try {
   const cases = await identityCases(dbPath, journal);
   if (!GIVEN) {
     cases.push(await keyCase());
+    cases.push(await restoreCase());
   }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
