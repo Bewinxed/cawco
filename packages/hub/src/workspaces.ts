@@ -9,7 +9,10 @@ import { knowsNotControl } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
-import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
+import {
+  WorkspaceArchivedSchema,
+  WorkspaceCheckoutSchema,
+} from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { workWords } from "@cawco/core/words/work";
 import { holdingWords, sizeWords } from "@cawco/core/words/workspace-holding";
@@ -41,10 +44,12 @@ import {
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
+import { z } from "zod";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import { soon } from "./lifetime";
+import { thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
@@ -486,11 +491,8 @@ export const createWorkspaces = ({
     return found;
   };
   /** The paths a workspace's items handed over as outputs: `git status` passes over them. */
-  const handedOver = (workspace: WorkspaceRow): string[] => [
-    ...new Set(
-      db.workItemsIn(workspace.id).flatMap((item) => item.outputs ?? [])
-    ),
-  ];
+  const handedOver = (workspace: WorkspaceRow): string[] =>
+    db.workspaceOutputs(workspace.id);
   /** A held workspace's work as its row keeps it (schema.ts `workspaces.holding`). */
   const heldWork = (
     workspace: WorkspaceRow & { holding: WorkspaceHolding }
@@ -675,9 +677,9 @@ export const createWorkspaces = ({
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `its ${SCRATCH_OUTPUTS} could not be copied into ${folder}/ of its project's folder, so it stays: ${reason}`,
-        { cause: error }
+      throw thrownAgain(
+        error,
+        `its ${SCRATCH_OUTPUTS} could not be copied into ${folder}/ of its project's folder, so it stays: ${reason}`
       );
     }
   };
@@ -1890,15 +1892,33 @@ export const createWorkspaces = ({
         return made;
       }
     }
-    return (await call(
-      machineId,
-      CONTROL_WORKSPACE_CREATE,
-      args
-    )) as WorkspaceCheckout;
+    // The machine's answer read as a checkout before anything is filed: a
+    // kind of workspace this build does not know (a newer agent's) is none
+    // it can land, so the cut is refused, its words saying so.
+    const read = WorkspaceCheckoutSchema.safeParse(
+      await call(machineId, CONTROL_WORKSPACE_CREATE, args)
+    );
+    return read.success
+      ? read.data
+      : {
+          unread: `${machineName(db, machineId)} cut a workspace this hub cannot read, so nothing was filed: ${z.prettifyError(read.error)}`,
+        };
   };
   /** What a cut that did not go says: its machine is paused, or the project's folder could not be made. */
+  /** A cut whose answer did not read as a checkout ({@link cutOn}): refused, nothing filed. */
+  const cutUnread = (detail: string) =>
+    problem(502, { code: "workspace-cut-unread", detail });
+  /** {@link cutOn} for a cut again: an answer that does not read is refused ({@link cutUnread}). */
+  const recutOn = async (...args: Parameters<typeof cutOn>) => {
+    const checkout = await cutOn(...args);
+    return "unread" in checkout ? cutUnread(checkout.unread) : checkout;
+  };
   type NotCut =
-    | Exclude<Awaited<ReturnType<typeof cutOn>>, WorkspaceCheckout>
+    | Exclude<
+        Awaited<ReturnType<typeof cutOn>>,
+        WorkspaceCheckout | { unread: string }
+      >
+    | ReturnType<typeof cutUnread>
     | NonNullable<ReturnType<typeof notPaused>>;
   /** Each workspace's cut under way ({@link recut}): one at a time. */
   const recutting = new Map<string, Promise<WorkspaceRow | NotCut>>();
@@ -1995,7 +2015,7 @@ export const createWorkspaces = ({
             resume: session.sessionId ?? null,
           }
         : null;
-      const checkout = await cutOn(workspace.machineId, [
+      const checkout = await recutOn(workspace.machineId, [
         workspace.repoRoot,
         workspace.id,
         projectId,
@@ -2294,6 +2314,11 @@ export const createWorkspaces = ({
           detail: await letGo(checkout.response.detail),
         });
       }
+      if ("unread" in checkout) {
+        // The clone it cut is let go of on the machine, as any create that
+        // did not file is ({@link discardCreate}).
+        return cutUnread(await letGo(checkout.unread));
+      }
       return db.createWorkspace({
         id,
         machineId,
@@ -2310,9 +2335,9 @@ export const createWorkspaces = ({
         checksFor: checksFor ?? null,
       });
     } catch (error) {
-      throw new Error(
-        await letGo(error instanceof Error ? error.message : String(error)),
-        { cause: error }
+      throw thrownAgain(
+        error,
+        await letGo(error instanceof Error ? error.message : String(error))
       );
     } finally {
       opening.delete(id);
@@ -2520,9 +2545,9 @@ export const createWorkspaces = ({
         cutFrom: { workspace: source.id, commit: made.head, landed: false },
       });
     } catch (error) {
-      throw new Error(
-        await unmade(error instanceof Error ? error.message : String(error)),
-        { cause: error }
+      throw thrownAgain(
+        error,
+        await unmade(error instanceof Error ? error.message : String(error))
       );
     }
   };

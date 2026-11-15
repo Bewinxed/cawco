@@ -281,6 +281,8 @@
       cwd: `/srv/${projectOf(seed.project)?.[1] ?? "work"}`,
       harness: "claude",
       kind: "mainline",
+      mayStart: ["any"],
+      startingSet: null,
       launchDir: "known",
       machineId,
       sessionId: id,

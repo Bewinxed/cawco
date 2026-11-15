@@ -310,7 +310,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * A read's answer: one held past its deadline with its machine still away
    * (MACHINE_DISCONNECTED) is its machine not connected, unanswered "dead",
    * as a read asked of a machine already gone is, so the read's own words
-   * for an offline machine say it and its route answers {@link awayStatus}.
+   * for an offline machine say it and its route answers `awayProblem`.
    * A read runs nothing, so "whether it ran is not known" is never its to
    * say; a write keeps those words, which are true of it.
    *

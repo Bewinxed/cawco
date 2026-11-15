@@ -22,14 +22,22 @@ import {
   harnessSpec,
 } from "@cawco/core/harness-refusal";
 import { machineLabel } from "@cawco/core/machine-names";
+import {
+  firstCopy,
+  type ToolUpdateState,
+  toolUpdateOf,
+} from "@cawco/core/tool-updates";
 import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
+import { toolUpdateWords } from "@cawco/core/words/tool-updates";
+import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { didntAnswer } from "./hub/control";
 import { boardStore, type Machine } from "./stores/board.svelte";
 import { sessionsStore } from "./stores/sessions.svelte";
+import { toolUpdatesStore } from "./stores/tool-updates.svelte";
 import { relaunchSession } from "./stores/turns.svelte";
 import { TabDraft } from "./tab-draft.svelte";
 import { installTool } from "./tools";
@@ -38,11 +46,30 @@ import { TRY_AGAIN } from "./unanswered";
 /** Where the fix stands, as the hub's cell for it says. */
 type HarnessFix =
   | { phase: "idle" }
-  | { phase: "running" }
+  /**
+   * An install runs there: CawCo's own (`byCawco`), or a person's press
+   * (`byPerson`; neither from a machine too old to say who started it); to
+   * `to` when known.
+   */
+  | { byCawco: boolean; byPerson: boolean; phase: "running"; to?: string }
   /** An install or update that ran and left it refused: the machine's words. */
   | { phase: "failed"; said: string };
 
 export interface HarnessBlock {
+  /**
+   * CawCo puts it on with no press: an install CawCo started runs now (core
+   * `ToolStatus.startedBy`), or a copy it put there waits for its update
+   * while the fleet updates such copies (core tool-updates.ts `due`). A
+   * copy the person installed, or one from a machine too old to say whose
+   * it is, takes the press.
+   */
+  auto: boolean;
+  /**
+   * What CawCo puts on is a first copy, not another version of one there
+   * (core tool-updates.ts `firstCopy` of the machine's cell): the block's
+   * line and the session page's wait say installing or updating by it.
+   */
+  firstCopy: boolean;
   /** What fixes it: an update, or an install. */
   fix: HarnessFix;
   harness: HarnessKind;
@@ -84,13 +111,22 @@ export function harnessBlockOf(
     return null;
   }
   const { kind, spec, why } = refusal;
+  const update = toolUpdateOf(
+    tool,
+    toolUpdatesStore.updates,
+    toolUpdatesStore.releases
+  );
   return {
     harness,
     kind,
     machine: name,
     spec,
     why,
-    fix: fixOf(spec, tool),
+    fix: fixOf(spec, tool, update),
+    firstCopy: firstCopy(tool),
+    auto:
+      update?.kind === "due" ||
+      (update?.kind === "updating" && update.startedBy === "cawco"),
   };
 }
 
@@ -111,26 +147,32 @@ export const machineBlocksOf = (machine: Machine): HarnessBlock[] =>
   );
 
 /**
- * Whether CawCo keeps the harness's CLI at its newest release by itself
- * (core `ToolSpec.release`: Claude Code): the hub sends each machine whose
- * copy is older its update, so its block offers no press until one failed.
+ * Where the fix stands, off the hub's cell (core tool-updates.ts
+ * `toolUpdateOf`): an install running; one that ran and left the copy
+ * refused (`failed`, with the installer's words), or failed with no copy
+ * there. A copy at a version CawCo doesn't run that nothing tried on is
+ * idle, with its press.
  */
-const keptCurrent = (spec: ToolSpec): boolean => spec.release !== undefined;
-
-/**
- * Where the fix stands, off the hub's cell. An attempt's failure carries no
- * version (agent tools.ts `install`), except on a CLI CawCo keeps current,
- * whose every failure keeps its copy's version and stands as the update's
- * own: the hub updates such a copy as soon as its probe says it is older.
- */
-const fixOf = (spec: ToolSpec, tool: ToolStatus | undefined): HarnessFix => {
-  if (tool?.state === "installing") {
-    return { phase: "running" };
+const fixOf = (
+  spec: ToolSpec,
+  tool: ToolStatus | undefined,
+  update: ToolUpdateState | undefined
+): HarnessFix => {
+  if (update?.kind === "updating") {
+    return {
+      phase: "running",
+      byCawco: update.startedBy === "cawco",
+      byPerson: update.startedBy === "person",
+      ...(update.to ? { to: update.to } : {}),
+    };
   }
-  if (
-    tool?.state === "failed" &&
-    (tool.version === undefined || keptCurrent(spec))
-  ) {
+  if (update?.kind === "failed") {
+    return {
+      phase: "failed",
+      said: update.output || "The machine didn't say why.",
+    };
+  }
+  if (tool?.state === "failed" && tool.version === undefined) {
     return {
       phase: "failed",
       said: tool.detail ?? "The machine didn't say why.",
@@ -150,14 +192,16 @@ const installs = (block: Pick<HarnessBlock, "kind" | "spec">): boolean =>
   block.kind === "not-installed" || block.spec.exactVersion !== undefined;
 
 /**
- * Whether the block offers its press: always, but for a CLI CawCo keeps
- * current that is there, which CawCo updates by itself and which takes the
- * press (Retry) only once that update failed.
+ * Whether the block offers its press: always, but while CawCo itself puts
+ * the CLI on, and for a copy CawCo updates by itself ({@link
+ * HarnessBlock.auto}), which takes the press (Retry) only once that update
+ * failed.
  */
 export const offersPress = (block: HarnessBlock): boolean =>
-  block.kind === "not-installed" ||
-  !keptCurrent(block.spec) ||
-  block.fix.phase === "failed";
+  !(block.fix.phase === "running" && block.fix.byCawco) &&
+  (block.kind === "not-installed" ||
+    !block.auto ||
+    block.fix.phase === "failed");
 
 /** A block's words for the press, its progress and its outcome. */
 export const harnessWords = {
@@ -169,8 +213,22 @@ export const harnessWords = {
     ),
   pressing: (block: HarnessBlock): string =>
     installs(block) ? "Installing…" : "Updating…",
-  running: (block: HarnessBlock): string =>
-    `${installs(block) ? "Installing" : "Updating"} ${block.spec.name} on ${block.machine}. It goes on if you close this.`,
+  /**
+   * An install under way, as one waiting line saying who started it (core
+   * `ToolStatus.startedBy`): CawCo, the person's press, or neither said (a
+   * machine too old to say); the version it puts on when known.
+   */
+  running: (block: HarnessBlock): string => {
+    const { fix, machine, spec } = block;
+    const to =
+      (fix.phase === "running" ? fix.to : undefined) ?? spec.exactVersion;
+    if (fix.phase === "running" && fix.byCawco) {
+      return toolWords.cawcoPutting(block.firstCopy, spec.name, machine, to);
+    }
+    return fix.phase === "running" && fix.byPerson
+      ? toolUpdateWords.youPutting(block.firstCopy, spec.name, machine, to)
+      : `${block.firstCopy ? "Installing" : "Updating"} ${spec.name} on ${machine}. It goes on if you close this.`;
+  },
   failed: (block: HarnessBlock, said: string): string =>
     `${block.spec.name} didn't ${installs(block) ? "install" : "update"} on ${block.machine}. ${said}`,
   /** The row's word while it is refused, or while its fix runs. */
@@ -219,6 +277,14 @@ const followed = new TabDraft(
   }),
   () => ({ brought: [], relaunch: {}, refused: {} })
 );
+
+/**
+ * What this tab follows, written to its storage as it changes from now on.
+ * The app starts it once (start.ts `startApp`); importing this module only
+ * reads what the tab kept, and a change before the start stands in the page
+ * alone until it. Returns its stop.
+ */
+export const startHarnessBlock = (): (() => void) => followed.keep();
 
 const keyOf = (machineId: string, harness: HarnessKind): string =>
   `${machineId}:${harness}`;

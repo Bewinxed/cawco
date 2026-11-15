@@ -3,6 +3,8 @@
  * place, kept out of fleet.ts so the rows' owners can sit below it.
  */
 
+import { everyOf } from "./every-of";
+
 /**
  * Where a fleet row applies, in Claude Code's own vocabulary:
  *
@@ -21,6 +23,9 @@
  *   out of the checkout's status.
  */
 export type FleetScope = "user" | "project" | "local";
+
+/** Every {@link FleetScope}. */
+export const FLEET_SCOPES = everyOf<FleetScope>()(["user", "project", "local"]);
 
 /**
  * What binds a row to a place. An absent `scope` reads as `user`, so every

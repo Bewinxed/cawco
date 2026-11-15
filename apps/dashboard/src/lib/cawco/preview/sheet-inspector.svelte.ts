@@ -17,6 +17,8 @@ import {
   inspectedProps,
   type PropMeta,
   type SheetOnPage,
+  STORY_NAME,
+  STORY_NAME_LENGTH,
   type Story,
   type StoryOp,
 } from "@cawco/core/stage";
@@ -29,8 +31,6 @@ type ToPage = Extract<
   { type: "cawco:story-args" | "cawco:story-select" }
 >;
 
-/** A story's name the file can take: an identifier starting with a capital (story-file.ts `STORY_NAME`). */
-const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
 /** A name's figures at its end: a new state's name counts on from them. */
 const TRAILING_FIGURES = /\d+$/u;
 
@@ -266,7 +266,7 @@ function newName(from: string, taken: readonly string[]): string {
     : "State";
   for (let count = 2; ; count += 1) {
     const figures = String(count);
-    const name = `${base.slice(0, 100 - figures.length)}${figures}`;
+    const name = `${base.slice(0, STORY_NAME_LENGTH - figures.length)}${figures}`;
     if (!taken.includes(name)) {
       return name;
     }

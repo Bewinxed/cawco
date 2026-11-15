@@ -16,7 +16,7 @@
     "dev": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun --watch src/index.ts",
     "fixture-db": "bun scripts/fixture-db.ts",
     "fmt": "bun ../../scripts/fmt.ts .",
-    "migrations:check": "bun scripts/migrations-check.ts",
+    "migrations:check": "bun scripts/migrations-check.ts && bun scripts/migrations-check.ts --fixture lists",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",

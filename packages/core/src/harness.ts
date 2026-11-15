@@ -604,6 +604,38 @@ export type MachineHarnessReport = Omit<HarnessReport, "auth"> & {
   auth?: AuthState;
 };
 
+/**
+ * A {@link HarnessReport} in its machine's own words: the harness's name,
+ * its sign-in word, its refusal, its permission modes and its accounts'
+ * kinds each the string the machine sent, which may be one this build does
+ * not know (a newer agent's). What the hub files of a machine's report beat
+ * (its `agent_harnesses` rows), kept whatever the words; it reads each into
+ * a {@link HarnessReport} before anything takes it as one (hub db
+ * machines.ts `harnessReportOf`): a permission mode or an account kind it
+ * does not know is left out, and a report whose harness, sign-in word or
+ * refusal it does not know is none it can run, its name among the
+ * machine's `AgentRow.unknownHarnesses`.
+ */
+export type NamedHarnessReport = Omit<
+  HarnessReport,
+  "accounts" | "auth" | "capabilities" | "harness" | "refused"
+> & {
+  accounts?: (Omit<import("./accounts").AccountReport, "kind"> & {
+    kind?: string;
+  })[];
+  auth: string;
+  capabilities: Omit<HarnessCapabilities, "permissionModes"> & {
+    permissionModes: string[];
+  };
+  harness: string;
+  refused?: string;
+};
+
+/** A {@link MachineHarnessReport} as a beat carries it, by its machine's own name for the harness ({@link NamedHarnessReport}). */
+export type ReportedHarness = Omit<NamedHarnessReport, "auth"> & {
+  auth?: string;
+};
+
 /** The default for a harness adapter that reports nothing; adapters override. */
 export const CAPABILITIES_NONE: HarnessCapabilities = {
   interrupt: false,

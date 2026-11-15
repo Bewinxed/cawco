@@ -26,7 +26,7 @@ import type { WorkInFlight } from "@cawco/core/session/controls";
 import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
 import { ContinuationReadSchema } from "@cawco/core/stored-shapes";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import {
   asksOpening,
@@ -44,6 +44,7 @@ import type {
 import type { ContinueOutcome } from "./hub-shapes";
 import { MachineAway, type SessionLocation } from "./hub-shapes";
 import { leafOf, sessionLabel } from "./labels";
+import { MachineProblem, silentProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { filingPrompt } from "./open-items";
 import { askEnvelope } from "./pending";
@@ -165,8 +166,11 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            `${ctx.machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${answer.value.error ?? "it gave no reason"}`
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail: `${ctx.machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${answer.value.error ?? "it gave no reason"}`,
+            })
           );
         }
         // Its read is kept in the continuation's record: taken into
@@ -185,27 +189,35 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * A continuation's inputs, read and sized: the source's live context (last
    * compaction summary on), the artifact index over its whole transcript, and
    * the token counts the pickers and the run are both held to. The source is
-   * only read.
+   * only read. A source with nothing to continue from (no such session, or
+   * no transcript yet) is the hub's own 404 or 409; a machine's cause is
+   * thrown as its MachineProblem.
    */
   const prepareContinuation = async (
     sourceId: string,
     note?: string,
     /** From its asks alone: nothing to summarise, and the opening is {@link asksOpening}. */
     asksOnly = false
-  ): Promise<PreparedContinuation> => {
+  ) => {
     const [row] = ctx.db.getInstancesByIds([sourceId]);
     const located = await ctx.locateSession(sourceId);
     switch (located.kind) {
       case "nowhere":
-        throw new Error(
-          row
-            ? `session ${sourceId} has no transcript yet`
-            : `no session ${sourceId}`
-        );
+        return row
+          ? problem(409, {
+              code: "continuation-no-transcript",
+              detail: `session ${sourceId} has no transcript yet`,
+            })
+          : problem(404, {
+              code: "continuation-no-session",
+              detail: `no session ${sourceId}`,
+            });
       case "away":
         throw ctx.awayError(located.machineId);
       case "unanswered":
-        throw new Error(ctx.unlocatedWords(sourceId, located.machines));
+        throw new MachineProblem(
+          silentProblem(ctx.unlocatedWords(sourceId, located.machines))
+        );
       case "found":
         break;
       default:
@@ -244,7 +256,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       extracted.middle.length && !asksOnly
         ? summariserPrompt(extracted.middle, note)
         : undefined;
-    return {
+    const prepared: PreparedContinuation = {
       source,
       extracted,
       prompt,
@@ -257,6 +269,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       compacted: read.compacted,
       entries: read.entries,
     };
+    return prepared;
   };
 
   /**
@@ -265,11 +278,9 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * answered release: its new session takes the item on and starts in that
    * clone ({@link startTarget}). The caller releases once the job is filed,
    * whose record holds the workspace from then on, or once it is refused.
-   * Throws why there is no clone.
+   * Answers why there is no clone (work-items.ts `continuable`).
    */
-  const cloneForContinuation = async (
-    sourceId: string
-  ): Promise<() => void> => {
+  const cloneForContinuation = async (sourceId: string) => {
     const itemId = ctx.db.getInstancesByIds([sourceId])[0]?.workItemId;
     return itemId ? await ctx.workItems.continuable(itemId) : () => undefined;
   };
@@ -469,13 +480,12 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * the process. Then the source is read again, so what that work brought
    * is in the continuation, and the job goes on: refused, in the fit's own
    * words, when it no longer fits. The job as it then stands; nothing when a
-   * Cancel landed or its machine went away.
+   * Cancel landed or its machine went away; the hub's problem when its source
+   * has nothing to continue from now.
    */
-  const waitStep = async (
-    row: ContinuationRow
-  ): Promise<ContinuationRow | undefined> => {
+  const waitStep = async (row: ContinuationRow) => {
     if (!(await untilWorkEnds(row))) {
-      return undefined;
+      return;
     }
     const sourceId = row.sourceInstanceId;
     const prepared = await prepareContinuation(
@@ -483,6 +493,9 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       row.request.note,
       row.request.asksOnly
     );
+    if (prepared instanceof ElysiaStatus) {
+      return prepared;
+    }
     const refusal = await continuationRefusal(
       prepared,
       row.request,
@@ -787,7 +800,12 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       );
     }
     if (row?.stage === "waiting") {
-      row = await waitStep(row);
+      const waited = await waitStep(row);
+      // The job as it stands; anything else is the hub's problem.
+      if (waited instanceof ElysiaStatus) {
+        return waited;
+      }
+      row = waited;
     }
     if (row?.stage === "filing") {
       row = await fileStep(row);

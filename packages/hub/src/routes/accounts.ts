@@ -11,7 +11,8 @@ import { configurePage } from "@cawco/core/words/configure";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import type { HubContext } from "../hub-context";
-
+import { awayProblem, silentProblem } from "../machine-answers";
+import type { MachineReadsContext } from "../machine-reads";
 import { unreachable } from "../unreachable";
 
 const accountHue = t.UnionEnum(ACCOUNT_HUES);
@@ -108,7 +109,8 @@ export const accountRoutes = ({
   | "removeWithSessions"
   | "signOutEverywhere"
   | "signOutMachine"
->) =>
+> &
+  MachineReadsContext) =>
   new Elysia()
     // ── Accounts ─────────────────────────────────────────────────────────────
     // Several sign-ins per provider, where each is signed in for which
@@ -313,17 +315,16 @@ export const accountRoutes = ({
       switch (answer.kind) {
         case "unanswered":
           return answer.reason === "dead"
-            ? problem(409, {
-                code: "offline-so-was-not",
-                detail: `${machine} is offline, so ${named} was not signed out there; try again when it is online.`,
-              })
-            : problem(409, {
-                code: "did-not-answer-within",
-                detail: `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`,
-              });
+            ? awayProblem(
+                params.machineId,
+                `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
+              )
+            : silentProblem(
+                `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
+              );
         case "answered":
           if (!answer.value.ok) {
-            return problem(409, {
+            return problem(502, {
               code: "did-not-sign-out",
               detail: `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`,
             });

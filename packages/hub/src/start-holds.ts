@@ -1,4 +1,5 @@
 import type { Envelope, SpawnPayload } from "@cawco/core/protocol";
+import { updatesWords } from "@cawco/core/words/updates";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { createLaunches } from "./launches";
@@ -33,6 +34,7 @@ export type StartHoldsContext = Pick<
   | "sendFrame"
   | "sessionName"
   | "speaksContract"
+  | "startSent"
   | "startsFreed"
   | "tellEndedByMove"
   | "wakesForSend"
@@ -91,7 +93,10 @@ export const createStartHolds = (
     if (!ctx.speaksContract(ctx.agentProtocols.get(machineId))) {
       return {
         kind: "build",
-        words: `${ctx.machineName(machineId)} runs a CawCo build older than its hub's, which cannot start sessions for this hub until it installs the hub's build`,
+        words: updatesWords.olderBuild(
+          ctx.machineName(machineId),
+          updatesWords.olderBuildStarts
+        ),
       };
     }
     return undefined;
@@ -258,8 +263,10 @@ export const createStartHolds = (
     // To the id the machine has now: it may have re-joined under a new one
     // since the start was owed (`takeFormerId`).
     ctx.sendFrame(agent, { ...asked, machineId, payload: launch });
-    // What it was sent while its start was held goes right behind it.
+    // What it was sent while its start was held goes right behind it, and
+    // the inputs its item held for it, then its brief.
     ctx.releaseOwed({ instanceId: owed.id });
+    ctx.startSent(owed.id);
   };
 
   /**
@@ -401,6 +408,7 @@ export const createStartHolds = (
       kind: row.kind ?? undefined,
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
+      startingSet: row.startingSet,
     });
     // A relaunch is the hub's own launch: it goes in its turn.
     const sent = sendSpawn(

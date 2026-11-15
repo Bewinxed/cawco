@@ -43,15 +43,22 @@ const unplugged = (port: keyof LedgerPorts) => () => {
   );
 };
 
-let ledgerPorts: LedgerPorts = {
+const UNPLUGGED: LedgerPorts = {
   applyFrame: unplugged("applyFrame"),
   rereadHistory: unplugged("rereadHistory"),
   noteFailure: unplugged("noteFailure"),
 };
 
-/** The stores, plugged into the ledger's ports. */
-export function plugLedger(ports: LedgerPorts): void {
+let ledgerPorts: LedgerPorts = UNPLUGGED;
+
+/** The stores, plugged into the ledger's ports (client.svelte.ts `startClient`). Returns the unplugging. */
+export function plugLedger(ports: LedgerPorts): () => void {
   ledgerPorts = ports;
+  return () => {
+    if (ledgerPorts === ports) {
+      ledgerPorts = UNPLUGGED;
+    }
+  };
 }
 
 export const streamHost: StreamHost = {

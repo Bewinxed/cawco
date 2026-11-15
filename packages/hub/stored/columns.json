@@ -8,20 +8,9 @@
           "type": "number"
         },
         "defaultEffort": {
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ]
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "description": {
@@ -39,14 +28,7 @@
         "supportedEffortLevels": {
           "type": "array",
           "items": {
-            "type": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ]
+            "type": "string"
           }
         },
         "supportsAdaptiveThinking": {
@@ -112,83 +94,232 @@
       "type": "string"
     }
   },
-  "account_routing.at_limit": {
-    "type": "object",
-    "properties": {
-      "compaction": {
-        "type": "object",
-        "properties": {
-          "atLimit": {
-            "type": "string",
-            "enum": [
-              "native",
-              "summary",
-              "whole"
-            ]
-          },
-          "beforeMove": {
-            "type": "string",
-            "enum": [
-              "native",
-              "summary",
-              "whole"
-            ]
-          },
-          "fileRoom": {
-            "type": "number"
-          },
-          "summarizer": {
-            "type": "object",
-            "properties": {
-              "harness": {
-                "type": "string",
-                "enum": [
-                  "claude",
-                  "opencode",
-                  "pi"
-                ]
-              },
-              "model": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "harness",
-              "model"
-            ]
-          }
-        },
-        "required": [
-          "atLimit",
-          "beforeMove",
-          "fileRoom",
-          "summarizer"
-        ]
-      },
-      "move": {
-        "type": "boolean"
-      },
-      "moveWholeUnderK": {
-        "type": "number"
-      },
-      "staleAfterHours": {
-        "type": "number"
-      },
-      "waitMinutes": {
-        "type": "number"
-      }
-    },
-    "required": [
-      "compaction",
+  "account_routing.compaction_at_limit": {
+    "type": "string",
+    "enum": [
+      "native",
+      "summary",
+      "whole"
+    ]
+  },
+  "account_routing.compaction_before_move": {
+    "type": "string",
+    "enum": [
+      "native",
+      "summary",
+      "whole"
+    ]
+  },
+  "account_routing.compaction_summarizer_harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "account_routing.delegates_strategy": {
+    "type": "string",
+    "enum": [
+      "pinned",
+      "fill-first",
+      "spread",
+      "soonest-reset"
+    ]
+  },
+  "account_routing.yours_strategy": {
+    "type": "string",
+    "enum": [
+      "pinned",
+      "fill-first",
+      "spread",
+      "soonest-reset"
+    ]
+  },
+  "account_signins.moved_from": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "account_signins.refusal_reach": {
+    "type": "string",
+    "enum": [
+      "machine",
+      "account"
+    ]
+  },
+  "account_signins.state": {
+    "type": "string",
+    "enum": [
+      "signed-in",
+      "signed-out",
+      "mismatch"
+    ]
+  },
+  "accounts.at_plan_limit": {
+    "type": "string",
+    "enum": [
       "move",
-      "moveWholeUnderK",
-      "staleAfterHours",
-      "waitMinutes"
+      "extra-usage"
+    ]
+  },
+  "accounts.hue": {
+    "type": "string",
+    "enum": [
+      "amber",
+      "blue",
+      "cyan",
+      "green",
+      "orange",
+      "rose",
+      "violet"
+    ]
+  },
+  "accounts.kind": {
+    "type": "string",
+    "enum": [
+      "subscription",
+      "console",
+      "oauth",
+      "api_key"
+    ]
+  },
+  "accounts.setup_step": {
+    "type": "string",
+    "enum": [
+      "signIn",
+      "nameIt",
+      "yourSessions",
+      "delegates",
+      "atLimit",
+      "done"
+    ]
+  },
+  "actions.state": {
+    "type": "string",
+    "enum": [
+      "proposed",
+      "approved",
+      "denied",
+      "running",
+      "done",
+      "failed",
+      "unknown",
+      "cancelled"
     ]
   },
   "agent_harnesses.report": {
     "type": "object",
     "properties": {
+      "authReason": {
+        "type": "string"
+      },
+      "installed": {
+        "type": "boolean"
+      },
+      "modelNames": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "models": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "contextWindow": {
+              "type": "number"
+            },
+            "defaultEffort": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "released": {
+              "type": "string"
+            },
+            "resolvedModel": {
+              "type": "string"
+            },
+            "supportedEffortLevels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "supportsAdaptiveThinking": {
+              "type": "boolean"
+            },
+            "supportsAutoMode": {
+              "type": "boolean"
+            },
+            "supportsEffort": {
+              "type": "boolean"
+            },
+            "supportsFastMode": {
+              "type": "boolean"
+            },
+            "supportsThinkingOff": {
+              "type": "boolean"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "displayName",
+            "value"
+          ]
+        }
+      },
+      "modelsUnread": {
+        "type": "string"
+      },
+      "signInFaults": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "number"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "words": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "at",
+            "provider",
+            "words"
+          ]
+        }
+      },
+      "unreadAccounts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "version": {
+        "type": "string"
+      },
       "accounts": {
         "type": "array",
         "items": {
@@ -219,19 +350,13 @@
                 "orgId"
               ]
             },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "subscription",
-                "console",
-                "oauth",
-                "api_key"
-              ]
-            },
             "loggedIn": {
               "type": "boolean"
             },
             "provider": {
+              "type": "string"
+            },
+            "kind": {
               "type": "string"
             }
           },
@@ -242,14 +367,6 @@
         }
       },
       "auth": {
-        "type": "string",
-        "enum": [
-          "authenticated",
-          "unauthenticated",
-          "unreadable-credentials"
-        ]
-      },
-      "authReason": {
         "type": "string"
       },
       "capabilities": {
@@ -300,21 +417,6 @@
           "mcpStatus": {
             "type": "boolean"
           },
-          "permissionModes": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "default",
-                "acceptEdits",
-                "bypassPermissions",
-                "plan",
-                "dontAsk",
-                "auto",
-                "fullSend"
-              ]
-            }
-          },
           "plugins": {
             "type": "boolean"
           },
@@ -350,6 +452,12 @@
           },
           "thinking": {
             "type": "boolean"
+          },
+          "permissionModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -368,7 +476,6 @@
           "listSessions",
           "mcpControl",
           "mcpStatus",
-          "permissionModes",
           "plugins",
           "reloadSkills",
           "renameSession",
@@ -380,151 +487,56 @@
           "supportedModels",
           "tagSession",
           "tasks",
-          "thinking"
+          "thinking",
+          "permissionModes"
         ]
       },
       "harness": {
-        "type": "string",
-        "enum": [
-          "claude",
-          "opencode",
-          "pi"
-        ]
-      },
-      "installed": {
-        "type": "boolean"
-      },
-      "modelNames": {
-        "type": "object",
-        "propertyNames": {
-          "type": "string"
-        },
-        "additionalProperties": {
-          "type": "string"
-        }
-      },
-      "models": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "contextWindow": {
-              "type": "number"
-            },
-            "defaultEffort": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "low",
-                    "medium",
-                    "high",
-                    "xhigh",
-                    "max"
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "description": {
-              "type": "string"
-            },
-            "displayName": {
-              "type": "string"
-            },
-            "released": {
-              "type": "string"
-            },
-            "resolvedModel": {
-              "type": "string"
-            },
-            "supportedEffortLevels": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "xhigh",
-                  "max"
-                ]
-              }
-            },
-            "supportsAdaptiveThinking": {
-              "type": "boolean"
-            },
-            "supportsAutoMode": {
-              "type": "boolean"
-            },
-            "supportsEffort": {
-              "type": "boolean"
-            },
-            "supportsFastMode": {
-              "type": "boolean"
-            },
-            "supportsThinkingOff": {
-              "type": "boolean"
-            },
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "displayName",
-            "value"
-          ]
-        }
-      },
-      "modelsUnread": {
         "type": "string"
       },
       "refused": {
-        "type": "string",
-        "enum": [
-          "not-installed",
-          "version"
-        ]
-      },
-      "signInFaults": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "at": {
-              "type": "number"
-            },
-            "provider": {
-              "type": "string"
-            },
-            "words": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "at",
-            "provider",
-            "words"
-          ]
-        }
-      },
-      "unreadAccounts": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "version": {
         "type": "string"
       }
     },
     "required": [
+      "installed",
       "auth",
       "capabilities",
-      "harness",
-      "installed"
+      "harness"
+    ]
+  },
+  "agent_tools.copy": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "by": {
+            "type": "string",
+            "const": "cawco"
+          },
+          "takenOver": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "by"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": "string",
+            "const": "person"
+          }
+        },
+        "required": [
+          "by"
+        ]
+      }
     ]
   },
   "agent_tools.signin": {
@@ -537,17 +549,60 @@
         "type": "string"
       },
       "state": {
-        "type": "string",
-        "enum": [
-          "signed-in",
-          "signed-out",
-          "unknown"
-        ]
+        "type": "string"
       }
     },
     "required": [
       "at",
       "state"
+    ]
+  },
+  "agent_tools.started_by": {
+    "type": "string",
+    "enum": [
+      "cawco",
+      "person"
+    ]
+  },
+  "agent_tools.state": {
+    "type": "string",
+    "enum": [
+      "installed",
+      "missing",
+      "installing",
+      "failed",
+      "unsupported"
+    ]
+  },
+  "agent_tools.wants": {
+    "type": "object",
+    "properties": {
+      "orNewer": {
+        "type": "boolean"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "orNewer",
+      "version"
+    ]
+  },
+  "agents.auth": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "authenticated",
+          "unauthenticated",
+          "unreadable-credentials"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "unknown"
+      }
     ]
   },
   "agents.build": {
@@ -1586,90 +1641,8 @@
             "available": {
               "type": "boolean"
             },
-            "id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "const": "git"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "claude",
-                    "opencode",
-                    "pi"
-                  ]
-                },
-                {
-                  "type": "string",
-                  "const": "node"
-                },
-                {
-                  "type": "string",
-                  "const": "browser"
-                },
-                {
-                  "type": "string",
-                  "const": "container-runtime"
-                },
-                {
-                  "type": "string",
-                  "const": "passkey-relay"
-                },
-                {
-                  "type": "string",
-                  "const": "public-address"
-                },
-                {
-                  "type": "string",
-                  "const": "service-manager"
-                },
-                {
-                  "type": "string",
-                  "const": "workspace"
-                }
-              ]
-            },
             "installCommand": {
               "type": "string"
-            },
-            "media": {
-              "type": "string",
-              "enum": [
-                "udp+tcp",
-                "tcp",
-                "none"
-              ]
-            },
-            "missing": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "command": {
-                    "type": "string"
-                  },
-                  "lookedIn": {
-                    "type": "string"
-                  },
-                  "need": {
-                    "type": "string",
-                    "enum": [
-                      "walls",
-                      "checkout"
-                    ]
-                  },
-                  "package": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "command",
-                  "lookedIn",
-                  "need",
-                  "package"
-                ]
-              }
             },
             "nat": {
               "type": "object",
@@ -1694,12 +1667,44 @@
             },
             "version": {
               "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "media": {
+              "type": "string"
+            },
+            "missing": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "lookedIn": {
+                    "type": "string"
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "need": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "command",
+                  "lookedIn",
+                  "package",
+                  "need"
+                ]
+              }
             }
           },
           "required": [
             "available",
-            "id",
-            "installCommand"
+            "installCommand",
+            "id"
           ]
         }
       },
@@ -1725,6 +1730,71 @@
     "additionalProperties": {
       "type": "number"
     }
+  },
+  "agents.status": {
+    "type": "string",
+    "enum": [
+      "online",
+      "offline"
+    ]
+  },
+  "areas.account_at_limit": {
+    "type": "string",
+    "enum": [
+      "wait",
+      "move"
+    ]
+  },
+  "areas.cap_period": {
+    "type": "string",
+    "enum": [
+      "day",
+      "month"
+    ]
+  },
+  "areas.caw_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
+  "areas.on_cap": {
+    "type": "string",
+    "enum": [
+      "pause",
+      "quiet",
+      "both"
+    ]
+  },
+  "artifact_changes.by": {
+    "type": "string",
+    "enum": [
+      "person",
+      "agent"
+    ]
+  },
+  "artifacts.does": {
+    "type": "string",
+    "enum": [
+      "pick",
+      "judge",
+      "try",
+      "draw"
+    ]
+  },
+  "artifacts.kind": {
+    "type": "string",
+    "enum": [
+      "page",
+      "canvas",
+      "preview",
+      "component",
+      "browser"
+    ]
   },
   "asks.record": {
     "type": "object",
@@ -2090,6 +2160,66 @@
       "asked"
     ]
   },
+  "asks.state": {
+    "type": "string",
+    "enum": [
+      "open",
+      "answered",
+      "withdrawn"
+    ]
+  },
+  "browsers.host": {
+    "type": "string",
+    "enum": [
+      "container",
+      "local"
+    ]
+  },
+  "browsers.state": {
+    "type": "string",
+    "enum": [
+      "pulling",
+      "building",
+      "starting",
+      "live",
+      "stopping",
+      "asleep",
+      "failed"
+    ]
+  },
+  "capability_calls.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "tool",
+      "mcp"
+    ]
+  },
+  "chosen_modes.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "config_trash.kind": {
+    "type": "string",
+    "enum": [
+      "rule",
+      "hook",
+      "skill",
+      "plugin",
+      "marketplace",
+      "agent",
+      "mcp",
+      "delegateType",
+      "memory",
+      "memoryDoc",
+      "connection",
+      "harnessConfig"
+    ]
+  },
   "config_trash.rows": {
     "type": "array",
     "items": {
@@ -2126,6 +2256,18 @@
     "items": {
       "type": "string"
     }
+  },
+  "connections.auth": {
+    "type": "string",
+    "enum": [
+      "none",
+      "bearer",
+      "header",
+      "oauth",
+      "app",
+      "gh",
+      "device"
+    ]
   },
   "connections.discovery": {
     "type": "object",
@@ -2826,6 +2968,22 @@
         "type": "string"
       }
     }
+  },
+  "connections.state": {
+    "type": "string",
+    "enum": [
+      "signed-in",
+      "needs-sign-in",
+      "error"
+    ]
+  },
+  "connections.transport": {
+    "type": "string",
+    "enum": [
+      "http",
+      "sse",
+      "stdio"
+    ]
   },
   "connector_polls.args": {
     "type": "object",
@@ -4389,6 +4547,18 @@
       "target"
     ]
   },
+  "continuations.stage": {
+    "type": "string",
+    "enum": [
+      "waiting",
+      "filing",
+      "summarising",
+      "starting",
+      "started",
+      "failed",
+      "cancelled"
+    ]
+  },
   "continuations.waiting": {
     "type": "object",
     "properties": {
@@ -4409,34 +4579,6 @@
       "from",
       "since",
       "why"
-    ]
-  },
-  "decides_members.reach": {
-    "type": "object",
-    "properties": {
-      "via": {
-        "type": "string",
-        "enum": [
-          "slack",
-          "email"
-        ]
-      },
-      "address": {
-        "type": "string"
-      },
-      "wait": {
-        "type": "string",
-        "enum": [
-          "4h",
-          "1d",
-          "wait"
-        ]
-      }
-    },
-    "required": [
-      "via",
-      "address",
-      "wait"
     ]
   },
   "decides_settings.hear": {
@@ -4548,6 +4690,14 @@
       "type": "string"
     }
   },
+  "delegate_events.kind": {
+    "type": "string",
+    "enum": [
+      "ask",
+      "answer",
+      "report"
+    ]
+  },
   "delegate_events.payload": {
     "anyOf": [
       {
@@ -4616,6 +4766,36 @@
       }
     ]
   },
+  "delegate_events.request_kind": {
+    "type": "string",
+    "enum": [
+      "question",
+      "tool"
+    ]
+  },
+  "delegate_events.status": {
+    "type": "string",
+    "enum": [
+      "pending",
+      "answered",
+      "denied"
+    ]
+  },
+  "delegate_type_starting_set.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "server"
+    ]
+  },
+  "delegate_types.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
   "design_checks.findings": {
     "type": "array",
     "items": {
@@ -4642,19 +4822,13 @@
       ]
     }
   },
-  "design_checks.pick": {
-    "type": "object",
-    "properties": {
-      "variant": {
-        "type": "string"
-      },
-      "why": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "variant",
-      "why"
+  "design_checks.state": {
+    "type": "string",
+    "enum": [
+      "checking",
+      "passed",
+      "findings",
+      "failed"
     ]
   },
   "design_checks.submission": {
@@ -4716,6 +4890,13 @@
       "summary"
     ]
   },
+  "design_offers.answer": {
+    "type": "string",
+    "enum": [
+      "built",
+      "dismissed"
+    ]
+  },
   "design_proposals.files": {
     "type": "array",
     "items": {
@@ -4765,6 +4946,16 @@
         "path"
       ]
     }
+  },
+  "event_routes.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
   },
   "external_comments.author": {
     "type": "object",
@@ -4820,6 +5011,36 @@
       "name",
       "source",
       "url"
+    ]
+  },
+  "external_comments.direction": {
+    "type": "string",
+    "enum": [
+      "in",
+      "out"
+    ]
+  },
+  "external_comments.source": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
+    ]
+  },
+  "fleet_harness_config.kind": {
+    "type": "string",
+    "enum": [
+      "claudeSettings",
+      "opencodePlugins",
+      "piExtensions"
+    ]
+  },
+  "fleet_harness_config.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
     ]
   },
   "fleet_harness_config.settings": {
@@ -4983,6 +5204,14 @@
       }
     ]
   },
+  "fleet_hook_history.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
+  },
   "fleet_hooks.handler": {
     "anyOf": [
       {
@@ -5135,6 +5364,21 @@
           "type"
         ]
       }
+    ]
+  },
+  "fleet_hooks.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
+  },
+  "fleet_mcp_oauth.access": {
+    "type": "string",
+    "enum": [
+      "read",
+      "write"
     ]
   },
   "fleet_mcp_oauth.client": {
@@ -5942,6 +6186,13 @@
     },
     "additionalProperties": {}
   },
+  "fleet_memory_docs.role": {
+    "type": "string",
+    "enum": [
+      "orchestrator",
+      "leaf"
+    ]
+  },
   "fleet_skill_history.files": {
     "type": "array",
     "items": {
@@ -5964,6 +6215,47 @@
       ]
     }
   },
+  "github_poll_cursors.resource": {
+    "type": "string",
+    "enum": [
+      "pulls",
+      "issues",
+      "comments",
+      "issueEvents",
+      "discussions"
+    ]
+  },
+  "image_settings.provider": {
+    "type": "string",
+    "enum": [
+      "chatgpt",
+      "antigravity",
+      "gemini-api"
+    ]
+  },
+  "inbound_events.via": {
+    "type": "string",
+    "enum": [
+      "poll",
+      "webhook",
+      "connector"
+    ]
+  },
+  "instance_conversations.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "instance_starting_set.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "server"
+    ]
+  },
   "instances.cache_cold": {
     "type": "object",
     "properties": {
@@ -5977,6 +6269,13 @@
     "required": [
       "reason",
       "at"
+    ]
+  },
+  "instances.cache_ttl": {
+    "type": "string",
+    "enum": [
+      "5m",
+      "1h"
     ]
   },
   "instances.commands": {
@@ -6000,34 +6299,42 @@
       "skills"
     ]
   },
-  "instances.last_ping_usage": {
-    "type": "object",
-    "properties": {
-      "input": {
-        "type": "number"
-      },
-      "read": {
-        "type": "number"
-      },
-      "write": {
-        "type": "number"
-      },
-      "at": {
-        "type": "number"
-      }
-    },
-    "required": [
-      "input",
-      "read",
-      "write",
-      "at"
+  "instances.end_intent": {
+    "type": "string",
+    "enum": [
+      "stop",
+      "discard",
+      "delete",
+      "delete-transcript"
     ]
   },
-  "instances.may_start": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
+  "instances.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "instances.keep_alive_stopped": {
+    "type": "string",
+    "const": "stopped-cap"
+  },
+  "instances.kind": {
+    "type": "string",
+    "enum": [
+      "mainline",
+      "scratch",
+      "summariser"
+    ]
+  },
+  "instances.last_error_kind": {
+    "type": "string",
+    "enum": [
+      "conversation-gone",
+      "restart-lost",
+      "start-refused"
+    ]
   },
   "instances.model_usage_seen": {
     "type": "object",
@@ -6061,6 +6368,15 @@
         "outputTokens"
       ]
     }
+  },
+  "instances.origin": {
+    "type": "string",
+    "enum": [
+      "person",
+      "delegate",
+      "project",
+      "check"
+    ]
   },
   "instances.owed_spawn": {
     "type": "object",
@@ -6422,6 +6738,17 @@
       "verb"
     ]
   },
+  "instances.role": {
+    "type": "string",
+    "enum": [
+      "worker",
+      "delegate",
+      "overseer",
+      "web-facing",
+      "curator",
+      "trimmer"
+    ]
+  },
   "instances.scratch_worktree": {
     "type": "object",
     "properties": {
@@ -6441,25 +6768,25 @@
       "root"
     ]
   },
-  "instances.starting_set": {
-    "type": "object",
-    "properties": {
-      "skills": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "servers": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      }
-    },
-    "required": [
-      "skills",
-      "servers"
+  "instances.status": {
+    "type": "string",
+    "enum": [
+      "moving",
+      "starting",
+      "running",
+      "sleeping",
+      "stopping",
+      "stopped",
+      "discarded",
+      "unknown",
+      "error"
+    ]
+  },
+  "instances.title_source": {
+    "type": "string",
+    "enum": [
+      "owner",
+      "agent"
     ]
   },
   "instances.tooling": {
@@ -6493,6 +6820,13 @@
     "required": [
       "servers",
       "tools"
+    ]
+  },
+  "lfs_offers.answer": {
+    "type": "string",
+    "enum": [
+      "tracked",
+      "dismissed"
     ]
   },
   "lfs_offers.rows": {
@@ -7741,6 +8075,14 @@
       "todos"
     ]
   },
+  "limit_compactions.stage": {
+    "type": "string",
+    "enum": [
+      "carrying",
+      "filing",
+      "compacting"
+    ]
+  },
   "limit_events.move": {
     "anyOf": [
       {
@@ -8907,6 +9249,21 @@
       "type": "string"
     }
   },
+  "login_moves.store": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "mcp_servers.auth_mode": {
+    "type": "string",
+    "enum": [
+      "direct",
+      "oauth"
+    ]
+  },
   "mcp_servers.config": {
     "anyOf": [
       {
@@ -9019,6 +9376,14 @@
         "win32"
       ]
     }
+  },
+  "mcp_servers.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
   },
   "move_endings.ended": {
     "type": "object",
@@ -9210,6 +9575,32 @@
     "required": [
       "machineId",
       "spawn"
+    ]
+  },
+  "moves.stage": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "approval",
+          "snapshot",
+          "clone",
+          "lfs",
+          "start"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "started"
+      },
+      {
+        "type": "string",
+        "const": "failed"
+      },
+      {
+        "type": "string",
+        "const": "cancelled"
+      }
     ]
   },
   "moves.state": {
@@ -10717,6 +11108,22 @@
       }
     ]
   },
+  "owed_moves.waits": {
+    "type": "string",
+    "enum": [
+      "turn",
+      "work",
+      "machine"
+    ]
+  },
+  "owner_devices.kind": {
+    "type": "string",
+    "enum": [
+      "browser",
+      "app",
+      "cli"
+    ]
+  },
   "parked_asks.envelope": {
     "type": "object",
     "properties": {
@@ -11048,133 +11455,7 @@
           },
           "suggestions": {
             "type": "array",
-            "items": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "addRules",
-                        "replaceRules",
-                        "removeRules"
-                      ]
-                    },
-                    "rules": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "toolName": {
-                            "type": "string"
-                          },
-                          "ruleContent": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "toolName"
-                        ]
-                      }
-                    },
-                    "behavior": {
-                      "type": "string",
-                      "enum": [
-                        "allow",
-                        "deny",
-                        "ask"
-                      ]
-                    },
-                    "destination": {
-                      "type": "string",
-                      "enum": [
-                        "userSettings",
-                        "projectSettings",
-                        "localSettings",
-                        "session",
-                        "cliArg"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "rules",
-                    "behavior",
-                    "destination"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "const": "setMode"
-                    },
-                    "mode": {
-                      "type": "string",
-                      "enum": [
-                        "default",
-                        "acceptEdits",
-                        "bypassPermissions",
-                        "plan",
-                        "dontAsk",
-                        "auto",
-                        "fullSend"
-                      ]
-                    },
-                    "destination": {
-                      "type": "string",
-                      "enum": [
-                        "userSettings",
-                        "projectSettings",
-                        "localSettings",
-                        "session",
-                        "cliArg"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "mode",
-                    "destination"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "addDirectories",
-                        "removeDirectories"
-                      ]
-                    },
-                    "directories": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "destination": {
-                      "type": "string",
-                      "enum": [
-                        "userSettings",
-                        "projectSettings",
-                        "localSettings",
-                        "session",
-                        "cliArg"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "directories",
-                    "destination"
-                  ]
-                }
-              ]
-            }
+            "items": {}
           },
           "toolName": {
             "type": "string"
@@ -11217,6 +11498,17 @@
       "machineId",
       "payload",
       "verb"
+    ]
+  },
+  "plan_changes.kind": {
+    "type": "string",
+    "enum": [
+      "reword",
+      "add",
+      "remove",
+      "comment",
+      "tick",
+      "move"
     ]
   },
   "plugins.files": {
@@ -11276,6 +11568,35 @@
       "outcome"
     ]
   },
+  "presence_clients.kind": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "web",
+          "ios",
+          "mac"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "machine"
+      },
+      {
+        "type": "string",
+        "const": "send"
+      }
+    ]
+  },
+  "presence_clients.machine": {
+    "type": "string",
+    "enum": [
+      "active",
+      "idle",
+      "locked",
+      "asleep"
+    ]
+  },
   "presence_clients.showing": {
     "type": "array",
     "items": {
@@ -11293,6 +11614,29 @@
     "items": {
       "type": "string"
     }
+  },
+  "preview_settings.mode": {
+    "type": "string",
+    "enum": [
+      "port",
+      "host"
+    ]
+  },
+  "project_blocks.page": {
+    "type": "string",
+    "enum": [
+      "board",
+      "table",
+      "pipeline",
+      "routines"
+    ]
+  },
+  "project_blocks.width": {
+    "type": "string",
+    "enum": [
+      "narrow",
+      "wide"
+    ]
   },
   "project_notes.note": {
     "type": "object",
@@ -11775,41 +12119,324 @@
       "title"
     ]
   },
-  "project_tasks.outputs": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
+  "project_offers.answer": {
+    "type": "string",
+    "enum": [
+      "accepted",
+      "dismissed"
+    ]
   },
-  "projects.budget": {
-    "type": "object",
-    "properties": {
-      "minutes": {
-        "type": "number"
-      },
-      "turns": {
-        "type": "number"
-      },
-      "usd": {
-        "type": "number"
-      }
-    }
+  "project_offers.reason": {
+    "type": "string",
+    "enum": [
+      "delegates",
+      "days",
+      "plan",
+      "repo",
+      "caw"
+    ]
+  },
+  "project_places.kind": {
+    "type": "string",
+    "enum": [
+      "checkout",
+      "hub"
+    ]
+  },
+  "project_starter_sets.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
+  "project_starter_sources.kind": {
+    "type": "string",
+    "enum": [
+      "task",
+      "thread",
+      "path",
+      "commit",
+      "routine",
+      "event"
+    ]
+  },
+  "project_starter_sources.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
+  "project_starters.glyph": {
+    "type": "string",
+    "enum": [
+      "brief",
+      "bug",
+      "calendar",
+      "draft",
+      "explore",
+      "grill",
+      "ideas",
+      "mail",
+      "palette",
+      "people",
+      "refresh",
+      "reply",
+      "rocket",
+      "routine",
+      "screen",
+      "search",
+      "site",
+      "stages",
+      "system",
+      "tasks",
+      "triage",
+      "voice"
+    ]
+  },
+  "project_starters.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
+  "project_task_edges.kind": {
+    "type": "string",
+    "const": "waits_on"
+  },
+  "projects.account_at_limit": {
+    "type": "string",
+    "enum": [
+      "wait",
+      "move"
+    ]
+  },
+  "projects.cap_period": {
+    "type": "string",
+    "enum": [
+      "day",
+      "month"
+    ]
+  },
+  "projects.caw_harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "projects.caw_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
+  "projects.lands": {
+    "type": "string",
+    "enum": [
+      "main",
+      "branch",
+      "pr",
+      "none"
+    ]
+  },
+  "projects.on_cap": {
+    "type": "string",
+    "enum": [
+      "pause",
+      "quiet",
+      "both"
+    ]
+  },
+  "projects.tapped": {
+    "type": "string",
+    "enum": [
+      "code",
+      "launch",
+      "seo",
+      "brand",
+      "design",
+      "social",
+      "outreach"
+    ]
+  },
+  "projects.template": {
+    "type": "string",
+    "enum": [
+      "code",
+      "launch",
+      "seo",
+      "brand",
+      "design",
+      "social",
+      "outreach"
+    ]
+  },
+  "projects.tracker": {
+    "type": "string",
+    "enum": [
+      "cawco",
+      "github",
+      "linear"
+    ]
   },
   "queued_task_starts.asked": {},
+  "queued_task_starts.origin": {
+    "type": "string",
+    "enum": [
+      "you",
+      "event"
+    ]
+  },
+  "queued_task_starts.why": {
+    "type": "string",
+    "enum": [
+      "cap",
+      "owns"
+    ]
+  },
   "queued_work_items.request": {},
-  "routines.budget": {
-    "type": "object",
-    "properties": {
-      "minutes": {
-        "type": "number"
-      },
-      "turns": {
-        "type": "number"
-      },
-      "usd": {
-        "type": "number"
-      }
-    }
+  "relays.provider": {
+    "type": "string",
+    "enum": [
+      "github",
+      "stripe",
+      "generic"
+    ]
+  },
+  "relays.secret_from": {
+    "type": "string",
+    "enum": [
+      "minted",
+      "owner"
+    ]
+  },
+  "relays.state": {
+    "type": "string",
+    "enum": [
+      "wanted",
+      "live",
+      "needs-owner",
+      "off"
+    ]
+  },
+  "removed_accounts.why": {
+    "type": "string",
+    "enum": [
+      "removed",
+      "joined"
+    ]
+  },
+  "routine_runs.outcome": {
+    "type": "string",
+    "enum": [
+      "silent",
+      "delivered",
+      "failed",
+      "cancelled"
+    ]
+  },
+  "routine_runs.state": {
+    "type": "string",
+    "enum": [
+      "queued",
+      "starting",
+      "running",
+      "ended",
+      "skipped"
+    ]
+  },
+  "routines.lands": {
+    "type": "string",
+    "enum": [
+      "main",
+      "branch",
+      "pr",
+      "none"
+    ]
+  },
+  "routines.made_by": {
+    "type": "string",
+    "enum": [
+      "delegate",
+      "session"
+    ]
+  },
+  "routines.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
+  "routines.target": {
+    "type": "string",
+    "enum": [
+      "delegate",
+      "orchestrator",
+      "conversation",
+      "curator",
+      "trim"
+    ]
+  },
+  "rule_state.status": {
+    "type": "string",
+    "enum": [
+      "armed",
+      "pending"
+    ]
+  },
+  "rules.match_kind": {
+    "type": "string",
+    "enum": [
+      "phrase",
+      "regex",
+      "meaning"
+    ]
+  },
+  "rules.scope_harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "rules.scope_role": {
+    "type": "string",
+    "enum": [
+      "orchestrator",
+      "leaf"
+    ]
+  },
+  "rules.timing": {
+    "type": "string",
+    "enum": [
+      "turn",
+      "message",
+      "immediate"
+    ]
+  },
+  "rules.watch": {
+    "type": "string",
+    "enum": [
+      "text",
+      "thinking",
+      "both"
+    ]
   },
   "sent_messages.body": {
     "type": "object",
@@ -12910,6 +13537,34 @@
       "verb"
     ]
   },
+  "sent_messages.hold": {
+    "type": "string",
+    "enum": [
+      "agent",
+      "behind",
+      "blocked",
+      "build",
+      "compacting",
+      "filing",
+      "finishing",
+      "held",
+      "hub",
+      "limit",
+      "paused",
+      "recut",
+      "resting",
+      "signin",
+      "starting",
+      "update"
+    ]
+  },
+  "sent_messages.mode": {
+    "type": "string",
+    "enum": [
+      "turn",
+      "note"
+    ]
+  },
   "sent_messages.owed": {
     "type": "object",
     "properties": {
@@ -13701,6 +14356,27 @@
       }
     ]
   },
+  "sent_messages.state": {
+    "type": "string",
+    "enum": [
+      "pending",
+      "read",
+      "failed",
+      "replaced",
+      "cancelled"
+    ]
+  },
+  "session_lines.kind": {
+    "type": "string",
+    "enum": [
+      "limit",
+      "outdated",
+      "watch",
+      "moved",
+      "room",
+      "context"
+    ]
+  },
   "session_plans.orphaned_comments": {
     "type": "array",
     "items": {
@@ -13851,6 +14527,60 @@
       "outcome"
     ]
   },
+  "skills.scope": {
+    "type": "string",
+    "enum": [
+      "user",
+      "project",
+      "local"
+    ]
+  },
+  "spend_settings.on_cap": {
+    "type": "string",
+    "enum": [
+      "pause",
+      "quiet",
+      "both"
+    ]
+  },
+  "starter_outcomes.outcome": {
+    "type": "string",
+    "enum": [
+      "picked",
+      "edited",
+      "ignored"
+    ]
+  },
+  "starter_outcomes.place": {
+    "type": "string",
+    "enum": [
+      "board",
+      "routines",
+      "decisions"
+    ]
+  },
+  "stranded_sessions.why": {
+    "type": "string",
+    "enum": [
+      "removed",
+      "signed-out"
+    ]
+  },
+  "stream_relay_journey.closed": {
+    "type": "string",
+    "enum": [
+      "later",
+      "done-for-now"
+    ]
+  },
+  "stream_relay_journey.name_state": {
+    "type": "string",
+    "enum": [
+      "open",
+      "pointed",
+      "skipped"
+    ]
+  },
   "stream_relay_proofs.ports": {
     "type": "array",
     "items": {
@@ -13923,6 +14653,33 @@
       "tailnet"
     ]
   },
+  "stream_relay.state": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "pulling",
+          "starting",
+          "live",
+          "failed"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "stopped"
+      }
+    ]
+  },
+  "supervisor_config.caw_mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
   "task_links.author": {
     "type": "object",
     "properties": {
@@ -13979,11 +14736,45 @@
       "url"
     ]
   },
+  "task_links.kind": {
+    "type": "string",
+    "enum": [
+      "issue",
+      "pr",
+      "discussion"
+    ]
+  },
   "task_links.labels": {
     "type": "array",
     "items": {
       "type": "string"
     }
+  },
+  "task_links.mode": {
+    "type": "string",
+    "enum": [
+      "record",
+      "closes",
+      "refs",
+      "related"
+    ]
+  },
+  "task_links.source": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
+    ]
+  },
+  "task_links.state": {
+    "type": "string",
+    "enum": [
+      "open",
+      "draft",
+      "merged",
+      "closed",
+      "canceled"
+    ]
   },
   "tool_call_keys.headers": {
     "type": "array",
@@ -14001,6 +14792,21 @@
       "minItems": 2,
       "maxItems": 2
     }
+  },
+  "tool_call_keys.state": {
+    "type": "string",
+    "enum": [
+      "running",
+      "answered",
+      "interrupted"
+    ]
+  },
+  "tool_update_settings.updates": {
+    "type": "string",
+    "enum": [
+      "update",
+      "ask"
+    ]
   },
   "tracker_bindings.cursor": {
     "type": "object",
@@ -14091,6 +14897,21 @@
       "options",
       "title",
       "url"
+    ]
+  },
+  "tracker_bindings.provider": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
+    ]
+  },
+  "tracker_bindings.state": {
+    "type": "string",
+    "enum": [
+      "syncing",
+      "synced",
+      "refused"
     ]
   },
   "tracker_links.synced": {
@@ -14197,11 +15018,32 @@
       }
     ]
   },
+  "trim_kept.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "server"
+    ]
+  },
+  "trim_offers.answer": {
+    "type": "string",
+    "enum": [
+      "on",
+      "dismissed"
+    ]
+  },
   "turn_cuts.calls": {
     "type": "array",
     "items": {
       "type": "string"
     }
+  },
+  "usage_buckets.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode"
+    ]
   },
   "usage_limits.open_code_go": {
     "type": "object",
@@ -14301,6 +15143,15 @@
       "windows"
     ]
   },
+  "view_proposals.page": {
+    "type": "string",
+    "enum": [
+      "board",
+      "table",
+      "pipeline",
+      "routines"
+    ]
+  },
   "work_items.blocked": {
     "type": "object",
     "properties": {
@@ -14325,88 +15176,47 @@
       "since"
     ]
   },
-  "work_items.budget": {
-    "type": "object",
-    "properties": {
-      "minutes": {
-        "type": "number"
-      },
-      "turns": {
-        "type": "number"
-      },
-      "usd": {
-        "type": "number"
-      }
-    }
-  },
-  "work_items.gate_passes": {
-    "type": "object",
-    "propertyNames": {
-      "type": "string"
-    },
-    "additionalProperties": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string"
-          },
-          "stage": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "command",
-          "stage"
-        ]
-      }
-    }
-  },
-  "work_items.landed": {
-    "type": "object",
-    "properties": {
-      "at": {
-        "type": "number"
-      },
-      "gate": {
-        "type": "object",
-        "properties": {
-          "passed": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "tree": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "passed",
-          "tree"
-        ]
-      },
-      "onto": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "sha": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "onto",
-      "sha"
+  "work_items.landing_phase": {
+    "type": "string",
+    "enum": [
+      "completing",
+      "gating",
+      "turn"
     ]
   },
-  "work_items.outputs": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
+  "work_items.lands": {
+    "type": "string",
+    "enum": [
+      "main",
+      "branch",
+      "pr",
+      "none"
+    ]
+  },
+  "work_items.origin": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "you",
+          "event"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "kept"
+      }
+    ]
+  },
+  "work_items.state": {
+    "type": "string",
+    "enum": [
+      "starting",
+      "running",
+      "done",
+      "failed",
+      "cancelled"
+    ]
   },
   "work_items.stopped_by": {
     "anyOf": [
@@ -14743,6 +15553,13 @@
       "stashes"
     ]
   },
+  "workspaces.kind": {
+    "type": "string",
+    "enum": [
+      "repo",
+      "folder"
+    ]
+  },
   "workspaces.moved_untold": {
     "anyOf": [
       {
@@ -14824,10 +15641,12 @@
       }
     ]
   },
-  "workspaces.ports": {
-    "type": "array",
-    "items": {
-      "type": "number"
-    }
+  "workspaces.state": {
+    "type": "string",
+    "enum": [
+      "active",
+      "held",
+      "archived"
+    ]
   }
 }

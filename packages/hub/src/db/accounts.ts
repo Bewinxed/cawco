@@ -9,10 +9,11 @@ import {
   type AccountReading,
   type AccountSetupStep,
   type AccountSignin,
-  DEFAULT_AT_LIMIT,
+  type AtLimit,
   defaultRouting,
   type HomeStore,
   type ProviderRouting,
+  RESTRICTIVE_AT_LIMIT,
   type RefusalReach,
 } from "@cawco/core/accounts";
 import { ACCOUNT_HUES, type AccountHue } from "@cawco/core/accounts/kinds";
@@ -87,6 +88,8 @@ export interface StrandedSession {
 }
 
 export interface AccountsDb {
+  /** Why the provider's saved at-limit policy does not read whole (migration 0399): its fields that don't, as a short reason; null when it reads or none is saved. */
+  readonly atLimitUnread: (provider: AccountProvider) => string | null;
   readonly bench: (now?: number) => AccountBench[];
   /**
    * The provider's account signed in as `identity` (core `sameIdentity`:
@@ -210,7 +213,11 @@ export interface AccountsDb {
   ) => void;
   readonly removeMovedFrom: (instanceId: string) => void;
   readonly removeSignin: (accountId: string, machineId: string) => boolean;
-  /** The provider's routing; a provider with no row reads the defaults. */
+  /**
+   * The provider's routing; a provider with no row reads the defaults. A
+   * saved at-limit policy that does not read ({@link atLimitUnread}) reads
+   * as core `RESTRICTIVE_AT_LIMIT`.
+   */
   readonly routing: (provider: AccountProvider) => ProviderRouting;
   readonly setBench: (
     accountId: string,
@@ -237,6 +244,78 @@ export interface AccountsDb {
 }
 
 type AccountRow = typeof accounts.$inferSelect;
+type RoutingRow = typeof accountRouting.$inferSelect;
+
+/**
+ * A routing row's saved at-limit policy, read from its columns; undefined
+ * when it does not read whole: kept unread by migration 0399, or a column
+ * empty. The hub acts on core `RESTRICTIVE_AT_LIMIT` then, never the
+ * default.
+ */
+const savedPolicy = (row: RoutingRow): AtLimit | undefined => {
+  const {
+    atLimitMove: move,
+    atLimitWaitMinutes: waitMinutes,
+    atLimitMoveWholeUnderK: moveWholeUnderK,
+    atLimitStaleAfterHours: staleAfterHours,
+    compactionAtLimit: atLimit,
+    compactionBeforeMove: beforeMove,
+    compactionFileRoom: fileRoom,
+    compactionSummarizerHarness: harness,
+    compactionSummarizerModel: model,
+  } = row;
+  return row.atLimitUnread === null &&
+    move !== null &&
+    waitMinutes !== null &&
+    moveWholeUnderK !== null &&
+    staleAfterHours !== null &&
+    atLimit !== null &&
+    beforeMove !== null &&
+    fileRoom !== null &&
+    harness !== null &&
+    model !== null
+    ? {
+        move,
+        waitMinutes,
+        moveWholeUnderK,
+        staleAfterHours,
+        compaction: {
+          atLimit,
+          beforeMove,
+          fileRoom,
+          summarizer: { harness, model },
+        },
+      }
+    : undefined;
+};
+
+/** Each column of the policy, by the field of core `AtLimit` it holds. */
+const POLICY_COLUMNS = [
+  ["move", "atLimitMove"],
+  ["waitMinutes", "atLimitWaitMinutes"],
+  ["moveWholeUnderK", "atLimitMoveWholeUnderK"],
+  ["staleAfterHours", "atLimitStaleAfterHours"],
+  ["compaction.atLimit", "compactionAtLimit"],
+  ["compaction.beforeMove", "compactionBeforeMove"],
+  ["compaction.fileRoom", "compactionFileRoom"],
+  ["compaction.summarizer.harness", "compactionSummarizerHarness"],
+  ["compaction.summarizer.model", "compactionSummarizerModel"],
+] as const;
+
+/**
+ * Why a routing row's policy does not read, short: the fields left empty
+ * (0399 placed none it could not read), or "no field" when none read (a
+ * policy that was not JSON, or not an object). Null when it reads.
+ */
+const unreadReason = (row: RoutingRow): string | null => {
+  if (savedPolicy(row)) {
+    return null;
+  }
+  const empty = POLICY_COLUMNS.filter(([, column]) => row[column] === null);
+  return empty.length === POLICY_COLUMNS.length
+    ? "no field"
+    : empty.map(([field]) => field).join(", ");
+};
 
 const toAccount = (row: AccountRow): Account => ({
   id: row.id,
@@ -783,6 +862,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .from(accountRouting)
         .where(eq(accountRouting.provider, provider))
         .get();
+      const unread = row ? unreadReason(row) : null;
       return row
         ? {
             provider: row.provider,
@@ -796,10 +876,18 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
                 ? { pinnedAccountId: row.delegatesPinned }
                 : {}),
             },
-            // A policy saved before a setting existed reads its default.
-            atLimit: { ...DEFAULT_AT_LIMIT, ...row.atLimit },
+            atLimit: savedPolicy(row) ?? RESTRICTIVE_AT_LIMIT,
+            ...(unread === null ? {} : { atLimitUnread: unread }),
           }
         : defaultRouting(provider);
+    },
+    atLimitUnread: (provider) => {
+      const row = db
+        .select()
+        .from(accountRouting)
+        .where(eq(accountRouting.provider, provider))
+        .get();
+      return row ? unreadReason(row) : null;
     },
     // A pin names an account the hub keeps, or none: a strategy other than
     // `pinned` may carry one the routes never checked.
@@ -810,7 +898,17 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         yoursPinned: kept(routing.yours.pinnedAccountId),
         delegatesStrategy: routing.delegates.strategy,
         delegatesPinned: kept(routing.delegates.pinnedAccountId),
-        atLimit: routing.atLimit,
+        atLimitMove: routing.atLimit.move,
+        atLimitWaitMinutes: routing.atLimit.waitMinutes,
+        atLimitMoveWholeUnderK: routing.atLimit.moveWholeUnderK,
+        atLimitStaleAfterHours: routing.atLimit.staleAfterHours,
+        compactionAtLimit: routing.atLimit.compaction.atLimit,
+        compactionBeforeMove: routing.atLimit.compaction.beforeMove,
+        compactionFileRoom: routing.atLimit.compaction.fileRoom,
+        compactionSummarizerHarness:
+          routing.atLimit.compaction.summarizer.harness,
+        compactionSummarizerModel: routing.atLimit.compaction.summarizer.model,
+        atLimitUnread: null,
       };
       db.insert(accountRouting)
         .values({ provider: routing.provider, ...values })

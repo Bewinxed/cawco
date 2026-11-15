@@ -2,16 +2,17 @@ language js
 
 // A states file takes a store module (client.svelte.ts, the stores under
 // stores/ and the socket under hub/) inside a story's `beforeEach`, with
-// `await import("…")`: the stage then serves that story's frame its own
-// copy of the store, and of every module between the states file and it,
-// so what the story writes into it is its frame's alone (stage-host
-// host.ts `cawcoStandIns`). A static import is the one store every frame
-// on the page shares, and two stories writing it draw alike. Its types
+// `await import("…")`: the stage then runs that story in a module runner
+// of its own, which evaluates the store and every module between the
+// states file and it, so what the story writes into it is its frame's
+// alone (stage-host canvas/own.ts, host.ts `ownSet`). A static import is
+// the one store every frame on the page shares, and two stories writing it
+// draw alike. Its types
 // stay free (`import type`, which loads nothing). biome.jsonc hands this
 // plugin the states files.
 JsImport() as $hit where {
   $filename <: r".*\.stories\.[cm]?[jt]sx?$",
   $hit <: r"[\s\S]*[\"'](?:[^\"']*/cawco/|(?:\.\.?/)+)(?:client\.svelte(?:\.js)?|stores/[^\"']+|hub/[^\"']+)[\"'][\s\S]*",
   $hit <: not r"^import\s+type\b[\s\S]*",
-  register_diagnostic(span=$hit, message="Import the store inside the story's beforeEach (`await import(…)`): that story's frame then holds its own copy.")
+  register_diagnostic(span=$hit, message="Import the store inside the story's beforeEach (`await import(…)`): that story then runs with a store of its own.")
 }

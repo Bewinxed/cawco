@@ -103,7 +103,6 @@
         pose: null,
         hear: draft.hear,
         delegateType: null,
-        reach: null,
       };
     }
     return member.type === "agent" ? { ...member, hue: draft.hue } : member;

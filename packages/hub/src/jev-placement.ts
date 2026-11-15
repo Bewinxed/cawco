@@ -568,13 +568,36 @@ export async function jevType(
 
 /** A noul at or above this meets a criterion. Our own call, as a meaning rule fires. */
 const JUDGED_THRESHOLD = 0.8;
-/** Judged checks with Jev on: one yes/no per criterion (task-file.ts `criteriaOf`), over the attempt's report. */
+/**
+ * The most of a landed attempt's diff the judge reads (dispatch.ts
+ * `attemptWork` cuts it file by file to this): Jev's context is 32,000
+ * tokens (.design-foundations/plans/2026-09-23-jev-typesafe.md, from
+ * OpenRouter's page), and a diff runs near three characters a token, so
+ * this leaves room for the task, the criteria, the checks and the caveats.
+ */
+export const JUDGED_DIFF_MAX = 48_000;
+/** The most of an attempt's report the judge reads when it landed nothing: its end. */
+export const JUDGED_REPORT_MAX = 6000;
+/** The most of everything else the work says (its merge checks, its caveats) the judge reads. */
+export const JUDGED_NOTES_MAX = 4000;
+/**
+ * The whole of the work the judge reads: the diff, its heading and the
+ * line naming what its cut left out, then the checks and the caveats.
+ */
+const JUDGED_WORK_MAX = JUDGED_DIFF_MAX + 2 * JUDGED_NOTES_MAX + 4000;
+/**
+ * Judged checks with Jev on: one yes/no per criterion (task-file.ts
+ * `criteriaOf`), over the attempt's work as dispatch.ts `attemptWork` writes
+ * it: what it landed (its diff, the merge checks the hub ran on it, the
+ * caveats its hand-in named), or its report and hand-in when it landed
+ * nothing.
+ */
 export async function jevJudged(
   access: JevAccess,
   projectId: string,
   task: { description: string; id: string; title: string },
   criteria: string[],
-  report: string
+  work: string
 ): Promise<{ criterion: string; met: boolean; noul: number }[]> {
   const result = await askRow(
     "judged",
@@ -586,7 +609,7 @@ export async function jevJudged(
         title: head(task.title, 200),
         description: head(task.description, 2000),
       },
-      attempt_report: tailOf(report, 6000),
+      work: head(work, JUDGED_WORK_MAX),
     },
     Object.fromEntries(
       criteria.map((criterion, index) => [
@@ -596,7 +619,7 @@ export async function jevJudged(
           instructions: {
             criterion: head(criterion, 500),
             question:
-              "Does `attempt_report` show `criterion` is met? A claim with nothing behind it in the report is not shown.",
+              "Does `work` show `criterion` is met? What it landed (its diff and the checks the hub ran on it) shows; a claim with nothing behind it in `work` is not shown.",
           },
         },
       ])

@@ -4,17 +4,15 @@
 
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
-import { type FleetSkillMeta, READ_SKILL_FILES } from "@cawco/core/fleet";
+import { NO_SKILL, READ_SKILL_FILES } from "@cawco/core/fleet";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import type { RouteSet } from "../machine-answers";
 import { machineSkillFiles } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
-import { pushTarget, skillFilesOff, unansweredStatus } from "../machine-reads";
-
+import { pushTarget, skillFilesOff, unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
 import { boundFields } from "./bound-fields";
 
@@ -79,11 +77,7 @@ export const fleetSkillCalls = (
     skillRow,
   } = ctx;
   return {
-    put: async (
-      name: string,
-      body: Static<typeof skillBody>,
-      set: Pick<RouteSet, "headers">
-    ) => {
+    put: async (name: string, body: Static<typeof skillBody>) => {
       if (!SKILL_NAME.test(name)) {
         return problem(400, {
           code: "not-usable-skill-name",
@@ -96,12 +90,10 @@ export const fleetSkillCalls = (
       }
 
       if (body.fromMachine) {
-        const read = await skillFilesOff(
-          ctx,
-          body.fromMachine,
-          [name, body.cwd],
-          set
-        );
+        const read = await skillFilesOff(ctx, body.fromMachine, [
+          name,
+          body.cwd,
+        ]);
         if (read instanceof ElysiaStatus) {
           return read;
         }
@@ -166,15 +158,7 @@ export const fleetSkillCalls = (
     },
     /** On or off: the stored row's flag, its source and files as they are. Nothing is fetched; every machine is told, and a machine takes a disabled skill away and writes an enabled one from the stored files. */
     setEnabled: (name: string, enabled: boolean) => {
-      let row: FleetSkillMeta | undefined;
-      try {
-        row = db.setSkillEnabled(name, enabled);
-      } catch (error) {
-        return problem(400, {
-          code: "skill-not-saved",
-          detail: error instanceof Error ? error.message : String(error),
-        });
-      }
+      const row = db.setSkillEnabled(name, enabled);
       if (!row) {
         return problem(404, {
           code: "no-skill",
@@ -220,10 +204,8 @@ export const fleetSkillRoutes = (
   } = ctx;
   return (
     new Elysia()
-      .put(
-        "/api/fleet/skills/:name",
-        { body: skillBody },
-        ({ params, body, set }) => calls.put(params.name, body, set)
+      .put("/api/fleet/skills/:name", { body: skillBody }, ({ params, body }) =>
+        calls.put(params.name, body)
       )
       .patch(
         "/api/fleet/skills/:name",
@@ -240,7 +222,7 @@ export const fleetSkillRoutes = (
       })
       // The same source, fetched again — for a skill whose repo has moved on.
       // Answers at once, the row marked `fetching`, as the PUT does.
-      .post("/api/fleet/skills/:name/refresh", async ({ params, set }) => {
+      .post("/api/fleet/skills/:name/refresh", async ({ params }) => {
         const stored = db
           .listSkills()
           .find((entry) => entry.name === params.name);
@@ -255,7 +237,7 @@ export const fleetSkillRoutes = (
         // "the same source, again" reads from.
         if (stored.source.startsWith("machine:")) {
           const machineId = stored.source.slice("machine:".length);
-          const read = await skillFilesOff(ctx, machineId, [stored.name], set);
+          const read = await skillFilesOff(ctx, machineId, [stored.name]);
           if (read instanceof ElysiaStatus) {
             return read;
           }
@@ -311,29 +293,22 @@ export const fleetSkillRoutes = (
           }
           const current = db
             .listSkills()
-            .find((skill) => skill.name === version.name);
-          try {
-            const skill = db.putSkill({
-              name: version.name,
-              source: version.skillSource,
-              enabled: current?.enabled ?? true,
-              hash: version.hash,
-              bytes: version.bytes,
-              files: version.files,
-            });
-            // A restore is no fetch: what the last one came to no longer
-            // says what the row holds.
-            db.noteSource({ skill: skill.name }, { lastRefresh: null });
-            fleetChanged();
-            return skillRow(
-              db.listSkills().find((row) => row.name === skill.name) ?? skill
-            );
-          } catch (error) {
-            return problem(400, {
-              code: "skill-not-saved",
-              detail: error instanceof Error ? error.message : String(error),
-            });
-          }
+            .find((one) => one.name === version.name);
+          const skill = db.putSkill({
+            name: version.name,
+            source: version.skillSource,
+            enabled: current?.enabled ?? true,
+            hash: version.hash,
+            bytes: version.bytes,
+            files: version.files,
+          });
+          // A restore is no fetch: what the last one came to no longer
+          // says what the row holds.
+          db.noteSource({ skill: skill.name }, { lastRefresh: null });
+          fleetChanged();
+          return skillRow(
+            db.listSkills().find((row) => row.name === skill.name) ?? skill
+          );
         }
       )
       // The click that settles a skill edited on one machine the fleet's way:
@@ -346,7 +321,7 @@ export const fleetSkillRoutes = (
       .post(
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
-        async ({ params, body, set }) => {
+        async ({ params, body }) => {
           const target = pushTarget(ctx, body);
           if (target instanceof ElysiaStatus) {
             return target;
@@ -370,7 +345,7 @@ export const fleetSkillRoutes = (
           );
           switch (asked.kind) {
             case "unanswered": {
-              return unansweredStatus(ctx, set, body.machineId, asked);
+              return unansweredProblem(ctx, body.machineId, asked);
             }
             case "answered":
               break;
@@ -380,8 +355,8 @@ export const fleetSkillRoutes = (
           const answer = asked.value;
           // No copy on the machine is nothing to keep; any other refusal
           // stops the push, because the copy it would destroy was not read.
-          if (!(answer.ok || answer.error?.startsWith("no skill "))) {
-            return problem(500, {
+          if (!(answer.ok || answer.error?.startsWith(NO_SKILL))) {
+            return problem(502, {
               code: "skill-unread",
               detail: answer.error ?? "the machine could not read the skill",
             });

@@ -53,6 +53,7 @@ import {
   type StreamSubscribe,
 } from "@cawco/core/stream";
 import type { HubLifetimeShape } from "./lifetime";
+import type { AnyProblem } from "./refusal";
 import { refusalFrame } from "./registry";
 import { type HubSocket, sendFrame } from "./wire-socket";
 
@@ -138,9 +139,12 @@ export interface StreamPorts {
   ) => boolean;
   /**
    * The one send path. It always takes the send: a machine that is not there
-   * makes its record failed, and the record's frame says so.
+   * makes its record failed, and the record's frame says so. A send the hub
+   * refuses outright, keeping no record, answers its problem.
    */
-  readonly relaySend: (envelope: Envelope<SendPayload>) => void;
+  readonly relaySend: (
+    envelope: Envelope<SendPayload>
+  ) => AnyProblem | undefined;
   readonly withdrawSend: (
     machineId: string,
     sessionId: string,
@@ -513,26 +517,24 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       // A send the hub refuses outright (a Claude conversation gone, which
       // keeps no record) is answered `failed` with why: unanswered, the client
       // reads silence, keeps the send and offers it again on every connection.
-      try {
-        ports.relaySend({
-          verb: "send",
-          machineId,
+      const refused = ports.relaySend({
+        verb: "send",
+        machineId,
+        instanceId: sessionId,
+        // The envelope's session is authoritative: the payload's own copy is
+        // normalised onto it so the two can never disagree on the wire.
+        // and the person is who a page speaks for.
+        payload: {
+          ...payload,
           instanceId: sessionId,
-          // The envelope's session is authoritative: the payload's own copy is
-          // normalised onto it so the two can never disagree on the wire.
-          // and the person is who a page speaks for.
-          payload: {
-            ...payload,
-            instanceId: sessionId,
-            message: { ...payload.message, origin: { kind: "human" } },
-          } as unknown as SendPayload,
-        });
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
+          message: { ...payload.message, origin: { kind: "human" } },
+        } as unknown as SendPayload,
+      });
+      if (refused) {
         console.warn(
-          `[hub] dashboard send ${commandId} for ${sessionId} refused: ${reason}`
+          `[hub] dashboard send ${commandId} for ${sessionId} refused: ${refused.response.detail}`
         );
-        fail(socket, commandId, reason);
+        fail(socket, commandId, refused.response.detail);
         return;
       }
       ackTo(socket, {

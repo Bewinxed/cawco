@@ -57,7 +57,8 @@
 </script>
 
 <!-- The session's mark leading on the title's line; the title and its wait;
-     what it wants, two lines at most; then the kind and where; a
+     what it wants, two lines at most (a choice, an onboarding step and a
+     fleet watch notice whole: its why is the row); then the kind and where; a
      permission's peers under them. Its machine is offline: it stands,
      dimmed as every stale row is. -->
 <!-- mark-line: a grid whose first row is the mark line; its words take
@@ -124,7 +125,7 @@
   {@render end?.()}
   <span
     data-slot="want"
-    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo"
+    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo group-kind-watch/row:block group-kind-watch/row:line-clamp-undo"
     >{want}</span
   >
   {@render below?.()}

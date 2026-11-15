@@ -68,6 +68,10 @@ import {
   type PasskeyRelayCapability,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
+import {
+  BrowserHostKindSchema,
+  BrowserStateSchema,
+} from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { SHIELD_WORDS } from "@cawco/core/words/browser";
@@ -75,7 +79,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-
+import { awayProblem, silentProblem } from "./machine-answers";
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -132,25 +136,25 @@ const browserKeyOf = (instance: InstanceRow): BrowserKey =>
     ? `project:${instance.projectId}`
     : `machine:${instance.machineId}`;
 
-/** A machine's answer to a browser call, or its refusal in the person's words. */
+/** Machine `machineId`'s answer to a browser call, or its refusal in the person's words (`machine`, its name). */
 export const answered = <T>(
   read: Awaited<ReturnType<RelayCall>>,
+  machineId: string,
   machine: string,
   what: string
 ) => {
   if (read.kind === "unanswered") {
     return read.reason === "dead"
-      ? problem(503, {
-          code: "browser-machine-away",
-          detail: `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`,
-        })
-      : problem(503, {
-          code: "browser-machine-late",
-          detail: `${machine}'s browser did not ${what} in time; it may still be at it there.`,
-        });
+      ? awayProblem(
+          machineId,
+          `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`
+        )
+      : silentProblem(
+          `${machine}'s browser did not ${what} in time; it may still be at it there.`
+        );
   }
   if (!read.value.ok) {
-    return problem(409, {
+    return problem(502, {
       code: "browser-machine-refused",
       detail: read.value.error ?? `${machine}'s browser did not ${what}.`,
     });
@@ -158,23 +162,42 @@ export const answered = <T>(
   return read.value.result as T;
 };
 
-const rowFrom = (row: BrowserRow): Omit<StoredBrowser, "machineId"> => ({
-  key: row.key,
-  name: row.name,
-  host: row.host,
-  state: row.state,
-  lastUsedAt: row.lastUsedAt,
-  projectId: row.key.startsWith("project:")
-    ? row.key.slice("project:".length)
-    : null,
-  takeover: row.takeover
-    ? {
-        by: row.takeover.by ?? "",
-        requestId: row.takeover.requestId ?? null,
-        since: row.takeover.since,
-      }
-    : null,
-});
+/**
+ * A machine's browser as the hub keeps it, or undefined when its state or
+ * its host is none this build knows (a newer agent's word): such a row is
+ * not kept, as `browsers.state` and `browsers.host` hold only what this hub
+ * reads, and it says so.
+ */
+const rowFrom = (
+  machineId: string,
+  row: BrowserRow
+): Omit<StoredBrowser, "machineId"> | undefined => {
+  const state = BrowserStateSchema.safeParse(row.state);
+  const host = BrowserHostKindSchema.safeParse(row.host);
+  if (!(state.success && host.success)) {
+    console.warn(
+      `[browser] ${row.key} on ${machineId}: its state ${JSON.stringify(row.state)} or host ${JSON.stringify(row.host)} is none this hub knows, so its row is not kept`
+    );
+    return undefined;
+  }
+  return {
+    key: row.key,
+    name: row.name,
+    host: host.data,
+    state: state.data,
+    lastUsedAt: row.lastUsedAt,
+    projectId: row.key.startsWith("project:")
+      ? row.key.slice("project:".length)
+      : null,
+    takeover: row.takeover
+      ? {
+          by: row.takeover.by ?? "",
+          requestId: row.takeover.requestId ?? null,
+          since: row.takeover.since,
+        }
+      : null,
+  };
+};
 
 export const createBrowsers = (deps: BrowsersDeps) => {
   const passkeyQrs = new Map<BrowserKey, PasskeyQrFrame>();
@@ -256,7 +279,10 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     deps.publish({ kind: "browser_list", browsers: browsers.list() });
 
   const keep = (machineId: string, row: BrowserRow): void => {
-    db.browsers.put(machineId, rowFrom(row));
+    const kept = rowFrom(machineId, row);
+    if (kept) {
+      db.browsers.put(machineId, kept);
+    }
     noteLive(machineId, row);
     told();
   };
@@ -264,6 +290,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
   const shield = async (machineId: string, args: BrowserShieldArgs) => {
     const row = answered<BrowserRow>(
       await deps.call(machineId, BROWSER_SHIELD, [args], BROWSER_CALL_MS),
+      machineId,
       deps.machineName(machineId),
       "be taken over"
     );
@@ -406,7 +433,10 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           ended(machineId, row.key, null, row.takeover.requestId ?? undefined);
         }
       }
-      db.browsers.replace(machineId, frame.browsers.map(rowFrom));
+      db.browsers.replace(
+        machineId,
+        frame.browsers.flatMap((row) => rowFrom(machineId, row) ?? [])
+      );
       for (const at of live.keys()) {
         if (at.startsWith(`${machineId}\u0000`)) {
           live.delete(at);
@@ -482,6 +512,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     async connected(machineId: string) {
       const frame = answered<BrowserFrame>(
         await deps.call(machineId, BROWSER_ROWS, [], BROWSER_CALL_MS),
+        machineId,
         deps.machineName(machineId),
         "say what it runs"
       );
@@ -552,6 +583,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           [{ key }],
           BROWSER_CALL_MS
         ),
+        machineId,
         deps.machineName(machineId),
         "be handed back"
       );
@@ -575,6 +607,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           [{ key, ...(relay ? { relay } : {}) }],
           BROWSER_CALL_MS
         ),
+        machineId,
         deps.machineName(machineId),
         "start"
       );
@@ -599,6 +632,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       const row = answered<BrowserRow | null>(
         await deps.call(machineId, BROWSER_STOP, [{ key }], BROWSER_CALL_MS),
+        machineId,
         deps.machineName(machineId),
         "stop"
       );
@@ -629,6 +663,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
       const removed = answered<null>(
         await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
+        machineId,
         deps.machineName(machineId),
         "be removed"
       );
@@ -690,6 +725,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           ],
           BROWSER_CALL_MS
         ),
+        machineId,
         deps.machineName(machineId),
         "receive the passkey advert"
       );

@@ -24,6 +24,7 @@ import {
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import { relaunchWords } from "@cawco/core/words/relaunch";
+import { ElysiaStatus } from "elysia";
 import { machineAccount } from "./accounts";
 import { pricedTokens, projectedMove, usdWords } from "./admission";
 import { accountsRead } from "./at-limit";
@@ -46,7 +47,7 @@ import {
   refusedUntil,
   type Stall,
 } from "./limit-decision";
-import type { PlacementInput } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import {
   accountFacts,
   place as placeAccount,
@@ -935,9 +936,26 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       projectAccounts: projectId
         ? runningAccounts(ctx.db.project(projectId), row.accountId)
         : null,
-      taskAccounts: ctx.taskAccounts(projectId, item?.taskId),
+      taskAccounts: allowedHere(row, ctx.taskAccounts(projectId, item?.taskId)),
       ...(typeAccount ? { typeAccount } : {}),
     };
+  };
+
+  /**
+   * A running session's task allow-list as a move reads it: the list, or,
+   * while its task's `accounts:` line does not read whole, the account the
+   * session is on alone, so it moves nowhere else on a list the hub cannot
+   * read (spawns.ts `taskAccounts`; a new start is refused for it).
+   */
+  const allowedHere = (
+    row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
+    allowed: TaskAccounts
+  ): string[] | null => {
+    if ("accounts" in allowed) {
+      return allowed.accounts;
+    }
+    const here = row.accountId ?? machineAccount(ctx.db, row.machineId);
+    return here ? [here] : null;
   };
 
   /** Whether a session's prompt cache is still warm, as the cold check reads it (keep-alive.ts `cacheWarmNow`). */
@@ -1381,8 +1399,15 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     };
     let release: () => void = () => undefined;
     try {
-      release = await ctx.cloneForContinuation(row.id);
+      const held = await ctx.cloneForContinuation(row.id);
+      if (held instanceof ElysiaStatus) {
+        return held.response.detail;
+      }
+      release = held;
       const prepared = await ctx.prepareContinuation(row.id);
+      if (prepared instanceof ElysiaStatus) {
+        return prepared.response.detail;
+      }
       const request: ContinueRequest = {
         summarizer: summarizerOf(row),
         target: {

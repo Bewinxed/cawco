@@ -7,24 +7,44 @@ import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { NamedSpawn } from "@cawco/core/protocol";
+import type { problem } from "elysia";
 import type { DbShape } from "./db";
+import { awayProblem, MachineProblem } from "./machine-answers";
 import type { HubSocket } from "./wire-socket";
 
 /**
  * A step or a read that could not finish because its machine went away. Not
  * a failure: a continuation waits, and the machine's next register carries it
- * on; a route answers it as the machine away (`awayStatus`: 503 naming it),
- * which a reader reads again once the machine is back.
+ * on; thrown to a route it is answered as the machine away (a
+ * `MachineProblem` holding `awayProblem`: 503 naming it), which a reader
+ * reads again once the machine is back.
  */
-export class MachineAway extends Error {
+export class MachineAway extends MachineProblem {
   readonly machineId: string;
   /** `words`: the hub's `machineFault`, the machine by its name. */
   constructor(machineId: string, words: string) {
-    super(words);
+    super(awayProblem(machineId, words));
     this.name = "MachineAway";
     this.machineId = machineId;
   }
 }
+
+/** A continuation's source with nothing to continue from: no such session (404), or no transcript yet (409) (continuations.ts `prepareContinuation`). */
+export type ContinuationUnfound =
+  | ReturnType<
+      typeof problem<404, { code: "continuation-no-session"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "continuation-no-transcript"; detail: string }
+      >
+    >;
+
+/** A work item's continuation with no clone to go on in (work-items.ts `continuable`). */
+export type ContinuationUnplaced = ReturnType<
+  typeof problem<409, { code: "continuation-unplaced"; detail: string }>
+>;
 
 /**
  * Where a conversation lives, resolved from its id alone. `sessionId` is the

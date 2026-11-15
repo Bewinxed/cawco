@@ -32,12 +32,18 @@ let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
  * Hands `follower` the continuation table every time the hub's word on it
  * lands — a publish, or the read on connect. One follower: the parked
  * starts' (spawn/parked.svelte.ts), which follow every continuation this tab
- * started.
+ * started (`startParked`). Returns its release: the table then moves with
+ * no one following it.
  */
 export function followContinuations(
   follower: (table: ContinuationJob[]) => void
-): void {
+): () => void {
   continuationFollower = follower;
+  return () => {
+    if (continuationFollower === follower) {
+      continuationFollower = null;
+    }
+  };
 }
 
 function adoptContinuations(table: ContinuationJob[]): void {

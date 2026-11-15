@@ -47,7 +47,6 @@ import {
   type MayStart,
   mayStartType,
   narrowMayStart,
-  sessionMayStart,
   startsAny,
 } from "@cawco/core/delegate-types";
 import type { BriefTarget } from "@cawco/core/fleet";
@@ -80,7 +79,11 @@ import type {
 import { sessionLink, todoLink } from "@cawco/core/references";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { NeutralOrigin, SendRefusal } from "@cawco/core/session-messages";
-import { type TurnWakes, waitsOnItself } from "@cawco/core/session-messages";
+import {
+  SEND_STATES,
+  type TurnWakes,
+  waitsOnItself,
+} from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import type { WaitWitness } from "@cawco/core/task-views";
@@ -118,21 +121,25 @@ import {
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { ElysiaStatus, problem } from "elysia";
+import type { HandedReceiver } from "./artifacts/shapes";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
-import type {
-  QueuedWorkItemRow,
-  WorkItemRow,
-  WorkspaceRow,
+import {
+  landedWork,
+  type QueuedWorkItemRow,
+  type WorkItemRow,
+  type WorkspaceRow,
 } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import type { Origin, WorkOrigin } from "./db/schema";
 import type {
   ItemBlock,
+  Origin,
+  StoredSendRefusal,
   WorkBudget,
   WorkItemSubmission,
+  WorkOrigin,
 } from "./db/stored-types";
-import type { designOnBase } from "./design-system";
+import type { designOnBase, designSection } from "./design-system";
 import { failedWith } from "./gate";
 import {
   capableMachines,
@@ -161,6 +168,7 @@ import {
   reportLine,
 } from "./landing-run";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { awayProblem, MachineProblem, thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import type { Plans } from "./plans";
@@ -171,7 +179,6 @@ import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo, TodoChanges } from "./task-file";
 import type { Tasks } from "./tasks";
-
 import { unwatchedMode } from "./unwatched-mode";
 import { CAWCO_TOOL } from "./web-reads";
 import {
@@ -182,7 +189,15 @@ import {
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
 } from "./work-item-state";
-import { budgetProblem, globOf, ownsProblem } from "./work-limits";
+import {
+  type BudgetColumns,
+  budgetColumns,
+  budgetFrom,
+  budgetOf,
+  budgetProblem,
+  globOf,
+  ownsProblem,
+} from "./work-limits";
 import type { WorkPlace } from "./work-place";
 import {
   createWorkspaces,
@@ -231,7 +246,7 @@ export const mayStartRefusal = (
   parent: Pick<InstanceRow, "delegateType" | "mayStart">,
   type: string | null
 ): string | undefined => {
-  const may = sessionMayStart(parent);
+  const may = parent.mayStart;
   if (startsAny(may) || (type !== null && mayStartType(may, type))) {
     return undefined;
   }
@@ -353,25 +368,13 @@ const overBudget = (
   return undefined;
 };
 
+/** Whether a row holds a budget: a limit, or one that did not read. */
+const budgetHeld = (row: BudgetColumns): boolean =>
+  row.budgetUnread !== null || budgetOf(row) !== null;
+
 /** `1 turn`, `40 turns`. */
 const counted = (count: number, one: string): string =>
   `${count} ${one}${count === 1 ? "" : "s"}`;
-
-/** A budget's fields, each from the first that sets it; null when none does. */
-const budgetFrom = (
-  ...budgets: (WorkBudget | null | undefined)[]
-): WorkBudget | null => {
-  const merged: WorkBudget = {};
-  for (const budget of [...budgets].reverse()) {
-    Object.assign(
-      merged,
-      Object.fromEntries(
-        Object.entries(budget ?? {}).filter(([, value]) => value !== undefined)
-      )
-    );
-  }
-  return Object.keys(merged).length > 0 ? merged : null;
-};
 
 /** Statuses of a session whose process its machine confirmed gone. */
 const GONE: ReadonlySet<string> = new Set(["stopped", "discarded"]);
@@ -447,6 +450,31 @@ const NO_INPUTS: Inputs = {
   held: [],
 };
 
+/**
+ * The hub's own `files` with their bytes, each made for `receiver` that is
+ * made for its reader alone (a preview's pass); or the first one's problem
+ * that could not be made for it, before anything is written.
+ */
+const heldFor = async (files: HandedFile[], receiver: HandedReceiver) => {
+  const made = await Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      bytes:
+        typeof file.bytes === "function"
+          ? await file.bytes(receiver)
+          : file.bytes,
+    }))
+  );
+  const held: { bytes: HandedBytes; name: string; size: number }[] = [];
+  for (const { name, bytes } of made) {
+    if (bytes instanceof ElysiaStatus) {
+      return bytes;
+    }
+    held.push({ name, bytes, size: handedSize(bytes) });
+  }
+  return held;
+};
+
 /** A sentence's closing stops and space, which an inputs line ends once. */
 const CLOSED = /[.\s]+$/u;
 
@@ -492,10 +520,13 @@ export interface WorkItemRequest {
    * before the item is filed: what the clone holds that the brief carries
    * (an attempt's design system, dispatch.ts). Its answer is the brief the
    * item stores and its session reads; `prompt` is that brief as it reads
-   * before any clone, for what is said of the request before one is cut. Set
-   * by the hub alone.
+   * before any clone, for what is said of the request before one is cut. Its
+   * problem stops the start: the clone's design/ could not be read. Set by
+   * the hub alone.
    */
-  briefFromClone?: (clone: CloneRef) => Promise<string>;
+  briefFromClone?: (
+    clone: CloneRef
+  ) => Promise<string | ProblemsOf<ReturnType<typeof designSection>>>;
   /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
   budget?: WorkBudget;
   /**
@@ -755,6 +786,14 @@ interface WorkItemDeps extends Pick<
     harness: HarnessKind,
     model: string | undefined
   ) => string | undefined;
+  /**
+   * "Omars-MacBook-Pro runs a CawCo build older than its hub's, which
+   * cannot send or take a session's inputs until it installs the hub's
+   * build" while `machineId`'s connected agent does not speak this hub's
+   * contract (core runtime.ts `protocolRange`): the inputs controls it
+   * answers are another epoch's shapes. Undefined when it speaks it.
+   */
+  readonly olderBuild: (machineId: string) => string | undefined;
   /** Whether `machineId`'s agent is connected now: the Apple build gate runs only on one that is. */
   readonly online: (machineId: string) => boolean;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
@@ -779,14 +818,7 @@ interface WorkItemDeps extends Pick<
     machineId: string,
     session: Omit<NamedSpawn, "cwd">,
     task: { projectId: string | null; taskId?: string }
-  ) =>
-    | ItemPlacement
-    | ReturnType<
-        typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<400, { code: "spawn-not-placed"; detail: string }>
-      >;
+  ) => ItemPlacement | PlacementProblem;
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
@@ -843,9 +875,10 @@ interface WorkItemDeps extends Pick<
   ) => void;
   /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; or its refusal in its words. */
   readonly resolveHanded: HandedInputs["resolve"];
-  /** The one send path; its record says whether the machine took it. */
+  /** The one send path; its record says whether the machine took it, and what refused it when one did. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
+    refusal: StoredSendRefusal | null;
     state: string;
   };
   /**
@@ -866,11 +899,9 @@ interface WorkItemDeps extends Pick<
     | ReturnType<
         typeof problem<400, { code: "spawn-not-settled"; detail: string }>
       >
+    | PlacementProblem
     | ReturnType<
-        typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<400, { code: "spawn-not-placed"; detail: string }>
+        typeof problem<409, { code: "starting-set-unread"; detail: string }>
       >
     | ReturnType<
         typeof problem<
@@ -968,8 +999,8 @@ const ASLEEP_WAKE_LIMIT_MS = DAY_MS;
 
 /** The longest `item`'s session may sleep and be woken: its budget's minutes, else {@link ASLEEP_WAKE_LIMIT_MS}. */
 const asleepLimit = (item: WorkItemRow): { ms: number; words: string } => {
-  const minutes = item.budget?.minutes;
-  return minutes === undefined
+  const minutes = item.budgetMinutes;
+  return minutes === null
     ? { ms: ASLEEP_WAKE_LIMIT_MS, words: workWords.aDay }
     : { ms: minutes * 60_000, words: workWords.budgetMinutes(minutes) };
 };
@@ -1000,7 +1031,7 @@ const REPORT_ARRIVES = workWords.reportArrives;
 
 /** How an open item ends, as the hub's reminders say it. */
 const FINISH_LINE =
-  "Finish the work and call finish_item with a report that quotes the output of every command that proves it, or call it with `blocked` and the exact command and error.";
+  "Finish the work and call finish_item, or call it with `blocked` and the exact command and error.";
 
 /** Whose word the sweep's wake is: the hub's about an item, as the quiet-turn word is. */
 const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: WORK_ITEM_ORIGIN };
@@ -1034,6 +1065,21 @@ interface Settings {
  * session's spawn finds the boundary in its form and hands it over to no new
  * generation.
  */
+/** Why a session could not be placed (spawns.ts `placedOrProblem`): its project deleted, no account it may run on, or its task's allow-list unread. */
+type PlacementProblem =
+  | ReturnType<
+      typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<400, { code: "spawn-not-placed"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "spawn-task-accounts-unread"; detail: string }
+      >
+    >;
+
 export interface ItemPlacement {
   accountId?: string;
   launchesOn?: string;
@@ -1374,10 +1420,10 @@ const outputsOf = (outputs: string[] | undefined) => {
   return [...paths];
 };
 
-/** How an item lands, as its session is told. */
-const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
+/** How an item lands, as its session is told: `outputs` the outputs it declared. */
+const landingOf = (item: WorkItemRow, outputs: string[]): WorkspaceLanding => ({
   lands: item.lands,
-  ...(item.outputs?.length ? { outputs: item.outputs } : {}),
+  ...(outputs.length > 0 ? { outputs } : {}),
   ...(item.projectId ? { assets: outputsFolder(item) } : {}),
 });
 
@@ -1446,6 +1492,7 @@ export const createWorkItems = ({
   missingFor,
   unblocked,
   machinePaused,
+  olderBuild,
   modelRefusal,
   online,
   personWait,
@@ -1493,6 +1540,16 @@ export const createWorkItems = ({
    * counts from none.
    */
   const woken = new Map<string, { count: number; turns: number }>();
+
+  /**
+   * The hand-in, then brief, of each new item whose session's start is
+   * kept on its row while its machine cannot take inputs ({@link
+   * handInWhenStarted}), by its session: run once its launch
+   * has gone ({@link startSent}), dropped when its item ends first
+   * ({@link update}). Held in memory only: one this hub lost to a restart
+   * is found at its release by the brief that never went.
+   */
+  const handInsHeld = new Map<string, { go: () => void; itemId: string }>();
   const waitTimers = new Map<string, HubTimer>();
   /**
    * Waits whose declaring turn ended. From then on a tool call of the
@@ -1612,6 +1669,11 @@ export const createWorkItems = ({
       disarmWait(id);
       woken.delete(id);
       const before = db.workItem(id);
+      // Ended while its start was held: the inputs it was to be handed go
+      // with it, never sent ({@link handInsHeld}).
+      if (before && handInsHeld.get(before.instanceId)?.itemId === id) {
+        handInsHeld.delete(before.instanceId);
+      }
       const after = published(
         db.updateWorkItem(id, {
           ...change,
@@ -1963,19 +2025,25 @@ export const createWorkItems = ({
   };
 
   /**
-   * Stops a live item that has reached its budget ({@link overBudget}): it
-   * fails with the sentence that names the budget, its parent (and its project's conversation) are
+   * Stops a live item that has reached its budget ({@link overBudget}), or
+   * whose budget does not read (`budgetUnread`): it fails with the sentence
+   * that names the budget, its parent (and its project's conversation) are
    * told, and its session is ended. An item whose landing is running is left
    * to it.
    */
   const enforceBudget = (item: WorkItemRow): void => {
     if (
-      !(item.budget && LIVE.has(item.state)) ||
+      !(budgetHeld(item) && LIVE.has(item.state)) ||
       itemHold(item, ["landing"], {})
     ) {
       return;
     }
-    const reason = overBudget(item.budget, usedBy(item));
+    const reason =
+      item.budgetUnread === null
+        ? overBudget(budgetOf(item), usedBy(item))
+        : workWords.budgetUnreadStopped(
+            workWords.budgetUnread(item.budgetUnread)
+          );
     if (!reason) {
       return;
     }
@@ -2375,7 +2443,7 @@ export const createWorkItems = ({
 
   lifetime.every(BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {
-      if (item.budget && !item.stoppingAt) {
+      if (budgetHeld(item) && !item.stoppingAt) {
         enforceBudget(item);
       }
     }
@@ -2888,7 +2956,7 @@ export const createWorkItems = ({
       ...(request.clean ? { clean: true } : {}),
       mayStart: narrowMayStart(
         request.mayStart ?? type?.mayStart ?? [],
-        sessionMayStart(parent)
+        parent.mayStart
       ),
       ...(request.account ? { account: request.account } : {}),
       ...(request.role ? { role: request.role } : {}),
@@ -3058,11 +3126,12 @@ export const createWorkItems = ({
     );
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
+    const outputs = db.workItemOutputs(item.id);
     const told =
-      (item.lands === "main" && !item.outputs?.length) ||
+      (item.lands === "main" && outputs.length === 0) ||
       isFolderOverlay(workspace)
         ? brief
-        : withLandingLine(brief, workspace.base, landingOf(item));
+        : withLandingLine(brief, workspace.base, landingOf(item, outputs));
     const sent = send(messageOf(session.id, session.machineId, parent, told));
     if (sent.state === "failed") {
       update(item.id, {
@@ -3070,10 +3139,13 @@ export const createWorkItems = ({
         error: sent.reason,
         endedAt: new Date(),
       });
-      return problem(502, {
-        code: "work-item-session-unreached",
-        detail: sent.reason ?? `could not reach ${session.id}`,
-      });
+      const words = sent.reason ?? `could not reach ${session.id}`;
+      // Its machine away is answered as one; any other refusal of the send
+      // is the hub's, by what the session or its item stands at (core
+      // SendRefusal): a conflict, never the machine's failure.
+      return sent.refusal?.kind === "machine-away"
+        ? awayProblem(sent.refusal.machineId, words)
+        : problem(409, { code: "work-item-session-unreached", detail: words });
     }
     const label = sessionLabel(session).tag;
     const continued: WorkItemStart = {
@@ -3281,7 +3353,7 @@ export const createWorkItems = ({
    * session's). A card-settling start is the hub's, whoever asks.
    */
   const mayStartIt = (request: WorkItemRequest, parent: Parent) => {
-    if (request.settlesCards || startsAny(sessionMayStart(parent))) {
+    if (request.settlesCards || startsAny(parent.mayStart)) {
       return;
     }
     const target = briefTarget(request, parent);
@@ -3342,7 +3414,8 @@ export const createWorkItems = ({
   /**
    * The problem that stops `parent` starting `request`: it may not start
    * that type, the request does not stand, its task's project holds its
-   * attempts, or its outputs have no project's folder to go to.
+   * attempts, its project's budget does not read, or its outputs have no
+   * project's folder to go to.
    */
   const admissionProblem = (request: WorkItemRequest, parent: Parent) => {
     const unmayed = mayStartIt(request, parent);
@@ -3359,6 +3432,19 @@ export const createWorkItems = ({
       return problem(409, {
         code: "work-item-attempts-paused",
         detail: capped,
+      });
+    }
+    // Every item of a project runs under its budget: one that does not read
+    // holds them all, as a cap that pauses does.
+    const projectId = request.task?.projectId ?? parent.projectId;
+    const project = projectId ? db.project(projectId) : undefined;
+    if (project && project.budgetUnread !== null) {
+      return problem(409, {
+        code: "work-item-attempts-paused",
+        detail: workWords.projectBudgetUnread(
+          project.name,
+          workWords.budgetUnread(project.budgetUnread)
+        ),
       });
     }
     return request.outputs && !(request.task?.projectId ?? parent.projectId)
@@ -3386,6 +3472,13 @@ export const createWorkItems = ({
   ) => {
     if (paths.length === 0) {
       return [];
+    }
+    const older = olderBuild(reader.machineId);
+    if (older) {
+      return problem(400, {
+        code: "work-item-inputs-older-build",
+        detail: inputsLine(older),
+      });
     }
     const judged = (await call(reader.machineId, CONTROL_INPUTS_ADMIT, [
       paths,
@@ -3593,7 +3686,9 @@ export const createWorkItems = ({
    * first byte is written. A set that fails partway is taken out again
    * (core `CONTROL_INPUTS_CLEAR`) and the failure said, so nothing of it is
    * taken for delivered ({@link sendInputs}). Answers the folder as the
-   * machine named it, none from an agent that names none.
+   * machine named it, none when there was nothing to hand; or, before
+   * anything is written, the problem of a file it could not make for
+   * `receiver` (a preview its browser opens nothing of).
    */
   const handInto = async (
     machineId: string,
@@ -3604,24 +3699,29 @@ export const createWorkItems = ({
     if (inputs.held.length === 0 && inputs.paths.length === 0) {
       return;
     }
-    const held = await Promise.all(
-      inputs.held.map(async (file) => {
-        const bytes =
-          typeof file.bytes === "function"
-            ? await file.bytes({ session: receiver, machineId })
-            : file.bytes;
-        return { name: file.name, bytes, size: handedSize(bytes) };
-      })
-    );
+    // Both ends speak this hub's inputs controls, or no byte moves: an
+    // older agent answers another epoch's shapes (core runtime.ts
+    // `protocolRange`), and is offered the hub's build.
+    const older =
+      olderBuild(machineId) ??
+      (inputs.paths.length > 0 ? olderBuild(inputs.machineId) : undefined);
+    if (older) {
+      return problem(400, {
+        code: "work-item-inputs-older-build",
+        detail: inputsLine(older),
+      });
+    }
+    const held = await heldFor(inputs.held, { session: receiver, machineId });
+    if (held instanceof ElysiaStatus) {
+      return held;
+    }
     const needed = [...held, ...inputs.admitted].reduce(
       (sum, file) => sum + file.size,
       0
     );
-    const room = (await call(machineId, CONTROL_INPUTS_ROOM, [place])) as
-      InputsRoom | undefined;
-    if (!room) {
-      return;
-    }
+    const room = (await call(machineId, CONTROL_INPUTS_ROOM, [
+      place,
+    ])) as InputsRoom;
     if (needed > room.free) {
       return problem(400, {
         code: "work-item-inputs-no-room",
@@ -3649,11 +3749,11 @@ export const createWorkItems = ({
       }
     } catch (error) {
       await clear();
-      throw new Error(
+      throw thrownAgain(
+        error,
         workWords.inputsCleared(
           inputsLine(error instanceof Error ? error.message : String(error))
-        ),
-        { cause: error }
+        )
       );
     }
     return room.folder;
@@ -3811,13 +3911,7 @@ export const createWorkItems = ({
         if (settings instanceof ElysiaStatus) {
           return settings;
         }
-        return spawnIn(
-          again,
-          settings,
-          parent,
-          await briefedFrom(request, again),
-          inputs
-        );
+        return spawnBriefed(again, settings, parent, request, inputs);
       }
       // Its clone is gone, or on a machine the attempt may not run on: the
       // retry runs in a new workspace, and the old one's sessions are
@@ -3967,14 +4061,10 @@ export const createWorkItems = ({
       return workspace;
     }
     // In its scratch dir before its session starts ({@link spawnIn}).
-    return spawnIn(
-      workspace,
-      settings,
-      parent,
-      await briefedFrom(request, workspace),
-      inputs,
-      { instanceId, placement }
-    );
+    return spawnBriefed(workspace, settings, parent, request, inputs, {
+      instanceId,
+      placement,
+    });
   };
 
   /**
@@ -4070,21 +4160,38 @@ export const createWorkItems = ({
     return workspace;
   };
 
-  /** The request with its brief written from its clone, when it asks for that ({@link WorkItemRequest.briefFromClone}). */
-  const briefedFrom = async (
+  /**
+   * {@link spawnIn}, the request's brief written from `workspace`'s clone
+   * first when it asks for that ({@link WorkItemRequest.briefFromClone}):
+   * the brief's problem stops the start.
+   */
+  const spawnBriefed = async (
+    workspace: WorkspaceRow,
+    settings: Settings,
+    parent: Parent,
     request: WorkItemRequest,
-    workspace: WorkspaceRow
-  ): Promise<WorkItemRequest> =>
-    request.briefFromClone
-      ? {
-          ...request,
-          prompt: await request.briefFromClone({
-            id: workspace.id,
-            machineId: workspace.machineId,
-            path: workspace.path,
-          }),
-        }
-      : request;
+    inputs: Inputs,
+    ahead?: { instanceId: string; placement: ItemPlacement }
+  ) => {
+    if (!request.briefFromClone) {
+      return spawnIn(workspace, settings, parent, request, inputs, ahead);
+    }
+    const prompt = await request.briefFromClone({
+      id: workspace.id,
+      machineId: workspace.machineId,
+      path: workspace.path,
+    });
+    return prompt instanceof ElysiaStatus
+      ? prompt
+      : spawnIn(
+          workspace,
+          settings,
+          parent,
+          { ...request, prompt },
+          inputs,
+          ahead
+        );
+  };
 
   /**
    * The follow-up in the workspace `needle` names, going on there in one
@@ -4212,7 +4319,9 @@ export const createWorkItems = ({
       group: request.group?.trim() || null,
       owns: request.owns?.length ? request.owns : null,
       waitedOn: request.waitedOn?.length ? request.waitedOn : null,
-      budget: budgetFrom(request.budget, project?.budget),
+      ...budgetColumns(
+        budgetFrom(request.budget, project ? budgetOf(project) : null)
+      ),
     };
   };
 
@@ -4234,15 +4343,13 @@ export const createWorkItems = ({
         ? ` It is in group “${item.group}”: its report waits until every item of the group has ended (a failure reports at once).`
         : "",
       owns.length > 0 ? ` It owns ${owns.join(", ")}.` : "",
-      item.budget
+      budgetOf(item)
         ? ` Its budget: ${[
-            item.budget.usd === undefined ? "" : `$${item.budget.usd}`,
-            item.budget.turns === undefined
+            item.budgetUsd === null ? "" : `$${item.budgetUsd}`,
+            item.budgetTurns === null ? "" : counted(item.budgetTurns, "turn"),
+            item.budgetMinutes === null
               ? ""
-              : counted(item.budget.turns, "turn"),
-            item.budget.minutes === undefined
-              ? ""
-              : counted(item.budget.minutes, "minute"),
+              : counted(item.budgetMinutes, "minute"),
           ]
             .filter(Boolean)
             .join(", ")}.`
@@ -4254,8 +4361,9 @@ export const createWorkItems = ({
    * The session of a filed item spawned, its row standing from now as its
    * item does: a live item whose session has no row is one whose session is
    * gone ({@link followSessions}). The item fails in the words it got when
-   * its session does not start, and those words are the problem; a machine's
-   * failure is a 502.
+   * its session does not start, and those words are the problem; a
+   * machine's cause thrown is answered as it is, anything else thrown is the
+   * hub's own failure.
    */
   const spawnItemSession = (
     item: WorkItemRow,
@@ -4293,7 +4401,74 @@ export const createWorkItems = ({
       const message =
         (error instanceof Error && error.message) || String(error);
       notStarted(message);
-      return problem(502, { code: "work-item-spawn-failed", detail: message });
+      // A machine's cause is answered as it is; anything else thrown is the
+      // hub's own failure, Elysia's 500.
+      if (error instanceof MachineProblem) {
+        return error.value();
+      }
+      throw error;
+    }
+  };
+
+  /** `item`'s inputs did not go, for `why`: it fails in their words, its parent is told, and its session ends. */
+  const inputsNotIn = (item: WorkItemRow, why: string): Promise<void> => {
+    const reason = `Its inputs did not reach its $TMPDIR/inputs/, so its brief was not sent: ${why}`;
+    const ended = finish(item, { state: "failed", error: reason });
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    if (row) {
+      report(row, `${reason}${reportLine(ended)}`, true);
+    }
+    return end(item.instanceId);
+  };
+
+  /**
+   * `inputs` put into `item`'s workspace for its new session, then `brief`
+   * sent; inputs that cannot go fail the item in their words
+   * ({@link inputsNotIn}). They go as soon as the machine can take them:
+   * at once while its agent is connected and speaks this hub's contract,
+   * whatever holds the start (start-holds.ts `startHold`: a pause, an
+   * install, its turn among the hub's paced launches), the brief then
+   * owed behind the start as any send is. A start kept on its row on a
+   * machine that cannot take them now (not connected, or an older build:
+   * {@link WorkItemDeps.olderBuild}) keeps them until its launch has gone
+   * ({@link startSent}); the item waits, it does not fail on the hold.
+   */
+  const handInWhenStarted = (
+    item: WorkItemRow,
+    workspace: WorkspaceRow,
+    inputs: Inputs,
+    brief: () => void
+  ): void => {
+    const { instanceId } = item;
+    const notIn = (error: unknown): Promise<void> =>
+      inputsNotIn(
+        item,
+        (error instanceof Error && error.message) || String(error)
+      );
+    const handAndBrief = (): void => {
+      const [receiver] = db.getInstancesByIds([instanceId]);
+      (receiver
+        ? handIn(workspace, inputs, receiver)
+        : Promise.reject(new Error(`its session ${instanceId} has no row`))
+      )
+        .then(
+          (unhanded) => (unhanded ? notIn(unhanded.response.detail) : brief()),
+          notIn
+        )
+        .catch((stopped: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+          )
+        );
+    };
+    const { machineId } = workspace;
+    if (
+      db.owesSpawn(instanceId) &&
+      (!online(machineId) || olderBuild(machineId) !== undefined)
+    ) {
+      handInsHeld.set(instanceId, { itemId: item.id, go: handAndBrief });
+    } else {
+      handAndBrief();
     }
   };
 
@@ -4384,7 +4559,7 @@ export const createWorkItems = ({
                   ...workspaces.askedIn(workspace, request.cwd ?? parent.cwd),
                 },
                 workspace.base,
-                landingOf(item)
+                landingOf(item, db.workItemOutputs(item.id))
               )
         )
       );
@@ -4402,30 +4577,7 @@ export const createWorkItems = ({
       // being written ("ENOENT … rename …/inputs/…", 2026-10-20). Inputs that
       // cannot go fail the item in their words, its report says so, and its
       // session ends.
-      /** Its inputs did not go: the item fails in their words, and its session ends. */
-      const notIn = (error: unknown): Promise<void> => {
-        const reason = `Its inputs did not reach its $TMPDIR/inputs/, so its brief was not sent: ${(error instanceof Error && error.message) || String(error)}`;
-        const ended = finish(item, { state: "failed", error: reason });
-        const [row] = db.getInstancesByIds([instanceId]);
-        if (row) {
-          report(row, `${reason}${reportLine(ended)}`, true);
-        }
-        return end(instanceId);
-      };
-      const [receiver] = db.getInstancesByIds([instanceId]);
-      (receiver
-        ? handIn(workspace, inputs, receiver)
-        : Promise.reject(new Error(`its session ${instanceId} has no row`))
-      )
-        .then(
-          (unhanded) => (unhanded ? notIn(unhanded.response.detail) : brief()),
-          notIn
-        )
-        .catch((stopped: unknown) =>
-          console.warn(
-            `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
-          )
-        );
+      handInWhenStarted(item, workspace, inputs, brief);
     } else {
       brief();
     }
@@ -4594,13 +4746,13 @@ export const createWorkItems = ({
    * nothing holds it, which its session, still in the turn that ended it,
    * does until it sleeps.
    *
-   * An item whose work landed (its `landed`) and that runs again (a word
-   * from the reader, its parent or its project's conversation, {@link reopen}; a
-   * continuation of its session, `continuedIn`; work found since its landing,
-   * {@link finishable}) stays done however its follow-up ends without
-   * landing: blocked, a failed or third quiet turn, its session failing or
-   * gone, its budget, a stop. The reason is its `error`, and its task goes to
-   * review with it (dispatch.ts `settle`). On nightly 3944 Caw's send-back
+   * An item whose work landed (project-work.ts `landedWork`) and that runs
+   * again (a word from the reader, its parent or its project's conversation,
+   * {@link reopen}; a continuation of its session, `continuedIn`; work found
+   * since its landing, {@link finishable}) stays done however its follow-up
+   * ends without landing: blocked, a failed or third quiet turn, its session
+   * failing or gone, its budget, a stop. The reason is its `error`, and its
+   * task goes to review with it (dispatch.ts `settle`). On nightly 3944 Caw's send-back
    * of a landed design build ended blocked and failed the attempt that had
    * landed it, its task back in its first stage.
    */
@@ -4622,9 +4774,9 @@ export const createWorkItems = ({
     landingRun.stopLanding(item.id);
     workedThisTurn.delete(item.id);
     toldWhileWaiting.delete(item.id);
-    const { landed } = db.workItem(item.id) ?? item;
     const kept =
-      landed && (change.state === "failed" || change.state === "cancelled")
+      landedWork(db.workItem(item.id) ?? item) &&
+      (change.state === "failed" || change.state === "cancelled")
         ? {
             state: "done" as const,
             error: change.error ?? FOLLOW_UP_STOPPED,
@@ -4928,6 +5080,7 @@ export const createWorkItems = ({
         state: "running",
         result: null,
         error: null,
+        endedBlocked: false,
         stoppedBy: null,
         endedAt: null,
         dismissedAt: null,
@@ -4972,7 +5125,7 @@ export const createWorkItems = ({
     const read = await command(
       workspace.machineId,
       workspace.path,
-      `${SAFE_GIT_SHELL}git rev-list --count HEAD --not --remotes=origin && ${statusCommand(item.outputs ?? [])} | wc -l`,
+      `${SAFE_GIT_SHELL}git rev-list --count HEAD --not --remotes=origin && ${statusCommand(db.workItemOutputs(item.id))} | wc -l`,
       GIT_TIMEOUT_MS,
       refOf(workspace),
       { noWait: true }
@@ -5089,7 +5242,7 @@ export const createWorkItems = ({
       }
       return result.stdout;
     };
-    const outputs = item.outputs ?? [];
+    const outputs = db.workItemOutputs(item.id);
     const pathspec =
       outputs.length > 0
         ? ` -- .${outputs.map((path) => ` ${shellQuote(`:(exclude,literal)${path}`)}`).join("")}`
@@ -5709,27 +5862,31 @@ export const createWorkItems = ({
      * already under way, a retired one cut again ({@link withClone}), and
      * from then on held (workspaces.ts `holdsOf`) until the answered release, called
      * once the continuation's job is filed (its record holds it from there)
-     * or has failed to be. Throws why there is no clone.
+     * or has failed to be. Why there is no clone is the hub's own 409
+     * `continuation-unplaced`: no workspace, an archived one that is not cut
+     * again, or a clone gone from its machine.
      */
-    async continuable(itemId: string): Promise<() => void> {
+    async continuable(itemId: string) {
+      const unplaced = (detail: string) =>
+        problem(409, { code: "continuation-unplaced", detail });
       const item = db.workItem(itemId);
       if (!item) {
-        throw new Error(`work item ${itemId} has no workspace`);
+        return unplaced(`work item ${itemId} has no workspace`);
       }
       const { workspaceId } = item;
       return await workspaces.inWorkspaceTurn(workspaceId, async () => {
         const [workspace] = db.workspacesNamed(workspaceId);
         if (!workspace) {
-          throw new Error(`work item ${itemId} has no workspace`);
+          return unplaced(`work item ${itemId} has no workspace`);
         }
         if (
           workspace.state === "archived" &&
           !workspaces.recuttable(workspace)
         ) {
-          throw new Error(workspaces.archivedWords(workspace));
+          return unplaced(workspaces.archivedWords(workspace));
         }
         if (!(await withClone(workspace))) {
-          throw new Error(
+          return unplaced(
             `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(db, workspace.machineId)}`
           );
         }
@@ -5889,6 +6046,7 @@ export const createWorkItems = ({
         const ended = finish(item, {
           state: "failed",
           error,
+          endedBlocked: true,
           headline: request.headline,
           ...LANDING_ENDED,
         });
@@ -5991,14 +6149,53 @@ export const createWorkItems = ({
           continue;
         }
         // Its gate goes on from the step it was on: what passed is kept
-        // on its row (gate.ts `gateOnce`).
+        // in its rows (gate.ts `gateOnce`). Passes stored before they were
+        // rows that did not read vouch for no tree: every step runs again.
         const kept = [...landingRun.passesOf(item.id).values()].flat().length;
+        const unread =
+          item.gatePassesUnread === null
+            ? ""
+            : ", its passes from before migration 0401 unread so none of them kept";
         console.log(
-          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept`
+          `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept${unread}`
         );
         landStored(item, submission);
       }
       releaseLastTurns(machineId);
+    },
+
+    /**
+     * `instanceId`'s kept start has gone to its machine (start-holds.ts
+     * `sendNextStart`, the one path a kept start takes): the inputs its
+     * item held for it go in now, then its brief ({@link handInsHeld}). A
+     * live item's session with no send at all never had its brief, which
+     * waited on inputs this hub lost to a restart (held for a machine that
+     * could not take them, or on their way when it stopped): the item fails
+     * in their words, as inputs that cannot go fail it.
+     */
+    startSent(instanceId: string): void {
+      const held = handInsHeld.get(instanceId);
+      if (held) {
+        handInsHeld.delete(instanceId);
+        held.go();
+        return;
+      }
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (
+        !item ||
+        item.instanceId !== instanceId ||
+        !LIVE.has(item.state) ||
+        db.sendsIn(instanceId, [...SEND_STATES]).length > 0
+      ) {
+        return;
+      }
+      inputsNotIn(item, workWords.inputsLostToRestart).catch(
+        (stopped: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: its session, whose inputs were lost, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
+          )
+      );
     },
 
     /**
@@ -6066,13 +6263,8 @@ export const createWorkItems = ({
         if (folder instanceof ElysiaStatus) {
           return folder;
         }
-        if (!folder) {
-          return problem(409, {
-            code: "work-item-handoff-no-inputs-folder",
-            detail: `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(db, row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`,
-          });
-        }
-        return sendLanded({ folder, inputs: named, cut: false });
+        // No folder: the inputs named no file, so the message names none.
+        return sendLanded({ folder: folder ?? "", inputs: named, cut: false });
       }
       return await workspaces.goOnIn(
         item.workspaceId,
@@ -6472,19 +6664,12 @@ export const createWorkItems = ({
 
     /**
      * What the landing gate passed on `tree`, a git tree's name: each step's
-     * command that passed on it, over every item that landed it (WorkLanding
-     * `gate`). Empty when none did. A release asks it of its commit's tree
-     * (scripts/release.ts), and checks only what it does not find here.
+     * command that passed on it, over every item that landed it
+     * (work_item_landed_checks). Empty when none did. A release asks it of
+     * its commit's tree (scripts/release.ts), and checks only what it does
+     * not find here.
      */
-    gatePassesOn: (tree: string): string[] => [
-      ...new Set(
-        db
-          .landedOnTree(tree)
-          .flatMap((row) =>
-            row.landed?.gate?.tree === tree ? row.landed.gate.passed : []
-          )
-      ),
-    ],
+    gatePassesOn: (tree: string): string[] => db.landedChecksOnTree(tree),
 
     /**
      * What a session's delegate tray shows when it opens: the items it

@@ -56,7 +56,6 @@
 import {
   type SessionRole,
   SPAWNING_TOOLS,
-  sessionMayStart,
   startsAny,
 } from "@cawco/core/delegate-types";
 import type { MemoryRole } from "@cawco/core/fleet";
@@ -74,9 +73,7 @@ export const roleOf = (row: InstanceRow): SessionRole => {
   if (row.role) {
     return row.role;
   }
-  return row.workItemId || !startsAny(sessionMayStart(row))
-    ? "delegate"
-    : "worker";
+  return row.workItemId || !startsAny(row.mayStart) ? "delegate" : "worker";
 };
 
 /**
@@ -261,7 +258,7 @@ const listed = (role: SessionRole, name: string): boolean =>
  * not.
  */
 export const orchestrates = (row: InstanceRow): boolean =>
-  startsAny(sessionMayStart(row)) && listed(roleOf(row), "delegate");
+  startsAny(row.mayStart) && listed(roleOf(row), "delegate");
 
 /**
  * Whether the session talks with the person: it has no work item, which

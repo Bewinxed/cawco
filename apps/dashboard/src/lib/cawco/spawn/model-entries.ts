@@ -1,4 +1,8 @@
-import type { EffortLevel, ModelInfo } from "@cawco/core/harness/kinds";
+import {
+  type EffortLevel,
+  isEffortLevel,
+  type ModelInfo,
+} from "@cawco/core/harness/kinds";
 import { modelNameIn, modelRun, providerOf } from "@cawco/core/model-names";
 import type { ModelUse } from "./modelUse.svelte";
 
@@ -36,6 +40,11 @@ export function deriveModelEntries(
     const dates = group
       .flatMap((row) => (row.released ? [row.released] : []))
       .sort();
+    // The harness's own effort words, kept to the levels CawCo can send: a
+    // level a later release lists is not offered until CawCo knows it.
+    const measured = group.find(
+      (row) => row.defaultEffort !== undefined
+    )?.defaultEffort;
     return {
       id,
       name: name ?? id,
@@ -45,11 +54,15 @@ export function deriveModelEntries(
       lastUsedAt: use.lastUsedAt[id],
       isDefault: group.some((row) => row.value === "default"),
       contextWindow: group.find((row) => row.contextWindow)?.contextWindow,
-      defaultEffort: group.find((row) => row.defaultEffort !== undefined)
-        ?.defaultEffort,
+      defaultEffort:
+        measured === null || isEffortLevel(measured) ? measured : undefined,
       isCustom: false,
       effort: [
-        ...new Set(group.flatMap((row) => row.supportedEffortLevels ?? [])),
+        ...new Set(
+          group.flatMap((row) =>
+            (row.supportedEffortLevels ?? []).filter(isEffortLevel)
+          )
+        ),
       ],
       aliases: [
         ...new Set(

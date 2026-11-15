@@ -7,7 +7,11 @@
  * prints each and fails over {@link ROLE_TOOL_BUDGET}.
  */
 import { estimateTokens } from "@cawco/core/continuation";
-import { SESSION_ROLES, type SessionRole } from "@cawco/core/delegate-types";
+import {
+  ANY_TYPE,
+  SESSION_ROLES,
+  type SessionRole,
+} from "@cawco/core/delegate-types";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   definedTools,
@@ -132,10 +136,15 @@ import {
  * 2026-11-14: action_list and event_route_list take `skip`, so an agent reads
  * the older actions and events a page leaves out (their answers say how many
  * and which skip reads on) (worker 30,828 measured).
+ * 2026-11-15: what a task's hand-in holds is said by task_result itself and
+ * no longer by a line in every task's brief (the owner's rule that a tool's
+ * instructions live in the tool, decisions/memory-tool-lines); its fields say
+ * the loose ends that are the person's and the thing itself (delegate 11,383
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 30_840,
-  delegate: 11_340,
+  delegate: 11_390,
   overseer: 770,
   "web-facing": 3400,
   curator: 1320,
@@ -241,5 +250,9 @@ const sampleOf = (role: SessionRole): InstanceRow => ({
   sessionId: null,
   status: "running",
   kind: "mainline",
+  // A session nobody delegated work to, as a person's: a role's sample
+  // that is a delegate says its own.
+  mayStart: [ANY_TYPE],
+  startingSet: null,
   ...SAMPLES[role],
 });

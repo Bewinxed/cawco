@@ -107,12 +107,6 @@ export interface Member {
   name: string;
   /** Caw's flock: the pose it wears; null for the rest. */
   pose: CawPoseId | null;
-  /** A person or channel: how it is reached. Null until that slice. */
-  reach: {
-    address: string;
-    via: "slack" | "email";
-    wait: "4h" | "1d" | "wait";
-  } | null;
   /** In a sentence: "Roost iOS sends scope to the advisor". */
   subject: string;
   type: MemberType;
@@ -204,7 +198,6 @@ const builtIn = (
   builtIn: true,
   hue: null,
   pose: id === "you" ? null : DEFAULT_POSES[id],
-  reach: null,
   ...rest,
 });
 

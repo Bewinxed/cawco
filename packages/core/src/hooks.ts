@@ -304,6 +304,10 @@ export const EVENT_INFO = new Map(
   HOOK_EVENTS.map((info) => [info.event, info])
 );
 
+/** The event a stored or wire value names, when it is one this build knows ({@link HOOK_EVENTS}). */
+export const hookEventNamed = (value: string): HookEvent | undefined =>
+  HOOK_EVENTS.find((info) => info.event === value)?.event;
+
 /** What an event's matcher is tested against, or undefined when it has none. */
 export const hookEventInfo = (event: HookEvent): HookEventInfo | undefined =>
   EVENT_INFO.get(event);

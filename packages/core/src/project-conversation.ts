@@ -251,6 +251,9 @@ export type ProjectNoteEvent =
   /** Caw asking whether to build a design system. */
   | DesignOfferNote;
 
+/** Who made a routine: a delegate, or a session in conversation. */
+export type RoutineMadeBy = "delegate" | "session";
+
 /**
  * A session made a routine with `routine_create` (routines.ts `announce`):
  * the note in its project's conversation. Keep, Turn off and Open act on `routineId`
@@ -258,7 +261,7 @@ export type ProjectNoteEvent =
  */
 export interface RoutineMadeEvent {
   /** `delegate`: a delegated session made it; `session`: any other, the project's conversation among them. */
-  by: "delegate" | "session";
+  by: RoutineMadeBy;
   /** When it turns itself off unless kept, ms epoch; null when it was kept as it was made. */
   expiresAt: number | null;
   /** The session that made it. */

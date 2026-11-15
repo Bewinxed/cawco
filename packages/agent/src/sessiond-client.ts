@@ -27,6 +27,7 @@
 import { spawn as spawnProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { Socket } from "node:net";
+import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -464,7 +465,7 @@ interface ProcListener {
    */
   exit?: (
     exitCode: number | null,
-    signal: NodeJS.Signals | null,
+    signal: string | null,
     /** The process that exited, when its keeper says (what {@link SessiondClient.release} names). */
     pid: number | undefined,
     /** The last of what it wrote on stderr, when it wrote any and its keeper kept it (core sessiond.ts `SessiondExit.stderr`). */
@@ -784,7 +785,7 @@ export class SessiondClient {
   #tellExit(
     procId: string,
     exitCode: number | null,
-    signal: NodeJS.Signals | null,
+    signal: string | null,
     pid: number | undefined,
     stderr: string | undefined
   ): void {
@@ -814,7 +815,7 @@ export class SessiondClient {
   #exit(
     listener: ProcListener,
     exitCode: number | null,
-    signal: NodeJS.Signals | null,
+    signal: string | null,
     pid: number | undefined,
     stderr: string | undefined
   ): void {
@@ -1178,7 +1179,8 @@ export interface BridgeRing {
  */
 export interface ProcessExit {
   code: number | null;
-  signal: NodeJS.Signals | null;
+  /** As the OS names it (core sessiond.ts `SessiondExit.signal`). */
+  signal: string | null;
   /** The last of what it said on stderr, as its keeper kept it; absent when it said nothing there. */
   stderr?: string;
 }
@@ -1220,6 +1222,10 @@ const parseRingLine = (
  * `Query` drives it like one it spawned, mid-turn or not, and nothing the
  * child runs is interrupted.
  */
+/** Whether Node names this signal: the SDK's `SpawnedProcess` reads only those. */
+const isNodeSignal = (name: string): name is NodeJS.Signals =>
+  Object.hasOwn(constants.signals, name);
+
 /** What a bridged child tells the SDK that drives it (its `SpawnedProcess`): how it exited, or why it cannot be followed. */
 type ExitHandler = (code: number | null, signal: NodeJS.Signals | null) => void;
 type ErrorHandler = (error: Error) => void;
@@ -1386,7 +1392,9 @@ export const sessiondBridge = (
     },
     exit: (code, sig, pid, stderr) => {
       exitCode = code;
-      signalCode = sig;
+      // A name Node does not list reaches the SDK as no signal, and with no
+      // code that is an end it cannot read: told as `error` below.
+      signalCode = sig !== null && isNodeSignal(sig) ? sig : null;
       stdout.push(null);
       end(
         code === null && sig === null
@@ -1401,16 +1409,18 @@ export const sessiondBridge = (
       // cannot describe is reported as what it is to this transport — a
       // process that is not there — through `error`, which the SDK's
       // `ProcessTransport` turns into the error its read ends with.
-      if (code === null && sig === null) {
+      if (code === null && signalCode === null) {
         events.emit(
           "error",
           new Error(
-            `[sessiond] ${procId}: the child had already exited; sessiond reported neither its exit code nor its signal`
+            sig === null
+              ? `[sessiond] ${procId}: the child had already exited; sessiond reported neither its exit code nor its signal`
+              : `[sessiond] ${procId}: the child was ended by ${sig}, a signal Node does not name`
           )
         );
         return;
       }
-      events.emit("exit", code, sig);
+      events.emit("exit", code, signalCode);
     },
     // An overflowed ring is an honest refusal, not a silent splice: the SDK
     // is told the stream broke rather than handed a transcript with a hole.

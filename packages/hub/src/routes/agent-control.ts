@@ -17,10 +17,10 @@ import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
+import { awayProblem, silentProblem } from "../machine-answers";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
-import { unansweredStatus } from "../machine-reads";
-
+import { unansweredProblem } from "../machine-reads";
 import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
 
@@ -46,15 +46,13 @@ export const agentUpdateBody = t.Object({
 
 /**
  * A machine's update, what its route answers: the machine pulls, installs,
- * rebuilds and restarts what it serves, then says what it actually did.
+ * rebuilds and restarts what it serves, then says what it actually did; a
+ * machine not connected is `awayProblem`.
  */
 export const agentUpdate =
-  ({
-    callAgent,
-    machineFault,
-    machineName,
-  }: Pick<HubContext, "callAgent" | "machineFault" | "machineName">) =>
+  (ctx: Pick<HubContext, "callAgent" | "machineName"> & MachineReadsContext) =>
   async (machineId: string, body: Static<typeof agentUpdateBody>) => {
+    const { callAgent, machineName } = ctx;
     const answer = await callAgent(
       machineId,
       UPDATE_CAWCO,
@@ -67,18 +65,14 @@ export const agentUpdate =
         // into a socket that no longer exists, so this is not proof that
         // nothing happened — only that the hub stopped hearing about it.
         return answer.reason === "dead"
-          ? problem(404, {
-              code: "machine-offline",
-              detail: machineFault(machineId, "offline"),
-            })
-          : problem(504, {
-              code: "didnt-finish-update-within",
-              detail: `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
-            });
+          ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
+          : silentProblem(
+              `${machineName(machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`
+            );
       case "answered":
         return answer.value.ok
           ? (answer.value.result as UpdateReport)
-          : problem(500, {
+          : problem(502, {
               code: "update-failed",
               detail: answer.value.error ?? "the update failed",
             });
@@ -102,7 +96,7 @@ export const agentControlRoutes = (
   const update = agentUpdate(ctx);
   return (
     new Elysia()
-      .get("/api/agents/:machineId/busy", async ({ params, set }) => {
+      .get("/api/agents/:machineId/busy", async ({ params }) => {
         const answer = await readAgent(
           params.machineId,
           AGENT_BUSY,
@@ -111,11 +105,11 @@ export const agentControlRoutes = (
         );
         switch (answer.kind) {
           case "unanswered":
-            return unansweredStatus(ctx, set, params.machineId, answer);
+            return unansweredProblem(ctx, params.machineId, answer);
           case "answered":
             return answer.value.ok
               ? (answer.value.result as { busy: number; instances: string[] })
-              : problem(500, {
+              : problem(502, {
                   code: "busy-probe-failed",
                   detail: answer.value.error ?? "the busy probe failed",
                 });
@@ -136,7 +130,7 @@ export const agentControlRoutes = (
       .post(
         "/api/agents/:machineId/inspect",
         { body: t.Object({ cwd: t.Optional(t.String()) }) },
-        async ({ params, body, set }) => {
+        async ({ params, body }) => {
           const answer = await readAgent(
             params.machineId,
             INSPECT_CONFIG,
@@ -145,7 +139,7 @@ export const agentControlRoutes = (
           );
           switch (answer.kind) {
             case "unanswered":
-              return unansweredStatus(ctx, set, params.machineId, answer);
+              return unansweredProblem(ctx, params.machineId, answer);
             case "answered":
               return answer.value.ok
                 ? // A machine's own connectors carry their keys: said as set.
@@ -153,7 +147,7 @@ export const agentControlRoutes = (
                     answer.value
                       .result as import("@cawco/core/fleet").ConfigInspection
                   )
-                : problem(500, {
+                : problem(502, {
                     code: "config-unread",
                     detail:
                       answer.value.error ??
@@ -180,7 +174,7 @@ export const agentControlRoutes = (
             model: t.Optional(t.String()),
           }),
         },
-        async ({ params, query, set }) => {
+        async ({ params, query }) => {
           const account = traitsOf(query.harness).accountDir
             ? (query.account ?? machineAccount(db, params.machineId))
             : undefined;
@@ -193,11 +187,11 @@ export const agentControlRoutes = (
           );
           switch (answer.kind) {
             case "unanswered":
-              return unansweredStatus(ctx, set, params.machineId, answer);
+              return unansweredProblem(ctx, params.machineId, answer);
             case "answered":
               return answer.value.ok
                 ? (answer.value.result as SupportedCommands)
-                : problem(500, {
+                : problem(502, {
                     code: "config-not-written",
                     detail:
                       answer.value.error ??

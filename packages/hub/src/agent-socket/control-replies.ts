@@ -2,7 +2,7 @@
 
 import { clientAsk } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
-import { peekToolStatus } from "../machine-answers";
+import { type ControlResult, peekToolStatus } from "../machine-answers";
 import { externalizeImages } from "../media";
 import type { TranscriptPayload } from "../transcripts";
 import type { FrameAnswer, FrameRun } from "./frame-run";
@@ -11,6 +11,7 @@ export type ControlRepliesContext = Pick<
   HubContext,
   | "db"
   | "fleetSyncs"
+  | "keepCopiesOn"
   | "lateAnswer"
   | "lifecycle"
   | "logUnroutedReply"
@@ -21,7 +22,6 @@ export type ControlRepliesContext = Pick<
   | "rewinds"
   | "sendFrame"
   | "streams"
-  | "toolReleases"
   | "transcripts"
   | "waiting"
   | "welcomeConverge"
@@ -38,21 +38,35 @@ export const controlReplyStagesOf = (ctx: ControlRepliesContext) => {
       : undefined;
     if (install && kind === "control_result" && message.requestId) {
       ctx.pendingInstalls.delete(message.requestId);
-      // The release it was sent to reach is settled for this
-      // machine, landed or not: a copy left older says why on its
-      // row, and is sent no other until a newer release.
-      if (install.newest) {
-        ctx.toolReleases.answered(
-          message.machineId,
-          install.toolId,
-          install.newest
-        );
+      // Each press that joined it is answered with this answer, under its
+      // own request id, where it waits (relay-control.ts).
+      for (const joined of install.joined ?? []) {
+        const result: ControlResult = {
+          ...(message.payload as ControlResult),
+          requestId: joined.requestId,
+        };
+        if (joined.replyAsFrame) {
+          ctx.sendFrame(joined.dashboard, {
+            ...message,
+            requestId: joined.requestId,
+            payload: result,
+          });
+        } else {
+          ctx.streams.settleCommand(joined.requestId, result);
+        }
       }
+      // A copy left older than the release it was sent to reach says
+      // why on its row (agent tools.ts `install`), and is due no other
+      // until a newer release (core `toolUpdateOf`).
       const status = peekToolStatus(message.payload);
       if (status) {
         ctx.db.setAgentToolCell(message.machineId, status);
         ctx.publishInstances(message.machineId);
       }
+      // The answer moves whether a copy there is due, and an install
+      // that was in flight held back the pass for that tool: it runs
+      // now (tool-installs.ts `keepCopies`).
+      ctx.keepCopiesOn(message.machineId);
     }
     return "continue";
   };

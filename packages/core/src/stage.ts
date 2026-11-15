@@ -291,6 +291,14 @@ export const RENDERED_PATH = "/@cawco/rendered";
  */
 export const SHEET_PATH = "/@cawco/sheet";
 
+/**
+ * Where a canvas page reads what a states file's stories hold of their own
+ * (`?file=…`), beside the page as {@link SHEET_PATH} is: the stories that
+ * name a module in `beforeEach`, the modules each evaluates in its own Vite
+ * `ModuleRunner`, and their code (stage-host canvas own.ts).
+ */
+export const OWN_PATH = "/@cawco/own";
+
 /** Where the daemon reads a canvas's newest {@link RenderReport} (`?file=…` per section), next to the stage. */
 export const REPORT_PATH = "/__cawco/report";
 
@@ -1455,3 +1463,11 @@ export interface SheetOnPage extends SheetRead {
 
 /** A states file's sheet as its section's module carries it: its stories and meta, no props (those are read at {@link SHEET_PATH}). */
 export type SectionSheet = Omit<SheetOnPage, "components">;
+
+/** The most characters a story's name has. */
+export const STORY_NAME_LENGTH = 100;
+/** A story's export name in a CSF file: `Roomy`. */
+export const STORY_NAME = new RegExp(
+  `^[A-Z][A-Za-z0-9_]{0,${STORY_NAME_LENGTH - 1}}$`,
+  "u"
+);

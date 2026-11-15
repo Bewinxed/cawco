@@ -472,14 +472,17 @@ export const createLaunches = (ctx: LaunchesContext) => {
   /**
    * What a session's row puts on every spawn of it, whatever its caller sent:
    * a session refused routine_create is refused its harness's durable
-   * schedule too (`makesRoutines`); and the set its first spawn resolved
-   * ({@link startingSetOf}), so a wake or a restore starts with the tools its
-   * conversation began with. A clean session's fence is narrower still.
+   * schedule too (`makesRoutines`); the types it may start, so its machine
+   * withholds the spawning tools from a leaf; and the set its first spawn
+   * resolved ({@link startingSetOf}), so a wake or a restore starts with the
+   * tools its conversation began with. A clean session's fence is narrower
+   * still.
    */
   const rowKeeps = (
     row: InstanceRow
-  ): Pick<SpawnPayload, "schedulesToParent" | "startingSet"> => ({
+  ): Pick<SpawnPayload, "mayStart" | "schedulesToParent" | "startingSet"> => ({
     ...(makesRoutines(row) ? {} : { schedulesToParent: true as const }),
+    mayStart: row.mayStart,
     ...(row.startingSet && !row.clean ? { startingSet: row.startingSet } : {}),
   });
 
@@ -881,7 +884,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     ...(row.model ? { model: row.model } : {}),
     ...(row.projectId ? { projectId: row.projectId } : {}),
     // A leaf stays a leaf whatever brings it back (as `restore` says).
-    ...(row.mayStart ? { mayStart: row.mayStart } : {}),
+    mayStart: row.mayStart,
     ...ctx.typeSettingsOf(row),
   });
 

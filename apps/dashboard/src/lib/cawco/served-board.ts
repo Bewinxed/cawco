@@ -32,9 +32,10 @@ export interface MachineVerdict {
 
 /**
  * A session row's fields the first paint reads: where it is, its kind and
- * status, its titles, its place in its tree, and the stamps Recent orders,
- * groups, ages and marks it by. Every required field of `InstanceRow` is
- * here (the store's `instances` is typed so, and checks it).
+ * status, its titles, its place in its tree, the stamps Recent orders,
+ * groups, ages and marks it by, and what it may start and starts with.
+ * Every required field of `InstanceRow` is here (the store's `instances` is
+ * typed so, and checks it).
  */
 export const ROW_KEYS = [
   "id",
@@ -62,6 +63,8 @@ export const ROW_KEYS = [
   "queuedSends",
   "runningDelegates",
   "stalled",
+  "mayStart",
+  "startingSet",
 ] as const satisfies readonly (keyof InstanceRow)[];
 
 export type FirstPaintRow = Pick<InstanceRow, (typeof ROW_KEYS)[number]>;

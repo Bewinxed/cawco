@@ -16,7 +16,7 @@ export interface FollowedTabs {
 }
 
 /** Before the workspace says otherwise, no tab is open, and an id no tab holds is no tab's to name. */
-let tabs: FollowedTabs = {
+const NO_TABS: FollowedTabs = {
   openIds: [],
   named: () => true,
   machineOf: () => {
@@ -26,9 +26,20 @@ let tabs: FollowedTabs = {
   },
 };
 
-/** The workspace's tabs, followed: what it says from here on (workspace.svelte.ts). */
-export function followTabs(source: FollowedTabs): void {
+let tabs: FollowedTabs = NO_TABS;
+
+/**
+ * The workspace's tabs, followed: what it says from here on
+ * (workspace.svelte.ts `startWorkspace`). Returns its release: no tab is
+ * followed then.
+ */
+export function followTabs(source: FollowedTabs): () => void {
   tabs = source;
+  return () => {
+    if (tabs === source) {
+      tabs = NO_TABS;
+    }
+  };
 }
 
 /** The sessions the workspace's tabs hold open. */

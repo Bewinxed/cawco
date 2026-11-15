@@ -3,20 +3,23 @@ import {
   ACCOUNT_MOVE,
   CUSTODY_HELD,
   FLEET_WATCH,
+  HARNESS_TOOL,
   MOVED_HERE,
   PROJECT_NOTE,
 } from "@cawco/core/harness";
-import { harnessNamed } from "@cawco/core/harness/kinds";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { harnessSpec } from "@cawco/core/harness-refusal";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
 import type { SendRecord, SessionMessage } from "@cawco/core/session-messages";
-import type {
-  TranscriptWhere,
-  TranscriptWindow,
-  WindowAsk,
+import type { ToolStatus } from "@cawco/core/tools";
+import {
+  type TranscriptWhere,
+  type TranscriptWindow,
+  transcriptWindowOf,
+  type WindowAsk,
 } from "@cawco/core/transcript-types";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import type { ClosureContext } from "./closure-context";
@@ -164,6 +167,7 @@ export type HistoryContext = Pick<
   | "refusedHarness"
   | "registry"
   | "sendLines"
+  | "toolFacts"
   | "unlocatedWords"
 >;
 
@@ -237,27 +241,110 @@ export const createHistory = (ctx: HistoryContext) => {
   };
 
   /**
-   * Why `where`'s machine cannot read its stored conversation now: its
-   * harness reads one only through its own CLI (core traits
-   * `readsThroughCli`: OpenCode's server), and the machine refuses that CLI
-   * (core harness-refusal.ts), so asked, it could only refuse the read too.
-   * Said as the conversation kept and where it shows again, then the
-   * refusal in the machine's own sentence, which carries its fix. A
-   * harness read from the files it stored (Claude Code, pi) reads them
-   * whatever its CLI is: never refused here.
+   * Why `where`'s machine could not read its stored conversation, once it
+   * failed to: its harness reads one only through its own CLI (core traits
+   * `readsThroughCli`: OpenCode's server), and with no server of it running
+   * there a read needs one started, which a CLI CawCo doesn't run never is.
+   * `updating`: an install of that CLI runs there now (its tool cell), so
+   * the read is the install's to wait out, said as such and read again once
+   * it lands. `refused`: the machine refuses the CLI (core
+   * harness-refusal.ts), said as the conversation kept and where it shows
+   * again, then the refusal in the machine's own sentence, which carries its
+   * fix. Asked only after the machine failed the read: a server that still
+   * runs there (the one a session mid-turn is on, through an update) answers
+   * whatever its CLI on disk is, and that answer is the true one. A harness
+   * read from the files it stored (Claude Code, pi) reads them whatever its
+   * CLI is: never refused here.
+   *
+   * Asked of the machine's tool cells only once they are its connection's
+   * (tool-facts.ts): between its register and its first tools report they
+   * are the previous connection's, which the update pass never acts on
+   * either, so the read waits for that report, as long as a machine's read
+   * is given ({@link READ_TIMEOUT_MS}), then decides. A machine that never
+   * says its tools in that time is said as not answering (`timeout`), one
+   * gone meanwhile as offline: neither is a read of the transcript that
+   * failed.
    */
-  const refusedRead = (where: TranscriptWhere): HistoryFault | undefined => {
+  const refusedRead = async (
+    where: TranscriptWhere
+  ): Promise<HistoryFault | undefined> => {
     const harness = harnessNamed(where.harness);
     if (!(harness && traitsOf(harness).readsThroughCli)) {
       return;
     }
-    const why = ctx.refusedHarness(where.machineId, harness);
+    const { machineId } = where;
+    if (!(await ctx.toolFacts.until(machineId, READ_TIMEOUT_MS))) {
+      return ctx.registry.agent(machineId)
+        ? {
+            fault: "timeout",
+            message: harnessRefusedWords.toolsUnsaid(
+              ctx.machineName(machineId)
+            ),
+          }
+        : {
+            fault: "offline",
+            machineId,
+            message: ctx.machineFault(machineId, "offline"),
+          };
+    }
+    const { name } = harnessSpec(harness);
+    const cell = ctx.db.agentTools(machineId)[HARNESS_TOOL[harness]];
+    if (cell?.state === "installing") {
+      return {
+        fault: "updating",
+        harness,
+        machineId,
+        message: harnessRefusedWords.updatingUnread(
+          name,
+          ctx.machineName(machineId),
+          cell
+        ),
+      };
+    }
+    const why =
+      cellRefusal(harness, machineId, cell) ??
+      ctx.refusedHarness(machineId, harness);
     return why
       ? {
           fault: "refused",
-          machineId: where.machineId,
-          message: `${harnessRefusedWords.unread(harnessSpec(harness).name, ctx.machineName(where.machineId))} ${why}`,
+          harness,
+          machineId,
+          message: `${harnessRefusedWords.unread(name, ctx.machineName(machineId))} ${why}`,
         }
+      : undefined;
+  };
+
+  /**
+   * Why the machine refuses `harness`'s CLI by its tool cell alone, once the
+   * cell is its connection's ({@link refusedRead}): no copy there, or one it
+   * says CawCo can't run (`wants`). The harness's own report rides a beat of
+   * its own and can still be the last connection's, saying the CLI runs;
+   * the cell is the newer fact, and the read that failed is its refusal,
+   * never a transcript that couldn't be read.
+   */
+  const cellRefusal = (
+    harness: HarnessKind,
+    machineId: string,
+    cell: ToolStatus | undefined
+  ): string | undefined => {
+    const spec = harnessSpec(harness);
+    const machine = ctx.machineName(machineId);
+    if (cell?.state === "missing") {
+      return harnessRefusedWords.notInstalled(
+        spec.name,
+        machine,
+        traitsOf(harness).requiredOnEveryMachine
+      );
+    }
+    return cell?.wants
+      ? harnessRefusedWords.notRun(
+          spec.name,
+          cell.version,
+          machine,
+          harnessRefusedWords.pressFix(
+            harnessRefusedWords.press("version", spec.name, spec.exactVersion)
+          )
+        )
       : undefined;
   };
 
@@ -275,10 +362,6 @@ export const createHistory = (ctx: HistoryContext) => {
     window: WindowAsk
   ): Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
-    const refused = refusedRead(where);
-    if (refused) {
-      return refused;
-    }
     const answer = await ctx.readAgent(
       machineId,
       CONTROL_READ_TRANSCRIPT_WINDOW,
@@ -301,19 +384,26 @@ export const createHistory = (ctx: HistoryContext) => {
             };
       case "answered": {
         if (!answer.value.ok) {
-          return {
-            fault: "failed",
-            message: answer.value.error ?? "the transcript could not be read",
-          };
+          return (
+            (await refusedRead(where)) ?? {
+              fault: "failed",
+              message: answer.value.error ?? "the transcript could not be read",
+            }
+          );
         }
-        // A session the machine has never stored answers with nothing: an
-        // empty transcript, the same shape a brand new session has.
-        const read = answer.value.result as Partial<TranscriptWindow> | null;
-        return {
-          entries: Array.isArray(read?.entries) ? read.entries : [],
-          older: read?.older ?? null,
-          newer: read?.newer ?? null,
-        };
+        // A session the machine has never stored answers an empty window,
+        // the same shape a brand new session has. Only a read that could see
+        // the store answers a window at all: one that could not fails with
+        // why (each harness's `readTranscriptWindow`), and an answer that is
+        // no window is no read. Kept as the transcript (transcripts.ts
+        // `load`), an empty answer stood until the hub restarted.
+        const read = transcriptWindowOf(answer.value.result);
+        return (
+          read ?? {
+            fault: "failed",
+            message: `${ctx.machineName(machineId)} answered the read of this conversation with no window of it`,
+          }
+        );
       }
       default:
         throw unreachable(answer);

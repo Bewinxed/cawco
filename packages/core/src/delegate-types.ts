@@ -123,14 +123,6 @@ export type MayStart = string[];
 /** The one word in a {@link MayStart} list that is every type; no type may be named it. */
 export const ANY_TYPE = "any";
 
-/**
- * What a session may start, off its row or its spawn: none said (null or
- * absent) is a session nobody delegated, which may start any.
- */
-export const sessionMayStart = (session: {
-  mayStart?: MayStart | null;
-}): MayStart => session.mayStart ?? [ANY_TYPE];
-
 /** Whether a session that may start `mayStart` orchestrates: it may start any type. */
 export const startsAny = (mayStart: readonly string[]): boolean =>
   mayStart.includes(ANY_TYPE);
@@ -177,7 +169,11 @@ export const mayStartProblem = (
  * characters, so its tools' names keep room under a harness's tool-name
  * limit (connections.ts `sessionToolName`).
  */
-export const CONNECTION_NAME = /^(?=.{1,24}$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+export const CONNECTION_NAME_LENGTH = 24;
+export const CONNECTION_NAME = new RegExp(
+  `^(?=.{1,${CONNECTION_NAME_LENGTH}}$)[a-z0-9]+(?:-[a-z0-9]+)*$`,
+  "u"
+);
 
 /** The tool name a session calls a connection's `tool` by. */
 export const connectionToolName = (connection: string, tool: string): string =>

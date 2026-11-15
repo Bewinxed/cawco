@@ -1,8 +1,12 @@
 /**
- * EVERY MACHINE RUNS THE NEWEST RELEASE OF EACH CLI CAWCO KEEPS CURRENT
- * (core `ToolSpec.release`: Claude Code), with no press and no running
- * session cut off. The owner, 2026-11-04: two machines on two Claude Code
- * builds worded one API refusal two ways, so one incident read as two.
+ * EVERY COPY CAWCO PUT ON A MACHINE RUNS THE NEWEST RELEASE OF EACH CLI
+ * CAWCO KEEPS CURRENT (core `ToolSpec.release`: Claude Code), with no press
+ * and no running session cut off, while the fleet is set to update. The
+ * owner, 2026-11-04: two machines on two Claude Code builds worded one API
+ * refusal two ways, so one incident read as two. Narrowed 2026-11-14 to the
+ * rule every tool follows (core tool-updates.ts): a copy the person
+ * installed is never updated by CawCo, and under "ask" CawCo's own copy
+ * waits on the person's Update.
  *
  * Why CawCo runs the updater: Claude Code updates itself only from its
  * interactive REPL (its footer's `AutoUpdaterWrapper`, on mount and every
@@ -14,8 +18,8 @@
  *
  * The hub reads each kept CLI's release (upstreams.ts `TOOL_RELEASES`, the
  * catalog's URLs) as it starts and every {@link RELEASE_READ_MS}, and each
- * machine whose copy says a version older than it is sent the catalog's
- * install, with that release to reach (tool-installs.ts `keepCurrent`): the same
+ * machine whose copy CawCo put there says a version older than it is sent the catalog's
+ * install, with that release to reach (tool-installs.ts `keepCopies`): the same
  * control a press sends, so the agent runs the copy's own updater (`claude
  * update`) and answers what the copy says after it (agent tools.ts
  * `install`). An update never stops a process: Claude Code's updater puts
@@ -24,21 +28,17 @@
  * the old build goes to sleep only once it is at rest, waking on the new one
  * at its next message (agent session.ts `#retire`).
  *
- * One update per machine, tool and release ({@link updatesOwed}): an update
- * that left the copy older stands on its row with the updater's words until
- * a newer release, a Retry, or the machine connecting again (a new agent
- * process, whose own memory of the failure went with the old one).
+ * One update per copy and release ({@link keptReleases}): an update that
+ * left the copy older stands on its row with the updater's words until a
+ * newer release, a Retry, the copy moving, or a new agent process, whose
+ * own memory of the failure went with the old one (agent tools.ts
+ * `failures`).
  */
 
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
-import {
-  olderThan,
-  type ToolPolicy,
-  type ToolSpec,
-  type ToolStatus,
-} from "@cawco/core/tools";
+import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { versionSaid } from "@cawco/core/version-said";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { HubLifetimeShape } from "./lifetime";
@@ -111,58 +111,33 @@ export const releaseTarget = (
 ): string | undefined =>
   spec.release ? (newest ?? spec.minVersion) : undefined;
 
-/** One update a machine is owed: the tool, the version its copy says, and the release to reach. */
-export interface UpdateOwed {
-  newest: string;
-  toolId: string;
-  version: string;
-}
-
 /**
- * Each update one machine is owed, from the hub's cells for it: a tool CawCo
- * keeps current ({@link releaseTarget}) whose policy pins no version, whose
- * copy there says a version older than its release (`installed`, or
- * `failed` with a version: older than CawCo runs, or an update that failed),
- * with no install of it in flight there (`installing`, or one the hub awaits:
- * `inFlight`), and no update for that release answered on this connection
- * (`tried`). A copy that says no version, and a tool not there, are left to
- * a press: there is no version to compare, and CawCo installs nothing it
- * wasn't asked to.
+ * The release each CLI CawCo keeps current is kept at, by tool id: its
+ * newest release as last read, for each tool whose policy pins no version
+ * (a pinned tool is held at its pin, and no release moves it). What core
+ * `toolUpdateOf` judges a copy CawCo put there by, for the hub's pass
+ * (tool-installs.ts `keepCopies`) and for `/api/tool-updates` alike, so a
+ * copy the screens call due is one the pass sends: CawCo's own copy that
+ * says a version older than it, while the fleet is set to update, with no
+ * attempt standing on it (the agent's words on a copy an update left
+ * older, kept until that copy moves, agent tools.ts `failures`). A tool
+ * whose release was never read is in none: a copy older than the oldest
+ * CawCo runs is its machine's to say (`wants`).
  */
-export const updatesOwed = (
-  machine: {
-    cells: Readonly<Record<string, ToolStatus>>;
-    inFlight: (toolId: string) => boolean;
-    tried: (toolId: string) => string | undefined;
-  },
-  fleet: {
-    catalog: readonly ToolSpec[];
-    newest: (toolId: string) => string | undefined;
-    policies: readonly ToolPolicy[];
-  }
-): UpdateOwed[] =>
-  fleet.catalog.flatMap((spec) => {
-    const newest = releaseTarget(spec, fleet.newest(spec.id));
-    const cell = machine.cells[spec.id];
-    const pinned = fleet.policies.some(
-      (policy) => policy.id === spec.id && policy.pinnedVersion !== null
-    );
-    if (
-      !(newest && cell?.version) ||
-      pinned ||
-      (cell.state !== "installed" && cell.state !== "failed") ||
-      !olderThan(cell.version, newest) ||
-      machine.inFlight(spec.id) ||
-      machine.tried(spec.id) === newest
-    ) {
-      return [];
-    }
-    return [{ toolId: spec.id, version: cell.version, newest }];
-  });
-
-/** Where a machine's tool is in {@link ToolReleases}' memory of what it tried. */
-const triedKey = (machineId: string, toolId: string): string =>
-  `${machineId}\0${toolId}`;
+export const keptReleases = (fleet: {
+  catalog: readonly ToolSpec[];
+  newest: (toolId: string) => string | undefined;
+  policies: readonly ToolPolicy[];
+}): Record<string, string> =>
+  Object.fromEntries(
+    fleet.catalog.flatMap((spec) => {
+      const newest = spec.release ? fleet.newest(spec.id) : undefined;
+      const pinned = fleet.policies.some(
+        (policy) => policy.id === spec.id && policy.pinnedVersion !== null
+      );
+      return newest && !pinned ? [[spec.id, newest]] : [];
+    })
+  );
 
 /** What {@link ToolReleases} reads with and tells. */
 export interface ToolReleasesDeps {
@@ -178,17 +153,14 @@ export interface ToolReleasesDeps {
 
 /**
  * The newest release of each CLI CawCo keeps current, read as the hub starts
- * and every {@link RELEASE_READ_MS}, and what each machine was last sent to
- * reach. After each read, `read` runs: the hub sends every machine what it
- * is owed (tool-installs.ts `keepCurrent`).
+ * and every {@link RELEASE_READ_MS}. After each read, `read` runs: the hub sends every machine what it
+ * is owed (tool-installs.ts `keepCopies`).
  */
 export class ToolReleases {
   readonly #deps: ToolReleasesDeps;
   readonly #reads = new Map<string, ReleaseRead>();
   /** The release last read for each tool, kept through a read that failed. */
   readonly #newest = new Map<string, string>();
-  /** The release an update was last answered for, by machine and tool, on its connection. */
-  readonly #tried = new Map<string, string>();
 
   constructor(deps: ToolReleasesDeps) {
     this.#deps = deps;
@@ -248,28 +220,5 @@ export class ToolReleases {
   /** The newest release of `toolId` as last read; undefined before one answered. */
   newest(toolId: string): string | undefined {
     return this.#newest.get(toolId);
-  }
-
-  /** The release an update of `toolId` on `machineId` was last answered for, on its connection. */
-  tried(machineId: string, toolId: string): string | undefined {
-    return this.#tried.get(triedKey(machineId, toolId));
-  }
-
-  /** The machine answered an install sent to reach `newest`: no other is sent it for that release. */
-  answered(machineId: string, toolId: string, newest: string): void {
-    this.#tried.set(triedKey(machineId, toolId), newest);
-  }
-
-  /**
-   * The machine connected: what it was sent before is forgotten, so a copy
-   * still older is sent its update once more (a new agent remembers no
-   * failure of the old one's, and its row would say none).
-   */
-  connected(machineId: string): void {
-    for (const key of this.#tried.keys()) {
-      if (key.startsWith(`${machineId}\0`)) {
-        this.#tried.delete(key);
-      }
-    }
   }
 }

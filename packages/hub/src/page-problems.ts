@@ -1,5 +1,6 @@
 import type { problem } from "elysia";
 import type { BuiltProgram, buildProgram } from "./decision-program";
+import type { AwayProblem, SilentProblem } from "./machine-answers";
 import type { changeFolderFiles, readFolderFile } from "./project-folder";
 import type { ProblemsOf } from "./refusal";
 
@@ -22,12 +23,8 @@ type PageSourceProblem =
   | ReturnType<
       typeof problem<404, { code: "page-unpublished"; detail: string }>
     >
-  | ReturnType<
-      typeof problem<503, { code: "page-machine-away"; detail: string }>
-    >
-  | ReturnType<
-      typeof problem<504, { code: "page-machine-late"; detail: string }>
-    >;
+  | AwayProblem
+  | SilentProblem;
 
 /** A page built, its project's folder kept as it was or written, or why not (artifact-pages.ts `keptArtifactPage`): the source's, the folder's, the program's, or the page's own. */
 export type PageBuilt =

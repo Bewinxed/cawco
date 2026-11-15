@@ -15,6 +15,7 @@ typeOverrides:
     AccountSigninRefusalReach: OpenEnums.AccountSigninRefusalReach
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
+    AgentRowClaude: OpenEnums.AgentRowClaude
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactReadSentBy: OpenEnums.ArtifactReadSentBy
@@ -64,12 +65,12 @@ typeOverrides:
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
+    DelegateTypeEffort: OpenEnums.DelegateTypeEffort
     DelegateTypeRole: OpenEnums.DelegateTypeRole
     DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
     DesignOfferStateAnswer: OpenEnums.DesignOfferStateAnswer
     DeviceKind: OpenEnums.DeviceKind
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
-    EffortLevel: OpenEnums.EffortLevel
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     EventRouteViewMode: OpenEnums.EventRouteViewMode
@@ -97,7 +98,6 @@ typeOverrides:
     FrameState: OpenEnums.FrameState
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
-    GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessConfigKind: OpenEnums.HarnessConfigKind
     HarnessKind: OpenEnums.HarnessKind
@@ -117,10 +117,10 @@ typeOverrides:
     InstallSignIn: OpenEnums.InstallSignIn
     InstallState: OpenEnums.InstallState
     InstallStep: OpenEnums.InstallStep
+    InstanceKind: OpenEnums.InstanceKind
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
-    InstanceRowWaits: OpenEnums.InstanceRowWaits
     InstanceStatus: OpenEnums.InstanceStatus
     Interaction: OpenEnums.Interaction
     IssueTracker: OpenEnums.IssueTracker
@@ -135,8 +135,6 @@ typeOverrides:
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemberHear: OpenEnums.MemberHear
     MemberType: OpenEnums.MemberType
-    MemberVia: OpenEnums.MemberVia
-    MemberWait: OpenEnums.MemberWait
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
@@ -146,13 +144,11 @@ typeOverrides:
     NeutralSessionInfoStartedBy: OpenEnums.NeutralSessionInfoStartedBy
     NeutralStatus: OpenEnums.NeutralStatus
     OnCap: OpenEnums.OnCap
+    OwedMoveWait: OpenEnums.OwedMoveWait
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
     PasskeyRelayStatus: OpenEnums.PasskeyRelayStatus
-    PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
-    PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
-    PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
     PersonReadState: OpenEnums.PersonReadState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
@@ -164,6 +160,7 @@ typeOverrides:
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
+    PostApiToolsByIdUpdateAll200Why: OpenEnums.PostApiToolsByIdUpdateAll200Why
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
     PreviewFrameState: OpenEnums.PreviewFrameState
@@ -180,7 +177,7 @@ typeOverrides:
     RelayStepFinding: OpenEnums.RelayStepFinding
     RenderedBy: OpenEnums.RenderedBy
     RestartHoldReason: OpenEnums.RestartHoldReason
-    RoutineMadeInBy: OpenEnums.RoutineMadeInBy
+    RoutineMadeBy: OpenEnums.RoutineMadeBy
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget
@@ -219,9 +216,11 @@ typeOverrides:
     TaskCommentAuthorMover: OpenEnums.TaskCommentAuthorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
+    ToolBehindMachineStartedBy: OpenEnums.ToolBehindMachineStartedBy
     ToolPlatform: OpenEnums.ToolPlatform
     ToolSigninState: OpenEnums.ToolSigninState
     ToolState: OpenEnums.ToolState
+    ToolUpdates: OpenEnums.ToolUpdates
     Tracker: OpenEnums.Tracker
     TrackerSyncState: OpenEnums.TrackerSyncState
     TranscriptBlockState: OpenEnums.TranscriptBlockState

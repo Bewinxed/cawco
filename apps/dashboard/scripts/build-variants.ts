@@ -60,6 +60,9 @@ const ARIA_STATIC = [
  */
 const DATA_STATIC: { attr: string; value: string }[] = [
   { attr: "kind", value: "tailnet" },
+  // A fleet watch notice's row says its why whole (NeedsRow `data-kind`,
+  // read as `group-kind-watch/row:`).
+  { attr: "kind", value: "watch" },
   // Files' list of artifacts, its floor one row or two (FilesList
   // `data-artifacts-floor`, read as `artifacts-floor-one:`), as the
   // attachments' floors are.

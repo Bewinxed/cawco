@@ -24,8 +24,11 @@ import {
 import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
-import type { LandingPhase } from "./db/schema";
-import type { WorkItemSubmission, WorkLanding } from "./db/stored-types";
+import type {
+  LandingPhase,
+  WorkItemSubmission,
+  WorkLanding,
+} from "./db/stored-types";
 import {
   createGate,
   failedWith,
@@ -85,7 +88,7 @@ const DIFFSTAT_LINES = 40;
 /** A full commit id, as a machine names one: never an option or a ref. */
 const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 /** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
-const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
+export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
 const MIB = 1024 * 1024;
 /**
@@ -491,6 +494,27 @@ const gateSection = (
   return lines ? `\n\n${workWords.gateHeading}\n${lines}` : "";
 };
 /**
+ * The merge checks a done item's report names, heading and lines, as its
+ * landing wrote them ({@link finishedReport}: its summary, then
+ * {@link gateSection}); undefined when it names none. A landed item passed
+ * every step, so each is one line.
+ */
+export const reportedGate = (
+  item: Pick<WorkItemRow, "result" | "summary">
+): string | undefined => {
+  const { result, summary } = item;
+  if (!(result && summary !== null && result.startsWith(summary))) {
+    return;
+  }
+  const rest = result.slice(summary.length);
+  const head = `\n\n${workWords.gateHeading}\n`;
+  if (!rest.startsWith(head)) {
+    return;
+  }
+  const end = rest.indexOf("\n\n", head.length);
+  return rest.slice(2, end === -1 ? undefined : end);
+};
+/**
  * A finished item's report to its parent: what it said it did (its own
  * report, quoting what it ran), the landing gate's lines, how it landed and
  * its outputs, then `tail` (commits, diffstat, findings). A failure leads
@@ -606,7 +630,7 @@ interface LandingRunDeps
   extends
     LandingsHub,
     Pick<WorkspacesDeps, "call" | "command" | "db">,
-    Pick<GateDeps, "machinePaused" | "online" | "update" | "workspaces"> {
+    Pick<GateDeps, "machinePaused" | "online" | "workspaces"> {
   readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
   readonly declareWait: (
     item: WorkItemRow,
@@ -630,6 +654,10 @@ interface LandingRunDeps
     headline?: string,
     outputs?: string[]
   ) => void;
+  readonly update: (
+    id: string,
+    asked: Parameters<DbShape["updateWorkItem"]>[1]
+  ) => WorkItemRow | undefined;
 }
 
 export const createLandingRun = ({
@@ -795,7 +823,6 @@ export const createLandingRun = ({
     machineFree,
     machinePaused,
     online,
-    update,
     workspaces,
     landingStop: (itemId) => landingStops.get(itemId)?.signal,
     runIn,
@@ -944,7 +971,7 @@ export const createLandingRun = ({
         stepped.push(words);
       },
       queue: landings,
-      skip: item.outputs ?? [],
+      skip: db.workItemOutputs(item.id),
       stopped: landingStopped(item),
     });
     const after = await headOf(workspace, item);
@@ -1060,6 +1087,9 @@ export const createLandingRun = ({
    * ({@link landingBranch}): the newest branch landing of every attempt at
    * its task in its project, the item's own earlier rounds among them, or of
    * the item alone when it is no task's. Undefined: the hub never pushed there.
+   * A landing whose record does not read (`landedUnread`) is none of them:
+   * the hub cannot vouch it pushed there, so a branch at it is refused, not
+   * pushed over.
    */
   const lastBranchPush = (item: WorkItemRow): string | undefined => {
     const now = db.workItem(item.id) ?? item;
@@ -1069,14 +1099,16 @@ export const createLandingRun = ({
             .projectAttempts(now.projectId)
             .filter((attempt) => attempt.taskId === now.taskId)
         : [now];
-    let last: WorkLanding | undefined;
-    for (const { landed } of sharing) {
+    let last: { at: number; sha: string } | undefined;
+    for (const attempt of sharing) {
+      const at = attempt.landedAt?.getTime() ?? 0;
       if (
-        landed &&
-        landed.onto === null &&
-        (!last || (landed.at ?? 0) > (last.at ?? 0))
+        attempt.landedSha !== null &&
+        attempt.landedOnto === null &&
+        attempt.landedUnread === null &&
+        (!last || at > last.at)
       ) {
-        last = landed;
+        last = { at, sha: attempt.landedSha };
       }
     }
     return last?.sha;
@@ -1102,7 +1134,7 @@ export const createLandingRun = ({
       run: runIn(workspace, item),
       turn: turnOf(item),
       queue: landings,
-      skip: item.outputs ?? [],
+      skip: db.workItemOutputs(item.id),
       stopped: landingStopped(item),
     });
     if (pushed.kind === "stopped") {
@@ -1214,9 +1246,10 @@ export const createLandingRun = ({
         return Promise.resolve({
           kind: "done",
           gate: earlier,
-          line: item.outputs?.length
-            ? "Nothing pushed: this item lands none, and its outputs are what it hands in."
-            : "Nothing pushed: this item lands none.",
+          line:
+            db.workItemOutputs(item.id).length > 0
+              ? "Nothing pushed: this item lands none, and its outputs are what it hands in."
+              : "Nothing pushed: this item lands none.",
         });
       case "branch":
       case "pr":
@@ -1318,7 +1351,7 @@ export const createLandingRun = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string | undefined> => {
-    const outputs = item.outputs ?? [];
+    const outputs = db.workItemOutputs(item.id);
     const result = { stdout: "" };
     for (const probe of outputsProbes(outputs)) {
       const probed = await runIn(workspace, item)(probe, GIT_TIMEOUT_MS);
@@ -1331,7 +1364,9 @@ export const createLandingRun = ({
     }
     const scratch = item.projectId ? await scratchOutputs(workspace, item) : [];
     const total = outputsBytes(result.stdout, scratch);
-    const free = item.projectId ? await folderFreeBytes(item.projectId) : total;
+    const free = item.projectId
+      ? await folderFreeBytes({ id: item.projectId })
+      : total;
     const problems = [
       ...outputsSaid(result.stdout),
       ...scratchOutputsSaid(scratch, declaredFilesOf(result.stdout)),
@@ -1458,7 +1493,7 @@ export const createLandingRun = ({
   ) => {
     const folder = outputsFolder(item);
     const files: { path: string; content: Uint8Array }[] = [];
-    for (const output of item.outputs ?? []) {
+    for (const output of db.workItemOutputs(item.id)) {
       files.push(...(await outputFiles(workspace, item, output, folder)));
     }
     files.push(...(await scratchOutputFiles(workspace, item, folder)));
@@ -1483,7 +1518,7 @@ export const createLandingRun = ({
   ): Promise<{ ok: boolean; line: string; paths: string[] }> => {
     const { projectId } = item;
     if (!projectId) {
-      return item.outputs?.length
+      return db.workItemOutputs(item.id).length > 0
         ? {
             ok: false,
             line: "\n\nOutputs not collected: the item belongs to no project.",
@@ -1833,7 +1868,7 @@ export const createLandingRun = ({
       }
       return { done: false, text: gate.refusal };
     }
-    const refused = await branchRefused(workspace, item, gate);
+    const refused = await refusedBefore(workspace, item, gate);
     if (refused) {
       return await reportLanding(item, row, workspace, submission, refused);
     }
@@ -1864,16 +1899,39 @@ export const createLandingRun = ({
     return await landAndReport(current, row, workspace, gate, submission, run);
   };
   /**
-   * A branch or a pull request gates at finish_item, before its push: the
-   * push is checked first, so one that will be refused runs no step
+   * An item whose outputs did not read as they became rows (schema.ts
+   * `workItems.outputsUnread`) lands nothing, whichever way it lands but
+   * `none`: the hub cannot tell which of its files were declared outputs,
+   * and an output its landing does not pass over is committed with the
+   * rest. Refused before any step runs; its outputs that read are still
+   * collected ({@link reportLanding}). Nothing for any other item.
+   */
+  const outputsUnreadRefused = (
+    item: WorkItemRow
+  ): Extract<Landed, { kind: "refused" }> | undefined =>
+    item.outputsUnread !== null && item.lands !== "none"
+      ? {
+          kind: "refused",
+          gate: { declared: false, outcomes: [] },
+          line: workWords.outputsUnreadRefused(item.outputsUnread),
+        }
+      : undefined;
+  /**
+   * A landing refused before any gate step runs: one whose outputs did not
+   * read ({@link outputsUnreadRefused}); a branch or a pull request whose
+   * push will be refused, checked before it gates at finish_item
    * (landing.ts `branchPushCheck`; a landing on its base checks inside
    * `land`). The refused landing, or nothing.
    */
-  const branchRefused = async (
+  const refusedBefore = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
     gate: Gate
   ): Promise<Extract<Landed, { kind: "refused" }> | undefined> => {
+    const unread = outputsUnreadRefused(item);
+    if (unread) {
+      return unread;
+    }
     if (item.lands !== "branch" && item.lands !== "pr") {
       return;
     }

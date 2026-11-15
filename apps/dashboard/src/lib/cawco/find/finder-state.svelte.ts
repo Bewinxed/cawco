@@ -577,6 +577,61 @@ export class FinderState {
     return this.#askNames(this.asked, machineId);
   }
 
+  /** A later page is on its way, or failed: the "more" row says which. */
+  morePage = $state<{
+    names?: "asking" | "failed";
+    said?: "asking" | "failed";
+  }>({});
+
+  /**
+   * The next page of one answer, by the cursor the hub gave: its results are
+   * added to the end of the answer drawn, which keeps every secret shown. An
+   * answer that was replaced meanwhile (newer words) is not touched.
+   */
+  async loadMore(source: "names" | "said") {
+    const held = source === "names" ? this.names : this.everywhere;
+    if (held.state !== "ok" || held.value.next === null) {
+      return;
+    }
+    const { next } = held.value;
+    this.morePage = { ...this.morePage, [source]: "asking" };
+    const asked =
+      source === "names"
+        ? await findNames(this.asked, { cursor: next, limit: 20 })
+        : await findEverywhere(this.asked, {
+            cursor: next,
+            limit: 20,
+            by: this.by,
+          });
+    if (asked.kind === "superseded") {
+      return;
+    }
+    const now = source === "names" ? this.names : this.everywhere;
+    if (now !== held) {
+      this.morePage = { ...this.morePage, [source]: undefined };
+      return;
+    }
+    if (!asked.read.ok) {
+      this.morePage = { ...this.morePage, [source]: "failed" };
+      return;
+    }
+    const page = asked.read.value;
+    const joined: Answer<FindAnswer> = {
+      ...held,
+      value: {
+        ...held.value,
+        next: page.next,
+        results: [...held.value.results, ...page.results],
+      },
+    };
+    this.morePage = { ...this.morePage, [source]: undefined };
+    if (source === "names") {
+      this.names = joined;
+    } else {
+      this.everywhere = joined;
+    }
+  }
+
   async #askNames(words: string, relist?: string) {
     this.#namesAbort?.abort();
     const abort = new AbortController();
@@ -638,6 +693,7 @@ export class FinderState {
   }
 
   #land<T>(read: Read<T>, key: string): Answer<T> {
+    this.morePage = {};
     // The list changes: every secret shown hides again.
     this.shownSecrets.clear();
     this.secretNote = "";

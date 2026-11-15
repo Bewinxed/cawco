@@ -34,6 +34,15 @@ export const hubDbPath = (): string =>
   resolve(process.env.CAWCO_DB_PATH ?? join(hubDataDir(), "cawco.db"));
 
 /**
+ * Why the hub's last start stopped before it opened its database `db`: it
+ * holds a migration this build does not have (core migration-state.ts), or
+ * this build's pending migrations left a declared table or column missing
+ * (hub db/migrate.ts). A sentence, written by the start that stopped and
+ * removed by the next that opens it, beside the database. `cawco status` says it when the hub does not answer.
+ */
+export const hubStoppedPath = (db: string): string => `${db}.stopped`;
+
+/**
  * Where the hub keeps every project's folder: `projects/` beside its
  * database ({@link hubDbPath}). Only on the hub's machine does it exist.
  */

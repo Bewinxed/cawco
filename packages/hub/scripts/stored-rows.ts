@@ -1,7 +1,7 @@
 /**
- * Every row of every stored JSON column (hub stored-json.ts `storedJson`)
- * in a hub database, read as the hub reads it: parsed and checked against
- * the column's schema. A row that fails is a migration missing, since the hub
+ * Every row of every stored column (hub stored-json.ts: `storedJson`'s
+ * JSON, `storedEnum`'s closed sets of text) in a hub database, read as the
+ * hub reads it: parsed and checked against the column's schema. A row that fails is a migration missing, since the hub
  * would throw reading it. Used by migrations:check on the migrated
  * fixture.
  *
@@ -17,6 +17,7 @@ import {
   readStoredText,
   type StoredShape,
   storedShapeOf,
+  storedValueOf,
   undeclaredKeys,
 } from "../src/stored-json";
 
@@ -43,13 +44,15 @@ interface StoredUndeclared {
 export interface StoredRows {
   /** Rows read, every column. */
   checked: number;
-  /** Stored JSON columns read. */
+  /** Stored columns read. */
   columns: number;
   failures: StoredFailure[];
   /** Columns the schema declares and the database does not have (`table.column`). */
   missing: string[];
   /** Sealed columns not read, with no key to open them (`table.column`). */
   sealed: string[];
+  /** Of {@link columns}, the closed sets of text (`storedEnum`). */
+  sets: number;
   /**
    * Keys rows hold that their column's type does not declare: written
    * before its writes were checked (2026-10-26) or refused one
@@ -66,7 +69,7 @@ const INDEX = /\[\d+\]/gu;
 
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
-/** One stored JSON column's rows, read and checked into `result`. */
+/** One stored column's rows, read and checked into `result`. */
 const readColumn = (
   sqlite: Database,
   at: { table: string; column: string; keys: string[] },
@@ -93,8 +96,12 @@ const readColumn = (
       continue;
     }
     try {
-      const parsed = readStoredText(shape.schema, text, at);
-      const keys = undeclaredKeys(shape.schema, JSON.parse(text), parsed);
+      const parsed = readStoredText(shape, text, at);
+      const keys = undeclaredKeys(
+        shape.schema,
+        storedValueOf(shape, text),
+        parsed
+      );
       for (const [key, type] of new Map(
         keys.map((one) => [one.key.replace(INDEX, "[]"), one.type])
       )) {
@@ -131,7 +138,7 @@ const readColumn = (
   result.undeclared.push(...undeclared.values());
 };
 
-/** Every stored JSON column the schema declares: its table, name, primary key columns and shape. */
+/** Every stored column the schema declares: its table, name, primary key columns and shape. */
 export const storedColumns = async (): Promise<
   { table: string; column: string; keys: string[]; shape: StoredShape }[]
 > => {
@@ -161,6 +168,7 @@ export const storedRows = async (
   const result: StoredRows = {
     checked: 0,
     columns: 0,
+    sets: 0,
     failures: [],
     missing: [],
     sealed: [],
@@ -186,6 +194,7 @@ export const storedRows = async (
       result.sealed.push(at);
     } else {
       result.columns += 1;
+      result.sets += shape.text ? 1 : 0;
       readColumn(sqlite, { table, column, keys }, shape, open, result);
     }
   }
@@ -213,5 +222,5 @@ export const storedRowsReport = (result: StoredRows): string[] => [
         `${result.unopened} sealed value(s) the key does not open (the hub reads them as no secret)`,
       ]
     : []),
-  `${result.checked} rows in ${result.columns} stored JSON columns; ${result.failures.length === 0 ? "every one is its shape" : `${result.failures.reduce((n, f) => n + f.count, 0)} fail, in ${result.failures.length} column(s)`}`,
+  `${result.checked} rows in ${result.columns} stored columns (${result.sets} of them closed sets of text); ${result.failures.length === 0 ? "every one is its shape" : `${result.failures.reduce((n, f) => n + f.count, 0)} fail, in ${result.failures.length} column(s)`}`,
 ];

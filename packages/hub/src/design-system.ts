@@ -73,6 +73,7 @@ import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
 import { boardTitle } from "./labels";
+import { awayProblem } from "./machine-answers";
 import { machineName } from "./machine-name";
 import {
   FOLDER_FILE_LIMIT,
@@ -953,14 +954,19 @@ export interface OwnLanding {
  * nothing: it parks the person's ask").
  */
 export const ownLandings = (
-  attempts: Pick<WorkItemRow, "landed" | "taskId">[],
+  attempts: Pick<
+    WorkItemRow,
+    "landedOnto" | "landedSha" | "landedUnread" | "taskId"
+  >[],
   item: Pick<WorkItemRow, "taskId">,
   taskOpen: boolean
 ): OwnLanding[] =>
   taskOpen && item.taskId
-    ? attempts.flatMap((attempt) =>
-        attempt.taskId === item.taskId && attempt.landed?.onto
-          ? [{ onto: attempt.landed.onto, sha: attempt.landed.sha }]
+    ? attempts.flatMap(({ landedOnto, landedSha, landedUnread, taskId }) =>
+        // A landing whose record does not read is not vouched as its own:
+        // design work on what it put there stays checked.
+        taskId === item.taskId && landedOnto && landedSha && !landedUnread
+          ? [{ onto: landedOnto, sha: landedSha }]
           : []
       )
     : [];
@@ -1718,10 +1724,10 @@ export const createDesignSystem = (deps: {
       return { repo: null } satisfies ProposalPlace;
     }
     if (!deps.online(row.machineId)) {
-      return problem(503, {
-        code: "design-proposal-machine-away",
-        detail: `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`,
-      });
+      return awayProblem(
+        row.machineId,
+        `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`
+      );
     }
     const own = workspaceOfSession(row.instanceId);
     const boundary =

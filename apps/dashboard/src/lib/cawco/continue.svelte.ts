@@ -75,11 +75,17 @@ export const continuing = $state<{ source: ContinueSource | null }>({
   source: readJson(KEY, ContinueSourceSchema.nullable(), null, "session"),
 });
 
-$effect.root(() => {
-  $effect(() => {
-    writeJson(KEY, $state.snapshot(continuing.source), "session");
+/**
+ * The session the form continues, written to the tab's storage as it
+ * changes from now on. The app starts it once (start.ts `startApp`);
+ * importing this module only reads what the tab kept. Returns its stop.
+ */
+export const startContinue = (): (() => void) =>
+  $effect.root(() => {
+    $effect(() => {
+      writeJson(KEY, $state.snapshot(continuing.source), "session");
+    });
   });
-});
 
 /** Opens the New Session form continuing `source`; none opens nothing. */
 export function continueInNewSession(source: ContinueSource | null): void {

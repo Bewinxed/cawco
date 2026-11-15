@@ -2421,6 +2421,17 @@ public enum Words {
             "No new builds could be looked for: \(why). Machines keep the build they run; Try again to check."
         }
 
+        /// A connected machine whose agent's contract range (core runtime.ts `protocolRange`) does not hold its hub's: the hub sends it no work it cannot carry (`cannot` says which) and offers it the hub's build, which it installs by itself. Said where that work is held or refused: a held start (hub start-holds.ts `startHold`), a delegate's or handoff's inputs (hub work-items.ts `handInto`).
+        public static func olderBuild(machine: String, cannot: String) -> String {
+            "\(machine) runs a CawCo build older than its hub's, which cannot \(cannot) until it installs the hub's build"
+        }
+
+        /// {@link updatesWords.olderBuild}'s `cannot` for a session's start.
+        public static let olderBuildStarts = "start sessions for this hub"
+
+        /// {@link updatesWords.olderBuild}'s `cannot` for a delegate's or handoff's inputs.
+        public static let olderBuildInputs = "send or take a session's inputs"
+
         /// `behind`: the hub does not speak the build's wire protocol yet.
         public static func waitsForHubToTake(version: String) -> String {
             "Waits for its hub to take \(version) first"
@@ -2473,6 +2484,31 @@ public enum Words {
         /// An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs.
         public static func trialUndecided(version: String, tries: Int, why: String) -> String {
             "\(version)'s health could not be checked after \(tries) tries: \(why)."
+        }
+
+        /// `cawco status` on the hub's machine, when the hub does not answer and the last update failed: the update's own words.
+        public static func lastFailed(error: String) -> String {
+            "the last update failed: \(error)"
+        }
+
+        /// An install stopped before anything changed: the disk the hub's database is on has less free than its copy and a rollback's copy need (cli binary-apply.ts `requireRoom`).
+        public static func noRoomForDatabaseCopy(version: String, needed: String, free: String) -> String {
+            "\(version) was not installed: copying the hub's database needs \(needed) free on its disk, and \(free) is free. Nothing was changed. Free space there, then install again."
+        }
+
+        /// A rollback put the hub's database back: said after the reason, naming the file that holds what the trial wrote.
+        public static func databasePutBack(file: String) -> String {
+            "the hub's database is back as it was before the update; what it stored during the trial is in \(file)"
+        }
+
+        /// A rollback whose copy could not be put back (no room for it beside the database, the hub still holding it): said after the reason. The rollback goes on, and the build rolled back to runs on the database the trial left. `stopped`: that database holds migrations `previous` lacks, so its hub does not start on it (core migrations-ahead.ts).
+        public static func databaseNotPutBack(database: String, why: String, copy: String, previous: String, stopped: Bool) -> String {
+            "the hub's database was not put back (\(why)), so \(database) still holds what the hub stored during the trial; the copy from before the update is \(copy)\(stopped ? ". The trial migrated it, so \(previous)'s hub doesn't start on it: put that copy in its place to start the hub, which loses what it stored during the trial" : "")"
+        }
+
+        /// The update helper's log line for an older copy or moved-aside database it removed, once a newer one was written whole and checked.
+        public static func olderCopyRemoved(file: String, size: String) -> String {
+            "\(file) (\(size)) was removed: a newer copy replaces it"
         }
 
         /// A machine's row once such a trial ended (`unconfirmedVersion`), `version` the build that runs.

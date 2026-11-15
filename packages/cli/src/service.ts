@@ -47,6 +47,7 @@ import {
   launchdLogsDir,
   unxml,
 } from "@cawco/core/launchd";
+import { unknownMigrations } from "@cawco/core/migration-state";
 import { hubDbPath } from "@cawco/core/paths/hub";
 import {
   CAWCO_HUB_PORT,
@@ -806,7 +807,16 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       restartSec: 2,
       cpuWeight: OWN_CPU_WEIGHT,
       processType: "Interactive",
-      check: needs(layout.hub, "hub"),
+      // The database the unit names holds a migration this build does not have, and the hub
+      // this unit runs would not open it, so the hub running now is left
+      // running (core migration-state.ts).
+      check: () => {
+        needs(layout.hub, "hub")();
+        const unknown = unknownMigrations(hubDbPath());
+        if (unknown) {
+          throw new ServiceError(unknown);
+        }
+      },
       probe: probeHub,
     },
 
@@ -1635,6 +1645,25 @@ const renderInstalled = (
       return { spec, text: at.mac ? plist(spec) : unit(spec) };
     }
   );
+
+/**
+ * The database the hub's installed unit (or plist) opens: `hubDbPath` as the
+ * unit's own recorded environment resolves it (its `CAWCO_DB_PATH`, written
+ * into it at install and carried by every refresh, else the published default
+ * under the data dir it records). THE ONE SOURCE of the hub's database for
+ * any process that did not start in that unit (the update helper, which the
+ * agent launches): the hub opens the database its unit names, and nothing
+ * else records it. `undefined` where no hub's unit is installed.
+ */
+export const installedHubDbPath = async (): Promise<string | undefined> => {
+  const mac = platform() === "darwin";
+  const text = await Bun.file(mac ? launchAgentPath("hub") : systemdPath("hub"))
+    .text()
+    .catch(() => undefined);
+  return text === undefined
+    ? undefined
+    : asInstalled(recordedEnvironment(text, mac), hubDbPath);
+};
 
 /** The browser address of the socket-activated service among `specs` (the dashboard), by its network socket. */
 const dashboardUrlOf = (

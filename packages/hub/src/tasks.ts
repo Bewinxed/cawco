@@ -474,6 +474,12 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   accounts: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
+  /**
+   * What its `budget:` line holds that does not read; null when it reads or
+   * there is none. While set, no attempt at it starts (dispatch.ts
+   * `startable`), and `startProblem` says why.
+   */
+  budgetUnread: string | null;
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
   comments: TaskComment[];
@@ -503,6 +509,14 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
    * source last said it.
    */
   links: ExternalRef[];
+  /**
+   * What its `outputs:`, `owns:`, `checks:`, `accounts:` or `waits_on:`
+   * line holds that does not read as its list (task-file.ts
+   * `GOVERNING_LISTS`); null when they read or there are none. While set,
+   * no attempt at it starts (dispatch.ts `startable`), and `startProblem`
+   * says why.
+   */
+  listsUnread: string | null;
   /** It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}). */
   needsYou: boolean;
   number: number;
@@ -1212,6 +1226,26 @@ export const onFrontier = (task: TaskSummary): boolean =>
   !task.lastAttemptStopped &&
   task.startProblem === null;
 
+/**
+ * Why no attempt at a task starts while a line of its file does not read
+ * (dispatch.ts `startable`): its budget line, then a list line that governs
+ * its attempt; null when they read.
+ */
+const unreadLineOf = (task: {
+  budgetUnread: string | null;
+  id: string;
+  listsUnread: string | null;
+  path: string;
+}): string | null => {
+  if (task.budgetUnread !== null) {
+    return workWords.taskBudgetUnread(task.path, task.id, task.budgetUnread);
+  }
+  if (task.listsUnread !== null) {
+    return workWords.taskListUnread(task.path, task.id, task.listsUnread);
+  }
+  return null;
+};
+
 const summaryOf = (
   row: TaskIndexRow,
   stages: Stages | undefined,
@@ -1284,6 +1318,8 @@ const viewOf = (
   group: parsed.fields.group,
   owns: parsed.fields.owns,
   budget: parsed.fields.budget,
+  budgetUnread: parsed.budgetUnread,
+  listsUnread: parsed.listsUnread,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
   accounts: parsed.fields.accounts,
@@ -1953,9 +1989,12 @@ export const createTasks = (store: TaskStore) => {
   const flagsOf = (
     projectId: string,
     task: {
+      budgetUnread: string | null;
       hash: string;
       id: string;
+      listsUnread: string | null;
       partOf: string | null;
+      path: string;
       stage: string;
       waitsOn: string[];
     },
@@ -2000,7 +2039,11 @@ export const createTasks = (store: TaskStore) => {
         open,
       lastAttemptStopped: last?.state === "cancelled" && open,
       queuedStart: context.queued.has(task.id),
-      startProblem: store.startProblem?.(projectId, task) ?? null,
+      // A budget or outputs line that does not read holds every start
+      // (dispatch.ts `startable`), so it is why the task does not start
+      // until it reads.
+      startProblem:
+        unreadLineOf(task) ?? store.startProblem?.(projectId, task) ?? null,
     };
   };
   /**
@@ -2151,6 +2194,8 @@ export const createTasks = (store: TaskStore) => {
       todosDone: todos.done,
       todosTotal: todos.total,
       problem: parsed.problems.join(" ") || null,
+      budgetUnread: parsed.budgetUnread,
+      listsUnread: parsed.listsUnread,
       hash,
       updatedAt: new Date(),
     };
@@ -3360,10 +3405,13 @@ export const createTasks = (store: TaskStore) => {
       projectId,
       {
         id: taskId(number),
+        path,
         waitsOn: parsed.fields.waitsOn,
         partOf: parsed.fields.partOf,
         stage,
         hash,
+        budgetUnread: parsed.budgetUnread,
+        listsUnread: parsed.listsUnread,
       },
       context
     );

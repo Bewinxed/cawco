@@ -17,7 +17,6 @@ import type { SessionTooling } from "@cawco/core/protocol";
 import type {
   McpServerStatus,
   NeutralStatus,
-  PermissionUpdate,
   SendRecord,
 } from "@cawco/core/session-messages";
 import type { ToolGlance } from "@cawco/core/transcript-types";
@@ -66,7 +65,8 @@ export interface PendingPermission {
   requestId: string;
   /** Set when the hub routed the ask to its parent rather than to the user. */
   routedTo?: "parent";
-  suggestions?: PermissionUpdate[];
+  /** The harness's own suggested updates, held whole: "Always allow" hands them back as they came. */
+  suggestions?: unknown[];
   toolName: string;
   /**
    * The call the ask gates, as its message's `toolCallId`: while the ask is
@@ -129,11 +129,20 @@ export type ReadFault =
   | { message: string; reason: "failed" }
   /**
    * The session's machine refuses the harness CLI its conversation is read
-   * through (the hub's `harness-refused`): read again once the machine
-   * runs it (SessionPane), or on Try again, never on a backoff, which
-   * would be refused the same. `message` is the hub's sentence.
+   * through (the hub's `harness-refused`), or an install of that CLI runs
+   * there now and no server answers (`harness-updating`, `updating`): read
+   * again once the machine runs it (SessionPane), or on Try again, never on
+   * a backoff, which would be refused the same. `message` is the hub's
+   * sentence.
    */
-  | { message: string; reason: "refused" };
+  | {
+      /** The harness whose CLI the read waits on, on {@link machineId}: what a page with no row for the conversation watches. */
+      harness?: HarnessKind;
+      machineId?: string;
+      message: string;
+      reason: "refused";
+      updating?: true;
+    };
 
 /** Everything one session view needs — live or browsed from storage. */
 export interface SessionState {

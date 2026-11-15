@@ -71,27 +71,20 @@ import type { MoveRow } from "./db/moves";
 import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
 import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
+import { MachineAway } from "./hub-shapes";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
 
 import type { SpawnProblem } from "./spawn-problems";
 import { received } from "./stored-json";
 
-/** A machine a step needs is away: the job waits for its next register. */
-export class MoveAway extends Error {
-  readonly machineId: string;
-  constructor(machineId: string) {
-    super("a machine this move needs is away");
-    this.machineId = machineId;
-  }
-}
-
 export interface MovesDeps {
   /** Every ask parked now, the ones kept across a hub restart included (server.ts `pending`). */
   readonly asks: () => Envelope[];
   /**
-   * A machine's control: its result, or {@link MoveAway} when the machine is
-   * not connected (or went while it answered), or the machine's own error.
+   * A machine's control: its result, or {@link MachineAway} thrown when the
+   * machine is not connected (or went while it answered), which a job waits
+   * out; else the machine's own cause, thrown as its `MachineProblem`.
    */
   readonly call: (
     machineId: string,
@@ -1423,7 +1416,7 @@ export const createMoves = (deps: MovesDeps) => {
     if (!(row && WORKING.has(row.stage))) {
       return false;
     }
-    if (error instanceof MoveAway || !allHere(row)) {
+    if (error instanceof MachineAway || !allHere(row)) {
       console.log(`[moves] ${id}: ${row.stage} waits for its machine`);
       return true;
     }

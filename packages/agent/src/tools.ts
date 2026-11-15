@@ -11,10 +11,15 @@ import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { toolInstallsPath } from "@cawco/core/paths/cawco";
+import { ownIdentity } from "@cawco/core/process-identity";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { identifiedPid } from "@cawco/core/signal";
+import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
 import type {
+  ToolCopy,
   ToolFootprint,
   ToolInstallMethod,
   ToolPlatform,
@@ -22,6 +27,7 @@ import type {
   ToolSpec,
   ToolStatus,
   ToolUpdateSwitches,
+  ToolUpdates,
 } from "@cawco/core/tools";
 import {
   needProbe,
@@ -38,6 +44,7 @@ import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
+import { ToolInstallsSchema } from "./stored-shapes";
 
 /** Where the curl-script installers put their binaries (Claude Code's, Antigravity's). */
 const LOCAL_BIN = expandHome("~/.local/bin");
@@ -134,6 +141,54 @@ const TAIL_LINES = 4;
 const tail = (output: string): string =>
   lastLines(output.trim().split("\n"), TAIL_LINES, "\n");
 
+/**
+ * How much of a failed installer's output is kept, which a person opens to
+ * see why (its row's popover): whole up to {@link OUTPUT_LINES} lines and
+ * {@link OUTPUT_CHARS} characters, which every failure measured fits in:
+ * npm's ECONNREFUSED is six to twelve lines, the cause (`npm error code
+ * ECONNREFUSED`, `FetchError: … reason: connect ECONNREFUSED`) at the head
+ * and its log's path at the end, which the last four lines alone kept and
+ * the cause dropped (host run 41f12701); bun says one or two lines; the
+ * curl installers a few lines of progress and curl's own `curl: (7)`.
+ * Longer output keeps its head ({@link OUTPUT_HEAD} lines: where most
+ * installers say the cause) and its tail (the rest of the lines: where they
+ * end), with how many were left out between; a line longer than
+ * {@link OUTPUT_LINE_CHARS} is cut.
+ */
+const OUTPUT_LINES = 60;
+const OUTPUT_HEAD = 20;
+const OUTPUT_CHARS = 8000;
+const OUTPUT_LINE_CHARS = 400;
+
+/** A failed installer's output, kept as {@link OUTPUT_LINES} says. */
+const failedOutput = (output: string): string => {
+  const lines = output
+    .trim()
+    .split("\n")
+    .map((line) =>
+      line.length > OUTPUT_LINE_CHARS
+        ? `${line.slice(0, OUTPUT_LINE_CHARS)}…`
+        : line
+    );
+  const whole = lines.join("\n");
+  if (lines.length <= OUTPUT_LINES && whole.length <= OUTPUT_CHARS) {
+    return whole;
+  }
+  const tailLines = Math.min(
+    OUTPUT_LINES - OUTPUT_HEAD,
+    lines.length - OUTPUT_HEAD
+  );
+  const left = lines.length - OUTPUT_HEAD - tailLines;
+  const kept = [
+    ...lines.slice(0, OUTPUT_HEAD),
+    ...(left > 0 ? [`… ${left} lines left out …`] : []),
+    ...lines.slice(-tailLines),
+  ].join("\n");
+  return kept.length > OUTPUT_CHARS
+    ? `${kept.slice(0, OUTPUT_CHARS / 2)}\n…\n${kept.slice(-OUTPUT_CHARS / 2)}`
+    : kept;
+};
+
 /** An installer's tail, as one line for a sentence. */
 const oneLine = (said: string | undefined): string =>
   (said ?? "").trim().replaceAll(/\s*\n\s*/gu, "; ");
@@ -174,8 +229,14 @@ export const onToolsMoved = (listener: () => void): (() => void) => {
   return () => movedListeners.delete(listener);
 };
 
-/** Tells every {@link onToolsMoved} listener. */
+/**
+ * Tells every {@link onToolsMoved} listener, once the version gate's reads
+ * are dropped ({@link gateReads}): an install that ended, or a probe that
+ * saw another version, makes every gate read its binary again before any
+ * listener asks it (a harness that counts the tool running at once).
+ */
 const toolsMoved = (): void => {
+  gateReads.clear();
   for (const listener of movedListeners) {
     listener();
   }
@@ -607,6 +668,570 @@ const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
 };
 
 /**
+ * One tool CawCo put on this machine, as its daemon recorded it when the
+ * install answered a copy it runs ({@link recordInstall}): the path the copy
+ * is found at (`toolBinary`'s), the method's label, the version it said, and
+ * when, ms epoch. `takenOver`: no install of this daemon's put it there; it
+ * is a copy CawCo was keeping current before it kept this record, taken into
+ * its care then ({@link takeOverKept}), `at` being that moment.
+ */
+export interface ToolInstallRecord {
+  at: number;
+  method?: string;
+  path: string;
+  takenOver?: boolean;
+  version?: string;
+}
+
+/**
+ * An install of CawCo's that has begun and not yet answered, written before
+ * its method runs ({@link markUnderway}) so the copy it leaves is CawCo's
+ * from the moment it is there ({@link landedBy}), not only once the install
+ * records it: the copy it replaces (`path`, none when there was none, and
+ * the version it said, `from`), the version it puts on (`to`, none when it
+ * puts on the newest), the method's label, when it began, and the process
+ * that runs it (`pid`, its start and the boot it runs in, core
+ * `ownIdentity`, so a pid used again is never taken for it). What it was
+ * asked besides the version ({@link InstallAsk}: `automatic`, `newest`,
+ * `startedBy`), and how many runs of it a stop cut short before this one
+ * (`tries`), so the next start can run it again as it was asked. One whose
+ * process is gone (the agent restarted mid-install, which takes the
+ * installer down with it) is settled at the next start
+ * ({@link settleUnderway}).
+ *
+ * `answered`: when the install answered, failing, with the copy at its path
+ * saying no version ({@link closeUnderway}). Such an entry stands only for
+ * that broken copy ({@link midway}): it never makes a copy that says a
+ * version CawCo's, and no start runs it again; the failure it answered is
+ * said, and the hub's pass or a press takes it from there.
+ */
+export interface ToolInstallUnderway {
+  answered?: number;
+  at: number;
+  automatic?: boolean;
+  bootId?: string;
+  from?: string;
+  method?: string;
+  newest?: string;
+  path?: string;
+  pid: number;
+  procStart?: string;
+  startedBy?: "cawco" | "person";
+  to?: string;
+  tries?: number;
+}
+
+/**
+ * `tool-installs.json`: each tool's last install by CawCo, by tool id; the
+ * installs of CawCo's under way, by tool id ({@link ToolInstallUnderway});
+ * and when the one-time pass that took the copies CawCo was already keeping
+ * current into its care ran ({@link takeOverKept}); absent until it has.
+ */
+export interface ToolInstalls {
+  installs: Record<string, ToolInstallRecord>;
+  tookOverAt?: number;
+  underway?: Record<string, ToolInstallUnderway>;
+}
+
+/**
+ * What CawCo installed here; nothing when it never recorded one. Read whole
+ * each time: `cawco binary-pins` (another process) writes it too. One that
+ * does not read is said, and reads as none: every copy is then the
+ * person's until CawCo installs it again, which updates nothing unasked.
+ */
+const readInstallFile = async (): Promise<ToolInstalls> => {
+  try {
+    return (
+      (await readRecord(toolInstallsPath(), ToolInstallsSchema)) ?? {
+        installs: {},
+      }
+    );
+  } catch (error) {
+    console.warn(
+      `[tools] ${toolInstallsPath()} was not read, so no copy here is taken for CawCo's own: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return { installs: {} };
+  }
+};
+
+let installWrites: Promise<void> = Promise.resolve();
+
+/**
+ * `change` made to the record file, one write at a time, so none is lost; a
+ * write that fails is said, never thrown (`what`: what it would have kept).
+ */
+const writeInstalls = (
+  what: string,
+  change: (file: ToolInstalls) => ToolInstalls
+): Promise<void> => {
+  installWrites = installWrites
+    .then(async () => {
+      const file = change(await readInstallFile());
+      await writeStateFile(
+        toolInstallsPath(),
+        `${JSON.stringify(file, null, 2)}\n`
+      );
+    })
+    .catch((error: unknown) => {
+      console.warn(
+        `[tools] ${toolInstallsPath()} could not be written, so ${what} is not recorded: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  return installWrites;
+};
+
+/**
+ * CawCo's install of `id` left a copy it runs at `record.path`: kept, over
+ * any record of an earlier one, so the fleet updates that copy unasked from
+ * now on ({@link copyOf}), at the version it says now: a keep-current update
+ * of CawCo's own copy moves the record with it.
+ */
+const recordInstall = (id: string, record: ToolInstallRecord): Promise<void> =>
+  writeInstalls(`${id}'s install as CawCo's`, (file) => ({
+    ...withoutUnderway(file, id),
+    installs: { ...file.installs, [id]: record },
+  }));
+
+/** `file` without `id`'s install under way, or only when it is the one begun at `at`. */
+const withoutUnderway = (
+  file: ToolInstalls,
+  id: string,
+  at?: number
+): ToolInstalls => {
+  const mine = file.underway?.[id];
+  if (!mine || (at !== undefined && mine.at !== at)) {
+    return file;
+  }
+  const { [id]: _gone, ...underway } = file.underway ?? {};
+  const { underway: _all, ...rest } = file;
+  return Object.keys(underway).length > 0 ? { ...rest, underway } : rest;
+};
+
+/**
+ * Whether the copy at `at` is where the install under way (`underway`) puts
+ * its copy: the path of the copy it replaces, or any, when there was none.
+ */
+const atItsPath = (underway: ToolInstallUnderway, at: Found): boolean =>
+  underway.path === undefined ||
+  underway.path === at.path ||
+  realOf(underway.path) === at.file;
+
+/**
+ * Whether the copy at `at` that says `version` is the one the install
+ * under way (`underway`) put on: at its path ({@link atItsPath}), saying
+ * the version it puts on, or, when it puts on the newest, any version other
+ * than the one the copy said as it began. An install that answered
+ * (`answered`) put on nothing after it answered. The record of a copy at its
+ * version before then ({@link copyOf}) decides any other.
+ */
+const landedBy = (
+  underway: ToolInstallUnderway,
+  at: Found,
+  version: string | undefined
+): boolean =>
+  underway.answered === undefined &&
+  atItsPath(underway, at) &&
+  version !== undefined &&
+  (underway.to === undefined
+    ? version !== underway.from
+    : version === underway.to);
+
+/**
+ * Whether the copy at `at` is the install under way (`underway`) half done:
+ * at its path ({@link atItsPath}), it says no version (npm has the package
+ * aside for seconds, the link still there; an installer a stop killed left
+ * a copy that doesn't run, which {@link settleOne} runs the install again
+ * over; an install that answered failing left it so, {@link closeUnderway}).
+ * It is CawCo's to put right, never a hand's.
+ */
+const midway = (
+  underway: ToolInstallUnderway,
+  at: Found,
+  version: string | undefined
+): boolean => version === undefined && atItsPath(underway, at);
+
+/**
+ * CawCo's install of `spec` is about to run its method over `copy` (none:
+ * there is none), which says `from`, to put on `to` with `method`: written
+ * first, so the copy it leaves reads as CawCo's while it is under way and
+ * after a restart cuts it short ({@link ToolInstallUnderway}), with what it
+ * was asked (`ask`), for a start to run it again. Its `at`, for
+ * {@link endUnderway}.
+ */
+const markUnderway = async (
+  spec: ToolSpec,
+  method: ToolInstallMethod,
+  copy: { at?: Found; from?: string },
+  to: string | undefined,
+  ask: InstallAsk
+): Promise<number> => {
+  const at = Date.now();
+  const underway: ToolInstallUnderway = {
+    at,
+    ...(await ownIdentity()),
+    method: method.label,
+    ...(copy.at ? { path: copy.at.path } : {}),
+    ...(copy.from ? { from: copy.from } : {}),
+    ...(to ? { to } : {}),
+    ...(ask.automatic ? { automatic: true } : {}),
+    ...(ask.newest ? { newest: ask.newest } : {}),
+    ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
+    ...(ask.tries ? { tries: ask.tries } : {}),
+  };
+  await writeInstalls(`${spec.id}'s install under way`, (file) => ({
+    ...file,
+    underway: { ...file.underway, [spec.id]: underway },
+  }));
+  return at;
+};
+
+/** The install of `id` begun at `at` answered: its entry under way goes, when {@link recordInstall} has not taken it already. */
+const endUnderway = (id: string, at: number): Promise<void> =>
+  writeInstalls(`the end of ${id}'s install`, (file) =>
+    withoutUnderway(file, id, at)
+  );
+
+/**
+ * THE INSTALLS A STOP CUT SHORT ARE SETTLED, AT THE START. An install under
+ * way whose process is gone (systemd and launchd take an agent's installer
+ * down with it: a restart, an out-of-memory kill of the unit, a power cut)
+ * never answered, and the copy stands as it left it:
+ * - one it put on ({@link landedBy}) is recorded as CawCo's install, as
+ *   the install would have recorded it;
+ * - one that says another version than it began from or puts on, or one
+ *   the PATH finds at another path, is someone else's doing since: the
+ *   entry goes, and the record of before says whose it is;
+ * - anything else is the install not done: no copy (npm left its package
+ *   aside, or its new package.json with no bin), a copy at its path that
+ *   says no version ({@link midway}), or the copy it began from, unmoved.
+ *   The install was asked for (the hub's pass, a press, adding a machine,
+ *   a build's pins), so it runs again now as it was asked
+ *   ({@link redoInstall}), and the tool reads `installing` meanwhile: never
+ *   a missing tool with nothing on its way, which the hub sends nothing for.
+ * An install that answered (`answered`) is not run again: its failure was
+ * said; its entry stays while its copy says no version, and goes otherwise.
+ * An install another process still runs (`cawco binary-pins` beside the
+ * agent) is its own.
+ */
+const settleUnderway = async (): Promise<void> => {
+  const { underway = {} } = await readInstallFile();
+  for (const [id, entry] of Object.entries(underway)) {
+    const runs =
+      entry.pid === process.pid
+        ? installing.has(id)
+        : (await identifiedPid(entry)) !== undefined;
+    if (!runs) {
+      await settleOne(id, entry);
+    }
+  }
+};
+
+/**
+ * How many runs of one install a stop may cut short, one after another,
+ * before the next start runs it no more and says so ({@link redoInstall}):
+ * an installer that takes its agent down with it (memory) would otherwise
+ * restart the agent, and every session on it, for good. Our call: two
+ * stops in a row are a power cut and a restart; a third is the install.
+ */
+const CUT_SHORT_MOST = 3;
+
+/** One install a stop cut short, settled ({@link settleUnderway}). */
+const settleOne = async (
+  id: string,
+  entry: ToolInstallUnderway
+): Promise<void> => {
+  const spec = toolSpec(id);
+  if (!spec) {
+    await endUnderway(id, entry.at);
+    return;
+  }
+  const at = await findCopy(spec);
+  const version = at ? await probeVersion(spec, at.path) : undefined;
+  const began = new Date(entry.at).toISOString();
+  if (at && landedBy(entry, at, version)) {
+    console.info(
+      `[tools] ${spec.name} ${version} ${copyWords(spec, at.path).at} is CawCo's: its install that began ${began} put it on and stopped before it was recorded`
+    );
+    await recordInstall(id, {
+      path: at.path,
+      ...(entry.method ? { method: entry.method } : {}),
+      ...(version ? { version } : {}),
+      at: entry.at,
+    });
+    return;
+  }
+  if (entry.answered !== undefined) {
+    if (at && midway(entry, at, version)) {
+      console.info(
+        `[tools] ${spec.name} ${copyWords(spec, at.path).at} says no version: its install that began ${began} failed so, and it stays CawCo's to put right`
+      );
+      return;
+    }
+    await endUnderway(id, entry.at);
+    return;
+  }
+  const untouched = at && atItsPath(entry, at) && version === entry.from;
+  if (at && !untouched && !midway(entry, at, version)) {
+    console.info(
+      `[tools] ${spec.name}'s install that began ${began} stopped, and the copy ${copyWords(spec, at.path).at} says ${version ?? "no version"}, which it did not put on: the copy there is whose the record says`
+    );
+    await endUnderway(id, entry.at);
+    return;
+  }
+  await redoInstall(spec, entry, at ? (version ?? "no version") : undefined);
+};
+
+/**
+ * An install a stop cut short with its work not done ({@link settleOne}),
+ * run again as it was asked, its `tries` one more: the new run writes its
+ * own entry under way over this one as its method starts, and this one goes
+ * when the run answers without having started it (the copy now the
+ * person's, no method). Once {@link CUT_SHORT_MOST}
+ * runs were cut short it runs no more: the tool says the install failed,
+ * and why, for Retry, and the entry goes. `found`: what the copy there says
+ * now, none for no copy.
+ */
+const redoInstall = async (
+  spec: ToolSpec,
+  entry: ToolInstallUnderway,
+  found: string | undefined
+): Promise<void> => {
+  const began = new Date(entry.at).toISOString();
+  const there = found ? `the copy there says ${found}` : "no copy is there";
+  const runs = (entry.tries ?? 0) + 1;
+  if (runs >= CUT_SHORT_MOST) {
+    console.info(
+      `[tools] ${spec.name}'s install that began ${began} stopped before it finished, as ${runs} runs of it in a row did, and ${there}: it is not run again until Retry`
+    );
+    await settle(spec, {
+      id: spec.id,
+      state: "failed",
+      detail: toolWords.cutShort(spec.name, runs),
+      ...(entry.method ? { method: entry.method } : {}),
+      at: Date.now(),
+    });
+    await endUnderway(spec.id, entry.at);
+    return;
+  }
+  console.info(
+    `[tools] ${spec.name}'s install that began ${began} stopped before it finished, and ${there}: it runs again now`
+  );
+  // Not waited on: the tool reads `installing` from here on (installTool
+  // marks it before its first wait), and its end tells the hub.
+  installTool(spec.id, entry.to, {
+    ...(entry.automatic ? { automatic: true } : {}),
+    ...(entry.newest ? { newest: entry.newest } : {}),
+    ...(entry.startedBy ? { startedBy: entry.startedBy } : {}),
+    tries: runs,
+  })
+    .then(() => endUnderway(spec.id, entry.at))
+    .catch(() => undefined);
+};
+
+/**
+ * THE COPIES CAWCO WAS ALREADY KEEPING CURRENT ARE CAWCO'S, ONCE. Before
+ * this daemon kept a record of its own installs, the hub sent every copy
+ * of a CLI CawCo keeps current (core `ToolSpec.release`: Claude Code) that
+ * said a version older than its newest release that CawCo's own updater
+ * runs on (hub tool-releases.ts `updatesOwed` before 2026-11-14; agent
+ * `install`), whoever had put it there: the owner's standing decision of
+ * 2026-11-04 put those copies in CawCo's care. So the first time a daemon
+ * of this build reads its tools, each such copy no record names is recorded
+ * as CawCo's (`takenOver`, said in its log, and on the hub's when its
+ * report lands), and the pass is marked done in the same file, never run
+ * again: a copy the person puts on after it is theirs (the record names a
+ * copy only while it says the version recorded, {@link copyOf}).
+ *
+ * What the earlier pass acted on, and so what is taken: a copy that says
+ * its version (one saying none was never sent an update), older than the
+ * floor or not (the earlier pass sent those too), unless the owner turned
+ * the tool's automatic updates off where the tool reads its settings
+ * (`install`'s `switchedOff` declined every automatic update then): that
+ * copy stays the person's. A copy whose settings could not be read is not
+ * taken, and the pass is not marked done, so the next start asks again: a
+ * read that failed is no word that its updates are off, and marking it
+ * done would leave that copy out of CawCo's care for good. The same for a
+ * copy not found, unless two looks agree there is none with no install of
+ * it running (a copy an update moved aside is away for a moment: host run
+ * 84ca5c0e marked the pass done then, with nothing taken), and for a copy
+ * that didn't say its version. A fleet pin held it at its version but left
+ * it CawCo's to install (the pin is CawCo's policy, not a hand install), so
+ * it is taken too, and stays held by the pin (hub tool-releases.ts
+ * `keptReleases` keeps no release for a pinned tool). A read that fails
+ * leaves the pass unmarked, for the next start to run.
+ */
+const takeOverKept = async (): Promise<void> => {
+  const file = await readInstallFile();
+  if (file.tookOverAt !== undefined) {
+    return;
+  }
+  const at = Date.now();
+  const taken: Record<string, ToolInstallRecord> = {};
+  let unread = false;
+  for (const spec of TOOL_CATALOG.filter((one) => one.release)) {
+    if (file.installs[spec.id]) {
+      continue;
+    }
+    const decided = await takeOverOne(spec, at);
+    if (decided === "unknown") {
+      unread = true;
+    } else if (decided !== "left") {
+      taken[spec.id] = decided;
+    }
+  }
+  // Done only when every copy that could be there was read and decided, or
+  // established as none (`unread` otherwise): the next start runs it again.
+  await writeInstalls("the copies CawCo was keeping current", (now) => ({
+    installs: { ...taken, ...now.installs },
+    ...(unread ? {} : { tookOverAt: at }),
+  }));
+};
+
+/**
+ * One tool's part of {@link takeOverKept}: its copy's record as CawCo's
+ * from `at`, `left` (none there, established; or one the person turned the
+ * updates off on), or `unknown` (not found while it may be moving, no
+ * version said, settings unread), said on the log.
+ */
+const takeOverOne = async (
+  spec: ToolSpec,
+  at: number
+): Promise<ToolInstallRecord | "left" | "unknown"> => {
+  const copy = await findCopy(spec);
+  if (!copy) {
+    // None found is "there is none" only once two looks agree on it while
+    // no install of the tool runs here: mid-update the copy is away for a
+    // moment, and a pass marked done then never took it in.
+    if (await noneThere(spec)) {
+      return "left";
+    }
+    console.info(
+      `[tools] ${spec.name} is not taken into CawCo's care yet: no copy was found while ${installing.has(spec.id) ? "an install of it ran" : "it was moving"}, so whether there is one isn't known; the next start looks again`
+    );
+    return "unknown";
+  }
+  const where = shownPath(copy.path);
+  const version = await probeVersion(spec, copy.path);
+  if (!version) {
+    console.info(
+      `[tools] ${spec.name} at ${where} is not taken into CawCo's care yet: it didn't say its version, so whether CawCo was keeping it current isn't known; the next start asks again`
+    );
+    return "unknown";
+  }
+  const off = spec.updatesOff
+    ? await switchedOff(spec.updatesOff, true)
+    : undefined;
+  if (off && "unread" in off) {
+    console.info(
+      `[tools] ${spec.name} ${version} at ${where} is not taken into CawCo's care yet: its settings could not be read (${off.unread ?? "it said nothing"}), so whether its automatic updates are off isn't known; the next start asks again`
+    );
+    return "unknown";
+  }
+  if (off) {
+    console.info(
+      `[tools] ${spec.name} ${version} at ${where} stays the person's: its automatic updates were off, so CawCo was not keeping it current`
+    );
+    return "left";
+  }
+  console.info(
+    `[tools] ${spec.name} ${version} at ${where} is CawCo's from now on: CawCo was keeping it current before it kept a record of its own installs`
+  );
+  return {
+    path: copy.path,
+    version,
+    ...(copy.method ? { method: copy.method.label } : {}),
+    takenOver: true,
+    at,
+  };
+};
+
+/**
+ * Whether `spec` has no copy here, established: two looks
+ * {@link COPY_SETTLE_MS} apart find none, and no install of it ran across
+ * them (one of this agent's own; a copy an update moves aside is away for
+ * the update's moment). Anything else is not known.
+ */
+const noneThere = async (spec: ToolSpec): Promise<boolean> => {
+  if (installing.has(spec.id)) {
+    return false;
+  }
+  await Bun.sleep(COPY_SETTLE_MS);
+  return !(installing.has(spec.id) || (await findCopy(spec)));
+};
+
+/** {@link takeOverKept}, once a process: every read of the tools waits on it. */
+let tookOver: Promise<void> | undefined;
+/** {@link settleUnderway}, once a process, before {@link takeOverKept}: every read of the tools waits on it. */
+let settled: Promise<void> | undefined;
+
+/**
+ * Whether a copy at a record's path that says `version` is still the one the
+ * record names (recorded at `recorded`): the version recorded, or, for a CLI
+ * CawCo keeps current (core `ToolSpec.release`), a newer one, which the
+ * tool's own updater put on over it (Claude Code updates itself in a
+ * terminal the person runs it in, the same updater CawCo runs); never an
+ * older one, which another hand put on over it.
+ */
+const stillRecorded = (
+  spec: ToolSpec,
+  recorded: string | undefined,
+  version: string | undefined
+): boolean =>
+  recorded === undefined ||
+  recorded === version ||
+  (spec.release !== undefined &&
+    version !== undefined &&
+    olderThan(recorded, version));
+
+/**
+ * WHOSE THE COPY AT `at` IS (core `ToolCopy`). CawCo's, when an install of
+ * CawCo's under way put it on ({@link landedBy}) or left it saying no
+ * version ({@link midway}; an install that answered stands for that copy
+ * alone, `answered`). Else, when CawCo's record
+ * of its own install names this copy's path (the link the PATH finds, or
+ * the file it resolves to: a package manager's update rewrites the file
+ * under the same link), the record alone decides: CawCo's while the copy
+ * still says the version that install put on ({@link stillRecorded}), and
+ * the person's when it says another, which another hand put on over
+ * CawCo's, whatever version that is; the person's own is never updated
+ * unasked (the owner, 2026-11-14). Only for a copy no record names, which
+ * every copy CawCo put on before it kept the record is: CawCo's when it
+ * says a version a CawCo build ran as its one version (core
+ * `ToolSpec.formerVersions`, and this build's own) and one of the catalog's
+ * methods holds it, the method an install would run again. Any other is the
+ * person's.
+ */
+const copyOf = async (
+  spec: ToolSpec,
+  at: Found,
+  version: string | undefined
+): Promise<ToolCopy> => {
+  const file = await readInstallFile();
+  const underway = file.underway?.[spec.id];
+  if (
+    underway &&
+    (landedBy(underway, at, version) || midway(underway, at, version))
+  ) {
+    return { by: "cawco", at: underway.at };
+  }
+  const record = file.installs[spec.id];
+  if (record && (record.path === at.path || realOf(record.path) === at.file)) {
+    return stillRecorded(spec, record.version, version)
+      ? {
+          by: "cawco",
+          at: record.at,
+          ...(record.takenOver ? { takenOver: true } : {}),
+        }
+      : { by: "person" };
+  }
+  const pinned = [...(spec.formerVersions ?? []), spec.exactVersion];
+  if (version && at.method && pinned.includes(version)) {
+    return { by: "cawco" };
+  }
+  return { by: "person" };
+};
+
+/**
  * Whether the catalog can tell how a present copy of this tool got here (its
  * methods carry footprints, or ask their manager, {@link holdsCopies}): only
  * then is the copy held to its own method. A tool without them installs with
@@ -635,16 +1260,16 @@ const refusal = async (
       return undefined;
     }
     const ways = spec.install.map((method) => method.label).join(", ");
-    return `${at.path} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
+    return `${shownPath(at.path)} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
   }
   if (!at.method.platforms.some((one) => one === platform())) {
-    return `${at.path} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
+    return `${shownPath(at.path)} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
   }
   const unmet = at.method.needs
     ? await needUnmet(at.method.needs, fresh)
     : undefined;
   return unmet
-    ? `${at.path} was installed with ${at.method.label}, and ${unmet}`
+    ? `${shownPath(at.path)} was installed with ${at.method.label}, and ${unmet}`
     : undefined;
 };
 
@@ -773,7 +1398,9 @@ interface SettingsUnread {
 
 /**
  * A settings read's process as its answer (agent claude-settings.ts): the
- * settings when it printed them; none read when it didn't finish, failed
+ * settings when it printed them and every source Claude Code reads was read
+ * or absent; none read when a source is there and was not read (each said,
+ * claude-settings.ts `unreadSources`), or the process didn't finish, failed
  * (with the last line it said), or printed anything else.
  */
 const settingsAnswer = (
@@ -789,7 +1416,12 @@ const settingsAnswer = (
     return { unread: undefined };
   }
   const parsed = SettingsReadSchema.safeParse(answer);
-  return parsed.success ? parsed.data : { unread: undefined };
+  if (!parsed.success) {
+    return { unread: undefined };
+  }
+  return parsed.data.unreadSources.length > 0
+    ? { unread: parsed.data.unreadSources.join("; ") }
+    : parsed.data;
 };
 
 /**
@@ -1077,7 +1709,13 @@ export interface ToolGate {
   words?: string;
 }
 
-/** The version each binary said, by `<real path>:<mtime>:<size>`. */
+/**
+ * The version each binary said, by `<real path>:<mtime>:<size>`, until the
+ * tools move ({@link toolsMoved}): the file's identity need not move with
+ * the version it runs (a package's launcher, rewritten the same size with
+ * its tarball's mtime, in front of a native binary that did move), so an
+ * install that ended is no stale read's to answer.
+ */
 const gateReads = new Map<string, Promise<string | undefined>>();
 
 /** What `spec` runs, in words: "2.0.29", "1.3.0 or newer". */
@@ -1129,14 +1767,23 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
 };
 
 /**
- * What comes next for a copy older than its tool's floor: one CawCo keeps at
- * its newest release is updated with no press (hub tool-releases.ts) when it
- * says a version to compare; any other is updated by a press, or by hand.
+ * The copy a probe found, kept for the looks ({@link probedCopies}).
+ * Whatever asked for the probe (a look, an install's end, a harness's
+ * version gate, the hub's `listTools`), a copy found gone or changed may be
+ * mid-move: the settle looks start ({@link settleCopies}), and tell again
+ * once two agree.
  */
-const belowFloorNext = (spec: ToolSpec, version: string | undefined): string =>
-  spec.release && version
-    ? toolWords.updatingItself
-    : "Update it to put a newer one on.";
+const probedCopy = async (
+  spec: ToolSpec,
+  at: Found | undefined
+): Promise<void> => {
+  const before = probedCopies.get(spec.id);
+  const stamp = await copyStamp(at);
+  probedCopies.set(spec.id, stamp);
+  if (before !== undefined && before !== stamp) {
+    settleCopies(before === "missing" ? [] : [spec.id]);
+  }
+};
 
 /**
  * What this machine has of one tool. A binary that will not say its version is
@@ -1149,6 +1796,7 @@ const probeTool = async (
   want = spec.exactVersion
 ): Promise<ToolStatus> => {
   const at = await findCopy(spec);
+  await probedCopy(spec, at);
   if (!at) {
     sawTool(spec.id, "missing");
     return { id: spec.id, state: "missing", at: Date.now() };
@@ -1157,14 +1805,17 @@ const probeTool = async (
   sawTool(spec.id, version ?? "unsaid");
   const method = at.method ? { method: at.method.label } : {};
   const where = copyWords(spec, at.path);
+  const copy = await copyOf(spec, at, version);
   // A tool CawCo updates with its own updater runs at its floor or newer.
   if (spec.minVersion && !(version && !olderThan(version, spec.minVersion))) {
     return {
       id: spec.id,
       state: "failed",
-      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. ${belowFloorNext(spec, version)}${where.others}`,
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. Update it to put a newer one on.${where.others}`,
       ...(version ? { version } : {}),
       ...method,
+      copy,
+      wants: { version: spec.minVersion, orNewer: true },
       at: Date.now(),
     };
   }
@@ -1177,6 +1828,8 @@ const probeTool = async (
       detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${want}. ${refused ? `${refused}.` : "Install it again to put that one on."}${where.others}`,
       ...(version ? { version } : {}),
       ...method,
+      copy,
+      wants: { version: want, orNewer: false },
       at: Date.now(),
     };
   }
@@ -1185,8 +1838,172 @@ const probeTool = async (
     state: "installed",
     version,
     ...method,
+    copy,
     at: Date.now(),
   };
+};
+
+/**
+ * How often the copies are looked at for one that moved since its probe
+ * ({@link lookAtCopies}): the longest a copy the person put on by hand
+ * stands unreported, beside the second the report waits and the probe's own
+ * run. A probe is otherwise read only as the agent connects, when an
+ * install it ran ends, when a probe or a harness's version gate finds
+ * another version (Claude Code's report is read every minute; OpenCode's
+ * and pi's gates only as a session starts), or when the hub asks
+ * (`listTools`), so an OpenCode put on by hand at the same version, or at
+ * another path, went unreported until the next connect.
+ */
+export const COPY_LOOK_MS = 60_000;
+
+/**
+ * Each tool's copy as its last probe found it ({@link copyStamp}), by tool
+ * id: what {@link lookAtCopies} holds a look against.
+ */
+const probedCopies = new Map<string, string>();
+
+/**
+ * A copy as it stands, without running it: the path the PATH finds, the
+ * file it resolves to, and that file's mtime and size; `missing` for none.
+ * Another path, another file, or the same file rewritten is a copy that
+ * moved.
+ */
+const copyStamp = async (at: Found | undefined): Promise<string> => {
+  if (!at) {
+    return "missing";
+  }
+  const info = await stat(at.file).catch(() => undefined);
+  return `${at.path}\0${at.file}\0${info?.mtimeMs ?? 0}\0${info?.size ?? 0}`;
+};
+
+/**
+ * How far apart two looks at a copy that moved are ({@link lookAtCopies}),
+ * and how long they go on at most. A copy found moved can be mid-install:
+ * `npm install -g` moves the old package aside before it puts the new one
+ * on (32 s for OpenCode in the host run of 2026-11-14), so one look then
+ * finds the copy gone, and the next minute's look was the first to find it
+ * back: the hub said "missing" for 55 s after a hand install landed. So a
+ * change is told only once two looks {@link COPY_SETTLE_MS} apart agree on
+ * it, and the looks go on at that pace while a copy that was there is gone
+ * or a copy is still moving, for {@link COPY_SETTLE_MOST_MS} at most: a copy
+ * that comes back is told within two looks (2–4 s) of its last write, plus
+ * the second the report waits and its probe. Our call: a stat of each copy
+ * every 2 s costs nothing, and the bound covers the slowest npm install seen.
+ */
+const COPY_SETTLE_MS = 2000;
+const COPY_SETTLE_MOST_MS = 3 * 60_000;
+
+/** Each probed tool's copy as it stands now ({@link copyStamp}), by tool id; a tool an install of this agent's is putting on is passed over: its end tells. */
+const copiesNow = async (): Promise<Map<string, string>> => {
+  const now = new Map<string, string>();
+  for (const spec of TOOL_CATALOG) {
+    if (!probedCopies.has(spec.id) || installing.has(spec.id)) {
+      continue;
+    }
+    const path = await toolBinary(spec);
+    now.set(
+      spec.id,
+      await copyStamp(
+        path
+          ? { path, file: await realpath(path).catch(() => path) }
+          : undefined
+      )
+    );
+  }
+  return now;
+};
+
+/** Whether two looks ({@link copiesNow}) found every copy the same. */
+const sameCopies = (
+  a: ReadonlyMap<string, string>,
+  b: ReadonlyMap<string, string>
+): boolean =>
+  a.size === b.size && [...a].every(([id, stamp]) => b.get(id) === stamp);
+
+/** The settle looks running now, one at a time ({@link settleCopies}). */
+let settling: Promise<void> | undefined;
+/** The tools whose copy was there before the move the settle looks follow. */
+const thereBeforeMove = new Set<string>();
+
+/** Each probed copy as its last probe found it, less those an install of this agent's is putting on. */
+const probedNow = (): Map<string, string> =>
+  new Map([...probedCopies].filter(([id]) => !installing.has(id)));
+
+/**
+ * THE TWO-LOOKS RULE, for every copy found gone or changed, by whichever
+ * trigger found it (the minute's {@link lookAtCopies}, or any probe,
+ * `probeTool`): the copies are looked at again every {@link COPY_SETTLE_MS},
+ * and {@link onToolsMoved} is told each time two looks in a row agree on
+ * copies other than those last told (the tools are probed again and the
+ * hub hears whose each copy is now), until two agree with every copy that
+ * was there before the move (`wasThere`) there again, or
+ * {@link COPY_SETTLE_MOST_MS} has gone by, when what the last look found is
+ * told. One run at a time: a move found while one runs adds its copies to
+ * it. So a copy gone for the half minute of an install is never held gone
+ * for the minute after it is back, whatever probe saw it gone (host run
+ * 49045442: a probe outside the looks left OpenCode "missing" 47–49 s).
+ */
+const settleCopies = (wasThere: Iterable<string>): void => {
+  for (const id of wasThere) {
+    thereBeforeMove.add(id);
+  }
+  settling ??= settleLooks().finally(() => {
+    settling = undefined;
+    thereBeforeMove.clear();
+  });
+};
+
+/** The looks {@link settleCopies} runs. */
+const settleLooks = async (): Promise<void> => {
+  let told = probedNow();
+  let last = await copiesNow();
+  const until = Date.now() + COPY_SETTLE_MOST_MS;
+  while (Date.now() < until) {
+    await Bun.sleep(COPY_SETTLE_MS);
+    const look = await copiesNow();
+    const agreed = sameCopies(look, last);
+    last = look;
+    if (!agreed) {
+      continue;
+    }
+    if (!sameCopies(look, told)) {
+      console.info(
+        `[tools] a copy moved: ${[...look]
+          .filter(([id, stamp]) => told.get(id) !== stamp)
+          .map(
+            ([id, stamp]) => `${id} ${stamp === "missing" ? "gone" : "changed"}`
+          )
+          .join(
+            ", "
+          )}, two looks ${COPY_SETTLE_MS / 1000} s apart agree; probed again`
+      );
+      toolsMoved();
+      told = look;
+    }
+    if ([...thereBeforeMove].every((id) => look.get(id) !== "missing")) {
+      return;
+    }
+  }
+  if (!sameCopies(last, told)) {
+    toolsMoved();
+  }
+};
+
+/**
+ * The minute's look at each tool's copy ({@link toolBinary}, a stat;
+ * nothing is run) against what its last probe found: any moved starts the
+ * settle looks ({@link settleCopies}), which this waits out. So a hand
+ * install is told within a minute and two looks of its end.
+ */
+export const lookAtCopies = async (): Promise<void> => {
+  const told = probedNow();
+  if (sameCopies(await copiesNow(), told)) {
+    return;
+  }
+  settleCopies(
+    [...told].filter(([, stamp]) => stamp !== "missing").map(([id]) => id)
+  );
+  await settling;
 };
 
 /**
@@ -1195,6 +2012,20 @@ const probeTool = async (
  */
 export const probeTools = async (): Promise<ToolStatus[]> => {
   probeStarted();
+  settled ??= settleUnderway().catch((error: unknown) => {
+    settled = undefined;
+    console.warn(
+      `[tools] the installs a restart cut short were not settled, so the next read tries again: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  await settled;
+  tookOver ??= takeOverKept().catch((error: unknown) => {
+    tookOver = undefined;
+    console.warn(
+      `[tools] the copies CawCo was keeping current were not taken into its care, so the next read tries again: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  await tookOver;
   return await Promise.all(TOOL_CATALOG.map((spec) => probeToolStatus(spec)));
 };
 
@@ -1402,13 +2233,28 @@ export const signinMoved = (id: string): void => {
  * ended while the probe read is read again.
  */
 const installing = new Map<string, Promise<ToolStatus>>();
+/** The machine's installs one after another ({@link installTool}): the last one asked, settled. */
+let installTurn: Promise<void> = Promise.resolve();
 const installEnded = new Map<string, number>();
+/**
+ * Each running install, by tool id: the version it puts on, when it names
+ * one, who started it, and the version the copy it replaces said as it
+ * began (`from`, {@link install}'s read before its method runs). A method
+ * takes the old binary away before the new one is there (OpenCode's npm
+ * install did, for about 4 s in the host run), and a probe then finds no
+ * copy: the row reads the copy being updated, not a tool that is not there.
+ */
+const installingAs = new Map<
+  string,
+  { from?: string; startedBy?: "cawco" | "person"; to?: string }
+>();
 
 /**
  * One catalog tool, as {@link probeTools} reports it. An attempt's failure
- * ({@link failures}) stands while the copy is where the attempt left it: one
- * that kept the copy's version is gone once the copy says another (updated
- * by hand, or by its own updater), and any is gone once the tool runs,
+ * ({@link failures}) stands while the copy is where the attempt left it: it
+ * is gone once the copy says another version than it left, or one where it
+ * left none (updated by hand, or by its own updater), and any is gone once
+ * the tool runs,
  * except an update that left a copy that runs older than the release it was
  * after, which stands until that copy moves.
  */
@@ -1416,11 +2262,17 @@ const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
   const started = Date.now();
   let status = await probeTool(spec);
   if (installing.has(spec.id)) {
-    // The copy an update replaces keeps its version on the row while it runs.
+    // The copy an update replaces keeps its version on the row while it
+    // runs: the one it said as the install began, whatever a probe finds
+    // mid-install ({@link installingAs}).
+    const { from, ...as } = installingAs.get(spec.id) ?? {};
+    const version = from ?? status.version;
     return {
       id: spec.id,
       state: "installing",
-      ...(status.version ? { version: status.version } : {}),
+      ...(version ? { version } : {}),
+      ...as,
+      ...(status.copy ? { copy: status.copy } : {}),
       at: Date.now(),
     };
   }
@@ -1428,7 +2280,9 @@ const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
     status = await probeTool(spec);
   }
   const kept = failures.get(spec.id);
-  const moved = kept?.version !== undefined && kept.version !== status.version;
+  // A failure whose copy said no version (an install that broke it) is gone
+  // too once the copy says one: a hand that put it right since.
+  const moved = kept !== undefined && kept.version !== status.version;
   if (moved || (kept?.state === "installed" && status.state !== "installed")) {
     failures.delete(spec.id);
     return status;
@@ -1486,12 +2340,19 @@ const runMethod = async (
     .nothrow()
     .env(toolEnv())
     .finally(() => rm(dir, { recursive: true, force: true }));
-  const out = tail(Bun.stripANSI(ran.stdout.toString()));
-  const err = tail(Bun.stripANSI(ran.stderr.toString()));
+  const out = Bun.stripANSI(ran.stdout.toString()).trim();
+  const err = Bun.stripANSI(ran.stderr.toString()).trim();
   if (ran.exitCode === 0) {
-    return { ok: true, said: out || err };
+    return { ok: true, said: tail(out || err) };
   }
-  return { ok: false, said: err || out || `exited ${ran.exitCode}` };
+  // A failure keeps what the installer said, its errors first, whole up to
+  // a bound: the line that says why is often not among the last.
+  return {
+    ok: false,
+    said:
+      failedOutput([err, out].filter(Boolean).join("\n")) ||
+      `exited ${ran.exitCode}`,
+  };
 };
 
 /**
@@ -1525,7 +2386,9 @@ const failedWords = (
  * Puts `version` of a tool on, with the method {@link methodFor} chooses, or
  * says why not. What a method `needs` is never installed here: a machine
  * without it is told so ({@link noMethod}). A copy whose owner turned its
- * updates off ({@link switchedOff}) is left as it is, with why.
+ * updates off ({@link switchedOff}) is left as it is, with why, and so is
+ * one CawCo started an update of that is the person's by the time it would
+ * run ({@link copyNow}).
  *
  * `ask.newest`: for a tool CawCo keeps at its newest release (core
  * `ToolSpec.release`), the release the hub sent this install to reach. A
@@ -1544,7 +2407,8 @@ const install = async (
   if ("refused" in choice) {
     // A tool CawCo keeps current keeps its copy's standing (the words on a
     // copy that still runs); any other fails, as it always has.
-    return remember(
+    return await settle(
+      spec,
       spec.release && at
         ? await standing(spec, () => choice.refused, choice.method)
         : {
@@ -1557,7 +2421,7 @@ const install = async (
     );
   }
   if (!("method" in choice)) {
-    return remember(noMethod(spec, choice));
+    return await settle(spec, noMethod(spec, choice));
   }
   const { method } = choice;
   // A copy's owner may have turned its updates off: CawCo's own (automatic)
@@ -1568,15 +2432,82 @@ const install = async (
       ? await switchedOff(spec.updatesOff, ask.automatic === true)
       : undefined;
   if (off) {
-    return remember(
+    return await settle(
+      spec,
       await standing(spec, () => offWords(spec.name, off), undefined)
     );
   }
 
+  const now = await copyNow(spec, ask);
+  if ("left" in now) {
+    return now.left;
+  }
+  const began = await markUnderway(spec, method, now, version, ask);
+  try {
+    return await runInstall(spec, method, version, ask, began);
+  } finally {
+    await closeUnderway(spec, began);
+  }
+};
+
+/**
+ * The install of `spec` begun at `began` answered: its entry under way goes
+ * ({@link endUnderway}), unless the copy at its path says no version, one
+ * the install broke ({@link midway}), which stays CawCo's to put right: the
+ * entry stays, marked `answered`, so it stands for that broken copy alone.
+ * Left as it was, it went on making a copy at its path that says the
+ * version it puts on (or, with none named, any other than it began from)
+ * CawCo's ({@link landedBy}) while the agent ran, whoever put that copy on,
+ * and the next start would run an install again that had answered.
+ */
+const closeUnderway = async (spec: ToolSpec, began: number): Promise<void> => {
+  const entry = (await readInstallFile()).underway?.[spec.id];
+  if (entry?.at !== began) {
+    return;
+  }
+  const at = await findCopy(spec);
+  if (at && midway(entry, at, await probeVersion(spec, at.path))) {
+    console.info(
+      `[tools] ${spec.name} ${copyWords(spec, at.path).at} says no version after CawCo's install, so it stays CawCo's to put right`
+    );
+    const answered = Date.now();
+    await writeInstalls(`${spec.id}'s install as answered`, (file) => {
+      const mine = file.underway?.[spec.id];
+      return mine?.at === began
+        ? {
+            ...file,
+            underway: { ...file.underway, [spec.id]: { ...mine, answered } },
+          }
+        : file;
+    });
+    return;
+  }
+  await endUnderway(spec.id, began);
+};
+
+/**
+ * {@link install}'s method, run once nothing stands in its way, with its
+ * entry under way written (`began`, {@link markUnderway}): what the machine
+ * looks like after it. A copy it put on is recorded as CawCo's, a copy that
+ * runs ({@link ownInstall}) and one it moved that CawCo doesn't run too
+ * ({@link landedBy}), so its own install is never read as a hand's.
+ */
+const runInstall = async (
+  spec: ToolSpec,
+  method: ToolInstallMethod,
+  version: string | undefined,
+  { newest }: InstallAsk,
+  began: number
+): Promise<ToolStatus> => {
   const ran = await runMethod(spec, method, version);
   const probed = await probeTool(spec, version ?? spec.exactVersion);
-  const { newest } = ask;
   if (probed.state === "installed") {
+    // The copy this install left is CawCo's from now on.
+    const landed = {
+      ...probed,
+      method: method.label,
+      copy: await ownInstall(spec, method, probed),
+    };
     if (
       spec.release &&
       newest &&
@@ -1584,8 +2515,7 @@ const install = async (
       olderThan(probed.version, newest)
     ) {
       return remember({
-        ...probed,
-        method: method.label,
+        ...landed,
         detail: toolWords.behind(
           method.label,
           probed.version,
@@ -1594,15 +2524,120 @@ const install = async (
         ),
       });
     }
-    return remember({ ...probed, method: method.label });
+    return remember(landed);
   }
-  return remember({
-    id: spec.id,
-    state: "failed",
-    detail: failedWords(spec, method, ran, probed, version),
+  const moved = await movedBy(spec, began);
+  return await settle(
+    spec,
+    {
+      id: spec.id,
+      state: "failed",
+      detail: failedWords(spec, method, ran, probed, version),
+      method: method.label,
+      ...(probed.version ? { version: probed.version } : {}),
+      at: Date.now(),
+    },
+    moved ? { ...probed, copy: await ownInstall(spec, method, probed) } : probed
+  );
+};
+
+/** Whether the install of `spec` begun at `began` left the copy there now ({@link landedBy}). */
+const movedBy = async (spec: ToolSpec, began: number): Promise<boolean> => {
+  const entry = (await readInstallFile()).underway?.[spec.id];
+  const at = await findCopy(spec);
+  if (!(entry?.at === began && at)) {
+    return false;
+  }
+  return landedBy(entry, at, await probeVersion(spec, at.path));
+};
+
+/**
+ * THE COPY AN INSTALL REPLACES, READ AS IT IS ABOUT TO RUN. The hub sends
+ * CawCo's own installs from what the machine last reported, and a copy the
+ * person put on since (by hand, at the path CawCo's record names or another
+ * the PATH finds first) is theirs, which CawCo never updates unasked (core
+ * `ToolUpdates`). So the copy at the path the method would replace is read
+ * now ({@link findCopy}, {@link probeVersion}, {@link copyOf}): its version
+ * is the install's `from` ({@link installingAs}), and an install CawCo
+ * started (`automatic`, or `startedBy` CawCo) over a copy that is now the
+ * person's runs nothing and answers the copy as it stands (returned), whose
+ * `copy` tells the hub (`left`). A person's press runs whoever's the copy
+ * is: the press is the ask. Otherwise the method runs, over the copy read
+ * (`at`, none when there is none) and the version it said (`from`).
+ */
+const copyNow = async (
+  spec: ToolSpec,
+  ask: InstallAsk
+): Promise<{ left: ToolStatus } | { at?: Found; from?: string }> => {
+  const at = await findCopy(spec);
+  if (!at) {
+    return {};
+  }
+  const from = await probeVersion(spec, at.path);
+  const as = installingAs.get(spec.id);
+  if (as && from) {
+    installingAs.set(spec.id, { ...as, from });
+  }
+  const unasked = ask.automatic === true || ask.startedBy === "cawco";
+  if (!unasked || (await copyOf(spec, at, from)).by !== "person") {
+    return { at, ...(from ? { from } : {}) };
+  }
+  console.info(
+    `[tools] ${spec.name} ${from ?? "(no version said)"} ${copyWords(spec, at.path).at} is the person's own copy now, so CawCo's update of it ran nothing`
+  );
+  return { left: await probeTool(spec) };
+};
+
+/**
+ * An install of `spec` with `method` left a copy CawCo runs (`probed`):
+ * recorded as CawCo's ({@link recordInstall}) at the path it is found at,
+ * and answered as its {@link ToolCopy}. A copy no longer found (gone between
+ * the probe and this) keeps what the probe said.
+ */
+const ownInstall = async (
+  spec: ToolSpec,
+  method: ToolInstallMethod,
+  probed: ToolStatus
+): Promise<ToolCopy | undefined> => {
+  const at = await findCopy(spec);
+  if (!at) {
+    return probed.copy;
+  }
+  const when = Date.now();
+  await recordInstall(spec.id, {
+    path: at.path,
     method: method.label,
-    ...(spec.release && probed.version ? { version: probed.version } : {}),
-    at: Date.now(),
+    ...(probed.version ? { version: probed.version } : {}),
+    at: when,
+  });
+  return { by: "cawco", at: when };
+};
+
+/**
+ * What an install that left no clean copy CawCo runs answers, kept for the
+ * boot ({@link remember}): with the copy that is there now (the version it
+ * says, whose it is, what CawCo runs instead), from `probed` when the
+ * install read it after it ran, else read now; and, short of `installed`,
+ * when the attempt ran (`triedAt`), so the hub sends no update unasked while
+ * it stands (hub tool-installs.ts `keepCopies`) and the row says it failed.
+ */
+const settle = async (
+  spec: ToolSpec,
+  status: ToolStatus,
+  probed?: ToolStatus
+): Promise<ToolStatus> => {
+  if (status.state === "installed") {
+    return remember(status);
+  }
+  const copy = probed ?? (await probeTool(spec));
+  return remember({
+    ...status,
+    ...(status.version === undefined && copy.version
+      ? { version: copy.version }
+      : {}),
+    ...(copy.copy ? { copy: copy.copy } : {}),
+    ...(copy.wants ? { wants: copy.wants } : {}),
+    triedAt: status.at,
   });
 };
 
@@ -1615,6 +2650,10 @@ const install = async (
 export interface InstallAsk {
   automatic?: boolean;
   newest?: string;
+  /** Who started it (core `ToolStatus.startedBy`), said on the tool's row while it runs. */
+  startedBy?: "cawco" | "person";
+  /** How many runs of this install a stop cut short before this one, which a start runs again ({@link redoInstall}). */
+  tries?: number;
 }
 
 /**
@@ -1641,19 +2680,36 @@ export const installTool = async (
       at: Date.now(),
     };
   }
-  // One install of a tool at a time: a second ask while one runs (a press
-  // in the dashboard while an add brings the machine up) answers with it.
+  // One install of a tool at a time: a second ask while one runs or waits
+  // (two dashboards pressing at once, a press while an add brings the
+  // machine up, CawCo's own pass beside a press) answers with it.
   const running = installing.get(spec.id);
   if (running) {
     return await running;
   }
   // A tool CawCo is built against goes on at its one version, whatever is pinned.
-  const work = install(spec, spec.exactVersion ?? version, ask).finally(() => {
-    installing.delete(spec.id);
-    installEnded.set(spec.id, Date.now());
-    toolsMoved();
-  });
+  const target = spec.exactVersion ?? version;
+  // One install on the machine at a time, of any tool: package managers
+  // take their own locks, and the asks arrive in lanes of their own.
+  const turn = installTurn;
+  const work = turn
+    .then(() => install(spec, target, ask))
+    .finally(() => {
+      installing.delete(spec.id);
+      installingAs.delete(spec.id);
+      installEnded.set(spec.id, Date.now());
+      toolsMoved();
+    });
   installing.set(spec.id, work);
+  installTurn = work.then(
+    () => undefined,
+    () => undefined
+  );
+  const to = target ?? ask.newest;
+  installingAs.set(spec.id, {
+    ...(to ? { to } : {}),
+    ...(ask.startedBy ? { startedBy: ask.startedBy } : {}),
+  });
   return await work;
 };
 
@@ -1670,17 +2726,58 @@ export const pinMoveWords = (move: PinMove): string =>
   `${toolSpec(move.id)?.name ?? move.id} ${move.from ?? "(no version said)"} -> ${move.to}${move.method ? ` with ${move.method}` : ""}`;
 
 /**
- * THE PINS GO ON BEFORE THE BUILD THAT RUNS THEM. `pins`, by tool id, are
- * what `build` runs and no other: each one this machine has at another
- * version is put on now, with the method its copy came from, so the build
- * never starts beside a harness it refuses. A tool this machine does not have
- * is left alone: nothing here runs it. `moved` hears each move as it lands,
- * before the next is tried, so what went on is known even when a later one
- * fails. Throws one sentence at the first that does not go on.
- *
- * It runs in the staged build's own process (`cawco binary-pins`), so the
- * agent of the build before hears of a move only when a probe of its own
- * looks again; the build that pins these probes when it connects.
+ * One pin put on (`version` of `spec`, which `build` runs): nothing when
+ * this machine has it at that version or not at all (nothing here runs a
+ * tool it lacks), else the move, or the status the install left.
+ */
+const pinOn = async (
+  spec: ToolSpec,
+  version: string,
+  build: string,
+  take: (before: ToolStatus) => string | undefined
+): Promise<
+  { move: PinMove } | { left: string } | { failed: string } | undefined
+> => {
+  const before = await probeTool(spec, version);
+  if (before.state === "missing" || before.state === "installed") {
+    return;
+  }
+  const left = take(before);
+  if (left) {
+    return { left };
+  }
+  const after = await install(spec, version, {});
+  if (after.state !== "installed") {
+    return {
+      failed: `${spec.name} ${version}, which ${build} runs, did not go on${after.method ? ` with ${after.method}` : ""}: ${oneLine(after.detail)}`,
+    };
+  }
+  return {
+    move: {
+      id: spec.id,
+      to: version,
+      ...(before.version ? { from: before.version } : {}),
+      ...(after.method ? { method: after.method } : {}),
+    },
+  };
+};
+
+/** The catalog entry of each pin `build` names, or the sentence of one its catalog lacks. */
+const pinSpec = (id: string, build: string): ToolSpec => {
+  const spec = toolSpec(id);
+  if (!spec) {
+    throw new Error(`${build} pins ${id}, which is not in its tool catalog`);
+  }
+  return spec;
+};
+
+/**
+ * WHAT WENT ON FOR A BUILD GOES BACK. `pins`, by tool id, are the versions
+ * `build` runs and no other: each one this machine has at another version
+ * is put on now, with the method its copy came from, whoever's the copy is
+ * (each is one CawCo moved for a build that is not going to run, pin-record.ts
+ * `putBackPins`). `moved` hears each move as it lands, before the next is
+ * tried. Throws one sentence at the first that does not go on.
  */
 export const putOnPins = async (
   pins: Record<string, string>,
@@ -1689,28 +2786,96 @@ export const putOnPins = async (
 ): Promise<PinMove[]> => {
   const done: PinMove[] = [];
   for (const [id, version] of Object.entries(pins)) {
-    const spec = toolSpec(id);
-    if (!spec) {
-      throw new Error(`${build} pins ${id}, which is not in its tool catalog`);
+    const put = await pinOn(
+      pinSpec(id, build),
+      version,
+      build,
+      () => undefined
+    );
+    if (put && "failed" in put) {
+      throw new Error(put.failed);
     }
-    const before = await probeTool(spec, version);
-    if (before.state === "missing" || before.state === "installed") {
-      continue;
+    if (put && "move" in put) {
+      await moved(put.move);
+      done.push(put.move);
     }
-    const after = await install(spec, version, {});
-    if (after.state !== "installed") {
-      throw new Error(
-        `${spec.name} ${version}, which ${build} runs, did not go on${after.method ? ` with ${after.method}` : ""}: ${oneLine(after.detail)}`
-      );
-    }
-    const move: PinMove = {
-      id,
-      to: version,
-      ...(before.version ? { from: before.version } : {}),
-      ...(after.method ? { method: after.method } : {}),
-    };
-    await moved(move);
-    done.push(move);
   }
   return done;
+};
+
+/**
+ * What the hub said the fleet does with a copy of a tool CawCo doesn't run
+ * (core `ToolUpdates`), or why it said nothing, in words: what a build's
+ * pins go on by before its swap (pin-record.ts `fleetToolUpdates`).
+ */
+export type FleetUpdates = { updates: ToolUpdates } | { unsaid: string };
+
+/**
+ * Why a copy at a version a build does not run is left as it is before
+ * that build's swap ({@link putOnFleetPins}): a person's own copy, or the
+ * fleet asking first, or the hub not saying and why; nothing when it goes
+ * on.
+ */
+const leftBeforeSwap = (
+  spec: ToolSpec,
+  before: ToolStatus,
+  fleet: FleetUpdates
+): string | undefined => {
+  const at = `${spec.name} ${before.version ?? "(no version said)"} here`;
+  if (before.copy?.by !== "cawco") {
+    return `${at} is the person's own copy, left as it is`;
+  }
+  if ("unsaid" in fleet) {
+    return `${at} is left as it is: ${fleet.unsaid}`;
+  }
+  return fleet.updates === "ask"
+    ? `${at} is left as it is: the fleet asks before it updates one`
+    : undefined;
+};
+
+/**
+ * THE PINS GO ON BEFORE THE BUILD THAT RUNS THEM, AS THE FLEET CHOSE (core
+ * `ToolUpdates`). `pins`, by tool id, are what `build` runs and no other:
+ * under "update", each copy CawCo put on this machine ({@link copyOf}) at
+ * another version is put on now, with the method its copy came from, so the
+ * build never starts beside a harness of its own it refuses. A person's own
+ * copy, and every copy while the fleet asks first or its choice could not
+ * be read (`fleet.unsaid`, said with it), is left as it is: `build`'s agent reports
+ * it, and the hub sends its update or the person is told (hub
+ * tool-installs.ts `keepCopies`). A tool this machine does not have is
+ * left alone: nothing here runs it. `moved` hears each move as it lands,
+ * before the next is tried, so what went on is known even when the swap
+ * does not follow. One that does not go on is said, not thrown, and the
+ * build goes on: its agent reports the copy, the hub sends its update once
+ * more (that agent holds no failure of this process's), and a second
+ * failure stands on its row and in Needs you. A pin that fails is never
+ * tried again each time the build's update is.
+ *
+ * It runs in the staged build's own process (`cawco binary-pins`), so the
+ * agent of the build before hears of a move only when a probe of its own
+ * looks again; the build that pins these probes when it connects.
+ */
+export const putOnFleetPins = async (
+  pins: Record<string, string>,
+  build: string,
+  fleet: FleetUpdates,
+  moved: (move: PinMove) => Promise<void>
+): Promise<string[]> => {
+  const said: string[] = [];
+  for (const [id, version] of Object.entries(pins)) {
+    const spec = pinSpec(id, build);
+    const put = await pinOn(spec, version, build, (before) =>
+      leftBeforeSwap(spec, before, fleet)
+    );
+    if (!put) {
+      continue;
+    }
+    if ("move" in put) {
+      await moved(put.move);
+      said.push(pinMoveWords(put.move));
+    } else {
+      said.push("left" in put ? put.left : put.failed);
+    }
+  }
+  return said;
 };

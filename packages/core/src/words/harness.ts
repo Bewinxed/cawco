@@ -1,4 +1,6 @@
 import type { HarnessKind } from "../harness/kinds";
+import { firstCopy } from "../tool-updates";
+import type { ToolStatus } from "../tools";
 import { accountsWords } from "./accounts";
 import { andList } from "./helpers";
 
@@ -47,6 +49,9 @@ export const harnessWords = {
  * `harnessRefusal`). Claude Code's version sentences the agent says itself
  * (agent claude-version.ts `versionRefusal`), and the report carries them.
  */
+/** A sentence that already ends: a quoted one takes no stop of ours. */
+const SENTENCE_END = /[.!?]$/u;
+
 export const harnessRefusedWords = {
   /** The press that fixes it: its install, OpenCode's one version, or its update. */
   press: (
@@ -79,6 +84,62 @@ export const harnessRefusedWords = {
    * machine refuses that CLI; the refusal's own sentence follows it (hub
    * history.ts `refusedRead`).
    */
+  /**
+   * A stored conversation its machine reads only through the harness's CLI,
+   * asked while an install of that CLI runs there and no server of a
+   * version CawCo runs could answer it (hub history.ts `refusedRead`): the
+   * page reads it again by itself once the install lands. Who started it
+   * by the cell's `startedBy`, and installing or updating by `firstCopy`,
+   * the choices the page's own line makes (words/tool-updates.ts
+   * `putting`); a cell too old to say who is said with neither.
+   */
+  updatingUnread: (
+    name: string,
+    machine: string,
+    cell: Pick<ToolStatus, "startedBy" | "state" | "to" | "version">
+  ) => {
+    const verb = firstCopy(cell) ? "installing" : "updating";
+    const what = `${name} on ${machine}${cell.to ? ` to ${cell.to}` : ""}`;
+    return `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${what}`;
+  },
+  /**
+   * A stored conversation read through the harness's CLI whose read failed
+   * while its machine, connected again, had not yet said which tools it has
+   * (hub history.ts `refusedRead`): why isn't known until it does.
+   */
+  toolsUnsaid: (machine: string) =>
+    `${machine} hasn't said which tools it has since it connected, so why this conversation can't be read isn't known yet. Try again in a moment.`,
+  /**
+   * A stored conversation its machine reads only through the harness's
+   * CLI, asked while no copy of that CLI is on disk there (agent opencode.ts
+   * `#transcript`: npm moves it aside while it installs): the read fails
+   * with this, and the hub says the install under way when one is (hub
+   * history.ts `refusedRead`).
+   */
+  noBinaryUnread: (name: string) =>
+    `${name} isn't on this machine right now, so this conversation can't be read. ${name} still keeps it, and it shows here once ${name} is back.`,
+  /**
+   * An act on a stored conversation that only the harness's CLI does
+   * (agent opencode.ts `renameSession`, `deleteSession`), asked while no
+   * copy of it is on disk: nothing was done. `undone` says what wasn't.
+   */
+  noBinaryUndone: (name: string, undone: string) =>
+    `${name} isn't on this machine right now, so ${undone}. Try again once ${name} is back.`,
+  /** The providers a harness's CLI signs in to, asked while no copy of it is on disk (agent opencode.ts `providerList`). */
+  noBinaryUnlisted: (name: string) =>
+    `${name} isn't on this machine right now, so the providers it signs in to can't be listed`,
+  /**
+   * An act on a stored conversation that the harness keeps nothing for
+   * (pi: no name or tag CawCo can set, its capabilities say so): nothing
+   * was done. `what` is what it keeps none of, `undone` what wasn't done.
+   */
+  keepsNo: (name: string, what: string, undone: string) =>
+    `${name} keeps no ${what} CawCo can set, so ${undone}.`,
+  /** Needs you's notice for a stored conversation's deletion that keeps failing (hub session-lifecycle.ts): its title. */
+  notDeletedTitle: "A conversation wasn't deleted",
+  /** Its body: where, how often, the machine's last words, and that CawCo goes on trying. */
+  notDeleted: (name: string, machine: string, tries: number, said: string) =>
+    `${name} on ${machine} didn't delete this conversation's stored transcript in ${tries} tries. The last said: ${said}${SENTENCE_END.test(said) ? "" : "."} It is retried every few minutes.`,
   unread: (name: string, machine: string) =>
     `This conversation is kept by ${name} on ${machine}, and CawCo reads it only through a copy of ${name} it runs, so it shows here once CawCo runs ${name} there.`,
   /**

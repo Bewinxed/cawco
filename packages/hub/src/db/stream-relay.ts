@@ -15,6 +15,7 @@ import {
   streamRelayProofs,
   supervisorConfig,
 } from "./schema";
+import type { RelayNameState } from "./stored-types";
 
 /** The fleet's stream relay as stored; its secret opened (null when the hub's key does not open it). */
 export interface StoredRelay {
@@ -62,7 +63,7 @@ export interface StoredJourney {
   liveAt: number | null;
   machineId: string | null;
   name: string | null;
-  nameState: "open" | "pointed" | "skipped";
+  nameState: RelayNameState;
   runtimeHolds: boolean;
 }
 

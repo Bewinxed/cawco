@@ -10,7 +10,6 @@ import {
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
-import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { GatePass } from "./db/stored-types";
 import {
@@ -251,10 +250,6 @@ export interface GateDeps extends Pick<
     lands?: boolean,
     moves?: string
   ) => Promise<CommandResult>;
-  readonly update: (
-    id: string,
-    asked: Parameters<DbShape["updateWorkItem"]>[1]
-  ) => WorkItemRow | undefined;
   readonly workspaces: Workspaces;
 }
 
@@ -267,37 +262,17 @@ export const createGate = ({
   machinePaused,
   online,
   runIn,
-  update,
   workspaces,
 }: GateDeps) => {
   /**
    * The gate commands that passed for a live item, by what they passed on
    * ({@link passKey}: the whole tree, or the trees of the paths a step
-   * declares), as its row keeps them (`gatePasses`): one command runs at
-   * most once on one such key ({@link gateOnce}), a hub restart included.
+   * declares), as its rows keep them (schema.ts `workItemGatePasses`): one
+   * command runs at most once on one such key ({@link gateOnce}), a hub
+   * restart included.
    */
   const passesOf = (itemId: string): Map<string, GatePass[]> =>
-    new Map(Object.entries(db.workItem(itemId)?.gatePasses ?? {}));
-  /** `pass` kept on `item`'s row under `key`, as its step passes. */
-  const keepPass = (itemId: string, key: string, pass: GatePass): void => {
-    const kept = db.workItem(itemId)?.gatePasses ?? {};
-    update(itemId, {
-      gatePasses: { ...kept, [key]: [...(kept[key] ?? []), pass] },
-    });
-  };
-  /** The passes `taken` let go of: their run's workspace moved while it ran. */
-  const dropPasses = (
-    itemId: string,
-    taken: readonly { key: string; pass: GatePass }[]
-  ): void => {
-    const kept = { ...(db.workItem(itemId)?.gatePasses ?? {}) };
-    for (const { key, pass } of taken) {
-      kept[key] = (kept[key] ?? []).filter(
-        (each) => !(each.command === pass.command && each.stage === pass.stage)
-      );
-    }
-    update(itemId, { gatePasses: kept });
-  };
+    db.gatePasses(itemId);
   /**
    * The project's repository on a machine, which a gate workspace there is
    * cut from: its checkout place there (the primary first), or the folder
@@ -604,7 +579,7 @@ export const createGate = ({
     inputPaths: readonly string[],
     noWait: boolean
   ): Promise<TreeState | undefined> => {
-    const outputs = item.outputs ?? [];
+    const outputs = db.workItemOutputs(item.id);
     // One hash a line per output; a folder's is the hash of its files' list
     // with each file's hash.
     const hashed =
@@ -685,7 +660,7 @@ export const createGate = ({
             pass: { command: step.command.trim(), stage },
           };
           taken.push(one);
-          keepPass(item.id, one.key, one.pass);
+          db.keepGatePass(item.id, one.key, one.pass);
         }
       : undefined;
     const run =
@@ -697,7 +672,7 @@ export const createGate = ({
       (await treeState(workspace, item, inputPaths, how.inTurn))?.stamp !==
         state?.stamp
     ) {
-      dropPasses(item.id, taken);
+      db.dropGatePasses(item.id, taken);
     }
     const ran = [...run.outcomes];
     return {

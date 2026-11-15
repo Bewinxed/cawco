@@ -13,6 +13,7 @@ import {
   hubData,
   hubRefusal,
   type Refused,
+  unreachedAnswer,
 } from "#lib/platform/hub-read.js";
 import { machineControl } from "./stores/machines";
 
@@ -61,10 +62,10 @@ export const installTool = (
   );
 
 /**
- * A tool sign-in's refusal, in the hub's words (hub server.ts, the tool
- * sign-in routes). `spent`: the machine answered, so its sign-in is over
- * and its link is dead (a `422`); a machine that didn't answer (`503`)
- * may still hold it.
+ * A tool sign-in's refusal, in the hub's words (hub routes/tools.ts, the
+ * tool sign-in routes). `spent`: the machine answered with its failure, so
+ * its sign-in is over and its link is dead (a `502`); a machine away
+ * (`503`) or silent (`504`) may still hold it.
  */
 export class ToolSigninRefusal extends Error {
   readonly spent: boolean;
@@ -79,19 +80,22 @@ export class ToolSigninRefusal extends Error {
 function signinRefusal(refused: Refused): ToolSigninRefusal {
   // Read first: a request that got no answer rejects here as it was thrown.
   const words = hubRefusal(refused).message;
-  const { status } = refused.response;
+  // The machine's failure, never the dashboard's own 502 for a hub that
+  // didn't answer, which says nothing of the machine's sign-in.
+  const spent =
+    refused.response.status === 502 && !unreachedAnswer(refused.response);
   const said = refused.error.value;
   // The machine's own refusal, whole: its sentence, then the tool's screen
   // lines one per line (core words/tools `screenOf`), which the hub's
   // one-line refusal reading would cut to the first. No status after it: it
   // would read as one more line of the tool's screen.
-  if (status === 422 && typeof said === "string") {
+  if (spent && typeof said === "string") {
     const whole = said.trim();
     if (whole && !whole.startsWith("{")) {
       return new ToolSigninRefusal(whole, true);
     }
   }
-  return new ToolSigninRefusal(words, status === 422);
+  return new ToolSigninRefusal(words, spent);
 }
 
 /**

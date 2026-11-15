@@ -30,7 +30,7 @@ import { and, eq, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { z } from "zod";
 import { type Deleter, projectPage } from "./artifacts";
-import { artifacts } from "./schema";
+import { artifacts, PLACE_KINDS } from "./schema";
 import type { Tx } from "./tx";
 
 /** A value as the record keeps it: SQLite's text, numbers and nulls as they are, a blob as base64. */
@@ -85,6 +85,12 @@ export type RowsRestored =
       taken: Counts;
       /** Rows left out: what they named went since, or their table did. */
       gone: Counts;
+      /**
+       * Rows left out: a kind no longer kept, as migration 0322 deleted the
+       * places of kind `workspace` (schema `PLACE_KINDS`). A record kept
+       * before it holds them; put back, one would not read.
+       */
+      retired: Counts;
     }
   /** A live project holds the id. */
   | { ok: false; why: "live" }
@@ -495,7 +501,7 @@ export const forgetDb = (
       // Checked at the commit: rows go back in any order.
       tx.run(sql`pragma defer_foreign_keys = on`);
       const gone: Counts = {};
-      const { inserted, taken } = putBack(tx, rows, gone);
+      const { inserted, taken, retired } = putBack(tx, rows, gone);
       const relinked = relink(tx, rows);
       settleKeys(tx, inserted);
       if (!first(tx, sql`select 1 from ${name("projects")} where id = ${id}`)) {
@@ -515,7 +521,7 @@ export const forgetDb = (
         add(back, table, stands);
         add(gone, table, ids.size - stands);
       }
-      return { ok: true, back, relinked, taken, gone };
+      return { ok: true, back, relinked, taken, gone, retired };
     }),
 });
 
@@ -526,6 +532,7 @@ export const forgetDb = (
  */
 const putBack = (tx: Tx, rows: ProjectRows, gone: Counts) => {
   const taken: Counts = {};
+  const retired: Counts = {};
   const inserted = new Map<string, Set<number>>();
   for (const kept of rows.tables) {
     const now = new Set(columnsOf(tx, kept.table));
@@ -538,7 +545,13 @@ const putBack = (tx: Tx, rows: ProjectRows, gone: Counts) => {
     );
     const ids = inserted.get(kept.table) ?? new Set<number>();
     inserted.set(kept.table, ids);
+    const kindAt =
+      kept.table === "project_places" ? kept.columns.indexOf("kind") : -1;
     for (const row of kept.rows) {
+      if (kindAt >= 0 && !PLACE_KINDS.some((kind) => kind === row[kindAt])) {
+        add(retired, kept.table);
+        continue;
+      }
       const put = first<{ [ROWID]: number }>(
         tx,
         sql`insert into ${name(kept.table)} (${list(used.map((one) => name(one.column)))})
@@ -552,7 +565,7 @@ const putBack = (tx: Tx, rows: ProjectRows, gone: Counts) => {
       }
     }
   }
-  return { inserted, taken };
+  return { inserted, taken, retired };
 };
 
 /** Each cut link set again where its row still stands and still reads null: how many, by table. */

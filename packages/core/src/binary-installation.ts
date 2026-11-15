@@ -113,7 +113,7 @@ export async function readRunningManifest(): Promise<ReleaseManifest> {
  * crash loop). Nothing but a decider acts on it.
  */
 const TrialMarkerSchema = z.object({
-  /** The hub database copy a rollback restores, when the schema changed. */
+  /** The hub database copy a rollback restores: made on every update of the hub's machine (cli binary-apply.ts `backUpDatabase`). */
   dbBackup: z.string().optional(),
   dbPath: z.string().optional(),
   /** A rollback has put the database copy in place: a resumed one does not do it again over the previous build's writes. */

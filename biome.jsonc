@@ -57,6 +57,12 @@
     // A problem's status is never a plain `number`: Eden reads it as a
     // possible success (ProblemStatus, packages/hub/src/refusal.ts).
     "./scripts/lint/problem-status-number.grit",
+    // A problem a function could return is returned, never thrown as its
+    // detail (packages/hub/src/refusal.ts).
+    "./scripts/lint/problem-detail-thrown.grit",
+    // A machine away is 503 machine-away and one silent 504 machine-silent,
+    // made in packages/hub/src/machine-answers.ts alone.
+    "./scripts/lint/machine-answers.grit",
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",
@@ -667,6 +673,14 @@
           },
         },
       },
+    },
+    {
+      // Importing a dashboard store module starts nothing: its top level
+      // only declares, and the app starts each store once
+      // (lib/cawco/start.ts `startApp`). The plugin reads the path itself,
+      // its entries and states files left alone.
+      "includes": ["apps/dashboard/src/lib/cawco/**/*.ts"],
+      "plugins": ["./scripts/lint/store-starts-nothing.grit"],
     },
     {
       // A states file takes a store inside a story's `beforeEach`

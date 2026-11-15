@@ -34,6 +34,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
+import type { ContinuationUnfound, ContinuationUnplaced } from "./hub-shapes";
 import { type JevAccess, jevAccess } from "./jev";
 import {
   attachByRule,
@@ -51,7 +52,6 @@ import {
   TRIAGE_FIELD,
 } from "./jev-placement";
 import { grepScore, wordsOf } from "./memory-facts";
-
 import {
   hubActor,
   type TaskEvent,
@@ -71,17 +71,19 @@ export interface JevTasksDeps {
    * An ended attempt's cold session compressed and continued in a new
    * session in its workspace, which takes on the attempt and opens on
    * `comment` (server.ts `continueAttempt`): the new session's id, and how
-   * the job ends (nothing once it started, else why not). Throws why it
-   * could not begin.
+   * the job ends (nothing once it started, else why not); the hub's problem
+   * when its source has no clone or nothing to continue from. Throws why
+   * else it could not begin.
    */
   readonly continueAttempt: (
     row: SessionRow,
     taskId: string,
     comment: string
-  ) => Promise<{
-    ended: Promise<string | undefined>;
-    targetInstanceId: string;
-  }>;
+  ) => Promise<
+    | { ended: Promise<string | undefined>; targetInstanceId: string }
+    | ContinuationUnfound
+    | ContinuationUnplaced
+  >;
   readonly db: Pick<
     DbShape,
     | "getInstancesByIds"
@@ -473,6 +475,9 @@ export const createJevTasks = ({
       started = await continueAttempt(row, task.id, yours);
     } catch (error) {
       return await notStarted(words(error));
+    }
+    if (started instanceof ElysiaStatus) {
+      return await notStarted(started.response.detail);
     }
     console.log(
       `[tasks] ${task.id} in ${projectId}: it continues compressed: ${row.id.slice(0, 8)}'s history goes on in new session ${started.targetInstanceId.slice(0, 8)} in its workspace, opening on your comment`

@@ -6,6 +6,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { ElysiaStatus } from "elysia";
 import type { ArtifactRow } from "../db/artifacts";
 import { readKept } from "../decision-program";
+import type { OpenStop } from "../preview-stops";
 import { boardOf } from "./access";
 import type { ArtifactServiceDeps } from "./deps";
 import { stateOf } from "./facts";
@@ -35,7 +36,8 @@ export interface VersionsContext {
     card?: string | null
   ) => Promise<
     | { opened: true; started: true }
-    | { opened: false; started: boolean; why: string; href?: string }
+    | { opened: false; started: true; why: string; href?: string }
+    | { opened: false; started: false; why: string; stop: OpenStop }
   >;
   store: ReturnType<typeof createPageStore>;
   versionMoved: (row: ArtifactRow) => void;

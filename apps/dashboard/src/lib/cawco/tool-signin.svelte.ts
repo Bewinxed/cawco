@@ -171,15 +171,35 @@ export class ToolSigninFlow implements PasteSignin {
 
 const flows = new SvelteMap<string, ToolSigninFlow>();
 
-// A reload: each link the tab kept that still works is a flow again.
-for (const key of Object.keys(kept.value.links)) {
-  const { machineId, toolId } = signinOf(key);
-  if (machineId && toolId) {
-    const flow = new ToolSigninFlow(machineId, toolId);
-    if (flow.live) {
-      flows.set(key, flow);
+/**
+ * The tool sign-ins, started: what the tab keeps written as it changes, and
+ * each link a reload kept that still works a flow again, its lapse timed.
+ * The app starts it once (start.ts `startApp`); importing this module only
+ * reads what the tab kept, and a popover drawn before the start shows no
+ * kept link. Returns its stop: the flows it made again dropped, their lapses cleared.
+ */
+export function startToolSignins(): () => void {
+  const stopKeeping = kept.keep();
+  const resumed = new Map<string, ToolSigninFlow>();
+  for (const key of Object.keys(kept.value.links)) {
+    const { machineId, toolId } = signinOf(key);
+    if (machineId && toolId && !flows.has(key)) {
+      const flow = new ToolSigninFlow(machineId, toolId);
+      if (flow.live) {
+        flows.set(key, flow);
+        resumed.set(key, flow);
+      }
     }
   }
+  return () => {
+    for (const [key, flow] of resumed) {
+      flow.dispose();
+      if (flows.get(key) === flow) {
+        flows.delete(key);
+      }
+    }
+    stopKeeping();
+  };
 }
 
 /**

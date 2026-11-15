@@ -6,15 +6,26 @@ import { harnessWords } from "@cawco/core/words/harness";
 import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { instanceTimes } from "../instance-out";
+import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
-import { awayStatus } from "../machine-reads";
-
 import { attachmentsOfPages } from "../session-attachments";
+import type { HistoryFault } from "../transcripts";
 
 /** Why keep-alive is refused a session: its harness's prompt cache is one nothing times. */
 const keepAliveRefused = harnessWords.keepAliveIsFor(
   harnessesWith((traits) => traits.promptCacheMaxMs !== null)
 );
+
+/**
+ * The machine and harness a refused or waiting read names (history.ts
+ * `refusedRead`), as its problem's extension members: a reader with no row
+ * for the conversation watches that machine's cell for that harness to know
+ * when to read again (SessionPane).
+ */
+const faultWhere = (fault: HistoryFault) => ({
+  ...(fault.machineId ? { machineId: fault.machineId } : {}),
+  ...(fault.harness ? { harness: fault.harness } : {}),
+});
 
 export const instanceEditRoutes = (
   ctx: Pick<
@@ -73,7 +84,7 @@ export const instanceEditRoutes = (
             before: t.Optional(t.String()),
           }),
         },
-        async ({ params, query, set }) => {
+        async ({ params, query }) => {
           const limit =
             Number(query.limit) > 0
               ? Math.floor(Number(query.limit))
@@ -101,17 +112,14 @@ export const instanceEditRoutes = (
           }
           switch (page.fault) {
             case "offline":
-              return awayStatus(ctx, set, page.machineId ?? "", page.message);
+              return awayProblem(page.machineId ?? "", page.message);
             case "missing":
               return problem(404, {
                 code: "no-transcript",
                 detail: page.message,
               });
             case "timeout":
-              return problem(504, {
-                code: "machine-silent",
-                detail: page.message,
-              });
+              return silentProblem(page.message);
             // Its machine refuses the CLI the conversation is read
             // through: the read depends on a CLI the machine does not run
             // yet (424 Failed Dependency, RFC 4918 §11.4), never the hub
@@ -120,11 +128,22 @@ export const instanceEditRoutes = (
               return problem(424, {
                 code: "harness-refused",
                 detail: page.message,
+                ...faultWhere(page),
+              });
+            // An install of that CLI runs there now: the CLI is held by
+            // the install for its seconds (423 Locked, RFC 4918 §11.3), its
+            // own code, so a reader shows the install under way and reads
+            // again once it lands rather than offering one.
+            case "updating":
+              return problem(423, {
+                code: "harness-updating",
+                detail: page.message,
+                ...faultWhere(page),
               });
             case "failed":
               break;
           }
-          return problem(500, {
+          return problem(502, {
             code: "transcript-unread",
             detail: page.message,
           });
@@ -134,7 +153,7 @@ export const instanceEditRoutes = (
       // conversation carried, read off its whole transcript here, newest
       // first, so the list never depends on the pages a reader has loaded.
       // A transcript that can't be read answers as its page would.
-      .get("/api/instances/:id/attachments", async ({ params, set }) => {
+      .get("/api/instances/:id/attachments", async ({ params }) => {
         const read = await everyPage(params.id);
         if ("gone" in read) {
           return problem(409, {
@@ -145,24 +164,28 @@ export const instanceEditRoutes = (
         if ("fault" in read) {
           switch (read.fault) {
             case "offline":
-              return awayStatus(ctx, set, read.machineId ?? "", read.message);
+              return awayProblem(read.machineId ?? "", read.message);
             case "missing":
               return problem(404, {
                 code: "no-transcript",
                 detail: read.message,
               });
             case "timeout":
-              return problem(504, {
-                code: "machine-silent",
-                detail: read.message,
-              });
+              return silentProblem(read.message);
             case "refused":
               return problem(424, {
                 code: "harness-refused",
                 detail: read.message,
+                ...faultWhere(read),
+              });
+            case "updating":
+              return problem(423, {
+                code: "harness-updating",
+                detail: read.message,
+                ...faultWhere(read),
               });
             case "failed":
-              return problem(500, {
+              return problem(502, {
                 code: "transcript-unread",
                 detail: read.message,
               });
@@ -238,10 +261,7 @@ export const instanceEditRoutes = (
           if (permissionMode !== undefined) {
             const refused = await applyPermissionMode(current, permissionMode);
             if (refused) {
-              return problem(refused.code, {
-                code: "mode-refused",
-                detail: refused.error,
-              });
+              return refused;
             }
           }
           const named = title

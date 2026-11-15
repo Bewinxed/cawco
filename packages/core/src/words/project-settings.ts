@@ -67,6 +67,8 @@ export interface SettingsRead {
   frontier: string[];
   /** The conversation reads what the person writes on tasks. */
   hearsTasks: boolean;
+  /** Ready tasks dispatch does not start, each with why. */
+  held: { task: string; why: string }[];
   lands: string;
   /** Its links, one per repository, like github.com/owner/name. */
   links: string[];
@@ -124,7 +126,7 @@ export const projectSettingsWords = {
         now.paused === null
           ? `Next to start: ${now.frontier.length > 0 ? now.frontier.join(", ") : "nothing is ready"}.`
           : `Dispatch starts nothing: ${now.paused}`
-      }`,
+      }${now.held.map(({ task, why }) => `\n- ${task} does not start: ${why}`).join("")}`,
     ].join("\n"),
 
   /** Each dispatch change, in the card's and the project note's words. */
@@ -161,7 +163,7 @@ export const projectSettingsWords = {
       return "Starting set: none, so its sessions start with everything installed";
     }
     if ("problems" in set) {
-      return `Starting set: starting-set.md does not read, so its sessions start with everything installed: ${set.problems.join(" ")}`;
+      return `Starting set: starting-set.md does not read, so no session starts in this project until it does, but one whose delegate type names a set: ${set.problems.join(" ")}`;
     }
     return `Starting set: its sessions start with ${setText(set)}, besides CawCo's own and its template's starter skills, unless their delegate type names a set`;
   },

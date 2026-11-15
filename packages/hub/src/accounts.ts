@@ -70,8 +70,10 @@ const MODELS = z.array(ModelInfoSchema);
  * Keeps what a probe read of an account: its models, as its catalog
  * (replacing the one before, rows and all), and its plan. The models are
  * Claude Code's own list, taken into CawCo's type here (hub stored-json.ts
- * `received`): a field its release adds is left out and said, never a
- * catalog its write refuses.
+ * `received`): a field its release adds is left out and said, and an effort
+ * level it adds is kept as the string it is (`ModelInfo` holds the list's
+ * effort words as Claude Code's, unenumerated), so neither makes the
+ * catalog's write refuse.
  */
 export const keepProbe = (
   db: DbShape,

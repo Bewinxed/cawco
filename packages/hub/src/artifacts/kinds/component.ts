@@ -19,6 +19,7 @@ import {
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
+import { openProblem } from "../../preview-stops";
 
 import {
   COMPONENT_EXAMPLE,
@@ -512,10 +513,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const shown = await handOver(making, before, row);
     if (!(shown.started || before)) {
       discard(row);
-      return problem(503, {
-        code: "artifact-sheet-unshown",
-        detail: shown.why,
-      });
+      return openProblem(shown.stop, "artifact-sheet-unshown", shown.why);
     }
     const owned = sheetOf(row);
     const drawn = await drawnReport(

@@ -99,6 +99,7 @@ import {
 } from "./preview-paths";
 import { createPreviewPorts } from "./preview-ports";
 import { createStaleAddresses } from "./preview-stale";
+import type { PreviewStop } from "./preview-stops";
 import { folderPath } from "./project-folder";
 
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
@@ -234,10 +235,26 @@ const withKeyedOverlay = (answer: Response): Promise<Response> | Response =>
     ? keyOverlay(answer, previewParents())
     : answer;
 
-/** Where a machine's preview is served now, or the hop that failed and why (preview-service.ts `reach`). */
+/** Where a machine's preview is served now, or the hop that failed, why, and what stopped it (preview-service.ts `reach`). */
 export type PreviewReach =
   | { ok: true; upstream: Upstream }
-  | { ok: false; down: PreviewDown; error: string };
+  | { ok: false; down: PreviewDown; error: string; stop: PreviewStop };
+
+/** A preview's page that did not load ({@link loadedOnce}): the hop that failed, the machine's words for it, and what stopped it. */
+export interface PreviewUnloaded {
+  failure: PreviewDown;
+  stop: PreviewStop;
+  why: string | null;
+}
+
+/** The status a preview's own down page answers with for each stop ({@link stopProblem}'s, a closed one's 404). */
+const STOP_STATUS: Record<PreviewStop["kind"], number> = {
+  away: 503,
+  silent: 504,
+  paused: 409,
+  closed: 404,
+  failed: 502,
+};
 
 /** A machine artifact's row: one a machine serves (a port or a folder), never a page the hub serves itself. */
 export type MachineRow = ArtifactRow & {
@@ -659,11 +676,12 @@ export async function loadedOnce(
   at: Upstream,
   path: string | undefined,
   waitMs: number
-): Promise<{ failure: PreviewDown; why: string | null } | null> {
+): Promise<PreviewUnloaded | null> {
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
-  const said = (html: string) => {
+  const failed: PreviewStop = { kind: "failed" };
+  const said = (html: string): PreviewUnloaded | null => {
     const down = downOf(html);
-    return down && { failure: down.down, why: down.why };
+    return down && { failure: down.down, why: down.why, stop: failed };
   };
   try {
     const page = await readWithin(waitMs, async (signal) => {
@@ -682,7 +700,7 @@ export async function loadedOnce(
       return (
         said(body) ??
         (status >= 400
-          ? { failure: "error", why: errorWhy(status, body) }
+          ? { failure: "error", why: errorWhy(status, body), stop: failed }
           : null)
       );
     }
@@ -698,11 +716,13 @@ export async function loadedOnce(
       : {
           failure: "machine",
           why: `its listener didn't answer the hub within ${secondsOf(pinged.after)} s`,
+          stop: { kind: "silent" },
         };
   } catch (error) {
     return {
       failure: "machine",
       why: `its listener didn't answer the hub: ${causeOf(error)}`,
+      stop: failed,
     };
   }
 }
@@ -1012,7 +1032,7 @@ async function serveMachine(
     previewFailed(HOP, instanceId, `${reached.down}: ${reached.error}`);
     return downResponse(
       reached.down,
-      reached.down === "closed" ? 404 : 503,
+      STOP_STATUS[reached.stop.kind],
       reached.down === "reach" ? reached.error : undefined
     );
   }

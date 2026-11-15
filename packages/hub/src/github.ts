@@ -56,7 +56,8 @@ import type { WaitTarget } from "@cawco/core/wait-targets";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
-import type { GitHubCursor, GitHubResource } from "./db/schema";
+import type { GitHubCursor } from "./db/schema";
+import type { GitHubResource } from "./db/stored-types";
 import type { InboundEvent } from "./inbound-event";
 import type { GitHubWaitState } from "./task-waits";
 

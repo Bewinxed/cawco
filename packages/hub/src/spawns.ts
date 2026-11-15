@@ -18,19 +18,21 @@ import type {
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import { StartsHeld } from "./continuations";
 import type { DbShape } from "./db/index";
-import type { InstanceKind } from "./db/instances";
+import type { InstanceKind } from "./db/stored-types";
 import { handleId, isHandle } from "./handles";
 import type { Located, SessionLocation, SettledSpawn } from "./hub-shapes";
 import type { LabelledRow } from "./labels";
 import { sessionLabel } from "./labels";
 import type { createLaunches } from "./launches";
+import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek, peekResume } from "./payload-peeks";
-import type { PlacementInput } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import {
   accountFacts,
   place as placeAccount,
@@ -322,8 +324,16 @@ export const createSpawns = (ctx: SpawnsContext) => {
             case "unanswered":
               return "unanswered" as const;
             case "answered": {
+              // A lookup that failed (a store that couldn't be read, a
+              // harness CLI npm moved aside) is no word that the machine
+              // holds no such session: remembered as nowhere, it stood as a
+              // 404 for the hub's lifetime, past the store being readable
+              // again. It counts as not answered, and is asked again.
               if (!answer.value.ok) {
-                return null;
+                console.warn(
+                  `[hub] locating ${id}: ${ctx.machineName(agent.machineId)}'s ${harness} couldn't say whether it holds it: ${answer.value.error ?? "no reason given"}`
+                );
+                return "unanswered" as const;
               }
               const info = answer.value.result as
                 { sessionId?: string; cwd?: string } | undefined | null;
@@ -452,32 +462,44 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * recorded as every spawn is: the row is what puts it in the rail. A
    * conversation that starts here is named by its first turn.
    */
-  /** The accounts a project task allows its attempts (`accounts:`), read from its file; null: every account. */
+  /**
+   * The accounts a project task allows its attempts (`accounts:`), read
+   * from its file at each placement: null is every account (no line, or a
+   * line that reads as an empty list). An `accounts:` line that does not
+   * read whole is `unread`, its sentences quoted (task-file.ts
+   * `listUnread`): what of it reads is not the allow-list it meant, and a
+   * list left with none would read as every account.
+   */
   const taskAccounts = (
     projectId: string | null | undefined,
     taskId: string | null | undefined
-  ): string[] | null => {
+  ): TaskAccounts => {
     if (!(projectId && taskId)) {
-      return null;
+      return { accounts: null };
     }
     const indexed = ctx.db
       .taskIndex(projectId)
       .find((row) => row.id === taskId);
     if (!indexed) {
-      return null;
+      return { accounts: null };
     }
     const root = projectRoot(projectId);
     if (root instanceof ElysiaStatus) {
-      return null;
+      return { accounts: null };
     }
     try {
-      const { accounts } = new TaskDoc(
+      const doc = new TaskDoc(
         indexed.path,
         readFileSync(join(root, indexed.path), "utf8")
-      ).read().fields;
-      return accounts.length > 0 ? accounts : null;
+      );
+      const unread = doc.unreadOfList("accounts");
+      if (unread.length > 0) {
+        return { path: indexed.path, unread: unread.join(" ") };
+      }
+      const { accounts } = doc.read().fields;
+      return { accounts: accounts.length > 0 ? accounts : null };
     } catch {
-      return null;
+      return { accounts: null };
     }
   };
 
@@ -494,7 +516,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
    */
   const spawnAsks = (
     payload: SpawnPayload,
-    task: { projectId?: string | null; taskId?: string | null }
+    task: { accounts?: string[] | null; projectId?: string | null }
   ): Pick<
     PlacementInput,
     | "explicit"
@@ -515,7 +537,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return {
       kind: parentInstanceId || payload.spawnedBy ? "delegates" : "yours",
       projectAccounts: project?.accounts ?? null,
-      taskAccounts: taskAccounts(projectId, task.taskId),
+      taskAccounts: task.accounts ?? null,
       // The start's own account wins over its project's (placement.ts `place`).
       ...(payload.account ? { explicit: payload.account } : {}),
       ...projectAccountOf(project, (id) => ctx.db.areas.get(id)?.name ?? null),
@@ -526,7 +548,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
   const placementInput = (
     machineId: string,
     payload: NamedSpawn,
-    task: { projectId?: string | null; taskId?: string | null },
+    task: { accounts?: string[] | null; projectId?: string | null },
     fork: { accountId: string | null } | undefined
   ): PlacementInput | undefined => {
     const provider = ctx.accountProviderFor(
@@ -684,7 +706,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     machineId: string,
     payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null } = {}
-  ): { accountId?: string } | { refusal: string; status?: 404 } => {
+  ): { accountId?: string } | { refusal: string; status?: 404 | 409 } => {
     // Checked here, in the same synchronous step as the row's write that
     // follows: a project deleted after it was picked refuses the start.
     if (payload.projectId && !ctx.db.project(payload.projectId)) {
@@ -729,11 +751,36 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (held) {
       return runsOn(held);
     }
+    const placed = placedNew(machineId, payload, task);
+    return "refusal" in placed ? placed : runsOn(placed);
+  };
+
+  /**
+   * The account a session no account holds yet is placed on, within its
+   * project's and task's allow-lists ({@link placeSpawn}); its task's list
+   * read now, and one that does not read whole places it nowhere, never on
+   * any account (409).
+   */
+  const placedNew = (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null }
+  ): { accountId?: string } | { refusal: string; status?: 409 } => {
+    const allowed = taskAccounts(
+      payload.projectId ?? task.projectId,
+      task.taskId
+    );
+    if ("unread" in allowed) {
+      return {
+        status: 409,
+        refusal: spawnWords.taskAccountsUnread(allowed.path, allowed.unread),
+      };
+    }
     const { resume } = payload;
     const input = placementInput(
       machineId,
       payload,
-      task,
+      { projectId: task.projectId, accounts: allowed.accounts },
       resume?.fork
         ? {
             accountId:
@@ -748,8 +795,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
           }
         : {};
     }
-    const placed = placedStart(machineId, payload, input);
-    return "refusal" in placed ? placed : runsOn(placed);
+    return placedStart(machineId, payload, input);
   };
 
   /**
@@ -775,8 +821,9 @@ export const createSpawns = (ctx: SpawnsContext) => {
   /**
    * A start as the placement explain query describes it, for placement to
    * read, with pi's `default` named as its machine answers it in `cwd`; or
-   * why there is none: a 400 for a harness CawCo does not run, a 503 for a
-   * machine that could not say pi's default.
+   * why there is none: a 400 for a harness CawCo does not run, or the
+   * machine's own problem when it could not say pi's default (silent, or
+   * its failure).
    */
   const askedStart = async (query: {
     account?: string;
@@ -787,10 +834,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
     model?: string;
     projectId?: string;
     type?: string;
-  }): Promise<NamedSpawn | { refusal: string; status: 400 | 503 }> => {
+  }) => {
     const harness = harnessNamed(query.harness);
     if (!harness) {
-      return { refusal: HARNESS_UNNAMED, status: 400 };
+      return problem(400, {
+        code: "placement-refused",
+        detail: HARNESS_UNNAMED,
+      });
     }
     const { projectId } = query;
     const asked = await ctx.piDefaultFor(query.machineId, {
@@ -803,10 +853,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...(query.type ? { delegateType: { name: query.type, projectId } } : {}),
       ...(query.kind === "delegates" ? { spawnedBy: { instanceId: "" } } : {}),
     });
-    return "refusal" in asked ? { ...asked, status: 503 } : asked;
+    return asked;
   };
 
-  /** {@link placeSpawn} as a problem a caller passes up: a deleted project's is a 404, any other a 400. */
+  /**
+   * {@link placeSpawn} as a problem a caller passes up: a deleted project's
+   * is a 404, a task's allow-list that does not read a 409, any other a 400.
+   */
   const placedOrProblem = (
     machineId: string,
     payload: NamedSpawn,
@@ -814,12 +867,23 @@ export const createSpawns = (ctx: SpawnsContext) => {
   ) => {
     const placed = placeSpawn(machineId, payload, task);
     if ("refusal" in placed) {
-      return placed.status === 404
-        ? problem(404, {
+      switch (placed.status) {
+        case 404:
+          return problem(404, {
             code: "spawn-project-deleted",
             detail: placed.refusal,
-          })
-        : problem(400, { code: "spawn-not-placed", detail: placed.refusal });
+          });
+        case 409:
+          return problem(409, {
+            code: "spawn-task-accounts-unread",
+            detail: placed.refusal,
+          });
+        case undefined:
+          return problem(400, {
+            code: "spawn-not-placed",
+            detail: placed.refusal,
+          });
+      }
     }
     return placed;
   };
@@ -1083,7 +1147,21 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (placed instanceof ElysiaStatus) {
       return placed;
     }
-    return { payload, permissionMode: settled.permissionMode, placed };
+    // A project starting-set file that does not read refuses it, in the
+    // file's words, as an unread stages.md refuses a dispatch.
+    const begins = ctx.startingSetOf(payload);
+    if ("refusal" in begins) {
+      return problem(409, {
+        code: "starting-set-unread",
+        detail: begins.refusal,
+      });
+    }
+    return {
+      payload,
+      permissionMode: settled.permissionMode,
+      placed,
+      startingSet: begins.startingSet,
+    };
   };
 
   /** Opens the row of a start {@link clearedToStart} and sends its spawn. */
@@ -1094,7 +1172,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     by: SessionOrigin,
     workItemId: string | undefined
   ) => {
-    const { payload, permissionMode, placed } = cleared;
+    const { payload, permissionMode, placed, startingSet } = cleared;
     const agent = ctx.registry.agent(machineId);
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
@@ -1117,7 +1195,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       clean: payload.clean === true,
-      ...ctx.startingSetOf(payload),
+      startingSet,
       ...openedAccount(payload, placed),
       // The account its start named, as placement honoured it.
       ...(payload.account && placed.accountId
@@ -1182,11 +1260,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     fallbackMode?: string
   ) => {
     const payload = await ctx.piDefaultFor(machineId, asked);
-    if ("refusal" in payload) {
-      return problem(503, {
-        code: "spawn-default-unnamed",
-        detail: payload.refusal,
-      });
+    if (payload instanceof ElysiaStatus) {
+      return payload;
     }
     // Cleared before it waits on anything: what stops a start is said here.
     const cleared = clearedToStart(
@@ -1216,16 +1291,17 @@ export const createSpawns = (ctx: SpawnsContext) => {
     );
     switch (reply.kind) {
       case "unanswered":
-        return problem(504, {
-          code: "spawn-start-unanswered",
-          detail: `the session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)} s`,
-        });
+        return silentProblem(
+          `the session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)} s`
+        );
       case "answered":
         if (!reply.value.ok) {
-          return problem(422, {
-            code: "spawn-start-failed",
-            detail: reply.value.error ?? "the session failed to start",
-          });
+          return reply.value.error === MACHINE_DISCONNECTED
+            ? awayProblem(machineId, ctx.machineFault(machineId, "offline"))
+            : problem(502, {
+                code: "spawn-start-failed",
+                detail: reply.value.error ?? "the session failed to start",
+              });
         }
         return;
       default:
@@ -1264,10 +1340,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       !ctx.registry.agent(machineId) &&
       ctx.startHold(machineId)?.kind !== "away"
     ) {
-      return problem(404, {
-        code: "spawn-machine-offline",
-        detail: ctx.machineFault(machineId, "offline"),
-      });
+      return awayProblem(machineId, ctx.machineFault(machineId, "offline"));
     }
     const { parentInstanceId } = peekParent(named);
     const relayed = await relaySpawn(
@@ -1303,12 +1376,14 @@ export const createSpawns = (ctx: SpawnsContext) => {
   >;
   /**
    * What a session started to go on from `source` (a continuation, a plan
-   * change's new session) carries over on the same harness: its delegate
-   * type with the tools that type denies, its toolset, the types it may
-   * start, and the starting set it began with, never one resolved anew. On
-   * another harness it is no longer that type, and carries none of it. A
-   * start that goes on from none resolves its set as any start does
-   * ({@link startingSetOf}).
+   * change's new session) carries over: the types it may start, on any
+   * harness (a leaf goes on as a leaf); and on the same harness its delegate
+   * type with the tools that type denies, its toolset, and the starting set
+   * it began with, never one resolved anew. On another harness it is no
+   * longer that type, and starts with everything installed. A start that
+   * goes on from none resolves its set as any start does
+   * ({@link startingSetOf}), and its list as its row opens
+   * (db/instances.ts `openInstance`).
    */
   const carriedFrom = (
     source: CarriedSource | undefined,
@@ -1323,21 +1398,33 @@ export const createSpawns = (ctx: SpawnsContext) => {
     spawn: Pick<SpawnPayload, "delegateType" | "denyTools" | "mayStart">;
   } => {
     if (!source) {
-      return { row: ctx.startingSetOf, spawn: {} };
+      return {
+        row: (payload) => {
+          const begins = ctx.startingSetOf(payload);
+          if ("refusal" in begins) {
+            throw new Error(begins.refusal);
+          }
+          return begins;
+        },
+        spawn: {},
+      };
     }
+    const { mayStart } = source;
     if (source.harness !== harness) {
-      return { row: () => ({}), spawn: {} };
+      return {
+        row: () => ({ mayStart, startingSet: null }),
+        spawn: { mayStart },
+      };
     }
     const type = ctx.typeSettingsOf(source);
-    const mayStart = source.mayStart ? { mayStart: source.mayStart } : {};
     return {
       row: () => ({
         ...(type.delegateType ? { delegateType: type.delegateType } : {}),
         ...(source.role ? { role: source.role } : {}),
-        ...mayStart,
-        ...(source.startingSet ? { startingSet: source.startingSet } : {}),
+        mayStart,
+        startingSet: source.startingSet,
       }),
-      spawn: { ...type, ...mayStart },
+      spawn: { ...type, mayStart },
     };
   };
 
@@ -1368,8 +1455,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
       throw new StartsHeld(machineId, held.words);
     }
     const named = await ctx.piDefaultFor(machineId, asked);
-    if ("refusal" in named) {
-      throw new Error(named.refusal);
+    if (named instanceof ElysiaStatus) {
+      throw new MachineProblem(named);
     }
     const settled = settleSpawn(machineId, named, fallbackMode);
     if ("refusal" in settled) {
@@ -1434,7 +1521,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return startedOrThrown(reply, machineId, payload.harness);
   };
 
-  /** A hub start's answer from its machine: nothing when the session is in place; else its failure thrown in the machine's words. */
+  /** A hub start's answer from its machine: nothing when the session is in place; else its cause thrown (`MachineProblem`), in the machine's words. */
   const startedOrThrown = (
     reply: Awaited<ReturnType<typeof ctx.awaitStart>>,
     machineId: string,
@@ -1442,14 +1529,21 @@ export const createSpawns = (ctx: SpawnsContext) => {
   ): undefined => {
     switch (reply.kind) {
       case "unanswered":
-        throw new Error(
-          `the ${harness} session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
+        throw new MachineProblem(
+          silentProblem(
+            `the ${harness} session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
+          )
         );
       case "answered":
         if (!reply.value.ok) {
           throw reply.value.error === MACHINE_DISCONNECTED
             ? ctx.awayError(machineId)
-            : new Error(reply.value.error ?? "the session failed to start");
+            : new MachineProblem(
+                problem(502, {
+                  code: "spawn-start-failed",
+                  detail: reply.value.error ?? "the session failed to start",
+                })
+              );
         }
         return;
       default:

@@ -2710,6 +2710,76 @@
       "when": 1794655258647,
       "tag": "0394_passkey_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 395,
+      "version": "6",
+      "when": 1794665090026,
+      "tag": "0395_ended_blocked",
+      "breakpoints": true
+    },
+    {
+      "idx": 396,
+      "version": "6",
+      "when": 1794665364546,
+      "tag": "0396_drop_dead_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 397,
+      "version": "6",
+      "when": 1794672715968,
+      "tag": "0397_may_start_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 398,
+      "version": "6",
+      "when": 1794688495745,
+      "tag": "0398_budget_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 399,
+      "version": "6",
+      "when": 1794690728033,
+      "tag": "0399_at_limit_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 400,
+      "version": "6",
+      "when": 1794695662505,
+      "tag": "0400_landed_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 401,
+      "version": "6",
+      "when": 1794698573328,
+      "tag": "0401_gate_passes_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 402,
+      "version": "6",
+      "when": 1794702091162,
+      "tag": "0402_tool_updates",
+      "breakpoints": true
+    },
+    {
+      "idx": 403,
+      "version": "6",
+      "when": 1794702092447,
+      "tag": "0403_tool_install_starter",
+      "breakpoints": true
+    },
+    {
+      "idx": 404,
+      "version": "6",
+      "when": 1794703465360,
+      "tag": "0404_outputs_tables",
+      "breakpoints": true
     }
   ]
 }

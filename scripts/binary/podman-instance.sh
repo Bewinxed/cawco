@@ -18,6 +18,14 @@
 # base image's id, names its tag), one writer at a time (flock), and read by every instance as an additional image
 # store (containers-storage.conf(5) `additionalimagestores`; containers/storage types/options.go:458-459 passes each
 # as `<driver>.imagestore`, which the vfs driver reads as a read-only home, drivers/vfs/driver.go:54-55).
+#
+# THE HOST'S OWN PODMAN, NEVER A REMOTE ONE. podman(1) v5.7.0: "If the CONTAINER_HOST environment variable is set, the
+# --remote option defaults to true", CONTAINER_CONNECTION "Automatically enables the --remote option", and "When
+# specifying the podman --remote flag, only the global options --url, --identity, --log-level, --connection are used":
+# the remote client has no --tmpdir (`podman --tmpdir /tmp info` answers "Error: unknown flag: --tmpdir" with either
+# set), no `unshare`, and no instance of its own. A CawCo session's shell points CONTAINER_HOST at its own container
+# socket, so every script that sources this, and every podman it starts (proof-sweep.sh too), drops both.
+unset CONTAINER_HOST CONTAINER_CONNECTION
 TEST_CACHE=${CAWCO_TEST_CACHE:-$HOME/.cache/cawco-test}
 TEST_STORE=$TEST_CACHE/images
 

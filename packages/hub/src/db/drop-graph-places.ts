@@ -18,32 +18,22 @@ import { docOf } from "./merge-project-pages";
 /** The state key the graph kept its places under. */
 const PLACES = "graph.places";
 
-/** Whether the database holds a migration as new as 0317, or no artifacts at all: nothing to drop. */
-const settled = (client: Database, when: number): boolean => {
-  const tables = new Set(
-    (
-      client
-        .query(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'artifact_updates', '__drizzle_migrations')"
-        )
-        .all() as { name: string }[]
-    ).map((row) => row.name)
-  );
-  if (tables.size < 3) {
-    return true;
-  }
-  const newest = client
-    .query("SELECT max(created_at) AS at FROM __drizzle_migrations")
-    .get() as { at: number | null };
-  return (newest.at ?? 0) >= when;
-};
+/** Whether the database has no artifacts at all: nothing to drop. Called only in a start that applies 0317 (db/migrate.ts). */
+const settled = (client: Database): boolean =>
+  (
+    client
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifacts', 'artifact_updates')"
+      )
+      .all() as { name: string }[]
+  ).length < 2;
 
 /**
  * Takes `graph.places` out of every page's state, in one transaction; how
- * many pages held it. Nothing once 0317 is applied.
+ * many pages held it. Run only in a start that applies 0317 (db/migrate.ts).
  */
-export const dropGraphPlaces = (client: Database, when: number): number => {
-  if (settled(client, when)) {
+export const dropGraphPlaces = (client: Database): number => {
+  if (settled(client)) {
     return 0;
   }
   const pages = client

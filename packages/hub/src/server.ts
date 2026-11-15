@@ -43,7 +43,7 @@ import {
   CANVAS_SCREEN_CLOSE,
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
-import type { MachineCapabilities } from "@cawco/core/capabilities";
+import type { NamedMachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import {
@@ -55,7 +55,7 @@ import {
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
-import { sessionMayStart, startsAny } from "@cawco/core/delegate-types";
+import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
@@ -79,6 +79,7 @@ import {
 import type {
   AgentBusyReport,
   HarnessReport,
+  NamedHarnessReport,
   SessionCredentialInstall,
 } from "@cawco/core/harness";
 import {
@@ -111,7 +112,7 @@ import {
   type HarnessConfigKind,
   harnessConfigProblem,
 } from "@cawco/core/harness-config";
-import { harnessRefusal } from "@cawco/core/harness-refusal";
+import { harnessRefusal, harnessSpec } from "@cawco/core/harness-refusal";
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import { parseDelegateWaitNotice } from "@cawco/core/injected";
@@ -220,21 +221,24 @@ import {
 } from "@cawco/core/stage";
 import {
   FleetSyncReportSchema,
-  HarnessReportSchema,
-  MachineCapabilitiesSchema,
+  HookDraftSchema,
+  NamedHarnessReportSchema,
+  NamedMachineCapabilitiesSchema,
+  NamedToolSigninSchema,
   OpenCodeGoLimitsSchema,
-  ToolSigninSchema,
+  ToolCopySchema,
+  ToolWantsSchema,
 } from "@cawco/core/stored-shapes";
 import type { CommandAck } from "@cawco/core/stream";
 import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import type { ToolStatus } from "@cawco/core/tools";
+import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
-import type { UsageSpend } from "@cawco/core/usage/types";
+import { USAGE_HARNESSES, type UsageSpend } from "@cawco/core/usage/types";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -247,8 +251,9 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { connectWords } from "@cawco/core/words/connect";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
-import { harnessWords } from "@cawco/core/words/harness";
+import { harnessRefusedWords, harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
+import { judgedWords } from "@cawco/core/words/judged";
 import {
   machineFaultWords,
   machineSilenceWords,
@@ -261,6 +266,7 @@ import {
   relaunchWords,
 } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { updatesWords } from "@cawco/core/words/updates";
 import { workWords } from "@cawco/core/words/work";
 import {
   CONTROL_HOST_OUTPUTS,
@@ -288,6 +294,7 @@ import type { FolderWeight } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
+import { z } from "zod";
 import { createAccountCarry } from "./account-carry";
 import { createAccountProbes } from "./account-probes";
 import { createAccountSignin } from "./account-signin";
@@ -388,7 +395,7 @@ import {
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { ContinuationRow } from "./db/continuations";
-import type { AgentAuth } from "./db/machines";
+import { accountReportOf } from "./db/machines";
 import { SPLIT_CONTINUATIONS, TAG_MARKERS } from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
@@ -397,6 +404,7 @@ import type { ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
 import type {
+  AgentAuth,
   ContinuationAsker,
   ContinueRequest,
   StoredSendRefusal,
@@ -473,6 +481,8 @@ import {
 } from "./keep-alive";
 import { isBlockProgram, moveKeptBlocks, pageSourcePaths } from "./kept-blocks";
 import { boardTitle, sessionLabel } from "./labels";
+import { landedDiff } from "./landed";
+import { landingBranch } from "./landing-run";
 import { createLaunchAccounts } from "./launch-accounts";
 import { createLaunches } from "./launches";
 import { createLaws } from "./laws";
@@ -481,7 +491,14 @@ import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import type { Stall, TakenUpBy } from "./limit-decision";
 import { createLimitMoves } from "./limit-moves";
 import { createLoginMoves } from "./login-moves";
-import type { ControlResult, Unanswered } from "./machine-answers";
+import {
+  awayProblem,
+  type ControlResult,
+  MachineProblem,
+  silentProblem,
+  type Unanswered,
+  unansweredIn,
+} from "./machine-answers";
 import { createMachineCalls } from "./machine-calls";
 import { createMachineCommands } from "./machine-commands";
 import { createMachineContact } from "./machine-contact";
@@ -492,7 +509,7 @@ import {
   type PauseCaller,
 } from "./machine-pause";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { reconnectingFor } from "./machine-reads";
+import { nameAwayMachine, reconnectingFor } from "./machine-reads";
 import { createMachineRuntime } from "./machine-runtime";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
@@ -503,7 +520,7 @@ import {
   memoryRoutes,
   ROUTINE_ORIGIN,
 } from "./memory";
-import { createMoves, MoveAway } from "./moves";
+import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
 import { createNoticesSeen } from "./notices";
 import {
@@ -705,6 +722,7 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { createToolCallKeys } from "./tool-call-keys";
+import { createToolFacts } from "./tool-facts";
 import { createToolInstalls } from "./tool-installs";
 import { ToolReleases } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
@@ -1086,26 +1104,45 @@ const AUTH_STATES: readonly AgentAuth[] = [
   "unreadable-credentials",
 ];
 
-/** What is kept of a tool's status a machine reported. */
-const keptToolStatus = (tool: ToolStatus): ToolStatus =>
-  tool.signin
+/** What is kept of a tool's status a machine reported: each stored shape it carries, as its type, its sign-in in the machine's own words (core `NamedToolSignin`). */
+const keptToolStatus = (tool: ReportedToolStatus): ReportedToolStatus => ({
+  ...tool,
+  ...(tool.signin
     ? {
-        ...tool,
         signin: received(
-          ToolSigninSchema,
+          NamedToolSigninSchema,
           tool.signin,
           "a machine's report beat (a tool's sign-in)"
         ),
       }
-    : tool;
+    : {}),
+  ...(tool.copy
+    ? {
+        copy: received(
+          ToolCopySchema,
+          tool.copy,
+          "a machine's report beat (whose a tool's copy is)"
+        ),
+      }
+    : {}),
+  ...(tool.wants
+    ? {
+        wants: received(
+          ToolWantsSchema,
+          tool.wants,
+          "a machine's report beat (the version a tool runs at)"
+        ),
+      }
+    : {}),
+});
 
-/** What is kept of what a machine reported it can do. */
+/** What is kept of what a machine reported it can do, in its own words (core `NamedMachineCapabilities`). */
 const keptCapabilities = (
-  capabilities: MachineCapabilities | undefined
-): MachineCapabilities | undefined =>
+  capabilities: NamedMachineCapabilities | undefined
+): NamedMachineCapabilities | undefined =>
   capabilities &&
   received(
-    MachineCapabilitiesSchema,
+    NamedMachineCapabilitiesSchema,
     capabilities,
     "a machine's report beat (its capabilities)"
   );
@@ -1230,7 +1267,9 @@ export const createServer = (
     hubPreviewOrigins: () => hubPreviewOrigins,
     interruptedTurns: () => interruptedTurns,
     isHubMachine: () => isHubMachine,
+    keepCopiesOn: () => keepCopiesOn,
     keepCustody: () => keepCustody,
+    keptReleases: () => keptReleases,
     keepFleetReport: () => keepFleetReport,
     keepTasks: () => keepTasks,
     landSessionDir: () => landSessionDir,
@@ -1285,6 +1324,7 @@ export const createServer = (
     turnUnderWay: () => turnUnderWay,
     turnsWritten: () => turnsWritten,
     unknownAccountsOf: () => unknownAccountsOf,
+    updateAll: () => updateAll,
     waiting: () => waiting,
     welcomeConverge: () => welcomeConverge,
     withdrawUnshown: () => withdrawUnshown,
@@ -1294,7 +1334,6 @@ export const createServer = (
     announceSkill: () => announceSkill,
     archiveView: () => archiveView,
     artifactLane: () => artifactLane,
-    autoInstall: () => autoInstall,
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
     callAgent: () => callAgent,
@@ -1607,6 +1646,7 @@ export const createServer = (
     processFailed: () => processFailed,
     speaksContract: () => speaksContract,
     startsFreed: () => startsFreedPort.now(),
+    startSent: () => startSentPort.now(),
     homeMovedAccountOn: () => homeMovedAccountOn,
     placementInput: () => placementInput,
     accountsMoved: () => accountsMovedPort.now(),
@@ -1614,6 +1654,7 @@ export const createServer = (
     stallOf: () => stallOfPort.now(),
     stalledNow: () => stalledNowPort.now(),
     unansweredFault: () => unansweredFault,
+    toolFacts: () => toolFacts,
     toolReleases: () => toolReleases,
     boardBase: () => boardBase,
     browsers: () => browsers,
@@ -2153,8 +2194,14 @@ export const createServer = (
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
     createMachineCommands(ctx);
-  const { autoInstall, installArgs, installAsk, readyHarnesses } =
-    createToolInstalls(ctx);
+  const {
+    installArgs,
+    installAsk,
+    keepCopiesOn,
+    readyHarnesses,
+    releases: keptReleases,
+    updateAll,
+  } = createToolInstalls(ctx);
 
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
@@ -2812,10 +2859,10 @@ export const createServer = (
     reach: async (machineId, port) => {
       const address = registry.address(machineId);
       if (!address) {
-        return problem(503, {
-          code: "browser-machine-unreached",
-          detail: `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`,
-        });
+        return awayProblem(
+          machineId,
+          `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`
+        );
       }
       return sshTunnels.holds(machineId)
         ? {
@@ -2839,6 +2886,7 @@ export const createServer = (
       };
       const asked = browserAnswered<BrowserAskedPage>(
         await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_CALL_MS),
+        machineId,
         machineName(machineId),
         `say which page of yours is open on ${origin}`
       );
@@ -3215,6 +3263,15 @@ export const createServer = (
     "startsFreed",
     (_machineId: string): void => undefined
   );
+  /**
+   * A kept start has gone (start-holds.ts `sendNextStart`): its item's
+   * held inputs, then its brief, go (work-items.ts `startSent`). Bound once
+   * the work items exist below.
+   */
+  const startSentPort = portOf<(instanceId: string) => void>(
+    "startSent",
+    (_instanceId: string): void => undefined
+  );
 
   /**
    * Standing instructions, enforced on the frame stream this server already
@@ -3326,17 +3383,20 @@ export const createServer = (
   /**
    * A read its machine left unanswered, as the read throws it: not connected
    * (or away past its deadline, `asRead`) is {@link awayError}, which a route
-   * answers 503 naming the machine and a continuation waits out; silent, a
-   * plain error, `what` (the read, in words) followed by {@link silentWords}.
+   * answers 503 naming the machine and a continuation waits out; silent,
+   * 504 machine-silent, `what` (the read, in words) followed by
+   * {@link silentWords}.
    */
   const unansweredError = (
     machineId: string,
     answer: Unanswered,
     what: string
-  ): Error =>
+  ): MachineProblem =>
     answer.reason === "dead"
       ? awayError(machineId)
-      : new Error(`${what}: ${silentWords(machineId, answer)}`);
+      : new MachineProblem(
+          silentProblem(`${what}: ${silentWords(machineId, answer)}`)
+        );
   /** A session as a sentence names it. */
   const sessionName = (row: {
     derivedTitle?: string | null;
@@ -3477,6 +3537,11 @@ export const createServer = (
    */
   /** What a machine last reported of each harness, kept until its next report. */
   const capabilityReports = new Map<string, HarnessReport[]>();
+  /** Whether each machine's tool cells are its connection's now: set at its register, heard at its tools report. */
+  const toolFacts = createToolFacts();
+  registry.onAgentLeft((machineId, socketId) =>
+    toolFacts.left(machineId, socketId)
+  );
   const harnessReportOf = (
     machineId: string,
     harness: string
@@ -3536,12 +3601,9 @@ export const createServer = (
    * that model from here, so placement and the session agree on it. When pi
    * would pick among the machine's own providers, or the session is resumed,
    * or is not pi's, the payload is as it was. A machine that cannot say
-   * refuses the start.
+   * refuses the start: silent, or its failure (502 spawn-default-unnamed).
    */
-  const piDefaultFor = async (
-    machineId: string,
-    payload: NamedSpawn
-  ): Promise<NamedSpawn | { refusal: string }> => {
+  const piDefaultFor = async (machineId: string, payload: NamedSpawn) => {
     if (!asksPiDefault(payload)) {
       return payload;
     }
@@ -3557,14 +3619,15 @@ export const createServer = (
         if (answer.reason === "dead") {
           return payload;
         }
-        return {
-          refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${secondsOf(answer.after)} s. Nothing was started.`,
-        };
+        return silentProblem(
+          `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${secondsOf(answer.after)} s. Nothing was started.`
+        );
       case "answered": {
         if (!answer.value.ok) {
-          return {
-            refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
-          };
+          return problem(502, {
+            code: "spawn-default-unnamed",
+            detail: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
+          });
         }
         const model = answer.value.result as string | null;
         return model ? { ...payload, model } : payload;
@@ -3991,10 +4054,7 @@ export const createServer = (
    * `newest`: the release an install of a tool CawCo keeps current was sent
    * to reach (tool-releases.ts), which its answer settles for that machine.
    */
-  const pendingInstalls = new Map<
-    string,
-    { machineId: string; newest?: string; toolId: string }
-  >();
+  const pendingInstalls: HubContext["pendingInstalls"] = new Map();
   /**
    * Transcript deletes somebody is waiting on, by `requestId`: when the
    * machine says the transcript is gone, the rows that named it go too —
@@ -4140,14 +4200,11 @@ export const createServer = (
   /** How long the machine may take to finish a tool's sign-in once its code is typed. */
   const TOOL_SIGNIN_COMPLETE_MS = 180_000;
 
-  /** A PATCH changes the live harness first; its receipt files the stored mode. */
-  const applyPermissionMode = async (
-    row: InstanceRow,
-    mode: string
-  ): Promise<{ code: 400 | 500 | 503 | 504; error: string } | undefined> => {
+  /** A PATCH changes the live harness first; its receipt files the stored mode. Why it did not, as the PATCH answers it. */
+  const applyPermissionMode = async (row: InstanceRow, mode: string) => {
     const unfit = sessionModeRefusal(row.id, mode);
     if (unfit) {
-      return { code: 400, error: unfit };
+      return problem(400, { code: "mode-refused", detail: unfit });
     }
     const asked = await callAgent(
       row.machineId,
@@ -4160,11 +4217,10 @@ export const createServer = (
     switch (asked.kind) {
       case "unanswered":
         return asked.reason === "dead"
-          ? { code: 503, error: "Machine is not connected" }
-          : {
-              code: 504,
-              error: `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`,
-            };
+          ? awayProblem(row.machineId, "Machine is not connected")
+          : silentProblem(
+              `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`
+            );
       case "answered":
         break;
       default:
@@ -4172,18 +4228,17 @@ export const createServer = (
     }
     const answer = asked.value;
     if (!answer.ok) {
-      return {
-        code: 500,
-        error: answer.error ?? "Permission mode was refused",
-      };
+      return problem(502, {
+        code: "mode-refused",
+        detail: answer.error ?? "Permission mode was refused",
+      });
     }
     if (peek(answer.result, "permissionMode") !== mode) {
-      return {
-        code: 500,
-        error: "Harness did not acknowledge the permission mode",
-      };
+      return problem(502, {
+        code: "mode-refused",
+        detail: "Harness did not acknowledge the permission mode",
+      });
     }
-    return undefined;
   };
 
   /**
@@ -4717,11 +4772,12 @@ export const createServer = (
         return {
           ok: false,
           error: `No session holds ${artifact.name} now: it is its project's page.`,
+          stop: { kind: "closed" },
         };
       }
       const opened = await openPreview(panel, artifact, again);
       if (!opened.ok) {
-        return { ok: false, error: opened.error };
+        return opened;
       }
       return { ok: true, revision: opened.frame.revision };
     },
@@ -4869,10 +4925,10 @@ export const createServer = (
     screen: async (artifact, sync) => {
       const machineId = await ownMachineId;
       if (!registry.agent(machineId)) {
-        return problem(503, {
-          code: "artifact-screen-no-daemon",
-          detail: `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`,
-        });
+        return awayProblem(
+          machineId,
+          `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+        );
       }
       // A canvas is always its session's: only a project's page outlives one.
       const owner = artifact.instanceId as string;
@@ -4910,17 +4966,21 @@ export const createServer = (
               "late canvas screen close"
             );
           }
-          return problem(503, {
-            code: "artifact-screen-unopened",
-            detail: `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`,
-          });
+          return asked.reason === "dead"
+            ? awayProblem(
+                machineId,
+                `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it (its daemon isn't connected).`
+              )
+            : silentProblem(
+                `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it within ${secondsOf(asked.after)} s.`
+              );
         case "answered":
           break;
         default:
           throw unreachable(asked);
       }
       if (!asked.value.ok) {
-        return problem(503, {
+        return problem(502, {
           code: "artifact-screen-unopened",
           detail: `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`,
         });
@@ -4956,15 +5016,13 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           return asked.reason === "dead"
-            ? problem(503, {
-                code: "artifact-serve-machine-away",
-                detail:
-                  "The workspace's machine isn't connected to the hub, so its server can't start.",
-              })
-            : problem(504, {
-                code: "artifact-serve-machine-late",
-                detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`,
-              });
+            ? awayProblem(
+                machineId,
+                "The workspace's machine isn't connected to the hub, so its server can't start."
+              )
+            : silentProblem(
+                `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`
+              );
         case "answered":
           break;
         default:
@@ -4972,7 +5030,7 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        return problem(422, {
+        return problem(502, {
           code: "artifact-serve-unstarted",
           detail: answer.error ?? "The server didn't start.",
         });
@@ -4990,15 +5048,13 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           return asked.reason === "dead"
-            ? problem(503, {
-                code: "artifact-folder-machine-away",
-                detail:
-                  "The folder's machine isn't connected to the hub, so its folder can't be read.",
-              })
-            : problem(504, {
-                code: "artifact-folder-machine-late",
-                detail: `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`,
-              });
+            ? awayProblem(
+                machineId,
+                "The folder's machine isn't connected to the hub, so its folder can't be read."
+              )
+            : silentProblem(
+                `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`
+              );
         case "answered":
           break;
         default:
@@ -5006,7 +5062,7 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        return problem(422, {
+        return problem(502, {
           code: "artifact-folder-unread",
           detail: answer.error ?? "The folder couldn't be read.",
         });
@@ -5811,6 +5867,27 @@ export const createServer = (
       }
       publishInstances(machineId);
     },
+    // A deletion that keeps failing is said in Needs you, once while it
+    // stands (a hub restart drops notices of ended sessions, and the next
+    // failure says it again); it goes when the deletion lands.
+    deleteFailing: (row, error, attempts) => {
+      if (db.watchNotices().some((notice) => notice.instanceId === row.id)) {
+        return;
+      }
+      watchPort
+        .now()
+        ?.tellYou(
+          row,
+          harnessRefusedWords.notDeletedTitle,
+          harnessRefusedWords.notDeleted(
+            harnessSpec(row.harness).name,
+            machineName(row.machineId),
+            attempts,
+            error
+          )
+        );
+    },
+    deleteDone: (id) => watchPort.now()?.untell(id),
     deleteTranscript: async (row) => {
       if (!row.sessionId) {
         return true;
@@ -6237,7 +6314,7 @@ export const createServer = (
     // A leaf stays a leaf across a restart: the daemon builds the toolset
     // from the payload, and a restore that dropped this would hand a leaf
     // delegate the spawning tools back.
-    ...(row.mayStart ? { mayStart: row.mayStart } : {}),
+    mayStart: row.mayStart,
     ...typeSettingsOf(row),
   });
 
@@ -6335,7 +6412,8 @@ export const createServer = (
       kind: row.kind === "scratch" ? "scratch" : "mainline",
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
-      mayStart: row.mayStart ?? undefined,
+      mayStart: row.mayStart,
+      startingSet: row.startingSet,
       // The turn its last launch had open is handed back once this one is up.
       keepTurn: true,
     });
@@ -6840,9 +6918,10 @@ export const createServer = (
   keyAtStart();
 
   /**
-   * Project moves (moves.ts): a machine's control throws {@link MoveAway}
+   * Project moves (moves.ts): a machine's control throws {@link awayError}
    * when the machine is not here or went while it answered, so the job
-   * waits for its register; anything else is the machine's own words.
+   * waits for its register; else silent or the machine's own failure, by
+   * its cause.
    */
   const moves = createMoves({
     db,
@@ -6853,8 +6932,10 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           throw asked.reason === "dead"
-            ? new MoveAway(machineId)
-            : new Error(`${silentWords(machineId, asked)}.`);
+            ? awayError(machineId)
+            : new MachineProblem(
+                silentProblem(`${silentWords(machineId, asked)}.`)
+              );
         case "answered":
           break;
         default:
@@ -6864,9 +6945,13 @@ export const createServer = (
       if (!answer.ok) {
         throw answer.error === MACHINE_DISCONNECTED ||
           answer.error === AGENT_RESTARTING
-          ? new MoveAway(machineId)
-          : new Error(
-              answer.error ?? `${machineName(machineId)} gave no answer.`
+          ? awayError(machineId)
+          : new MachineProblem(
+              problem(502, {
+                code: "machine-call-failed",
+                detail:
+                  answer.error ?? `${machineName(machineId)} gave no answer.`,
+              })
             );
       }
       return answer.result;
@@ -7234,21 +7319,35 @@ export const createServer = (
    * The newest release of each CLI CawCo keeps current on every machine
    * (core `ToolSpec.release`: Claude Code), read as the hub starts and every
    * 30 minutes (tool-releases.ts); after each read, every online machine is
-   * sent what it is owed (`keepCurrent`, through `autoInstall`).
+   * sent what it is owed (tool-installs.ts `keepCopiesOn`).
    */
   const toolReleases = new ToolReleases({
     urls: TOOL_RELEASES,
     lifetime,
     name: (toolId) => toolSpec(toolId)?.name ?? toolId,
-    read: () => {
-      for (const machineId of registry.machineIds()) {
-        const agent = registry.agent(machineId);
-        if (agent) {
-          autoInstall(machineId, agent);
-        }
-      }
-    },
+    read: () => keepCopiesOn(),
   });
+
+  /**
+   * A machine's report naming a copy CawCo took into its care once, as the
+   * copy CawCo was already keeping current (agent tools.ts `takeOverKept`),
+   * said in the hub's log the first time its cell says so.
+   */
+  const sayTakenOver = (
+    machineId: string,
+    tools: ReportedToolStatus[]
+  ): void => {
+    const before = db.agentTools(machineId);
+    for (const tool of tools) {
+      const copy = tool.copy?.by === "cawco" ? tool.copy : undefined;
+      const was = before[tool.id]?.copy;
+      if (copy?.takenOver && !(was?.by === "cawco" && was.takenOver)) {
+        console.info(
+          `[hub] ${toolSpec(tool.id)?.name ?? tool.id} ${tool.version ?? "(no version said)"} on ${machineName(machineId)} is CawCo's from now on: CawCo was keeping it current before its machine kept a record of CawCo's installs`
+        );
+      }
+    }
+  };
 
   /** Every known machine's fleet items hashed, before the hub listens (fleet-sync.ts `warmHashes`). */
   const warmFleetHashes = (): void => {
@@ -7345,7 +7444,9 @@ export const createServer = (
 
   /**
    * A hook as a partial write leaves it: each given field over what is
-   * stored, `null` clearing one, its binding as asked ({@link boundAsAsked}).
+   * stored, `null` clearing one, its binding as asked ({@link boundAsAsked}),
+   * read as a hook by its stored shape (core `HookDraft`); or what is wrong
+   * with it, when it does not read as one.
    */
   const hookDraftOf = (
     current: FleetHook | undefined,
@@ -7353,7 +7454,7 @@ export const createServer = (
       areaId?: string | null;
       projectId?: string | null;
     }
-  ): HookDraft => {
+  ): HookDraft | string => {
     const merged: Record<string, unknown> = {};
     if (current) {
       const { id: _id, hash: _hash, ...stored } = current;
@@ -7366,7 +7467,8 @@ export const createServer = (
         merged[key] = value;
       }
     }
-    return boundAsAsked(merged, patch) as unknown as HookDraft;
+    const read = HookDraftSchema.safeParse(boundAsAsked(merged, patch));
+    return read.success ? read.data : z.prettifyError(read.error);
   };
 
   const boundProblem = ({
@@ -7523,7 +7625,6 @@ export const createServer = (
         return `session:${caller.instanceId ?? "unknown"}`;
       case "machine":
         return `machine:${caller.machineId}`;
-      case "hub":
       case "anonymous":
         return caller.kind;
       default:
@@ -7730,41 +7831,63 @@ export const createServer = (
    * every harness enforces one. A start that resumes a conversation
    * (a fork, a stored transcript) takes the set that conversation's row
    * began with, or none: its tools stay what its conversation began with.
-   * Asked once, as the row first opens: the row keeps it
-   * (`db.openInstance`) and every later spawn of it carries that
-   * ({@link bounded}), never the set as it stands then.
+   * Asked as the row first opens: the row keeps it (`db.openInstance`) and
+   * every later spawn of it carries that ({@link bounded}), never the set as
+   * it stands then, so a row that spawned before answers its own. A project
+   * file that does not read, where the session would start with it, is the
+   * start's refusal, in words naming the file: it never starts with
+   * everything because a file did not read, as a stages.md that does not
+   * read refuses a dispatch (dispatch.ts) and a gate.md one a landing.
    */
   function startingSetOf(
     payload: Pick<
       NamedSpawn,
-      "delegateType" | "projectId" | "resume" | "skills"
+      | "clean"
+      | "delegateType"
+      | "instanceId"
+      | "projectId"
+      | "resume"
+      | "skills"
     >
-  ): Pick<Parameters<DbShape["openInstance"]>[0], "startingSet"> {
+  ): { startingSet: StartingSet | null } | { refusal: string } {
+    const opened = db.ownedInstance(payload.instanceId);
+    if (opened?.spawnedAt) {
+      return { startingSet: opened.startingSet };
+    }
     if (payload.resume) {
       const began = db.instanceBySessionId(
         payload.resume.sessionKey
       )?.startingSet;
-      return began ? { startingSet: began } : {};
+      // A conversation no row began: everything installed, as it started.
+      return { startingSet: began ?? null };
     }
     const named = payload.delegateType;
     const project = payload.projectId
       ? db.project(payload.projectId)
       : undefined;
     const own = project ? projectStartingSet(project.id) : {};
-    if (own.problems) {
-      console.warn(
-        `[starting-set] ${project?.name}'s ${STARTING_SET_FILE} does not read, so its sessions start with everything: ${own.problems.join(" ")}`
-      );
+    const type = named
+      ? projectTypes.resolveTypeFor(named.projectId, named.name)?.startingSet
+      : undefined;
+    // The file is what it would start with: its type names no set, and a
+    // clean start loads none.
+    if (project && own.problems && !type && payload.clean !== true) {
+      return {
+        refusal: spawnWords.startingSetUnread(
+          project.name,
+          STARTING_SET_FILE,
+          own.problems
+        ),
+      };
     }
     const set = sessionStartingSet({
-      type: named
-        ? projectTypes.resolveTypeFor(named.projectId, named.name)?.startingSet
-        : undefined,
+      type,
       project: own.set,
       starters: project?.template ? TEMPLATE_SKILLS[project.template] : [],
       named: payload.skills,
     });
-    return set ? { startingSet: set } : {};
+    // No set of its type's or its project's: everything installed.
+    return { startingSet: set ?? null };
   }
 
   /** The machines connected now, in the order the hub keeps them. */
@@ -7782,7 +7905,11 @@ export const createServer = (
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
   });
-  /** A machine-scoped daemon function, answered or thrown in the machine's own words. */
+  /**
+   * A machine-scoped daemon function, answered, or thrown as its cause
+   * (`MachineProblem`): its machine away, silent, or its failure in the
+   * machine's own words (502 machine-call-failed).
+   */
   const callMachine = async (
     machineId: string,
     method: string,
@@ -7818,16 +7945,21 @@ export const createServer = (
         : await callAgent(machineId, method, args, timeout);
     switch (answer.kind) {
       case "unanswered":
-        throw new Error(
-          answer.reason === "dead"
-            ? machineFault(machineId, "offline")
-            : `${machineName(machineId)} didn't answer ${method} within ${secondsOf(answer.after)} s. Try again in a moment.`
+        throw new MachineProblem(
+          unansweredIn(machineId, answer, {
+            away: machineFault(machineId, "offline"),
+            silent: `${machineName(machineId)} didn't answer ${method} within ${secondsOf(answer.after)} s. Try again in a moment.`,
+          })
         );
       case "answered":
         if (!answer.value.ok) {
-          throw new Error(
-            answer.value.error ??
-              `${method} failed on ${machineName(machineId)}`
+          throw new MachineProblem(
+            problem(502, {
+              code: "machine-call-failed",
+              detail:
+                answer.value.error ??
+                `${method} failed on ${machineName(machineId)}`,
+            })
           );
         }
         return answer.value.result;
@@ -8020,6 +8152,14 @@ export const createServer = (
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
+    olderBuild: (machineId) =>
+      registry.agent(machineId) &&
+      !speaksContract(agentProtocols.get(machineId))
+        ? updatesWords.olderBuild(
+            machineName(machineId),
+            updatesWords.olderBuildInputs
+          )
+        : undefined,
     stalled: (instanceId) => stallOfPort.now()(instanceId)?.words,
     // The sweep's wake of work asleep asks the same gate every sender does,
     // and leaves a session to the send already on its way to it.
@@ -8090,8 +8230,8 @@ export const createServer = (
     send: (envelope) => {
       const sent = deliverSend(envelope);
       return sent instanceof ElysiaStatus
-        ? { reason: sent.response.detail, state: "failed" }
-        : (sent ?? { reason: null, state: "pending" });
+        ? { reason: sent.response.detail, refusal: null, state: "failed" }
+        : (sent ?? { reason: null, refusal: null, state: "pending" });
     },
     // The plan ↔ to-do link: the task's to-dos, ticked and proposed as the hub.
     todos: {
@@ -8134,6 +8274,7 @@ export const createServer = (
     reclaimUnread,
     finishOver: (instanceId) => releaseOwed({ instanceId }),
   });
+  startSentPort.fill((instanceId) => workItems.startSent(instanceId));
   // A stop walks a session's tree (tree-stops.ts): each session's end asked
   // once nothing under it is left, its item's final state once its machine
   // confirms it.
@@ -8625,6 +8766,9 @@ export const createServer = (
     releaseOwed({ machineId });
     workItems.resumeQueued();
     workItems.pauseChanged(machineId);
+    // A copy due an update was held by the pause alone: it goes now
+    // (tool-installs.ts `keepCopiesOn`).
+    keepCopiesOn(machineId);
     publishInstances(machineId);
   };
   // Each project's conversation: a session its events reach (caw.ts).
@@ -8671,13 +8815,7 @@ export const createServer = (
     // its payload names (caw.ts `startOf`: the project's, else the one you
     // last chose for its harness on that machine), or refused, saying so,
     // when it names none.
-    spawn: async (machineId, payload) => {
-      const spawned = await spawnSession(machineId, payload, "project");
-      // caw.ts reads a start that does not go as a rejection.
-      if (spawned instanceof ElysiaStatus) {
-        throw new Error(spawned.response.detail);
-      }
-    },
+    spawn: (machineId, payload) => spawnSession(machineId, payload, "project"),
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.
     stops: {
@@ -8687,7 +8825,7 @@ export const createServer = (
     send: (envelope) => {
       const sent = deliverToSession(byIdNow(envelope), false);
       return sent instanceof ElysiaStatus
-        ? { reason: sent.response.detail, state: "failed" }
+        ? { reason: sent.response.detail, refusal: null, state: "failed" }
         : sent;
     },
     end: (instanceId) =>
@@ -8869,23 +9007,39 @@ export const createServer = (
     briefing: (request) => workItems.briefing(request),
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
     context: (projectId, task) => projectMemory.contextFor(projectId, task),
-    // Its design system, read in the attempt's clone inside its boundary.
-    // A clone it could not read fails the attempt's brief in the problem's
-    // words, as the thrown one did (dispatch.ts reads a brief's words alone).
-    designSection: async (clone) => {
-      const section = await designSection(
+    // Its design system, read in the attempt's clone inside its boundary,
+    // or the problem of a clone it could not read.
+    designSection: (clone) =>
+      designSection(
         (machineId, cwd, cmd, timeoutMs, workspace) =>
           runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
             what: "command",
           }),
         clone
-      );
-      if (section instanceof ElysiaStatus) {
-        throw new Error(section.response.detail);
-      }
-      return section;
-    },
+      ),
     db,
+    // A landed attempt's diff, read in the checkout its workspace was cut
+    // from on its machine, for the judge of its task's acceptance criteria.
+    landedDiff: (item, sha, limit) => {
+      const [workspace] = db.workspacesNamed(item.workspaceId);
+      return workspace
+        ? landedDiff(
+            {
+              online: (machineId) => Boolean(registry.agent(machineId)),
+              run: runOnMachine,
+            },
+            {
+              machineId: workspace.machineId,
+              root: workspace.repoRoot,
+              base: workspace.base,
+              onto: item.landedOnto,
+              sha,
+              ...(item.landedOnto ? {} : { branch: landingBranch(item) }),
+            },
+            limit
+          )
+        : Promise.resolve({ unread: judgedWords.noWorkspace });
+    },
     lifetime,
     tasks,
     conversationFor: (projectId, by) => caw.conversationFor(projectId, by),
@@ -9369,20 +9523,25 @@ export const createServer = (
    * turn. Our own call: the summary is written on the source's harness at
    * its default model, and the new session runs on the source's harness and
    * model, in its mode. Answers the new session's id and how the job ends
-   * (nothing once it started, else why not); throws why it could not begin.
+   * (nothing once it started, else why not); the hub's problem when its
+   * source has no clone or nothing to continue from; throws why else it
+   * could not begin.
    */
   const continueAttempt = async (
     row: InstanceRow,
     taskId: string,
     comment: string
-  ): Promise<{
-    ended: Promise<string | undefined>;
-    targetInstanceId: string;
-  }> => {
+  ) => {
     const release = await cloneForContinuation(row.id);
+    if (release instanceof ElysiaStatus) {
+      return release;
+    }
     let job: ContinuationRow;
     try {
       const prepared = await prepareContinuation(row.id, comment);
+      if (prepared instanceof ElysiaStatus) {
+        return prepared;
+      }
       const { harness } = prepared.source;
       const request: ContinueRequest = {
         summarizer: summarizerOf(row),
@@ -9401,7 +9560,10 @@ export const createServer = (
     } finally {
       release();
     }
-    return {
+    const begun: {
+      ended: Promise<string | undefined>;
+      targetInstanceId: string;
+    } = {
       targetInstanceId: job.targetInstanceId,
       ended: settledContinuation(job.id).then((settled) => {
         if (settled?.stage === "started") {
@@ -9412,6 +9574,7 @@ export const createServer = (
           : (settled?.error ?? "the continuation failed");
       }),
     };
+    return begun;
   };
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
   // as a task is filed; Attach or spawn as you comment on a task (a live
@@ -9568,7 +9731,7 @@ export const createServer = (
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
     // A leaf picks from the few types it may start: Jev's pick from the
     // whole catalog would only be refused.
-    if (parent && !startsAny(sessionMayStart(parent))) {
+    if (parent && !startsAny(parent.mayStart)) {
       return {};
     }
     const projectId = parent?.projectId ?? null;
@@ -10693,10 +10856,7 @@ export const createServer = (
   ) => {
     const agent = registry.agent(row.machineId);
     if (!agent) {
-      return problem(404, {
-        code: "delegation-machine-offline",
-        detail: machineFault(row.machineId, "offline"),
-      });
+      return awayProblem(row.machineId, machineFault(row.machineId, "offline"));
     }
     sendFrame(agent, {
       ...envelope,
@@ -11624,17 +11784,73 @@ export const createServer = (
   };
 
   /**
+   * What a dashboard's start that goes notes before its row opens. A
+   * relaunch replaces the process — questions the old one had open are
+   * settled by its teardown and must not replay. What no process was ever
+   * handed (owed) goes to the new one, and what the old one was handed and
+   * never read its machine hands back for it ({@link takeBack}). A session
+   * whose harness never began a conversation comes back fresh under its id
+   * (core `relaunchOf`), and its transcript says so.
+   */
+  const noteDashboardStart = (
+    message: Envelope,
+    instanceId: string,
+    asked: NamedSpawn,
+    before: ReturnType<typeof rowNamed>
+  ): void => {
+    forgetPending(instanceId, UNREAD.restarted, false, "all");
+    noteChosenMode(message.machineId, asked, before !== undefined);
+    if (
+      before &&
+      !peekResume(message.payload) &&
+      relaunchOf(before).kind === "fresh"
+    ) {
+      noteFreshStart(before);
+    }
+    noteRespawn(instanceId, message.requestId, message.payload);
+  };
+
+  /**
+   * Who a dashboard's start is and where it begins: its origin and parent,
+   * its project (a row keeps the one it opened in, and its machine is handed
+   * that one, as every revive hands it the row's, `revivePayloadOf`), and
+   * its starting set ({@link startingSetOf}); undefined once refused, its
+   * words sent.
+   */
+  const dashboardBegins = (
+    ws: HubSocket,
+    message: Envelope,
+    before: { projectId?: string | null } | undefined,
+    payload: NamedSpawn
+  ) => {
+    const start = dashboardStartOf(
+      ws,
+      message,
+      before !== undefined,
+      payload.cwd
+    );
+    const projectId = before?.projectId ?? start.projectId;
+    const begins = startingSetOf({ ...payload, projectId });
+    if ("refusal" in begins) {
+      console.warn(spawnWords.refusedLine(begins.refusal));
+      sendFrame(ws, failure(message, begins.refusal));
+      return;
+    }
+    return { ...start, projectId, startingSet: begins.startingSet };
+  };
+
+  /**
    * A dashboard's start, from its permission mode on: launch directory,
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
   const startFromDashboard = (
     ws: HubSocket,
     message: Envelope,
-    asked: NamedSpawn | { refusal: string }
+    asked: Awaited<ReturnType<typeof piDefaultFor>>
   ): void => {
-    if ("refusal" in asked) {
-      console.warn(spawnWords.refusedLine(asked.refusal));
-      sendFrame(ws, failure(message, asked.refusal));
+    if (asked instanceof ElysiaStatus) {
+      console.warn(spawnWords.refusedLine(asked.response.detail));
+      sendFrame(ws, failure(message, asked.response.detail));
       return;
     }
     // A session the hub has a row for is started again (a relaunch, a
@@ -11677,32 +11893,12 @@ export const createServer = (
       );
       return;
     }
-    // A relaunch replaces the process — questions the old one had
-    // open are settled by its teardown and must not replay. What no process
-    // was ever handed (owed) goes to the new one, and what the old one was
-    // handed and never read its machine hands back for it ({@link takeBack}).
-    forgetPending(message.instanceId, UNREAD.restarted, false, "all");
-    noteChosenMode(message.machineId, asked, before !== undefined);
-    // A session whose harness never began a conversation comes back fresh
-    // under its id (core `relaunchOf`), and its transcript says so.
-    if (
-      before &&
-      !peekResume(message.payload) &&
-      relaunchOf(before).kind === "fresh"
-    ) {
-      noteFreshStart(before);
+    const begins = dashboardBegins(ws, message, before, payload);
+    if (!begins) {
+      return;
     }
-    noteRespawn(message.instanceId, message.requestId, message.payload);
-    const start = dashboardStartOf(
-      ws,
-      message,
-      before !== undefined,
-      payload.cwd
-    );
-    const { origin, parent } = start;
-    // A row keeps the project it opened in; its machine is handed that one,
-    // as every revive hands it the row's (`revivePayloadOf`).
-    const projectId = before?.projectId ?? start.projectId;
+    const { origin, parent, projectId } = begins;
+    noteDashboardStart(message, message.instanceId, asked, before);
     // Brought back by the operator: nothing of the stop is left to carry.
     openInstance({
       id: message.instanceId,
@@ -11724,7 +11920,7 @@ export const createServer = (
       // its first spawn alone, `db.openInstance`).
       clean: payload.clean === true,
       // A person's start in a project takes its project's starting set.
-      ...startingSetOf({ ...payload, projectId }),
+      startingSet: begins.startingSet,
       ...parent,
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
@@ -12261,13 +12457,17 @@ export const createServer = (
    * dir was asked) is filed all the same, its word `unauthenticated` (no
    * account can run on it; the machine's own word stays): the refusal is the
    * report, and the dashboard puts it, with its fix, where Claude would
-   * start.
+   * start. Each is filed by the machine's own name for its harness, one
+   * this hub does not run included (a newer agent's): its read narrows it
+   * (db machines.ts `harnessesByMachine`). Filed as a harness this hub
+   * runs, such a report failed its write and took the beat's every other
+   * report with it.
    */
   const harnessesReported = (
     machineId: string,
     reported: NonNullable<AgentFrame["harnesses"]>
   ): void => {
-    const filed = reported.flatMap((report): HarnessReport[] => {
+    const filed = reported.flatMap((report): NamedHarnessReport[] => {
       const auth =
         report.auth ??
         harnessReportOf(machineId, report.harness)?.auth ??
@@ -12275,7 +12475,7 @@ export const createServer = (
       return auth
         ? [
             received(
-              HarnessReportSchema,
+              NamedHarnessReportSchema,
               { ...report, auth },
               "a machine's report beat (a harness's report)"
             ),
@@ -12284,20 +12484,19 @@ export const createServer = (
     });
     db.mergeAgentHarnesses(machineId, filed);
     capabilityReports.delete(machineId);
-    const claudeReport = reported.find(
-      (report) => traitsOf(report.harness).accountDir
-    );
+    const claudeReport = reported.find((report) => {
+      const harness = harnessNamed(report.harness);
+      return harness !== undefined && traitsOf(harness).accountDir;
+    });
     // The machine's word on Claude moves with its Claude report,
     // not only at its register: a keychain unlocked from the
     // dashboard clears the machine's row (its Unlock offer) now.
     // A report whose dirs did not answer carries no word, and the
     // row keeps the last one.
-    const claudeWord = claudeReport?.auth;
-    if (
-      claudeWord &&
-      AUTH_STATES.includes(claudeWord) &&
-      db.setAgentAuth(machineId, claudeWord)
-    ) {
+    const claudeWord = AUTH_STATES.find(
+      (state) => state === claudeReport?.auth
+    );
+    if (claudeWord && db.setAgentAuth(machineId, claudeWord)) {
       publishInstances(machineId);
     }
     // Where each Claude account is signed in on this machine, as
@@ -12306,7 +12505,7 @@ export const createServer = (
     const claudeAccounts = claudeReport?.accounts;
     if (claudeAccounts) {
       syncAccounts(machineId, "claude", {
-        reports: claudeAccounts,
+        reports: claudeAccounts.map(accountReportOf),
         unread: claudeReport?.unreadAccounts ?? [],
       });
     }
@@ -12319,15 +12518,15 @@ export const createServer = (
    * one its register's `os` named (core `machinePlatform`) moves which
    * platform-scoped servers it runs: what moved goes.
    */
-  const toolsReported = (
-    ws: AgentSocket,
-    machineId: string,
-    agentFrame: AgentFrame
-  ): void => {
+  const toolsReported = (machineId: string, agentFrame: AgentFrame): void => {
     const tools = agentFrame.tools.map(keptToolStatus);
     if (tools.length > 0) {
+      sayTakenOver(machineId, tools);
       db.mergeAgentTools(machineId, tools);
-      autoInstall(machineId, ws);
+      keepCopiesOn(machineId);
+      // The cells are this connection's now, with any install the pass just
+      // sent: a read waiting to ask them why it failed asks now.
+      toolFacts.reported(machineId);
     }
     const capabilities = keptCapabilities(agentFrame.machineCapabilities);
     if (!capabilities) {
@@ -12416,7 +12615,7 @@ export const createServer = (
     if (reported) {
       harnessesReported(machineId, reported);
     }
-    toolsReported(ws, machineId, agentFrame);
+    toolsReported(machineId, agentFrame);
     accountsReported(machineId, agentFrame);
     const dated = beatDated(machineId, agentFrame);
     if (
@@ -12462,8 +12661,18 @@ export const createServer = (
     for (const reading of accounts ?? []) {
       noteProviderReading(db, message.machineId, reading);
     }
-    if (buckets && buckets.length > 0) {
-      db.putUsageBuckets(message.machineId, buckets);
+    // A bucket of a harness this build does not scan (a newer agent's) is
+    // left out, as `usage_buckets.harness` holds only the harnesses it reads.
+    const scanned = (buckets ?? []).filter((bucket) =>
+      USAGE_HARNESSES.some((harness) => harness === bucket.harness)
+    );
+    if (scanned.length < (buckets?.length ?? 0)) {
+      console.warn(
+        `[usage] ${machineName(message.machineId)}: ${(buckets?.length ?? 0) - scanned.length} bucket(s) of a harness this hub does not scan left out`
+      );
+    }
+    if (scanned.length > 0) {
+      db.putUsageBuckets(message.machineId, scanned);
       // Spend moved: every capped project's state with it.
       caps.recheck();
     }
@@ -12655,12 +12864,13 @@ export const createServer = (
    * one already detaching), the process lived on under sessiond, and the
    * register after the restart restored it as a session the user had left
    * running. Filed `stopped`, the row is no orphan to restore, no beat
-   * promotes it, and the first beat that still lists a process for it ends
-   * that process (`endStopped`, in the heartbeat). Only a send brings it
-   * back (`wakeForSend`). Both Stop and Discard wait for the machine's
-   * teardown receipt: persisting intent is not proof that the runner has
-   * ended. Then it cuts the turn it lands in, as an interrupt does, and
-   * what it cut says it was the person's Stop.
+   * promotes it, and each beat whose custody still lists a process for it
+   * sends that process its stop again until a fresh reading finds it gone
+   * (session-lifecycle.ts `reconcile`, from {@link beatReconciled}). Only a
+   * send brings it back (`wakeForSend`). Both Stop and Discard wait for
+   * the machine's teardown receipt: persisting intent is not proof that the
+   * runner has ended. Then it cuts the turn it lands in, as an interrupt
+   * does, and what it cut says it was the person's Stop.
    */
   const stopAskedByDashboard: DashboardVerb = (ws, message) => {
     stopFromDashboard(ws, message);
@@ -12753,6 +12963,8 @@ export const createServer = (
     handle(ws, message);
   };
 
+  /** The one setter of an away machine's headers (machine-reads.ts `nameAwayMachine`). */
+  const nameAway = nameAwayMachine(ctx);
   return Object.assign(
     // Every body, query and params schema closed (Elysia's
     // `nonAdditionalProperties`): a field a route doesn't take is refused,
@@ -12764,7 +12976,16 @@ export const createServer = (
       // A request with a field its route doesn't take: a 422 naming each
       // (unknown-fields.ts), before any plugin's or route's own error
       // words, which would say only that the shape was wrong.
-      .onError("global", ({ error }) => {
+      .onError("global", ({ error, set }) => {
+        // A machine's cause thrown from deep in a step: Elysia answers the
+        // problem it holds (machine-answers.ts `MachineProblem`), and its
+        // machine, when away, is named on it by the one setter a returned
+        // answer meets below. Returning it here would add it to every
+        // route's answers.
+        if (error instanceof MachineProblem) {
+          nameAway({ responseValue: error.value(), set });
+          return;
+        }
         const unknown = unknownFieldsOf(error);
         return unknown
           ? problem(422, {
@@ -12811,6 +13032,10 @@ export const createServer = (
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
       .onRequest(async ({ request }) => await bodyLimitRefusal(request))
+      // A machine that is away named on whatever answer says so, however
+      // deep it was made (machine-answers.ts `awayProblem`): its headers'
+      // one setter, before every route.
+      .mapResponse("global", nameAway)
       .use(
         previewRoutes({
           deviceOf: (request) => {

@@ -198,7 +198,7 @@ export default {
         // Loaded in place of agent harnesses/index.ts by the test builds: scripts/build-binary.ts.
         "scripts/binary/test-harnesses.ts",
         // Each bundled by `bun build` and run on the rig's machines: scripts/binary/e2e-test.sh machine_helpers.
-        "scripts/binary/e2e-{start-session,stop-session,during-install}.ts",
+        "scripts/binary/e2e-{start-session,stop-session,during-install,db-rows}.ts",
         // scripts/binary/e2e-test.sh
         "scripts/binary/e2e-fixture.ts",
         // scripts/binary/smoke-test.sh

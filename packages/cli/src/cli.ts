@@ -9,9 +9,13 @@ import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
 import { isServiceId } from "@cawco/agent/service-manager/units";
-import { SERVICE_IDS } from "@cawco/core/binary-installation";
+import { readUpdateState, SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { hubCredentialSocket } from "@cawco/core/paths/hub";
+import {
+  hubCredentialSocket,
+  hubDbPath,
+  hubStoppedPath,
+} from "@cawco/core/paths/hub";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import type { AgentRow } from "@cawco/core/protocol";
 import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
@@ -19,6 +23,8 @@ import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
+import { hubDatabaseWords } from "@cawco/core/words/hub-database";
+import { updatesWords } from "@cawco/core/words/updates";
 import { dataOf, reached } from "@cawco/hub/client";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { ownerRead } from "./owner";
@@ -402,10 +408,34 @@ const printFleet = (agents: AgentRow[]): void => {
   }
 };
 
+/**
+ * On the hub's machine, what is known of why the hub does not answer: why its
+ * last start stopped before it opened its database, as that start wrote it
+ * beside the database (core paths/hub.ts `hubStoppedPath`; a start that opens
+ * it removes it), and the last update's failure in the words the update wrote
+ * (core binary-installation.ts `readUpdateState`), each a line. Said where
+ * the hub does not answer, as why.
+ */
+const hubDown = async (): Promise<string | undefined> => {
+  const file = Bun.file(hubStoppedPath(hubDbPath()));
+  const update = await readUpdateState();
+  const lines = [
+    (await file.exists())
+      ? hubDatabaseWords.down((await file.text()).trim())
+      : undefined,
+    (update?.phase === "failed" || update?.phase === "failed-rolled-back") &&
+    update.error
+      ? updatesWords.lastFailed(update.error)
+      : undefined,
+  ].filter((line) => line !== undefined);
+  return lines.length > 0 ? lines.join("\ncawco: ") : undefined;
+};
+
 const status = async (args: Args): Promise<number> => {
+  const down = await hubDown();
   const hub = await resolve(args);
   if (!hub) {
-    console.error(NO_HUB);
+    console.error(down ? `cawco: ${down}` : NO_HUB);
     return 1;
   }
 
@@ -424,7 +454,7 @@ const status = async (args: Args): Promise<number> => {
   );
   if (asked.kind === "unanswered") {
     console.error(
-      `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`
+      `\ncawco: ${down ?? `${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`}`
     );
     return 1;
   }
@@ -433,7 +463,7 @@ const status = async (args: Args): Promise<number> => {
     reached(answer);
   } catch (error) {
     console.error(
-      `\ncawco: ${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`
+      `\ncawco: ${down ?? `${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`}`
     );
     return 1;
   }
@@ -627,7 +657,9 @@ const writeBinaryUnits = async (services: boolean): Promise<void> => {
 /**
  * `cawco binary-pins`, run from this build by the build before it, before the
  * swap (agent binary-update.ts `putOnPins`): this build's pinned harnesses go
- * on, with the methods this build knows, each recorded as it lands. `cawco
+ * on as the fleet chose (agent tools.ts `putOnFleetPins`: CawCo's own copies,
+ * under "update"), with the methods this build knows, each recorded as it
+ * lands; what it left, and why, is said with what went on. `cawco
  * binary-pins back <build>`, run from the build that runs instead of <build>:
  * what went on for <build> goes back on for this one (agent pin-record.ts).
  * Says what it did on one line; a failure is one sentence on stderr and exit 1,
@@ -643,16 +675,17 @@ const runBinaryPins = async (args: Args): Promise<number> => {
         "binary-pins takes nothing, or back <the build that will not run>"
       );
     }
-    const { pinMoveWords, putOnPins } = await import("@cawco/agent/tools");
-    const { putBackPins, recordPinMove } =
+    const { putOnFleetPins } = await import("@cawco/agent/tools");
+    const { fleetToolUpdates, putBackPins, recordPinMove } =
       await import("@cawco/agent/pin-record");
     const said = back
       ? await putBackPins(back, CLI_VERSION)
-      : (
-          await putOnPins(pinnedTools(), CLI_VERSION, (move) =>
-            recordPinMove(CLI_VERSION, move)
-          )
-        ).map(pinMoveWords);
+      : await putOnFleetPins(
+          pinnedTools(),
+          CLI_VERSION,
+          await fleetToolUpdates(),
+          (move) => recordPinMove(CLI_VERSION, move)
+        );
     console.log(said.join(", "));
     return 0;
   } catch (error) {

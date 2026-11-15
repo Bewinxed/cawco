@@ -1,12 +1,22 @@
 /** Machines: each one's row, what its daemon reports, and re-keying and removing one. */
 
+import type { AccountReport } from "@cawco/core/accounts";
+import type {
+  MachineCapabilities,
+  NamedMachineCapabilities,
+} from "@cawco/core/capabilities";
 import type {
   FleetItemStatus,
   FleetSyncOutcome,
   FleetSyncReport,
 } from "@cawco/core/fleet";
-import type { HarnessReport } from "@cawco/core/harness";
-import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
+import {
+  type HarnessKind,
+  harnessNamed,
+  type PermissionMode,
+  permissionModeNamed,
+} from "@cawco/core/harness/kinds";
 import {
   type MachinePath,
   MachinePathRefused,
@@ -18,7 +28,20 @@ import type {
   RunKind,
   StoppedCommands,
 } from "@cawco/core/protocol";
-import type { ToolStatus } from "@cawco/core/tools";
+import {
+  AccountKindSchema,
+  HarnessReportSchema,
+  MachineCapabilitySchema,
+  MediaPathShape,
+  PermissionModeShape,
+  ToolSigninSchema,
+  WorkspaceToolSchema,
+} from "@cawco/core/stored-shapes";
+import type {
+  ReportedToolStatus,
+  ToolSignin,
+  ToolStatus,
+} from "@cawco/core/tools";
 import { stoppedWords } from "@cawco/core/words/machine-pause";
 import { and, asc, eq, getTableName, ne, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -34,9 +57,8 @@ import {
   removedMachines,
   usageBuckets,
 } from "./schema";
+import type { AgentAuth } from "./stored-types";
 import type { Tx } from "./tx";
-
-export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 /** How many rows moved, by what they are: what a re-key answers. */
 type Moved = (what: string, count: number) => void;
@@ -58,12 +80,81 @@ const machineKept = (tx: Tx, machineId: string): boolean =>
     .where(eq(agents.machineId, machineId))
     .get() !== undefined;
 
+/** An account a machine's harness report names, read: a kind this build does not know left out. */
+export const accountReportOf = ({
+  kind,
+  ...account
+}: NonNullable<NamedHarnessReport["accounts"]>[number]): AccountReport => {
+  const named = AccountKindSchema.safeParse(kind);
+  return named.success ? { ...account, kind: named.data } : account;
+};
+
+/**
+ * A filed harness report (core `NamedHarnessReport`) read as a
+ * {@link HarnessReport}: a permission mode or an account kind this build
+ * does not know left out, and the report whole by its schema, so one whose
+ * harness, sign-in word or refusal this build does not know is none it can
+ * run (undefined).
+ */
+const harnessReportOf = ({
+  accounts,
+  capabilities,
+  ...report
+}: NamedHarnessReport): HarnessReport | undefined => {
+  const parsed = HarnessReportSchema.safeParse({
+    ...report,
+    capabilities: {
+      ...capabilities,
+      permissionModes: capabilities.permissionModes.filter(
+        (mode) => PermissionModeShape.safeParse(mode).success
+      ),
+    },
+    ...(accounts ? { accounts: accounts.map(accountReportOf) } : {}),
+  });
+  return parsed.success ? parsed.data : undefined;
+};
+
+/** A tool's sign-in state as its machine said it, read: one this build does not know is `unknown`, as a read that said neither is. */
+const signinStateOf = (state: string): ToolSignin["state"] => {
+  const parsed = ToolSigninSchema.shape.state.safeParse(state);
+  return parsed.success ? parsed.data : "unknown";
+};
+
+/**
+ * What a machine reported it has installed (core `NamedMachineCapabilities`),
+ * read: an item, a media path or a missing tool this build does not know is
+ * left out.
+ */
+const capabilitiesOf = ({
+  items,
+  ...capabilities
+}: NamedMachineCapabilities): MachineCapabilities => ({
+  ...capabilities,
+  items: items.flatMap(({ media, missing, ...item }) => {
+    const parsed = MachineCapabilitySchema.safeParse({
+      ...item,
+      ...(media !== undefined && MediaPathShape.safeParse(media).success
+        ? { media }
+        : {}),
+      ...(missing
+        ? {
+            missing: missing.filter(
+              (tool) => WorkspaceToolSchema.safeParse(tool).success
+            ),
+          }
+        : {}),
+    });
+    return parsed.success ? [parsed.data] : [];
+  }),
+});
+
 export interface MachinesDb {
   /** The machine's fleet generation and the fingerprint of what it was to hold at it (hub fleet-sync.ts); generation 0 for a machine never sent one. */
   readonly agentFleetGeneration: (machineId: string) => {
     fingerprint: string | null;
     generation: number;
   };
+  /** The machine's reports of the harnesses this hub runs ({@link harnessesByMachine}); undefined when it has none. */
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   /**
    * One machine's row as {@link listAgents} shapes it, read alone: what
@@ -80,7 +171,7 @@ export interface MachinesDb {
     harness: HarnessKind,
     mode: PermissionMode
   ) => void;
-  /** The permission mode the person last chose for `harness` on `machineId` (schema `chosenModes`); none when never. */
+  /** The permission mode the person last chose for `harness` on `machineId` (schema `chosenModes`); none when never, or when it is none CawCo offers. */
   readonly chosenMode: (
     machineId: string,
     harness: string
@@ -135,13 +226,18 @@ export interface MachinesDb {
    * What each harness on the machine can do, as its daemon's report beat
    * said: every harness the beat names is replaced, and one it leaves out
    * keeps its last report, since its daemon could not read it this time.
+   * Each is filed by the machine's own name for its harness, one this hub
+   * does not run included (core `NamedHarnessReport`).
    */
   readonly mergeAgentHarnesses: (
     machineId: string,
-    harnesses: HarnessReport[]
+    harnesses: NamedHarnessReport[]
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
-  readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
+  readonly mergeAgentTools: (
+    machineId: string,
+    statuses: ReportedToolStatus[]
+  ) => void;
   /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
   readonly namedMachines: () => { hostname: string; machineId: string }[];
   /**
@@ -165,7 +261,7 @@ export interface MachinesDb {
   /** What the machine has installed, as its latest capabilities beat said. */
   readonly setAgentCapabilities: (
     machineId: string,
-    capabilities: import("@cawco/core/capabilities").MachineCapabilities
+    capabilities: NamedMachineCapabilities
   ) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
@@ -185,7 +281,10 @@ export interface MachinesDb {
     machineId: string,
     outcome: FleetSyncOutcome
   ) => void;
-  readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
+  readonly setAgentToolCell: (
+    machineId: string,
+    status: ReportedToolStatus
+  ) => void;
   /**
    * Pauses a machine until `until`, with what the pause stopped as it began,
    * or ends its pause (null, null); false when no such machine (machine-pause.ts).
@@ -264,7 +363,14 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     ...(row.version === null ? {} : { version: row.version }),
     ...(row.method === null ? {} : { method: row.method }),
     ...(row.detail === null ? {} : { detail: row.detail }),
-    ...(row.signin === null ? {} : { signin: row.signin }),
+    ...(row.signin === null
+      ? {}
+      : { signin: { ...row.signin, state: signinStateOf(row.signin.state) } }),
+    ...(row.copy === null ? {} : { copy: row.copy }),
+    ...(row.wants === null ? {} : { wants: row.wants }),
+    ...(row.triedAt === null ? {} : { triedAt: row.triedAt.getTime() }),
+    ...(row.goingTo === null ? {} : { to: row.goingTo }),
+    ...(row.startedBy === null ? {} : { startedBy: row.startedBy }),
   });
 
   /** Each machine's tool statuses by catalog id; one machine's with `machineId`. */
@@ -293,7 +399,10 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     toolsByMachine(machineId).get(machineId) ?? {};
 
   /** Each status over the machine's cell for its tool, the rest kept, in one transaction. */
-  const putToolCells = (machineId: string, statuses: ToolStatus[]): void => {
+  const putToolCells = (
+    machineId: string,
+    statuses: ReportedToolStatus[]
+  ): void => {
     db.transaction((tx) => {
       // A machine the hub keeps no row for has no cells to keep.
       if (!machineKept(tx, machineId)) {
@@ -306,6 +415,12 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           method: status.method ?? null,
           detail: status.detail ?? null,
           signin: status.signin ?? null,
+          copy: status.copy ?? null,
+          wants: status.wants ?? null,
+          triedAt:
+            status.triedAt === undefined ? null : new Date(status.triedAt),
+          goingTo: status.to ?? null,
+          startedBy: status.startedBy ?? null,
           at: new Date(status.at),
         };
         tx.insert(agentTools)
@@ -319,11 +434,21 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     });
   };
 
-  /** Each machine's harness reports, in the order they were last reported; one machine's with `machineId`. */
+  /**
+   * Each machine's harness reports, in the order they were last reported;
+   * one machine's with `machineId`. A row keeps the machine's report in its
+   * own words (core `NamedHarnessReport`), read here ({@link harnessReportOf}):
+   * one this hub can read is among `known`; any other's harness is among
+   * `unknown`, by the machine's name for it, a harness this hub cannot run.
+   */
   const harnessesByMachine = (
     machineId?: string
-  ): Map<string, HarnessReport[]> => {
-    const byMachine = new Map<string, HarnessReport[]>();
+  ): {
+    known: Map<string, HarnessReport[]>;
+    unknown: Map<string, string[]>;
+  } => {
+    const known = new Map<string, HarnessReport[]>();
+    const unknown = new Map<string, string[]>();
     for (const row of db
       .select()
       .from(agentHarnesses)
@@ -334,15 +459,25 @@ export const machinesDb = (core: DbCore): MachinesDb => {
       )
       .orderBy(sql`rowid`)
       .all()) {
-      byMachine.set(row.machineId, [
-        ...(byMachine.get(row.machineId) ?? []),
-        row.report,
-      ]);
+      const report = harnessReportOf(row.report);
+      if (report) {
+        known.set(row.machineId, [...(known.get(row.machineId) ?? []), report]);
+      } else {
+        unknown.set(row.machineId, [
+          ...(unknown.get(row.machineId) ?? []),
+          row.harness,
+        ]);
+      }
     }
-    return byMachine;
+    return { known, unknown };
   };
 
-  /** Each machine's chosen permission mode by harness (schema `chosenModes`). */
+  /**
+   * Each machine's chosen permission mode by harness (schema `chosenModes`).
+   * A mode is kept as text, as a start named it; one CawCo does not offer
+   * (core `permissionModeNamed`) is no choice the form can open on, and is
+   * left out, as {@link DbShape.chosenMode} leaves it.
+   */
   const chosenModesByMachine = (
     machineId?: string
   ): Map<string, Partial<Record<HarnessKind, PermissionMode>>> => {
@@ -359,10 +494,13 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           : eq(chosenModes.machineId, machineId)
       )
       .all()) {
-      byMachine.set(row.machineId, {
-        ...byMachine.get(row.machineId),
-        [row.harness]: row.permissionMode,
-      });
+      const mode = permissionModeNamed(row.permissionMode);
+      if (mode) {
+        byMachine.set(row.machineId, {
+          ...byMachine.get(row.machineId),
+          [row.harness]: mode,
+        });
+      }
     }
     return byMachine;
   };
@@ -394,7 +532,8 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         ...agent
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
       }) => {
-        const harnesses = reports.get(agent.machineId);
+        const harnesses = reports.known.get(agent.machineId);
+        const unknownHarnesses = reports.unknown.get(agent.machineId);
         const chosen = modes.get(agent.machineId);
         return {
           ...agent,
@@ -406,9 +545,12 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           ...(fleetItems ? { fleetItems } : {}),
           ...(build ? { build } : {}),
           ...(harnesses ? { harnesses } : {}),
+          ...(unknownHarnesses ? { unknownHarnesses } : {}),
           ...(chosen ? { chosenModes: chosen } : {}),
           ...(home ? { home } : {}),
-          ...(machineCapabilities ? { machineCapabilities } : {}),
+          ...(machineCapabilities
+            ? { machineCapabilities: capabilitiesOf(machineCapabilities) }
+            : {}),
         };
       }
     );
@@ -430,18 +572,25 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         throw error;
       }
     },
-    agentHarnesses: (machineId) => harnessesByMachine(machineId).get(machineId),
-    chosenMode: (machineId, harness) =>
-      db
-        .select({ mode: chosenModes.permissionMode })
-        .from(chosenModes)
-        .where(
-          and(
-            eq(chosenModes.machineId, machineId),
-            eq(chosenModes.harness, harness as HarnessKind)
+    agentHarnesses: (machineId) =>
+      harnessesByMachine(machineId).known.get(machineId),
+    chosenMode: (machineId, harness) => {
+      const kind = harnessNamed(harness);
+      return kind
+        ? permissionModeNamed(
+            db
+              .select({ mode: chosenModes.permissionMode })
+              .from(chosenModes)
+              .where(
+                and(
+                  eq(chosenModes.machineId, machineId),
+                  eq(chosenModes.harness, kind)
+                )
+              )
+              .get()?.mode
           )
-        )
-        .get()?.mode,
+        : undefined;
+    },
     chooseMode: (machineId, harness, mode) => {
       const row = {
         machineId,

@@ -33,7 +33,11 @@ import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
-import { RelayPortsSchema, RelayReachSchema } from "@cawco/core/stored-shapes";
+import {
+  RelayPortsSchema,
+  RelayReachSchema,
+  StreamRelayStateSchema,
+} from "@cawco/core/stored-shapes";
 import {
   RELAY_CERTIFY,
   RELAY_REMOVE,
@@ -61,7 +65,12 @@ import { ElysiaStatus, problem } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
-
+import {
+  type AwayProblem,
+  awayProblem,
+  type SilentProblem,
+  silentProblem,
+} from "./machine-answers";
 import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
@@ -149,17 +158,13 @@ export interface StreamRelayDeps {
   renewed: (expiresAt: number) => void;
 }
 
-/** The relay's machine's refusal: away or late (503), or refusing in its own words (409). */
+/** The relay's machine's refusal: away (503) or silent (504), or its failure in its own words (502). */
 export type RelayMachineRefusal =
-  | ReturnType<
-      typeof problem<503, { code: "stream-relay-machine-away"; detail: string }>
-    >
-  | ReturnType<
-      typeof problem<503, { code: "stream-relay-machine-late"; detail: string }>
-    >
+  | AwayProblem
+  | SilentProblem
   | ReturnType<
       typeof problem<
-        409,
+        502,
         { code: "stream-relay-machine-refused"; detail: string }
       >
     >;
@@ -271,25 +276,22 @@ const ACT: Record<string, string> = {
   issued: "certificate's issue",
 };
 
-/** The relay's machine's answer, or its refusal in its own words. */
+/** The relay's machine's answer (machine `machineId`, `machine` by name), or its refusal in its own words. */
 const answered = <T>(
   read: Bounded<{ ok: boolean; result?: unknown; error?: string }>,
+  machineId: string,
   machine: string,
   what: string
 ): T | RelayMachineRefusal => {
   if (read.kind === "unanswered") {
     return read.reason === "dead"
-      ? problem(503, {
-          code: "stream-relay-machine-away",
-          detail: STREAM_RELAY_WORDS.machineAway(machine),
-        })
-      : problem(503, {
-          code: "stream-relay-machine-late",
-          detail: `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`,
-        });
+      ? awayProblem(machineId, STREAM_RELAY_WORDS.machineAway(machine))
+      : silentProblem(
+          `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
+        );
   }
   if (!read.value.ok) {
-    return problem(409, {
+    return problem(502, {
       code: "stream-relay-machine-refused",
       detail: read.value.error ?? `The stream relay was not ${what}.`,
     });
@@ -325,7 +327,7 @@ export interface StreamRelay {
     | undefined
     | ReturnType<
         typeof problem<
-          409,
+          502,
           { code: "stream-relay-not-removed"; detail: string }
         >
       >
@@ -395,6 +397,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     const read = await call(relay.machineId, RELAY_START, [args], START_MS);
     const frame = answered<RelayFrame>(
       read,
+      relay.machineId,
       machineName(relay.machineId),
       "started"
     );
@@ -413,9 +416,17 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     ({ progress } = frame);
+    // A state this build does not know (a newer agent's) leaves the kept
+    // one: `stream_relay.state` holds only the states this hub reads.
+    const state = StreamRelayStateSchema.safeParse(frame.state);
+    if (!state.success) {
+      console.warn(
+        `[stream-relay] ${frame.machineId}: its state ${JSON.stringify(frame.state)} is none this hub knows, so the relay's kept state stands`
+      );
+    }
     // The machine's word on its relay, taken into CawCo's types as it is kept.
     update({
-      state: frame.state,
+      ...(state.success ? { state: state.data } : {}),
       ports: received(RelayPortsSchema, frame.ports, "a machine's relay frame"),
       why: frame.why ?? null,
       whyCommand: frame.command ?? null,
@@ -468,6 +479,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     );
     const done = answered<RelayRenewed>(
       read,
+      relay.machineId,
       machineName(relay.machineId),
       "renewed"
     );
@@ -510,6 +522,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       const read = await call(machineId, RELAY_CERTIFY, [args], CERTIFY_MS);
       const certified = answered<RelayCertified>(
         read,
+        machineId,
         machineName(machineId),
         "issued"
       );
@@ -560,6 +573,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
       const frame = answered<RelayFrame>(
         read,
+        relay.machineId,
         machineName(relay.machineId),
         "stopped"
       );
@@ -580,7 +594,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
       if (read.kind === "answered" && !read.value.ok) {
-        return problem(409, {
+        return problem(502, {
           code: "stream-relay-not-removed",
           detail:
             read.value.error ??

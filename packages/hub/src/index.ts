@@ -1,9 +1,13 @@
 import "@cawco/core/no-huge-pages";
+import { rm } from "node:fs/promises";
 import { readBuildInfo } from "@cawco/core/build-info";
 import { DatabaseHeld, lockDatabase } from "@cawco/core/db-lock";
 import { detach } from "@cawco/core/detach";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
 import { keepFoldersPrivate } from "@cawco/core/folders";
+import { unknownMigrations } from "@cawco/core/migration-state";
+import { hubStoppedPath } from "@cawco/core/paths/hub";
+import { writeStateFile } from "@cawco/core/state-file";
 import { Effect, Layer } from "effect";
 import {
   BIND_HOST,
@@ -82,6 +86,17 @@ export const startHub = async (): Promise<void> => {
     }
     throw error;
   }
+  // A database holding a migration this build does not have is not opened
+  // (core migration-state.ts),
+  // and why is kept beside it for `cawco status`; a start that opens it
+  // removes that.
+  const unknown = unknownMigrations(DB_PATH);
+  if (unknown) {
+    await writeStateFile(hubStoppedPath(DB_PATH), `${unknown}\n`);
+    console.error(`[hub] ${unknown}`);
+    process.exit(1);
+  }
+  await rm(hubStoppedPath(DB_PATH), { force: true });
   await Effect.runPromise(
     Effect.provide(
       main,

@@ -3,7 +3,6 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { PlanStep } from "@cawco/core/plan";
-import type { PreviewDown } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasSpec,
@@ -23,10 +22,11 @@ import type { Caw } from "../caw";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import type { DecisionLinks } from "../decision-problems";
 import type { ArtifactNamed } from "../decision-program";
-
 import type { HubLifetimeShape } from "../lifetime";
+import type { AwayProblem, SilentProblem } from "../machine-answers";
 import type { PageBuilt, PageFolderProblem } from "../page-problems";
-import type { PreviewListeners } from "../preview";
+import type { PreviewListeners, PreviewUnloaded } from "../preview";
+import type { OpenStop } from "../preview-stops";
 import type { ProblemsOf } from "../refusal";
 import type { CardsRouted, Settler } from "../settling-answers";
 import type { SentPage } from "../setup";
@@ -36,6 +36,7 @@ import type {
   Browsed,
   CanvasScreen,
   DesignAsk,
+  HandedReceiver,
   MarksDelivery,
   MarksOutcome,
   PageFrom,
@@ -48,10 +49,8 @@ type PerStatus<Status extends number> = Status extends number
   ? ReturnType<typeof problem<Status, { code: string; detail: string }>>
   : never;
 
-/** A machine call of the hub's own wiring that no machine answered: away (503), or not in time (504). */
-type Unanswered<Away extends string, Late extends string> =
-  | ReturnType<typeof problem<503, { code: Away; detail: string }>>
-  | ReturnType<typeof problem<504, { code: Late; detail: string }>>;
+/** A machine call of the hub's own wiring that no machine answered: away, or not in time. */
+type Unanswered = AwayProblem | SilentProblem;
 
 /** A stage's refusal (artifact-events.ts `onStage`): its workspace gone or on no machine, its machine away or late, or the stage's own no. */
 type StageRefused =
@@ -61,8 +60,8 @@ type StageRefused =
   | ReturnType<
       typeof problem<409, { code: "stage-workspace-unplaced"; detail: string }>
     >
-  | Unanswered<"stage-machine-away", "stage-machine-late">
-  | ReturnType<typeof problem<422, { code: "stage-said-no"; detail: string }>>;
+  | Unanswered
+  | ReturnType<typeof problem<502, { code: "stage-said-no"; detail: string }>>;
 
 /** Why an artifact has no origin a browser of the session's own opens (preview-browse.ts `browsedOrigin`): no session holds it, no machine serves it, or its listener does not open. */
 type OriginRefused =
@@ -70,6 +69,23 @@ type OriginRefused =
   | ReturnType<typeof problem<409, { code: "browse-unserved"; detail: string }>>
   | Exclude<ReturnType<PreviewListeners["address"]>, { port: number }>
   | Exclude<ReturnType<PreviewListeners["embed"]>, { port: number }>;
+
+/** Why session `instance`'s own browser opens no artifact (preview-browse.ts `browseAt`): its origin refused, or no pass named. */
+export type BrowseProblem =
+  | OriginRefused
+  | ReturnType<typeof problem<503, { code: "browse-unnamed"; detail: string }>>;
+
+/**
+ * One file of an artifact handed to another session (hub handed-inputs.ts):
+ * its bytes, or, for a preview's pass, the bytes made for the session it is
+ * handed to once that session stands, in the workspace it reads them in, or
+ * why that session's browser opens nothing ({@link ArtifactServiceDeps.browse}).
+ */
+export interface HandedArtifactFile {
+  bytes:
+    Buffer | ((receiver: HandedReceiver) => Promise<Buffer | BrowseProblem>);
+  name: string;
+}
 
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
@@ -102,15 +118,7 @@ export interface ArtifactServiceDeps {
    * may read (`artifact_browse`, preview-browse.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
-  browse: (
-    instance: InstanceRow,
-    row: ArtifactRow
-  ) =>
-    | Browsed
-    | OriginRefused
-    | ReturnType<
-        typeof problem<503, { code: "browse-unnamed"; detail: string }>
-      >;
+  browse: (instance: InstanceRow, row: ArtifactRow) => Browsed | BrowseProblem;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
   /**
@@ -190,9 +198,9 @@ export interface ArtifactServiceDeps {
     path: string | undefined
   ) => Promise<
     | FolderWeight
-    | Unanswered<"artifact-folder-machine-away", "artifact-folder-machine-late">
+    | Unanswered
     | ReturnType<
-        typeof problem<422, { code: "artifact-folder-unread"; detail: string }>
+        typeof problem<502, { code: "artifact-folder-unread"; detail: string }>
       >
   >;
   /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
@@ -256,11 +264,10 @@ export interface ArtifactServiceDeps {
           { code: "picture-save-no-workspace"; detail: string }
         >
       >
+    | AwayProblem
+    | SilentProblem
     | ReturnType<
-        typeof problem<503, { code: "picture-save-unanswered"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<503, { code: "picture-save-failed"; detail: string }>
+        typeof problem<502, { code: "picture-save-failed"; detail: string }>
       >
     | ReturnType<
         typeof problem<400, { code: "picture-save-refused"; detail: string }>
@@ -302,7 +309,10 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     panel?: string | null,
     again?: boolean
-  ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
+  ) => Promise<
+    | { ok: true; revision: string }
+    | { error: string; ok: false; stop: OpenStop }
+  >;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
   /**
@@ -334,13 +344,9 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     | { png: string; cut?: PictureCut }
     | OriginRefused
-    | ReturnType<
-        typeof problem<503, { code: "picture-no-daemon"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<503, { code: "picture-undrawn"; detail: string }>
-      >
-    | ReturnType<typeof problem<503, { code: "picture-none"; detail: string }>>
+    | AwayProblem
+    | SilentProblem
+    | ReturnType<typeof problem<502, { code: "picture-none"; detail: string }>>
   >;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
@@ -369,9 +375,7 @@ export interface ArtifactServiceDeps {
    * preview handed to a parent is checked
    * so before it reaches them.
    */
-  reachable: (
-    row: ArtifactRow
-  ) => Promise<{ failure: PreviewDown; why: string | null } | null>;
+  reachable: (row: ArtifactRow) => Promise<PreviewUnloaded | null>;
   /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
    * the frame it follows (the panel's open frame, unchanged otherwise); none
@@ -397,15 +401,11 @@ export interface ArtifactServiceDeps {
     sync: string
   ) => Promise<
     | CanvasScreen
+    | AwayProblem
+    | SilentProblem
     | ReturnType<
         typeof problem<
-          503,
-          { code: "artifact-screen-no-daemon"; detail: string }
-        >
-      >
-    | ReturnType<
-        typeof problem<
-          503,
+          502,
           { code: "artifact-screen-unopened"; detail: string }
         >
       >
@@ -439,10 +439,10 @@ export interface ArtifactServiceDeps {
     serve: ServeSpec
   ) => Promise<
     | StageState
-    | Unanswered<"artifact-serve-machine-away", "artifact-serve-machine-late">
+    | Unanswered
     | ReturnType<
         typeof problem<
-          422,
+          502,
           { code: "artifact-serve-unstarted"; detail: string }
         >
       >

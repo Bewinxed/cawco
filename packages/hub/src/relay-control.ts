@@ -187,10 +187,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    * A dashboard's `send` command, taken: the one send path, and a log line.
    * Its record — pending, or failed with why — is the answer every tab hears.
    * One the hub refuses outright, keeping no record (a conversation gone),
-   * throws its reason: the command is answered `failed` with it (stream.ts),
-   * else the tab that sent it waits on a record that never comes.
+   * answers its problem: the command is answered `failed` with it
+   * (stream.ts), else the tab that sent it waits on a record that never
+   * comes.
    */
-  const relaySend = (message: Envelope<SendPayload>): void => {
+  const relaySend = (message: Envelope<SendPayload>) => {
     // Provenance (NEW.md, cross-session delivery incident): which tab it
     // believed it was sending from. It is the one thing that makes "a send
     // landed on the wrong session" provable after the fact instead of merely
@@ -219,9 +220,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
           : ""
       }`
     );
-    if (record instanceof ElysiaStatus) {
-      throw new Error(record.response.detail);
-    }
+    return record instanceof ElysiaStatus ? record : undefined;
   };
 
   /**
@@ -699,6 +698,23 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // else the release to reach, so a copy its updater leaves older answers
     // why and keeps its Retry. A press is no automatic update.
     const toolId = peekControlArg(message.payload, "installTool");
+    // One install of a tool on a machine at a time: a press while one runs
+    // (another dashboard's press, Update all, CawCo's own pass) joins it and
+    // is answered with its answer, never sent as a second install.
+    const running = toolId
+      ? [...ctx.pendingInstalls.values()].find(
+          (install) =>
+            install.machineId === message.machineId && install.toolId === toolId
+        )
+      : undefined;
+    if (running && requestId) {
+      running.joined = [
+        ...(running.joined ?? []),
+        { dashboard, requestId, replyAsFrame },
+      ];
+      noteControl(message);
+      return true;
+    }
     const ask = toolId ? ctx.installAsk(toolId) : {};
     const { newest } = ask;
     const correlated = {
@@ -708,7 +724,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         ? {
             payload: {
               ...message.payload,
-              args: ctx.installArgs(toolId, ask, false),
+              args: ctx.installArgs(toolId, ask, false, "person"),
             },
           }
         : {}),
@@ -724,11 +740,18 @@ export const createRelayControl = (ctx: RelayControlContext) => {
         toolId,
         ...(newest ? { newest } : {}),
       });
-      const updated = ctx.db.agentTools(message.machineId)[toolId]?.version;
+      const cell = ctx.db.agentTools(message.machineId)[toolId];
+      const updated = cell?.version;
+      // The version it puts on, when known: the one version a copy behind
+      // is wanted at, else the release it is sent to reach.
+      const to =
+        cell?.wants && !cell.wants.orNewer ? cell.wants.version : newest;
       ctx.db.setAgentToolCell(message.machineId, {
         id: toolId,
         state: "installing",
         ...(updated ? { version: updated } : {}),
+        ...(to ? { to } : {}),
+        startedBy: "person",
         at: Date.now(),
       });
       ctx.publishInstances(message.machineId);

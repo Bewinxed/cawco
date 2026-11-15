@@ -4,7 +4,7 @@ import { isBrowserKey } from "@cawco/core/browser";
 import { deliverableKind } from "@cawco/core/deliverables";
 import { detach } from "@cawco/core/detach";
 import { blockFile } from "@cawco/core/inline-blocks";
-import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
+import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_FOLDERS } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core/protocol";
@@ -30,6 +30,12 @@ import {
   pageSourcePaths,
 } from "./kept-blocks";
 import { sessionLabel } from "./labels";
+import {
+  awayProblem,
+  MachineProblem,
+  silentProblem,
+  unansweredIn,
+} from "./machine-answers";
 import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PageBuilt, PageFolderProblem } from "./page-problems";
 import type { PreviewTarget } from "./preview";
@@ -39,6 +45,7 @@ import {
   servedByMachine,
   shownArtifact,
 } from "./preview";
+import type { OpenStop } from "./preview-stops";
 import {
   changeFolderFiles,
   readFolderBytes,
@@ -73,6 +80,12 @@ interface ImageAt {
   readOn?: ((file: string) => string | undefined) | undefined;
   shown?: ReadonlyMap<string, Uint8Array> | undefined;
 }
+
+/** A page's machine that did not answer its read, in words: not connected, or silent. */
+const MACHINE_UNANSWERED = {
+  away: "Machine is not connected",
+  silent: "Machine did not answer",
+};
 
 export type ArtifactPagesContext = Pick<
   ClosureContext,
@@ -327,19 +340,6 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     );
   };
 
-  /** An open's status for each way its machine's listener didn't start (its start's own codes). */
-  const OPEN_REFUSAL: Record<PreviewDown, 409 | 500 | 503 | 504> = {
-    closed: 409,
-    machine: 503,
-    workspace: 500,
-    reach: 500,
-    server: 500,
-    gone: 409,
-    // A start never names these: a page's own load does.
-    error: 500,
-    crashed: 500,
-  };
-
   /**
    * Makes artifact `row` what session `instanceId`'s panel shows: a
    * machine's preview reached on its own origin first, its listener
@@ -357,7 +357,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     again = false
   ): Promise<
     | { ok: true; frame: ReturnType<typeof previewFrame> }
-    | { ok: false; code: 409 | 500 | 503 | 504; error: string }
+    | { ok: false; error: string; stop: OpenStop }
   > => {
     // As its row stands now: an opening of its held version moved its origin
     // (`handOrigin`) after the caller read it.
@@ -365,8 +365,8 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     if (!row) {
       return {
         ok: false,
-        code: 409,
         error: `${asked.name} is gone, so no origin serves it.`,
+        stop: { kind: "closed" },
       };
     }
     const artifact = shownArtifact(row);
@@ -384,18 +384,18 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     // shown.
     const origin = frameOrigin(instanceId, target);
     if (origin instanceof ElysiaStatus) {
-      return { ok: false, code: 503, error: origin.response.detail };
+      return {
+        ok: false,
+        error: origin.response.detail,
+        stop: { kind: "origin", problem: origin },
+      };
     }
     if (servedByMachine(row)) {
       const reached = await timedShowStep("reach", artifact, instanceId, () =>
         ctx.previewService.reach(row)
       );
       if (!reached.ok) {
-        return {
-          ok: false,
-          code: OPEN_REFUSAL[reached.down],
-          error: reached.error,
-        };
+        return { ok: false, error: reached.error, stop: reached.stop };
       }
     }
     previewTargets.set(instanceId, target);
@@ -451,10 +451,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const agent = ctx.registry.agent(origin.machineId);
     if (!agent) {
-      return problem(503, {
-        code: "page-machine-away",
-        detail: "Machine is not connected",
-      });
+      return awayProblem(origin.machineId, MACHINE_UNANSWERED.away);
     }
     const readText = async (path: string) => {
       const read = await ctx.callFs(origin.machineId, agent, {
@@ -463,7 +460,9 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       });
       switch (read.kind) {
         case "unanswered":
-          throw new Error("Machine did not answer");
+          throw new MachineProblem(
+            unansweredIn(origin.machineId, read, MACHINE_UNANSWERED)
+          );
         case "answered":
           return read.value.ok ? (read.value.result as string) : undefined;
         default:
@@ -471,13 +470,14 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       }
     };
     const file = posix.join(origin.dir, "page.html");
-    const source = await readText(file).catch(() => null);
-    if (source === null) {
-      return problem(504, {
-        code: "page-machine-late",
-        detail: "Machine did not answer",
-      });
+    const page = await ctx.callFs(origin.machineId, agent, {
+      op: "read",
+      path: file,
+    });
+    if (page.kind === "unanswered") {
+      return unansweredIn(origin.machineId, page, MACHINE_UNANSWERED);
     }
+    const source = page.value.ok ? (page.value.result as string) : undefined;
     if (source === undefined) {
       return problem(404, {
         code: "page-source-missing",
@@ -495,8 +495,13 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
             posix.join(origin.dir, path)
           );
           // Not there is the machine's refusal; no answer is not "not there".
-          if (typeof read === "string") {
-            throw new Error("Machine did not answer");
+          if (read === "offline") {
+            throw new MachineProblem(
+              awayProblem(origin.machineId, MACHINE_UNANSWERED.away)
+            );
+          }
+          if (read === "timeout") {
+            throw new MachineProblem(silentProblem(MACHINE_UNANSWERED.silent));
           }
           return "refused" in read ? undefined : read;
         },
@@ -666,20 +671,14 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     if ("dir" in from) {
       const agent = ctx.registry.agent(row.machineId);
       if (!agent) {
-        return problem(503, {
-          code: "page-machine-away",
-          detail: "Machine is not connected",
-        });
+        return awayProblem(row.machineId, MACHINE_UNANSWERED.away);
       }
       const read = await ctx.callFs(row.machineId, agent, {
         op: "read",
         path: posix.join(from.dir, PROGRAM_FILE),
       });
       if (read.kind === "unanswered") {
-        return problem(504, {
-          code: "page-machine-late",
-          detail: "Machine did not answer",
-        });
+        return unansweredIn(row.machineId, read, MACHINE_UNANSWERED);
       }
       const inDir: (ImageAt & { text: string }) | undefined = read.value.ok
         ? { text: read.value.result as string, dir: from.dir }

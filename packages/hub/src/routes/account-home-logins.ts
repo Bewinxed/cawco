@@ -8,12 +8,11 @@ import {
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
 import { everyOf } from "@cawco/core/every-of";
-import { Elysia, problem, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
+import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
-import { awayStatus } from "../machine-reads";
-
 import { unreachable } from "../unreachable";
 
 /**
@@ -52,7 +51,7 @@ export const accountHomeLoginRoutes = (
       .get(
         "/api/accounts/home-credentials",
         { query: t.Object({ machineId: t.String() }) },
-        async ({ query, set }) => {
+        async ({ query }) => {
           const [claude, others] = await Promise.all([
             readAgent(
               query.machineId,
@@ -71,15 +70,15 @@ export const accountHomeLoginRoutes = (
           switch (others.kind) {
             case "unanswered":
               if (others.reason === "dead") {
-                return awayStatus(ctx, set, query.machineId);
+                return awayProblem(
+                  query.machineId,
+                  ctx.machineFault(query.machineId, "offline")
+                );
               }
-              return problem(503, {
-                code: "machine-away",
-                detail: awayWords(query.machineId, others),
-              });
+              return silentProblem(awayWords(query.machineId, others));
             case "answered":
               if (!others.value.ok) {
-                return problem(422, {
+                return problem(502, {
                   code: "home-logins-unread",
                   detail: others.value.error ?? "The machine gave no reason.",
                 });
@@ -94,12 +93,12 @@ export const accountHomeLoginRoutes = (
           switch (claude.kind) {
             case "unanswered":
               if (claude.reason === "dead") {
-                return awayStatus(ctx, set, query.machineId);
+                return awayProblem(
+                  query.machineId,
+                  ctx.machineFault(query.machineId, "offline")
+                );
               }
-              return problem(503, {
-                code: "machine-away",
-                detail: awayWords(query.machineId, claude),
-              });
+              return silentProblem(awayWords(query.machineId, claude));
             case "answered":
               home = claude.value.ok
                 ? (claude.value.result as HomeLogin)
@@ -134,11 +133,8 @@ export const accountHomeLoginRoutes = (
         async ({ body, status }) => {
           const { machineId, store } = body;
           const found = await homeCredentialOf(machineId, store, body.provider);
-          if ("error" in found) {
-            return problem(found.status, {
-              code: "home-login-refused",
-              detail: found.error,
-            });
+          if (found instanceof ElysiaStatus) {
+            return found;
           }
           const started = await startMove(machineId, store, found);
           return "error" in started

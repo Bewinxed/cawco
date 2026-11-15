@@ -1,16 +1,25 @@
 /**
  * `__cawcoDebug`, the dev server's handle on the client's stores: asserted
  * from the console while developing, and written by the /motion benches to
- * stand their own data in. Each store adds its part as it loads.
+ * stand their own data in. Each store adds its part as the app starts it.
  *
  * Every call sits inside `if (import.meta.env.DEV)`, so any other build
  * folds it away with what it would have exposed: a shipped dashboard has no
  * such global, and no way for a page to stage anything.
  */
-export function devDebug(parts: Partial<CawcoDebug>): void {
-  if (typeof window !== "undefined") {
-    window.__cawcoDebug = Object.assign(window.__cawcoDebug ?? {}, parts);
+export function devDebug(parts: Partial<CawcoDebug>): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
   }
+  window.__cawcoDebug = Object.assign(window.__cawcoDebug ?? {}, parts);
+  return () => {
+    const debug = window.__cawcoDebug;
+    for (const key of Object.keys(parts)) {
+      if (debug?.[key] === parts[key as keyof CawcoDebug]) {
+        delete debug[key];
+      }
+    }
+  };
 }
 
 /** One more `entry` on the `name` list, for a probe to count. */

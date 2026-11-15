@@ -84,6 +84,13 @@ export const workWords = {
    * Inputs that failed partway across (hub work-items.ts `handInto`): what
    * had landed was taken out again, so none is presented as delivered.
    */
+  /**
+   * A delegate's start was held (hub start-holds.ts `startHold`) with its
+   * inputs waiting at the hub for its launch, and the hub restarted before
+   * it went (hub work-items.ts `startSent`): they were held in its memory.
+   */
+  inputsLostToRestart:
+    "the hub restarted while its start was held, and the inputs it was to hand in went with it. Delegate it again.",
   inputsCleared: (why: string) =>
     `${why} What of them had landed was removed, so none of them was delivered.`,
   /** Heads a gate step's stream cut to its tail (hub gate.ts `gateTails`): the cut part may hold the failure, so the reader runs the step itself. */
@@ -144,7 +151,7 @@ export const workWords = {
     `start held: ${why}; it starts once that is over`,
   /** When a parent hears from its delegate, as `delegate` and a continue answer it. */
   reportArrives:
-    "Its report arrives once it calls finish_item and its work passes the hub's merge checks; the report quotes the commands it ran.",
+    "Its report arrives once it calls finish_item and its work passes the hub's merge checks.",
   /**
    * The title of your notice of a blocked item: held because its session
    * slept past its limit (hub work-items.ts `blockAsleep`), or because what
@@ -167,6 +174,44 @@ export const workWords = {
   /** Why an item is blocked: the account its session runs on is gone. */
   missingAccount: (name: string) =>
     `The account it runs on (${name}) is gone, so its session isn't started again on another one. Add the account back, or stop the item.`,
+  /**
+   * A budget that did not read whole when budgets became columns (hub
+   * migration 0398, its column `budget_unread`), as it was stored, cut
+   * short: why the work it governs stops.
+   */
+  budgetUnread: (stored: string) =>
+    `its budget was stored as “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, which does not read as dollars above 0 (usd) and whole numbers from 1 (turns, minutes), so the hub cannot tell what it may spend`,
+  /** A live item stopped because its own budget does not read (`budgetUnread`). */
+  budgetUnreadStopped: (why: string) =>
+    `The hub stopped this item: ${why}. Start the work again with a budget that reads.`,
+  /** A work item refused, or a project's dispatch paused, because its project's budget does not read (`budgetUnread`). */
+  projectBudgetUnread: (name: string, why: string) =>
+    `${name} starts no work item: ${why}. Set the project's budget again, or clear it, and its work starts.`,
+  /**
+   * Why no attempt at a task starts (hub dispatch.ts `startable`, and the
+   * task's `startProblem`): its file's `budget:` line does not read; `why`
+   * is what does not, quoted from the line.
+   */
+  taskBudgetUnread: (path: string, id: string, why: string) =>
+    `${path} has a budget line that does not read, so no attempt at ${id} starts until it reads or is taken out: ${why}`,
+  /**
+   * Why no attempt at a task starts (hub dispatch.ts `startable`, and the
+   * task's `startProblem`): its file's `outputs:`, `owns:`, `checks:`,
+   * `accounts:` or `waits_on:` line does not read whole as its list; `why`
+   * is what does not, quoted from the line.
+   */
+  taskListUnread: (path: string, id: string, why: string) =>
+    `${path} has a list line that does not read, so no attempt at ${id} starts until it reads: an entry it leaves out would widen what the attempt does. ${why}`,
+  /**
+   * A work item's landing refused because its outputs did not read as they
+   * became rows (hub schema.ts `workItems.outputsUnread`); `stored` is the
+   * list as it was stored.
+   */
+  outputsUnreadRefused: (stored: string) =>
+    `Not landed: this item's outputs, stored as “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, do not read, so the hub cannot tell which of its files are outputs to keep off the base branch, and it pushes nothing. Its outputs that read are collected; start the work again with its outputs named.`,
+  /** A routine's run skipped because its budget does not read (`budgetUnread`). */
+  routineBudgetUnread: (why: string) =>
+    `The run is skipped: ${why}. Set the routine's budget again, or clear it, and its runs start.`,
   /** How long a session with no minutes budget may sleep and be woken. */
   aDay: "a day",
   /** The limit of an item with a minutes budget. */

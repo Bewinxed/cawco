@@ -16,8 +16,9 @@
  * No file: no set, and its sessions start with everything installed. Every
  * write of it, `project_settings`' and a session's `folder_write` alike,
  * passes {@link startingSetFileProblems} first (server.ts guards it). One
- * that does not read (a commit pushed from outside CawCo) is taken for no
- * set, as before any set, and said wherever the set is read.
+ * that does not read (a commit pushed from outside CawCo) is never taken for
+ * no set: a session it would start with is refused, its problems said
+ * (server.ts `startingSetOf`), and said wherever the set is read.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -115,7 +116,7 @@ const startingSetFileOf = (set: StartingSet, previous?: string): string => {
 
 /** A project's starting-set file as it stands: its text, its set, or what keeps it from reading. */
 export interface ProjectStartingSet {
-  /** Its problems when it does not read: its sessions then start with everything. */
+  /** Its problems when it does not read: a session it would start with is refused. */
   problems?: string[];
   /** Its set; absent with no file, or one that does not read. */
   set?: StartingSet;

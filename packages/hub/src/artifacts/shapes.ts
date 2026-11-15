@@ -200,16 +200,6 @@ export interface HandedReceiver {
   session: InstanceRow;
 }
 
-/**
- * One file of an artifact handed to another session (hub handed-inputs.ts):
- * its bytes, or, for a preview's pass, the bytes made for the session it is
- * handed to once that session stands, in the workspace it reads them in.
- */
-export interface HandedArtifactFile {
-  bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
-  name: string;
-}
-
 /** An entry as `artifact_read` answers it. */
 export type ReadEntry = ChoiceEntry & { earlierRevision?: true };
 

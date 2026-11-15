@@ -39,6 +39,20 @@ export const updatesWords = {
    * `hubWaitWords`); it installs by itself once the hub runs a build that
    * speaks it and has confirmed it.
    */
+  /**
+   * A connected machine whose agent's contract range (core runtime.ts
+   * `protocolRange`) does not hold its hub's: the hub sends it no work it
+   * cannot carry (`cannot` says which) and offers it the hub's build, which
+   * it installs by itself. Said where that work is held or refused: a held
+   * start (hub start-holds.ts `startHold`), a delegate's or handoff's inputs
+   * (hub work-items.ts `handInto`).
+   */
+  olderBuild: (machine: string, cannot: string) =>
+    `${machine} runs a CawCo build older than its hub's, which cannot ${cannot} until it installs the hub's build`,
+  /** {@link updatesWords.olderBuild}'s `cannot` for a session's start. */
+  olderBuildStarts: "start sessions for this hub",
+  /** {@link updatesWords.olderBuild}'s `cannot` for a delegate's or handoff's inputs. */
+  olderBuildInputs: "send or take a session's inputs",
   /** `behind`: the hub does not speak the build's wire protocol yet. */
   waitsForHubToTake: (version: string) =>
     `Waits for its hub to take ${version} first`,
@@ -71,6 +85,32 @@ export const updatesWords = {
   /** An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs. */
   trialUndecided: (version: string, tries: number, why: string) =>
     `${version}'s health could not be checked after ${tries} tries: ${why}.`,
+  /** `cawco status` on the hub's machine, when the hub does not answer and the last update failed: the update's own words. */
+  lastFailed: (error: string) => `the last update failed: ${error}`,
+  /** An install stopped before anything changed: the disk the hub's database is on has less free than its copy and a rollback's copy need (cli binary-apply.ts `requireRoom`). */
+  noRoomForDatabaseCopy: (version: string, needed: string, free: string) =>
+    `${version} was not installed: copying the hub's database needs ${needed} free on its disk, and ${free} is free. Nothing was changed. Free space there, then install again.`,
+  /** A rollback put the hub's database back: said after the reason, naming the file that holds what the trial wrote. */
+  databasePutBack: (file: string) =>
+    `the hub's database is back as it was before the update; what it stored during the trial is in ${file}`,
+  /**
+   * A rollback whose copy could not be put back (no room for it beside the
+   * database, the hub still holding it): said after the reason. The rollback
+   * goes on, and the build rolled back to runs on the database the trial
+   * left. `stopped`: that database holds migrations `previous` lacks, so its
+   * hub does not start on it (core migration-state.ts).
+   */
+  databaseNotPutBack: (
+    database: string,
+    why: string,
+    copy: string,
+    previous: string,
+    stopped: boolean
+  ) =>
+    `the hub's database was not put back (${why}), so ${database} still holds what the hub stored during the trial; the copy from before the update is ${copy}${stopped ? `. The trial migrated it, so ${previous}'s hub doesn't start on it: put that copy in its place to start the hub, which loses what it stored during the trial` : ""}`,
+  /** The update helper's log line for an older copy or moved-aside database it removed, once a newer one was written whole and checked. */
+  olderCopyRemoved: (file: string, size: string) =>
+    `${file} (${size}) was removed: a newer copy replaces it`,
   /** A machine's row once such a trial ended (`unconfirmedVersion`), `version` the build that runs. */
   runningUnconfirmed: (version: string) =>
     `${version} is running, but its health was never confirmed. It is not rolled back, and not installed again by itself.`,

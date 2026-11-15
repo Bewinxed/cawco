@@ -106,6 +106,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routineToolWords } from "@cawco/core/words/routines";
+import { workWords } from "@cawco/core/words/work";
 import cronstrue from "cronstrue";
 import { Cron, DateTime } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
@@ -151,7 +152,7 @@ import {
   type WorkItemRequest,
   type WorkItems,
 } from "./work-items";
-import { budgetProblem } from "./work-limits";
+import { budgetColumns, budgetOf, budgetProblem } from "./work-limits";
 import type { WorkPlace } from "./work-place";
 
 /** What a delegate's headline says to stay silent. */
@@ -260,7 +261,10 @@ export interface RoutinePatch {
 /** What a routine says, checked before it is written. */
 type Fields = Pick<
   RoutineRow,
-  | "budget"
+  | "budgetMinutes"
+  | "budgetTurns"
+  | "budgetUnread"
+  | "budgetUsd"
   | "cron"
   | "dailyCapUsd"
   | "delegateType"
@@ -284,7 +288,15 @@ const merged = (row: RoutineRow, patch: RoutinePatch): Fields => ({
   lands: patch.lands ?? row.lands,
   delegateType:
     patch.delegateType === undefined ? row.delegateType : patch.delegateType,
-  budget: patch.budget === undefined ? row.budget : patch.budget,
+  // A budget written replaces one that did not read; left out, both stay.
+  ...(patch.budget === undefined
+    ? {
+        budgetUsd: row.budgetUsd,
+        budgetTurns: row.budgetTurns,
+        budgetMinutes: row.budgetMinutes,
+        budgetUnread: row.budgetUnread,
+      }
+    : budgetColumns(patch.budget)),
   dailyCapUsd:
     patch.dailyCapUsd === undefined ? row.dailyCapUsd : patch.dailyCapUsd,
   mode: patch.mode === undefined ? row.mode : patch.mode,
@@ -744,7 +756,7 @@ export const createRoutines = ({
     prompt: row.prompt,
     delegateType: row.delegateType,
     lands: row.lands,
-    budget: row.budget,
+    budget: budgetOf(row),
     dailyCapUsd: row.dailyCapUsd,
     mode: row.mode,
     enabled: row.enabled,
@@ -817,7 +829,7 @@ export const createRoutines = ({
       (LANDS_MODES.includes(routine.lands)
         ? undefined
         : `lands is one of ${LANDS_MODES.join(", ")}.`) ??
-      (routine.budget ? budgetProblem(routine.budget) : undefined) ??
+      budgetProblem(budgetOf(routine) ?? {}) ??
       (cap === null || (Number.isFinite(cap) && cap > 0)
         ? undefined
         : "dailyCapUsd is a number of dollars above 0.") ??
@@ -1049,9 +1061,10 @@ export const createRoutines = ({
   };
 
   /**
-   * A run as a work item the hub starts: skipped when the routine has no
-   * place to run, else briefed with the routine's prompt, `kind.lead` before
-   * it and `kind.input` after it, and started with `kind.fields`.
+   * A run as a work item the hub starts: skipped when the routine's budget
+   * does not read or it has no place to run, else briefed with the
+   * routine's prompt, `kind.lead` before it and `kind.input` after it, and
+   * started with `kind.fields`.
    */
   const fireWorkItem = async (
     routine: RoutineRow,
@@ -1063,7 +1076,13 @@ export const createRoutines = ({
       noted: string;
     }
   ) => {
-    const place = await placeWithin(routine);
+    // A budget that does not read stops every run it would govern.
+    const place =
+      routine.budgetUnread === null
+        ? await placeWithin(routine)
+        : workWords.routineBudgetUnread(
+            workWords.budgetUnread(routine.budgetUnread)
+          );
     if (place instanceof ElysiaStatus) {
       return place;
     }
@@ -1079,13 +1098,14 @@ export const createRoutines = ({
     }
     const label = slotLabel(run.slot, routine.timeZone);
     const type = await runType(routine);
+    const budget = budgetOf(routine);
     const begun = await workItems.startForHub(
       {
         title: routine.name,
         prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. ${kind.lead}Its prompt:\n\n${routine.prompt}${kind.input}\n\n${contractOf(routine)}`,
         ...(type ? { type } : {}),
         ...kind.fields,
-        ...(routine.budget ? { budget: routine.budget } : {}),
+        ...(budget ? { budget } : {}),
         cwd: place.cwd,
         machineId: place.machineId,
       },
@@ -2256,7 +2276,7 @@ export const createRoutines = ({
       prompt: input.prompt,
       delegateType: input.delegateType ?? null,
       lands: input.lands ?? "none",
-      budget: input.budget ?? null,
+      ...budgetColumns(input.budget ?? null),
       dailyCapUsd: input.dailyCapUsd ?? null,
       mode: input.mode ?? null,
     };
@@ -2410,7 +2430,7 @@ export const createRoutines = ({
       timeZone,
       delegateType: null,
       lands: "none",
-      budget: null,
+      ...budgetColumns(null),
       dailyCapUsd: null,
       mode: null,
       enabled: true,

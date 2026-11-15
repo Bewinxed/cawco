@@ -15,6 +15,7 @@ import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
 import {
+  awayOf,
   failureClause,
   failureSentence,
   hubAsk,
@@ -22,6 +23,7 @@ import {
   hubFailure,
   hubRefusal,
   hubSaid,
+  unreachedAnswer,
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -256,12 +258,17 @@ class Updates {
     if (!answer || answer.ok) {
       return;
     }
-    if (answer.refused.response.status === 404) {
+    if (awayOf(answer.refused)) {
       this.refuse(machineId, {
         act: "install",
         reason: updatesWords.notConnected(name),
       });
-    } else if (answer.refused.response.status === 500) {
+    } else if (
+      // The machine's failure, never the dashboard's own 502 for a hub that
+      // didn't answer: the hub's machine restarts it mid-install.
+      answer.refused.response.status === 502 &&
+      !unreachedAnswer(answer.refused.response)
+    ) {
       this.refuse(machineId, {
         act: "install",
         reason: `${name} could not start the update: ${hubSaid(answer.refused)}. It keeps the build it runs; Retry to install it again.`,

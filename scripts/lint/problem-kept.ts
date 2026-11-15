@@ -6,11 +6,14 @@
  * of its own (`helper(x);`, `await helper(x);`), drops it: the route goes on
  * as if the helper had said yes. A thrown error stopped the route by itself;
  * a returned status stops it only where it is read, so this is a finding.
+ * An assignment (`this.problem = answer;`) keeps what it assigns: no finding.
  *
  * golar.config.ts runs it over the hub's source.
  */
 import { defineRule } from "golar/unstable";
 import {
+  isBinaryExpression,
+  isEqualsToken,
   isExpressionStatement,
   type Node,
   type SourceFile,
@@ -41,6 +44,10 @@ export const problemKept = defineRule({
     const visit = (node: Node): void => {
       if (
         isExpressionStatement(node) &&
+        !(
+          isBinaryExpression(node.expression) &&
+          isEqualsToken(node.expression.operatorToken)
+        ) &&
         isStatus(program.getTypeAtLocation(node.expression))
       ) {
         context.report({

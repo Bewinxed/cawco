@@ -33,6 +33,26 @@ export const ownsProblem = (owns: string[]): string | undefined => {
 
 // --- budgets ---------------------------------------------------------------------
 
+/**
+ * A budget's limits, each from the first that sets it; null when none does.
+ * The one merge along a budget's chain (a call's ask, its task, its routine,
+ * then its project): an earlier one's limit overrides that limit alone.
+ */
+export const budgetFrom = (
+  ...budgets: (WorkBudget | null | undefined)[]
+): WorkBudget | null => {
+  const merged: WorkBudget = {};
+  for (const budget of [...budgets].reverse()) {
+    Object.assign(
+      merged,
+      Object.fromEntries(
+        Object.entries(budget ?? {}).filter(([, value]) => value !== undefined)
+      )
+    );
+  }
+  return Object.keys(merged).length > 0 ? merged : null;
+};
+
 /** Why a budget cannot stand, or nothing when it can. */
 export const budgetProblem = (budget: WorkBudget): string | undefined => {
   const { usd, turns, minutes } = budget;
@@ -49,3 +69,37 @@ export const budgetProblem = (budget: WorkBudget): string | undefined => {
   }
   return undefined;
 };
+
+/**
+ * A row's budget as its columns hold it (db/schema.ts `budgetColumns`): a
+ * project's, a routine's or a work item's. Each limit null is not set here;
+ * `budgetUnread` is a budget that did not read whole when budgets became
+ * columns, which stops the work it governs.
+ */
+export interface BudgetColumns {
+  budgetMinutes: number | null;
+  budgetTurns: number | null;
+  budgetUnread: string | null;
+  budgetUsd: number | null;
+}
+
+/** The limits a row's columns set; null when they set none. */
+export const budgetOf = (row: BudgetColumns): WorkBudget | null => {
+  const budget: WorkBudget = {
+    ...(row.budgetUsd === null ? {} : { usd: row.budgetUsd }),
+    ...(row.budgetTurns === null ? {} : { turns: row.budgetTurns }),
+    ...(row.budgetMinutes === null ? {} : { minutes: row.budgetMinutes }),
+  };
+  return Object.keys(budget).length > 0 ? budget : null;
+};
+
+/**
+ * The columns `budget` is written as: each limit it leaves out not set
+ * here. A budget written whole replaces one that did not read.
+ */
+export const budgetColumns = (budget: WorkBudget | null): BudgetColumns => ({
+  budgetUsd: budget?.usd ?? null,
+  budgetTurns: budget?.turns ?? null,
+  budgetMinutes: budget?.minutes ?? null,
+  budgetUnread: null,
+});

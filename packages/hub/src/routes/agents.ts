@@ -5,7 +5,9 @@
 import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { awayProblem, silentProblem } from "../machine-answers";
 import { machineOut } from "../machine-out";
+import type { MachineReadsContext } from "../machine-reads";
 
 export const agentListRoutes = ({
   db,
@@ -51,7 +53,8 @@ export const agentMediaRoutes = ({
   | "readMachineMedia"
   | "registry"
   | "sshTunnels"
->) =>
+> &
+  MachineReadsContext) =>
   new Elysia()
     // What a restart polls to find a moment that cuts nothing in half.
     // A picture or video on a machine's disk, for the transcript's cards. No
@@ -63,16 +66,13 @@ export const agentMediaRoutes = ({
       async ({ params, query, set }) => {
         const answer = await readMachineMedia(params.machineId, query.path);
         if (answer === "offline") {
-          return problem(503, {
-            code: "machine-offline",
-            detail: machineFault(params.machineId, "offline"),
-          });
+          return awayProblem(
+            params.machineId,
+            machineFault(params.machineId, "offline")
+          );
         }
         if (answer === "timeout") {
-          return problem(504, {
-            code: "machine-silent",
-            detail: machineFault(params.machineId, "silent"),
-          });
+          return silentProblem(machineFault(params.machineId, "silent"));
         }
         if ("refused" in answer) {
           return problem(404, {

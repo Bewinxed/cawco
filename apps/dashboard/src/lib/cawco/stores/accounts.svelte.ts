@@ -95,10 +95,16 @@ let accountsTaker: ((view: AccountsView) => void) | null = null;
 /**
  * Calls `taker` with each accounts read that changed what the hub said, as
  * it is kept: the sign-ins under way in this tab take up the link or code
- * the hub kept for them (accounts/flows.svelte.ts). One taker.
+ * the hub kept for them (accounts/flows.svelte.ts `startFlows`). One taker.
+ * Returns its release: a read then lands with no one taking it.
  */
-export function takeAccounts(taker: (view: AccountsView) => void): void {
+export function takeAccounts(taker: (view: AccountsView) => void): () => void {
   accountsTaker = taker;
+  return () => {
+    if (accountsTaker === taker) {
+      accountsTaker = null;
+    }
+  };
 }
 
 /**
@@ -278,7 +284,8 @@ export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
 
 /**
  * Signs an account out on one machine and drops its store there; the hub
- * refuses a machine that is offline (409) or not signed in (404).
+ * refuses a machine that is offline (503, named as away), silent (504), or
+ * not signed in (404).
  */
 export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
   accountsWrite(
@@ -334,8 +341,8 @@ const placementFix = (code: string | undefined): PlacementFix | null => {
  * Undefined when it cannot be read; a refusal is thrown in the hub's words
  * with where its fix is ({@link PlacementRefused}): no account can take it
  * or the machine refuses the harness's CLI (400), or the machine could not
- * say which model pi starts on in that folder (503), any of which refuses
- * the start too.
+ * say which model pi starts on in that folder (502, its failure; 504, it did
+ * not answer in time), any of which refuses the start too.
  */
 export async function placementFor(query: {
   cwd?: string;
@@ -347,7 +354,7 @@ export async function placementFor(query: {
   const answer = await hubAsk(hub.api.accounts.placement.get({ query }));
   if (!answer.ok) {
     const { status } = answer.refused.error;
-    if (status === 400 || status === 503) {
+    if (status === 400 || status === 502 || status === 504) {
       throw new PlacementRefused(
         hubRefusal(answer.refused).message,
         placementFix(hubFailure(answer.refused).code)

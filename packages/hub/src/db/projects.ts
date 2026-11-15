@@ -99,12 +99,12 @@ const TRAILING_SLASHES = /\/+$/u;
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
 const HUB_PLACE_MACHINE = "hub";
 
-/** Where a place stands in its project's list: the primary checkout, other checkouts, the hub's folder, workspaces. */
+/** Where a place stands in its project's list: the primary checkout, other checkouts, then the hub's folder. */
 const placeRank = (place: PlaceRow): number => {
   if (place.isPrimary) {
     return 0;
   }
-  return { checkout: 1, hub: 2, workspace: 3 }[place.kind];
+  return { checkout: 1, hub: 2 }[place.kind];
 };
 
 /**
@@ -446,7 +446,10 @@ export interface ProjectsDb {
     change: Partial<
       Pick<
         ProjectRow,
-        | "budget"
+        | "budgetMinutes"
+        | "budgetTurns"
+        | "budgetUnread"
+        | "budgetUsd"
         | "dispatch"
         | "lands"
         | "maxAttempts"
@@ -1090,7 +1093,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         walkOwned(
           "foldProject",
           {
-            // Places: the duplicate's checkouts and workspaces join, each
+            // Places: the duplicate's checkouts join, each
             // folder once; its hub folder is its own, and goes with it.
             project_places: () => {
               const kept = tx

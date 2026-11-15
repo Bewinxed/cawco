@@ -27,12 +27,15 @@ import {
   queuedTaskStarts,
   queuedWorkItemGlobs,
   queuedWorkItems,
-  type WorkspaceState,
+  workItemGatePasses,
   workItemGlobs,
+  workItemLandedChecks,
+  workItemOutputs,
   workItems,
   workspaceCreates,
   workspaces,
 } from "./schema";
+import type { GatePass, WorkLanding, WorkspaceState } from "./stored-types";
 
 /** A session of the project, as its removal needs it. */
 export interface HeldSession {
@@ -141,6 +144,75 @@ export const projectWorkDb = (db: BunSQLiteDatabase): ProjectWorkDb => ({
 
 export type WorkItemRow = typeof workItems.$inferSelect;
 
+/**
+ * Whether any of an item's work landed: its landing recorded the commit
+ * pushed, or its landing is there and did not read as landings became
+ * columns (schema.ts `workItems.landedUnread`), which holds it landed so it
+ * is never landed again.
+ */
+export const landedWork = (
+  item: Pick<WorkItemRow, "landedSha" | "landedUnread">
+): boolean => item.landedSha !== null || item.landedUnread !== null;
+
+/**
+ * A change to a work item: its columns; `landed`, what a landing that
+ * pushed something put where, written to its landing's columns and its
+ * gate's commands in one transaction, the record it replaces cleared; and
+ * `gatePasses: null`, its landing gate's passes dropped with the change
+ * ({@link workItemGatePasses}, and `gatePassesUnread`).
+ */
+export type WorkItemChange = Partial<
+  Pick<
+    WorkItemRow,
+    | "state"
+    | "result"
+    | "summary"
+    | "headline"
+    | "error"
+    | "endedBlocked"
+    | "endedAt"
+    | "dismissedAt"
+    | "dismissReason"
+    | "replacedBy"
+    | "landingSince"
+    | "landingPhase"
+    | "blocked"
+    | "lastTurnAt"
+    | "submission"
+    | "waitUntil"
+    | "waitReason"
+    | "waitResumeBy"
+    | "waitHistory"
+    | "heldAt"
+    | "heldAsleepAt"
+    | "stoppingAt"
+    | "prUrl"
+    | "groupReportedAt"
+    | "digest"
+    | "turns"
+    | "instanceId"
+    | "origin"
+    | "stoppedBy"
+    | "taskResult"
+  >
+> & { gatePasses?: null; landed?: WorkLanding };
+
+/** A landing's columns on its work item, the record it replaces cleared. */
+const landedColumns = (landed: WorkLanding) => ({
+  landedSha: landed.sha,
+  landedOnto: landed.onto,
+  landedAt: landed.at === undefined ? null : new Date(landed.at),
+  landedGateTree: landed.gate?.tree ?? null,
+  landedUnread: null,
+});
+
+/** A landing gate's passed commands as `work_item_landed_checks` rows, each once, in the gate's order. */
+const landedCheckRows = (itemId: string, landed: WorkLanding) =>
+  [...new Set(landed.gate?.passed ?? [])].map((command) => ({
+    itemId,
+    command,
+  }));
+
 type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 
 /**
@@ -183,19 +255,36 @@ export interface WorkRowsDb {
    * `delegate`): delegation-tree.ts `treeSessions`.
    */
   readonly childIdsOfParents: (parentInstanceIds: string[]) => string[];
-  /** Files a work item as the hub accepted it. */
-  /** Files a work item as the hub accepted it, the globs it owns with it in one transaction. */
+  /** Files a work item as the hub accepted it, the globs it owns and the outputs it declares with it in one transaction. */
   readonly createWorkItem: (
-    item: typeof workItems.$inferInsert & { owns?: string[] | null }
+    item: typeof workItems.$inferInsert & {
+      outputs?: string[] | null;
+      owns?: string[] | null;
+    }
   ) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */
   readonly createWorkspace: (
     workspace: typeof workspaces.$inferInsert
   ) => WorkspaceRow;
+  /**
+   * The passes `taken` let go of, each under its key: their run's workspace
+   * moved while it ran (gate.ts `gateOnce`).
+   */
+  readonly dropGatePasses: (
+    itemId: string,
+    taken: readonly { key: string; pass: GatePass }[]
+  ) => void;
   /** Forgets a task's queued start, if it had one. */
   readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
   readonly dropQueuedWorkItem: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
+  /**
+   * A live item's landing gate passes, by what each passed on (gate.ts
+   * `passKey`), each key's in the order kept. A record that did not read as
+   * passes became rows (`gatePassesUnread`) gives none: it vouches for no
+   * tree.
+   */
+  readonly gatePasses: (itemId: string) => Map<string, GatePass[]>;
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
   readonly groupWorkItems: (
     parentInstanceId: string,
@@ -209,8 +298,15 @@ export interface WorkRowsDb {
    * tree's walk has no use for (3,134 items read whole took 200 ms a walk).
    */
   readonly itemSessionsOfParents: (parentInstanceIds: string[]) => string[];
-  /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */
-  readonly landedOnTree: (tree: string) => WorkItemRow[];
+  /** `pass` kept for `itemId` under `key`, as its step passes; one already kept stays as it was. */
+  readonly keepGatePass: (itemId: string, key: string, pass: GatePass) => void;
+  /** The commands an item's landing gate passed on the tree that landed, in the gate's order. */
+  readonly landedChecks: (itemId: string) => string[];
+  /**
+   * Each command the landing gate passed on `tree` (schema.ts
+   * `workItems.landedGateTree`), once, over every item that landed it.
+   */
+  readonly landedChecksOnTree: (tree: string) => string[];
   /** The work items, live or ended, whose session's `finish_item` turn has not been heard to end (`last_turn_at`). */
   readonly lastTurnWorkItems: () => WorkItemRow[];
   /** The live work items (starting or running) that own files, each with its globs: one join on `work_item_globs`. */
@@ -258,42 +354,7 @@ export interface WorkRowsDb {
   /** Moves a work item; the hub is its only writer. */
   readonly updateWorkItem: (
     id: string,
-    change: Partial<
-      Pick<
-        WorkItemRow,
-        | "state"
-        | "result"
-        | "summary"
-        | "headline"
-        | "error"
-        | "endedAt"
-        | "dismissedAt"
-        | "dismissReason"
-        | "replacedBy"
-        | "landingSince"
-        | "landingPhase"
-        | "gatePasses"
-        | "blocked"
-        | "lastTurnAt"
-        | "submission"
-        | "waitUntil"
-        | "waitReason"
-        | "waitResumeBy"
-        | "waitHistory"
-        | "heldAt"
-        | "heldAsleepAt"
-        | "stoppingAt"
-        | "landed"
-        | "prUrl"
-        | "groupReportedAt"
-        | "digest"
-        | "turns"
-        | "instanceId"
-        | "origin"
-        | "stoppedBy"
-        | "taskResult"
-      >
-    >
+    change: WorkItemChange
   ) => WorkItemRow | undefined;
   /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its clone's HEAD was when it retired. */
   readonly updateWorkspace: (
@@ -322,6 +383,8 @@ export interface WorkRowsDb {
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
   /** The globs a work item owns; none when it claims nothing. */
   readonly workItemGlobs: (itemId: string) => string[];
+  /** The outputs a work item declared, in the order it declared them; none when it declared none. */
+  readonly workItemOutputs: (itemId: string) => string[];
   /** A workspace's items, newest first. */
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
   /** Every work item any of these sessions delegated, newest first (delegation-tree.ts). */
@@ -330,6 +393,8 @@ export interface WorkRowsDb {
   readonly workspaceCreatesOn: (
     machineId: string
   ) => (typeof workspaceCreates.$inferSelect)[];
+  /** The outputs every item of a workspace declared, each once. */
+  readonly workspaceOutputs: (workspaceId: string) => string[];
   /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFrom`), in any state. */
   readonly workspacesCutFrom: (workspaceId: string) => WorkspaceRow[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
@@ -454,13 +519,19 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             .where(sql`${workspaces.id} LIKE ${`${idOrPrefix}%`}`)
             .all();
     },
-    createWorkItem: ({ owns, ...item }) =>
+    createWorkItem: ({ outputs, owns, ...item }) =>
       db.transaction((tx) => {
         const row = tx.insert(workItems).values(item).returning().get();
         const owned = [...new Set(owns ?? [])];
         if (owned.length > 0) {
           tx.insert(workItemGlobs)
             .values(owned.map((glob) => ({ itemId: row.id, glob })))
+            .run();
+        }
+        const declared = [...new Set(outputs ?? [])];
+        if (declared.length > 0) {
+          tx.insert(workItemOutputs)
+            .values(declared.map((path) => ({ itemId: row.id, path })))
             .run();
         }
         return row;
@@ -475,6 +546,26 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .orderBy(sql`rowid`)
         .all()
         .map(({ glob }) => glob),
+    workItemOutputs: (itemId) =>
+      db
+        .select({ path: workItemOutputs.path })
+        .from(workItemOutputs)
+        .where(eq(workItemOutputs.itemId, itemId))
+        .orderBy(sql`rowid`)
+        .all()
+        .map(({ path }) => path),
+    workspaceOutputs: (workspaceId) => [
+      ...new Set(
+        db
+          .select({ path: workItemOutputs.path })
+          .from(workItemOutputs)
+          .innerJoin(workItems, eq(workItems.id, workItemOutputs.itemId))
+          .where(eq(workItems.workspaceId, workspaceId))
+          .orderBy(sql`${workItemOutputs}.rowid`)
+          .all()
+          .map(({ path }) => path)
+      ),
+    ],
     liveOwningWorkItems: () => {
       const owning = new Map<string, { globs: string[]; item: WorkItemRow }>();
       for (const { item, glob } of db
@@ -660,12 +751,67 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             .where(inArray(instances.parentInstanceId, parentInstanceIds))
             .all()
             .map((row) => row.id),
-    landedOnTree: (tree) =>
+    landedChecksOnTree: (tree) =>
       db
-        .select()
-        .from(workItems)
-        .where(sql`json_extract(${workItems.landed}, '$.gate.tree') = ${tree}`)
-        .all(),
+        .selectDistinct({ command: workItemLandedChecks.command })
+        .from(workItemLandedChecks)
+        .innerJoin(workItems, eq(workItems.id, workItemLandedChecks.itemId))
+        .where(eq(workItems.landedGateTree, tree))
+        .orderBy(workItemLandedChecks.command)
+        .all()
+        .map((row) => row.command),
+    gatePasses: (itemId) => {
+      const passes = new Map<string, GatePass[]>();
+      const rows = db
+        .select({
+          key: workItemGatePasses.passKey,
+          command: workItemGatePasses.command,
+          stage: workItemGatePasses.stage,
+        })
+        .from(workItemGatePasses)
+        .where(eq(workItemGatePasses.itemId, itemId))
+        .orderBy(sql`${workItemGatePasses}.rowid`)
+        .all();
+      for (const { key, command, stage } of rows) {
+        passes.set(key, [...(passes.get(key) ?? []), { command, stage }]);
+      }
+      return passes;
+    },
+    keepGatePass: (itemId, key, { command, stage }) => {
+      db.insert(workItemGatePasses)
+        .values({ itemId, passKey: key, command, stage })
+        .onConflictDoNothing()
+        .run();
+    },
+    dropGatePasses: (itemId, taken) => {
+      if (taken.length === 0) {
+        return;
+      }
+      db.delete(workItemGatePasses)
+        .where(
+          and(
+            eq(workItemGatePasses.itemId, itemId),
+            or(
+              ...taken.map(({ key, pass }) =>
+                and(
+                  eq(workItemGatePasses.passKey, key),
+                  eq(workItemGatePasses.command, pass.command),
+                  eq(workItemGatePasses.stage, pass.stage)
+                )
+              )
+            )
+          )
+        )
+        .run();
+    },
+    landedChecks: (itemId) =>
+      db
+        .select({ command: workItemLandedChecks.command })
+        .from(workItemLandedChecks)
+        .where(eq(workItemLandedChecks.itemId, itemId))
+        .orderBy(sql`${workItemLandedChecks}.rowid`)
+        .all()
+        .map((row) => row.command),
     trayItemsOf: (sessionId, endedSince) =>
       db
         .select()
@@ -682,13 +828,42 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         )
         .orderBy(workItems.createdAt)
         .all(),
-    updateWorkItem: (id, change) =>
-      db
-        .update(workItems)
-        .set(change)
-        .where(eq(workItems.id, id))
-        .returning()
-        .get(),
+    updateWorkItem: (id, { landed, gatePasses, ...change }) => {
+      if (!landed && gatePasses !== null) {
+        return db
+          .update(workItems)
+          .set(change)
+          .where(eq(workItems.id, id))
+          .returning()
+          .get();
+      }
+      return db.transaction((tx) => {
+        if (gatePasses === null) {
+          tx.delete(workItemGatePasses)
+            .where(eq(workItemGatePasses.itemId, id))
+            .run();
+        }
+        if (landed) {
+          tx.delete(workItemLandedChecks)
+            .where(eq(workItemLandedChecks.itemId, id))
+            .run();
+          const checks = landedCheckRows(id, landed);
+          if (checks.length > 0) {
+            tx.insert(workItemLandedChecks).values(checks).run();
+          }
+        }
+        return tx
+          .update(workItems)
+          .set({
+            ...change,
+            ...(gatePasses === null ? { gatePassesUnread: null } : {}),
+            ...(landed ? landedColumns(landed) : {}),
+          })
+          .where(eq(workItems.id, id))
+          .returning()
+          .get();
+      });
+    },
     activeWorkspacesOn: (machineId) =>
       db
         .select()

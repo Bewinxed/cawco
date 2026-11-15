@@ -26,6 +26,7 @@
    */
   import type { Account } from "@cawco/core/accounts";
   import { accountsWords as words } from "@cawco/core/words/accounts";
+  import { onMount } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import { z } from "zod";
 
@@ -89,6 +90,7 @@
     z.object({ on: z.string().nullable() }),
     () => ({ on: null })
   );
+  onMount(() => shown.keep());
   const openOn = $derived(
     shown.value.on?.startsWith(`${account.id}:`)
       ? shown.value.on.slice(account.id.length + 1)

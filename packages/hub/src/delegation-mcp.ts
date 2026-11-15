@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
-import { parseConnectionTool } from "@cawco/core/delegate-types";
+import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -245,7 +245,9 @@ export const toolViewOf = (
   // A connection with no session is OpenCode's shared discovery
   // ({@link requestBinding}).
   harness: actor?.harness ?? "opencode",
-  mayStart: actor?.mayStart ?? undefined,
+  // Shared discovery lists every tool a session may be listed, a spawning
+  // one included; a session's own list is its row's.
+  mayStart: actor ? actor.mayStart : [ANY_TYPE],
   hasParent: !actor || !!actor.parentInstanceId,
   lands,
   workItem: !actor || !!actor.workItemId,
@@ -1090,17 +1092,16 @@ export function createDelegationMcp(options: {
     }
   };
 
-  /** A session tool (delegation-tools.ts), for a resolved session whose role has it. */
-  const sessionCall = async (
+  /** What session `actor`'s tool `name` acts through (delegation-actions.ts), what it would start held in `emitted`. */
+  const actionDeps = (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>,
+    emitted: Envelope[],
     callId?: string,
     cut?: AbortSignal
-  ): Promise<CallToolResult> => {
-    const emitted: Envelope[] = [];
+  ): HandoffDeps => {
     const tree = options.delegationTree;
-    const deps: HandoffDeps = {
+    return {
       instanceId: actor.id,
       instanceById: options.instanceById,
       formerIds: options.formerIds,
@@ -1126,6 +1127,18 @@ export function createDelegationMcp(options: {
       work: options.workItemCalls,
       calls: options.sessionCalls,
     };
+  };
+
+  /** A session tool (delegation-tools.ts), for a resolved session whose role has it. */
+  const sessionCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>,
+    callId?: string,
+    cut?: AbortSignal
+  ): Promise<CallToolResult> => {
+    const emitted: Envelope[] = [];
+    const deps = actionDeps(actor, name, emitted, callId, cut);
     const entry = tools(viewOf(actor)).find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Tool ${name} is unavailable to this session`);
@@ -1270,10 +1283,10 @@ export function createDelegationMcp(options: {
     };
   };
 
-  /** The server's instructions for the session `bound`. */
+  /** The server's instructions for the session `bound`; with none, shared discovery's, as {@link toolViewOf} lists its tools. */
   const instructionsFor = (bound: InstanceRow | undefined): string =>
     handoffInstructions(
-      { mayStart: bound?.mayStart ?? undefined },
+      { mayStart: bound ? bound.mayStart : [ANY_TYPE] },
       listableOf(bound),
       options.decidesKinds()
     );
@@ -1523,23 +1536,11 @@ export function createDelegationMcp(options: {
   };
   /**
    * The hub's own hand-off as session `actor` (Who decides, settling.ts):
-   * the `handoff` tool's one path, its delivery words answered; refused in
-   * the tool's words when it would be.
+   * the `handoff` tool's one path (delegation-actions.ts `handoff`), its
+   * delivery words answered, or the problem the tool would answer.
    */
-  const handoffAs = async (
-    actor: InstanceRow,
-    target: string,
-    message: string
-  ): Promise<string> => {
-    const result = await sessionCall(actor, "handoff", { target, message });
-    const said = result.content
-      .flatMap((part) => (part.type === "text" ? [part.text] : []))
-      .join("\n");
-    if (result.isError) {
-      throw new Error(said);
-    }
-    return said;
-  };
+  const handoffAs = (actor: InstanceRow, target: string, message: string) =>
+    handoffActions(actionDeps(actor, "handoff", [])).handoff(target, message);
 
   return { handle, call, list, toolsMayHaveChanged, handoffAs };
 }

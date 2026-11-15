@@ -78,6 +78,9 @@ import type { BlockedRequest } from "../stores/sessions.svelte";
 import { storedStore } from "../stores/stored.svelte";
 import { tailnetStore } from "../stores/tailnet.svelte";
 import { tickersStore } from "../stores/tickers.svelte";
+import { toolUpdatesStore } from "../stores/tool-updates.svelte";
+import type { ToolItem } from "./ToolNeedsRow.svelte";
+import { toolNeedsOf } from "./tool-needs";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
    What "ended since you last looked" means is the owner's looking on
@@ -313,24 +316,33 @@ export function unarchive(rows: BoardRow[]): void {
 /* ── One clock for every age on the home ──────────────────────────── */
 
 let tick = $state(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
+/** Whether the app started the clock ({@link startHome}). */
+let ticking = $state(false);
 
-/** The minute-grained now every wait and elapsed time reads. */
+/**
+ * The minute-grained now every wait and elapsed time reads. Until the app
+ * starts it, and on the server, it is the time as it is read, never the
+ * module's load: a canvas's frame and a server render read their own moment,
+ * and a reader in an effect reads it again once the clock starts.
+ */
 export const clock = {
   get now(): number {
-    // The server renders each page at its own moment, never at the
-    // module's load.
-    if (typeof window === "undefined") {
-      return Date.now();
-    }
-    if (ticker === undefined) {
-      ticker = setInterval(() => {
-        tick = Date.now();
-      }, 15_000);
-    }
-    return tick;
+    return ticking ? tick : Date.now();
   },
 };
+
+/** Ticks {@link clock} every 15 s from now on. Returns its stop. */
+function startClock(): () => void {
+  tick = Date.now();
+  ticking = true;
+  const ticker = setInterval(() => {
+    tick = Date.now();
+  }, 15_000);
+  return () => {
+    clearInterval(ticker);
+    ticking = false;
+  };
+}
 
 /* ── Shapes ────────────────────────────────────────────────────────── */
 
@@ -395,12 +407,17 @@ interface ActionItem {
 
 /**
  * Fleet watch telling you about a session (core `FleetWatchNotice`): a
- * triage said so, or its project's Caw is off. It opens the session, and
- * leaves once you write to it or it moves on.
+ * triage said so, its project's Caw is off, or its deletion keeps failing.
+ * Its first line names the session, its second says why (the notice's
+ * body). It opens the session while the board holds its row; a notice that
+ * outlived its row (a deleted conversation) is titled by the notice and
+ * opens nothing, since the session has no page. It leaves once you write to
+ * it or it moves on.
  */
 interface WatchItem {
   cwd: string;
-  href: string;
+  /** The session's page; none once the board holds no row for it. */
+  href?: string;
   instanceId: string;
   key: string;
   kind: "watch";
@@ -612,6 +629,7 @@ interface McpItem {
 }
 
 export type NeedsItem =
+  | ToolItem
   | ArtifactItem
   | McpItem
   | AskItem
@@ -1016,8 +1034,15 @@ class Home {
   /** Each project's reads of its waiting tasks so far, by project id. */
   readonly #waitingAsked = new Map<string, number>();
 
-  constructor() {
-    $effect.root(() => {
+  /**
+   * The home's upkeep, which making it starts none of: the waiting tasks
+   * read as the hub is reached and as a project's tasks change, a mark's
+   * echo settled, and the looks the hub did not take sent again on a
+   * connection. Until it starts, `waiting` holds nothing and no look is
+   * sent again. Returns its stop.
+   */
+  start(): () => void {
+    return $effect.root(() => {
       $effect(() => {
         if (connectionStore.hub !== "connected") {
           this.#waitingRead.clear();
@@ -1168,7 +1193,9 @@ class Home {
         cwd: row?.cwd ?? "",
         title: row ? instanceTitle(row) : notice.title,
         place: row ? placeOfRow(row) : machineName(notice.machineId),
-        href: conversationHref(notice.instanceId, boardStore.instanceIndex),
+        ...(row
+          ? { href: conversationHref(row.id, boardStore.instanceIndex) }
+          : {}),
         raisedAt: notice.at,
       };
     });
@@ -1354,11 +1381,18 @@ class Home {
           : [];
       }
     );
+    // A tool whose copy on some machine waits on the person, while it does.
+    const tools: NeedsItem[] = toolNeedsOf(
+      boardStore.machines,
+      toolUpdatesStore.updates,
+      toolUpdatesStore.releases
+    );
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
       ...artifacts,
       ...signIns,
+      ...tools,
       ...caps,
       ...actions,
       ...watched,
@@ -1463,3 +1497,17 @@ function workingNow(): BoardRow[] {
 }
 
 export const home = new Home();
+
+/**
+ * The home, started: its clock and its upkeep ({@link Home.start}). The app
+ * starts it once (start.ts `startApp`); importing this module starts
+ * neither. Returns its stop.
+ */
+export function startHome(): () => void {
+  const stopClock = startClock();
+  const stopHome = home.start();
+  return () => {
+    stopHome();
+    stopClock();
+  };
+}

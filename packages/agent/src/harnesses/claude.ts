@@ -32,6 +32,7 @@ import {
   type McpServerStatus,
   type ModelUsage,
   type PermissionResult,
+  type PermissionUpdate,
   type Query,
   query,
   renameSession,
@@ -45,7 +46,7 @@ import {
   type SyncHookJSONOutput,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
-import { isGone } from "@cawco/core/absent";
+import { errnoCode, isGone } from "@cawco/core/absent";
 import type { AccountIdentity, AccountKind } from "@cawco/core/accounts";
 import { identityOf } from "@cawco/core/accounts";
 import {
@@ -65,6 +66,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import type { CutCommand } from "@cawco/core/commands/controls";
+import { isObject } from "@cawco/core/comments/model";
 import type { StartingSet } from "@cawco/core/delegate-types";
 import {
   HARNESS_TOOLS,
@@ -706,7 +708,11 @@ function attachQuestionResult(
 /**
  * The session file the CLI stores a session under, by its id alone, or null
  * when it is not found: the lookup for a caller with no row to name its dir,
- * so every config dir on the machine is searched.
+ * so every config dir on the machine is searched. Not found means looked for
+ * everywhere and absent (ENOENT, ENOTDIR): a place that could not be looked
+ * in (a projects folder at mode 000, a disk error) fails the lookup with
+ * why once no other place holds the file, so a transcript that can't be
+ * read is never answered as one that was never stored.
  */
 async function claudeSessionFile(
   sessionId: string,
@@ -714,50 +720,70 @@ async function claudeSessionFile(
 ): Promise<string | null> {
   const projects = claudeConfigDirs().map((config) => join(config, "projects"));
   const fileName = `${sessionId}.jsonl`;
+  const looks = new PlaceLooks();
   // The CLI names the project dir from the session's cwd: realpath, then
   // `projectSlug`. Try that first — it is the exact file `getSessionMessages`
   // reads — and only scan when the cwd is gone or the slug no longer resolves
   // (a cwd that has since moved).
-  let slug: string | null = null;
-  if (dir) {
-    try {
-      slug = projectSlug(await realpath(dir));
-    } catch {
-      slug = null;
-    }
-  }
-  if (slug) {
-    for (const projectsDir of projects) {
-      const candidate = join(projectsDir, slug, fileName);
-      try {
-        await access(candidate);
-        return candidate;
-      } catch {
-        // not under this config dir
-      }
+  const slug = dir ? await realpath(dir).then(projectSlug, () => null) : null;
+  for (const projectsDir of slug ? projects : []) {
+    const candidate = join(projectsDir, slug ?? "", fileName);
+    if (await looks.there(() => access(candidate))) {
+      return candidate;
     }
   }
   for (const projectsDir of projects) {
-    let entries: Dirent[];
-    try {
-      entries = await readdir(projectsDir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
+    for (const entry of await looks.entries(projectsDir)) {
       const candidate = join(projectsDir, entry.name, fileName);
-      try {
-        await access(candidate);
+      if (entry.isDirectory() && (await looks.there(() => access(candidate)))) {
         return candidate;
-      } catch {
-        // not in this project
       }
     }
   }
+  if (looks.unread !== undefined) {
+    throw new Error(
+      `Claude Code's stored conversation ${sessionId} couldn't be looked for: ${looks.unread instanceof Error ? looks.unread.message : String(looks.unread)}`,
+      { cause: looks.unread }
+    );
+  }
   return null;
+}
+
+/**
+ * Looks in places for a stored conversation ({@link claudeSessionFile}),
+ * keeping the first that could not be looked in: nothing there (ENOENT,
+ * ENOTDIR) is an answer, anything else is not.
+ */
+class PlaceLooks {
+  unread: unknown;
+
+  /** Whether `look` found the place there. */
+  async there(look: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await look();
+      return true;
+    } catch (error) {
+      this.#keep(error);
+      return false;
+    }
+  }
+
+  /** The entries of the folder `dir`; none when it is not there or could not be read. */
+  async entries(dir: string): Promise<Dirent[]> {
+    try {
+      return await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      this.#keep(error);
+      return [];
+    }
+  }
+
+  #keep(error: unknown): void {
+    const code = errnoCode(error);
+    if (!(code === "ENOENT" || code === "ENOTDIR")) {
+      this.unread ??= error;
+    }
+  }
 }
 
 /**
@@ -1515,20 +1541,50 @@ const sdkMode = (
 ): import("@anthropic-ai/claude-agent-sdk").PermissionMode =>
   mode === "fullSend" ? "bypassPermissions" : mode;
 
-/** A permission answer in the SDK's words: any `setMode` it carries names the CLI's mode. */
+/**
+ * A `setMode` update naming CawCo's own Full Send: the one part of an
+ * answer's permission updates that is CawCo's, and the one this adapter
+ * rewrites. Every other update is the CLI's and goes back as it came.
+ */
+const setsFullSend = (
+  update: unknown
+): update is Record<string, unknown> & { mode: "fullSend" } =>
+  isObject(update) && update.type === "setMode" && update.mode === "fullSend";
+
+/**
+ * One of the CLI's own permission updates, as an "Always allow" hands its
+ * suggestion back: an object naming its `type` and `destination`. Which
+ * values those take is the CLI's, so they are not enumerated here: a kind a
+ * later release adds goes back to the release that raised it.
+ */
+const isCliPermissionUpdate = (value: unknown): value is PermissionUpdate =>
+  isObject(value) &&
+  typeof value.type === "string" &&
+  typeof value.destination === "string";
+
+/** A permission answer in the SDK's words: a Full Send `setMode` it carries names the CLI's bypass. */
 const sdkPermissionResult = (
   result: import("@cawco/core/session-messages").PermissionResult
-): PermissionResult =>
-  (result.behavior === "allow" && result.updatedPermissions
-    ? {
-        ...result,
-        updatedPermissions: result.updatedPermissions.map((update) =>
-          update.type === "setMode"
+): PermissionResult => {
+  if (result.behavior === "deny") {
+    return result;
+  }
+  const { updatedInput, updatedPermissions, toolUseID } = result;
+  return {
+    behavior: "allow",
+    ...(isObject(updatedInput) && { updatedInput }),
+    ...(updatedPermissions && {
+      updatedPermissions: updatedPermissions
+        .map((update) =>
+          setsFullSend(update)
             ? { ...update, mode: sdkMode(update.mode) }
             : update
-        ),
-      }
-    : result) as PermissionResult;
+        )
+        .filter(isCliPermissionUpdate),
+    }),
+    ...(toolUseID !== undefined && { toolUseID }),
+  };
+};
 
 /**
  * A session's permission mode, in CawCo's words and the CLI's. Bypass is the
@@ -4642,9 +4698,7 @@ class ClaudeSession implements HarnessSession {
     // the asks it still holds open.
     if (
       result.behavior === "allow" &&
-      result.updatedPermissions?.some(
-        (update) => update.type === "setMode" && update.mode === "fullSend"
-      )
+      result.updatedPermissions?.some(setsFullSend)
     ) {
       this.#mode.choose("fullSend");
       this.#answerOpen();

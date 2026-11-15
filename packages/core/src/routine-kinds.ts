@@ -1,5 +1,5 @@
 /** Every {@link RoutineTarget}. */
-const ROUTINE_TARGETS = [
+export const ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
   "conversation",
@@ -24,7 +24,7 @@ export const MADE_ROUTINE_TARGETS = [
 ] as const satisfies readonly RoutineTarget[];
 
 /** Every {@link RoutineRunState}. */
-const ROUTINE_RUN_STATES = [
+export const ROUTINE_RUN_STATES = [
   "queued",
   "starting",
   "running",
@@ -39,7 +39,7 @@ const ROUTINE_RUN_STATES = [
 export type RoutineRunState = (typeof ROUTINE_RUN_STATES)[number];
 
 /** Every {@link RoutineOutcome}. */
-const ROUTINE_OUTCOMES = [
+export const ROUTINE_OUTCOMES = [
   "silent",
   "delivered",
   "failed",

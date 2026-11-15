@@ -5,10 +5,8 @@
  * can't install, and how a refused harness and its row read when CawCo
  * updates it with no press. The agent says {@link toolWords.behind},
  * {@link toolWords.updatesOff}, {@link toolWords.autoUpdatesOff},
- * {@link toolWords.cannotPin},
- * {@link toolWords.updatesItself} and {@link toolWords.updatingItself}
- * (agent tools.ts, claude-version.ts); the dashboard says the rest
- * (ToolMatrix.svelte, harness-block.svelte.ts). The app draws none of it,
+ * and {@link toolWords.cannotPin} (agent tools.ts); the dashboard says the
+ * rest (ToolMatrix.svelte, harness-block.svelte.ts). The app draws none of it,
  * so it is not written into it (scripts/words-swift.ts).
  */
 /** Where a tool sign-in's refusal turns to quoting the tool's own screen. */
@@ -32,6 +30,14 @@ const listed = (names: string[]): string =>
     : (names[0] ?? "");
 
 export const toolWords = {
+  /**
+   * An install that stopped before it finished `runs` times in a row, each
+   * time with the agent that ran it (a restart, an out-of-memory kill, a
+   * power cut), and is not run again unasked: the agent's `detail` on the
+   * tool's failed row (agent tools.ts `redoInstall`).
+   */
+  cutShort: (name: string, runs: number) =>
+    `${name}'s install stopped before it finished ${runs} times in a row, each time with the agent running it. Retry runs it again.`,
   /**
    * An update that left the copy older than the release it was after: the
    * release, the updater's own words, what still runs, and what comes next.
@@ -126,6 +132,38 @@ export const toolWords = {
    * `settingsAnswer`): CawCo can't tell whether its owner turned its updates
    * off, so it updates nothing; the read's last line when it said one.
    */
+  /**
+   * One of the tool's settings sources that is there and could not be read
+   * (agent claude-settings.ts `unreadSources`), where it is and why: what
+   * {@link toolWords.settingsUnread}'s `said` carries.
+   */
+  settingsSourceUnread: (where: string, why: string) =>
+    `${where} is there but couldn't be read: ${why}`,
+  /**
+   * A Claude Code settings file CawCo meant to write and left, said on the
+   * agent's log (agent claude-settings-file.ts): `unread` is
+   * {@link toolWords.settingsSourceUnread}'s sentence.
+   */
+  settingsLeft: (unread: string) =>
+    `${unread}. CawCo left it as it is and reads it again at its next start.`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a path that is a symlink to nothing (agent json-on-disk.ts). */
+  fileLinksToNothing: (to: string) =>
+    `it links to ${to || "a path it doesn't say"}, which isn't there`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings path that is a folder, a pipe or anything else not a file. */
+  settingsNotAFile: "it isn't a file",
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file larger than any CawCo reads. */
+  settingsTooLarge: (bytes: number, limit: number) =>
+    `it is ${bytes} bytes, and CawCo reads a settings file of up to ${limit}`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file whose text is not one JSON object. */
+  settingsNotAnObject: "it doesn't hold one JSON object",
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a settings file the tool's own engine left out of what it read. */
+  settingsSkipped: "Claude Code's own settings engine left it out",
+  /** {@link toolWords.settingsSourceUnread}'s `where` for the machine's managed policy, by the kinds of its sources that did not load. */
+  settingsPolicy: (kinds: readonly string[]) =>
+    `the machine's managed policy (${new Intl.ListFormat("en", { type: "conjunction" }).format(kinds)})`,
+  /** {@link toolWords.settingsSourceUnread}'s `why` for a managed policy source Claude Code's engine says did not load. */
+  settingsPolicyUnloaded:
+    "Claude Code's own settings engine says it didn't load",
   settingsUnread: (name: string, said: string | undefined) =>
     `CawCo couldn't read ${name}'s settings${said ? ` (${said})` : ""}, so it can't tell whether its updates are off. Retry reads them again, and so does CawCo's next update.`,
   /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */
@@ -154,13 +192,18 @@ export const toolWords = {
   /** No install method runs here: why each method's need can't serve, in catalog order. */
   noInstaller: (why: string[]) => `no installer runs here: ${why.join("; ")}`,
   /**
-   * The fix a refused harness's sentence ends on when CawCo updates its CLI
-   * with no press (Claude Code older than CawCo's floor).
+   * A machine's harness block while CawCo itself puts the CLI on (core
+   * `ToolStatus.startedBy` `cawco`: its update of its own copy, or adding a
+   * machine): who does it, what, where and to what, and that nothing waits
+   * on the person. A press's own progress is the block's other words.
    */
-  updatesItself: (name: string) =>
-    `CawCo updates ${name} and runs it once the update lands`,
-  /** The tail of the tool probe's word on a copy older than CawCo's floor, for a CLI CawCo updates by itself. */
-  updatingItself: "CawCo updates it.",
+  cawcoPutting: (
+    installs: boolean,
+    name: string,
+    machine: string,
+    to: string | undefined
+  ) =>
+    `${installs ? "Installing" : "Updating"} ${name} on ${machine}${to ? ` to ${to}` : ""}.`,
   /** Configure → CLI tools: the cell while CawCo updates a copy that is there. */
   updating: "Updating…",
   /** Configure → CLI tools: the mark beside a copy's version that its last update left older. */

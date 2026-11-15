@@ -282,8 +282,7 @@ its connection result.
 
 CawCo is a single-operator fleet reachable over a tailnet (or a trusted LAN). Every
 request to the hub is one class, read from the credential it presents
-(`packages/hub/src/hub-auth.ts`): the **hub** itself (an in-memory secret on its own
-self-calls, `hub-self.ts`), a **session** (`Authorization: Bearer <its credential>`), the
+(`packages/hub/src/hub-auth.ts`): a **session** (`Authorization: Bearer <its credential>`), the
 **owner** (a paired device's token, `Authorization: Owner <token>` or the browser's
 `cawco-owner` cookie), a **machine** (its key's proof), or **anonymous**. Every route is the
 owner's unless `hub-auth.ts` `RULES` lists it for sessions, machines or anyone: a route

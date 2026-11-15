@@ -25,7 +25,15 @@ import type {
   MediaMeasurementOutput,
   SetHarnessConfigOutput,
   SetHookOutput,
+  ToolInstallRecordOutput,
+  ToolInstallsOutput,
+  ToolInstallUnderwayOutput,
 } from "./stored-shapes";
+import type {
+  ToolInstallRecord as ToolInstallRecordType,
+  ToolInstalls as ToolInstallsType,
+  ToolInstallUnderway as ToolInstallUnderwayType,
+} from "./tools";
 
 /**
  * Each property, through every level, as a plain object type. `readonly`
@@ -57,5 +65,8 @@ prove<
     Same<FleetMcpSetOutput, FleetMcpSetType>,
     Same<FleetPlaceSetOutput, FleetPlaceSetType>,
     Same<MediaMeasurementOutput, MediaMeasurementType>,
+    Same<ToolInstallRecordOutput, ToolInstallRecordType>,
+    Same<ToolInstallUnderwayOutput, ToolInstallUnderwayType>,
+    Same<ToolInstallsOutput, ToolInstallsType>,
   ]
 >();

@@ -1078,42 +1078,38 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
   /**
    * The Make tasks ask, said to its session as the record's send, or to the
-   * project's conversation, which the record is written again to name;
-   * what refused it, if anything.
+   * project's conversation, which the record is written again to name: the
+   * problem that kept it from the conversation (caw.ts `tell`'s, its
+   * machine away among them, or the folder's write), if anything.
    */
   const askTasks = async (
     projectId: string,
     record: StoredRecord,
     to: ReturnType<typeof heardBy>,
     ask: PersonsSend
-  ): Promise<{ why: string } | null> => {
-    try {
-      if ("instance" in to) {
-        deps.tell(to.instance, ask, record.askedSend ?? crypto.randomUUID());
-        return null;
-      }
-      const told = await deps.tellConversation(projectId, ask);
-      if (told instanceof ElysiaStatus) {
-        return { why: told.response.detail };
-      }
-      const { send } = told;
-      const committed = await deps.commit(
-        projectId,
-        {
-          writes: [
-            {
-              path: recordPath(record.name),
-              content: recordText({ ...record, askedSend: send }),
-            },
-          ],
-          deletes: [],
-        },
-        `decisions: ${record.name} asked of Caw`
-      );
-      return committed ? { why: committed.response.detail } : null;
-    } catch (error) {
-      return { why: error instanceof Error ? error.message : String(error) };
+  ) => {
+    if ("instance" in to) {
+      deps.tell(to.instance, ask, record.askedSend ?? crypto.randomUUID());
+      return;
     }
+    const told = await deps.tellConversation(projectId, ask);
+    if (told instanceof ElysiaStatus) {
+      return told;
+    }
+    const { send } = told;
+    return await deps.commit(
+      projectId,
+      {
+        writes: [
+          {
+            path: recordPath(record.name),
+            content: recordText({ ...record, askedSend: send }),
+          },
+        ],
+        deletes: [],
+      },
+      `decisions: ${record.name} asked of Caw`
+    );
   };
 
   /**
@@ -1482,22 +1478,31 @@ export const createDecisions = (deps: DecisionsDeps) => {
         if (written) {
           return written;
         }
-        const refused = await askTasks(projectId, record, to, ask);
-        if (refused) {
-          const restored = await deps.commit(
+        // The record as it was, when its ask did not go: what it answered,
+        // or what it threw, is the answer once the record stands again.
+        const restore = () =>
+          deps.commit(
             projectId,
             prior
               ? { writes: recordFiles(prior, titles), deletes: [] }
               : { writes: [], deletes: [recordPath(name), logPath(name)] },
             `decisions: ${name}'s tasks were not asked for`
           );
-          if (restored) {
-            return restored;
+        let notAsked: Awaited<ReturnType<typeof askTasks>>;
+        try {
+          notAsked = await askTasks(projectId, record, to, ask);
+        } catch (error) {
+          // What was thrown is the answer; a record not restored is said.
+          const unrestored = await restore();
+          if (unrestored) {
+            console.warn(
+              `[decisions] ${projectId}: ${name}'s record was not restored: ${unrestored.response.detail}`
+            );
           }
-          return problem(503, {
-            code: "decision-tasks-unasked",
-            detail: `Couldn't make tasks: ${refused.why}`,
-          });
+          throw error;
+        }
+        if (notAsked) {
+          return (await restore()) ?? notAsked;
         }
       });
       if (unasked) {

@@ -6,6 +6,12 @@ import {
   connectionAreas,
   connectionProjects,
   connections,
+  delegateTypeConnections,
+  delegateTypeDenyTools,
+  delegateTypeMayStart,
+  delegateTypeSkills,
+  delegateTypeStartingSet,
+  delegateTypes,
   fleetAgents,
   fleetHarnessConfig,
   fleetHooks,
@@ -24,9 +30,8 @@ import {
   ruleState,
   rules,
   skills,
-  type TrashKind,
 } from "./schema";
-import type { TrashedRows } from "./stored-types";
+import type { TrashedRows, TrashKind } from "./stored-types";
 import type { Tx } from "./tx";
 
 /**
@@ -140,9 +145,20 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
     // new one.
     part("fleet_mcp_sessions", eq(fleetMcpSessions.server, key), false),
   ],
-  // db/delegate-types.ts owns this table outside Drizzle's schema.
+  // Its lists come back with it.
   delegateType: (key) => [
-    part("delegate_types", sql`${sql.identifier("name")} = ${key}`),
+    part("delegate_types", eq(delegateTypes.name, key)),
+    part("delegate_type_may_start", eq(delegateTypeMayStart.typeName, key)),
+    part("delegate_type_skills", eq(delegateTypeSkills.typeName, key)),
+    part("delegate_type_deny_tools", eq(delegateTypeDenyTools.typeName, key)),
+    part(
+      "delegate_type_connections",
+      eq(delegateTypeConnections.typeName, key)
+    ),
+    part(
+      "delegate_type_starting_set",
+      eq(delegateTypeStartingSet.typeName, key)
+    ),
   ],
   memoryDoc: (key) => docParts([key]),
   connection: (key) => [

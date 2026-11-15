@@ -4,6 +4,7 @@
 import type { ACTIVITIES } from "./activity";
 import type { ArtifactDoes, ArtifactKind } from "./artifact-kinds";
 import type { MayStart } from "./delegate-types";
+import { everyOf } from "./every-of";
 import type { FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { LastErrorKind } from "./relaunch";
@@ -803,6 +804,13 @@ export interface AgentRow {
    * Last-known tool status by tool id (NEW.md §10).
    */
   tools?: Record<string, ToolStatus>;
+  /**
+   * Harnesses the machine reported that this hub cannot run, by the
+   * machine's own name for each: one this hub does not know, or one whose
+   * sign-in word or refusal it does not know (a newer agent's report). Kept
+   * as reported, never among {@link harnesses}. Absent when there are none.
+   */
+  unknownHarnesses?: string[];
 }
 
 export type SessionCustody =
@@ -1181,10 +1189,10 @@ export interface InstanceRow {
   machineId: string;
   /**
    * The delegate types the session may start ({@link MayStart}): `["any"]`
-   * an orchestrator's, any other list a leaf's (the empty one by default).
-   * Null on a session nobody delegated, which may start any.
+   * an orchestrator's (a session nobody delegated work to starts as one),
+   * any other list a leaf's.
    */
-  mayStart?: MayStart | null;
+  mayStart: MayStart;
   model?: string | null;
   /**
    * Who started it ({@link SessionOrigin}), as the hub stamped it at its
@@ -1197,7 +1205,7 @@ export interface InstanceRow {
    * waits on, its turn's end, the background work its process holds ending,
    * or its machine connected again. Absent when it owes none.
    */
-  owedMove?: { accountId: string; waits: "turn" | "work" | "machine" };
+  owedMove?: { accountId: string; waits: OwedMoveWait };
   /**
    * The session that started this one (`delegate`, `start_session`), which every rail nests it under; absent on a
    * session a person started. A delegate is told from a session merely
@@ -1255,7 +1263,7 @@ export interface InstanceRow {
    * SpawnPayload.startingSet}): written by its first spawn and kept, so every
    * launch of it starts with the same set. Null: everything installed.
    */
-  startingSet?: import("./delegate-types").StartingSet | null;
+  startingSet: import("./delegate-types").StartingSet | null;
   status: InstanceStatus;
   /**
    * What the session is called: the owner's rename, else the name the session
@@ -1306,12 +1314,6 @@ export interface KeepAlive {
   cold: { reason: string; at: number } | null;
   contextReadAt: number | null;
   contextTokens: number | null;
-  lastPingUsage: {
-    input: number;
-    read: number;
-    write: number;
-    at: number;
-  } | null;
   nextAt: number | null;
   on: boolean;
   sent: number;
@@ -1446,8 +1448,22 @@ export type DelegateEvent =
       };
     });
 
+/**
+ * What a move a session owes waits on before it runs: the session's turn's
+ * end; the work its process holds for later (a background task) ending, or
+ * the restart bound; or its machine connected again (hub `owed_moves.waits`).
+ */
+export type OwedMoveWait = "turn" | "work" | "machine";
+
 /** The three things a delegate and its parent ever say to each other. */
 export type DelegateEventKind = DelegateEvent["kind"];
+
+/** Every {@link DelegateEventKind}. */
+export const DELEGATE_EVENT_KINDS = everyOf<DelegateEventKind>()([
+  "ask",
+  "answer",
+  "report",
+]);
 
 /** What each kind carries: the ask's own input, the answer, the turn's report. */
 export type DelegateEventPayload = DelegateEvent["payload"];

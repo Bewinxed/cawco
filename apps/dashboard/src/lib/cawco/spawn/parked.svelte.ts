@@ -109,17 +109,6 @@ export const parked = $state<{ list: ParkedStart[] }>({
   list: readJson(KEY, z.array(ParkedStartSchema), [], "session"),
 });
 
-// The form was showing a start the tab no longer keeps: it opens on none.
-if (spawning.shown && !parked.list.some((one) => one.id === spawning.shown)) {
-  spawning.shown = null;
-}
-
-$effect.root(() => {
-  $effect(() => {
-    writeJson(KEY, parked.list.map(kept), "session");
-  });
-});
-
 /** The parked start `id`, as the store holds it (reactive). */
 export function parkedStart(id: string | null): ParkedStart | undefined {
   return id ? parked.list.find((one) => one.id === id) : undefined;
@@ -319,11 +308,6 @@ function settleJobs(table: ContinuationJob[]): void {
   }
 }
 
-followContinuations((table) => {
-  tableRead = true;
-  settleJobs(table);
-});
-
 /** Nothing was asked of the hub before the reload: nothing started. */
 const NOTHING_ASKED = spawnWords.starting.reloadedBeforeAsk;
 /** The ask went, and its answer was the reload's to lose. */
@@ -401,13 +385,39 @@ function recover(start: ParkedStart): void {
   );
 }
 
-$effect.root(() => {
-  $effect(() => {
-    track(tick);
-    for (const start of parked.list) {
-      if (start.state === "running" && !running.has(start.id)) {
-        recover(start);
-      }
-    }
+/**
+ * The parked starts, started: the form opens on none when the start it
+ * showed is no longer kept, the list is written to the tab's storage as it
+ * changes, each continuation this tab started is settled as the hub's table
+ * moves, and a start the reload left running is recovered (again when its
+ * wait runs out). The app starts it once (start.ts `startApp`); importing
+ * this module only reads what the tab kept, and until the start a parked
+ * start stands as the tab kept it. Returns its stop.
+ */
+export function startParked(): () => void {
+  // The form was showing a start the tab no longer keeps: it opens on none.
+  if (spawning.shown && !parked.list.some((one) => one.id === spawning.shown)) {
+    spawning.shown = null;
+  }
+  const unfollow = followContinuations((table) => {
+    tableRead = true;
+    settleJobs(table);
   });
-});
+  const stopEffects = $effect.root(() => {
+    $effect(() => {
+      writeJson(KEY, parked.list.map(kept), "session");
+    });
+    $effect(() => {
+      track(tick);
+      for (const start of parked.list) {
+        if (start.state === "running" && !running.has(start.id)) {
+          recover(start);
+        }
+      }
+    });
+  });
+  return () => {
+    stopEffects();
+    unfollow();
+  };
+}

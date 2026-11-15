@@ -57,6 +57,25 @@ export interface WorkspaceTool {
  * browser only through a stream relay).
  */
 export type MediaPath = "udp+tcp" | "tcp" | "none";
+/**
+ * A {@link MachineCapabilities} in its machine's own words: each item's id,
+ * its media path and its missing tools' needs the string the machine sent,
+ * which may be one this build does not know (a newer agent's). What the hub
+ * keeps of a machine's report (`agents.machine_capabilities`), and reads
+ * into a {@link MachineCapabilities} (hub db machines.ts
+ * `capabilitiesOf`): an item, a media path or a missing tool it does not
+ * know is left out.
+ */
+export interface NamedMachineCapabilities {
+  at: number;
+  items: (Omit<MachineCapability, "id" | "media" | "missing"> & {
+    id: string;
+    media?: string;
+    missing?: (Omit<WorkspaceTool, "need"> & { need: string })[];
+  })[];
+  platform: string;
+}
+
 export interface MachineCapabilities {
   at: number;
   items: MachineCapability[];

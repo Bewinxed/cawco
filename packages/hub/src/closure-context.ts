@@ -37,6 +37,7 @@ import type {
   CommandQueue,
   CommandResult,
 } from "@cawco/core/commands/controls";
+import type { StartingSet } from "@cawco/core/delegate-types";
 import type {
   FleetPlugin,
   FleetSkillMeta,
@@ -126,16 +127,17 @@ import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { DelegateTypesShape } from "./db/delegate-types";
-import type {
-  BoardInstanceRow,
-  InstanceKind,
-  PublicInstanceRow,
-} from "./db/instances";
+import type { BoardInstanceRow, PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
-import type { ContinuationSource, StoredSendRefusal } from "./db/stored-types";
+import type {
+  ContinuationSource,
+  InstanceKind,
+  LimitCompactionStage,
+  StoredSendRefusal,
+} from "./db/stored-types";
 import type { Undoable } from "./db/trash";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
@@ -170,7 +172,12 @@ import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Kept, Stall, TakenUpBy } from "./limit-decision";
-import type { ControlResult, Unanswered } from "./machine-answers";
+import type {
+  AwayProblem,
+  ControlResult,
+  SilentProblem,
+  Unanswered,
+} from "./machine-answers";
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
@@ -181,7 +188,7 @@ import type { createNotifications } from "./notifications";
 import type { createOpenItems } from "./open-items";
 import type { createPasskeyRelay } from "./passkey-relay";
 import type { AnswerFrom, PendingShape } from "./pending";
-import type { PlacementInput } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import type { PlanChanges } from "./plan-changes";
 import type { createPlans } from "./plans";
 import type { createPreviewListeners, PreviewTarget } from "./preview";
@@ -217,6 +224,7 @@ import type { createStreamRelay } from "./stream-relay";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
+import type { ToolFactsShape } from "./tool-facts";
 import type { ToolReleases } from "./tool-releases";
 import type {
   createTranscripts,
@@ -232,6 +240,24 @@ import type { HubSocket } from "./wire-socket";
 import type { WorkItemCallsDeps } from "./work-item-calls";
 import type { createWorkItems } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
+
+/** The credential a move takes, as its machine's store holds it (account-signin.ts `homeCredentialOf`). */
+export interface HomeCredentialFound {
+  identity: AccountIdentity;
+  kind: AccountKind;
+  provider: AccountProvider;
+  storeProvider: string;
+}
+
+/** A credential's move refused at `Status`, in the words of why (account-signin.ts `homeCredentialOf`). */
+type HomeLoginRefused<Status extends 409 | 502> = ReturnType<
+  typeof problem<Status, { code: "home-login-refused"; detail: string }>
+>;
+
+/** A session's permission mode not applied, at `Status`, in the words of what refused it (server.ts `applyPermissionMode`). */
+type ModeRefused<Status extends 400 | 502> = ReturnType<
+  typeof problem<Status, { code: "mode-refused"; detail: string }>
+>;
 
 export interface ClosureContext {
   accountKindRefusal: (
@@ -303,7 +329,13 @@ export interface ClosureContext {
   applyPermissionMode: (
     row: InstanceRow,
     mode: string
-  ) => Promise<{ code: 400 | 500 | 503 | 504; error: string } | undefined>;
+  ) => Promise<
+    | ModeRefused<400>
+    | AwayProblem
+    | SilentProblem
+    | ModeRefused<502>
+    | undefined
+  >;
   archiveView: () => ArchiveView;
   artifactLane: ReturnType<typeof createArtifactLane>;
   artifactSessions: ReturnType<typeof createArtifactSessions>;
@@ -329,7 +361,13 @@ export interface ClosureContext {
     model?: string;
     projectId?: string;
     type?: string;
-  }) => Promise<NamedSpawn | { refusal: string; status: 400 | 503 }>;
+  }) => Promise<
+    | NamedSpawn
+    | ReturnType<
+        typeof problem<400, { code: "placement-refused"; detail: string }>
+      >
+    | Exclude<Awaited<ReturnType<ClosureContext["piDefaultFor"]>>, NamedSpawn>
+  >;
   askerOf: (request: Request) => string;
   askersOf: (row: InstanceRow | undefined) => string[];
   askInOrder: (
@@ -339,7 +377,6 @@ export interface ClosureContext {
   ) => boolean;
   asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
   atLimit: ReturnType<typeof createAtLimit>;
-  autoInstall: (machineId: string, agent: HubSocket) => void;
   awaitingFirstTurn: Set<string>;
   awaitReply: (
     machineId: string,
@@ -562,13 +599,11 @@ export interface ClosureContext {
     store: HomeStore,
     storeProvider: string | undefined
   ) => Promise<
-    | {
-        identity: AccountIdentity;
-        kind: AccountKind;
-        provider: AccountProvider;
-        storeProvider: string;
-      }
-    | { error: string; status: 409 | 422 | 503 }
+    | HomeCredentialFound
+    | AwayProblem
+    | SilentProblem
+    | HomeLoginRefused<409>
+    | HomeLoginRefused<502>
   >;
   homeLoginMoveOf: (
     machineId: string,
@@ -581,7 +616,7 @@ export interface ClosureContext {
       areaId?: string | null;
       projectId?: string | null;
     }
-  ) => HookDraft;
+  ) => HookDraft | string;
   hubAsks: ReturnType<typeof createAsks>;
   hubAuth: ReturnType<typeof createHubAuth>;
   hubBuild: BuildInfo;
@@ -606,7 +641,8 @@ export interface ClosureContext {
   installArgs: (
     toolId: string,
     ask: { newest?: string; pin?: string },
-    automatic: boolean
+    automatic: boolean,
+    startedBy: "cawco" | "person"
   ) => unknown[];
   installAsk: (toolId: string) => { newest?: string; pin?: string };
   installFromFolder: (
@@ -647,6 +683,8 @@ export interface ClosureContext {
     identity: AccountIdentity
   ) => Promise<AccountJoined | { error: string }>;
   keepAliveScheduler: ReturnType<typeof createKeepAliveScheduler>;
+  /** Runs the hub's tool pass for a machine, or every connected one (tool-installs.ts `keepCopiesOn`). */
+  keepCopiesOn: (machineId?: string) => void;
   keepCustody: (machineId: string, custody: SessionCustody) => void;
   keepFleetReport: (
     machineId: string,
@@ -679,6 +717,8 @@ export interface ClosureContext {
   ) => boolean;
   keptNextWords: (why: Kept, toName: string) => string;
   keptOn: Map<string, Set<string>>;
+  /** The release each kept CLI's copies are kept at, by tool id (tool-releases.ts `keptReleases`). */
+  keptReleases: () => Record<string, string>;
   keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
   lastRequestContext: Map<string, number>;
@@ -864,7 +904,17 @@ export interface ClosureContext {
   pending: PendingShape;
   pendingInstalls: Map<
     string,
-    { machineId: string; newest?: string | undefined; toolId: string }
+    {
+      /** Presses that came while it ran, by their own request ids: each answered with its answer (relay-control.ts). */
+      joined?: {
+        dashboard: HubSocket;
+        requestId: string;
+        replyAsFrame: boolean;
+      }[];
+      machineId: string;
+      newest?: string | undefined;
+      toolId: string;
+    }
   >;
   pendingKey: (accountId: string, machineId: string) => string;
   pendingSignins: Map<string, PendingAccountSignin>;
@@ -872,12 +922,18 @@ export interface ClosureContext {
   piDefaultFor: (
     machineId: string,
     payload: NamedSpawn
-  ) => Promise<NamedSpawn | { refusal: string }>;
+  ) => Promise<
+    | NamedSpawn
+    | SilentProblem
+    | ReturnType<
+        typeof problem<502, { code: "spawn-default-unnamed"; detail: string }>
+      >
+  >;
   placedOn: (machineId: string, accountId: string) => boolean;
   placementInput: (
     machineId: string,
     payload: NamedSpawn,
-    task: { projectId?: string | null; taskId?: string | null },
+    task: { accounts?: string[] | null; projectId?: string | null },
     fork: { accountId: string | null } | undefined
   ) => PlacementInput | undefined;
   planChanges: PlanChanges | undefined;
@@ -1223,9 +1279,14 @@ export interface ClosureContext {
   startingSetOf: (
     payload: Pick<
       NamedSpawn,
-      "delegateType" | "projectId" | "resume" | "skills"
+      | "clean"
+      | "delegateType"
+      | "instanceId"
+      | "projectId"
+      | "resume"
+      | "skills"
     >
-  ) => Pick<Parameters<DbShape["openInstance"]>[0], "startingSet">;
+  ) => { startingSet: StartingSet | null } | { refusal: string };
   startMove: (
     machineId: string,
     store: HomeStore,
@@ -1245,6 +1306,8 @@ export interface ClosureContext {
         waitingFor: number;
       }
   >;
+  /** A kept start has gone to its machine (start-holds.ts `sendNextStart`): its item's held inputs go (work-items.ts `startSent`). */
+  startSent: (instanceId: string) => void;
   startsFreed: (_machineId: string) => void;
   startsOnHomeLogin: (machineId: string, payload: SpawnPayload) => boolean;
   startsTurnIn: (
@@ -1256,7 +1319,7 @@ export interface ClosureContext {
   ) => boolean;
   stepping: Set<string>;
   stepUuids: (plan: LimitCompaction) => string[];
-  stepWords: (stage: "compacting" | "filing" | "carrying") => string;
+  stepWords: (stage: LimitCompactionStage) => string;
   stopCompaction: (instanceId: string) => void;
   stopDispatches: Map<
     string,
@@ -1308,7 +1371,7 @@ export interface ClosureContext {
   taskAccounts: (
     projectId: string | null | undefined,
     taskId: string | null | undefined
-  ) => string[] | null;
+  ) => TaskAccounts;
   tasks: ReturnType<typeof createTasks>;
   tellEndedByMove: (row: { id: string; machineId: string }) => void;
   tellSession: (
@@ -1325,6 +1388,8 @@ export interface ClosureContext {
   tickLeaves: () => void;
   tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
+  /** Whether each machine's tool cells are its connection's now (tool-facts.ts). */
+  toolFacts: ToolFactsShape;
   toolReleases: ToolReleases;
   toolsMayHaveChanged: () => void;
   touched: Map<string, number>;
@@ -1351,6 +1416,11 @@ export interface ClosureContext {
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
   unstrand: (instanceId: string) => void;
+  /** Update all of a tool: CawCo's copies on connected, unpaused machines; the rest left, with why (tool-installs.ts `updateAll`). */
+  updateAll: (toolId: string) => {
+    left: { machineId: string; why: "away" | "own" | "paused" }[];
+    sent: string[];
+  };
   usageCounter: UsageCounter;
   waitingForProcess: Set<string>;
   wakeForSend: (
@@ -1386,7 +1456,6 @@ export interface ClosureContext {
     | "contextTokens"
     | "contextReadAt"
     | "cacheCold"
-    | "lastPingUsage"
     | "keepAliveTurn"
   > & { keepAlive: KeepAlive })[];
   withPresence: (rows: AgentRow[]) => AgentRow[];

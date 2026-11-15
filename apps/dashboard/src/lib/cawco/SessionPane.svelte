@@ -1,12 +1,15 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { HARNESS_TOOL } from "@cawco/core/harness";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { harnessSpec } from "@cawco/core/harness-refusal";
   import { questionsOf } from "@cawco/core/question";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { CONTINUED_IN } from "@cawco/core/words/relaunch";
+  import { toolUpdateWords } from "@cawco/core/words/tool-updates";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
@@ -37,7 +40,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
-  import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
+  import { IconAlert, IconChat, IconLaptop, IconRefresh } from "#lib/icons.js";
   import {
     crossIn,
     crossOut,
@@ -83,7 +86,11 @@
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { asksStore } from "./stores/asks.svelte";
-  import { boardStore, machineConnected } from "./stores/board.svelte";
+  import {
+    boardStore,
+    machineConnected,
+    machineName,
+  } from "./stores/board.svelte";
   import { commandFault, submitCommand } from "./stores/commands.svelte";
   import { sendFailureNotice } from "./stores/ledger.svelte";
   import { offersStore } from "./stores/offers.svelte";
@@ -705,11 +712,43 @@
    * server's until this pane's read answers. A card with a button, never a
    * skeleton.
    */
-  const fault = $derived(
+  /** The newest read's word as it came, before a landed fix makes it a read under way ({@link fault}). */
+  const readFault = $derived(
     session?.messages.length || askAlone
       ? null
       : (session?.readFault ?? servedFault)
   );
+  const fault = $derived.by(() => {
+    const now = readFault;
+    // A refusal whose fix landed is a read under way, not a refusal: the
+    // re-read it set off replaces it (`readAfterFix`). Landed is read here,
+    // in the same evaluation as the block going (`unreadFix`), never from an
+    // effect a frame later: the refusal its block stood under, with the
+    // block gone, is the read under way. A host run's landings drew one
+    // frame of the refusal's line under Try again, the block gone and the
+    // fault not yet, and faded that out for 100–250 ms.
+    // The same for a wait on the machine's cell: the read that waited on
+    // it, with the cell out of installing (landed or failed), is the read
+    // under way, in the same evaluation.
+    if (
+      now !== null &&
+      (now === readAfterFix ||
+        (now.reason === "refused" &&
+          ((now === blockedFault && !unreadFix) ||
+            (now === installingFault && waitedCell?.state !== "installing"))))
+    ) {
+      return null;
+    }
+    return now;
+  });
+  /** The refusal a block of its machine's last stood under ({@link fault}). */
+  let blockedFault = $state.raw<ReadFault | null>(null);
+  /**
+   * The refusal standing when its machine's fix landed and the read went
+   * again: until that read answers, the pane shows the read under way, never
+   * the refusal it already answered. Any other fault is shown as it comes.
+   */
+  let readAfterFix = $state.raw<ReadFault | null>(null);
 
   /**
    * A read of the transcript landed and there is nothing in it, running or
@@ -809,36 +848,6 @@
     return crossOutWith(node, () => ({ height: `${node.offsetHeight}px` }));
   }
 
-  /**
-   * What a read failure is called: its machine away (on its way back, or
-   * offline), its machine refusing the harness CLI the conversation is read
-   * through, or the read failed.
-   */
-  const faultTitle = $derived.by(() => {
-    if (fault?.reason === "refused") {
-      return "This conversation can't be shown yet";
-    }
-    if (fault?.reason !== "offline") {
-      return "This transcript couldn't be read";
-    }
-    return reconnectingNow(fault)
-      ? "This machine is reconnecting"
-      : "This machine is offline";
-  });
-
-  /** What a read failure says: what went wrong, then what to do about it. */
-  const faultLine = $derived.by(() => {
-    if (fault?.reason === "refused") {
-      return `${fault.message}.`;
-    }
-    if (fault?.reason !== "offline") {
-      return `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`;
-    }
-    return reconnectingNow(fault)
-      ? `${faultMessage(fault)}.`
-      : `${fault.message}. Try again once it is back online.`;
-  });
-
   /** Try again: forget what was said about the last read, then read. */
   function retry(): void {
     clearReadFault(viewId);
@@ -906,26 +915,208 @@
     return machine && block ? { machine, block } : null;
   });
   /**
-   * Whether the read stood refused with its fix in hand when last looked
-   * at: the fix landing (the block gone, its machine running the harness
-   * now) is when the conversation can be read, and it is read then.
+   * How long a read that said an install runs is waited on with no cell on
+   * the board to watch: past it the page says the read's own answer, with
+   * Try again. The slowest install the host runs saw took about a minute
+   * (npm moving a package, `claude update`); our call.
    */
-  let unreadFixed: boolean | null = null;
+  const WAIT_BOUND_MS = 90_000;
+  /** The waiting read whose bound passed ({@link WAIT_BOUND_MS}). */
+  let waitLapsed = $state.raw<ReadFault | null>(null);
+  /**
+   * Where a refused read waits: the machine and the harness its CLI is read
+   * through, the row's when the board lists one, else the ones the read
+   * named (the hub's `harness-refused` and `harness-updating` carry them),
+   * else the session's harness. A conversation the hub never ran has no
+   * row, and no block, and its wait is the same wait.
+   */
+  const waitsOn = $derived.by(() => {
+    if (readFault?.reason !== "refused") {
+      return null;
+    }
+    const row = boardStore.rowOf(viewId);
+    const on = row?.machineId ?? readFault.machineId;
+    const harness = row?.harness ?? readFault.harness ?? session?.harness;
+    return on && harness ? { machineId: on, harness } : null;
+  });
+  /**
+   * That machine's cell for that harness's CLI, as the board holds it: what
+   * the wait watches, row or no row. Undefined when the board holds none.
+   */
+  const waitedCell = $derived.by(() => {
+    if (!waitsOn) {
+      return;
+    }
+    return boardStore.machines.find(
+      (one) => one.machineId === waitsOn.machineId
+    )?.tools?.[HARNESS_TOOL[waitsOn.harness]];
+  });
+  /** The harness CLI the conversation is read through, by its name. */
+  const harnessName = $derived.by(() => {
+    if (unreadFix) {
+      return unreadFix.block.spec.name;
+    }
+    return waitsOn ? harnessSpec(waitsOn.harness).name : "";
+  });
+
+  /**
+   * Whether a refused read waits on an install ({@link faultView} says how
+   * it is decided): by the block, else the cell, else the read's own word
+   * within its bound.
+   */
+  const waitsOnInstall = $derived.by(() => {
+    if (fault?.reason !== "refused") {
+      return false;
+    }
+    const block = unreadFix?.block;
+    if (block) {
+      return (
+        block.fix.phase === "running" ||
+        (block.auto && block.fix.phase !== "failed")
+      );
+    }
+    if (waitedCell) {
+      return waitedCell.state === "installing";
+    }
+    return fault.updating === true && waitLapsed !== fault;
+  });
+
+  /**
+   * What the fault state shows, as one value: its mark, its title, its line
+   * and its one action, each read off the same fault and the same block, so
+   * no frame shows one state's title over another's line or press. It
+   * changes once as the fix lands (the effect below takes the fault away in
+   * the same update the block goes in), and a state leaving keeps what it
+   * showed (Svelte pauses a branch's effects while it goes): the host run's
+   * landings faded out the refusal's line under Try again for 100–250 ms.
+   *
+   * A refused read waits on an install of the harness CLI, which nothing
+   * more of the person's moves, by the machine's block when the board has
+   * one: an install running there whoever started it, or CawCo's own
+   * (`auto`) not failed. Without a block, by the machine's cell for that
+   * CLI ({@link waitedCell}): installing. With no cell on the board either,
+   * by the read's own word that one runs (`harness-updating`), for
+   * {@link WAIT_BOUND_MS} at most, then the read's own answer with Try
+   * again. A failed install is no wait, whatever the read before it said:
+   * the heading follows the machine as it is now (host run 49045442 frame
+   * A1-retry-1440l-003 kept "shows once OpenCode is updated" over a failed
+   * block). Said as a wait, never as a refusal, in the words the cell
+   * chooses (installed for a first copy, updated for another version).
+   */
+  const faultView = $derived.by(() => {
+    if (!fault) {
+      return null;
+    }
+    if (fault.reason === "offline") {
+      const back = reconnectingNow(fault);
+      return {
+        icon: IconLaptop,
+        title: back
+          ? "This machine is reconnecting"
+          : "This machine is offline",
+        line: back
+          ? `${faultMessage(fault)}.`
+          : `${fault.message}. Try again once it is back online.`,
+        fix: null,
+        retry: true,
+      };
+    }
+    if (fault.reason !== "refused") {
+      return {
+        icon: IconAlert,
+        title: "This transcript couldn't be read",
+        line: `Reading it failed: ${fault.message}. Try again; if it fails the same way, the hub's log has the cause.`,
+        fix: null,
+        retry: true,
+      };
+    }
+    const waits = waitsOnInstall;
+    // The block says why, so the state's own line stands down: one fact,
+    // said once. With no block, a wait on the cell says who puts the CLI
+    // on, and the read's own sentence stands otherwise. A wait offers no
+    // press: Try again is the read's answer once nothing is waited on.
+    let line: string | undefined;
+    if (!unreadFix) {
+      line =
+        waits && waitedCell?.state === "installing" && waitsOn
+          ? toolUpdateWords.putting(
+              harnessName,
+              machineName(waitsOn.machineId),
+              waitedCell
+            )
+          : `${fault.message}.`;
+    }
+    return {
+      icon: waits ? IconRefresh : IconAlert,
+      title: waits
+        ? toolUpdateWords.readWaits(harnessName, waitedCell)
+        : "This conversation can't be shown yet",
+      line,
+      fix: unreadFix
+        ? {
+            block: unreadFix.block,
+            machineId: unreadFix.machine.machineId,
+            online: unreadFix.machine.status === "online",
+          }
+        : null,
+      retry: !(unreadFix || waits),
+    };
+  });
+
   $effect(() => {
-    const held = sessionsStore.session(viewId);
-    const refused =
-      held?.readFault?.reason === "refused" ||
-      held?.behind?.reason === "refused";
-    const blocked = unreadFix !== null;
+    const now = fault;
+    if (!(now?.reason === "refused" && now.updating) || waitedCell) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      waitLapsed = now;
+    }, WAIT_BOUND_MS);
+    return () => clearTimeout(timer);
+  });
+
+  /**
+   * The read that said an install runs and whose cell the board was seen
+   * holding as installing: once that cell leaves installing (the install
+   * landed or failed), whatever the read waits on has moved, and it is
+   * read again, row or no row, block or none; the page shows what that
+   * read says.
+   */
+  let installingFault = $state.raw<ReadFault | null>(null);
+  $effect.pre(() => {
+    const now = readFault;
+    const state = waitedCell?.state;
     untrack(() => {
-      if (!refused) {
-        unreadFixed = null;
+      if (now?.reason !== "refused") {
         return;
       }
-      if (!blocked && unreadFixed === false) {
+      if (state === "installing") {
+        installingFault = now;
+      } else if (now === installingFault && readAfterFix !== now) {
+        readAfterFix = now;
         reread("harnessRuns");
       }
-      unreadFixed = !blocked;
+    });
+  });
+
+  // The refusal a block stands under (the newest read's, or a read behind
+  // the transcript shown) is noted while it stands; once the block goes
+  // (its fix landed, the machine runs the harness now), the conversation
+  // can be read and is read again, and until that read answers the pane
+  // shows the read under way (`readAfterFix`).
+  $effect.pre(() => {
+    const held = sessionsStore.session(viewId);
+    const now = held?.readFault ?? held?.behind ?? servedFault;
+    const blocked = unreadFix !== null;
+    untrack(() => {
+      if (now?.reason !== "refused") {
+        return;
+      }
+      if (blocked) {
+        blockedFault = now;
+      } else if (now === blockedFault && readAfterFix !== now) {
+        readAfterFix = now;
+        reread("harnessRuns");
+      }
     });
   });
 
@@ -1178,11 +1369,13 @@
    * What waits on the person here, on the tray row's chip and the list it
    * opens (waiting/): the hub's list of what its tree asked him, after its
    * parked asks. A permission's row brings the composer's ask back up; a
-   * sign-in's brings its card into view.
+   * sign-in's brings its card into view. The hub keeps that list by its
+   * row, so a conversation it holds no row for (a stored transcript, one
+   * deleted) asks it for nothing: the read would only be refused.
    */
   const waitList = new SessionWaiting({
     instanceId: () => viewId,
-    onScreen: () => visible,
+    onScreen: () => visible && isLive,
     asks: () => waitingAsks,
     showAsk: (row) => {
       if (row.kind === "connect") {
@@ -1600,24 +1793,24 @@
      transcript's first row would, from the area's top on the transcript's
      start edge (`pad="transcript"`). The owner: "I didn't say center the
      whole block! No sane ui developer does this". -->
-{#snippet faultState(fault: ReadFault)}
+{#snippet faultState(view: NonNullable<typeof faultView>)}
   <EmptyState
     pad="transcript"
-    icon={fault.reason === "offline" ? IconLaptop : IconAlert}
-    line={faultLine}
+    icon={view.icon}
+    line={view.line}
     role="alert"
-    title={faultTitle}
+    title={view.title}
   >
     {#snippet action()}
       <!-- A read its machine's harness CLI refuses: its fix, as a start
            it blocks shows it, and the read comes once that lands. -->
-      {#if fault.reason === "refused" && unreadFix}
+      {#if view.fix}
         <HarnessBlock
-          block={unreadFix.block}
-          machineId={unreadFix.machine.machineId}
-          online={unreadFix.machine.status === "online"}
+          block={view.fix.block}
+          machineId={view.fix.machineId}
+          online={view.fix.online}
         />
-      {:else}
+      {:else if view.retry}
         <Button onclick={retry} variant="outline">{commonWords.tryAgain}</Button
         >
       {/if}
@@ -1714,9 +1907,9 @@
     >
       <!-- A named state, not an empty pane: what happened, in one line,
                and the one thing that can be done about it. -->
-      {#if fault}
+      {#if faultView}
         <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
-          {@render faultState(fault)}
+          {@render faultState(faultView)}
         </div>
       {:else if unaddressable}
         <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
@@ -1850,11 +2043,11 @@
         {@render body(session)}
       </SideSplit>
     {/if}
-  {:else if fault}
+  {:else if faultView}
     <!-- No session in the store yet, and the server's read was refused: the
          same named state the pane's own read would show. -->
     <div class="flex min-h-0 flex-auto flex-col">
-      {@render faultState(fault)}
+      {@render faultState(faultView)}
     </div>
   {:else if unaddressable}
     <div class="flex min-h-0 flex-auto flex-col">{@render missingState()}</div>

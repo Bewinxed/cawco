@@ -5,6 +5,7 @@
  */
 import {
   AccountMoveSchema,
+  AuthStateShape,
   EffortLevelShape,
   ExtractedShape,
   HarnessKindShape,
@@ -20,6 +21,7 @@ import {
   MoveSnapshotResultShape,
   MoveStepShape,
   PermissionModeShape,
+  PresenceClientShape,
   SendAttachmentShape,
   SendPayloadShape,
   SendRefusalShape,
@@ -42,26 +44,84 @@ import {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { z } from "zod";
 import type {
+  AgentAuth as AgentAuthType,
+  AgentStatus as AgentStatusType,
+  ArtifactChangeBy as ArtifactChangeByType,
+  CacheTtl as CacheTtlType,
+  CommentDirection as CommentDirectionType,
   ConnectionSecret as ConnectionSecretType,
   ContinuationAsker as ContinuationAskerType,
   ContinueRequest as ContinueRequestType,
+  DelegateRequestKind as DelegateRequestKindType,
+  DesignCheckState as DesignCheckStateType,
   DesignFinding as DesignFindingType,
-  DesignPick as DesignPickType,
+  DesignOfferAnswer as DesignOfferAnswerType,
   DesignProposalFile as DesignProposalFileType,
-  GatePass as GatePassType,
+  GitHubResource as GitHubResourceType,
+  InboundVia as InboundViaType,
   InstallsRecord as InstallsRecordType,
+  InstanceKind as InstanceKindType,
+  InstanceTitleSource as InstanceTitleSourceType,
   ItemBlock as ItemBlockType,
+  KeepAliveStopped as KeepAliveStoppedType,
+  LandingPhase as LandingPhaseType,
+  LfsOfferAnswer as LfsOfferAnswerType,
+  LimitCompactionStage as LimitCompactionStageType,
+  McpAuthMode as McpAuthModeType,
+  Origin as OriginType,
   PreparedContinuation as PreparedContinuationType,
+  PresenceKind as PresenceKindType,
+  PreviewSettingsMode as PreviewSettingsModeType,
+  ProjectOfferAnswer as ProjectOfferAnswerType,
   Proposal as ProposalType,
+  QueuedStartWhy as QueuedStartWhyType,
+  RelayJourneyClosed as RelayJourneyClosedType,
+  RelayNameState as RelayNameStateType,
+  RelaySecretFrom as RelaySecretFromType,
+  RemovedAccountWhy as RemovedAccountWhyType,
+  RuleStateStatus as RuleStateStatusType,
+  SendHold as SendHoldType,
+  SessionLineKind as SessionLineKindType,
+  StartingSetKind as StartingSetKindType,
   StoredSendRefusal as StoredSendRefusalType,
+  StrandedWhy as StrandedWhyType,
+  TaskEdgeKind as TaskEdgeKindType,
+  ToolCallKeyState as ToolCallKeyStateType,
   TrackerCursor as TrackerCursorType,
   TrackerSynced as TrackerSyncedType,
   TrashedRows as TrashedRowsType,
-  WorkBudget as WorkBudgetType,
+  TrashKind as TrashKindType,
+  TrimOfferAnswer as TrimOfferAnswerType,
   WorkItemSubmission as WorkItemSubmissionType,
-  WorkLanding as WorkLandingType,
+  WorkOrigin as WorkOriginType,
   WorkspaceFrom as WorkspaceFromType,
+  WorkspaceState as WorkspaceStateType,
 } from "./stored-types";
+
+const AgentAuthShape = declared(
+  z.union([AuthStateShape, z.literal("unknown")]),
+  "AgentAuth",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const AgentAuthSchema: z.ZodType<AgentAuthType> = AgentAuthShape;
+export type AgentAuthOutput = z.output<typeof AgentAuthShape>;
+
+const AgentStatusShape = declared(
+  z.enum(["online", "offline"]),
+  "AgentStatus",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const AgentStatusSchema: z.ZodType<AgentStatusType> = AgentStatusShape;
+export type AgentStatusOutput = z.output<typeof AgentStatusShape>;
+
+const ArtifactChangeByShape = declared(
+  z.enum(["person", "agent"]),
+  "ArtifactChangeBy",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ArtifactChangeBySchema: z.ZodType<ArtifactChangeByType> =
+  ArtifactChangeByShape;
+export type ArtifactChangeByOutput = z.output<typeof ArtifactChangeByShape>;
 
 const OAuthMetadataShape = declared(
   OAuthMetadataPublished,
@@ -89,6 +149,23 @@ export const AuthorizationServerMetadataSchema: z.ZodType<AuthorizationServerMet
 export type AuthorizationServerMetadataOutput = z.output<
   typeof AuthorizationServerMetadataShape
 >;
+
+const CacheTtlShape = declared(
+  z.enum(["5m", "1h"]),
+  "CacheTtl",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const CacheTtlSchema: z.ZodType<CacheTtlType> = CacheTtlShape;
+export type CacheTtlOutput = z.output<typeof CacheTtlShape>;
+
+const CommentDirectionShape = declared(
+  z.enum(["in", "out"]),
+  "CommentDirection",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const CommentDirectionSchema: z.ZodType<CommentDirectionType> =
+  CommentDirectionShape;
+export type CommentDirectionOutput = z.output<typeof CommentDirectionShape>;
 
 const ConnectionAppSecretShape = declared(
   z.union([
@@ -242,6 +319,26 @@ export const ContinueRequestSchema: z.ZodType<ContinueRequestType> =
   ContinueRequestShape;
 export type ContinueRequestOutput = z.output<typeof ContinueRequestShape>;
 
+const DelegateRequestKindShape = declared(
+  z.enum(["question", "tool"]),
+  "DelegateRequestKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const DelegateRequestKindSchema: z.ZodType<DelegateRequestKindType> =
+  DelegateRequestKindShape;
+export type DelegateRequestKindOutput = z.output<
+  typeof DelegateRequestKindShape
+>;
+
+const DesignCheckStateShape = declared(
+  z.enum(["checking", "passed", "findings", "failed"]),
+  "DesignCheckState",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const DesignCheckStateSchema: z.ZodType<DesignCheckStateType> =
+  DesignCheckStateShape;
+export type DesignCheckStateOutput = z.output<typeof DesignCheckStateShape>;
+
 const DesignFindingShape = declared(
   z.object({
     file: z.string(),
@@ -256,13 +353,14 @@ export const DesignFindingSchema: z.ZodType<DesignFindingType> =
   DesignFindingShape;
 export type DesignFindingOutput = z.output<typeof DesignFindingShape>;
 
-const DesignPickShape = declared(
-  z.object({ variant: z.string(), why: z.string() }),
-  "DesignPick",
+const DesignOfferAnswerShape = declared(
+  z.enum(["built", "dismissed"]),
+  "DesignOfferAnswer",
   "packages/hub/src/db/stored-types.ts"
 );
-export const DesignPickSchema: z.ZodType<DesignPickType> = DesignPickShape;
-export type DesignPickOutput = z.output<typeof DesignPickShape>;
+export const DesignOfferAnswerSchema: z.ZodType<DesignOfferAnswerType> =
+  DesignOfferAnswerShape;
+export type DesignOfferAnswerOutput = z.output<typeof DesignOfferAnswerShape>;
 
 const DesignProposalFileShape = declared(
   z.object({ after: z.string(), before: z.string(), path: z.string() }),
@@ -273,13 +371,22 @@ export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
   DesignProposalFileShape;
 export type DesignProposalFileOutput = z.output<typeof DesignProposalFileShape>;
 
-const GatePassShape = declared(
-  z.object({ command: z.string(), stage: z.string() }),
-  "GatePass",
+const GitHubResourceShape = declared(
+  z.enum(["pulls", "issues", "comments", "issueEvents", "discussions"]),
+  "GitHubResource",
   "packages/hub/src/db/stored-types.ts"
 );
-export const GatePassSchema: z.ZodType<GatePassType> = GatePassShape;
-export type GatePassOutput = z.output<typeof GatePassShape>;
+export const GitHubResourceSchema: z.ZodType<GitHubResourceType> =
+  GitHubResourceShape;
+export type GitHubResourceOutput = z.output<typeof GitHubResourceShape>;
+
+const InboundViaShape = declared(
+  z.enum(["poll", "webhook", "connector"]),
+  "InboundVia",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const InboundViaSchema: z.ZodType<InboundViaType> = InboundViaShape;
+export type InboundViaOutput = z.output<typeof InboundViaShape>;
 
 const InstallsRecordShape = declared(
   z.object({
@@ -298,6 +405,26 @@ export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
   InstallsRecordShape;
 export type InstallsRecordOutput = z.output<typeof InstallsRecordShape>;
 
+const InstanceKindShape = declared(
+  z.enum(["mainline", "scratch", "summariser"]),
+  "InstanceKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const InstanceKindSchema: z.ZodType<InstanceKindType> =
+  InstanceKindShape;
+export type InstanceKindOutput = z.output<typeof InstanceKindShape>;
+
+const InstanceTitleSourceShape = declared(
+  z.enum(["owner", "agent"]),
+  "InstanceTitleSource",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const InstanceTitleSourceSchema: z.ZodType<InstanceTitleSourceType> =
+  InstanceTitleSourceShape;
+export type InstanceTitleSourceOutput = z.output<
+  typeof InstanceTitleSourceShape
+>;
+
 const ItemBlockShape = declared(
   z.object({
     kind: z.enum(["type", "machine", "account"]),
@@ -309,6 +436,52 @@ const ItemBlockShape = declared(
 );
 export const ItemBlockSchema: z.ZodType<ItemBlockType> = ItemBlockShape;
 export type ItemBlockOutput = z.output<typeof ItemBlockShape>;
+
+const KeepAliveStoppedShape = declared(
+  z.literal("stopped-cap"),
+  "KeepAliveStopped",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const KeepAliveStoppedSchema: z.ZodType<KeepAliveStoppedType> =
+  KeepAliveStoppedShape;
+export type KeepAliveStoppedOutput = z.output<typeof KeepAliveStoppedShape>;
+
+const LandingPhaseShape = declared(
+  z.enum(["completing", "gating", "turn"]),
+  "LandingPhase",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const LandingPhaseSchema: z.ZodType<LandingPhaseType> =
+  LandingPhaseShape;
+export type LandingPhaseOutput = z.output<typeof LandingPhaseShape>;
+
+const LfsOfferAnswerShape = declared(
+  z.enum(["tracked", "dismissed"]),
+  "LfsOfferAnswer",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const LfsOfferAnswerSchema: z.ZodType<LfsOfferAnswerType> =
+  LfsOfferAnswerShape;
+export type LfsOfferAnswerOutput = z.output<typeof LfsOfferAnswerShape>;
+
+const LimitCompactionStageShape = declared(
+  z.enum(["carrying", "filing", "compacting"]),
+  "LimitCompactionStage",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const LimitCompactionStageSchema: z.ZodType<LimitCompactionStageType> =
+  LimitCompactionStageShape;
+export type LimitCompactionStageOutput = z.output<
+  typeof LimitCompactionStageShape
+>;
+
+const McpAuthModeShape = declared(
+  z.enum(["direct", "oauth"]),
+  "McpAuthMode",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const McpAuthModeSchema: z.ZodType<McpAuthModeType> = McpAuthModeShape;
+export type McpAuthModeOutput = z.output<typeof McpAuthModeShape>;
 
 export const MoveStateShape = declared(
   z.object({
@@ -382,6 +555,14 @@ export type OAuthDiscoveryStateOutput = z.output<
   typeof OAuthDiscoveryStateShape
 >;
 
+const OriginShape = declared(
+  z.enum(["you", "event"]),
+  "Origin",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const OriginSchema: z.ZodType<OriginType> = OriginShape;
+export type OriginOutput = z.output<typeof OriginShape>;
+
 const ContinuationSourceShape = declared(
   z.object({
     cwd: z.string(),
@@ -419,6 +600,35 @@ export type PreparedContinuationOutput = z.output<
   typeof PreparedContinuationShape
 >;
 
+const PresenceKindShape = declared(
+  z.union([PresenceClientShape, z.literal("machine"), z.literal("send")]),
+  "PresenceKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const PresenceKindSchema: z.ZodType<PresenceKindType> =
+  PresenceKindShape;
+export type PresenceKindOutput = z.output<typeof PresenceKindShape>;
+
+const PreviewSettingsModeShape = declared(
+  z.enum(["port", "host"]),
+  "PreviewSettingsMode",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const PreviewSettingsModeSchema: z.ZodType<PreviewSettingsModeType> =
+  PreviewSettingsModeShape;
+export type PreviewSettingsModeOutput = z.output<
+  typeof PreviewSettingsModeShape
+>;
+
+const ProjectOfferAnswerShape = declared(
+  z.enum(["accepted", "dismissed"]),
+  "ProjectOfferAnswer",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ProjectOfferAnswerSchema: z.ZodType<ProjectOfferAnswerType> =
+  ProjectOfferAnswerShape;
+export type ProjectOfferAnswerOutput = z.output<typeof ProjectOfferAnswerShape>;
+
 const ProposedFileShape = declared(
   z.object({ before: z.string(), content: z.string(), path: z.string() }),
   "ProposedFile",
@@ -454,6 +664,103 @@ const ProposalShape = declared(
 export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
 export type ProposalOutput = z.output<typeof ProposalShape>;
 
+const QueuedStartWhyShape = declared(
+  z.enum(["cap", "owns"]),
+  "QueuedStartWhy",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const QueuedStartWhySchema: z.ZodType<QueuedStartWhyType> =
+  QueuedStartWhyShape;
+export type QueuedStartWhyOutput = z.output<typeof QueuedStartWhyShape>;
+
+const RelayJourneyClosedShape = declared(
+  z.enum(["later", "done-for-now"]),
+  "RelayJourneyClosed",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const RelayJourneyClosedSchema: z.ZodType<RelayJourneyClosedType> =
+  RelayJourneyClosedShape;
+export type RelayJourneyClosedOutput = z.output<typeof RelayJourneyClosedShape>;
+
+const RelayNameStateShape = declared(
+  z.enum(["open", "pointed", "skipped"]),
+  "RelayNameState",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const RelayNameStateSchema: z.ZodType<RelayNameStateType> =
+  RelayNameStateShape;
+export type RelayNameStateOutput = z.output<typeof RelayNameStateShape>;
+
+const RelaySecretFromShape = declared(
+  z.enum(["minted", "owner"]),
+  "RelaySecretFrom",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const RelaySecretFromSchema: z.ZodType<RelaySecretFromType> =
+  RelaySecretFromShape;
+export type RelaySecretFromOutput = z.output<typeof RelaySecretFromShape>;
+
+const RemovedAccountWhyShape = declared(
+  z.enum(["removed", "joined"]),
+  "RemovedAccountWhy",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const RemovedAccountWhySchema: z.ZodType<RemovedAccountWhyType> =
+  RemovedAccountWhyShape;
+export type RemovedAccountWhyOutput = z.output<typeof RemovedAccountWhyShape>;
+
+const RuleStateStatusShape = declared(
+  z.enum(["armed", "pending"]),
+  "RuleStateStatus",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const RuleStateStatusSchema: z.ZodType<RuleStateStatusType> =
+  RuleStateStatusShape;
+export type RuleStateStatusOutput = z.output<typeof RuleStateStatusShape>;
+
+const SendHoldShape = declared(
+  z.enum([
+    "agent",
+    "behind",
+    "blocked",
+    "build",
+    "compacting",
+    "filing",
+    "finishing",
+    "held",
+    "hub",
+    "limit",
+    "paused",
+    "recut",
+    "resting",
+    "signin",
+    "starting",
+    "update",
+  ]),
+  "SendHold",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const SendHoldSchema: z.ZodType<SendHoldType> = SendHoldShape;
+export type SendHoldOutput = z.output<typeof SendHoldShape>;
+
+const SessionLineKindShape = declared(
+  z.enum(["limit", "outdated", "watch", "moved", "room", "context"]),
+  "SessionLineKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const SessionLineKindSchema: z.ZodType<SessionLineKindType> =
+  SessionLineKindShape;
+export type SessionLineKindOutput = z.output<typeof SessionLineKindShape>;
+
+const StartingSetKindShape = declared(
+  z.enum(["skill", "server"]),
+  "StartingSetKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const StartingSetKindSchema: z.ZodType<StartingSetKindType> =
+  StartingSetKindShape;
+export type StartingSetKindOutput = z.output<typeof StartingSetKindShape>;
+
 const StoredSendRefusalShape = declared(
   z.union([
     SendRefusalShape,
@@ -465,6 +772,32 @@ const StoredSendRefusalShape = declared(
 export const StoredSendRefusalSchema: z.ZodType<StoredSendRefusalType> =
   StoredSendRefusalShape;
 export type StoredSendRefusalOutput = z.output<typeof StoredSendRefusalShape>;
+
+const StrandedWhyShape = declared(
+  z.enum(["removed", "signed-out"]),
+  "StrandedWhy",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const StrandedWhySchema: z.ZodType<StrandedWhyType> = StrandedWhyShape;
+export type StrandedWhyOutput = z.output<typeof StrandedWhyShape>;
+
+const TaskEdgeKindShape = declared(
+  z.literal("waits_on"),
+  "TaskEdgeKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const TaskEdgeKindSchema: z.ZodType<TaskEdgeKindType> =
+  TaskEdgeKindShape;
+export type TaskEdgeKindOutput = z.output<typeof TaskEdgeKindShape>;
+
+const ToolCallKeyStateShape = declared(
+  z.enum(["running", "answered", "interrupted"]),
+  "ToolCallKeyState",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ToolCallKeyStateSchema: z.ZodType<ToolCallKeyStateType> =
+  ToolCallKeyStateShape;
+export type ToolCallKeyStateOutput = z.output<typeof ToolCallKeyStateShape>;
 
 const TrackerCursorShape = declared(
   z.object({
@@ -496,6 +829,27 @@ export const TrackerSyncedSchema: z.ZodType<TrackerSyncedType> =
   TrackerSyncedShape;
 export type TrackerSyncedOutput = z.output<typeof TrackerSyncedShape>;
 
+const TrashKindShape = declared(
+  z.enum([
+    "rule",
+    "hook",
+    "skill",
+    "plugin",
+    "marketplace",
+    "agent",
+    "mcp",
+    "delegateType",
+    "memory",
+    "memoryDoc",
+    "connection",
+    "harnessConfig",
+  ]),
+  "TrashKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const TrashKindSchema: z.ZodType<TrashKindType> = TrashKindShape;
+export type TrashKindOutput = z.output<typeof TrashKindShape>;
+
 const TrashedRowsShape = declared(
   z.object({
     rows: z.array(
@@ -509,17 +863,14 @@ const TrashedRowsShape = declared(
 export const TrashedRowsSchema: z.ZodType<TrashedRowsType> = TrashedRowsShape;
 export type TrashedRowsOutput = z.output<typeof TrashedRowsShape>;
 
-const WorkBudgetShape = declared(
-  z.object({
-    minutes: z.number().optional(),
-    turns: z.number().optional(),
-    usd: z.number().optional(),
-  }),
-  "WorkBudget",
+const TrimOfferAnswerShape = declared(
+  z.enum(["on", "dismissed"]),
+  "TrimOfferAnswer",
   "packages/hub/src/db/stored-types.ts"
 );
-export const WorkBudgetSchema: z.ZodType<WorkBudgetType> = WorkBudgetShape;
-export type WorkBudgetOutput = z.output<typeof WorkBudgetShape>;
+export const TrimOfferAnswerSchema: z.ZodType<TrimOfferAnswerType> =
+  TrimOfferAnswerShape;
+export type TrimOfferAnswerOutput = z.output<typeof TrimOfferAnswerShape>;
 
 const WorkItemSubmissionShape = declared(
   z.object({
@@ -538,20 +889,13 @@ export const WorkItemSubmissionSchema: z.ZodType<WorkItemSubmissionType> =
   WorkItemSubmissionShape;
 export type WorkItemSubmissionOutput = z.output<typeof WorkItemSubmissionShape>;
 
-const WorkLandingShape = declared(
-  z.object({
-    at: z.number().optional(),
-    gate: z
-      .object({ passed: z.array(z.string()), tree: z.string() })
-      .optional(),
-    onto: z.string().nullable(),
-    sha: z.string(),
-  }),
-  "WorkLanding",
+const WorkOriginShape = declared(
+  z.union([OriginShape, z.literal("kept")]),
+  "WorkOrigin",
   "packages/hub/src/db/stored-types.ts"
 );
-export const WorkLandingSchema: z.ZodType<WorkLandingType> = WorkLandingShape;
-export type WorkLandingOutput = z.output<typeof WorkLandingShape>;
+export const WorkOriginSchema: z.ZodType<WorkOriginType> = WorkOriginShape;
+export type WorkOriginOutput = z.output<typeof WorkOriginShape>;
 
 const WorkspaceFromShape = declared(
   z.object({ commit: z.string(), landed: z.boolean(), workspace: z.string() }),
@@ -561,3 +905,12 @@ const WorkspaceFromShape = declared(
 export const WorkspaceFromSchema: z.ZodType<WorkspaceFromType> =
   WorkspaceFromShape;
 export type WorkspaceFromOutput = z.output<typeof WorkspaceFromShape>;
+
+const WorkspaceStateShape = declared(
+  z.enum(["active", "held", "archived"]),
+  "WorkspaceState",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const WorkspaceStateSchema: z.ZodType<WorkspaceStateType> =
+  WorkspaceStateShape;
+export type WorkspaceStateOutput = z.output<typeof WorkspaceStateShape>;

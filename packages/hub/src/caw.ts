@@ -58,6 +58,7 @@ import {
   type OfferedMode,
   type PLAN_ORIGIN,
 } from "@cawco/core/harness/kinds";
+import type { MachinePath } from "@cawco/core/machine-path";
 import {
   CAW_NO_MACHINE,
   type CawInitiated,
@@ -91,8 +92,9 @@ import { topsAtCaw } from "./caw-own";
 import type { LeadHomeProblem } from "./caw-problems";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
-import type { Origin } from "./db/schema";
+import type { Origin, StoredSendRefusal } from "./db/stored-types";
 import { boardTitle } from "./labels";
+import { awayProblem } from "./machine-answers";
 import { defineTool, type McpTool, sentence } from "./mcp-tool";
 import {
   AGENTS_FILE,
@@ -118,6 +120,7 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
+import type { ProjectStops } from "./project-stops";
 import type { AnyProblem } from "./refusal";
 import type { CawToolName } from "./roles";
 import {
@@ -128,9 +131,11 @@ import {
   setupFactsWords,
   shippedTemplates,
 } from "./setup";
+import type { SpawnProblem } from "./spawn-problems";
 import { readStages } from "./stages";
 import { MODE, stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
 import type { Views } from "./views";
+import { budgetOf } from "./work-limits";
 import type { WorkPlace } from "./work-place";
 
 /**
@@ -590,14 +595,19 @@ export interface CawDeps {
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
+    refusal: StoredSendRefusal | null;
     state: string;
   };
   /**
    * Starts the project's conversation as any session starts (server.ts
    * `spawnSession`): in the mode its payload names ({@link modeFor}), else
-   * the one you last chose for its harness on that machine.
+   * the one you last chose for its harness on that machine. Answers the
+   * folder it runs in, or why it did not start.
    */
-  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  readonly spawn: (
+    machineId: string,
+    payload: SpawnPayload
+  ) => Promise<MachinePath | SpawnProblem>;
   /**
    * A project's forget stop path (project-stops.ts): its running sessions as
    * a tree, and their stop, each end reported as `project.stop` once its
@@ -607,7 +617,7 @@ export interface CawDeps {
     running: (
       projectId: string
     ) => Omit<CawRunning, "kind" | "taskId" | "taskTitle">[];
-    stop: (projectId: string, ids: string[]) => void;
+    stop: ProjectStops["stop"];
   };
   /** A task as its project's files have it, or the problem of its read. */
   readonly task: (
@@ -798,7 +808,7 @@ export const createCaw = ({
   const message = (
     target: InstanceRow,
     said: Said
-  ): { uuid: string } | { why: string } => {
+  ): { uuid: string } | { why: string; refusal: StoredSendRefusal | null } => {
     const uuid = crypto.randomUUID();
     const record = send({
       verb: "send",
@@ -819,7 +829,7 @@ export const createCaw = ({
     });
     return record.state === "pending"
       ? { uuid }
-      : { why: record.reason ?? NOT_TAKEN };
+      : { why: record.reason ?? NOT_TAKEN, refusal: record.refusal };
   };
 
   /** What starts the conversation: how it routes, its first send once its row is there, and how. */
@@ -847,23 +857,21 @@ export const createCaw = ({
     }
     const instanceId = crypto.randomUUID();
     startingIds.set(project.id, instanceId);
-    try {
-      await spawn(how.machineId, {
-        instanceId,
-        cwd: how.cwd,
-        harness: how.harness,
-        ...(how.model ? { model: how.model } : {}),
-        ...(how.permissionMode ? { permissionMode: how.permissionMode } : {}),
-        ...(start.skills?.length ? { skills: [...start.skills] } : {}),
-        projectId: project.id,
-        title: "Caw",
-        requestId: crypto.randomUUID(),
-      });
-    } catch (error) {
-      const why = errorWords(error);
-      startProblems.set(project.id, why);
+    const spawned = await spawn(how.machineId, {
+      instanceId,
+      cwd: how.cwd,
+      harness: how.harness,
+      ...(how.model ? { model: how.model } : {}),
+      ...(how.permissionMode ? { permissionMode: how.permissionMode } : {}),
+      ...(start.skills?.length ? { skills: [...start.skills] } : {}),
+      projectId: project.id,
+      title: "Caw",
+      requestId: crypto.randomUUID(),
+    });
+    if (spawned instanceof ElysiaStatus) {
+      startProblems.set(project.id, spawned.response.detail);
       projectsChanged();
-      return problem(502, { code: "caw-failed", detail: why });
+      return spawned;
     }
     const conversation = row(instanceId);
     const sent = conversation
@@ -997,8 +1005,21 @@ export const createCaw = ({
         : message(conversation.row, said(conversation.row));
     return "uuid" in sent
       ? { instanceId: conversation.row.id, send: sent.uuid }
-      : problem(409, { code: "caw-send-not-taken", detail: sent.why });
+      : notTaken(sent);
   };
+
+  /**
+   * A send to the conversation its record says was not taken: its machine
+   * away answered as one, naming it; any other refusal is the hub's, by
+   * where the conversation stands (core SendRefusal).
+   */
+  const notTaken = (sent: {
+    refusal: StoredSendRefusal | null;
+    why: string;
+  }) =>
+    sent.refusal?.kind === "machine-away"
+      ? awayProblem(sent.refusal.machineId, sent.why)
+      : problem(409, { code: "caw-send-not-taken", detail: sent.why });
 
   /** {@link tell} for the tellers that only log what did not go: an event is never lost silently. */
   const tellQuietly = (projectId: string, event: ProjectEvent): void => {
@@ -1126,11 +1147,15 @@ export const createCaw = ({
     }
     const stopping = new Set(choice?.stop ?? []);
     const stopped = running.filter((one) => stopping.has(one.id));
-    if (stopped.length > 0) {
-      stops.stop(
-        project.id,
-        stopped.map((one) => one.id)
-      );
+    const notStopped =
+      stopped.length > 0
+        ? stops.stop(
+            project.id,
+            stopped.map((one) => one.id)
+          )
+        : undefined;
+    if (notStopped) {
+      return notStopped;
     }
     keep(running.filter((one) => !stopping.has(one.id)));
   };
@@ -1558,7 +1583,7 @@ export const createCaw = ({
         monthUsd: spent.monthUsd,
         caw: spent.caw,
         others: spent.others,
-        budget: project.budget ?? null,
+        budget: budgetOf(project),
         cap: caps.capOf(project),
         fleetOnCap: db.spendOnCap(),
         // This month's ledger: what moved this month, and nothing else.

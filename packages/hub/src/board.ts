@@ -188,7 +188,6 @@ export const createBoard = (ctx: BoardContext) => {
         keepAliveSent: _sent,
         keepAliveStopped: _stopped,
         cacheCold: _cold,
-        lastPingUsage: _usage,
         keepAliveTurn: _turn,
         cacheTtl: _ttl,
         contextTokens: _contextTokens,

@@ -1,11 +1,7 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { ControlRefusal } from "@cawco/core/frames";
-import {
-  PREVIEW_START,
-  PREVIEW_STOP,
-  type PreviewDown,
-} from "@cawco/core/preview/protocol";
+import { PREVIEW_START, PREVIEW_STOP } from "@cawco/core/preview/protocol";
 import {
   type ServingPreview,
   type SourceKey,
@@ -22,6 +18,7 @@ import {
   loadedOnce,
   type MachineRow,
   type PreviewReach,
+  type PreviewUnloaded,
   servedByMachine,
 } from "./preview";
 
@@ -152,7 +149,12 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     const { token } = start;
     const address = deps.address(machineId);
     if (!address) {
-      return { ok: false, down: "machine", error: "Machine is not connected" };
+      return {
+        ok: false,
+        down: "machine",
+        error: "Machine is not connected",
+        stop: { kind: "away", machineId },
+      };
     }
     if (!deps.carried(machineId)) {
       return { ok: true, upstream: { for: start.for, address, port, token } };
@@ -174,6 +176,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
         ok: false,
         down: "reach",
         error: error instanceof Error ? error.message : String(error),
+        stop: { kind: "failed" },
       };
     }
   };
@@ -194,7 +197,12 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     // preview's next request after the pause asks again.
     const paused = deps.paused(machineId);
     if (paused) {
-      return { ok: false, down: "machine", error: paused };
+      return {
+        ok: false,
+        down: "machine",
+        error: paused,
+        stop: { kind: "paused" },
+      };
     }
     const asked = await deps.call(
       machineId,
@@ -209,6 +217,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
             ok: false,
             down: "machine",
             error: "Machine is not connected",
+            stop: { kind: "away", machineId },
           };
         }
         // The daemon may still finish the start after this gave up; the
@@ -218,6 +227,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
           ok: false,
           down: "machine",
           error: `Machine did not answer within ${secondsOf(asked.after)} s`,
+          stop: { kind: "silent" },
         };
       case "answered":
         break;
@@ -227,7 +237,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     const answer = asked.value;
     if (!answer.ok) {
       const { down, why } = startRefused(answer);
-      return { ok: false, down, error: why };
+      return { ok: false, down, error: why, stop: { kind: "failed" } };
     }
     const { port } = answer.result as { port: number };
     return await upstreamAt(machineId, key, port, start);
@@ -271,6 +281,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
           ok: false,
           down: "closed",
           error: "Preview was closed while starting.",
+          stop: { kind: "closed" },
         };
   };
 
@@ -305,12 +316,18 @@ export function createPreviewService(deps: PreviewServiceDeps) {
         // The cause alone: its readers are the hub's own lines and the
         // preview ping, whose pane says its own next step (it tries again).
         error: deps.offline(row.machineId),
+        stop: { kind: "away", machineId: row.machineId },
       });
     }
     const start: Start = {
       for: want,
       token: crypto.randomUUID(),
-      reach: Promise.resolve({ ok: false, down: "closed", error: "" }),
+      reach: Promise.resolve({
+        ok: false,
+        down: "closed",
+        error: "",
+        stop: { kind: "closed" },
+      }),
     };
     start.reach = (async (): Promise<PreviewReach> => {
       const started = await startListener(key, row, start);
@@ -379,15 +396,17 @@ export function createPreviewService(deps: PreviewServiceDeps) {
      * error status, with that status and the error's first line
      * ({@link loadedOnce}; artifacts service `answersFirst`).
      */
-    reachable: async (
-      row: ArtifactRow
-    ): Promise<{ failure: PreviewDown; why: string | null } | null> => {
+    reachable: async (row: ArtifactRow): Promise<PreviewUnloaded | null> => {
       if (!servedByMachine(row)) {
         return null;
       }
       const reached = await reach(row);
       if (!reached.ok) {
-        return { failure: reached.down, why: reached.error };
+        return {
+          failure: reached.down,
+          why: reached.error,
+          stop: reached.stop,
+        };
       }
       return await loadedOnce(
         reached.upstream,

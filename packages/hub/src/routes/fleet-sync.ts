@@ -1,14 +1,14 @@
 /**
  * Pushing the fleet to its machines and retrying what a machine refused.
  */
-import { Elysia, problem, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { awayProblem } from "../machine-answers";
+import type { MachineReadsContext } from "../machine-reads";
 
-export const fleetSyncRoutes = ({
-  fleetSyncs,
-  machineFault,
-  registry,
-}: Pick<HubContext, "fleetSyncs" | "machineFault" | "registry">) =>
+export const fleetSyncRoutes = (
+  ctx: Pick<HubContext, "fleetSyncs"> & MachineReadsContext
+) =>
   new Elysia()
     // The click for a machine that drifted, or for the whole fleet: what
     // moved goes, and every item the machine holds converges again.
@@ -16,13 +16,13 @@ export const fleetSyncRoutes = ({
       "/api/fleet/sync",
       { body: t.Object({ machineId: t.Optional(t.String()) }) },
       ({ body }) => {
-        if (body.machineId && !registry.agent(body.machineId)) {
-          return problem(404, {
-            code: "machine-offline",
-            detail: machineFault(body.machineId, "offline"),
-          });
+        if (body.machineId && !ctx.registry.agent(body.machineId)) {
+          return awayProblem(
+            body.machineId,
+            ctx.machineFault(body.machineId, "offline")
+          );
         }
-        fleetSyncs.changed("asked for", {
+        ctx.fleetSyncs.changed("asked for", {
           reconverge: true,
           ...(body.machineId ? { machineId: body.machineId } : {}),
         });
@@ -41,13 +41,13 @@ export const fleetSyncRoutes = ({
         }),
       },
       ({ body }) => {
-        if (!registry.agent(body.machineId)) {
-          return problem(404, {
-            code: "machine-offline",
-            detail: machineFault(body.machineId, "offline"),
-          });
+        if (!ctx.registry.agent(body.machineId)) {
+          return awayProblem(
+            body.machineId,
+            ctx.machineFault(body.machineId, "offline")
+          );
         }
-        fleetSyncs.retry(body.machineId, body.ids);
+        ctx.fleetSyncs.retry(body.machineId, body.ids);
         return { ok: true };
       }
     );

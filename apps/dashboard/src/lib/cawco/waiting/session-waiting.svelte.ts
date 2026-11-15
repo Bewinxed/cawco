@@ -30,7 +30,7 @@ export interface SessionWaitingInput {
   asks: () => WaitingAsk[];
   /** The session the pane shows. */
   instanceId: () => string;
-  /** The pane is on screen: only then is the hub's list read. */
+  /** The pane is on screen and the hub holds the session's row: only then is the hub's list read. */
   onScreen: () => boolean;
   /** A parked ask's row pressed: the ask comes into view where it is answered. */
   showAsk: (row: WaitingRow & { requestId: string }) => void;

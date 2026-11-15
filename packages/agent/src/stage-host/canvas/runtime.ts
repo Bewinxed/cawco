@@ -15,6 +15,20 @@
  * the panel map's live card (`by=embed`, `by=map`) each story it names, a
  * drawing in a column.
  *
+ * Every drawing is live DOM that the browser itself draws, in this one
+ * page: that is what a person judges and what every measure reads. At the
+ * tens of drawings a states file holds, drawing them costs nothing;
+ * measured on 2026-11-14, a page's cost is loading and compiling its
+ * modules. If a page ever holds hundreds of live drawings and scrolling or
+ * zooming it drops frames, look first at the browser's HTML-in-Canvas
+ * (`chrome://flags/#canvas-draw-element`, on by default from Chrome 157;
+ * Firefox, Safari and every iOS browser had none then): the GPU draws the
+ * same live elements as textures while clicks and typing still reach them,
+ * as github.com/berkantay/gpucanvas does for 5,000 React screens. A
+ * renderer of our own (Dessn's WebGPU canvas,
+ * x.com/eminimnim/status/2121249063576228036) is no answer here: its
+ * drawing would no longer be the browser's.
+ *
  * The stage's entry module hands {@link boot} the framework's adapter
  * (`mountStory`, answering `unmount` and `update`) and how to load each
  * section; everything else is read from the page's URL: `file` per
@@ -78,6 +92,7 @@ import {
   snapshot,
   valuesOf,
 } from "./measure";
+import { ownModulesOf } from "./own";
 import {
   type BootOptions,
   type Bridge,
@@ -744,7 +759,7 @@ export function boot(options: BootOptions): void {
     section: Section,
     name: string
   ): Record<string, unknown> => {
-    const mod = moduleOf(section.mod, name);
+    const mod = moduleOf(section, name);
     return {
       ...readCsf(mod.default)?.args,
       ...csfOf(mod, name)?.args,
@@ -766,7 +781,7 @@ export function boot(options: BootOptions): void {
     name: string,
     args: Record<string, unknown>
   ): MountSpec {
-    const mod = moduleOf(section.mod, name);
+    const mod = moduleOf(section, name);
     const meta = readCsf(mod.default) ?? {};
     const csf = csfOf(mod, name) ?? {};
     return {
@@ -807,6 +822,16 @@ export function boot(options: BootOptions): void {
     into: { error?: PageError }
   ): Mounted | undefined {
     into.error = undefined;
+    const unreached = section.own?.unreached.get(name);
+    if (unreached) {
+      into.error = {
+        message: stageRenderWords.seedUnreached(unreached),
+        file: section.file,
+        line: null,
+        column: null,
+      };
+      return;
+    }
     const was = mounting;
     // What the story's script asks of matchMedia while it mounts, its body answers.
     const width = Number.parseFloat(body.style.width);
@@ -988,16 +1013,39 @@ export function boot(options: BootOptions): void {
     return section.loading;
   }
 
+  /** Whether a section's module has a `beforeEach`, the meta's or a story's: only then may a story hold modules of its own. */
+  const seeds = (section: Section): boolean => {
+    const mod = section.mod?.module ?? {};
+    return (
+      !!readCsf(mod.default)?.beforeEach ||
+      (section.mod?.SHEET.stories ?? []).some(
+        (story) => !!csfOf(mod, story.name)?.beforeEach
+      )
+    );
+  };
+
   /**
    * Each story's `beforeEach` run, the meta's first, as Storybook runs them
    * before a story renders: once as its section loads, before any of its
    * frames mount, with the story's context. A story that imports a module
-   * in it writes into its own copy (host.ts `cawcoStandIns`), which every
-   * frame of that story then reads.
+   * in it is evaluated in a runner of its own first (own.ts), made anew
+   * each time its section loads, the last ones closed; what its
+   * `beforeEach` writes is its runner's, which every frame of that story
+   * reads. A story whose seed can't reach its component runs none: its
+   * frames are refused ({@link mountInto}).
    */
   async function seeded(section: Section): Promise<void> {
+    const was = section.own;
+    section.own =
+      (seeds(section)
+        ? await ownModulesOf(section.file, options.moduleRunner)
+        : null) ?? undefined;
+    await was?.close();
     for (const story of section.mod?.SHEET.stories ?? []) {
-      const mod = moduleOf(section.mod, story.name);
+      if (section.own?.unreached.has(story.name)) {
+        continue;
+      }
+      const mod = moduleOf(section, story.name);
       const { context } = specFor(
         section,
         story.name,
@@ -1184,7 +1232,7 @@ export function boot(options: BootOptions): void {
     to: string,
     body: HTMLElement
   ): Promise<{ mounted: Mounted | undefined; move: MoveRender }> {
-    const csf = csfOf(moduleOf(section.mod, to), to) ?? {};
+    const csf = csfOf(moduleOf(section, to), to) ?? {};
     const { play } = csf;
     const from = String(
       csf.from ??
@@ -1551,6 +1599,15 @@ export function boot(options: BootOptions): void {
   });
 
   /* --- HMR ------------------------------------------------------------- */
+
+  // A page let go of (not kept in the back-forward cache) closes its sections' runners.
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) {
+      for (const section of sections) {
+        quietly(section.own?.close() ?? Promise.resolve());
+      }
+    }
+  });
 
   window.addEventListener("cawco:section", (event) => {
     const mod = event.detail;

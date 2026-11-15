@@ -84,9 +84,14 @@ export function startForecast(): void {
  * (dev-debug.ts); every other build folds each read of it away.
  */
 const bench = $state<CawcoDebug["usage"]>({ staged: null });
-if (import.meta.env.DEV) {
-  devDebug({ usage: bench });
-}
+
+/**
+ * The bench's handle, `__cawcoDebug.usage`, exposed (dev only). The app
+ * starts it once (start.ts `startApp`); importing this module exposes
+ * nothing. Returns its withdrawal.
+ */
+export const startUsageBench = (): (() => void) =>
+  import.meta.env.DEV ? devDebug({ usage: bench }) : () => undefined;
 const staged = $derived(import.meta.env.DEV ? bench.staged : null);
 
 const claude = $derived.by((): ClaudeRings | null => {

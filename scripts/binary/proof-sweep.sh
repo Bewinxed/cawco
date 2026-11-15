@@ -10,6 +10,8 @@
 # thing ended. Only processes and mounts that name one of these dirs are touched: no other podman container of the
 # host is, and a live test's run dir is never taken with --stale.
 set -euo pipefail
+# `podman unshare` is the host's own podman's: a remote client has none (podman-instance.sh, THE HOST'S OWN PODMAN).
+unset CONTAINER_HOST CONTAINER_CONNECTION
 dirs=()
 runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 if [[ ${1:-} == --stale ]]; then

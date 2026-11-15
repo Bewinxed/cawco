@@ -12,7 +12,7 @@
  * hub's own mode): a machine's proof of its key, a session's credential, a
  * paired device's token, or nothing, and nothing reaches only the open
  * routes. The mark is a secret this process made at start and keeps in
- * memory, as the hub's call to itself is (hub-self.ts), set here on every
+ * memory, set here on every
  * request and socket and refused from anyone else.
  *
  * Every connection through a forward reaches the hub from this host's

@@ -146,6 +146,7 @@ import {
 } from "../decision-program";
 import { HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
+import { type OpenStop, openProblem, stopProblem } from "../preview-stops";
 import {
   changeFolderFiles,
   folderFileNames,
@@ -160,7 +161,7 @@ import {
   canvasProblem,
   specOf,
 } from "./component";
-import type { ArtifactServiceDeps } from "./deps";
+import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
 import { createFacts, metaOf, stateOf } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind } from "./kinds/component";
@@ -196,7 +197,6 @@ import {
   type CanvasExport,
   type CommentRead,
   type Created,
-  type HandedArtifactFile,
   type Making,
   type Opened,
   type PageBroken,
@@ -1683,7 +1683,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     again = false
   ): Promise<
     | { opened: true; started: true }
-    | { opened: false; started: boolean; why: string; href?: string }
+    | { opened: false; started: true; why: string; href?: string }
+    | { opened: false; started: false; why: string; stop: OpenStop }
   > => {
     const landing = landingOf(row, card);
     if (landing) {
@@ -1693,7 +1694,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       deps.open(row, panel, again)
     );
     if (!published.ok) {
-      return { opened: false, why: published.error, started: false };
+      return {
+        opened: false,
+        why: published.error,
+        started: false,
+        stop: published.stop,
+      };
     }
     const owns = panel === row.instanceId;
     const meta = docMeta(docs.doc(row.id));
@@ -2298,10 +2304,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const said = down.why
       ? `${failed.replace(TRAILING_STOPS, "")} (${down.why.replace(TRAILING_STOPS, "")}).`
       : failed;
-    return problem(503, {
-      code: "artifact-unanswered-unhanded",
-      detail: `${said} ${artifactToolWords.notHanded}`,
-    });
+    return stopProblem(
+      down.stop,
+      "artifact-unanswered-unhanded",
+      `${said} ${artifactToolWords.notHanded}`
+    );
   };
 
   /** A session by its link, labelled by its title, as `artifact_list` names it. */
@@ -2970,10 +2977,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // A preview nothing could start shows nothing: it is not kept. One
       // whose server did not answer stays in the panel, its failure on it.
       discard(row);
-      return problem(503, {
-        code: "artifact-preview-unstarted",
-        detail: shown.why,
-      });
+      return openProblem(shown.stop, "artifact-preview-unstarted", shown.why);
     }
     const said = heldId(row);
     askedNow(instance, said.id);
@@ -3150,9 +3154,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       name: `${base}.json`,
       bytes: async ({ session, machineId }) => {
         const pass = deps.browse(session, row);
-        // The receiver's inputs throw what they cannot write (work-items.ts).
         if (pass instanceof ElysiaStatus) {
-          throw new Error(pass.response.detail);
+          return pass;
         }
         const unreached = await deps.workspaceReach(pass.url, machineId);
         return jsonFile(
@@ -4862,10 +4865,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const shown = await show(row, instance.id, "card" in at ? at.card : null);
       if (!shown.started) {
-        return problem(503, {
-          code: "artifact-show-unstarted",
-          detail: shown.why,
-        });
+        return openProblem(shown.stop, "artifact-show-unstarted", shown.why);
       }
       // The agent's show of its own asks again (needs.ts rule 2: a new show of it).
       if (by === "agent" && row.instanceId === instance.id) {

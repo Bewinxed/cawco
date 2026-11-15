@@ -17,6 +17,10 @@ import { z } from "zod";
 export interface HubFailure {
   code?: string;
   detail: string;
+  /** The harness a refused or waiting read names (the hub's `harness-refused`, `harness-updating`). */
+  harness?: string;
+  /** The machine a refused or waiting read names, as the problem's `machineId` member. */
+  machine?: string;
   status: number;
 }
 
@@ -57,7 +61,7 @@ export function deadlineIn(ms: number | null): number | null {
 
 /**
  * A read refused because the machine it reads off is away: the hub's 503
- * naming it ({@link machineAway}; hub server.ts `awayStatus`). Every reader of
+ * naming it ({@link machineAway}; hub machine-reads.ts `nameAwayMachine`). Every reader of
  * a route that reads off a machine throws it, so the surface that asked says
  * so in place and asks again once the machine is back (machine-wait.svelte.ts
  * `MachineWait`), never as a refusal.
@@ -121,6 +125,8 @@ export function hubFailure(refused: Refused): HubFailure {
         ? hubFailureWords.unreadRequest
         : (sentenceOf(problem?.detail ?? problem?.title) ?? noAnswer(status)),
     ...(problem?.code ? { code: problem.code } : {}),
+    ...(problem?.machineId ? { machine: problem.machineId } : {}),
+    ...(problem?.harness ? { harness: problem.harness } : {}),
   };
 }
 
@@ -530,6 +536,8 @@ const { noAnswer } = hubFailureWords;
 function problemOf(value: unknown): {
   code?: string;
   detail?: string;
+  harness?: string;
+  machineId?: string;
   title?: string;
 } | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -543,6 +551,8 @@ function problemOf(value: unknown): {
   return {
     code: field("code"),
     detail: field("detail"),
+    harness: field("harness"),
+    machineId: field("machineId"),
     title: field("title"),
   };
 }

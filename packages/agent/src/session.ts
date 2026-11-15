@@ -1130,7 +1130,14 @@ export class SessionSupervisor {
       call: (tool, code) =>
         completeToolSignin(String(tool), String(code ?? "")),
     },
-    installTool: { call: (...args) => this.#installTool(args) },
+    // Each ask in a lane of its own, never queued behind another: a second
+    // ask of the same tool while its install runs joins it (tools.ts
+    // `installTool`), where queued it ran a second install once the first
+    // ended (host run 49045442, two dashboards pressing at once).
+    installTool: {
+      call: (...args) => this.#installTool(args),
+      lane: (control) => `install:${control.requestId}`,
+    },
     // A delta, held as it arrived and kept on disk (#holdDelta): answered
     // at once with the generation kept (ACK; READY for a welcome), its
     // policy and items applied after (#writePolicy, #convergeSoon), each
@@ -4964,15 +4971,22 @@ export class SessionSupervisor {
   /** {@link installTool} of the tool `args` names, as the hub asked. */
   async #installTool(args: unknown[]): Promise<unknown> {
     // The policy's pin, the newest release the hub sends a tool it keeps
-    // current to reach, and whether the hub sent it to keep it current
-    // rather than a press (hub tool-releases.ts); JSON says an absent
-    // one as null.
+    // current to reach, whether the hub sent it to keep it current rather
+    // than a press (hub tool-releases.ts), and who started it (a hub too
+    // old to say: a press unless automatic); JSON says an absent one as null.
     const said = (at: number): string | undefined =>
       typeof args[at] === "string" ? (args[at] as string) : undefined;
     const newest = said(2);
+    const automatic = args[3] === true;
+    const said4 = said(4);
+    let startedBy: "cawco" | "person" = automatic ? "cawco" : "person";
+    if (said4 === "cawco" || said4 === "person") {
+      startedBy = said4;
+    }
     const installed = await installTool(args[0] as string, said(1), {
       ...(newest ? { newest } : {}),
-      automatic: args[3] === true,
+      automatic,
+      startedBy,
     });
     // A harness CLI installed here converges what the machine holds of
     // the fleet, as every harness already here did.

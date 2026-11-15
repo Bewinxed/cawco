@@ -25,8 +25,8 @@ import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import { cutShort } from "@cawco/core/words/helpers";
 import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus, problem } from "elysia";
+import type { HandedArtifactFile } from "./artifacts/deps";
 import type { Artifacts } from "./artifacts/service";
-import type { HandedReceiver } from "./artifacts/shapes";
 import type { WorkItemRow } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
@@ -45,12 +45,12 @@ export interface HandedOnDisk {
 /**
  * One file the hub writes into `inputs/`: its name there, what it was handed
  * as, and its bytes; for what is made for its reader alone (a preview's
- * pass), the bytes made for the session it is handed to as it is written;
- * or the file on the hub's disk they are read from as they are sent.
+ * pass), the bytes made for the session it is handed to as it is written,
+ * or why that session's browser opens nothing; or the file on the hub's
+ * disk they are read from as they are sent.
  */
 export interface HandedFile {
-  bytes:
-    Buffer | ((receiver: HandedReceiver) => Promise<Buffer>) | HandedOnDisk;
+  bytes: HandedArtifactFile["bytes"] | HandedOnDisk;
   /** What it is, for the receiver's opening line: "report of Fix the tray (1a2b3c4d)". */
   from: string;
   /** Where it lands under `inputs/`: a file name, or an item's asset's path in its project's folder. */

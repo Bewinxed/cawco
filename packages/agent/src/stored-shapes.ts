@@ -4,12 +4,12 @@
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
 import {
-  BrowserHostKindShape,
+  BrowserHostKindSchema,
   BrowserKeyShape,
   BrowserPortsShape,
   BrowserRelayShape,
   BrowserRowShape,
-  BrowserStateShape,
+  BrowserStateSchema,
   FleetMcpConfigSchema,
   HarnessConfigKindShape,
   HookEventShape,
@@ -53,7 +53,7 @@ const BrowserRecordShape = declared(
         volume: z.string(),
       })
       .optional(),
-    host: BrowserHostKindShape,
+    host: BrowserHostKindSchema,
     key: BrowserKeyShape,
     lastUsedAt: z.number(),
     local: z
@@ -70,7 +70,7 @@ const BrowserRecordShape = declared(
     relayKey: z.string().optional(),
     runtimeAway: z.literal(true).optional(),
     slot: z.number().optional(),
-    state: BrowserStateShape,
+    state: BrowserStateSchema,
     takeover: BrowserRowShape.shape.takeover,
     why: z.string().optional(),
   }),
@@ -152,3 +152,51 @@ const MediaMeasurementShape = declared(
 );
 export const MediaMeasurementSchema = MediaMeasurementShape;
 export type MediaMeasurementOutput = z.output<typeof MediaMeasurementShape>;
+
+const ToolInstallRecordShape = declared(
+  z.object({
+    at: z.number(),
+    method: z.string().optional(),
+    path: z.string(),
+    takenOver: z.boolean().optional(),
+    version: z.string().optional(),
+  }),
+  "ToolInstallRecord",
+  "packages/agent/src/tools.ts"
+);
+export type ToolInstallRecordOutput = z.output<typeof ToolInstallRecordShape>;
+
+const ToolInstallUnderwayShape = declared(
+  z.object({
+    answered: z.number().optional(),
+    at: z.number(),
+    automatic: z.boolean().optional(),
+    bootId: z.string().optional(),
+    from: z.string().optional(),
+    method: z.string().optional(),
+    newest: z.string().optional(),
+    path: z.string().optional(),
+    pid: z.number(),
+    procStart: z.string().optional(),
+    startedBy: z.enum(["cawco", "person"]).optional(),
+    to: z.string().optional(),
+    tries: z.number().optional(),
+  }),
+  "ToolInstallUnderway",
+  "packages/agent/src/tools.ts"
+);
+export type ToolInstallUnderwayOutput = z.output<
+  typeof ToolInstallUnderwayShape
+>;
+
+const ToolInstallsShape = declared(
+  z.object({
+    installs: z.record(z.string(), ToolInstallRecordShape),
+    tookOverAt: z.number().optional(),
+    underway: z.record(z.string(), ToolInstallUnderwayShape).optional(),
+  }),
+  "ToolInstalls",
+  "packages/agent/src/tools.ts"
+);
+export const ToolInstallsSchema = ToolInstallsShape;
+export type ToolInstallsOutput = z.output<typeof ToolInstallsShape>;

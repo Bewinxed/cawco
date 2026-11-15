@@ -819,17 +819,19 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_result",
-      "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create and hand that artifact in first, primary (its name or handle); files by folder path. Again replaces it.",
+      "Hand in your task's work before finish_item, for the person who asked for it: they judged it then, and read this to learn it is done and what needs them. Again replaces it.",
       {
         summary: z
           .string()
           .trim()
           .min(1)
-          .describe("What you did, in a few sentences."),
+          .describe("What is done, in one line."),
         check: z
           .array(z.string())
           .optional()
-          .describe("What the reviewer should look at, one line each."),
+          .describe(
+            "The loose ends that are theirs, and each thing they must look at or decide, one line each."
+          ),
         artifacts: z
           .array(
             z.object({
@@ -852,7 +854,10 @@ export function taskTools(context: TaskToolContext | undefined) {
                 .describe("The one the review draws first."),
             })
           )
-          .optional(),
+          .optional()
+          .describe(
+            "The thing itself where a person can use it: the screen or component running (an artifact_create preview, first, primary), a post or document as it will read, a file, a link. None for work a person cannot open."
+          ),
       },
       async ({ summary, check, artifacts }) => {
         const scoped = scope();

@@ -310,12 +310,77 @@ import type { TailnetServing } from "./tailnet-https";
  *    `eventsMore` count the older actions and events (numbers, where 63 sent
  *    booleans), and each list takes a `skip` to read them. A page built for
  *    63 reads a number as a flag, so it reloads first.
+ * 65: a delegation's or handoff's inputs to or from a machine whose agent
+ *    is older than the hub's contract (core runtime.ts `protocolRange`) are
+ *    refused (`work-item-inputs-older-build`) until it installs the hub's
+ *    build. A page built for 64 does not know the new code, so it reloads
+ *    first.
+ * 66: a permission ask's `suggestions` and a model's `defaultEffort` and
+ *    `supportedEffortLevels` are the provider's own values, passed through
+ *    and not enumerated (any JSON values, and plain strings). A page built
+ *    for 65 reads them as closed sets the hub may now send values outside,
+ *    so it reloads first.
+ * 67: a machine that is away is answered 503 `machine-away`, its headers
+ *    naming it, where the fleet pushes and sync, an account's sign-out
+ *    and a spawn answered 404 or 409 with their own codes, and a
+ *    machine's media and a session's image 503 with theirs;
+ *    the project's conversation that does not start answers the spawn's own
+ *    problem where it answered 502 `caw-failed`, and an attempt whose clone's
+ *    design/ is unread 502 `design-clone-unread` where it answered 500. A
+ *    page built for 66 reads those answers closed, so it reloads first.
+ * 68: three fields nothing read are gone: a session's `keepAlive`
+ *    `lastPingUsage`, a Who decides member's `reach`, and an archived
+ *    workspace's `ports`. A page built for 67 may hold them as required,
+ *    so it reloads first.
+ * 69: every answer about a machine says its cause: away is 503
+ *    `machine-away`, naming its machine in the body and the headers, where
+ *    a browser's, the stream relay's, a stage's, a page's, a preview's and
+ *    a credential move's calls answered their own codes; silent is 504
+ *    `machine-silent`, where those and a session's PATCH, generate_image
+ *    and agent update answered theirs; a machine's failure is 502, where a
+ *    spawn's start answered 422 and a placement 503. A page built for 68
+ *    reads those codes and members closed, so it reloads first.
+ * 70: a start whose project's starting-set.md does not read is refused
+ *    409 `starting-set-unread`, where its session started with everything
+ *    installed: a project's requests, an attempt and its retry, a view's
+ *    requests and asks may answer it. A page built for 69 does not know the
+ *    new code, so it reloads first.
+ * 71: the rest of the machine-status rule: a preview's create and show
+ *    and a decision page's Make tasks answer a machine away 503, silent
+ *    504, its failure 502, and the hub's own causes (a paused machine, a
+ *    closed preview, Caw's send not taken, the folder's write) at their own
+ *    4xx, where each answered 503 at its own code; an artifact's read
+ *    (a stage's failure), a skill's adoption and refetch (a skill the
+ *    machine does not have), Caw's turn-off and a continuation's start (no
+ *    transcript, no clone) answer new 502, 404, 400 and 409 bodies. A page
+ *    built for 70 reads those statuses' bodies closed, so it reloads first.
+ * 72: an attempt whose task file's budget line does not read is refused
+ *    409 `dispatch-budget-unread`, where it started with no task limit: a
+ *    project's requests, an attempt and its retry may answer it. A page
+ *    built for 71 does not know the new code, so it reloads first.
+ * 73: a provider's routing gains `atLimitUnread` while its saved at-limit
+ *    policy can't be read (the fields that don't, short), its `atLimit`
+ *    then the restrictive policy. A page built for 72 would show those
+ *    values with no reason, so it reloads first.
+ * 74: a hook's save takes its `scope` only as one of `user`, `project` or
+ *    `local`, where any text was taken and stored. A page built for 73 may
+ *    send another, so it reloads first.
+ * 75: an attempt whose task file's `outputs:`, `owns:`, `checks:`,
+ *    `accounts:` or `waits_on:` line does not read whole (a `waits_on`
+ *    entry that names no target included) is refused 409
+ *    `dispatch-list-unread`, where it started on what of the line read
+ *    (no outputs, fewer owned globs, checks, waits, any account): a
+ *    project's requests, an attempt and its retry may answer it. A task
+ *    gains `listsUnread`. A start, and the placement preview, on a task
+ *    whose `accounts:` line does not read whole are refused 409
+ *    `spawn-task-accounts-unread`, where they were placed on any account.
+ *    A page built for 74 does not know the new codes, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 64;
+export const WIRE_PROTOCOL = 75;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -78,28 +78,6 @@ export type SupportedCommands = SlashCommand[];
 
 /* ----------------------------------------------------------- permissions — */
 
-export type PermissionUpdateDestination =
-  "userSettings" | "projectSettings" | "localSettings" | "session" | "cliArg";
-
-/** A permission the SDK suggests persisting, so "always allow" has something to write. */
-export type PermissionUpdate =
-  | {
-      type: "addRules" | "replaceRules" | "removeRules";
-      rules: { toolName: string; ruleContent?: string }[];
-      behavior: "allow" | "deny" | "ask";
-      destination: PermissionUpdateDestination;
-    }
-  | {
-      type: "setMode";
-      mode: PermissionMode;
-      destination: PermissionUpdateDestination;
-    }
-  | {
-      type: "addDirectories" | "removeDirectories";
-      directories: string[];
-      destination: PermissionUpdateDestination;
-    };
-
 /**
  * Whether a machine's daemon can actually start sessions for a harness. For
  * Claude: whether any CawCo account is signed in on the machine.
@@ -118,7 +96,12 @@ export type PermissionResult =
   | {
       behavior: "allow";
       updatedInput?: unknown;
-      updatedPermissions?: PermissionUpdate[];
+      /**
+       * The provider's own permission updates, held as the provider's: an
+       * "Always allow" hands the ask's `suggestions` back whole, and the
+       * adapter that reads one narrows it where it reads.
+       */
+      updatedPermissions?: unknown[];
       remember?: boolean;
       toolUseID?: string;
     }

@@ -3,6 +3,7 @@
  * (USAGE-SPEC.md §4.1). Pure types only; no runtime imports.
  */
 
+import { everyOf } from "../every-of";
 import type { HarnessKind } from "../harness/kinds";
 import { HOUR_MS } from "../time";
 
@@ -16,6 +17,9 @@ interface UsageScanned {
 export type UsageHarness = {
   [K in HarnessKind]: UsageScanned[K] extends true ? K : never;
 }[HarnessKind];
+
+/** Every {@link UsageHarness}. */
+export const USAGE_HARNESSES = everyOf<UsageHarness>()(["claude", "opencode"]);
 
 export interface UsageTokens {
   cacheCreation: number; // Claude: see cacheCreationCount() rule in tokens.ts

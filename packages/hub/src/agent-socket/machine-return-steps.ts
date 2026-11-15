@@ -86,7 +86,7 @@ export type MachineReturnContext = Pick<
   | "streams"
   | "tailnetHttps"
   | "takeUpMovesOn"
-  | "toolReleases"
+  | "toolFacts"
   | "transcripts"
   | "unknownAccountsOf"
   | "workItems"
@@ -112,18 +112,14 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     // Named as the hub names it: through an SSH add's forward, the
     // address the person gave the add (`socketAddress`).
     const from = ctx.socketAddress(ws);
+    // Its tool cells are the last connection's until its tools report on
+    // this one (tool-facts.ts); set before the registry hears of the new
+    // socket, so the old one's leaving takes no read waiting with it.
+    ctx.toolFacts.connected(message.machineId, ws.id);
     ctx.registry.registerAgent(message.machineId, ws, from ?? undefined);
     console.info(
       `[hub] machine ${message.machineId} registered from ${from ?? "an unknown address"}`
     );
-  };
-
-  const toolReleasesTold = (ret: MachineReturn): void => {
-    const { message } = ret;
-    // A copy an update left older is sent it once more: the agent
-    // may be a new process, which remembers no failure of the old
-    // one's (tool-releases.ts `connected`).
-    ctx.toolReleases.connected(message.machineId);
   };
 
   const artifactsBack = (ret: MachineReturn): void => {
@@ -751,7 +747,6 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
   return [
     backRegistered,
     registryEntered,
-    toolReleasesTold,
     artifactsBack,
     foldersRead,
     workResumed,

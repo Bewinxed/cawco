@@ -69,13 +69,16 @@
   );
   let order = $state(untrack(() => accounts.map((account) => account.id)));
 
+  // A policy that can't be read is saved as shown, which clears it.
   const dirty = $derived(
-    JSON.stringify(draft) !==
-      JSON.stringify({
-        yours: routing.yours,
-        delegates: routing.delegates,
-        atLimit: routing.atLimit,
-      }) || order.join() !== accounts.map((account) => account.id).join()
+    routing.atLimitUnread !== undefined ||
+      JSON.stringify(draft) !==
+        JSON.stringify({
+          yours: routing.yours,
+          delegates: routing.delegates,
+          atLimit: routing.atLimit,
+        }) ||
+      order.join() !== accounts.map((account) => account.id).join()
   );
   const limitLanes = $derived<[Account, Account]>([accounts[0], accounts[1]]);
 
@@ -214,6 +217,7 @@
         accounts={limitLanes}
         terms={provider === "anthropic"}
         bind:atLimit={draft.atLimit}
+        unread={routing.atLimitUnread}
       />
     </section>
   {/if}
