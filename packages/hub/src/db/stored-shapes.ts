@@ -54,6 +54,7 @@ import type {
   AttemptAsk as AttemptAskType,
   CacheTtl as CacheTtlType,
   CommentDirection as CommentDirectionType,
+  CompactionMoveBody as CompactionMoveBodyType,
   ContinueRequest as ContinueRequestType,
   DelegateRequestKind as DelegateRequestKindType,
   DesignCheckState as DesignCheckStateType,
@@ -91,7 +92,6 @@ import type {
   StrandedWhy as StrandedWhyType,
   TaskEdgeKind as TaskEdgeKindType,
   ToolCallKeyState as ToolCallKeyStateType,
-  TrackerCursor as TrackerCursorType,
   TrashedRows as TrashedRowsType,
   TrashKind as TrashKindType,
   TrimOfferAnswer as TrimOfferAnswerType,
@@ -252,6 +252,32 @@ const CommentDirectionShape = declared(
 export const CommentDirectionSchema: z.ZodType<CommentDirectionType> =
   CommentDirectionShape;
 export type CommentDirectionOutput = z.output<typeof CommentDirectionShape>;
+
+const CompactionMoveBodyShape = declared(
+  AccountMoveSchema.options[0]
+    .omit({
+      asked: true,
+      because: true,
+      compactFirst: true,
+      kind: true,
+      to: true,
+    })
+    .extend({
+      because: z
+        .union([
+          AccountMoveSchema.options[0].shape.because.unwrap().options[0],
+          AccountMoveSchema.options[0].shape.because.unwrap().options[1],
+          AccountMoveSchema.options[0].shape.because.unwrap().options[3],
+        ])
+        .optional(),
+      to: AccountMoveSchema.options[0].shape.to.omit({ id: true }),
+    }),
+  "CompactionMoveBody",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const CompactionMoveBodySchema: z.ZodType<CompactionMoveBodyType> =
+  CompactionMoveBodyShape;
+export type CompactionMoveBodyOutput = z.output<typeof CompactionMoveBodyShape>;
 
 const ContinueRequestShape = declared(
   z.object({
@@ -823,20 +849,6 @@ const ToolCallKeyStateShape = declared(
 export const ToolCallKeyStateSchema: z.ZodType<ToolCallKeyStateType> =
   ToolCallKeyStateShape;
 export type ToolCallKeyStateOutput = z.output<typeof ToolCallKeyStateShape>;
-
-const TrackerCursorShape = declared(
-  z.object({
-    commentsEtag: z.string().nullable(),
-    commentsSince: z.number(),
-    etag: z.string().nullable(),
-    since: z.number(),
-  }),
-  "TrackerCursor",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const TrackerCursorSchema: z.ZodType<TrackerCursorType> =
-  TrackerCursorShape;
-export type TrackerCursorOutput = z.output<typeof TrackerCursorShape>;
 
 const TrashKindShape = declared(
   z.enum([

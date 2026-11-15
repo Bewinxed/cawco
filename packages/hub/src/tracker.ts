@@ -82,11 +82,11 @@ import {
 import { connectionsWords } from "@cawco/core/words/connections";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
-import type { TrackerCursor } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type {
   TrackerAgreement,
   TrackerBindingRow,
+  TrackerCursor,
   TrackerLinkRow,
   TrackerSynced,
   TrackersDb,

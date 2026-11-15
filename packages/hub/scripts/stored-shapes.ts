@@ -99,12 +99,20 @@ const WRITTEN: Record<string, { schema: string; values: [string, string][] }> =
         "z.union([DelegateEventShape.options[2].shape.payload, DelegateEventShape.options[1].shape.payload, DelegateEventShape.options[0].shape.payload])",
       values: [],
     },
-    // Stored apart from its kind (limit_events and limit_compactions keep
-    // that in their own column): most required keys first, as a line of
-    // fewer would take, and strip, another's.
+    // Stored apart from its kind (limit_events keeps that in its own
+    // column): most required keys first, as a line of fewer would take, and
+    // strip, another's.
     AccountMoveBody: {
       schema:
         "z.union([AccountMoveSchema.options[0].omit({ kind: true }), AccountMoveSchema.options[3].omit({ kind: true }), AccountMoveSchema.options[7].omit({ kind: true }), AccountMoveSchema.options[1].omit({ kind: true }), AccountMoveSchema.options[2].omit({ kind: true }), AccountMoveSchema.options[4].omit({ kind: true }), AccountMoveSchema.options[5].omit({ kind: true }), AccountMoveSchema.options[6].omit({ kind: true })])",
+      values: [],
+    },
+    // A `moved` line apart from what its plan's columns hold
+    // (limit_compactions): its kind, `to`'s id, `compactFirst`, `asked` and
+    // a `refused` `because`, which `move_refused` says.
+    CompactionMoveBody: {
+      schema:
+        "AccountMoveSchema.options[0].omit({ asked: true, because: true, compactFirst: true, kind: true, to: true }).extend({ because: z.union([AccountMoveSchema.options[0].shape.because.unwrap().options[0], AccountMoveSchema.options[0].shape.because.unwrap().options[1], AccountMoveSchema.options[0].shape.because.unwrap().options[3]]).optional(), to: AccountMoveSchema.options[0].shape.to.omit({ id: true }) })",
       values: [],
     },
   };

@@ -2948,6 +2948,34 @@
       "when": 1794757271734,
       "tag": "0428_workspace_head_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 429,
+      "version": "6",
+      "when": 1794758032440,
+      "tag": "0429_compaction_plan_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 430,
+      "version": "6",
+      "when": 1794758056473,
+      "tag": "0430_decides_pose_hear_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 431,
+      "version": "6",
+      "when": 1794758074499,
+      "tag": "0431_tracker_cursor_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 432,
+      "version": "6",
+      "when": 1794758096532,
+      "tag": "0432_account_reading_columns",
+      "breakpoints": true
     }
   ]
 }

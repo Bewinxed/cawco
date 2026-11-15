@@ -16,54 +16,13 @@
  * that migration will do; for a migration that has already run it says
  * so, and reads nothing of its columns.
  */
-import { Database } from "bun:sqlite";
 import { cutFromKept } from "../src/db/cut-from-unread";
 import { itemBlocksKept } from "../src/db/item-blocks-unread";
-import type { Lifted, Reading } from "../src/db/lifted-reading";
 import { limitLinesKept } from "../src/db/limit-lines-unread";
 import { sendOriginsKept } from "../src/db/send-origins-unread";
+import { liftedReport } from "./lifted-report";
 
-const path = process.argv.at(2);
-if (path === undefined) {
-  console.error(
-    "lifted-columns: name the database: bun run lifted-columns <path>"
-  );
-  process.exit(2);
-}
-const client = new Database(path, { readonly: true });
-
-/** Every table's columns as `table.column`, generated ones included (`table_xinfo`). */
-const columns = new Set(
-  client
-    .query<{ at: string }, []>(
-      "SELECT m.name || '.' || c.name AS at FROM sqlite_master m JOIN pragma_table_xinfo(m.name) c WHERE m.type = 'table'"
-    )
-    .all()
-    .map((one) => one.at)
-);
-
-/** One column's count, then each restrictive value by its key. */
-const report = (column: string, rows: Lifted[]): void => {
-  const count = (kind: Reading["kind"]) =>
-    rows.filter((row) => row.reading.kind === kind).length;
-  console.log(
-    `${column}: ${rows.length} read, ${count("unset")} never set, ${count("placed")} placed, ${count("restrictive")} restrictive`
-  );
-  for (const row of rows) {
-    if (row.reading.kind === "restrictive") {
-      console.log(
-        `  restrictive: ${row.key}: ${JSON.stringify(row.raw)}: ${row.reading.why}`
-      );
-    }
-  }
-};
-
-/** A migration that has run: its columns are read by the hub, not here. */
-const ran = (migration: string, lifted: string): void => {
-  console.log(
-    `${lifted}: ${migration} has run on ${path}; read a copy taken before it`
-  );
-};
+const { client, columns, report, ran } = liftedReport("lifted-columns");
 
 if (columns.has("limit_events.kind")) {
   ran("0410", "limit_events.move, limit_compactions.move");

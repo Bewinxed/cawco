@@ -275,19 +275,6 @@ const AccountMoveShape = declared(
 export const AccountMoveSchema = AccountMoveShape;
 export type AccountMoveOutput = z.output<typeof AccountMoveShape>;
 
-const AccountOverageShape = declared(
-  z.object({
-    disabledReason: z.string().nullable(),
-    inUse: z.boolean(),
-    resetsAt: z.string().nullable(),
-    status: z.string().nullable(),
-  }),
-  "AccountOverage",
-  "packages/core/src/accounts.ts"
-);
-export const AccountOverageSchema = AccountOverageShape;
-export type AccountOverageOutput = z.output<typeof AccountOverageShape>;
-
 export const AuthStateShape = declared(
   z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
   "AuthState",
@@ -720,7 +707,6 @@ const ContextFillShape = declared(
   "ContextFill",
   "packages/core/src/context-filing.ts"
 );
-export const ContextFillSchema = ContextFillShape;
 export type ContextFillOutput = z.output<typeof ContextFillShape>;
 
 const FilingStageShape = declared(

@@ -5,7 +5,11 @@
  * for them. Types only; `scripts/stored-shapes.ts` makes each schema from
  * these declarations and proves it equal in stored-shapes.proof.ts.
  */
-import type { AccountMove } from "@cawco/core/accounts";
+import type {
+  AccountMove,
+  MoveBecause,
+  NamedAccount,
+} from "@cawco/core/accounts";
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { Extracted } from "@cawco/core/continuation-read";
 import type { MayStart } from "@cawco/core/delegate-types";
@@ -520,16 +524,32 @@ export interface MoveAsker {
 }
 
 /**
- * A limit line as the hub keeps it (`limit_events.body`,
- * `limit_compactions.move`): an {@link AccountMove} without its `kind`,
- * which is a column of its own (`kind`, `move_kind`) the row mapper puts
- * back (db at-limit.ts).
+ * A limit line as the hub keeps it (`limit_events.body`): an
+ * {@link AccountMove} without its `kind`, which is a column of its own
+ * (`kind`) the row mapper puts back (db at-limit.ts).
  */
 export type AccountMoveBody = AccountMove extends infer Line
   ? Line extends AccountMove
     ? Omit<Line, "kind">
     : never
   : never;
+
+/**
+ * A compaction plan's move line as `limit_compactions.move` keeps it: a
+ * `moved` line ({@link AccountMove}) without what the plan's own columns
+ * hold, which the hub decides by and the row mapper puts back (db
+ * at-limit.ts): its kind (the plan's `kind`, `move`), the account it moves
+ * to (`move_to_account_id`, beside the name and hue the line says),
+ * `compactFirst` (`move_compact_first`), `asked` (`move_asked`) and a
+ * `because` that is `refused` (`move_refused`).
+ */
+export type CompactionMoveBody = Omit<
+  Extract<AccountMove, { kind: "moved" }>,
+  "asked" | "because" | "compactFirst" | "kind" | "to"
+> & {
+  because?: Exclude<MoveBecause, { kind: "refused" }>;
+  to: Omit<NamedAccount, "id">;
+};
 
 /** One must-fix finding of a design check, tied to an element (design-verify.ts). */
 export interface DesignFinding {
@@ -550,20 +570,6 @@ export interface DesignProposalFile {
   after: string;
   before: string;
   path: string;
-}
-
-/**
- * Where a tracker binding's poll stands (tracker.ts): the newest change it
- * took in, of issues and of their comments, and GitHub's ETag for each list
- * as it last asked it.
- */
-export interface TrackerCursor {
-  commentsEtag: string | null;
-  /** The newest comment taken in, ms. */
-  commentsSince: number;
-  etag: string | null;
-  /** The newest issue change taken in, ms. */
-  since: number;
 }
 
 /* -------------------------------------------- closed sets of text columns */

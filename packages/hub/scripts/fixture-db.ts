@@ -35,9 +35,11 @@
  * into their envelopes ({@link seedOwedSends}), the skills', plugins'
  * and kept versions' files and last fetches migrations 0422 and 0423 move
  * ({@link seedFleetFiles}), the pauses, sign-ins and capabilities 0424
- * moves ({@link seedMachineColumns}), and the cold readings, waits,
- * witnesses and heads migrations 0425 to 0428 lift into columns and rows
- * ({@link seedColdWaitsHeads}), written to
+ * moves ({@link seedMachineColumns}), the cold readings, waits, witnesses
+ * and heads migrations 0425 to 0428 lift into columns and rows
+ * ({@link seedColdWaitsHeads}), and the compaction plans, Who decides
+ * settings, tracker cursors and account readings migrations 0429 to 0432
+ * lift into columns ({@link seedPlansSettingsCursorsReadings}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -82,7 +84,10 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * 0422 and 0423, every shape a machine's pause, a tool's sign-in and a
  * machine's capabilities took before migration 0424, and every shape a
  * session's cold reading, a work item's waits and witnesses and a retired
- * workspace's head took before migrations 0425 to 0428, written here.
+ * workspace's head took before migrations 0425 to 0428, and every shape a
+ * compaction plan, Who decides' hearing and poses, a tracker's cursor and
+ * an account's extra usage and window set took before migrations 0429 to
+ * 0432, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -3322,6 +3327,198 @@ function seedColdWaitsHeads(dbPath: string): void {
   sqlite.close();
 }
 
+/**
+ * Every shape migrations 0429 to 0432 read in, written by hand, as the hub
+ * writes each and as a hand edit could leave one:
+ *
+ * - compaction plans beside {@link seedLiftedColumns}'s: a move a person
+ *   asked for whose credential was refused, one a forecast moved, a line
+ *   that is not a moved one, a moved line missing a field, a filing's
+ *   reading whose numbers are text, and one that is JSON `null`;
+ * - Who decides' hearing and poses on {@link seedPlatformsRoutes}'s rows:
+ *   placed whole, partly readable, never set, an empty object, and ones
+ *   that are not JSON or not an object;
+ * - three more tracker bindings beside {@link seedTracker}'s: a cursor
+ *   that is not JSON, one whose comments do not read, and one with no
+ *   comments at all;
+ * - six Claude accounts' readings: extra usage placed (on and rejected),
+ *   never said, partly readable, not JSON and JSON `null`; a window set
+ *   named, never named, empty, with a key named twice, with a key that is
+ *   not text, and not JSON.
+ */
+function seedPlansSettingsCursorsReadings(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const sessions = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE status = 'stopping' ORDER BY id LIMIT 6"
+    )
+    .all()
+    .map((row) => row.id);
+  const moved = {
+    kind: "moved",
+    from: WORK,
+    to: HOME,
+    sameOrganization: false,
+    tokens: 188_000,
+    window: "5-hour limit",
+    resetsAt: RESETS,
+    compact: "compacting",
+  };
+  const plans: [string | null, string | null, string | null][] = [
+    [
+      JSON.stringify({
+        ...moved,
+        asked: true,
+        because: { kind: "refused" },
+        relaunched: true,
+      }),
+      null,
+      "compact-refused",
+    ],
+    [
+      JSON.stringify({
+        ...moved,
+        because: { kind: "forecast", runsOutAt: RESETS - 30 * MINUTE_MS },
+        cost: { pct: 12, window: "5-hour limit" },
+      }),
+      null,
+      "compact-forecast",
+    ],
+    [
+      JSON.stringify({
+        kind: "moving",
+        from: WORK,
+        to: HOME,
+        at: RESETS,
+        tokens: 240_000,
+      }),
+      null,
+      "compact-moving",
+    ],
+    [
+      JSON.stringify({ kind: "moved", from: WORK, to: HOME, tokens: 9 }),
+      null,
+      "compact-partial",
+    ],
+    [null, JSON.stringify({ compactsAt: "200000", tokens: 181_000 }), null],
+    [null, "null", null],
+  ];
+  for (const [at, [move, fill, compactUuid]] of plans.entries()) {
+    sqlite.run(
+      "INSERT INTO limit_compactions (instance_id, stage, line_id, move, fill, filing_uuid, compact_uuid, compacted, created_at) VALUES (?, 'compacting', ?, ?, ?, ?, ?, 0, ?)",
+      [
+        sessions[at] ?? "",
+        `line-plan-${3 + at}`,
+        move,
+        fill,
+        `filing-${3 + at}`,
+        compactUuid,
+        RESETS,
+      ]
+    );
+  }
+  const settings: [string, string | null, string | null][] = [
+    [
+      "decides",
+      JSON.stringify({ advisor: "later", practice: 7 }),
+      JSON.stringify({ caw: "rocket", advisor: "laptop" }),
+    ],
+    [
+      "fixture-every",
+      JSON.stringify({ advisor: "later", practice: "each" }),
+      JSON.stringify({
+        caw: "dancing",
+        advisor: "chart",
+        practice: "sheets",
+        asker: "done",
+      }),
+    ],
+    ["fixture-unset", null, "{}"],
+    ["fixture-unreadable", "advisor: later", "[]"],
+  ];
+  for (const [row, hear, pictures] of settings) {
+    sqlite.run(
+      "UPDATE decides_settings SET hear = ?, pictures = ? WHERE id = ?",
+      [hear, pictures, row]
+    );
+  }
+  const projects = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM projects WHERE id NOT IN (SELECT project_id FROM tracker_bindings) ORDER BY id LIMIT 3"
+    )
+    .all()
+    .map((row) => row.id);
+  const boundAt = Date.UTC(2026, 9, 1);
+  const since = boundAt + 30 * HOUR_MS;
+  const cursors = [
+    "since 2026-10-02, comments since 2026-10-02",
+    JSON.stringify({
+      since,
+      etag: 'W/"7d1f3a"',
+      commentsSince: "yesterday",
+      commentsEtag: null,
+    }),
+    JSON.stringify({ since, etag: null }),
+  ];
+  for (const [at, cursor] of cursors.entries()) {
+    const projectId = projects[at] ?? "";
+    sqlite.run(
+      "INSERT INTO tracker_bindings (project_id, provider, connection, target, target_name, target_url, bound_at, cursor, state, reason, polled_at, resume_at, github_project, github_project_reason) VALUES (?, 'github', 'github-dev', ?, ?, ?, ?, ?, 'synced', NULL, ?, NULL, NULL, NULL)",
+      [
+        projectId,
+        `dev/${projectId}`,
+        `dev/${projectId}`,
+        `https://github.com/dev/${projectId}`,
+        boundAt,
+        cursor,
+        since,
+      ]
+    );
+  }
+  const readings: [string | null, string | null][] = [
+    [
+      JSON.stringify({
+        inUse: true,
+        status: "allowed",
+        disabledReason: null,
+        resetsAt: "2026-11-01T00:00:00.000Z",
+      }),
+      JSON.stringify(["five_hour", "seven_day", "seven_day_opus"]),
+    ],
+    [null, null],
+    [JSON.stringify({ inUse: "yes", status: "allowed" }), "[]"],
+    ["allowed", JSON.stringify(["five_hour", 7])],
+    ["null", "five_hour"],
+    [
+      JSON.stringify({
+        inUse: false,
+        status: "rejected",
+        disabledReason: "out_of_credits",
+        resetsAt: null,
+      }),
+      JSON.stringify(["five_hour", "five_hour"]),
+    ],
+  ];
+  for (const [at, [overage, windowKinds]] of readings.entries()) {
+    const accountId = `acct-reading-${at}`;
+    sqlite.run(
+      "INSERT INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at, at_plan_limit) VALUES (?, 'claude', 'subscription', ?, ?, ?, 0, ?, 'move')",
+      [
+        accountId,
+        `Claude ${at + 1}`,
+        at % 2 === 0 ? "blue" : "violet",
+        10 + at,
+        boundAt,
+      ]
+    );
+    sqlite.run(
+      "INSERT INTO account_readings (account_id, subscription, overage, last_seen_at, window_kinds) VALUES (?, 'max', ?, ?, ?)",
+      [accountId, overage, since, windowKinds]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -3365,6 +3562,7 @@ async function seed(
     seedFleetFiles(dbPath);
     seedMachineColumns(dbPath);
     seedColdWaitsHeads(dbPath);
+    seedPlansSettingsCursorsReadings(dbPath);
   }
 }
 

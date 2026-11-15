@@ -23,13 +23,16 @@ import { eq, is, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { logAccountReadingsUnread } from "./account-readings-unread";
 import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
 import { logCacheColdUnread } from "./cache-cold-unread";
+import { logCompactionPlansUnread } from "./compaction-plans-unread";
 import { logContinuationsUnread } from "./continuation-askers-unread";
 import type { DbCore } from "./core";
 import { logCutFromUnread } from "./cut-from-unread";
+import { logDecidesSettingsUnread } from "./decides-settings-unread";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
 import { dropGraphPlaces } from "./drop-graph-places";
 import { placeFleetFiles } from "./fleet-files-unread";
@@ -56,6 +59,7 @@ import { placeSealedFacts } from "./sealed-facts-unread";
 import { logSendOriginsUnread } from "./send-origins-unread";
 import { logPlansUnread } from "./session-plans-unread";
 import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
+import { logTrackerCursorsUnread } from "./tracker-cursors-unread";
 import { logWaitHistoryUnread } from "./wait-history-unread";
 import { logWaitsUnread } from "./waits-unread";
 import { logWorkspaceHeadsUnread } from "./workspace-heads-unread";
@@ -371,6 +375,42 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every retired workspace's head 0428 keeps as not read, read before it runs.
       logWorkspaceHeadsUnread(client);
+    },
+  },
+  {
+    name: "compaction-plans-unread",
+    before: "0429_compaction_plan_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every compaction plan's move and reading 0429 keeps as not read, read before it runs.
+      logCompactionPlansUnread(client);
+    },
+  },
+  {
+    name: "decides-settings-unread",
+    before: "0430_decides_pose_hear_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every Who decides hearing and poses 0430 keeps as not read, read before it runs.
+      logDecidesSettingsUnread(client);
+    },
+  },
+  {
+    name: "tracker-cursors-unread",
+    before: "0431_tracker_cursor_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every tracker binding's cursor 0431 keeps as not read, read before it runs.
+      logTrackerCursorsUnread(client);
+    },
+  },
+  {
+    name: "account-readings-unread",
+    before: "0432_account_reading_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every account's extra usage and window set 0432 keeps as not read, read before it runs.
+      logAccountReadingsUnread(client);
     },
   },
   {

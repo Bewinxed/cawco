@@ -33,6 +33,7 @@ import {
   accountRouting,
   accountSignins,
   accounts,
+  accountWindowSet,
   accountWindows,
   loginMoves,
   movedFromSessions,
@@ -42,6 +43,7 @@ import {
   strandedSessions,
   usageLimitHistory,
 } from "./schema";
+import type { Tx } from "./tx";
 
 /** 30 days — long enough to cover several weekly windows, short enough that the table stays small. */
 const LIMIT_HISTORY_RETENTION_MS = 30 * DAY_MS;
@@ -364,23 +366,52 @@ interface ReadingReport {
 const windowKey = (w: LimitWindow): string =>
   `${w.kind}\u0000${w.scopeLabel ?? ""}`;
 
+type ReadingRow = typeof accountReadings.$inferSelect;
+
+/**
+ * A reading's extra usage as its columns hold it: none when no report said
+ * it, or while what was stored did not read (migration 0432's
+ * `overage_unread`), so it never reads as on.
+ */
+const overageOf = (row: ReadingRow): AccountOverage | null =>
+  row.overageUnread === null && row.overageInUse !== null
+    ? {
+        inUse: row.overageInUse,
+        status: row.overageStatus,
+        disabledReason: row.overageDisabledReason,
+        resetsAt: row.overageResetsAt,
+      }
+    : null;
+
+/** Extra usage as its columns hold it, written whole: what 0432 kept as not read goes with it. */
+const overageColumns = (overage: AccountOverage | null) => ({
+  overageInUse: overage?.inUse ?? null,
+  overageStatus: overage?.status ?? null,
+  overageDisabledReason: overage?.disabledReason ?? null,
+  overageResetsAt: overage?.resetsAt ?? null,
+  overageUnread: null,
+});
+
 /**
  * An account's reading row after one report at `at`: what the report names
- * replaces what was held, the rest kept. Its time is `at` only when the
- * report carries windows: a plan alone says nothing of them.
+ * replaces what was held, the rest kept. A window set it names is the
+ * account's from now on (its keys {@link accountWindowSet} rows), what 0432
+ * kept as not read going with it. Its time is `at` only when the report
+ * carries windows: a plan alone says nothing of them.
  */
 const readingValues = (
-  previous: typeof accountReadings.$inferSelect | undefined,
+  previous: ReadingRow | undefined,
   report: ReadingReport,
   at: number
 ) => ({
-  windowKinds: report.windowKinds ?? previous?.windowKinds ?? null,
   subscription:
     report.subscription === undefined
       ? (previous?.subscription ?? null)
       : report.subscription,
-  overage:
-    report.overage === undefined ? (previous?.overage ?? null) : report.overage,
+  ...(report.overage === undefined ? {} : overageColumns(report.overage)),
+  ...(report.windowKinds
+    ? { windowSetNamed: true, windowSetUnread: null }
+    : {}),
   lastSeenAt:
     report.windows === undefined && previous
       ? previous.lastSeenAt
@@ -408,6 +439,19 @@ const overWindows = (
     const over = Number.isFinite(reset) && reset <= at;
     return over || (set && !set.has(windowSetKey(w))) ? [w] : [];
   });
+};
+
+/** The window set a report names, the account's from now on: its keys as rows, each once. */
+const putWindowSet = (tx: Tx, accountId: string, kinds: string[]): void => {
+  tx.delete(accountWindowSet)
+    .where(eq(accountWindowSet.accountId, accountId))
+    .run();
+  const keys = [...new Set(kinds)];
+  if (keys.length > 0) {
+    tx.insert(accountWindowSet)
+      .values(keys.map((key) => ({ accountId, windowKey: key })))
+      .run();
+  }
 };
 
 /** A window as its row keeps it; "" is no scope. */
@@ -916,6 +960,14 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .run();
     },
     readings: () => {
+      const sets = new Map<string, string[]>();
+      for (const { accountId, windowKey: key } of db
+        .select()
+        .from(accountWindowSet)
+        .orderBy(sql`rowid`)
+        .all()) {
+        sets.set(accountId, [...(sets.get(accountId) ?? []), key]);
+      }
       const windows = new Map<string, LimitWindow[]>();
       for (const { accountId, ...row } of db
         .select()
@@ -935,8 +987,10 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           accountId: row.accountId,
           windows: windows.get(row.accountId) ?? [],
           subscription: row.subscription,
-          overage: row.overage,
-          windowKinds: row.windowKinds,
+          overage: overageOf(row),
+          windowKinds: row.windowSetNamed
+            ? (sets.get(row.accountId) ?? [])
+            : null,
           lastSeenAt: row.lastSeenAt.getTime(),
         }));
     },
@@ -996,6 +1050,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
             set: values,
           })
           .run();
+        if (report.windowKinds) {
+          putWindowSet(tx, accountId, report.windowKinds);
+        }
         // A window this report did not name whose reset has passed is over:
         // what it said is of a window that no longer runs. One outside the
         // window set the report names is a window the account no longer

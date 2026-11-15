@@ -13,7 +13,11 @@ import {
   limitHolds,
   limitStops,
 } from "./schema";
-import type { AccountMoveBody, LimitCompactionStage } from "./stored-types";
+import type {
+  AccountMoveBody,
+  CompactionMoveBody,
+  LimitCompactionStage,
+} from "./stored-types";
 
 /** A session waiting out its account's limit. */
 export interface LimitHold {
@@ -74,7 +78,12 @@ interface CompactionSteps {
  */
 export type LimitCompaction = CompactionSteps &
   (
-    | { compactUuid: string; fill: null; move: AccountMove; records: null }
+    | {
+        compactUuid: string;
+        fill: null;
+        move: MovedLine;
+        records: null;
+      }
     | {
         compactUuid: null;
         fill: ContextFill;
@@ -94,6 +103,9 @@ export interface ContextRise {
   /** The line that says it: its filing's, else the failed compaction's. */
   lineId: string;
 }
+
+/** A `moved` line: what a compaction plan's move always is (limit-decision.ts `compactedLine`). */
+export type MovedLine = Extract<AccountMove, { kind: "moved" }>;
 
 /** One line the hub wrote into a session's transcript at its account's limit. */
 export interface LimitEvent {
@@ -158,7 +170,7 @@ export interface AtLimitDb {
     patch: Partial<
       Pick<CompactionSteps, "compacted" | "endedStep" | "stage">
     > & {
-      move?: AccountMove;
+      move?: MovedLine;
     }
   ) => void;
   /** Marks `instanceId` compacted at `at`, no answer of its own since. */
@@ -223,15 +235,80 @@ const lineOf = (
   return parsed.data;
 };
 
-/** A compaction plan's move as its columns hold it: none for a filing at the threshold. */
-const planMove = (
-  move: AccountMove | null
-): { move: AccountMoveBody | null; moveKind: AccountMoveKind | null } => {
-  if (!move) {
-    return { move: null, moveKind: null };
+/** A compaction plan's move line as its columns hold it: what the hub decides it by apart, the rest of the line in `move`. */
+const planMove = (move: MovedLine) => {
+  const { asked, because, compactFirst, kind: _kind, to, ...rest } = move;
+  const { id, ...named } = to;
+  const body: CompactionMoveBody = {
+    ...rest,
+    to: named,
+    ...(because && because.kind !== "refused" ? { because } : {}),
+  };
+  return {
+    move: body,
+    moveToAccountId: id,
+    moveCompactFirst: compactFirst === true,
+    moveAsked: asked === true,
+    moveRefused: because?.kind === "refused",
+  };
+};
+
+/** A plan's columns, as a put writes them whole: any value kept unread goes with it. */
+const planColumns = (plan: LimitCompaction) => {
+  const { move, fill, ...steps } = plan;
+  const none = {
+    move: null,
+    moveToAccountId: null,
+    moveCompactFirst: null,
+    moveAsked: null,
+    moveRefused: null,
+    moveUnread: null,
+    fillCompactsAt: null,
+    fillTokens: null,
+    fillUnread: null,
+  };
+  if (move) {
+    return { ...steps, ...none, kind: "move" as const, ...planMove(move) };
   }
-  const { kind, body } = lineColumns(move);
-  return { move: body, moveKind: kind };
+  return {
+    ...steps,
+    ...none,
+    kind: "fill" as const,
+    fillCompactsAt: fill.compactsAt,
+    fillTokens: fill.tokens,
+  };
+};
+
+/** A move's line whole again from its plan's columns; undefined when one is missing, as no write leaves it. */
+const movedOf = (
+  row: typeof limitCompactions.$inferSelect
+): MovedLine | undefined => {
+  const {
+    move: body,
+    moveToAccountId: toId,
+    moveCompactFirst: compactFirst,
+    moveAsked: asked,
+    moveRefused: refused,
+  } = row;
+  if (
+    body === null ||
+    toId === null ||
+    compactFirst === null ||
+    asked === null ||
+    refused === null
+  ) {
+    return;
+  }
+  const { because, ...rest } = body;
+  const said = refused ? { kind: "refused" as const } : because;
+  return {
+    ...rest,
+    kind: "moved",
+    to: { ...body.to, id: toId },
+    ...(compactFirst ? { compactFirst: true as const } : {}),
+    ...(asked ? { asked: true as const } : {}),
+    ...(said ? { because: said } : {}),
+  };
 };
 
 type HoldRow = typeof limitHolds.$inferSelect;
@@ -257,31 +334,34 @@ const toCompaction = (
     compacted: row.compacted,
     endedStep: row.endedStep,
   };
-  // A plan whose move's line did not read (`move_unread`) is neither: it
-  // drives no move and holds nothing back.
-  if (row.moveKind && row.move && row.compactUuid) {
-    return {
-      ...steps,
-      move: lineOf(row.moveKind, row.move, {
-        table: "limit_compactions",
-        column: "move",
-        row: row.instanceId,
-      }),
-      compactUuid: row.compactUuid,
-      fill: null,
-      records: null,
-    };
+  // A plan whose move or reading did not read (`move_unread`,
+  // `fill_unread`) is neither: it drives no move and holds nothing back.
+  if (row.kind === "move") {
+    const move = row.moveUnread === null ? movedOf(row) : undefined;
+    return move && row.compactUuid
+      ? {
+          ...steps,
+          move,
+          compactUuid: row.compactUuid,
+          fill: null,
+          records: null,
+        }
+      : undefined;
   }
-  if (row.fill) {
-    return {
-      ...steps,
-      fill: row.fill,
-      compactUuid: null,
-      move: null,
-      records: row.records,
-    };
+  if (
+    row.fillUnread !== null ||
+    row.fillCompactsAt === null ||
+    row.fillTokens === null
+  ) {
+    return;
   }
-  return undefined;
+  return {
+    ...steps,
+    fill: { compactsAt: row.fillCompactsAt, tokens: row.fillTokens },
+    compactUuid: null,
+    move: null,
+    records: row.records,
+  };
 };
 
 const toLine = (row: typeof limitEvents.$inferSelect): LimitLine => ({
@@ -390,13 +470,8 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .where(eq(contextRises.instanceId, instanceId))
       .run();
   },
-  putCompaction: ({ move, ...compaction }) => {
-    const values = {
-      ...compaction,
-      ...planMove(move),
-      moveUnread: null,
-      createdAt: new Date(),
-    };
+  putCompaction: (compaction) => {
+    const values = { ...planColumns(compaction), createdAt: new Date() };
     db.insert(limitCompactions)
       .values(values)
       .onConflictDoUpdate({ target: limitCompactions.instanceId, set: values })

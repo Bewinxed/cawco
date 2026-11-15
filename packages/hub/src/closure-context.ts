@@ -124,7 +124,7 @@ import type { createConnections } from "./connections";
 import type { damagedRecordsOf } from "./damaged-rows";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
-import type { LimitCompaction } from "./db/at-limit";
+import type { LimitCompaction, MovedLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import type { BoardInstanceRow, PublicInstanceRow } from "./db/instances";
@@ -434,7 +434,7 @@ export interface ClosureContext {
     row: PublicInstanceRow,
     accountId: string,
     stopped: false | "limit" | "signin",
-    compact: { line: string; move: AccountMove } | undefined,
+    compact: { line: string; move: MovedLine } | undefined,
     laterSince: number | undefined
   ) => Promise<{ kept: Kept } | { ended?: MoveEnded | undefined }>;
   catalogFaults: Map<string, string>;
@@ -1147,7 +1147,7 @@ export interface ClosureContext {
   ) => void;
   say: (payload: FramePayload) => void;
   sayCompaction: (
-    plan: { instanceId: string; lineId: string; move: AccountMove | null },
+    plan: { instanceId: string; lineId: string; move: MovedLine | null },
     stage: CompactStage
   ) => void;
   sendAnswerable: <T extends Envelope>(socket: HubSocket, frame: T) => T;
@@ -1267,7 +1267,7 @@ export interface ClosureContext {
   startCompaction: (
     row: { id: string; machineId: string },
     line: string,
-    move: AccountMove,
+    move: MovedLine,
     stopped: false | "limit" | "signin"
   ) => void;
   startContinuation: SessionCallsDeps["startContinuation"];

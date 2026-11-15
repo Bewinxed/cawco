@@ -56,44 +56,6 @@
       ]
     }
   },
-  "account_readings.overage": {
-    "type": "object",
-    "properties": {
-      "disabledReason": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "inUse": {
-        "type": "boolean"
-      },
-      "resetsAt": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "status": {
-        "type": [
-          "string",
-          "null"
-        ]
-      }
-    },
-    "required": [
-      "disabledReason",
-      "inUse",
-      "resetsAt",
-      "status"
-    ]
-  },
-  "account_readings.window_kinds": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
   "account_routing.compaction_at_limit": {
     "type": "string",
     "enum": [
@@ -4296,105 +4258,95 @@
       "cancelled"
     ]
   },
-  "decides_settings.hear": {
-    "type": "object",
-    "properties": {
-      "advisor": {
-        "type": "string",
-        "enum": [
-          "each",
-          "later"
-        ]
-      },
-      "practice": {
-        "type": "string",
-        "enum": [
-          "each",
-          "later"
-        ]
-      }
-    }
+  "decides_settings.advisor_hear": {
+    "type": "string",
+    "enum": [
+      "each",
+      "later"
+    ]
   },
-  "decides_settings.pictures": {
-    "type": "object",
-    "properties": {
-      "caw": {
-        "type": "string",
-        "enum": [
-          "ready",
-          "idle",
-          "asleep",
-          "head",
-          "smiling",
-          "chart",
-          "sheets",
-          "easel",
-          "laptop",
-          "rocket",
-          "heart",
-          "working",
-          "done",
-          "trying"
-        ]
-      },
-      "advisor": {
-        "type": "string",
-        "enum": [
-          "ready",
-          "idle",
-          "asleep",
-          "head",
-          "smiling",
-          "chart",
-          "sheets",
-          "easel",
-          "laptop",
-          "rocket",
-          "heart",
-          "working",
-          "done",
-          "trying"
-        ]
-      },
-      "practice": {
-        "type": "string",
-        "enum": [
-          "ready",
-          "idle",
-          "asleep",
-          "head",
-          "smiling",
-          "chart",
-          "sheets",
-          "easel",
-          "laptop",
-          "rocket",
-          "heart",
-          "working",
-          "done",
-          "trying"
-        ]
-      },
-      "asker": {
-        "type": "string",
-        "enum": [
-          "ready",
-          "idle",
-          "asleep",
-          "head",
-          "smiling",
-          "chart",
-          "sheets",
-          "easel",
-          "laptop",
-          "rocket",
-          "heart",
-          "working",
-          "done",
-          "trying"
-        ]
-      }
-    }
+  "decides_settings.advisor_pose": {
+    "type": "string",
+    "enum": [
+      "ready",
+      "idle",
+      "asleep",
+      "head",
+      "smiling",
+      "chart",
+      "sheets",
+      "easel",
+      "laptop",
+      "rocket",
+      "heart",
+      "working",
+      "done",
+      "trying"
+    ]
+  },
+  "decides_settings.asker_pose": {
+    "type": "string",
+    "enum": [
+      "ready",
+      "idle",
+      "asleep",
+      "head",
+      "smiling",
+      "chart",
+      "sheets",
+      "easel",
+      "laptop",
+      "rocket",
+      "heart",
+      "working",
+      "done",
+      "trying"
+    ]
+  },
+  "decides_settings.caw_pose": {
+    "type": "string",
+    "enum": [
+      "ready",
+      "idle",
+      "asleep",
+      "head",
+      "smiling",
+      "chart",
+      "sheets",
+      "easel",
+      "laptop",
+      "rocket",
+      "heart",
+      "working",
+      "done",
+      "trying"
+    ]
+  },
+  "decides_settings.practice_hear": {
+    "type": "string",
+    "enum": [
+      "each",
+      "later"
+    ]
+  },
+  "decides_settings.practice_pose": {
+    "type": "string",
+    "enum": [
+      "ready",
+      "idle",
+      "asleep",
+      "head",
+      "smiling",
+      "chart",
+      "sheets",
+      "easel",
+      "laptop",
+      "rocket",
+      "heart",
+      "working",
+      "done",
+      "trying"
+    ]
   },
   "delegate_events.kind": {
     "type": "string",
@@ -6386,1152 +6338,209 @@
       ]
     }
   },
-  "limit_compactions.fill": {
-    "type": "object",
-    "properties": {
-      "compactsAt": {
-        "type": "number"
-      },
-      "tokens": {
-        "type": "number"
-      }
-    },
-    "required": [
-      "compactsAt",
-      "tokens"
+  "limit_compactions.kind": {
+    "type": "string",
+    "enum": [
+      "move",
+      "fill"
     ]
   },
   "limit_compactions.move": {
-    "anyOf": [
-      {
+    "type": "object",
+    "properties": {
+      "removed": {
+        "type": "boolean",
+        "const": true
+      },
+      "signedOut": {
+        "type": "boolean",
+        "const": true
+      },
+      "signedOutOn": {
+        "type": "string"
+      },
+      "compact": {
+        "type": "string",
+        "enum": [
+          "filing",
+          "compacting",
+          "compacted",
+          "stopped"
+        ]
+      },
+      "compactBy": {
+        "type": "string",
+        "enum": [
+          "opencode",
+          "pi"
+        ]
+      },
+      "summaryRefused": {
+        "type": "string"
+      },
+      "relaunched": {
+        "type": "boolean",
+        "const": true
+      },
+      "from": {
         "type": "object",
         "properties": {
-          "asked": {
-            "type": "boolean",
-            "const": true
-          },
-          "removed": {
-            "type": "boolean",
-            "const": true
-          },
-          "signedOut": {
-            "type": "boolean",
-            "const": true
-          },
-          "signedOutOn": {
-            "type": "string"
-          },
-          "compact": {
+          "hue": {
             "type": "string",
             "enum": [
-              "filing",
-              "compacting",
-              "compacted",
-              "stopped"
+              "amber",
+              "blue",
+              "cyan",
+              "green",
+              "orange",
+              "rose",
+              "violet"
             ]
           },
-          "compactFirst": {
-            "type": "boolean",
-            "const": true
-          },
-          "compactBy": {
-            "type": "string",
-            "enum": [
-              "opencode",
-              "pi"
-            ]
-          },
-          "summaryRefused": {
+          "id": {
             "type": "string"
           },
-          "relaunched": {
-            "type": "boolean",
-            "const": true
-          },
-          "from": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "to": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "sameOrganization": {
-            "type": "boolean"
-          },
-          "tokens": {
-            "type": [
-              "number",
-              "null"
-            ]
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hue",
+          "id",
+          "name"
+        ]
+      },
+      "sameOrganization": {
+        "type": "boolean"
+      },
+      "tokens": {
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "window": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resetsAt": {
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "cost": {
+        "type": "object",
+        "properties": {
+          "pct": {
+            "type": "number"
           },
           "window": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "resetsAt": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "because": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "forecast"
-                  },
-                  "runsOutAt": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "runsOutAt"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "cold"
-                  },
-                  "wake": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "wake"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "refused"
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "extra-usage"
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              }
-            ]
-          },
-          "cost": {
-            "type": "object",
-            "properties": {
-              "pct": {
-                "type": "number"
-              },
-              "window": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "pct",
-              "window"
-            ]
-          },
-          "ended": {
-            "type": "object",
-            "properties": {
-              "tasks": {
-                "type": "number"
-              },
-              "wakeups": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "tasks",
-              "wakeups"
-            ]
-          }
-        },
-        "required": [
-          "from",
-          "to",
-          "sameOrganization",
-          "tokens",
-          "window",
-          "resetsAt"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "from": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "hue": {
-                    "type": "string",
-                    "enum": [
-                      "amber",
-                      "blue",
-                      "cyan",
-                      "green",
-                      "orange",
-                      "rose",
-                      "violet"
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "hue",
-                  "id",
-                  "name"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "to": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "hue": {
-                    "type": "string",
-                    "enum": [
-                      "amber",
-                      "blue",
-                      "cyan",
-                      "green",
-                      "orange",
-                      "rose",
-                      "violet"
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "hue",
-                  "id",
-                  "name"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "writtenOn": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "hue": {
-                    "type": "string",
-                    "enum": [
-                      "amber",
-                      "blue",
-                      "cyan",
-                      "green",
-                      "orange",
-                      "rose",
-                      "violet"
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "hue",
-                  "id",
-                  "name"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "by": {
             "type": "string"
-          },
-          "asked": {
-            "type": "boolean",
-            "const": true
-          },
-          "asks": {
-            "type": "boolean",
-            "const": true
-          },
-          "move": {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string",
-                "enum": [
-                  "limit",
-                  "ahead"
-                ]
-              },
-              "because": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "const": "forecast"
-                      },
-                      "runsOutAt": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "runsOutAt"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "const": "cold"
-                      },
-                      "wake": {
-                        "type": "boolean"
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "wake"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "const": "refused"
-                      }
-                    },
-                    "required": [
-                      "kind"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "const": "extra-usage"
-                      }
-                    },
-                    "required": [
-                      "kind"
-                    ]
-                  }
-                ]
-              },
-              "asked": {
-                "type": "boolean",
-                "const": true
-              },
-              "window": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "resetsAt": {
-                "type": [
-                  "number",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "at",
-              "window",
-              "resetsAt"
-            ]
-          },
-          "tokens": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "preparedAtPct": {
-            "type": [
-              "number",
-              "null"
-            ]
           }
         },
         "required": [
-          "from",
-          "to",
-          "writtenOn",
-          "tokens",
-          "preparedAtPct"
+          "pct",
+          "window"
         ]
       },
-      {
+      "ended": {
         "type": "object",
         "properties": {
-          "action": {
-            "type": "string",
-            "enum": [
-              "move",
-              "continue"
-            ]
-          },
-          "signedOut": {
-            "type": "boolean",
-            "const": true
-          },
-          "from": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "hue": {
-                    "type": "string",
-                    "enum": [
-                      "amber",
-                      "blue",
-                      "cyan",
-                      "green",
-                      "orange",
-                      "rose",
-                      "violet"
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "hue",
-                  "id",
-                  "name"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "to": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "hue": {
-                    "type": "string",
-                    "enum": [
-                      "amber",
-                      "blue",
-                      "cyan",
-                      "green",
-                      "orange",
-                      "rose",
-                      "violet"
-                    ]
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "hue",
-                  "id",
-                  "name"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "asked": {
-            "type": "boolean",
-            "const": true
-          },
-          "step": {
-            "type": "string",
-            "enum": [
-              "prepare",
-              "summary",
-              "start"
-            ]
-          },
-          "reason": {
-            "type": "string"
-          },
-          "waits": {
-            "type": "boolean",
-            "const": true
-          }
-        },
-        "required": [
-          "action",
-          "from",
-          "to",
-          "step",
-          "reason"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "from": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "to": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "at": {
+          "tasks": {
             "type": "number"
           },
-          "tokens": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "cost": {
-            "type": "object",
-            "properties": {
-              "pct": {
-                "type": "number"
-              },
-              "window": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "pct",
-              "window"
-            ]
+          "wakeups": {
+            "type": "number"
           }
         },
         "required": [
-          "from",
-          "to",
-          "at",
-          "tokens"
+          "tasks",
+          "wakeups"
         ]
       },
-      {
+      "because": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "forecast"
+              },
+              "runsOutAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "runsOutAt"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "cold"
+              },
+              "wake": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "wake"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "extra-usage"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ]
+      },
+      "to": {
         "type": "object",
         "properties": {
-          "account": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "frees": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "account": {
-                  "type": "object",
-                  "properties": {
-                    "hue": {
-                      "type": "string",
-                      "enum": [
-                        "amber",
-                        "blue",
-                        "cyan",
-                        "green",
-                        "orange",
-                        "rose",
-                        "violet"
-                      ]
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "hue",
-                    "id",
-                    "name"
-                  ]
-                },
-                "backAt": {
-                  "type": "number"
-                },
-                "reason": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "signin"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "allowed"
-                        },
-                        "by": {
-                          "type": "string",
-                          "enum": [
-                            "project",
-                            "task"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "by"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "benched"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "reserve"
-                        },
-                        "pct": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "pct"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "unread"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "limit"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "backup"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "alone"
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "room"
-                        },
-                        "leftPct": {
-                          "type": "number"
-                        },
-                        "movePct": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "leftPct",
-                        "movePct"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "runsOut"
-                        },
-                        "at": {
-                          "type": "number"
-                        },
-                        "leftPct": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "at",
-                        "leftPct"
-                      ]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "const": "fits"
-                        },
-                        "carries": {
-                          "type": "boolean"
-                        },
-                        "leftPct": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "carries",
-                        "leftPct"
-                      ]
-                    }
-                  ]
-                }
-              },
-              "required": [
-                "account",
-                "reason"
-              ]
-            }
-          },
-          "until": {
-            "type": "number"
-          },
-          "why": {
+          "hue": {
             "type": "string",
             "enum": [
-              "fork",
-              "off",
-              "full",
-              "free",
-              "room",
-              "soon",
-              "work"
+              "amber",
+              "blue",
+              "cyan",
+              "green",
+              "orange",
+              "rose",
+              "violet"
             ]
           },
-          "tokens": {
-            "type": [
-              "number",
-              "null"
-            ]
+          "name": {
+            "type": "string"
           }
         },
         "required": [
-          "account",
-          "until",
-          "why",
-          "tokens"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "account": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          },
-          "resetsAt": {
-            "type": [
-              "number",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "account",
-          "resetsAt"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "account": {
-            "type": "object",
-            "properties": {
-              "hue": {
-                "type": "string",
-                "enum": [
-                  "amber",
-                  "blue",
-                  "cyan",
-                  "green",
-                  "orange",
-                  "rose",
-                  "violet"
-                ]
-              },
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "hue",
-              "id",
-              "name"
-            ]
-          }
-        },
-        "required": [
-          "account"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "by": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "person"
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "session"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "hub"
-                  },
-                  "why": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "why"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "outside"
-                  },
-                  "signal": {
-                    "type": "string"
-                  },
-                  "resumes": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "signal",
-                  "resumes"
-                ]
-              }
-            ]
-          }
-        },
-        "required": [
-          "by"
+          "hue",
+          "name"
         ]
       }
-    ]
-  },
-  "limit_compactions.move_kind": {
-    "type": "string",
-    "enum": [
-      "moved",
-      "moving",
-      "waiting",
-      "continued",
-      "stopped",
-      "signed-out",
-      "ended",
-      "unmoved"
+    },
+    "required": [
+      "from",
+      "sameOrganization",
+      "tokens",
+      "window",
+      "resetsAt",
+      "to"
     ]
   },
   "limit_compactions.records": {
@@ -13611,35 +12620,6 @@
     "enum": [
       "update",
       "ask"
-    ]
-  },
-  "tracker_bindings.cursor": {
-    "type": "object",
-    "properties": {
-      "commentsEtag": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "commentsSince": {
-        "type": "number"
-      },
-      "etag": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "since": {
-        "type": "number"
-      }
-    },
-    "required": [
-      "commentsEtag",
-      "commentsSince",
-      "etag",
-      "since"
     ]
   },
   "tracker_bindings.github_project": {

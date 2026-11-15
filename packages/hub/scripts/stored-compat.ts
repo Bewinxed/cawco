@@ -89,6 +89,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0410_limit_line_kinds",
     why: "a plan's move loses its kind to move_kind, the rest of the line kept; one whose kind does not read moves, as stored, to move_unread with move null, and the plan reads as none",
   },
+  {
+    column: "limit_compactions.move",
+    migration: "0429_compaction_plan_columns",
+    why: "a plan's move is a moved line whose to's id, compactFirst, asked and a refused because move to their own columns, the rest of the line kept; one that is not a moved line reading whole moves, as stored with its kind, to move_unread with move null, and the plan reads as none",
+  },
 ];
 
 type Schema = Record<string, unknown>;

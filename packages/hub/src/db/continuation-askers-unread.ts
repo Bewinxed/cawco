@@ -68,33 +68,40 @@ const PASSED_OVER = anyOf(
   kinded("fits", { carries: FLAG, leftPct: NUMBER })
 );
 
+/**
+ * A `moved` line's fields besides its kind (core `AccountMove`), as the
+ * hub read them before 0414 and 0429: those it requires, then those it
+ * may leave out. 0429 reads a compaction plan's move by them
+ * (db/compaction-plans-unread.ts).
+ */
+export const MOVED_FIELDS = {
+  required: {
+    from: ACCOUNT,
+    to: ACCOUNT,
+    sameOrganization: FLAG,
+    tokens: NUMBER_OR_NULL,
+    window: TEXT_OR_NULL,
+    resetsAt: NUMBER_OR_NULL,
+  },
+  optional: {
+    asked: TRUE,
+    removed: TRUE,
+    signedOut: TRUE,
+    signedOutOn: TEXT,
+    compact: oneOf("filing", "compacting", "compacted", "stopped"),
+    compactFirst: TRUE,
+    compactBy: oneOf("opencode", "pi"),
+    summaryRefused: TEXT,
+    relaunched: TRUE,
+    because: BECAUSE,
+    cost: COST,
+    ended: object({ tasks: NUMBER, wakeups: NUMBER }),
+  },
+};
+
 /** The line a move writes (core `AccountMove`), each kind of it. */
 const LINE = anyOf(
-  kinded(
-    "moved",
-    {
-      from: ACCOUNT,
-      to: ACCOUNT,
-      sameOrganization: FLAG,
-      tokens: NUMBER_OR_NULL,
-      window: TEXT_OR_NULL,
-      resetsAt: NUMBER_OR_NULL,
-    },
-    {
-      asked: TRUE,
-      removed: TRUE,
-      signedOut: TRUE,
-      signedOutOn: TEXT,
-      compact: oneOf("filing", "compacting", "compacted", "stopped"),
-      compactFirst: TRUE,
-      compactBy: oneOf("opencode", "pi"),
-      summaryRefused: TEXT,
-      relaunched: TRUE,
-      because: BECAUSE,
-      cost: COST,
-      ended: object({ tasks: NUMBER, wakeups: NUMBER }),
-    }
-  ),
+  kinded("moved", MOVED_FIELDS.required, MOVED_FIELDS.optional),
   kinded(
     "moving",
     { from: ACCOUNT, to: ACCOUNT, at: NUMBER, tokens: NUMBER_OR_NULL },
