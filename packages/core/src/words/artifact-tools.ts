@@ -1,4 +1,5 @@
 import type { PageFault } from "../page-faults";
+import { artifactLink } from "../references";
 import { cutShort } from "./helpers";
 
 /**
@@ -45,9 +46,32 @@ export const artifactToolWords = {
     "No session holds this page now, so the comment wasn't asked again.",
   /** An Ask again on a comment gone from the page. */
   askAgainGone: "This comment is gone from the page, so it wasn't asked again.",
-  /** A `to: "parent"` create opened nothing: the parent opens it. */
+  /** A create by a session that reports to another (hub artifacts/service.ts `ownerFor`) opened nothing: that session opens it. */
   handedToParent:
-    "Handed to your parent, not opened: it opens in their panel when they call artifact_show.",
+    "Handed to the session you report to, not opened: the person sees it only once that session calls artifact_show. Say in your report what of it needs the person.",
+  /** A create into the panel of the session its maker reports to, refused: `what` there (core `named`) is another maker's, still at work, `by` its link (hub artifacts/service.ts `nameTaken`). */
+  nameTaken: (what: string, by: string) =>
+    `The panel this goes to already holds ${what}, made by ${by}, which is still at work: create yours under another name.`,
+  /**
+   * The section a report to the session it went to ends on (hub
+   * ask-routing.ts `reportTo`, routines.ts `surfaceRun`): each artifact the
+   * reporting session handed it that it has not opened, with what it asks.
+   * Nothing when there are none.
+   */
+  handedInReport: (
+    handed: readonly { ask: string; does: string; id: string; title: string }[]
+  ): string =>
+    handed.length === 0
+      ? ""
+      : `\n\n## Handed to you, not opened\n\nThe person sees none of these until you call artifact_show on it. Show what needs them; leave the rest.\n${handed
+          .map(
+            (one) =>
+              `- ${artifactLink(one.id, one.title)}: ${one.does === "draw" ? "a working canvas" : `${one.does}, "${one.ask}"`}`
+          )
+          .join("\n")}`,
+  /** Why a hand-up notice was kept in its holder's transcript unsent (hub artifact-events.ts `wokenBy`): the maker's work does not report to it now. */
+  handedUnwoken:
+    "Filed in this panel without waking this session: the work that made it does not report here now.",
   /** A setup page shown or made while its project is not set up (hub artifacts/service.ts `landingOf`): the project's board draws it, and no panel opens it. */
   onBoard:
     "Drawn as the project's board, on its page, where the person reads and changes it as you write it; a setup page never opens in a panel.",
@@ -56,7 +80,7 @@ export const artifactToolWords = {
     "Drawn in the project's Decisions tab, where the person reads and answers it, and a card you name as a chip opens at that card; a setup page never opens in a panel.",
   /** A maker's change while the parent has it open. */
   heldAsNext:
-    "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show, and decision pages, artifact_read and artifact_browse have this one now.",
+    "The session you report to opened it, so this change waits as its next version: its panel keeps the version they opened until they call artifact_show, and decision pages, artifact_read and artifact_browse have this one now.",
   /** A revision that went to an artifact's next version its panel hasn't opened, `next` that version's id. */
   revisedNext: (next: string) =>
     `This change is in its next version, artifact ${next}: decision pages draw it now, and the panel keeps the version it opened until artifact_show opens this one.`,

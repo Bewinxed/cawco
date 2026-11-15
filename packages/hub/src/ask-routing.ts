@@ -11,6 +11,7 @@ import {
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import type { SentMessage } from "@cawco/core/session-messages";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
@@ -80,6 +81,7 @@ const renderDelegateAsk = (payload: unknown): string => {
 export type AskRoutingContext = Pick<
   ClosureContext,
   | "accountWords"
+  | "artifacts"
   | "awaitingFirstTurn"
   | "connectAsks"
   | "db"
@@ -549,10 +551,14 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     { completion, notice = false, headline, outputs }: ReportTold
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
+    // What it handed this parent that is still unopened: its move, this turn.
+    const handed = artifactToolWords.handedInReport(
+      ctx.artifacts.handedUnopened(parent.id, delegate.id)
+    );
     const sent = ctx.deliverSend(
       sessionWord(
         parent,
-        `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}`,
+        `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}${handed}`,
         {
           kind: "peer",
           from: delegate.id,

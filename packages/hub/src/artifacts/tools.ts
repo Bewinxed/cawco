@@ -249,13 +249,6 @@ export const artifactCreate = {
   },
 };
 
-/** What artifact_create adds for a session that has a parent (a delegate): `to`, and its words. */
-export const artifactCreateToParent = {
-  description:
-    ' to: "parent" hands it to your parent unopened, for artifact_show; their panel then keeps that version until their next artifact_show, but decision pages draw your changes at once.',
-  input: { to: z.literal("parent").optional() },
-};
-
 export const artifactUpdate = {
   name: "artifact_update" as const,
   description:

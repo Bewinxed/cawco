@@ -248,7 +248,6 @@ export const toolViewOf = (
   // Shared discovery lists every tool a session may be listed, a spawning
   // one included; a session's own list is its row's.
   mayStart: actor ? actor.mayStart : [ANY_TYPE],
-  hasParent: !actor || !!actor.parentInstanceId,
   lands,
   workItem: !actor || !!actor.workItemId,
 });

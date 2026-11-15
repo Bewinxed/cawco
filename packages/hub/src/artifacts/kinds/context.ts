@@ -95,23 +95,7 @@ export interface KindContext {
   ofTree: ReturnType<typeof createAccess>["ofTree"];
   openedOf: (shown: Opened) => Opened;
   openNextFirst: ReturnType<typeof createVersions>["openNextFirst"];
-  ownerFor: (
-    maker: InstanceRow,
-    input: ArtifactInput
-  ) =>
-    | InstanceRow
-    | ReturnType<
-        typeof problem<
-          400,
-          { code: "artifact-draft-to-parent"; detail: string }
-        >
-      >
-    | ReturnType<
-        typeof problem<409, { code: "artifact-no-parent"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<404, { code: "artifact-parent-gone"; detail: string }>
-      >;
+  ownerFor: (maker: InstanceRow, input: ArtifactInput) => InstanceRow;
   pagesShowing: () => Map<string, ArtifactRow[]>;
   personChangedAfter: (
     row: ArtifactRow,

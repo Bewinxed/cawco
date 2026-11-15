@@ -78,6 +78,7 @@
  *   each checked as a new routine's is. A delete takes the event routes
  *   that fed it with it (`event_routes` cascades), and names each.
  */
+
 import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
 import { ANY_TYPE } from "@cawco/core/delegate-types";
 import {
@@ -105,12 +106,14 @@ import type {
   NeutralOrigin,
 } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { workWords } from "@cawco/core/words/work";
 import cronstrue from "cronstrue";
 import { Cron, DateTime } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
+import type { Artifacts } from "./artifacts/service";
 import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
@@ -325,6 +328,8 @@ export interface RoutineDeps {
     | "trim"
     | "workItem"
   >;
+  /** What a run's session handed `holderId` that it has not opened (artifacts/service.ts `handedUnopened`): its report lists them. */
+  readonly handedUnopened: Artifacts["handedUnopened"];
   /**
    * Where a routine in no project runs: the hub's machine and the checkout
    * the hub runs from; a sentence when it cannot now.
@@ -534,9 +539,14 @@ export interface SurfaceDeps {
   ) => void;
   readonly push: Pick<Push, "routine">;
   /** The run's session as a link and its full report, when it ran one. */
-  readonly reportOf: (
-    run: RoutineRunRow
-  ) => { session: string; summary: string | null } | undefined;
+  readonly reportOf: (run: RoutineRunRow) =>
+    | {
+        /** What it handed Caw that he has not opened (core `handedInReport`); empty for none. */
+        handed: string;
+        session: string;
+        summary: string | null;
+      }
+    | undefined;
   /** Starts the run's second attempt at its slot. */
   readonly retry: (routine: RoutineRow, run: RoutineRunRow) => void;
 }
@@ -599,7 +609,7 @@ const surfaceRun = (
         by: "event",
         kind: "routine-report",
         trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${report ? ` in ${report.session}` : ""}, delivered its result`,
-        text: `Run ${run.id}. The routine's prompt:\n\n${routine.prompt}\n\n## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}`,
+        text: `Run ${run.id}. The routine's prompt:\n\n${routine.prompt}\n\n## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}${report?.handed ?? ""}`,
       })
       .then(
         (told) => {
@@ -646,6 +656,7 @@ export const createRoutines = ({
   anyOnline,
   caw,
   curatorBrief,
+  handedUnopened,
   trimBrief,
   db,
   hubCheckout,
@@ -1375,8 +1386,14 @@ export const createRoutines = ({
         push,
         reportOf: (ran) => {
           const item = ran.workItemId ? db.workItem(ran.workItemId) : undefined;
+          const lead = routine.projectId
+            ? db.project(routine.projectId)?.conversationInstanceId
+            : null;
           return item
             ? {
+                handed: artifactToolWords.handedInReport(
+                  lead ? handedUnopened(lead, item.instanceId) : []
+                ),
                 session: sessionLink(item.instanceId, item.title),
                 summary: item.summary,
               }

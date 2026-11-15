@@ -111,6 +111,12 @@ export interface ArtifactServiceDeps {
     writer: InstanceRow | undefined,
     artifact: ArtifactRow
   ) => PageHearer | null;
+  /**
+   * The session `maker`'s artifacts go to, unopened (artifact-events.ts
+   * `artifactsTo`): the session it reports to; undefined when it keeps
+   * its own.
+   */
+  artifactsTo: (maker: InstanceRow) => InstanceRow | undefined;
   /** The step of the session's plan an ask of the artifact is made at: the open one naming it, else the one in progress; null when it is at work on none (plans.ts `askedAt`). */
   askedAt: (instanceId: string, artifactId: string) => string | null;
   /**
@@ -396,11 +402,12 @@ export interface ArtifactServiceDeps {
    */
   reportHeardAt: (parent: InstanceRow, maker: InstanceRow) => Date | "unread";
   /**
-   * Whether the session's work reports to anyone (work-items.ts
-   * `reportees`): delegated work's does, to the session that started it,
-   * but not while that is its project's Caw and he is off.
+   * Whether session `instance`'s reports reach `to` (work-items.ts
+   * `reportees`): delegated work's reach the session that started it, but
+   * not while that is its project's Caw and he is off. A routine's run's,
+   * or one whose artifacts went to Caw for an ended parent, reach no holder.
    */
-  reportsUp: (instance: InstanceRow) => boolean;
+  reportsTo: (instance: InstanceRow, to: InstanceRow) => boolean;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**

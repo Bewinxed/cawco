@@ -12724,10 +12724,6 @@
                     "maxLength": 80,
                     "type": "string"
                   },
-                  "to": {
-                    "type": "string",
-                    "const": "parent"
-                  },
                   "workspace": {
                     "pattern": "^[0-9a-f][0-9a-f-]{7,35}$",
                     "type": "string"
@@ -132788,42 +132784,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-draft-to-parent"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "artifact-fields-stray"
                 ]
               },
@@ -134052,42 +134012,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-parent-gone"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "artifact-preview-machine-unknown"
                 ]
               },
@@ -134452,7 +134376,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-no-parent"
+                  "artifact-name-taken"
                 ]
               },
               "detail": {

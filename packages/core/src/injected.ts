@@ -19,7 +19,7 @@
  * migration over its stored sends (hub db/tag-markers.ts).
  */
 
-import type { ArtifactKind } from "./artifact-kinds";
+import type { ArtifactDoes, ArtifactKind } from "./artifact-kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
 import type { PlanWait } from "./plan";
 import { artifactLink, stepLink } from "./references";
@@ -738,24 +738,31 @@ export const artifactSavesNotice = (
   `${markerTag("artifact-saves", { id, kind, name, title })}[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
 
 /**
- * A delegate handed its parent an artifact (hub artifacts/service.ts
- * `create` with `to: "parent"`), readied and not opened: the parent owns it
- * now and opens it in its panel with artifact_show once it has reviewed it.
- * Told once per hand-off: when it starts waiting on the parent, or arrives
- * from another delegate; that delegate's updates while it waits are not told.
- * With `next`, the delegate changed an artifact the parent had opened: the
+ * A session's artifact went to the session it reports to (hub
+ * artifacts/service.ts `ownerFor`), readied and not opened: that session
+ * holds it now, and its own artifact_show is what puts it before the
+ * person. Told once per hand-off: when it starts waiting on it, or arrives
+ * from another maker; that maker's updates while it waits are not told.
+ * With `next`, the maker changed an artifact the holder had opened: the
  * change waits as that next version, which decision pages, artifact_read
  * and artifact_browse have at once, and the panel keeps the version opened
- * until the parent's artifact_show opens it; told once per held version. Sent under the system origin
+ * until the holder's artifact_show opens it; told once per held version.
+ * Sent under the system origin
  * {@link import("./harness/kinds").ARTIFACT_ORIGIN}; a transcript draws it as one
  * quiet note.
  */
 export interface ArtifactHanded extends ArtifactComments {
-  /** The delegate's name, as the rail shows it. */
+  /** The maker's name, as the rail shows it. */
   from: string;
-  /** The held next version's id, when the delegate changed one the parent had opened. */
+  /** The held next version's id, when the maker changed one the holder had opened. */
   next?: string | undefined;
 }
+
+/** What a handed artifact asks of the person, in the holder's notice: its `does` and its ask line. */
+const handedAsks = (does: ArtifactDoes, ask: string): string =>
+  does === "draw"
+    ? "It is a working canvas: it asks the person nothing."
+    : `It asks the person to ${does === "pick" ? "pick" : `${does} it`}: "${ask}".`;
 
 export const artifactHandedNotice = ({
   from,
@@ -764,10 +771,12 @@ export const artifactHandedNotice = ({
   name,
   title,
   next,
-}: ArtifactHanded): string =>
+  does,
+  ask,
+}: ArtifactHanded & { ask: string; does: ArtifactDoes }): string =>
   next === undefined
-    ? `${markerTag("artifact-handed", { from, id, kind, name, title })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`
-    : `${markerTag("artifact-handed", { from, id, kind, name, title, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, artifact ${next}, which decision pages, artifact_read and artifact_browse have now.`;
+    ? `${markerTag("artifact-handed", { from, id, kind, name, title })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened. ${handedAsks(does, ask)} The person sees it only when you call artifact_show: show what needs them, and leave the rest in your panel.`
+    : `${markerTag("artifact-handed", { from, id, kind, name, title, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, artifact ${next}, which decision pages, artifact_read and artifact_browse have now. ${handedAsks(does, ask)}`;
 
 /** A handed-up artifact's notice read back into who handed what, and the next version a change waits as. */
 function parseArtifactHanded(text: string): ArtifactHanded | null {

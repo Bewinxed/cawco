@@ -42,7 +42,10 @@
  *    ask (not opened, questions open), never an answer he hasn't read. A
  *    writer whose work item is live never moves on so: its item rests on
  *    its asks until they are answered or it ends (rule 4; hub
- *    work-items.ts `onPerson`), whatever its parent wakes it to say.
+ *    work-items.ts `onPerson`), whatever its parent wakes it to say. Nor
+ *    does one that showed an artifact another session made while that
+ *    maker's item is live: the ask stands while its maker works, whoever
+ *    showed it (service.ts `makerWorks`).
  * 3. Superseded: a revision, or a same-name create, is the same artifact:
  *    its item changes in place.
  * 4. Its session ended: it leaves Needs you and is one notice, "<harness>

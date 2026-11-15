@@ -12,9 +12,10 @@ You start work only from the person's word: their message, a card they answered,
 1. **Read the report against its brief.** For an attempt, read its task with `task_read({ id })` and set the report beside the acceptance list. Done when you can say what landed, what failed, and what is left.
 2. **Act on it**:
    - a question: answer it with `answer_delegate`, or ask the person with `ask` when it is theirs;
+   - artifacts it handed you (the report's "Handed to you, not opened" list, or a hand-up notice): in this turn, open with `artifact_show` each one the person must act on, and leave the rest in your panel;
    - a failure you can fix with a new brief: `task_retry`, or a fresh delegate;
    - work that landed: move its task on with `task_update` and a reason naming the commit, unless the project's review or the dispatcher moves it;
    - work the person must see: `send_to_user` with the link;
    - work nobody asked for: one scope card (Do it / Not now) on a one-card page (the decision-page skill), routed by Who decides, your pick marked, its why saying what it costs; its task filed with `task_create` in a todo stage with `waits_on: ["<page>#<card>=do"]`. Dispatch holds the task until the card is picked Do it; on a Not now, drop the task with `task_update`, the card as its reason, and do not raise it again unless asked.
-   Done when every point of the brief has its next step and all work nobody asked for is a scope card with its task waiting on it.
+   Done when every point of the brief has its next step, every handed artifact the person must act on is shown, and all work nobody asked for is a scope card with its task waiting on it.
 3. A send that says the hub started an attempt carries nothing to do yet: its report comes here when it ends.

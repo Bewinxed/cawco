@@ -2,6 +2,7 @@ import { waitsOnYou } from "@cawco/core/activity";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import { detach } from "@cawco/core/detach";
+import { byPerson } from "@cawco/core/harness";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
 import {
   artifactCommentsNotice,
@@ -32,7 +33,7 @@ import { isPlace } from "@cawco/core/workspace-policy";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
-import { artifactTaker } from "./artifacts/taker";
+import { artifactTaker, takesNoInput } from "./artifacts/taker";
 import type { Caw } from "./caw";
 import { stagePlaceRef } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
@@ -45,7 +46,7 @@ import { peek } from "./payload-peeks";
 import { handle as idHandle } from "./presenters/words";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
-import { isLive } from "./work-item-state";
+import { isLive, isRoutineParent } from "./work-item-state";
 import type { PersonWait } from "./work-items";
 import type { DiscardAsked, Discarded } from "./workspace-discards";
 
@@ -265,11 +266,78 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       })
     );
   };
+  /** A session that takes input now (artifacts/taker.ts `takesNoInput`), by id; undefined for none. */
+  const takingInput = (id: string | null | undefined) => {
+    const [row] = id ? ctx.db.getInstancesByIds([id]) : [];
+    return row && takesNoInput(row, artifactRefusal) === undefined
+      ? row
+      : undefined;
+  };
+  /** Project `projectId`'s Caw while he takes input; undefined outside a project or with none. */
+  const cawTaking = (projectId: string | null | undefined) => {
+    const project = projectId ? ctx.db.project(projectId) : undefined;
+    return takingInput(project?.conversationInstanceId);
+  };
   /**
-   * A delegate handed its parent an artifact, not opened (artifacts/service.ts
-   * `handOver`): the parent hears it once per hand-off, on the channel the person's picks
-   * take, which wakes it as their words do. One the parent didn't take is
-   * kept in its transcript as not sent, with why.
+   * Whether session `maker`'s turn now works on the person's own word: the
+   * newest send it read is his (core `byPerson`: his words, picks, pins,
+   * answer). A page made in a turn he started is his (B1, 2026-11-15).
+   */
+  const personsTurn = (maker: InstanceRow): boolean => {
+    const { read } = ctx.db.latestSends(maker.id);
+    const origin = read?.body.origin;
+    return !!origin && byPerson(origin);
+  };
+  /**
+   * THE SESSION `maker`'S ARTIFACTS GO TO, unopened (artifacts/service.ts
+   * `ownerFor`): the session it reports to. Delegated work's go to the
+   * session that started it (work-items.ts `reportsBack`), Caw off or on;
+   * once that one has ended, to the project's Caw, else they stay its own
+   * (B2: the chain the person's pins follow, artifacts/taker.ts). A
+   * routine's run's go to its project's Caw, as its report does; in no
+   * project they stay its own. Undefined, it keeps its own: a session that
+   * reports to no one (one started with start_session, a design check's
+   * verifier), and one at work on the person's own word ({@link personsTurn}).
+   */
+  const artifactsTo = (maker: InstanceRow): InstanceRow | undefined => {
+    if (personsTurn(maker)) {
+      return;
+    }
+    let to: InstanceRow | undefined;
+    if (isRoutineParent(maker.parentInstanceId)) {
+      to = cawTaking(maker.projectId);
+    } else if (ctx.workItems.reportsBack(maker)) {
+      to = takingInput(maker.parentInstanceId) ?? cawTaking(maker.projectId);
+    }
+    return to?.id === maker.id ? undefined : to;
+  };
+  /**
+   * Whether `parent` is woken by what `maker` hands it: it hears `maker`'s
+   * reports (work-items.ts `reportees`), or it is the project's Caw holding
+   * it for an ended parent while he is on. A Caw that is off, or a
+   * routine's run's (its report says it, routines.ts `surfaceRun`), is not.
+   */
+  const wokenBy = (parent: InstanceRow, maker: InstanceRow): boolean => {
+    if (ctx.workItems.reportees(maker).some((one) => one.id === parent.id)) {
+      return true;
+    }
+    const project = maker.projectId
+      ? ctx.db.project(maker.projectId)
+      : undefined;
+    return (
+      !isRoutineParent(maker.parentInstanceId) &&
+      maker.parentInstanceId !== parent.id &&
+      project?.conversationInstanceId === parent.id &&
+      project.eventsOn
+    );
+  };
+  /**
+   * A session's artifact went to the session it reports to, not opened
+   * (artifacts/service.ts `handOver`): that one hears it once per
+   * hand-off, on the channel the person's picks take, which wakes it as
+   * their words do, unless it is not woken by this maker's work
+   * ({@link wokenBy}): then it is kept in its transcript as not sent, with
+   * why, waking nobody. So is one it didn't take.
    */
   const handArtifactUp: ArtifactServiceDeps["handedUp"] = async (
     parent,
@@ -283,9 +351,15 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       kind: artifact.kind,
       name: artifact.name,
       title: artifact.title,
+      does: artifact.does,
+      ask: artifact.ask,
       next: next?.id,
     });
     await artifactInOrder(`${artifact.id}:handed`, () => {
+      if (!wokenBy(parent, maker)) {
+        recordUndelivered(parent, text, [], artifactToolWords.handedUnwoken);
+        return Promise.resolve();
+      }
       const record = sendArtifactEvent(parent, text, [], undefined);
       if (record instanceof ElysiaStatus) {
         // A problem the send path answers (a conversation gone) keeps no record of its own.
@@ -835,6 +909,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   };
 
   return {
+    artifactsTo,
     handArtifactUp,
     signalResponses,
     deliverArtifactMarks,

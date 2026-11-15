@@ -839,8 +839,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Whether `row`, or the next version held for it, is handed up to a
    * parent that has not had its turn on it ({@link passedNow}, which
    * stamps one that has), while that parent can still take a turn and its
-   * maker's work reports to anyone (a project's Caw that is off hears
-   * nothing of it, work-items.ts `reportees`).
+   * maker's work reports to it: one its report reaches no holder of (a
+   * project's Caw that is off, a routine's run, Caw holding it for an
+   * ended parent; work-items.ts `reportees`) is passed over at once.
    */
   const handedOwed = (row: ArtifactRow): boolean => {
     const owner = holder(row);
@@ -860,7 +861,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return false;
     }
     const maker = handed.madeBy ? deps.instance(handed.madeBy) : undefined;
-    return !!maker && (deps.itemLive(maker) || deps.reportsUp(maker));
+    return !!maker && (deps.itemLive(maker) || deps.reportsTo(maker, owner));
   };
 
   /**
@@ -1048,35 +1049,53 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Whose panel a create puts the artifact in: the caller's own, or with
-   * `to: "parent"` the session that started it; refused for a session with
-   * no parent, or one whose parent is gone.
+   * THE ONE RULE OF WHOSE PANEL A CREATE PUTS AN ARTIFACT IN: the session
+   * its maker reports to, unopened, for that session's own artifact_show
+   * to put before the person ({@link ArtifactServiceDeps.artifactsTo}); its
+   * maker's own when it reports to no one. A draft is the person's
+   * composer canvas: it stays in its own session's. The owner's pick of
+   * 2026-11-15 (page-route card): "A delegate's page goes to its
+   * orchestrator, which passes on only what needs you."
    */
-  const ownerFor = (maker: InstanceRow, input: ArtifactInput) => {
-    if (input.to !== "parent") {
-      return maker;
+  const ownerFor = (maker: InstanceRow, input: ArtifactInput): InstanceRow =>
+    (input.draft ? undefined : deps.artifactsTo(maker)) ?? maker;
+
+  /** Whether `row` was made by a session other than `holderId` whose work item is live. */
+  const makerWorks = (row: ArtifactRow, holderId: string): boolean => {
+    const maker =
+      row.madeBy && row.madeBy !== holderId
+        ? deps.instance(row.madeBy)
+        : undefined;
+    return !!maker && deps.itemLive(maker);
+  };
+
+  /**
+   * A create into another session's panel ({@link ownerFor}) that would
+   * land on an artifact of that kind and name made by a maker still at
+   * work: refused, so delegates sharing the panel of the session they
+   * report to never write over each other's. It lands on one this maker
+   * made, one whose maker acts no more ({@link actsNoMore}), or a
+   * project's page (the project's by its name); a name is the artifact's
+   * identity in a panel (schema.ts `artifacts_instance_name`). Landing on
+   * one its holder opened, the change waits as its next version
+   * ({@link holdNext}), as its own maker's would.
+   */
+  const nameTaken = ({ lands, maker, owner }: Making, input: ArtifactInput) => {
+    if (lands || owner.id === maker.id) {
+      return;
     }
-    if (input.draft) {
-      return problem(400, {
-        code: "artifact-draft-to-parent",
-        detail: "A draft canvas is the person's own: it goes to no parent.",
-      });
+    const found = namedFor(owner, input.kind, input.name);
+    if (!found || found.madeBy === maker.id || isProjectPage(found)) {
+      return;
     }
-    const parentId = maker.parentInstanceId;
-    if (!parentId) {
-      return problem(409, {
-        code: "artifact-no-parent",
-        detail:
-          'This session has no parent to put an artifact in front of: leave out to: "parent".',
-      });
+    const by = deps.instance(found.madeBy ?? owner.id);
+    if (!by || actsNoMore(by)) {
+      return;
     }
-    return (
-      deps.instance(parentId) ??
-      problem(404, {
-        code: "artifact-parent-gone",
-        detail: `Your parent session ${parentId.slice(0, 8)} is gone, so nothing was put in its panel.`,
-      })
-    );
+    return problem(409, {
+      code: "artifact-name-taken",
+      detail: artifactToolWords.nameTaken(named(found), sessionNamed(by.id)),
+    });
   };
 
   /**
@@ -3592,6 +3611,60 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     },
 
+    /**
+     * What session `instanceId` waits on the person for through the
+     * artifacts it made into another session's panel (server.ts
+     * `restsOnPerson`, work-items.ts `onPerson`): each that asks him to
+     * pick or judge and is handed up unopened to a holder that still takes
+     * turns (its move: show it, or tell this maker), or that waits on him
+     * there ({@link waitsOnPerson}); at its first open card.
+     */
+    madeWaiting: (
+      instanceId: string
+    ): { artifactId: string; card: string | null; title: string }[] =>
+      db
+        .ofMaker(instanceId)
+        .filter((row) => {
+          if (row.instanceId === instanceId) {
+            return false;
+          }
+          const owner = holder(row);
+          const handedAsks =
+            factsOf(row).handed &&
+            (row.does === "pick" || row.does === "judge") &&
+            row.ask.trim() !== "" &&
+            !!owner &&
+            !actsNoMore(owner);
+          return handedAsks || waitsOnPerson(row);
+        })
+        .map((row) => ({
+          artifactId: row.id,
+          card: factsOf(row).firstOpen,
+          title: row.title,
+        })),
+
+    /**
+     * The artifacts session `makerId` made into `holderId`'s panel that
+     * `holderId` has not opened: handed up, or opened with a change of the
+     * maker's held as its next version. What a report to `holderId` lists
+     * (core `handedInReport`).
+     */
+    handedUnopened: (
+      holderId: string,
+      makerId: string
+    ): { ask: string; does: string; id: string; title: string }[] =>
+      db
+        .ofMaker(makerId)
+        .filter(
+          (row) =>
+            row.instanceId === holderId &&
+            (factsOf(row).handed || db.heldOf(row.id)?.madeBy === makerId)
+        )
+        .map((row) => {
+          const now = newestVersion(row);
+          return { id: row.id, title: now.title, does: now.does, ask: now.ask };
+        }),
+
     /** What artifact `id` waits on the person for now; null when nothing, or no artifact. */
     pending: (id: string): ArtifactPending | null => {
       const row = db.get(id);
@@ -3604,9 +3677,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * made before this turn began, still asked, with nothing of its plan
      * waiting on it, is one it moved on from (needs.ts rule 2): this turn
      * was its next. A session whose work item is live moves on from none:
-     * its item rests on them ({@link ArtifactServiceDeps.itemLive}). First,
-     * what its delegates handed it that it did not open is passed over
-     * ({@link passOver}).
+     * its item rests on them ({@link ArtifactServiceDeps.itemLive}); nor
+     * from an artifact another session made whose item is live, which it
+     * showed for that maker: the ask stands while its maker works, whoever
+     * showed it. First, what its delegates handed it that it did not open
+     * is passed over ({@link passOver}).
      */
     turnEnded: (
       instanceId: string,
@@ -3630,6 +3705,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           asked.movedAt ||
           asked.at >= from ||
           planHolds(row.id, asked, steps) ||
+          makerWorks(row, instanceId) ||
           !pendingFor(row)
         ) {
           continue;
@@ -4006,9 +4082,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Makes an artifact and shows it in the session's panel; with
-     * `to: "parent"` readies it for its parent ({@link ownerFor}) unopened,
-     * the parent told once and opening it itself ({@link handOver}).
+     * Makes an artifact and shows it in the session's panel; one by a
+     * session that reports to another is readied for that one unopened
+     * ({@link ownerFor}), which is told once and opens it itself
+     * ({@link handOver}). One that lands on another maker's of that name
+     * at work is refused ({@link nameTaken}).
      * A preview handed so is loaded first ({@link ArtifactServiceDeps.reachable}),
      * and one with a hop down is refused, nothing kept. A page or preview the panel's owner already has under
      * the same kind and name is replaced in place: its doc, and so every
@@ -4038,8 +4116,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return unasked;
       }
       const making = makingFor(instance, input);
-      if (making instanceof ElysiaStatus) {
-        return making;
+      const taken = nameTaken(making, input);
+      if (taken) {
+        return taken;
       }
       const ownWay = madeOwnWay(making, input);
       if (ownWay === null) {

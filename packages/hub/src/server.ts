@@ -754,6 +754,7 @@ import {
   blockWords,
   createWorkItems,
   mayStartRefusal,
+  type PersonWait,
   type WorkItemRequest,
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
@@ -1921,6 +1922,7 @@ export const createServer = (
   } = createArtifactPages(ctx);
   const {
     artifactRefusal,
+    artifactsTo,
     decisionsChanged,
     deliverArtifactMarks,
     discardAsked,
@@ -4784,6 +4786,8 @@ export const createServer = (
     },
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
+    // A session's artifacts go to the session it reports to, unopened.
+    artifactsTo,
     // A delegate's artifact handed to its parent unopened: the parent hears it once.
     handedUp: (parent, maker, artifact, next) =>
       handArtifactUp(parent, maker, artifact, next),
@@ -4820,7 +4824,8 @@ export const createServer = (
     stranded,
     itemEnded,
     itemLive,
-    reportsUp: (instance) => workItems.reportees(instance).length > 0,
+    reportsTo: (instance, to) =>
+      workItems.reportees(instance).some((one) => one.id === to.id),
     reportHeardAt: (parent, maker) => {
       const report = db.lastPeerSend(parent.id, maker.id);
       if (report?.state === "pending") {
@@ -8087,6 +8092,20 @@ export const createServer = (
       workItems.settleStagesOf(frame.workspace);
     }
   };
+  /**
+   * What a session waits on the person for (artifact-events.ts
+   * `personWaitOf`), with the artifacts it made into the panel of the
+   * session it reports to that wait on him or are handed up unopened
+   * (artifacts/service.ts `madeWaiting`): its item rests on either.
+   */
+  const restsOnPerson = (instanceId: string): PersonWait | undefined => {
+    const own = personWaitOf(instanceId);
+    const made = artifacts.madeWaiting(instanceId);
+    if (made.length === 0) {
+      return own;
+    }
+    return { asks: own?.asks ?? [], cards: [...(own?.cards ?? []), ...made] };
+  };
   const workItems = createWorkItems({
     workPlace: workPlaceOf,
     // A delegate whose tools reach the fleet's chrome-devtools is told the
@@ -8187,7 +8206,7 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     // What a session waits on the person for: an item's session resting on
     // it is neither told to finish nor failed for idling.
-    personWait: personWaitOf,
+    personWait: restsOnPerson,
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
       memoryWatch.spawned(instanceId, parentId),
@@ -9953,7 +9972,7 @@ export const createServer = (
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
     db,
-    personWait: personWaitOf,
+    personWait: restsOnPerson,
     held: () => workItems.heldWorkspaces(),
     queued: (caller) => workItems.queuedOf(caller),
     landingWait: (itemId) => workItems.landingWaitOf(itemId),
@@ -10020,6 +10039,9 @@ export const createServer = (
     caw,
     // A curator run's inbox, sorted first (memory.ts).
     curatorBrief: (projectId) => projectMemory.curatorBrief(projectId),
+    // A run's report lists what it handed Caw unopened.
+    handedUnopened: (holderId, makerId) =>
+      artifacts.handedUnopened(holderId, makerId),
     // A trim run's findings, read before any model is asked (unused-trim.ts).
     trimBrief: (projectId) => trim.brief(projectId),
     db,

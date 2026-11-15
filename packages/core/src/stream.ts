@@ -375,12 +375,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    whose `accounts:` line does not read whole are refused 409
  *    `spawn-task-accounts-unread`, where they were placed on any account.
  *    A page built for 74 does not know the new codes, so it reloads first.
+ * 76: an artifact goes to the session its maker reports to, and a create
+ *    that would land on another maker's of that kind and name, still at
+ *    work, is refused 409 `artifact-name-taken`; `to` and its refusal
+ *    `artifact-no-parent` are gone. A page built for 75 does not know the
+ *    new code, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 75;
+export const WIRE_PROTOCOL = 76;
 
 /**
  * What a session's stream carries: the changes each frame made to its

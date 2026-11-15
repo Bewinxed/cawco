@@ -115,13 +115,6 @@ export interface ArtifactInput {
    */
   title?: string | undefined;
   /**
-   * `parent`: a delegate hands it to its parent, readied and not opened.
-   * The parent owns it (its panel, its list, the person's picks and pins on
-   * it), is told once per hand-off and opens it itself with artifact_show;
-   * the delegate stays its maker ({@link ArtifactRow.madeBy}).
-   */
-  to?: "parent" | undefined;
-  /**
    * The workspace whose dev server a port is: the caller's own, or one of its
    * delegates'. Omitted, the caller's own when it runs in one, unless
    * `machine` names the host the port is on.

@@ -737,8 +737,9 @@ interface WorkItemDeps extends Pick<
   readonly pauses: (projectId: string) => string | undefined;
   /**
    * What session `instanceId` itself waits on the person for now: an ask of
-   * its own for them, or an artifact of its own in Needs you (server.ts
-   * `personWaitOf`, core `waitsOnYou`); undefined when nothing. Its item
+   * its own for them, an artifact of its own in Needs you, or one it made
+   * into another session's panel that waits on them there or is handed up
+   * unopened (server.ts `restsOnPerson`); undefined when nothing. Its item
    * rests on it ({@link onPerson}).
    */
   readonly personWait: (instanceId: string) => PersonWait | undefined;
@@ -2137,8 +2138,10 @@ export const createWorkItems = ({
   /**
    * THE REST ON THE PERSON: a live item's session that waits on the person
    * itself ({@link WorkItemDeps.personWait}: an ask of its own for them, a
-   * decision page or canvas of its own in Needs you) rests on them, one rule
-   * for both. Its turn's end is not quiet: it is not told its item is still
+   * decision page or canvas of its own in Needs you, or one it made into the
+   * panel of the session it reports to that waits on them there or is
+   * handed up unopened, server.ts `restsOnPerson`) rests on them, one rule
+   * for all. Its turn's end is not quiet: it is not told its item is still
    * open, and no count of quiet turns fails it ({@link openItemTurnEnded});
    * asleep, the sweep neither wakes nor holds it ({@link leftAsleep}). Its
    * workspace, uncommitted files and the previews it serves stay, as its
@@ -5481,6 +5484,7 @@ export const createWorkItems = ({
     },
 
     reportees,
+    reportsBack,
 
     /** Whether `leadId` is the conversation of the project of the work item `instanceId` runs: it may answer, steer and stop it. */
     ledBy(instanceId: string, leadId: string): boolean {

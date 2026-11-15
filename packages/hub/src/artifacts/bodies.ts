@@ -214,8 +214,6 @@ export const createBody = t.Object({
     })
   ),
   draft: t.Optional(t.Boolean()),
-  // A delegate hands it to its parent, unopened.
-  to: t.Optional(t.Literal("parent")),
 });
 
 /** A page's or a canvas's change: one of html, patch, elements, delete or mermaid. */

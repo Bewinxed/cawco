@@ -76,9 +76,10 @@ export const createVersions = (ctx: VersionsContext) => {
       );
     });
   /**
-   * Whether a create hands the artifact to its owner: a delegate's
-   * `to: "parent"`, readied but never shown by the create, so the parent
-   * reviews each revision its delegate makes before the person sees it.
+   * Whether a create hands the artifact to its owner: a create into the
+   * panel of the session its maker reports to (service.ts `ownerFor`),
+   * readied but never shown by the create, so that session reviews each
+   * revision before the person sees it.
    */
   const handing = ({ owner, maker }: Making): boolean => owner.id !== maker.id;
   /** Whether an artifact waits on its parent unopened ({@link handOver}). */

@@ -27,7 +27,6 @@ import { z } from "zod";
 import {
   artifactBrowse,
   artifactCreate,
-  artifactCreateToParent,
   artifactDelete,
   artifactList,
   artifactPromote,
@@ -346,11 +345,6 @@ export interface ToolView {
    * words say can differ by it ({@link NO_REPLY_WORDS}).
    */
   readonly harness: HarnessKind;
-  /**
-   * Whether this session has a parent (it was started by another session):
-   * artifact_create then offers `to: "parent"`.
-   */
-  readonly hasParent?: boolean;
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
   readonly lands?: ItemEnd;
   /** The delegate types THIS session may start (core `MayStart`): its row's list. */
@@ -1159,24 +1153,14 @@ export function handoffTools(view: ToolView) {
       artifactListWords,
       { annotations: READ_ONLY }
     ),
-    // A delegate may hand it to its parent instead (`to`), unopened.
-    view.hasParent
-      ? handoffTool(
-          artifactCreate.name,
-          artifactCreate.description + artifactCreateToParent.description,
-          { ...artifactCreate.input, ...artifactCreateToParent.input },
-          (input, _format, bound) => bound.actions.artifacts.create(input),
-          artifactCreatedWords,
-          { detailed: artifactCreatedDetailed }
-        )
-      : handoffTool(
-          artifactCreate.name,
-          artifactCreate.description,
-          artifactCreate.input,
-          (input, _format, bound) => bound.actions.artifacts.create(input),
-          artifactCreatedWords,
-          { detailed: artifactCreatedDetailed }
-        ),
+    handoffTool(
+      artifactCreate.name,
+      artifactCreate.description,
+      artifactCreate.input,
+      (input, _format, bound) => bound.actions.artifacts.create(input),
+      artifactCreatedWords,
+      { detailed: artifactCreatedDetailed }
+    ),
     handoffTool(
       artifactUpdate.name,
       artifactUpdate.description,

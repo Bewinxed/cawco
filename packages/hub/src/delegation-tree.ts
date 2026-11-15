@@ -119,7 +119,7 @@ export type PeekContext =
 /** What its workspace holds so far, or why it could not be read. */
 export type PeekMade =
   | (Omit<Unlanded, "live" | "workspaceId"> & {
-      /** The artifacts it handed its parent (`to: "parent"`), by title. */
+      /** The artifacts it handed its parent (artifacts/service.ts `ownerFor`), by title. */
       handed: { id: string; title: string }[];
     })
   | { handed: { id: string; title: string }[]; unread: string };
@@ -570,11 +570,11 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     return sessionsOf(items);
   };
 
-  /** The artifacts `instanceId` made that stand in its parent's panel: handed up with `to: "parent"`. */
+  /** The artifacts `instanceId` made that stand in another session's panel: handed up (artifacts/service.ts `ownerFor`), to its parent or its project's Caw. */
   const handedUp = (item: WorkItemRow): { id: string; title: string }[] =>
     db.artifacts
-      .ofInstance(item.parentInstanceId)
-      .filter((artifact) => artifact.madeBy === item.instanceId)
+      .ofMaker(item.instanceId)
+      .filter((artifact) => artifact.instanceId !== item.instanceId)
       .map((artifact) => ({ id: artifact.id, title: artifact.title }));
 
   /** What the session's workspace holds so far, or the machine's words on why it could not be read. */

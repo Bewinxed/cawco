@@ -116,13 +116,13 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   const keptUpAt = new Map<string, number>();
   /**
    * Who makes a create and whose panel it lands in: the caller's own, or
-   * its parent's with `to: "parent"` ({@link ownerFor}). A preview its own
+   * the session it reports to ({@link ownerFor}). A preview its own
    * panel has no artifact of that name for lands on its delegation tree's
    * of that name in its project ({@link ofTree}), when several the one
    * nearest up its line ({@link above}), else the newest, so its id stays,
    * its server moves to the caller's ({@link letGoMoved}) and every page
    * embedding it follows. A live holder's is made again where it stands,
-   * as a `to: "parent"` create lands on the parent's: held as its next
+   * as a create into the panel of the session it reports to lands: held as its next
    * version once it opened it, and it is told. One whose holder acts no
    * more ({@link actsNoMore}) is taken into the caller's panel at once
    * (`lands`): no version waits on a session that never opens it, its old
@@ -132,9 +132,6 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    */
   const makingFor = (maker: InstanceRow, input: ArtifactInput) => {
     const owner = ctx.ownerFor(maker, input);
-    if (owner instanceof ElysiaStatus) {
-      return owner;
-    }
     const alone: Making = { maker, owner };
     if (
       input.kind !== "preview" ||

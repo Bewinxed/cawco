@@ -4873,7 +4873,7 @@ export const artifacts = sqliteTable(
     }),
     /**
      * The session whose `artifact_create` last made it: the owner itself, or
-     * a delegate that handed it to its parent (`to: "parent"`), which may
+     * a delegate that handed it to its parent (artifacts/service.ts `ownerFor`), which may
      * go on updating and reading it. Null on one made before it
      * was kept.
      */
