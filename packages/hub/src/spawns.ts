@@ -18,6 +18,7 @@ import type {
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import { StartsHeld } from "./continuations";
@@ -31,7 +32,7 @@ import type { createLaunches } from "./launches";
 import { awayProblem, MachineProblem, silentProblem } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { peek, peekResume } from "./payload-peeks";
-import type { PlacementInput } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import {
   accountFacts,
   place as placeAccount,
@@ -461,32 +462,44 @@ export const createSpawns = (ctx: SpawnsContext) => {
    * recorded as every spawn is: the row is what puts it in the rail. A
    * conversation that starts here is named by its first turn.
    */
-  /** The accounts a project task allows its attempts (`accounts:`), read from its file; null: every account. */
+  /**
+   * The accounts a project task allows its attempts (`accounts:`), read
+   * from its file at each placement: null is every account (no line, or a
+   * line that reads as an empty list). An `accounts:` line that does not
+   * read whole is `unread`, its sentences quoted (task-file.ts
+   * `listUnread`): what of it reads is not the allow-list it meant, and a
+   * list left with none would read as every account.
+   */
   const taskAccounts = (
     projectId: string | null | undefined,
     taskId: string | null | undefined
-  ): string[] | null => {
+  ): TaskAccounts => {
     if (!(projectId && taskId)) {
-      return null;
+      return { accounts: null };
     }
     const indexed = ctx.db
       .taskIndex(projectId)
       .find((row) => row.id === taskId);
     if (!indexed) {
-      return null;
+      return { accounts: null };
     }
     const root = projectRoot(projectId);
     if (root instanceof ElysiaStatus) {
-      return null;
+      return { accounts: null };
     }
     try {
-      const { accounts } = new TaskDoc(
+      const doc = new TaskDoc(
         indexed.path,
         readFileSync(join(root, indexed.path), "utf8")
-      ).read().fields;
-      return accounts.length > 0 ? accounts : null;
+      );
+      const unread = doc.unreadOfList("accounts");
+      if (unread.length > 0) {
+        return { path: indexed.path, unread: unread.join(" ") };
+      }
+      const { accounts } = doc.read().fields;
+      return { accounts: accounts.length > 0 ? accounts : null };
     } catch {
-      return null;
+      return { accounts: null };
     }
   };
 
@@ -503,7 +516,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
    */
   const spawnAsks = (
     payload: SpawnPayload,
-    task: { projectId?: string | null; taskId?: string | null }
+    task: { accounts?: string[] | null; projectId?: string | null }
   ): Pick<
     PlacementInput,
     | "explicit"
@@ -524,7 +537,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return {
       kind: parentInstanceId || payload.spawnedBy ? "delegates" : "yours",
       projectAccounts: project?.accounts ?? null,
-      taskAccounts: taskAccounts(projectId, task.taskId),
+      taskAccounts: task.accounts ?? null,
       // The start's own account wins over its project's (placement.ts `place`).
       ...(payload.account ? { explicit: payload.account } : {}),
       ...projectAccountOf(project, (id) => ctx.db.areas.get(id)?.name ?? null),
@@ -535,7 +548,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
   const placementInput = (
     machineId: string,
     payload: NamedSpawn,
-    task: { projectId?: string | null; taskId?: string | null },
+    task: { accounts?: string[] | null; projectId?: string | null },
     fork: { accountId: string | null } | undefined
   ): PlacementInput | undefined => {
     const provider = ctx.accountProviderFor(
@@ -693,7 +706,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     machineId: string,
     payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null } = {}
-  ): { accountId?: string } | { refusal: string; status?: 404 } => {
+  ): { accountId?: string } | { refusal: string; status?: 404 | 409 } => {
     // Checked here, in the same synchronous step as the row's write that
     // follows: a project deleted after it was picked refuses the start.
     if (payload.projectId && !ctx.db.project(payload.projectId)) {
@@ -738,11 +751,36 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (held) {
       return runsOn(held);
     }
+    const placed = placedNew(machineId, payload, task);
+    return "refusal" in placed ? placed : runsOn(placed);
+  };
+
+  /**
+   * The account a session no account holds yet is placed on, within its
+   * project's and task's allow-lists ({@link placeSpawn}); its task's list
+   * read now, and one that does not read whole places it nowhere, never on
+   * any account (409).
+   */
+  const placedNew = (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null }
+  ): { accountId?: string } | { refusal: string; status?: 409 } => {
+    const allowed = taskAccounts(
+      payload.projectId ?? task.projectId,
+      task.taskId
+    );
+    if ("unread" in allowed) {
+      return {
+        status: 409,
+        refusal: spawnWords.taskAccountsUnread(allowed.path, allowed.unread),
+      };
+    }
     const { resume } = payload;
     const input = placementInput(
       machineId,
       payload,
-      task,
+      { projectId: task.projectId, accounts: allowed.accounts },
       resume?.fork
         ? {
             accountId:
@@ -757,8 +795,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
           }
         : {};
     }
-    const placed = placedStart(machineId, payload, input);
-    return "refusal" in placed ? placed : runsOn(placed);
+    return placedStart(machineId, payload, input);
   };
 
   /**
@@ -819,7 +856,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return asked;
   };
 
-  /** {@link placeSpawn} as a problem a caller passes up: a deleted project's is a 404, any other a 400. */
+  /**
+   * {@link placeSpawn} as a problem a caller passes up: a deleted project's
+   * is a 404, a task's allow-list that does not read a 409, any other a 400.
+   */
   const placedOrProblem = (
     machineId: string,
     payload: NamedSpawn,
@@ -827,12 +867,23 @@ export const createSpawns = (ctx: SpawnsContext) => {
   ) => {
     const placed = placeSpawn(machineId, payload, task);
     if ("refusal" in placed) {
-      return placed.status === 404
-        ? problem(404, {
+      switch (placed.status) {
+        case 404:
+          return problem(404, {
             code: "spawn-project-deleted",
             detail: placed.refusal,
-          })
-        : problem(400, { code: "spawn-not-placed", detail: placed.refusal });
+          });
+        case 409:
+          return problem(409, {
+            code: "spawn-task-accounts-unread",
+            detail: placed.refusal,
+          });
+        case undefined:
+          return problem(400, {
+            code: "spawn-not-placed",
+            detail: placed.refusal,
+          });
+      }
     }
     return placed;
   };

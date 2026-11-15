@@ -24,6 +24,7 @@ export type SpawnProblem =
   | Problem<400, "spawn-not-settled">
   | Problem<404, "spawn-project-deleted">
   | Problem<400, "spawn-not-placed">
+  | Problem<409, "spawn-task-accounts-unread">
   | Problem<409, "starting-set-unread">
   | Problem<409, "launch-account-unavailable">
   | SilentProblem

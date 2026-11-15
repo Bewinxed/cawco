@@ -24,6 +24,15 @@ export const spawnWords = {
   startingSetUnread: (project: string, file: string, problems: string[]) =>
     `Not started: ${project}'s ${file}, which names the skills and MCP servers its sessions start with, does not read, so the hub cannot tell what this session may load. ${problems.join(" ")} Fix it in the project's folder (or with project_settings' set_starting_set), then start it again.`,
   /**
+   * A start refused because its task file's `accounts:` line does not read
+   * whole (hub spawns.ts `taskAccounts`), to the agent or person who asked:
+   * what of the line reads is not the allow-list it meant, and a list left
+   * with none would read as every account. `why` is the reader's sentences,
+   * quoted from the line.
+   */
+  taskAccountsUnread: (path: string, why: string) =>
+    `Not started: ${path} has an accounts line that does not read, so the hub cannot tell which accounts this session may run on, and it places it on none. ${why} Fix the line in the task's file, then start it again.`,
+  /**
    * A start refused on a model its harness does not list (hub server.ts
    * `modelRefusal`), to the agent or person who asked: the harness by name
    * (`harness`, accountsWords.harnesses), the model ids it does list, and

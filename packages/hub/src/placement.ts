@@ -43,6 +43,15 @@ import type { AccountPaces } from "./window-paces";
  * at a wake with its cache cold. Pure: every input is read by the caller.
  */
 
+/**
+ * A task's allow-list of accounts as a start reads it from its file (hub
+ * spawns.ts `taskAccounts`): `accounts` null is every account; `unread`, an
+ * `accounts:` line that does not read whole, quoted, from its file at
+ * `path`.
+ */
+export type TaskAccounts =
+  { accounts: string[] | null } | { path: string; unread: string };
+
 export interface PlacementInput {
   /** Every account of the session's provider. */
   accounts: Account[];

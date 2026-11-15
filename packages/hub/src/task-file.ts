@@ -540,20 +540,28 @@ const emptyFields = (): TaskFields => ({
 /** How `waits_on:` is written. */
 const WAITS_LIKE = '[138, "<artifact id>#<card>"]';
 
+/**
+ * What of a `waits_on:` line does not read, one sentence each, quoted: the
+ * line's own ({@link listUnread}), and each entry that names no task, card,
+ * pin, pull request, Actions run or session. Empty when it reads whole.
+ */
+const waitsUnread = (line: FrontMatterLine): string[] => [
+  ...listUnread("waits_on", line, WAITS_LIKE),
+  ...(listOf(line) ?? [])
+    .filter((item) => !waitTarget(item))
+    .map(
+      (item) =>
+        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run or session.`
+    ),
+];
+
 /** `waits_on:`, each target as wait-targets.ts keeps it; what reads as none goes to `problems`. */
 const readWaits = (line: FrontMatterLine, problems: string[]): string[] => {
-  problems.push(...listUnread("waits_on", line, WAITS_LIKE));
-  const kept: string[] = [];
-  for (const item of listOf(line) ?? []) {
+  problems.push(...waitsUnread(line));
+  const kept = (listOf(line) ?? []).flatMap((item) => {
     const target = waitTarget(item);
-    if (target) {
-      kept.push(waitHandle(target));
-    } else {
-      problems.push(
-        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run or session.`
-      );
-    }
-  }
+    return target ? [waitHandle(target)] : [];
+  });
   return [...new Set(kept)];
 };
 
@@ -682,7 +690,8 @@ const readBudget = (
  * overlapping item run beside it), `checks` (a command not listed is not
  * run), `accounts` (a list left with no account reads as every account,
  * and which were meant is unknown) and `waits_on` (a wait not kept starts
- * it before what it waits on settles). The others narrow what an attempt is given
+ * it before what it waits on settles; an entry that names no target is
+ * one such wait too). The others narrow what an attempt is given
  * or only sort and draw it (`context`, `labels`, `links`): what does not
  * read is a problem the board shows, and the rest is read.
  */
@@ -1117,14 +1126,10 @@ export class TaskDoc {
       if (line.key === "budget") {
         readBudget(line, budgetUnread);
       }
-      if (line.key !== undefined && GOVERNING_LISTS.has(line.key)) {
-        listsUnread.push(
-          ...listUnread(
-            line.key,
-            line,
-            line.key === "waits_on" ? WAITS_LIKE : undefined
-          )
-        );
+      if (line.key === "waits_on") {
+        listsUnread.push(...waitsUnread(line));
+      } else if (line.key !== undefined && GOVERNING_LISTS.has(line.key)) {
+        listsUnread.push(...listUnread(line.key, line));
       }
     }
     const sections = sectionsOf(this.body);
@@ -1166,6 +1171,16 @@ export class TaskDoc {
       budgetUnread: budgetUnread.join(" ") || null,
       listsUnread: listsUnread.join(" ") || null,
     };
+  }
+
+  /**
+   * What its `field:` line holds that does not read as its list, one
+   * sentence each, quoted ({@link listUnread}); empty when it reads whole or
+   * there is none. A line that reads as an empty list reads.
+   */
+  unreadOfList(field: "accounts"): string[] {
+    const line = this.front?.find((each) => each.key === field);
+    return line ? listUnread(field, line) : [];
   }
 
   /** The title the file gives, else one from its name. */
