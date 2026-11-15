@@ -44,6 +44,7 @@ import {
   resolveMarketplacePlugins,
 } from "./plugins";
 import { projectRowsFor, unbound } from "./project-placements";
+import { redactedFrame } from "./redactor";
 import { resolveSkill } from "./skills";
 import { unreachable } from "./unreachable";
 import type { HubSocket } from "./wire-socket";
@@ -92,7 +93,7 @@ export type FleetSourcesContext = Pick<
   | "readSkillFolder"
   | "registry"
   | "sendAnswerable"
-  | "sendFrame"
+  | "sendToMachine"
   | "toolsMayHaveChanged"
 >;
 
@@ -231,7 +232,7 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
           method,
           args: [],
         };
-        ctx.sendFrame(agent, {
+        ctx.sendToMachine(agent, {
           verb: "control",
           machineId,
           instanceId: row.id,
@@ -580,11 +581,13 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     fetches.has(`plugin:${row.id}`) ? { ...row, fetching: true } : row;
 
   const announceFetch = (news: FetchNews): void => {
-    ctx.registry.broadcast({
-      verb: "frames",
-      machineId: "hub",
-      payload: { kind: "fleet.fetch", ...news },
-    });
+    ctx.registry.broadcast(
+      redactedFrame({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "fleet.fetch", ...news },
+      })
+    );
     heardFetch(news);
   };
 

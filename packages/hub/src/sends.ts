@@ -44,6 +44,7 @@ import type {
   SessionMessage,
 } from "@cawco/core/session-messages";
 import { SEND_STATES } from "@cawco/core/session-messages";
+import type { SessionStreamFrame } from "@cawco/core/stream";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import {
   transcriptWindowOf,
@@ -65,6 +66,7 @@ import { sessionLabel } from "./labels";
 import type { Unanswered } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages, mediaNameOf } from "./media";
+import { redactedFrame } from "./redactor";
 import { talksWithPerson } from "./roles";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
@@ -423,7 +425,7 @@ export type SendsContext = Pick<
   | "reconnectingFor"
   | "registry"
   | "sayCompaction"
-  | "sendFrame"
+  | "sendToMachine"
   | "sendRefusal"
   | "sessionName"
   | "silentWords"
@@ -484,12 +486,15 @@ export const createSends = (ctx: SendsContext) => {
       }
     }
     if (isKeepAlive(row.body)) {
-      ctx.streams.sequence(row.instanceId, {
-        kind: "send",
-        instanceId: row.instanceId,
-        keepAlive: true,
-        record: toSendRecord(row),
-      });
+      ctx.streams.sequence(
+        row.instanceId,
+        redactedFrame<SessionStreamFrame>({
+          kind: "send",
+          instanceId: row.instanceId,
+          keepAlive: true,
+          record: toSendRecord(row),
+        })
+      );
       return;
     }
     ctx.transcripts.ingest(row.instanceId, {
@@ -2665,7 +2670,7 @@ export const createSends = (ctx: SendsContext) => {
     const asSent = envelope.payload;
     if (agent && !owed) {
       toldMove(envelope);
-      ctx.sendFrame(agent, presenced(envelope));
+      ctx.sendToMachine(agent, presenced(envelope));
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
     // or its item's finish.
@@ -3199,7 +3204,7 @@ export const createSends = (ctx: SendsContext) => {
       delivery,
       envelope,
     });
-    ctx.sendFrame(agent, presenced(envelope));
+    ctx.sendToMachine(agent, presenced(envelope));
   };
 
   /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */

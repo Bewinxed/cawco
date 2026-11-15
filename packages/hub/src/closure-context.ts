@@ -207,6 +207,7 @@ import type { ProjectTrash } from "./project-trash";
 import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
 import type { ForecastRead } from "./rebalance";
+import type { ClientFrame, Redacted } from "./redactor";
 import type { AnyProblem } from "./refusal";
 import type { RegistryShape } from "./registry";
 import type { createRelayJourney } from "./relay-journey";
@@ -1151,7 +1152,6 @@ export interface ClosureContext {
     stage: CompactStage
   ) => void;
   sendAnswerable: <T extends Envelope>(socket: HubSocket, frame: T) => T;
-  sendFrame: (socket: HubSocket, frame: unknown) => void;
   sendFromHub: (
     machineId: string,
     instanceId: string,
@@ -1179,6 +1179,10 @@ export interface ClosureContext {
     | undefined;
   /** Each session's sends still pending, by count (sends.ts `pendingSends`). */
   sendsPending: { count: (instanceId: string) => number };
+  /** A frame to a client's socket: only what the redactor passed (redactor.ts). */
+  sendToClient: (socket: HubSocket, frame: Redacted<ClientFrame>) => void;
+  /** The hub's command to a machine's socket, as it is (wire-socket.ts). */
+  sendToMachine: (socket: HubSocket, frame: object) => void;
   sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;

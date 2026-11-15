@@ -3,6 +3,7 @@
 import { detach } from "@cawco/core/detach";
 import { stagePlaceRef } from "../caw";
 import type { HubContext } from "../hub-context";
+import { redactedFrame } from "../redactor";
 import type { FrameAnswer, FrameRun } from "./frame-run";
 import { isFleetReport } from "./wire-reads";
 
@@ -176,7 +177,9 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     if (kind === "passkey_qr") {
       const qr = { ...body, machineId: message.machineId };
       ctx.browsers.heardPasskeyQr(qr);
-      ctx.registry.broadcast({ verb: "frames", machineId: "hub", payload: qr });
+      ctx.registry.broadcast(
+        redactedFrame({ verb: "frames", machineId: "hub", payload: qr })
+      );
       ctx.passkeyRelay.start(qr.key, qr.machineId);
       return "stop";
     }

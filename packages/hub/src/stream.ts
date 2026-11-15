@@ -53,9 +53,10 @@ import {
   type StreamSubscribe,
 } from "@cawco/core/stream";
 import type { HubLifetimeShape } from "./lifetime";
+import { type ClientFrame, type Redacted, redactedFrame } from "./redactor";
 import type { AnyProblem } from "./refusal";
 import { refusalFrame } from "./registry";
-import { type HubSocket, sendFrame } from "./wire-socket";
+import { type HubSocket, sendToClient } from "./wire-socket";
 
 /**
  * A control whose `control_result` never came stops being an ack anybody is
@@ -204,21 +205,22 @@ export interface StreamHubShape {
   readonly ingestedFor: (
     instanceIds: readonly string[]
   ) => Record<string, IngestMark>;
-  /** A session's plan frame, to every socket following it. */
+  /** A session's plan frame, to every socket following it: only what the redactor passed. */
   readonly planToFollowers: (
     sessionId: string,
-    message: PlanSnapshot | PlanDelta
+    message: Redacted<PlanSnapshot | PlanDelta>
   ) => void;
   /**
    * Stamps a relayed frame with the session's next `seq`, files it in the ring
    * and fans it out to that session's followers. Called for EVERY relayed
    * frame, subscribed or not: the sequence is the session's canonical order,
    * not a function of who happens to be listening, and a ring with holes in it
-   * could not answer a resume.
+   * could not answer a resume. The frame is what the redactor passed
+   * (redactor.ts): the ring replays what it holds to every resume.
    */
   readonly sequence: (
     sessionId: string,
-    frame: SessionStreamFrame
+    frame: Redacted<SessionStreamFrame>
   ) => SessionStreamEvent;
   /**
    * A `control_result` off an agent socket. Returns true when it answered a
@@ -323,9 +325,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return ring;
   };
 
-  /** One write to one socket, through its outbox (wire-socket.ts). */
-  const deliver = (socket: HubSocket, message: unknown): void => {
-    sendFrame(socket, message);
+  /** One write to one socket, through its outbox (wire-socket.ts): only what the redactor passed. */
+  const deliver = (socket: HubSocket, message: Redacted<ClientFrame>): void => {
+    sendToClient(socket, message);
   };
 
   const dropSocket = (socketId: string): void => {
@@ -361,7 +363,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   const ackTo = (socket: HubSocket, ack: CommandAck): void => {
-    deliver(socket, ack);
+    deliver(socket, redactedFrame(ack));
   };
 
   const fail = (socket: HubSocket, commandId: string, reason: string): void => {
@@ -371,17 +373,17 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   /** A stream message too malformed to act on: logged, and the sender told which field. */
   const malformed = (socket: HubSocket, raw: unknown, fault: string): void => {
     console.warn(`[hub] ${fault}`, raw);
-    deliver(socket, refusalFrame(raw, fault));
+    deliver(socket, redactedFrame(refusalFrame(raw, fault)));
   };
 
   const sequence = (
     sessionId: string,
-    frame: SessionStreamFrame
+    frame: Redacted<SessionStreamFrame>
   ): SessionStreamEvent => {
     const event = ringOf(sessionId).record(sessionId, frame);
     const perSession = followers.get(sessionId);
     if (perSession) {
-      const delta: StreamDelta = { type: "stream.event", event };
+      const delta = redactedFrame<StreamDelta>({ type: "stream.event", event });
       // Iterated live, no defensive copy: this runs on every frame of every
       // session, and deleting from a Set mid-iteration is well defined — which
       // is exactly what a failed delivery does.
@@ -414,7 +416,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     followers.set(sessionId, perSession);
 
     // Its plan whole, after it is a follower: every delta after comes in turn.
-    ports.planSnapshot(sessionId, (plan) => deliver(socket, plan));
+    ports.planSnapshot(sessionId, (plan) =>
+      deliver(socket, redactedFrame(plan))
+    );
     // After this subscribe has run to its end, so nothing it starts is
     // sequenced inside it.
     queueMicrotask(() => ports.followed(sessionId));
@@ -433,7 +437,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         sessionId,
         nextSeq: ring.head + 1,
       };
-      deliver(socket, refusal);
+      deliver(socket, redactedFrame(refusal));
     };
     if (!ring.canReplay(typeof afterSeq === "number" ? afterSeq : Number.NaN)) {
       reset();
@@ -459,7 +463,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       // nothing" rather than silence the client cannot tell from a lost reply.
       events,
     };
-    deliver(socket, backlog);
+    deliver(socket, redactedFrame(backlog));
   };
 
   /**
@@ -753,7 +757,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     entry.plans = new Set(instanceIds);
     for (const instanceId of entry.plans) {
       if (!before.has(instanceId)) {
-        ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
+        ports.planSnapshot(instanceId, (plan) =>
+          deliver(socket, redactedFrame(plan))
+        );
       }
     }
   };
@@ -768,7 +774,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       malformed(socket, raw, "plan.resync refused: `instanceId` is missing");
       return;
     }
-    ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
+    ports.planSnapshot(instanceId, (plan) =>
+      deliver(socket, redactedFrame(plan))
+    );
   };
 
   /** What a socket follows: each message that changes it, by its type. */
@@ -792,7 +800,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // deltas queued for this tab, which a tab that hears nothing within its
     // deadline otherwise took for a dead socket while they arrived.
     if (raw.type === "heartbeat") {
-      deliver(socket, { type: "heartbeat" } satisfies StreamHeartbeat);
+      deliver(socket, redactedFrame<StreamHeartbeat>({ type: "heartbeat" }));
       return true;
     }
 

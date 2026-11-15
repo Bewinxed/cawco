@@ -11,6 +11,7 @@ import { briefingsObserve } from "../briefings";
 import type { HubContext } from "../hub-context";
 import { peek } from "../payload-peeks";
 import { outlivesSession, unreadFields } from "../pending";
+import { redactedFrame } from "../redactor";
 import { type FrameAnswer, type FrameRun, onSessionFrame } from "./frame-run";
 import { runTurnEnded } from "./turn-ended";
 import { type TurnEndedContext, turnEndedStepsOf } from "./turn-ended-steps";
@@ -204,7 +205,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
       if (sender && parent) {
         ctx.delegateWaits.asked(message);
       } else if (!run.internal) {
-        ctx.push.onAsk(message);
+        ctx.push.onAsk(redactedFrame(message));
       }
     }
     return "continue";
