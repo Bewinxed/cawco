@@ -1,32 +1,26 @@
 /**
- * What the popup shows, written by the background worker to
- * `chrome.storage.session` (so a worker that sleeps loses nothing) and
- * messages between the extension's pages.
+ * What the popup shows, kept in memory by the background worker, and the
+ * messages between the extension's pages. The bridge keeps nothing on disk
+ * and asks for no storage permission.
  */
 /** The hub's passkey relay phases (core `PasskeyRelayStatus`). */
-type PasskeyRelayStatus =
-  "scanning" | "captured" | "injected" | "authenticated" | "timeout" | "no_ble";
-
 export interface BridgeState {
-  hub: "idle" | "connecting" | "connected" | "closed";
   qr: { expiresAt: number; fidoUri: string; rpOrigin?: string } | null;
-  /** The relay phase the hub last reported for the QR's take-over. */
-  relay: PasskeyRelayStatus | null;
   scan: "idle" | "scanning" | "captured" | "needs-flag" | "failed";
   /** Why a scan did not start, for the person. */
   scanDetail?: string;
 }
 
-export const STATE_KEY = "bridgeState";
+export const IDLE_STATE: BridgeState = { qr: null, scan: "idle" };
 
-export const IDLE_STATE: BridgeState = {
-  hub: "idle",
-  qr: null,
-  relay: null,
-  scan: "idle",
-};
+/** A passkey QR as the dashboard page posts it. */
+export interface PageQr {
+  fidoUri: string;
+  raisedAt: number;
+  rpOrigin?: string;
+}
 
-/** Messages between the background worker, the offscreen document and the popup. */
+/** Messages between the content script, the background worker, the offscreen document and the popup. */
 export type BridgeMessage =
   | { type: "scan:start" }
   | { type: "scan:stop" }
@@ -38,4 +32,8 @@ export type BridgeMessage =
       rssi: number;
       capturedAt: number;
     }
-  | { type: "dismiss" };
+  | ({ type: "qr" } & PageQr)
+  | { type: "dismiss" }
+  | { type: "state:get" }
+  | { type: "state"; state: BridgeState }
+  | { type: "ping" };

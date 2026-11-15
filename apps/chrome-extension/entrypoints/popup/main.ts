@@ -1,11 +1,15 @@
 /**
- * Popup: the bridge's status (hub link, BLE scan, relay), the pending
- * passkey QR as a visual reference, and the hub URL setting. It reads the
- * state the background worker keeps and redraws when it changes.
+ * Popup: the bridge's status (dashboard link, BLE scan) and the pending
+ * passkey QR as a visual reference. It has nothing to set: it asks the
+ * background worker for its state and redraws when it changes.
  */
 import { encode } from "uqr";
 import { FLAG_INSTRUCTION } from "../../lib/ble";
-import { type BridgeState, IDLE_STATE, STATE_KEY } from "../../lib/state";
+import {
+  type BridgeMessage,
+  type BridgeState,
+  IDLE_STATE,
+} from "../../lib/state";
 
 const app = document.getElementById("app") as HTMLElement;
 
@@ -20,26 +24,13 @@ const escape = (text: string): string =>
       ] ?? c
   );
 
-const HUB_WORDS: Record<BridgeState["hub"], string> = {
-  idle: "No hub set",
-  connecting: "Connecting to the hub…",
-  connected: "Connected to the hub",
-  closed: "Hub unreachable, retrying",
-};
-
-const RELAY_WORDS: Record<NonNullable<BridgeState["relay"]>, string> = {
-  scanning: "Hub: scanning",
-  captured: "Hub: advert received",
-  injected: "Hub: advert injected into the browser",
-  authenticated: "Hub: signed in",
-  timeout: "Hub: timed out",
-  no_ble: "Hub: no Bluetooth on the agent machine",
-};
-
-const scanLine = (state: BridgeState): string => {
+const scanLine = (state: BridgeState, dashboards: number): string => {
+  if (dashboards === 0) {
+    return "No dashboard";
+  }
   switch (state.scan) {
     case "scanning": {
-      return "Scanning for passkey...";
+      return "Scanning...";
     }
     case "captured": {
       return "Captured!";
@@ -51,7 +42,7 @@ const scanLine = (state: BridgeState): string => {
       return `Scan failed: ${state.scanDetail ?? "unknown error"}`;
     }
     default: {
-      return "";
+      return "Connected";
     }
   }
 };
@@ -69,17 +60,9 @@ const qrSvg = (fidoUri: string, label: string): string => {
   return `<svg viewBox="0 0 ${size} ${size}" aria-label="${escape(label)}" role="img"><path d="${path}" fill="black" shape-rendering="crispEdges" /></svg>`;
 };
 
-async function render(state: BridgeState) {
-  const { hubUrl } = await chrome.storage.sync.get("hubUrl");
-  const hubValue = typeof hubUrl === "string" ? hubUrl : "";
-  const { hubToken } = await chrome.storage.sync.get("hubToken");
-  const tokenValue = typeof hubToken === "string" ? hubToken : "";
+function render(state: BridgeState, dashboards: number) {
   const { qr } = state;
   const rp = qr?.rpOrigin?.replace(/^https?:\/\//u, "");
-  const lines = [
-    scanLine(state),
-    state.relay ? RELAY_WORDS[state.relay] : "",
-  ].filter(Boolean);
 
   app.innerHTML = `
     <div class="header">${KEY_SVG}<span class="title">CawCo Passkey Bridge</span></div>
@@ -89,44 +72,43 @@ async function render(state: BridgeState) {
            <p class="scan-line">${rp ? `Passkey for <span class="origin">${escape(rp)}</span>` : "Passkey sign-in"}</p>`
         : `<div class="empty"><p class="empty-line">No passkey sign-in waiting</p></div>`
     }
-    ${lines.map((line) => `<p class="scan-line" role="status">${escape(line)}</p>`).join("")}
-    <div class="connected"><span class="dot"></span> ${HUB_WORDS[state.hub]}</div>
+    <p class="scan-line" role="status">${escape(scanLine(state, dashboards))}</p>
     ${qr ? `<button class="dismiss" id="dismiss">Dismiss</button>` : ""}
-    <div class="setup">
-      <label for="hub-url">Hub URL</label>
-      <input id="hub-url" type="url" placeholder="https://your-hub.ts.net:3455" value="${escape(hubValue)}" />
-      <label for="hub-token">Owner token</label>
-      <input id="hub-token" type="password" autocomplete="off" value="${escape(tokenValue)}" />
-      <button id="save-hub">Save</button>
-    </div>
   `;
 
   document.getElementById("dismiss")?.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "dismiss" });
-  });
-  document.getElementById("save-hub")?.addEventListener("click", () => {
-    const input = document.getElementById("hub-url") as HTMLInputElement;
-    const url = input.value.trim();
-    const token = (
-      document.getElementById("hub-token") as HTMLInputElement
-    ).value.trim();
-    if (url) {
-      chrome.storage.sync.set({ hubUrl: url, hubToken: token });
-    }
+    chrome.runtime.sendMessage({ type: "dismiss" } satisfies BridgeMessage);
   });
 }
 
-const read = async (): Promise<BridgeState> => {
-  const kept = await chrome.storage.session.get(STATE_KEY);
-  return (kept[STATE_KEY] as BridgeState | undefined) ?? IDLE_STATE;
+/** How many open tabs have the content script on a CawCo dashboard: each answers a ping, any other tab does not. */
+const countDashboards = async (): Promise<number> => {
+  const tabs = await chrome.tabs.query({});
+  const answers = await Promise.all(
+    tabs.map((tab) =>
+      tab.id === undefined
+        ? undefined
+        : chrome.tabs
+            .sendMessage(tab.id, { type: "ping" } satisfies BridgeMessage)
+            .catch(() => undefined)
+    )
+  );
+  return answers.filter(Boolean).length;
 };
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "session" && changes[STATE_KEY]) {
-    render(changes[STATE_KEY].newValue as BridgeState);
-  } else if (area === "sync" && (changes.hubUrl || changes.hubToken)) {
-    read().then(render);
+const read = async (): Promise<BridgeState> =>
+  (await chrome.runtime
+    .sendMessage({ type: "state:get" } satisfies BridgeMessage)
+    .catch(() => undefined)) ?? IDLE_STATE;
+
+let dashboards = 0;
+chrome.runtime.onMessage.addListener((message: BridgeMessage) => {
+  if (message.type === "state") {
+    render(message.state, dashboards);
   }
 });
 
-read().then(render);
+Promise.all([read(), countDashboards()]).then(([state, count]) => {
+  dashboards = count;
+  render(state, dashboards);
+});

@@ -92,8 +92,6 @@ export const passkeyWords = {
   extensionPrompt: "For easier scanning, install the CawCo Chrome extension",
   /** The extension prompt's link. */
   install: "Install",
-  /** The overlay's state once the QR is sent to the extension. */
-  sentToExtension: "QR sent to extension",
   /** The QR expired. */
   expired: "The passkey QR expired",
   /** The hub's relay of the phone's Bluetooth advert, by where it is, said under the QR. */

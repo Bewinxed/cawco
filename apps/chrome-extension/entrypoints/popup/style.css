@@ -70,48 +70,6 @@ body {
   text-align: center;
 }
 
-.setup {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-
-.setup label {
-  font-size: 13px;
-  color: #666;
-  align-self: flex-start;
-}
-
-.setup input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 13px;
-  outline: none;
-}
-
-.setup input:focus {
-  border-color: #e54d2e;
-}
-
-.setup button {
-  padding: 8px 16px;
-  background: #e54d2e;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.setup button:hover {
-  background: #d4432a;
-}
-
 .connected {
   display: flex;
   align-items: center;
