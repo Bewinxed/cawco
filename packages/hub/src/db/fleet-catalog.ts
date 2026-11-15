@@ -34,6 +34,7 @@ import { bundledSkills, starterSkills } from "../bundled-skills";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import type { DbCore } from "./core";
 import { bindingOf, placementOf } from "./fleet-bindings";
+import { listedPlatforms, runsOnOf } from "./mcp-servers";
 import { SKILL_PLUGIN_VERSIONS } from "./migration-names";
 import {
   dataMigrations,
@@ -867,6 +868,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
             : {}),
         };
       };
+      const listed = listedPlatforms(db);
       return {
         mcp: db
           .select()
@@ -886,14 +888,18 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
               projectId,
               areaId,
               scope,
-              platforms,
+              everyPlatform,
+              platformsUnread,
               shared,
             }) => ({
               name,
               config,
               enabled,
               ...bindingOf({ projectId, areaId, scope }, "local"),
-              ...(platforms ? { platforms } : {}),
+              ...runsOnOf(
+                { everyPlatform, platformsUnread },
+                listed.get(name) ?? []
+              ),
               ...(shared ? { shared } : {}),
               auth: mcpAuthOf(name, authMode, authError),
             })

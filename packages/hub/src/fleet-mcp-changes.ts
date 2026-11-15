@@ -20,6 +20,7 @@ const seen = (row: FleetMcpServer): Seen => ({
     row.projectId ?? null,
     row.areaId ?? null,
     row.platforms ?? null,
+    row.platformsUnread ?? false,
     row.shared ?? false,
     row.auth?.mode ?? null,
   ]),

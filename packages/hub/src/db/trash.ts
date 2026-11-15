@@ -25,6 +25,7 @@ import {
   githubPollCursors,
   githubPollers,
   marketplaces,
+  mcpServerPlatforms,
   mcpServers,
   plugins,
   ruleState,
@@ -139,6 +140,8 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
   agent: (key) => [part("fleet_agents", eq(fleetAgents.name, key))],
   mcp: (key) => [
     part("mcp_servers", eq(mcpServers.name, key)),
+    // Where it runs comes back with it.
+    part("mcp_server_platforms", eq(mcpServerPlatforms.serverName, key)),
     // Its sign-in comes back with it.
     part("fleet_mcp_oauth", eq(fleetMcpOauth.name, key)),
     // A relay session's upstream went with the server: a session opens a

@@ -6,16 +6,59 @@ import type {
   McpPlatform,
 } from "@cawco/core/fleet";
 import type { ToolPolicy } from "@cawco/core/tools";
-import { and, eq, isNotNull, lt } from "drizzle-orm";
+import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DbCore } from "./core";
 import { bindingOf, placementOf } from "./fleet-bindings";
 import {
   fleetMcpOauth,
   fleetMcpSessions,
+  mcpServerPlatforms,
   mcpServers,
   mcpToolListings,
   tools,
 } from "./schema";
+import type { Tx } from "./tx";
+
+type McpServerRow = typeof mcpServers.$inferSelect;
+
+/** Where a server runs, as core `FleetMcpServer` says it. */
+export type McpRunsOn = Pick<FleetMcpServer, "platforms" | "platformsUnread">;
+
+/**
+ * Where a server's row says it runs: every machine, or the platforms
+ * `listed` names (its {@link mcpServerPlatforms} rows, in order); and
+ * whether its saved platforms can't be read, which sends it to none.
+ */
+export const runsOnOf = (
+  row: Pick<McpServerRow, "everyPlatform" | "platformsUnread">,
+  listed: readonly McpPlatform[]
+): McpRunsOn => ({
+  ...(row.everyPlatform ? {} : { platforms: [...listed] }),
+  ...(row.platformsUnread === null ? {} : { platformsUnread: true }),
+});
+
+/** Every server's {@link mcpServerPlatforms} rows, by server, each in the order saved. */
+export const listedPlatforms = (
+  db: Pick<BunSQLiteDatabase | Tx, "select">,
+  name?: string
+): Map<string, McpPlatform[]> => {
+  const listed = new Map<string, McpPlatform[]>();
+  for (const row of db
+    .select()
+    .from(mcpServerPlatforms)
+    .where(
+      name === undefined ? undefined : eq(mcpServerPlatforms.serverName, name)
+    )
+    .orderBy(sql`${mcpServerPlatforms}.rowid`)
+    .all()) {
+    listed.set(row.serverName, [
+      ...(listed.get(row.serverName) ?? []),
+      row.platform,
+    ]);
+  }
+  return listed;
+};
 
 /** A fleet MCP server's detail between saving a new config and the server's first answer. */
 const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
@@ -28,9 +71,10 @@ export interface McpServersDb {
     name: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
   readonly getMcpServer: (name: string) =>
-    | (Omit<typeof mcpServers.$inferSelect, "config"> & {
-        config: FleetMcpConfig;
-      })
+    | (Omit<McpServerRow, "config" | "everyPlatform" | "platformsUnread"> &
+        McpRunsOn & {
+          config: FleetMcpConfig;
+        })
     | undefined;
   /** The `initialize` params a fleet MCP relay session of `server` opened with, if it is kept. */
   readonly getMcpSession: (
@@ -46,7 +90,8 @@ export interface McpServersDb {
    * Upsert. `projectId` binds it to one project (placed at each of its
    * checkouts and workspaces), null makes it every machine's, and left out
    * keeps what it was. `platforms` the same way: the platforms it runs on,
-   * null every platform, left out as it was. `shared`, one instance per
+   * null (or none) every platform, left out as it was; named, they replace
+   * saved platforms that could not be read. `shared`, one instance per
    * machine started at its first call, left out as it was.
    */
   readonly putMcpServer: (server: {
@@ -108,8 +153,19 @@ export const mcpServersDb = (core: DbCore): McpServersDb => {
         .from(mcpServers)
         .where(eq(mcpServers.name, name))
         .get();
-      // A config the hub's key does not open is no server until it is saved again.
-      return row?.config ? { ...row, config: row.config } : undefined;
+      if (!row?.config) {
+        // A config the hub's key does not open is no server until it is saved again.
+        return;
+      }
+      const { everyPlatform, platformsUnread, ...rest } = row;
+      return {
+        ...rest,
+        config: row.config,
+        ...runsOnOf(
+          { everyPlatform, platformsUnread },
+          listedPlatforms(db, name).get(name) ?? []
+        ),
+      };
     },
     getMcpOauth: (name) =>
       db.select().from(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).get(),
@@ -229,9 +285,16 @@ export const mcpServersDb = (core: DbCore): McpServersDb => {
         db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
       }
       const placement = placementOf({ projectId, areaId }, previous, "local");
-      const asked = platforms?.length ? platforms : null;
-      const runsOn =
-        platforms === undefined ? (previous?.platforms ?? null) : asked;
+      // Platforms named (an empty list is every machine) replace what it
+      // had, an unread value included; left out, they stay as they were.
+      const asked = platforms?.length ? [...new Set(platforms)] : null;
+      const runs =
+        platforms === undefined
+          ? {
+              everyPlatform: previous?.everyPlatform ?? true,
+              platformsUnread: previous?.platformsUnread ?? null,
+            }
+          : { everyPlatform: asked === null, platformsUnread: null };
       const one = shared ?? previous?.shared ?? false;
       // A new or changed config is unsettled — failed, so never synced — until
       // the hub hears from the server (fleet-mcp.ts `#probe`).
@@ -239,34 +302,48 @@ export const mcpServersDb = (core: DbCore): McpServersDb => {
         authMode: "direct" as const,
         authError: MCP_NOT_YET_REACHED,
       };
-      db.insert(mcpServers)
-        .values({
-          name,
-          config,
-          enabled: enabled ?? true,
-          platforms: runsOn,
-          shared: one,
-          ...placement,
-          ...unsettled,
-        })
-        .onConflictDoUpdate({
-          target: mcpServers.name,
-          set: {
+      const listed = db.transaction((tx) => {
+        tx.insert(mcpServers)
+          .values({
+            name,
             config,
             enabled: enabled ?? true,
-            platforms: runsOn,
+            ...runs,
             shared: one,
             ...placement,
-            ...(changed ? unsettled : {}),
-          },
-        })
-        .run();
+            ...unsettled,
+          })
+          .onConflictDoUpdate({
+            target: mcpServers.name,
+            set: {
+              config,
+              enabled: enabled ?? true,
+              ...runs,
+              shared: one,
+              ...placement,
+              ...(changed ? unsettled : {}),
+            },
+          })
+          .run();
+        if (platforms === undefined) {
+          return listedPlatforms(tx, name).get(name) ?? [];
+        }
+        tx.delete(mcpServerPlatforms)
+          .where(eq(mcpServerPlatforms.serverName, name))
+          .run();
+        for (const platform of asked ?? []) {
+          tx.insert(mcpServerPlatforms)
+            .values({ serverName: name, platform })
+            .run();
+        }
+        return asked ?? [];
+      });
       return {
         name,
         config,
         enabled: enabled ?? true,
         ...bindingOf(placement, "local"),
-        ...(runsOn ? { platforms: runsOn } : {}),
+        ...runsOnOf(runs, listed),
         ...(one ? { shared: one } : {}),
       };
     },

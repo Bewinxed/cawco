@@ -17,10 +17,12 @@
  * commit, against its hub; the seed below must fit that commit's Db.
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
- * budgets, at-limit policies, landings, gate passes, outputs and queued
- * starts besides ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
+ * budgets, at-limit policies, landings, gate passes, outputs, queued
+ * starts, MCP servers' platforms and the fleet's routes besides
+ * ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
  * {@link seedLanded}, {@link seedGatePasses}, {@link seedOutputs},
- * {@link seedQueued}), written to
+ * {@link seedQueued}, {@link seedMcpServers}, {@link seedPlatformsRoutes}),
+ * written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -46,8 +48,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * migration 0399, every shape a work item's landing took before migration
  * 0400, every shape a work item's gate passes took before migration 0401,
  * every shape a work item's and a task's outputs took before migration
- * 0404, and every shape a queued start's kept call took before migration
- * 0405, written here.
+ * 0404, every shape a queued start's kept call took before migration
+ * 0405, and every shape an MCP server's platforms and the fleet's routes
+ * took before migration 0406, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -947,6 +950,127 @@ function seedQueued(dbPath: string): void {
   sqlite.close();
 }
 
+/** The configs the fixture's MCP servers run: one started on the machine, one reached over HTTP. */
+const STDIO_SERVER = {
+  command: "npx",
+  args: ["-y", "@example/sqlite-mcp", "--read-only"],
+};
+const HTTP_SERVER = {
+  type: "http" as const,
+  url: "https://mcp.example.invalid/mcp",
+};
+
+/**
+ * The fleet's MCP servers as the hub's one writer (`putMcpServer`) saves
+ * them: on every machine (no platforms), and with every field set (bound to
+ * a project, shared, two platforms); servers whose platforms a hand edit
+ * replaces ({@link seedPlatformsRoutes}); and three in the trash, one on
+ * every machine, one scoped, one a hand edit breaks.
+ */
+function seedMcpServers(db: HubDb, projects: string[]): void {
+  db.putMcpServer({ name: "linear-docs", config: HTTP_SERVER });
+  db.putMcpServer({
+    name: "sqlite-explorer",
+    config: STDIO_SERVER,
+    enabled: true,
+    projectId: projects[0] ?? null,
+    platforms: ["darwin", "linux"],
+    shared: true,
+  });
+  for (const name of [
+    "figma-bridge",
+    "local-search",
+    "notes-index",
+    "screen-reader",
+    "shell-tools",
+  ]) {
+    db.putMcpServer({ name, config: STDIO_SERVER, platforms: ["linux"] });
+  }
+  db.putMcpServer({ name: "trashed-everywhere", config: HTTP_SERVER });
+  db.putMcpServer({
+    name: "trashed-scoped",
+    config: STDIO_SERVER,
+    platforms: ["linux", "win32"],
+  });
+  db.putMcpServer({
+    name: "trashed-broken",
+    config: STDIO_SERVER,
+    platforms: ["darwin"],
+  });
+  for (const key of [
+    "trashed-everywhere",
+    "trashed-scoped",
+    "trashed-broken",
+  ]) {
+    db.trash.put({ kind: "mcp", key }, Date.now());
+  }
+}
+
+/**
+ * Every shape migration 0406 reads an MCP server's platforms and the
+ * fleet's routes in, beside what {@link seedMcpServers} saved, as a hand
+ * edit could leave them: platforms that are not JSON, partly platforms, a
+ * platform kept twice, an empty list (on no machine), JSON `null`, and a
+ * trashed server's partly platforms; the routes the hub reads (`'decides'`)
+ * partly readable (every built-in kind set, one member a number, one member
+ * gone, one key naming no kind), and three rows no code reads: every kind
+ * set, none (`{}`), and not JSON.
+ */
+function seedPlatformsRoutes(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const platforms: [string, string][] = [
+    ["figma-bridge", "linux and darwin"],
+    ["local-search", JSON.stringify(["linux", "freebsd", 3])],
+    ["notes-index", JSON.stringify(["win32", "win32"])],
+    ["screen-reader", "[]"],
+    ["shell-tools", "null"],
+  ];
+  for (const [name, value] of platforms) {
+    sqlite.run("UPDATE mcp_servers SET platforms = ? WHERE name = ?", [
+      value,
+      name,
+    ]);
+  }
+  sqlite.run(
+    "UPDATE config_trash SET rows = json_set(rows, '$[0].rows[0].platforms', ?) WHERE kind = 'mcp' AND key = 'trashed-broken'",
+    [JSON.stringify(["darwin", "beos"])]
+  );
+  const routes: [string, string][] = [
+    [
+      "decides",
+      JSON.stringify({
+        look: "you",
+        behaviour: "advisor",
+        scope: "you",
+        approach: "practice",
+        rules: "former-agent",
+        tools: 5,
+        "retired-kind": "advisor",
+      }),
+    ],
+    [
+      "fixture-every",
+      JSON.stringify({
+        look: "advisor",
+        behaviour: "you",
+        scope: "practice",
+        approach: "advisor",
+        rules: "advisor",
+        tools: "practice",
+      }),
+    ],
+    ["fixture-unset", "{}"],
+    ["fixture-unreadable", "look: advisor, tools: practice"],
+  ];
+  for (const [row, value] of routes) {
+    sqlite.run("INSERT INTO decides_settings (id, routes) VALUES (?, ?)", [
+      row,
+      value,
+    ]);
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -960,6 +1084,7 @@ async function seed(
   const continued = withLists ? seedLists(db, sessions) : [];
   if (withLists) {
     seedDelegateTypes(db);
+    seedMcpServers(db, projects);
   }
   lifetime.close();
   if (withLists) {
@@ -970,6 +1095,7 @@ async function seed(
     seedGatePasses(dbPath);
     seedOutputs(dbPath);
     seedQueued(dbPath);
+    seedPlatformsRoutes(dbPath);
   }
 }
 

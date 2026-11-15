@@ -34,6 +34,7 @@ import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
 import { logOutputsUnread } from "./outputs-unread";
+import { logPlatformsRoutesUnread } from "./platforms-routes-unread";
 import { logQueuedUnread } from "./queued-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
@@ -155,6 +156,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every queued call and ask 0405 holds as not read, read before it runs.
       logQueuedUnread(client);
+    },
+  },
+  {
+    name: "platforms-routes-unread",
+    before: "0406_platforms_routes_tables",
+    at: "migrator",
+    run: (client) => {
+      // Every server's platforms and the fleet's routes 0406 keeps as not read, read before it runs.
+      logPlatformsRoutesUnread(client);
     },
   },
   {

@@ -2367,10 +2367,22 @@ export const mcpServers = sqliteTable("mcp_servers", {
   /** Bound to every project in one area instead (`fleetRowArea`). */
   areaId: fleetRowArea(),
   /**
-   * The machine platforms it runs on (`FleetMcpServer.platforms`): a machine
-   * of any other is never sent it. Null: every machine.
+   * It runs on every machine, whatever its platform (`FleetMcpServer.platforms`
+   * absent). False: only a machine of a platform its
+   * {@link mcpServerPlatforms} rows name is sent it (none, with none).
    */
-  platforms: storedJson(z.array(McpPlatformSchema))("platforms"),
+  everyPlatform: integer("every_platform", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * Its platforms as they were stored, when they were there and did not
+   * read whole as they became {@link mcpServerPlatforms} rows (migration
+   * 0406): not JSON, not a list, or an entry that is not a platform. Those
+   * that read were placed. While set it is sent to no machine
+   * (`FleetMcpServer.platformsUnread`, core `mcpRunsOn`); a save that names
+   * its platforms clears it.
+   */
+  platformsUnread: text("platforms_unread"),
   /**
    * One instance per machine for every session (`FleetMcpServer.shared`),
    * started at its first call, rather than one per session at its start.
@@ -2378,6 +2390,30 @@ export const mcpServers = sqliteTable("mcp_servers", {
   shared: integer("shared", { mode: "boolean" }).notNull().default(false),
   createdAt: stampedNow("created_at"),
 });
+
+/**
+ * The machine platforms an MCP server runs on when it does not run on every
+ * one ({@link mcpServers.everyPlatform} false), one row each, in the order
+ * it was saved with (rowid).
+ */
+export const mcpServerPlatforms = sqliteTable(
+  "mcp_server_platforms",
+  {
+    serverName: text("server_name")
+      .notNull()
+      .references(() => mcpServers.name, { onDelete: "cascade" }),
+    platform: storedEnum(McpPlatformSchema)("platform").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.serverName, table.platform] }),
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
+    check(
+      "mcp_server_platforms_platform",
+      sql`${sql.identifier("platform")} in ('darwin', 'linux', 'win32')`
+    ),
+  ]
+);
 
 /**
  * Private OAuth material. Only the hub's OAuth manager reads these rows. The
@@ -3767,19 +3803,24 @@ export const DECIDES_ID = "decides";
 
 /**
  * The fleet's Who decides (core decides.ts) — one row, keyed `'decides'`,
- * following the {@link spendSettings} precedent: every kind's member across
- * the fleet (a kind it leaves out goes to `you`), what the person changed of
+ * following the {@link spendSettings} precedent: what the person changed of
  * the built-in members (the Advisor's and Common practice's delegate types,
  * how he hears of their answers, the flock's pictures), and when he last
- * read the decision surface's catch-up. No row reads as core's seed.
+ * read the decision surface's catch-up. No row reads as core's seed. Each
+ * kind's member across the fleet is a {@link decidesRoutes} row.
  */
 export const decidesSettings = sqliteTable("decides_settings", {
   /** Always `'decides'`. */
   id: text("id").primaryKey(),
-  /** Kind id → member id, checked against the members and kinds at every write (decides.ts). */
-  routes: storedJson(z.record(z.string(), z.string()))("routes")
-    .notNull()
-    .default({}),
+  /**
+   * The fleet's routes as they were stored, when they were there and did
+   * not read whole as they became {@link decidesRoutes} rows (migration
+   * 0406): not JSON, not an object, or a member that is not text. Those
+   * that read were placed. While set, every kind goes to `you` (db
+   * decides.ts `fleet`), never to core's seed; a save of the routes clears
+   * it.
+   */
+  routesUnread: text("routes_unread"),
   /** The Advisor's delegate type; null: `advisor`. */
   advisor: text("advisor"),
   /** Common practice's delegate type; null: `research`. */
@@ -3837,6 +3878,21 @@ export const decidesKinds = sqliteTable("decides_kinds", {
   example: text("example").notNull(),
   builtIn: integer("built_in", { mode: "boolean" }).notNull().default(false),
   position: integer("position").notNull(),
+});
+
+/**
+ * Each kind's member across the fleet that the person set (core
+ * `FleetDecides.routes`): one row per kind, checked against the members and
+ * kinds at every write (decides.ts). A kind with no row goes to core's seed
+ * (`DEFAULT_ROUTES`), else `you`. The member is no foreign key: the
+ * built-in members are never rows, and one he removes sends its kinds to
+ * `you` (db decides.ts `removeMember`).
+ */
+export const decidesRoutes = sqliteTable("decides_routes", {
+  kindId: text("kind_id")
+    .primaryKey()
+    .references(() => decidesKinds.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull(),
 });
 
 /**
