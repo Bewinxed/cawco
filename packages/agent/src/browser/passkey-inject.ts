@@ -12,7 +12,7 @@
  * Requires `hci_vhci` kernel module (`sudo modprobe hci_vhci`).
  */
 
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -30,6 +30,27 @@ export const vhciAvailable = (): boolean => existsSync(DEV_VHCI);
 
 /** The BlueZ management tool that powers an adapter on. */
 const BTMGMT = "btmgmt";
+
+/** How long bluetoothd has to put a new adapter on the system bus. */
+const ON_BUS_MS = 5000;
+const ON_BUS_POLL_MS = 250;
+
+/** BlueZ's object paths on the system bus, from `busctl`; rejects when it has none (no bluetoothd). */
+const bluezObjects = (): Promise<string[]> =>
+  new Promise((resolve, reject) => {
+    execFile(
+      "busctl",
+      ["--system", "--list", "tree", "org.bluez"],
+      { timeout: 5000 },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr.trim() || error.message));
+          return;
+        }
+        resolve(stdout.split("\n").map((line) => line.trim()));
+      }
+    );
+  });
 
 // ── HCI byte markers ───────────────────────────────────────────────
 
@@ -410,6 +431,38 @@ class PasskeyInjector {
     }
     this.#up = true;
     console.info(`[browser] passkey-inject: hci${this.#adapterIndex} is UP`);
+    await this.#onBus();
+  }
+
+  /**
+   * Logs the adapter's object path once the machine's bluetoothd has put it
+   * on the system bus, where Chromium in a container finds it (bluez-bus.ts),
+   * or warns when it doesn't: bluetoothd running on the machine is part of
+   * its setup, and the agent starts no system service.
+   */
+  async #onBus(): Promise<void> {
+    const path = `/org/bluez/hci${this.#adapterIndex}`;
+    const deadline = Date.now() + ON_BUS_MS;
+    for (;;) {
+      try {
+        if ((await bluezObjects()).includes(path)) {
+          console.info(`[browser] passkey-inject: BlueZ has ${path}`);
+          return;
+        }
+      } catch (error) {
+        console.warn(
+          `[browser] passkey-inject: BlueZ isn't on the system bus, so Chromium sees no adapter: is bluetoothd running on this machine? (${error instanceof Error ? error.message : String(error)})`
+        );
+        return;
+      }
+      if (Date.now() >= deadline) {
+        console.warn(
+          `[browser] passkey-inject: BlueZ has no ${path} after ${ON_BUS_MS} ms, so Chromium sees no adapter`
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, ON_BUS_POLL_MS));
+    }
   }
 
   /**

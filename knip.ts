@@ -327,8 +327,8 @@ export default {
         // CawCo's OpenCode plugin, a Bun.build entrypoint (src/harnesses/opencode-plugin.ts, scripts/build-binary.ts) that OpenCode loads from a directory.
         "src/harnesses/opencode-plugin-module.ts",
       ],
-      // System binaries the passkey relay spawns: BlueZ's `bluetoothctl` (src/browser/passkey-capture.ts) and macOS's `swift` there and `system_profiler` (src/browser/passkey-detect.ts) to find and scan a BLE adapter.
-      ignoreBinaries: ["bluetoothctl", "swift", "system_profiler"],
+      // System binaries the passkey relay spawns: BlueZ's `bluetoothctl` (src/browser/passkey-capture.ts) and macOS's `swift` there and `system_profiler` (src/browser/passkey-detect.ts) to find and scan a BLE adapter, and systemd's `busctl` (src/browser/passkey-inject.ts) to find the virtual adapter on the system bus.
+      ignoreBinaries: ["bluetoothctl", "busctl", "swift", "system_profiler"],
     },
     "packages/preview": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
