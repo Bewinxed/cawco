@@ -1,7 +1,8 @@
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
+import type { AttemptAsk } from "./db/stored-types";
 import type { DelegateResult } from "./delegate-result";
-import type { AttemptAsk, Dispatcher } from "./dispatch";
+import type { Dispatcher } from "./dispatch";
 
 import type { createTreeStops } from "./tree-stops";
 import type { WorkItemRequest, WorkItemStart, WorkItems } from "./work-items";

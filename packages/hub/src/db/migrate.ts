@@ -34,6 +34,7 @@ import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
 import { logOutputsUnread } from "./outputs-unread";
+import { logQueuedUnread } from "./queued-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
@@ -145,6 +146,15 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every list of outputs 0404 keeps as not read or reads again, read before it runs.
       logOutputsUnread(client);
+    },
+  },
+  {
+    name: "queued-unread",
+    before: "0405_queued_request_schemas",
+    at: "migrator",
+    run: (client) => {
+      // Every queued call and ask 0405 holds as not read, read before it runs.
+      logQueuedUnread(client);
     },
   },
   {

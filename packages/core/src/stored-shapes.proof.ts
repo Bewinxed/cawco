@@ -146,7 +146,10 @@ import type {
 } from "./hooks";
 import type { DeviceKind as DeviceKindType } from "./hub-auth";
 import type { HubRepoKey as HubRepoKeyType } from "./hub-repo";
-import type { CheckoutMove as CheckoutMoveType } from "./injected";
+import type {
+  CheckoutMove as CheckoutMoveType,
+  LandsMode as LandsModeType,
+} from "./injected";
 import type {
   InstallCheck as InstallCheckType,
   InstallDraft as InstallDraftType,
@@ -415,6 +418,7 @@ import type {
   IssueTrackerOutput,
   ItemEndOutput,
   KeptProcessOutput,
+  LandsModeOutput,
   LastErrorKindOutput,
   LimitWindowOutput,
   LinkModeOutput,
@@ -647,6 +651,8 @@ prove<
     Same<ArtifactThumbnailOutput, ArtifactThumbnailType>,
     Same<AskStateOutput, AskStateType>,
     Same<AtPlanLimitOutput, AtPlanLimitType>,
+    Same<LandsModeOutput, LandsModeType>,
+    Same<MayStartOutput, MayStartType>,
     Same<ResultArtifactOutput, ResultArtifactType>,
     Same<AttemptResultOutput, AttemptResultType>,
     Same<BinaryUpdatePolicyOutput, BinaryUpdatePolicyType>,
@@ -872,7 +878,6 @@ prove<
     Same<SkillFileOutput, SkillFileType>,
     Same<IngestMarkOutput, IngestMarkType>,
     Same<SessionInstructionOutput, SessionInstructionType>,
-    Same<MayStartOutput, MayStartType>,
     Same<SessionRoleOutput, SessionRoleType>,
     Same<StartingSetOutput, StartingSetType>,
     Same<WorkspaceRefOutput, WorkspaceRefType>,

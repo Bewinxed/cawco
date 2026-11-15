@@ -8,11 +8,13 @@
 import type { AccountMove } from "@cawco/core/accounts";
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { Extracted } from "@cawco/core/continuation-read";
+import type { MayStart } from "@cawco/core/delegate-types";
 import type {
   EffortLevel,
   HarnessKind,
   PermissionMode,
 } from "@cawco/core/harness/kinds";
+import type { LandsMode } from "@cawco/core/injected";
 import type { Install, InstallDraft } from "@cawco/core/install";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type {
@@ -281,6 +283,123 @@ export interface WorkBudget {
   turns?: number;
   usd?: number;
 }
+
+/**
+ * What a `delegate` call asks of the work it starts, as its route takes it
+ * (routes/work-items.ts `POST /api/work-items`) less the task it may name:
+ * its brief, its name, where and how it runs, and its limits. The hub's own
+ * fields of a start (work-items.ts `WorkItemRequest`) are set by the hub
+ * alone and never kept with a call.
+ */
+export interface DelegateCall {
+  /** The account its session must run on (an id or label); placement chooses when absent. */
+  account?: string;
+  /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
+  budget?: WorkBudget;
+  /**
+   * Its session starts clean (core `SpawnPayload.clean`): no instruction
+   * context, and none of its type's skills. Not with skills, fork or
+   * workspace, which would bring context back (work-items.ts `cleanProblem`).
+   */
+  clean?: boolean;
+  /** The repository a new workspace is cut from; the parent's directory by default. */
+  cwd?: string;
+  /**
+   * The item's session forks its parent's conversation as it stands now, on
+   * the parent's harness and model so the parent's prompt cache still holds.
+   * Always a new workspace.
+   */
+  fork?: boolean;
+  /**
+   * A workspace of the caller's, with no live item: the new workspace's
+   * branch is cut at that workspace's head, its commits carried in a
+   * bundle, on its machine and from its repository.
+   */
+  from?: string;
+  /** Its group under its parent: one combined report once every item of it has ended. */
+  group?: string;
+  harness?: HarnessKind;
+  /**
+   * Host scope: its session runs on the machine itself (`machineId`, the
+   * parent's by default) in `cwd` (the agent user's home when left out),
+   * with no clone and no boundary (work-items.ts `startHost`). It lands nothing, and
+   * takes nothing that needs a clone (work-items.ts `hostProblem`).
+   */
+  host?: boolean;
+  /**
+   * What its parent hands it (hub handed-input.ts), written into its
+   * workspace's `$TMPDIR/inputs/` before the brief that names them: files
+   * on the parent's machine by absolute path (agent inputs.ts), and what
+   * the hub holds by name, resolved by the hub (handed-inputs.ts). Checked as
+   * they come: the route takes any list.
+   */
+  inputs?: unknown[];
+  /** Where its commits go once it passes the landing gate; `main` when left out. */
+  lands?: LandsMode;
+  /** The machine a new workspace is cut on; the parent's by default. */
+  machineId?: string;
+  /**
+   * The delegate types it may start (core `MayStart`); its type's list when
+   * absent. Never past what its parent may start itself (work-items.ts `Settings`).
+   */
+  mayStart?: MayStart;
+  model?: string;
+  /**
+   * Files in its workspace, as paths from the clone's root, that the hub
+   * copies into its project's folder when it finishes. Needs a project.
+   */
+  outputs?: string[];
+  /** Globs of the repository's files it owns: it waits while a live item's overlap them. */
+  owns?: string[];
+  parentInstanceId: string;
+  prompt: string;
+  skills?: string[];
+  /** What the caller named the work: the item's title and its session's. */
+  title: string;
+  type?: string;
+  /**
+   * An existing workspace's id or unique prefix: the item is its follow-up,
+   * on the session its last item ran, so type, model, harness, skills and
+   * fork are the session's own and not the request's to set.
+   */
+  workspace?: string;
+}
+
+/**
+ * A `delegate` call waiting for files a live item owns, as
+ * `queued_work_items.request` keeps it: the call whole but its globs, which
+ * are rows of `queued_work_item_globs`. The task it starts and the ids it
+ * stands under are the row's own columns.
+ */
+export type QueuedRequest = Omit<DelegateCall, "owns">;
+
+/**
+ * What a `delegate` call that names its task asks of the attempt over the
+ * task file (dispatch.ts), as `queued_task_starts.asked` keeps it while the
+ * attempt waits for owned files: its brief, which the attempt's brief
+ * carries above the task file, its name, and how it runs. Where the attempt
+ * runs is the task's (`runs_on`, the project's place for its work), so it
+ * names no machine, folder or workspace.
+ */
+export type AttemptAsk = Pick<
+  DelegateCall,
+  | "prompt"
+  | "title"
+  | "account"
+  | "budget"
+  | "fork"
+  | "from"
+  | "group"
+  | "harness"
+  | "inputs"
+  | "lands"
+  | "mayStart"
+  | "model"
+  | "outputs"
+  | "owns"
+  | "skills"
+  | "type"
+>;
 
 /**
  * Where a workspace cut `from` another started ({@link workspaces.cutFrom}):

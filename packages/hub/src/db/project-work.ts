@@ -35,7 +35,12 @@ import {
   workspaceCreates,
   workspaces,
 } from "./schema";
-import type { GatePass, WorkLanding, WorkspaceState } from "./stored-types";
+import type {
+  GatePass,
+  QueuedRequest,
+  WorkLanding,
+  WorkspaceState,
+} from "./stored-types";
 
 /** A session of the project, as its removal needs it. */
 export interface HeldSession {
@@ -216,14 +221,34 @@ const landedCheckRows = (itemId: string, landed: WorkLanding) =>
 type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 
 /**
+ * What a queued delegate's row holds of its request in its own columns and
+ * rows: the globs it owns, the task it starts, and the ids it stands under
+ * (the row's own id, and a session id minted as it was queued).
+ */
+export interface QueuedPlace {
+  owns?: string[];
+  queuedAs: { id: string; instanceId: string };
+  task?: { id: string; projectId: string };
+}
+
+/** A queued delegate's request whole: the call as kept, and what its columns and rows hold of it. */
+export type QueuedCall = QueuedRequest & QueuedPlace;
+
+/**
  * A queued delegate as the queue hands it out: its request whole again,
  * the task, session id and globs it stands under put back in it from their
- * columns and rows.
+ * columns and rows. Held, `requestUnread` is its request as it was stored,
+ * which did not read when the column gained its schema (migration 0405),
+ * and `request` is what its columns and rows hold alone: it never starts.
  */
-export type QueuedWorkItemRow = Omit<
+export type QueuedWorkItemRow = Pick<
   typeof queuedWorkItems.$inferSelect,
-  "projectId" | "taskId" | "queuedInstanceId"
->;
+  "id" | "parentInstanceId" | "queuedAt" | "title"
+> &
+  (
+    | { request: QueuedCall; requestUnread: null }
+    | { request: QueuedPlace; requestUnread: string }
+  );
 
 /** Its paths named as {@link MachinePath}, which the API's schema reads as the string it is on the wire. */
 export type WorkspaceRow = Omit<
@@ -333,17 +358,23 @@ export interface WorkRowsDb {
   readonly queuedTaskStarts: (projectId: string) => QueuedTaskStartRow[];
   /** `delegate` calls waiting for files a live item owns, oldest first. */
   readonly queuedWorkItems: () => QueuedWorkItemRow[];
-  /** Queues a hook's start, or replaces the one its task already had. */
+  /** Queues a hook's start, or replaces the one its task already had, a held one included. */
   readonly queueTaskStart: (
-    row: Omit<QueuedTaskStartRow, "asked" | "queuedAt" | "retry" | "why"> & {
+    row: Omit<
+      QueuedTaskStartRow,
+      "asked" | "askedUnread" | "queuedAt" | "retry" | "why"
+    > & {
       asked?: QueuedTaskStartRow["asked"];
       retry?: boolean;
       why?: QueuedTaskStartRow["why"];
     }
   ) => QueuedTaskStartRow;
-  readonly queueWorkItem: (
-    row: Omit<QueuedWorkItemRow, "queuedAt">
-  ) => QueuedWorkItemRow;
+  readonly queueWorkItem: (row: {
+    id: string;
+    parentInstanceId: string;
+    request: QueuedCall;
+    title: string;
+  }) => QueuedWorkItemRow;
   readonly runningDelegateCounts: () => Map<string, number>;
   /**
    * What a session's delegate tray can still show, oldest first: of the
@@ -456,6 +487,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             retry: row.retry ?? false,
             origin: row.origin,
             asked: row.asked ?? null,
+            askedUnread: null,
             queuedAt: new Date(),
           },
         })
@@ -659,30 +691,39 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .from(queuedWorkItems)
         .orderBy(asc(queuedWorkItems.queuedAt), asc(queuedWorkItems.id))
         .all()
-        .map(({ projectId, taskId, queuedInstanceId, ...row }) => {
-          const owned = globs.get(row.id);
-          return {
-            ...row,
-            request: {
-              ...(row.request as object),
+        .map(
+          ({
+            projectId,
+            taskId,
+            queuedInstanceId,
+            request,
+            requestUnread,
+            ...row
+          }): QueuedWorkItemRow => {
+            const owned = globs.get(row.id);
+            const place: QueuedPlace = {
               ...(owned ? { owns: owned } : {}),
               ...(projectId && taskId
                 ? { task: { id: taskId, projectId } }
                 : {}),
               queuedAs: { id: row.id, instanceId: queuedInstanceId },
-            },
-          };
-        });
+            };
+            // The table's check keeps exactly one of the two set.
+            return request === null
+              ? { ...row, request: place, requestUnread: requestUnread ?? "" }
+              : {
+                  ...row,
+                  request: { ...request, ...place },
+                  requestUnread: null,
+                };
+          }
+        );
     },
     // What the queue reads of a request is columns and rows; the rest of it
     // is kept as `delegate` made it.
     queueWorkItem: ({ request, ...row }) =>
       db.transaction((tx) => {
-        const { owns, task, queuedAs, ...rest } = request as {
-          owns?: string[];
-          queuedAs: { id: string; instanceId: string };
-          task?: { id: string; projectId: string };
-        };
+        const { owns, task, queuedAs, ...rest } = request;
         const queued = tx
           .insert(queuedWorkItems)
           .values({
@@ -706,6 +747,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           title: queued.title,
           queuedAt: queued.queuedAt,
           request,
+          requestUnread: null,
         };
       }),
     dropQueuedWorkItem: (id) => {

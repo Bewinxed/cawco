@@ -170,6 +170,7 @@ import {
   AgentAuthSchema,
   AgentStatusSchema,
   ArtifactChangeBySchema,
+  AttemptAskSchema,
   AuthorizationServerMetadataSchema,
   CacheTtlSchema,
   CommentDirectionSchema,
@@ -201,6 +202,7 @@ import {
   PresenceKindSchema,
   PreviewSettingsModeSchema,
   ProjectOfferAnswerSchema,
+  QueuedRequestSchema,
   QueuedStartWhySchema,
   RelayJourneyClosedSchema,
   RelayNameStateSchema,
@@ -775,10 +777,18 @@ export const queuedTaskStarts = sqliteTable(
     origin: storedEnum(OriginSchema)("origin"),
     /**
      * What the `delegate` call that named the task asked over its task file
-     * (dispatch.ts `AttemptAsk`: its brief, its name and how it runs), read
-     * whole as it starts. Null: a task_start, a hook's or the dispatcher's.
+     * (stored-types.ts `AttemptAsk`: its brief, its name and how it runs),
+     * read whole as it starts. Null: a task_start, a hook's or the
+     * dispatcher's; or held, `asked_unread` set.
      */
-    asked: storedJson(z.unknown())("asked"),
+    asked: storedJson(AttemptAskSchema)("asked"),
+    /**
+     * An ask that was kept and did not read as an `AttemptAsk` when the
+     * column gained its schema (migration 0405), as it was stored, `asked`
+     * null beside it. The start is held: it never starts, and the dispatch
+     * view says why, until a later start or move of its task replaces it.
+     */
+    askedUnread: text("asked_unread"),
     queuedAt: stampedNow("queued_at"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]
@@ -2052,27 +2062,44 @@ export const treeStops = sqliteTable(
  * oldest first, when no live item overlaps it any more, its item taking this
  * row's id. Kept here across a hub restart.
  */
-export const queuedWorkItems = sqliteTable("queued_work_items", {
-  /** The id its item takes when it starts (`queuedAs.id`). */
-  id: text("id").primaryKey(),
-  parentInstanceId: sessionColumn("parent_instance_id").notNull(),
-  /**
-   * The request as `delegate` made it (work-items.ts `WorkItemRequest`),
-   * read whole; what the queue reads of it is its own columns: the task it
-   * starts, the session id it stands under, the globs it owns.
-   */
-  request: storedJson(z.unknown())("request").notNull(),
-  /** The project of the task it starts (`task.projectId`); null for no task. */
-  projectId: projectColumn("project_id").references(() => projects.id, {
-    onDelete: "cascade",
-  }),
-  /** The task it starts (`task.id`), `tsk-…`. */
-  taskId: text("task_id"),
-  /** The session id it stands under while it waits (`queuedAs.instanceId`): minted, no row yet. */
-  queuedInstanceId: sessionColumn("queued_instance_id").notNull(),
-  title: text("title").notNull(),
-  queuedAt: stampedNow("queued_at"),
-});
+export const queuedWorkItems = sqliteTable(
+  "queued_work_items",
+  {
+    /** The id its item takes when it starts (`queuedAs.id`). */
+    id: text("id").primaryKey(),
+    parentInstanceId: sessionColumn("parent_instance_id").notNull(),
+    /**
+     * The request as `delegate` made it (stored-types.ts `QueuedRequest`),
+     * read whole; what the queue reads of it is its own columns: the task it
+     * starts, the session id it stands under, the globs it owns. Null: held,
+     * `request_unread` set.
+     */
+    request: storedJson(QueuedRequestSchema)("request"),
+    /**
+     * A request that was kept and did not read as a `QueuedRequest` when the
+     * column gained its schema (migration 0405), as it was stored, `request`
+     * null beside it. The delegate is held: it never starts, its parent is
+     * told why, and it waits in the tray until its parent withdraws it.
+     */
+    requestUnread: text("request_unread"),
+    /** The project of the task it starts (`task.projectId`); null for no task. */
+    projectId: projectColumn("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    /** The task it starts (`task.id`), `tsk-…`. */
+    taskId: text("task_id"),
+    /** The session id it stands under while it waits (`queuedAs.instanceId`): minted, no row yet. */
+    queuedInstanceId: sessionColumn("queued_instance_id").notNull(),
+    title: text("title").notNull(),
+    queuedAt: stampedNow("queued_at"),
+  },
+  () => [
+    check(
+      "queued_work_items_request_once",
+      sql`(${sql.identifier("request")} IS NULL) <> (${sql.identifier("request_unread")} IS NULL)`
+    ),
+  ]
+);
 
 /**
  * Globs of the repository's files a work item owns, one row each: the hub

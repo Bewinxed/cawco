@@ -73,7 +73,18 @@ interface Rewrite {
   why: string;
 }
 
-const REWRITES: readonly Rewrite[] = [];
+const REWRITES: readonly Rewrite[] = [
+  {
+    column: "queued_work_items.request",
+    migration: "0405_queued_request_schemas",
+    why: "a kept call that does not read whole as a QueuedRequest moves, as stored, to request_unread with request null; the delegate is held, never started, and no row is deleted",
+  },
+  {
+    column: "queued_task_starts.asked",
+    migration: "0405_queued_request_schemas",
+    why: "a kept ask that does not read whole as an AttemptAsk moves, as stored, to asked_unread with asked null; the attempt is held, never started, and no row is deleted",
+  },
+];
 
 type Schema = Record<string, unknown>;
 

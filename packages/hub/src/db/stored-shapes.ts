@@ -11,7 +11,9 @@ import {
   HarnessKindShape,
   InstallDraftShape,
   InstallShape,
+  LandsModeShape,
   MachinePathShape,
+  MayStartShape,
   ModeAskShape,
   MoveAskShape,
   MoveErrorShape,
@@ -47,6 +49,7 @@ import type {
   AgentAuth as AgentAuthType,
   AgentStatus as AgentStatusType,
   ArtifactChangeBy as ArtifactChangeByType,
+  AttemptAsk as AttemptAskType,
   CacheTtl as CacheTtlType,
   CommentDirection as CommentDirectionType,
   ConnectionSecret as ConnectionSecretType,
@@ -74,6 +77,7 @@ import type {
   PreviewSettingsMode as PreviewSettingsModeType,
   ProjectOfferAnswer as ProjectOfferAnswerType,
   Proposal as ProposalType,
+  QueuedRequest as QueuedRequestType,
   QueuedStartWhy as QueuedStartWhyType,
   RelayJourneyClosed as RelayJourneyClosedType,
   RelayNameState as RelayNameStateType,
@@ -122,6 +126,72 @@ const ArtifactChangeByShape = declared(
 export const ArtifactChangeBySchema: z.ZodType<ArtifactChangeByType> =
   ArtifactChangeByShape;
 export type ArtifactChangeByOutput = z.output<typeof ArtifactChangeByShape>;
+
+const WorkBudgetShape = declared(
+  z.object({
+    minutes: z.number().optional(),
+    turns: z.number().optional(),
+    usd: z.number().optional(),
+  }),
+  "WorkBudget",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type WorkBudgetOutput = z.output<typeof WorkBudgetShape>;
+
+const DelegateCallShape = declared(
+  z.object({
+    account: z.string().optional(),
+    budget: WorkBudgetShape.optional(),
+    clean: z.boolean().optional(),
+    cwd: z.string().optional(),
+    fork: z.boolean().optional(),
+    from: z.string().optional(),
+    group: z.string().optional(),
+    harness: HarnessKindShape.optional(),
+    host: z.boolean().optional(),
+    inputs: z.array(z.unknown()).optional(),
+    lands: LandsModeShape.optional(),
+    machineId: z.string().optional(),
+    mayStart: MayStartShape.optional(),
+    model: z.string().optional(),
+    outputs: z.array(z.string()).optional(),
+    owns: z.array(z.string()).optional(),
+    parentInstanceId: z.string(),
+    prompt: z.string(),
+    skills: z.array(z.string()).optional(),
+    title: z.string(),
+    type: z.string().optional(),
+    workspace: z.string().optional(),
+  }),
+  "DelegateCall",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type DelegateCallOutput = z.output<typeof DelegateCallShape>;
+
+const AttemptAskShape = declared(
+  DelegateCallShape.pick({
+    prompt: true,
+    title: true,
+    account: true,
+    budget: true,
+    fork: true,
+    from: true,
+    group: true,
+    harness: true,
+    inputs: true,
+    lands: true,
+    mayStart: true,
+    model: true,
+    outputs: true,
+    owns: true,
+    skills: true,
+    type: true,
+  }),
+  "AttemptAsk",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const AttemptAskSchema: z.ZodType<AttemptAskType> = AttemptAskShape;
+export type AttemptAskOutput = z.output<typeof AttemptAskShape>;
 
 const OAuthMetadataShape = declared(
   OAuthMetadataPublished,
@@ -663,6 +733,15 @@ const ProposalShape = declared(
 );
 export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
 export type ProposalOutput = z.output<typeof ProposalShape>;
+
+const QueuedRequestShape = declared(
+  DelegateCallShape.omit({ owns: true }),
+  "QueuedRequest",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const QueuedRequestSchema: z.ZodType<QueuedRequestType> =
+  QueuedRequestShape;
+export type QueuedRequestOutput = z.output<typeof QueuedRequestShape>;
 
 const QueuedStartWhyShape = declared(
   z.enum(["cap", "owns"]),

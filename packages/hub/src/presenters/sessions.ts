@@ -138,7 +138,7 @@ const newestFirst = (nodes: DelegateNode[]): DelegateNode[] =>
   nodes.toSorted((a, b) => b.startedAt.localeCompare(a.startedAt));
 
 const queuedLine = (one: QueuedDelegate, now: number): string =>
-  `- ${quote(one.title, 120)} ${handle(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title, 80)} (${one.heldBy.globs})` : ""}`;
+  `- ${quote(one.title, 120)} ${handle(one.id)} · queued ${ago(one.queuedAt, now)}${one.heldBy ? `, behind ${quote(one.heldBy.title, 80)} (${one.heldBy.globs})` : ""}${one.unread ? ` · held, never starts: ${one.unread}` : ""}`;
 
 const heldLine = (work: HeldWork, now: number): string => {
   const excluded = excludedNamed(work.excluded);
