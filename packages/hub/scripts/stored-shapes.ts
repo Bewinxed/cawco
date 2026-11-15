@@ -912,6 +912,11 @@ const declaredInOf = (declaration: ts.Node): string => {
     : file.slice(inPackage + NODE_MODULES.length);
 };
 const proved = new Map<string, string[]>(OUTS.map((out) => [out, []]));
+/** A schema of a closed set of text: an enum, a literal, or a union of literals. */
+const CLOSED_SET =
+  /^z\.(?:enum|literal)\(|^z\.union\(\[z\.literal\("[^"]*"\)(?:, z\.literal\("[^"]*"\))*\]\)$/u;
+/** Core's closed sets whose `XSchema` is typed by their declared name ({@link CLOSED_SET}). */
+const namedSets = new Set<string>();
 const coreNames = new Set(
   order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Shape`)
 );
@@ -950,6 +955,17 @@ for (const declaration of order) {
       }
     }
   }
+  // A core closed set is typed by its declared name too, so a column of it
+  // is ({@link linesOf}); an object's stays its shape, for its combinators.
+  if (
+    target === CORE_OUT &&
+    imported.has(`${name}Schema`) &&
+    isExported(declaration) &&
+    CLOSED_SET.test(schema)
+  ) {
+    add("types", declaration.getSourceFile().fileName, name);
+    namedSets.add(name);
+  }
   if (!DASHBOARD) {
     add("values", DECLARED, "declared");
   }
@@ -965,9 +981,10 @@ for (const declaration of order) {
  * (`.extend`, `.shape`, `.partial`) other schemas use; `XSchema` is the same
  * schema. Each is exported only when a file outside this one imports it by
  * that name. In the hub's file `XSchema` is typed as `X`, so a column of it
- * is typed by the declared name, which the OpenAPI document reads; the
- * agent's, core's and the dashboard's name no declared type, since those are
- * their stores' and features' own. `XOutput` is what a proved shape outputs,
+ * is typed by the declared name, which the OpenAPI document reads; so is a
+ * closed set of core's (`SessionOriginSchema` as `SessionOrigin`), a column's
+ * set; core's other schemas, the agent's and the dashboard's name no declared
+ * type, since those are their stores' and features' own. `XOutput` is what a proved shape outputs,
  * exported for the proof. On the machine's side the shape is recorded as
  * made from its type (core stored-types.ts `declared`), so a write a stored
  * column refuses a key names the type to declare it in; the dashboard's own
@@ -984,7 +1001,7 @@ const linesOf =
     ];
     if (imported.has(`${name}Schema`)) {
       lines.push(
-        `export const ${name}Schema${out === HUB_OUT ? `: z.ZodType<${alias(name)}>` : ""} = ${name}Shape;`
+        `export const ${name}Schema${out === HUB_OUT || (out === CORE_OUT && namedSets.has(name)) ? `: z.ZodType<${alias(name)}>` : ""} = ${name}Shape;`
       );
     }
     if ((proved.get(out) ?? []).includes(name)) {

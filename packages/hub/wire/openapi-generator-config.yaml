@@ -120,7 +120,6 @@ typeOverrides:
     InstanceKind: OpenEnums.InstanceKind
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
-    InstanceRowOrigin: OpenEnums.InstanceRowOrigin
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
     InstanceStatus: OpenEnums.InstanceStatus
     Interaction: OpenEnums.Interaction
@@ -160,7 +159,6 @@ typeOverrides:
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
-    PostApiWorkspacesByIdArchive200Kind: OpenEnums.PostApiWorkspacesByIdArchive200Kind
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
     PreviewFrameState: OpenEnums.PreviewFrameState
@@ -177,7 +175,7 @@ typeOverrides:
     RelayStepFinding: OpenEnums.RelayStepFinding
     RenderedBy: OpenEnums.RenderedBy
     RestartHoldReason: OpenEnums.RestartHoldReason
-    RoutineMadeInBy: OpenEnums.RoutineMadeInBy
+    RoutineMadeBy: OpenEnums.RoutineMadeBy
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget
@@ -187,6 +185,7 @@ typeOverrides:
     SendBackBy: OpenEnums.SendBackBy
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
+    SessionOrigin: OpenEnums.SessionOrigin
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SetChangeTableChange: OpenEnums.SetChangeTableChange
     SetItemRowKind: OpenEnums.SetItemRowKind
@@ -228,5 +227,6 @@ typeOverrides:
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind
     WorkItemState: OpenEnums.WorkItemState
+    WorkspaceKind: OpenEnums.WorkspaceKind
     WorkspaceState: OpenEnums.WorkspaceState
     WorkspaceToolNeed: OpenEnums.WorkspaceToolNeed

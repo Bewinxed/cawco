@@ -362,12 +362,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    policy can't be read (the fields that don't, short), its `atLimit`
  *    then the restrictive policy. A page built for 72 would show those
  *    values with no reason, so it reloads first.
+ * 74: a hook's save takes its `scope` only as one of `user`, `project` or
+ *    `local`, where any text was taken and stored. A page built for 73 may
+ *    send another, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 73;
+export const WIRE_PROTOCOL = 74;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -11,6 +11,7 @@ import {
   DEFAULT_DELEGATE_TYPES,
   startsAny,
 } from "@cawco/core/delegate-types";
+import { isEffortLevel } from "@cawco/core/harness/kinds";
 import { eq, inArray, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -21,8 +22,8 @@ import {
   delegateTypeStartingSet,
   delegateTypes,
   delegateTypesMeta,
-  type StartingSetKind,
 } from "./schema";
+import type { StartingSetKind } from "./stored-types";
 import type { Tx } from "./tx";
 
 export interface DelegateTypesShape {
@@ -118,7 +119,7 @@ const typeOf = (
     description: row.description,
     harness: row.harness,
     model: row.model,
-    ...(row.effort ? { effort: row.effort } : {}),
+    ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
     ...(skills.length > 0 ? { skills } : {}),
     ...(denyTools.length > 0 ? { denyTools } : {}),
     ...(mayStart.length > 0 ? { mayStart } : {}),

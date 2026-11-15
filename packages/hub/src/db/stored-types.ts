@@ -26,7 +26,11 @@ import type {
 } from "@cawco/core/move";
 import type { PresenceClient } from "@cawco/core/notifications";
 import type { SendPayload } from "@cawco/core/protocol";
-import type { ModeAsk, SendRefusal } from "@cawco/core/session-messages";
+import type {
+  AuthState,
+  ModeAsk,
+  SendRefusal,
+} from "@cawco/core/session-messages";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 /** The session being continued, as the header names it. */
@@ -616,3 +620,51 @@ export type SessionLineKind =
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
 export type GitHubResource =
   "pulls" | "issues" | "comments" | "issueEvents" | "discussions";
+
+/** What a machine's agent says of its Claude sign-in (schema `agents.auth`): a word it may claim, or `unknown` until it said one. */
+export type AgentAuth = AuthState | "unknown";
+
+/** Why a session stopped by itself (schema `instances.keep_alive_stopped`): its keep-alive pings reached their cap. */
+export type KeepAliveStopped = "stopped-cap";
+
+/** What a delegate asked its parent (schema `delegate_events.request_kind`): a question, or a tool's permission. */
+export type DelegateRequestKind = "question" | "tool";
+
+/** Why an account was removed (schema `removed_accounts.why`): taken out, or joined into another. */
+export type RemovedAccountWhy = "removed" | "joined";
+
+/** Why a session was left without its account (schema `stranded_sessions.why`): the account was removed, or signed out. */
+export type StrandedWhy = "removed" | "signed-out";
+
+/** Where a tool call stands (schema `tool_call_keys.state`). */
+export type ToolCallKeyState = "running" | "answered" | "interrupted";
+
+/** The person's answer to a project offer (schema `project_offers.answer`). */
+export type ProjectOfferAnswer = "accepted" | "dismissed";
+
+/** The person's answer to a trim offer (schema `trim_offers.answer`). */
+export type TrimOfferAnswer = "on" | "dismissed";
+
+/** The person's answer to an LFS offer (schema `lfs_offers.answer`). */
+export type LfsOfferAnswer = "tracked" | "dismissed";
+
+/** Who changed an artifact (schema `artifact_changes.by`). */
+export type ArtifactChangeBy = "person" | "agent";
+
+/** Where the stream relay's name step stands (schema `stream_relay_journey.name_state`). */
+export type RelayNameState = "open" | "pointed" | "skipped";
+
+/** How the stream relay's journey was closed (schema `stream_relay_journey.closed`). */
+export type RelayJourneyClosed = "later" | "done-for-now";
+
+/** Which way an external comment went (schema `external_comments.direction`): taken in, or posted out. */
+export type CommentDirection = "in" | "out";
+
+/** A task file's blocking edge: what it waits on (`waits_on`). */
+export type TaskEdgeKind = "waits_on";
+
+/** What a starting set names: a skill, as a session's listing names it, or an MCP server, by its fleet name (core `StartingSet`). */
+export type StartingSetKind = "skill" | "server";
+
+/** How an inbound event reached the hub. */
+export type InboundVia = "poll" | "webhook" | "connector";

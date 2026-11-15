@@ -39,7 +39,7 @@ export const ROUTINE_RUN_STATES = [
 export type RoutineRunState = (typeof ROUTINE_RUN_STATES)[number];
 
 /** Every {@link RoutineOutcome}. */
-const ROUTINE_OUTCOMES = [
+export const ROUTINE_OUTCOMES = [
   "silent",
   "delivered",
   "failed",

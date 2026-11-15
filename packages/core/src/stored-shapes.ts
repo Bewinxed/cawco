@@ -4,31 +4,74 @@
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
 import { z } from "zod";
+import type {
+  AccountKind as AccountKindType,
+  AtPlanLimit as AtPlanLimitType,
+  RefusalReach as RefusalReachType,
+  SigninState as SigninStateType,
+} from "./accounts";
 import { ACCOUNT_HUES } from "./accounts/kinds";
+import type { CapPeriod as CapPeriodType, OnCap as OnCapType } from "./areas";
+import type { AskState as AskStateType } from "./asks";
 import { BINARY_UPDATE_PHASES } from "./binary-updates";
+import type {
+  BrowserHostKind as BrowserHostKindType,
+  BrowserState as BrowserStateType,
+} from "./browser";
+import type { ConnectionState as ConnectionStateType } from "./connections";
 import { SESSION_ROLES } from "./delegate-types";
+import type {
+  ExternalState as ExternalStateType,
+  LinkMode as LinkModeType,
+} from "./external-items";
 import { EXTERNAL_SOURCES } from "./external-items";
+import type { McpPlatform as McpPlatformType } from "./fleet";
 import { FAULT_CAUSES, MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
+import type { FleetScope as FleetScopeType } from "./fleet-placement";
+import type {
+  ConnectAccess as ConnectAccessType,
+  ProjectOfferReason as ProjectOfferReasonType,
+} from "./frames";
 import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness/kinds";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
+import type { DeviceKind as DeviceKindType } from "./hub-auth";
 import { COMMAND_STEPS, INSTALL_CHECKS, SSH_STEPS } from "./install";
 import type { MachinePath as MachinePathType } from "./machine-path";
 import { isMachinePath } from "./machine-path";
 import { MOVE_JOB_STEPS } from "./move";
+import type { MachineState as MachineStateType } from "./notifications";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
+import type { RoutineMadeBy as RoutineMadeByType } from "./project-conversation";
+import type {
+  DelegateAskStatus as DelegateAskStatusType,
+  InstanceStatus as InstanceStatusType,
+  OwedMoveWait as OwedMoveWaitType,
+  SessionEndIntent as SessionEndIntentType,
+  SessionOrigin as SessionOriginType,
+} from "./protocol";
+import type { LastErrorKind as LastErrorKindType } from "./relaunch";
 import { RELAY_PROVIDERS, RELAY_STATES } from "./relays";
+import type {
+  RuleMatchKind as RuleMatchKindType,
+  RuleTiming as RuleTimingType,
+  RuleWatch as RuleWatchType,
+} from "./rules";
+import type { SendMode as SendModeType } from "./session-messages";
 import { INTERACTIONS } from "./stage";
+import type { StarterOutcome as StarterOutcomeType } from "./starters";
 import { declared } from "./stored-types";
 import { COMMAND_ACK_STAGES } from "./stream";
+import type { TrackerSyncState as TrackerSyncStateType } from "./trackers";
 import { TRACKERS } from "./trackers";
 import { WORK_ITEM_STATES } from "./work-items";
+import type { WorkspaceKind as WorkspaceKindType } from "./workspace/controls";
 
 const AccountKindShape = declared(
   z.enum(["subscription", "console", "oauth", "api_key"]),
   "AccountKind",
   "packages/core/src/accounts.ts"
 );
-export const AccountKindSchema = AccountKindShape;
+export const AccountKindSchema: z.ZodType<AccountKindType> = AccountKindShape;
 export type AccountKindOutput = z.output<typeof AccountKindShape>;
 
 const CompactStageShape = declared(
@@ -242,6 +285,13 @@ const AccountOverageShape = declared(
 export const AccountOverageSchema = AccountOverageShape;
 export type AccountOverageOutput = z.output<typeof AccountOverageShape>;
 
+export const AuthStateShape = declared(
+  z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
+  "AuthState",
+  "packages/core/src/session-messages.ts"
+);
+export type AuthStateOutput = z.output<typeof AuthStateShape>;
+
 const DownloadProgressShape = declared(
   z.object({ received: z.number(), total: z.number() }),
   "DownloadProgress",
@@ -274,7 +324,7 @@ const AskStateShape = declared(
   "AskState",
   "packages/core/src/asks.ts"
 );
-export const AskStateSchema = AskStateShape;
+export const AskStateSchema: z.ZodType<AskStateType> = AskStateShape;
 export type AskStateOutput = z.output<typeof AskStateShape>;
 
 const AtPlanLimitShape = declared(
@@ -282,7 +332,7 @@ const AtPlanLimitShape = declared(
   "AtPlanLimit",
   "packages/core/src/accounts.ts"
 );
-export const AtPlanLimitSchema = AtPlanLimitShape;
+export const AtPlanLimitSchema: z.ZodType<AtPlanLimitType> = AtPlanLimitShape;
 export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
 
 const ArtifactBaseShape = declared(
@@ -450,6 +500,15 @@ const BinaryUpdateStateShape = declared(
 export const BinaryUpdateStateSchema = BinaryUpdateStateShape;
 export type BinaryUpdateStateOutput = z.output<typeof BinaryUpdateStateShape>;
 
+const BrowserHostKindShape = declared(
+  z.enum(["container", "local"]),
+  "BrowserHostKind",
+  "packages/core/src/browser.ts"
+);
+export const BrowserHostKindSchema: z.ZodType<BrowserHostKindType> =
+  BrowserHostKindShape;
+export type BrowserHostKindOutput = z.output<typeof BrowserHostKindShape>;
+
 export const MediaPathShape = declared(
   z.enum(["udp+tcp", "tcp", "none"]),
   "MediaPath",
@@ -467,13 +526,6 @@ export const BrowserPortsShape = declared(
   "packages/core/src/browser.ts"
 );
 export type BrowserPortsOutput = z.output<typeof BrowserPortsShape>;
-
-export const BrowserHostKindShape = declared(
-  z.enum(["container", "local"]),
-  "BrowserHostKind",
-  "packages/core/src/browser.ts"
-);
-export type BrowserHostKindOutput = z.output<typeof BrowserHostKindShape>;
 
 export const BrowserKeyShape = declared(
   z.union([
@@ -521,7 +573,8 @@ const BrowserStateShape = declared(
   "BrowserState",
   "packages/core/src/browser.ts"
 );
-export const BrowserStateSchema = BrowserStateShape;
+export const BrowserStateSchema: z.ZodType<BrowserStateType> =
+  BrowserStateShape;
 export type BrowserStateOutput = z.output<typeof BrowserStateShape>;
 
 export const BrowserRowShape = declared(
@@ -570,7 +623,7 @@ const CapPeriodShape = declared(
   "CapPeriod",
   "packages/core/src/areas.ts"
 );
-export const CapPeriodSchema = CapPeriodShape;
+export const CapPeriodSchema: z.ZodType<CapPeriodType> = CapPeriodShape;
 export type CapPeriodOutput = z.output<typeof CapPeriodShape>;
 
 const CarryRestoredShape = declared(
@@ -624,7 +677,8 @@ const ConnectAccessShape = declared(
   "ConnectAccess",
   "packages/core/src/frames.ts"
 );
-export const ConnectAccessSchema = ConnectAccessShape;
+export const ConnectAccessSchema: z.ZodType<ConnectAccessType> =
+  ConnectAccessShape;
 export type ConnectAccessOutput = z.output<typeof ConnectAccessShape>;
 
 const ConnectionStateShape = declared(
@@ -632,7 +686,8 @@ const ConnectionStateShape = declared(
   "ConnectionState",
   "packages/core/src/connections.ts"
 );
-export const ConnectionStateSchema = ConnectionStateShape;
+export const ConnectionStateSchema: z.ZodType<ConnectionStateType> =
+  ConnectionStateShape;
 export type ConnectionStateOutput = z.output<typeof ConnectionStateShape>;
 
 const ContextFillShape = declared(
@@ -995,6 +1050,8 @@ const DelegateAskStatusShape = declared(
   "DelegateAskStatus",
   "packages/core/src/protocol.ts"
 );
+export const DelegateAskStatusSchema: z.ZodType<DelegateAskStatusType> =
+  DelegateAskStatusShape;
 export type DelegateAskStatusOutput = z.output<typeof DelegateAskStatusShape>;
 
 const DelegateEventBaseShape = declared(
@@ -1155,6 +1212,14 @@ const DesignMapShape = declared(
 export const DesignMapSchema = DesignMapShape;
 export type DesignMapOutput = z.output<typeof DesignMapShape>;
 
+const DeviceKindShape = declared(
+  z.enum(["browser", "app", "cli"]),
+  "DeviceKind",
+  "packages/core/src/hub-auth.ts"
+);
+export const DeviceKindSchema: z.ZodType<DeviceKindType> = DeviceKindShape;
+export type DeviceKindOutput = z.output<typeof DeviceKindShape>;
+
 const VerbShape = declared(
   z.enum([
     "register",
@@ -1215,7 +1280,8 @@ const ExternalStateShape = declared(
   "ExternalState",
   "packages/core/src/external-items.ts"
 );
-export const ExternalStateSchema = ExternalStateShape;
+export const ExternalStateSchema: z.ZodType<ExternalStateType> =
+  ExternalStateShape;
 export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
 
 const FiledRecordsShape = declared(
@@ -1464,7 +1530,7 @@ const FleetScopeShape = declared(
   "FleetScope",
   "packages/core/src/fleet-placement.ts"
 );
-export const FleetScopeSchema = FleetScopeShape;
+export const FleetScopeSchema: z.ZodType<FleetScopeType> = FleetScopeShape;
 export type FleetScopeOutput = z.output<typeof FleetScopeShape>;
 
 const FleetSyncOutcomeShape = declared(
@@ -1667,13 +1733,6 @@ const AccountReportShape = declared(
 );
 export type AccountReportOutput = z.output<typeof AccountReportShape>;
 
-const AuthStateShape = declared(
-  z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
-  "AuthState",
-  "packages/core/src/session-messages.ts"
-);
-export type AuthStateOutput = z.output<typeof AuthStateShape>;
-
 const HarnessCapabilitiesShape = declared(
   z.object({
     compaction: z.boolean(),
@@ -1763,6 +1822,44 @@ const HarnessReportShape = declared(
 );
 export const HarnessReportSchema = HarnessReportShape;
 export type HarnessReportOutput = z.output<typeof HarnessReportShape>;
+
+const FleetPlacementShape = declared(
+  z.object({
+    areaId: z.string().optional(),
+    cwd: z.string().optional(),
+    placeId: z.string().optional(),
+    projectId: z.string().optional(),
+    scope: FleetScopeShape.optional(),
+  }),
+  "FleetPlacement",
+  "packages/core/src/fleet-placement.ts"
+);
+export type FleetPlacementOutput = z.output<typeof FleetPlacementShape>;
+
+const FleetHookShape = declared(
+  FleetPlacementShape.extend({
+    enabled: z.boolean(),
+    event: HookEventShape,
+    force: z.boolean().optional(),
+    handler: HookHandlerShape,
+    hash: z.string(),
+    id: z.string(),
+    matcher: z.string().optional(),
+    name: z.string(),
+    script: z.string().optional(),
+  }),
+  "FleetHook",
+  "packages/core/src/hooks.ts"
+);
+export type FleetHookOutput = z.output<typeof FleetHookShape>;
+
+const HookDraftShape = declared(
+  FleetHookShape.omit({ id: true, hash: true }),
+  "HookDraft",
+  "packages/core/src/hooks.ts"
+);
+export const HookDraftSchema = HookDraftShape;
+export type HookDraftOutput = z.output<typeof HookDraftShape>;
 
 const InstallRouteShape = declared(
   z.enum(["ssh", "command"]),
@@ -1902,7 +1999,8 @@ const InstanceStatusShape = declared(
   "InstanceStatus",
   "packages/core/src/protocol.ts"
 );
-export const InstanceStatusSchema = InstanceStatusShape;
+export const InstanceStatusSchema: z.ZodType<InstanceStatusType> =
+  InstanceStatusShape;
 export type InstanceStatusOutput = z.output<typeof InstanceStatusShape>;
 
 const TrackerShape = declared(
@@ -1925,7 +2023,8 @@ const LastErrorKindShape = declared(
   "LastErrorKind",
   "packages/core/src/relaunch.ts"
 );
-export const LastErrorKindSchema = LastErrorKindShape;
+export const LastErrorKindSchema: z.ZodType<LastErrorKindType> =
+  LastErrorKindShape;
 export type LastErrorKindOutput = z.output<typeof LastErrorKindShape>;
 
 const LinkModeShape = declared(
@@ -1933,7 +2032,7 @@ const LinkModeShape = declared(
   "LinkMode",
   "packages/core/src/external-items.ts"
 );
-export const LinkModeSchema = LinkModeShape;
+export const LinkModeSchema: z.ZodType<LinkModeType> = LinkModeShape;
 export type LinkModeOutput = z.output<typeof LinkModeShape>;
 
 const WorkspaceToolShape = declared(
@@ -1983,7 +2082,8 @@ const MachineStateShape = declared(
   "MachineState",
   "packages/core/src/notifications.ts"
 );
-export const MachineStateSchema = MachineStateShape;
+export const MachineStateSchema: z.ZodType<MachineStateType> =
+  MachineStateShape;
 export type MachineStateOutput = z.output<typeof MachineStateShape>;
 
 const McpPlatformShape = declared(
@@ -1991,7 +2091,7 @@ const McpPlatformShape = declared(
   "McpPlatform",
   "packages/core/src/fleet.ts"
 );
-export const McpPlatformSchema = McpPlatformShape;
+export const McpPlatformSchema: z.ZodType<McpPlatformType> = McpPlatformShape;
 export type McpPlatformOutput = z.output<typeof McpPlatformShape>;
 
 const EndedTaskShape = declared(
@@ -2319,7 +2419,7 @@ const OnCapShape = declared(
   "OnCap",
   "packages/core/src/areas.ts"
 );
-export const OnCapSchema = OnCapShape;
+export const OnCapSchema: z.ZodType<OnCapType> = OnCapShape;
 export type OnCapOutput = z.output<typeof OnCapShape>;
 
 const LimitWindowShape = declared(
@@ -2380,7 +2480,8 @@ const OwedMoveWaitShape = declared(
   "OwedMoveWait",
   "packages/core/src/protocol.ts"
 );
-export const OwedMoveWaitSchema = OwedMoveWaitShape;
+export const OwedMoveWaitSchema: z.ZodType<OwedMoveWaitType> =
+  OwedMoveWaitShape;
 export type OwedMoveWaitOutput = z.output<typeof OwedMoveWaitShape>;
 
 const PairingOffAnswerShape = declared(
@@ -2631,9 +2732,18 @@ const ItemEndShape = declared(
 );
 export type ItemEndOutput = z.output<typeof ItemEndShape>;
 
+const RoutineMadeByShape = declared(
+  z.enum(["delegate", "session"]),
+  "RoutineMadeBy",
+  "packages/core/src/project-conversation.ts"
+);
+export const RoutineMadeBySchema: z.ZodType<RoutineMadeByType> =
+  RoutineMadeByShape;
+export type RoutineMadeByOutput = z.output<typeof RoutineMadeByShape>;
+
 const RoutineMadeEventShape = declared(
   z.object({
-    by: z.enum(["delegate", "session"]),
+    by: RoutineMadeByShape,
     expiresAt: z.number().nullable(),
     instanceId: z.string(),
     name: z.string(),
@@ -2762,12 +2872,22 @@ const ProjectNoteShape = declared(
 export const ProjectNoteSchema = ProjectNoteShape;
 export type ProjectNoteOutput = z.output<typeof ProjectNoteShape>;
 
+const ProjectOfferReasonShape = declared(
+  z.enum(["delegates", "days", "plan", "repo", "caw"]),
+  "ProjectOfferReason",
+  "packages/core/src/frames.ts"
+);
+export const ProjectOfferReasonSchema: z.ZodType<ProjectOfferReasonType> =
+  ProjectOfferReasonShape;
+export type ProjectOfferReasonOutput = z.output<typeof ProjectOfferReasonShape>;
+
 const RefusalReachShape = declared(
   z.enum(["machine", "account"]),
   "RefusalReach",
   "packages/core/src/accounts.ts"
 );
-export const RefusalReachSchema = RefusalReachShape;
+export const RefusalReachSchema: z.ZodType<RefusalReachType> =
+  RefusalReachShape;
 export type RefusalReachOutput = z.output<typeof RefusalReachShape>;
 
 const RelayPortNameShape = declared(
@@ -3052,7 +3172,8 @@ const RuleMatchKindShape = declared(
   "RuleMatchKind",
   "packages/core/src/rules.ts"
 );
-export const RuleMatchKindSchema = RuleMatchKindShape;
+export const RuleMatchKindSchema: z.ZodType<RuleMatchKindType> =
+  RuleMatchKindShape;
 export type RuleMatchKindOutput = z.output<typeof RuleMatchKindShape>;
 
 const RuleTimingShape = declared(
@@ -3060,7 +3181,7 @@ const RuleTimingShape = declared(
   "RuleTiming",
   "packages/core/src/rules.ts"
 );
-export const RuleTimingSchema = RuleTimingShape;
+export const RuleTimingSchema: z.ZodType<RuleTimingType> = RuleTimingShape;
 export type RuleTimingOutput = z.output<typeof RuleTimingShape>;
 
 const RuleWatchShape = declared(
@@ -3068,7 +3189,7 @@ const RuleWatchShape = declared(
   "RuleWatch",
   "packages/core/src/rules.ts"
 );
-export const RuleWatchSchema = RuleWatchShape;
+export const RuleWatchSchema: z.ZodType<RuleWatchType> = RuleWatchShape;
 export type RuleWatchOutput = z.output<typeof RuleWatchShape>;
 
 const ScratchWorktreeShape = declared(
@@ -3084,7 +3205,7 @@ const SendModeShape = declared(
   "SendMode",
   "packages/core/src/session-messages.ts"
 );
-export const SendModeSchema = SendModeShape;
+export const SendModeSchema: z.ZodType<SendModeType> = SendModeShape;
 export type SendModeOutput = z.output<typeof SendModeShape>;
 
 const SessionCommandsShape = declared(
@@ -3100,7 +3221,8 @@ const SessionEndIntentShape = declared(
   "SessionEndIntent",
   "packages/core/src/protocol.ts"
 );
-export const SessionEndIntentSchema = SessionEndIntentShape;
+export const SessionEndIntentSchema: z.ZodType<SessionEndIntentType> =
+  SessionEndIntentShape;
 export type SessionEndIntentOutput = z.output<typeof SessionEndIntentShape>;
 
 const SessionOriginShape = declared(
@@ -3108,7 +3230,8 @@ const SessionOriginShape = declared(
   "SessionOrigin",
   "packages/core/src/protocol.ts"
 );
-export const SessionOriginSchema = SessionOriginShape;
+export const SessionOriginSchema: z.ZodType<SessionOriginType> =
+  SessionOriginShape;
 export type SessionOriginOutput = z.output<typeof SessionOriginShape>;
 
 const SessionToolingShape = declared(
@@ -3392,7 +3515,7 @@ const SigninStateShape = declared(
   "SigninState",
   "packages/core/src/accounts.ts"
 );
-export const SigninStateSchema = SigninStateShape;
+export const SigninStateSchema: z.ZodType<SigninStateType> = SigninStateShape;
 export type SigninStateOutput = z.output<typeof SigninStateShape>;
 
 const SkillFileShape = declared(
@@ -3512,6 +3635,15 @@ const SpawnPayloadShape = declared(
 export const SpawnPayloadSchema = SpawnPayloadShape;
 export type SpawnPayloadOutput = z.output<typeof SpawnPayloadShape>;
 
+const StarterOutcomeShape = declared(
+  z.enum(["picked", "edited", "ignored"]),
+  "StarterOutcome",
+  "packages/core/src/starters.ts"
+);
+export const StarterOutcomeSchema: z.ZodType<StarterOutcomeType> =
+  StarterOutcomeShape;
+export type StarterOutcomeOutput = z.output<typeof StarterOutcomeShape>;
+
 const RunKindShape = declared(
   z.enum(["merge check", "command"]),
   "RunKind",
@@ -3579,6 +3711,15 @@ const StreamRelayStateShape = declared(
 export const StreamRelayStateSchema = StreamRelayStateShape;
 export type StreamRelayStateOutput = z.output<typeof StreamRelayStateShape>;
 
+const TrackerSyncStateShape = declared(
+  z.enum(["syncing", "synced", "refused"]),
+  "TrackerSyncState",
+  "packages/core/src/trackers.ts"
+);
+export const TrackerSyncStateSchema: z.ZodType<TrackerSyncStateType> =
+  TrackerSyncStateShape;
+export type TrackerSyncStateOutput = z.output<typeof TrackerSyncStateShape>;
+
 const WaitWitnessShape = declared(
   z.object({ target: z.string(), value: z.string() }),
   "WaitWitness",
@@ -3632,5 +3773,23 @@ const WorkspaceKindShape = declared(
   "WorkspaceKind",
   "packages/core/src/workspace/controls.ts"
 );
-export const WorkspaceKindSchema = WorkspaceKindShape;
+export const WorkspaceKindSchema: z.ZodType<WorkspaceKindType> =
+  WorkspaceKindShape;
 export type WorkspaceKindOutput = z.output<typeof WorkspaceKindShape>;
+
+const WorkspaceCheckoutShape = declared(
+  z.object({
+    base: z.string(),
+    boundaryPid: z.number(),
+    branch: z.string(),
+    kind: WorkspaceKindShape,
+    path: z.string(),
+    repoRoot: z.string(),
+    restored: CarryRestoredShape.optional(),
+    tmp: z.string(),
+  }),
+  "WorkspaceCheckout",
+  "packages/core/src/workspace/controls.ts"
+);
+export const WorkspaceCheckoutSchema = WorkspaceCheckoutShape;
+export type WorkspaceCheckoutOutput = z.output<typeof WorkspaceCheckoutShape>;

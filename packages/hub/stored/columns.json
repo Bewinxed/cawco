@@ -94,6 +94,30 @@
       "type": "string"
     }
   },
+  "account_routing.compaction_at_limit": {
+    "type": "string",
+    "enum": [
+      "native",
+      "summary",
+      "whole"
+    ]
+  },
+  "account_routing.compaction_before_move": {
+    "type": "string",
+    "enum": [
+      "native",
+      "summary",
+      "whole"
+    ]
+  },
+  "account_routing.compaction_summarizer_harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
   "account_routing.delegates_strategy": {
     "type": "string",
     "enum": [
@@ -110,6 +134,14 @@
       "fill-first",
       "spread",
       "soonest-reset"
+    ]
+  },
+  "account_signins.moved_from": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
     ]
   },
   "account_signins.refusal_reach": {
@@ -489,6 +521,32 @@
     "required": [
       "at",
       "state"
+    ]
+  },
+  "agent_tools.state": {
+    "type": "string",
+    "enum": [
+      "installed",
+      "missing",
+      "installing",
+      "failed",
+      "unsupported"
+    ]
+  },
+  "agents.auth": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "authenticated",
+          "unauthenticated",
+          "unreadable-credentials"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "unknown"
+      }
     ]
   },
   "agents.build": {
@@ -1656,6 +1714,13 @@
       "both"
     ]
   },
+  "artifact_changes.by": {
+    "type": "string",
+    "enum": [
+      "person",
+      "agent"
+    ]
+  },
   "artifacts.does": {
     "type": "string",
     "enum": [
@@ -2047,6 +2112,13 @@
       "withdrawn"
     ]
   },
+  "browsers.host": {
+    "type": "string",
+    "enum": [
+      "container",
+      "local"
+    ]
+  },
   "browsers.state": {
     "type": "string",
     "enum": [
@@ -2065,6 +2137,14 @@
       "skill",
       "tool",
       "mcp"
+    ]
+  },
+  "chosen_modes.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
     ]
   },
   "config_trash.kind": {
@@ -4630,6 +4710,36 @@
       }
     ]
   },
+  "delegate_events.request_kind": {
+    "type": "string",
+    "enum": [
+      "question",
+      "tool"
+    ]
+  },
+  "delegate_events.status": {
+    "type": "string",
+    "enum": [
+      "pending",
+      "answered",
+      "denied"
+    ]
+  },
+  "delegate_type_starting_set.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "server"
+    ]
+  },
+  "delegate_types.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
   "design_checks.findings": {
     "type": "array",
     "items": {
@@ -4845,6 +4955,13 @@
       "name",
       "source",
       "url"
+    ]
+  },
+  "external_comments.direction": {
+    "type": "string",
+    "enum": [
+      "in",
+      "out"
     ]
   },
   "external_comments.source": {
@@ -6060,12 +6177,27 @@
       "gemini-api"
     ]
   },
+  "inbound_events.via": {
+    "type": "string",
+    "enum": [
+      "poll",
+      "webhook",
+      "connector"
+    ]
+  },
   "instance_conversations.harness": {
     "type": "string",
     "enum": [
       "claude",
       "opencode",
       "pi"
+    ]
+  },
+  "instance_starting_set.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "server"
     ]
   },
   "instances.cache_cold": {
@@ -6127,6 +6259,10 @@
       "opencode",
       "pi"
     ]
+  },
+  "instances.keep_alive_stopped": {
+    "type": "string",
+    "const": "stopped-cap"
   },
   "instances.kind": {
     "type": "string",
@@ -6628,6 +6764,13 @@
     "required": [
       "servers",
       "tools"
+    ]
+  },
+  "lfs_offers.answer": {
+    "type": "string",
+    "enum": [
+      "tracked",
+      "dismissed"
     ]
   },
   "lfs_offers.rows": {
@@ -9050,6 +9193,14 @@
       "type": "string"
     }
   },
+  "login_moves.store": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
   "mcp_servers.auth_mode": {
     "type": "string",
     "enum": [
@@ -10909,6 +11060,14 @@
       "machine"
     ]
   },
+  "owner_devices.kind": {
+    "type": "string",
+    "enum": [
+      "browser",
+      "app",
+      "cli"
+    ]
+  },
   "parked_asks.envelope": {
     "type": "object",
     "properties": {
@@ -11904,6 +12063,23 @@
       "title"
     ]
   },
+  "project_offers.answer": {
+    "type": "string",
+    "enum": [
+      "accepted",
+      "dismissed"
+    ]
+  },
+  "project_offers.reason": {
+    "type": "string",
+    "enum": [
+      "delegates",
+      "days",
+      "plan",
+      "repo",
+      "caw"
+    ]
+  },
   "project_places.kind": {
     "type": "string",
     "enum": [
@@ -11917,6 +12093,17 @@
       "board",
       "routines",
       "decisions"
+    ]
+  },
+  "project_starter_sources.kind": {
+    "type": "string",
+    "enum": [
+      "task",
+      "thread",
+      "path",
+      "commit",
+      "routine",
+      "event"
     ]
   },
   "project_starter_sources.place": {
@@ -11961,6 +12148,10 @@
       "routines",
       "decisions"
     ]
+  },
+  "project_task_edges.kind": {
+    "type": "string",
+    "const": "waits_on"
   },
   "project_tasks.outputs": {
     "type": "array",
@@ -12015,6 +12206,18 @@
       "pause",
       "quiet",
       "both"
+    ]
+  },
+  "projects.tapped": {
+    "type": "string",
+    "enum": [
+      "code",
+      "launch",
+      "seo",
+      "brand",
+      "design",
+      "social",
+      "outreach"
     ]
   },
   "projects.template": {
@@ -12077,6 +12280,22 @@
       "off"
     ]
   },
+  "removed_accounts.why": {
+    "type": "string",
+    "enum": [
+      "removed",
+      "joined"
+    ]
+  },
+  "routine_runs.outcome": {
+    "type": "string",
+    "enum": [
+      "silent",
+      "delivered",
+      "failed",
+      "cancelled"
+    ]
+  },
   "routine_runs.state": {
     "type": "string",
     "enum": [
@@ -12094,6 +12313,13 @@
       "branch",
       "pr",
       "none"
+    ]
+  },
+  "routines.made_by": {
+    "type": "string",
+    "enum": [
+      "delegate",
+      "session"
     ]
   },
   "routines.mode": {
@@ -14267,12 +14493,42 @@
       "both"
     ]
   },
+  "starter_outcomes.outcome": {
+    "type": "string",
+    "enum": [
+      "picked",
+      "edited",
+      "ignored"
+    ]
+  },
   "starter_outcomes.place": {
     "type": "string",
     "enum": [
       "board",
       "routines",
       "decisions"
+    ]
+  },
+  "stranded_sessions.why": {
+    "type": "string",
+    "enum": [
+      "removed",
+      "signed-out"
+    ]
+  },
+  "stream_relay_journey.closed": {
+    "type": "string",
+    "enum": [
+      "later",
+      "done-for-now"
+    ]
+  },
+  "stream_relay_journey.name_state": {
+    "type": "string",
+    "enum": [
+      "open",
+      "pointed",
+      "skipped"
     ]
   },
   "stream_relay_proofs.ports": {
@@ -14487,6 +14743,14 @@
       "maxItems": 2
     }
   },
+  "tool_call_keys.state": {
+    "type": "string",
+    "enum": [
+      "running",
+      "answered",
+      "interrupted"
+    ]
+  },
   "tracker_bindings.cursor": {
     "type": "object",
     "properties": {
@@ -14583,6 +14847,14 @@
     "enum": [
       "github",
       "linear"
+    ]
+  },
+  "tracker_bindings.state": {
+    "type": "string",
+    "enum": [
+      "syncing",
+      "synced",
+      "refused"
     ]
   },
   "tracker_links.synced": {
@@ -14689,11 +14961,32 @@
       }
     ]
   },
+  "trim_kept.kind": {
+    "type": "string",
+    "enum": [
+      "skill",
+      "server"
+    ]
+  },
+  "trim_offers.answer": {
+    "type": "string",
+    "enum": [
+      "on",
+      "dismissed"
+    ]
+  },
   "turn_cuts.calls": {
     "type": "array",
     "items": {
       "type": "string"
     }
+  },
+  "usage_buckets.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode"
+    ]
   },
   "usage_limits.open_code_go": {
     "type": "object",

@@ -62,7 +62,10 @@ import {
   type ListedBrowser,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { BrowserStateSchema } from "@cawco/core/stored-shapes";
+import {
+  BrowserHostKindSchema,
+  BrowserStateSchema,
+} from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { SHIELD_WORDS } from "@cawco/core/words/browser";
@@ -154,25 +157,27 @@ export const answered = <T>(
 };
 
 /**
- * A machine's browser as the hub keeps it, or undefined when its state is
- * none this build knows (a newer agent's word): such a row is not kept, as
- * `browsers.state` holds only the states this hub reads, and it says so.
+ * A machine's browser as the hub keeps it, or undefined when its state or
+ * its host is none this build knows (a newer agent's word): such a row is
+ * not kept, as `browsers.state` and `browsers.host` hold only what this hub
+ * reads, and it says so.
  */
 const rowFrom = (
   machineId: string,
   row: BrowserRow
 ): Omit<StoredBrowser, "machineId"> | undefined => {
   const state = BrowserStateSchema.safeParse(row.state);
-  if (!state.success) {
+  const host = BrowserHostKindSchema.safeParse(row.host);
+  if (!(state.success && host.success)) {
     console.warn(
-      `[browser] ${row.key} on ${machineId}: its state ${JSON.stringify(row.state)} is none this hub knows, so its row is not kept`
+      `[browser] ${row.key} on ${machineId}: its state ${JSON.stringify(row.state)} or host ${JSON.stringify(row.host)} is none this hub knows, so its row is not kept`
     );
     return undefined;
   }
   return {
     key: row.key,
     name: row.name,
-    host: row.host,
+    host: host.data,
     state: state.data,
     lastUsedAt: row.lastUsedAt,
     projectId: row.key.startsWith("project:")

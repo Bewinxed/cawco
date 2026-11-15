@@ -12,6 +12,7 @@ import type {
   UsageSummaryRow,
   UsageTotals,
 } from "@cawco/core/usage/types";
+import { USAGE_HARNESSES } from "@cawco/core/usage/types";
 import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { sessionLabel } from "../labels";
 import type { DbCore } from "./core";
@@ -153,6 +154,12 @@ export const usageDb = (core: DbCore): UsageDb => {
     return sessions;
   };
 
+  /** A usage query's harness: its buckets, or none for a harness this build does not scan. */
+  const harnessIs = (harness: string) => {
+    const scanned = USAGE_HARNESSES.find((one) => one === harness);
+    return scanned === undefined ? sql`0` : eq(usageBuckets.harness, scanned);
+  };
+
   /** The window a usage query names, or nothing — the filters fold into one AND. */
   const usageWhere = (q: {
     since?: number;
@@ -163,9 +170,7 @@ export const usageDb = (core: DbCore): UsageDb => {
     and(
       q.since === undefined ? undefined : gte(usageBuckets.start, q.since),
       q.until === undefined ? undefined : lte(usageBuckets.start, q.until),
-      q.harness === undefined
-        ? undefined
-        : eq(usageBuckets.harness, q.harness as UsageHarness),
+      q.harness === undefined ? undefined : harnessIs(q.harness),
       q.machineId === undefined
         ? undefined
         : eq(usageBuckets.machineId, q.machineId)
@@ -382,9 +387,7 @@ export const usageDb = (core: DbCore): UsageDb => {
         .where(
           and(
             sql`${usageBuckets.inputTokens} + ${usageBuckets.outputTokens} + ${usageBuckets.cacheCreationTokens} + ${usageBuckets.cacheReadTokens} + ${usageBuckets.reasoningTokens} > 0`,
-            harness === undefined
-              ? undefined
-              : eq(usageBuckets.harness, harness as UsageHarness),
+            harness === undefined ? undefined : harnessIs(harness),
             machineId === undefined
               ? undefined
               : eq(usageBuckets.machineId, machineId)

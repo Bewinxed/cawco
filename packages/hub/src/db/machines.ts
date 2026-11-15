@@ -57,9 +57,8 @@ import {
   removedMachines,
   usageBuckets,
 } from "./schema";
+import type { AgentAuth } from "./stored-types";
 import type { Tx } from "./tx";
-
-export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 /** How many rows moved, by what they are: what a re-key answers. */
 type Moved = (what: string, count: number) => void;

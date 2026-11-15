@@ -1,12 +1,11 @@
 import {
   ACCOUNT_SETUP_STEPS,
   type AccountProvider,
-  type HomeStore,
   PROJECT_AT_LIMIT,
 } from "@cawco/core/accounts";
 import {
   ACCOUNT_HUES,
-  type CompactMethod,
+  COMPACT_METHODS,
   PLACEMENT_STRATEGIES,
 } from "@cawco/core/accounts/kinds";
 import { ACTION_STATES } from "@cawco/core/actions";
@@ -22,35 +21,33 @@ import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { everyOf } from "@cawco/core/every-of";
 import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
-import type { HarnessReport } from "@cawco/core/harness";
 import {
-  type EffortLevel,
   HARNESSES,
   type HarnessKind,
   PERMISSION_MODES,
 } from "@cawco/core/harness/kinds";
 import { HARNESS_CONFIG_KINDS } from "@cawco/core/harness-config";
-import type { DeviceKind } from "@cawco/core/hub-auth";
 import { IMAGE_PROVIDERS } from "@cawco/core/image-generation";
 import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { PLAN_EDIT_KINDS } from "@cawco/core/plan";
-import type { RoutineMadeEvent } from "@cawco/core/project-conversation";
 import {
   DELEGATE_EVENT_KINDS,
-  type DelegateAskStatus,
   type Envelope,
   type SendPayload,
   type SpawnPayload,
 } from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
-import { ROUTINE_RUN_STATES, ROUTINE_TARGETS } from "@cawco/core/routine-kinds";
-import { type AuthState, SEND_STATES } from "@cawco/core/session-messages";
+import {
+  ROUTINE_OUTCOMES,
+  ROUTINE_RUN_STATES,
+  ROUTINE_TARGETS,
+} from "@cawco/core/routine-kinds";
+import { SEND_STATES } from "@cawco/core/session-messages";
 import {
   STARTER_GLYPHS,
   STARTER_PLACES,
-  type StarterOutcome,
-  type StarterSourceKind,
+  STARTER_SOURCE_KINDS,
 } from "@cawco/core/starters";
 import {
   AccountKindSchema,
@@ -59,6 +56,7 @@ import {
   AskStateSchema,
   AtPlanLimitSchema,
   AttemptResultSchema,
+  BrowserHostKindSchema,
   BrowserStateSchema,
   BuildInfoSchema,
   CapPeriodSchema,
@@ -68,7 +66,9 @@ import {
   ConnectionStateSchema,
   ContextFillSchema,
   ContinuationJobSchema,
+  DelegateAskStatusSchema,
   DelegateEventPayloadSchema,
+  DeviceKindSchema,
   EndedBySchema,
   EnvelopeShape,
   ExternalActorSchema,
@@ -104,10 +104,12 @@ import {
   PlaceLfsRowSchema,
   PlanStepSchema,
   ProjectNoteSchema,
+  ProjectOfferReasonSchema,
   RefusalReachSchema,
   RelayPortHealthSchema,
   RelayPortsSchema,
   RelayReachSchema,
+  RoutineMadeBySchema,
   RuleMatchKindSchema,
   RuleTimingSchema,
   RuleWatchSchema,
@@ -121,8 +123,10 @@ import {
   SigninStateSchema,
   SkillFileSchema,
   SpawnPayloadSchema,
+  StarterOutcomeSchema,
   StoppedCommandsSchema,
   StreamRelayStateSchema,
+  TrackerSyncStateSchema,
   WaitWitnessSchema,
   WorkspaceCutSchema,
   WorkspaceHoldingSchema,
@@ -131,9 +135,10 @@ import {
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
+import { TOOL_STATES } from "@cawco/core/tools";
 import { TRACKERS } from "@cawco/core/trackers";
-import type { LimitWindow, UsageHarness } from "@cawco/core/usage/types";
-import type { StagesTemplate } from "@cawco/core/views";
+import type { LimitWindow } from "@cawco/core/usage/types";
+import { USAGE_HARNESSES } from "@cawco/core/usage/types";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import type {
@@ -160,21 +165,28 @@ import { hubSecrets, openOrNull } from "../secret-box";
 import { storedEnum, storedJson } from "../stored-json";
 import { machineColumn, projectColumn, sessionColumn } from "./owner-columns";
 import {
+  AgentAuthSchema,
   AgentStatusSchema,
+  ArtifactChangeBySchema,
   AuthorizationServerMetadataSchema,
   CacheTtlSchema,
+  CommentDirectionSchema,
   ConnectionSecretSchema,
   ContinuationAskerSchema,
   ContinueRequestSchema,
+  DelegateRequestKindSchema,
   DesignCheckStateSchema,
   DesignFindingSchema,
   DesignOfferAnswerSchema,
   DesignProposalFileSchema,
   GitHubResourceSchema,
+  InboundViaSchema,
   InstanceKindSchema,
   InstanceTitleSourceSchema,
   ItemBlockSchema,
+  KeepAliveStoppedSchema,
   LandingPhaseSchema,
+  LfsOfferAnswerSchema,
   LimitCompactionStageSchema,
   McpAuthModeSchema,
   MoveStateShape,
@@ -186,16 +198,25 @@ import {
   PreparedContinuationSchema,
   PresenceKindSchema,
   PreviewSettingsModeSchema,
+  ProjectOfferAnswerSchema,
   QueuedStartWhySchema,
+  RelayJourneyClosedSchema,
+  RelayNameStateSchema,
   RelaySecretFromSchema,
+  RemovedAccountWhySchema,
   RuleStateStatusSchema,
   SendHoldSchema,
   SessionLineKindSchema,
+  StartingSetKindSchema,
   StoredSendRefusalSchema,
+  StrandedWhySchema,
+  TaskEdgeKindSchema,
+  ToolCallKeyStateSchema,
   TrackerCursorSchema,
   TrackerSyncedSchema,
   TrashedRowsSchema,
   TrashKindSchema,
+  TrimOfferAnswerSchema,
   WorkItemSubmissionSchema,
   WorkOriginSchema,
   WorkspaceFromSchema,
@@ -328,10 +349,7 @@ export const agents = sqliteTable("agents", {
   os: text("os").notNull(),
   status: storedEnum(AgentStatusSchema)("status").notNull().default("offline"),
   /** What the daemon found about Claude Code's credentials, last time it registered. */
-  auth: text("auth")
-    .$type<AuthState | "unknown">()
-    .notNull()
-    .default("unknown"),
+  auth: storedEnum(AgentAuthSchema)("auth").notNull().default("unknown"),
   /**
    * What the machine came to the last time it converged on the fleet's MCP
    * servers and plugins (NEW.md §11). Null until it has been asked once.
@@ -395,7 +413,7 @@ export const agentTools = sqliteTable(
       .notNull()
       .references(() => agents.machineId, { onDelete: "cascade" }),
     toolId: text("tool_id").notNull(),
-    state: text("state").$type<ToolStatus["state"]>().notNull(),
+    state: storedEnum(z.enum(TOOL_STATES))("state").notNull(),
     version: text("version"),
     method: text("method"),
     detail: text("detail"),
@@ -435,7 +453,7 @@ export const chosenModes = sqliteTable(
   "chosen_modes",
   {
     machineId: machineColumn("machine_id").notNull(),
-    harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
+    harness: storedEnum(z.enum(HARNESSES))("harness").notNull(),
     permissionMode: text("permission_mode").notNull(),
     chosenAt: timestamp("chosen_at").notNull(),
   },
@@ -680,7 +698,7 @@ export const projects = sqliteTable("projects", {
    * until its setup page is sent (setup.ts): `project_setup` answers it, and
    * nothing of it is written before Send. Null: none was tapped.
    */
-  tapped: text("tapped").$type<StagesTemplate>(),
+  tapped: storedEnum(z.enum(STAGES_TEMPLATES))("tapped"),
   /**
    * Review before done: only you move a task into a done stage, and an
    * attempt that lands sends its task to review (stages.ts `ruledStages`).
@@ -806,9 +824,6 @@ export const projectTasks = sqliteTable(
   ]
 );
 
-/** A task file's blocking edge: what it waits on (`waits_on`). */
-export type TaskEdgeKind = "waits_on";
-
 /**
  * What a task waits on (`waits_on:`), one row each, in the order its file
  * lists them (rowid): `other_id` the target as the file keeps it (a task as
@@ -822,7 +837,7 @@ export const projectTaskEdges = sqliteTable(
     projectId: projectColumn("project_id").notNull(),
     /** The task's file: its index row's key with `projectId`. */
     path: text("path").notNull(),
-    kind: text("kind").$type<TaskEdgeKind>().notNull(),
+    kind: storedEnum(TaskEdgeKindSchema)("kind").notNull(),
     /** What it waits on, as the file keeps it. */
     otherId: text("other_id").notNull(),
   },
@@ -1059,7 +1074,7 @@ export const instances = sqliteTable("instances", {
     .notNull()
     .default(false),
   keepAliveSent: integer("keep_alive_sent").notNull().default(0),
-  keepAliveStopped: text("keep_alive_stopped").$type<"stopped-cap">(),
+  keepAliveStopped: storedEnum(KeepAliveStoppedSchema)("keep_alive_stopped"),
   cacheTtl: storedEnum(CacheTtlSchema)("cache_ttl"),
   lastRequestAt: timestamp("last_request_at"),
   contextTokens: integer("context_tokens"),
@@ -1375,9 +1390,6 @@ export const instanceMayStart = sqliteTable(
   (table) => [primaryKey({ columns: [table.instanceId, table.delegateType] })]
 );
 
-/** What a starting set names: a skill, as a session's listing names it, or an MCP server, by its fleet name (core `StartingSet`). */
-export type StartingSetKind = "skill" | "server";
-
 /**
  * The skills and MCP servers a session starts with when it has a starting
  * set ({@link instances.startsWithAll} false), one row each.
@@ -1388,7 +1400,7 @@ export const instanceStartingSet = sqliteTable(
     instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<StartingSetKind>().notNull(),
+    kind: storedEnum(StartingSetKindSchema)("kind").notNull(),
     name: text("name").notNull(),
   },
   (table) => [
@@ -1410,10 +1422,15 @@ export const instanceStartingSet = sqliteTable(
 export const delegateTypes = sqliteTable("delegate_types", {
   name: text("name").primaryKey(),
   description: text("description").notNull(),
-  harness: text("harness").$type<HarnessKind>().notNull(),
+  harness: storedEnum(z.enum(HARNESSES))("harness").notNull(),
   model: text("model").notNull(),
-  /** Null: its model's default. */
-  effort: text("effort").$type<EffortLevel>(),
+  /**
+   * The effort its sessions ask for, as the harness names it (core
+   * `EffortLevel`): text, as a newer harness's level may be one this build
+   * cannot name; db delegate-types.ts narrows it with `isEffortLevel` where
+   * read. Null: its model's default.
+   */
+  effort: text("effort"),
   /** The account its sessions prefer; null: the provider's strategy chooses. */
   account: text("account"),
   /**
@@ -1464,7 +1481,7 @@ export const delegateTypeStartingSet = sqliteTable(
   "delegate_type_starting_set",
   {
     typeName: delegateTypeName(),
-    kind: text("kind").$type<StartingSetKind>().notNull(),
+    kind: storedEnum(StartingSetKindSchema)("kind").notNull(),
     name: text("name").notNull(),
   },
   (table) => [
@@ -2104,7 +2121,7 @@ export const delegateEvents = sqliteTable(
     /** The permission request an ask and its answer share. Null on a report. */
     requestId: text("request_id"),
     toolName: text("tool_name"),
-    requestKind: text("request_kind").$type<"question" | "tool">(),
+    requestKind: storedEnum(DelegateRequestKindSchema)("request_kind"),
     /**
      * What the kind carries, read whole: an ask's input, an answer, a
      * report's body; a report's turn identity is its own columns.
@@ -2115,7 +2132,7 @@ export const delegateEvents = sqliteTable(
     /** A report's turn's completion time, ISO, when its harness said it. */
     completedAt: text("completed_at"),
     /** An ask's own state; null on an answer and a report, which settle nothing. */
-    status: text("status").$type<DelegateAskStatus>(),
+    status: storedEnum(DelegateAskStatusSchema)("status"),
     createdAt: stampedNow("created_at"),
   },
   (table) => [
@@ -2623,7 +2640,7 @@ export const usageBuckets = sqliteTable(
     /** `${machineId}:${harness}:${sessionId}:${model}:${start}` */
     id: text("id").primaryKey(),
     machineId: machineColumn("machine_id").notNull(),
-    harness: text("harness").$type<UsageHarness>().notNull(),
+    harness: storedEnum(z.enum(USAGE_HARNESSES))("harness").notNull(),
     start: integer("start").notNull(),
     spanMs: integer("span_ms").notNull().default(HOUR_MS),
     firstTs: integer("first_ts").notNull(),
@@ -2729,7 +2746,7 @@ export const removedAccounts = sqliteTable("removed_accounts", {
   id: text("id").primaryKey(),
   removedAt: timestamp("removed_at").notNull(),
   /** `removed` by a person, or `joined` into the account its sign-in already was. */
-  why: text("why").$type<"removed" | "joined">().notNull(),
+  why: storedEnum(RemovedAccountWhySchema)("why").notNull(),
 });
 
 /**
@@ -2763,7 +2780,7 @@ export const strandedSessions = sqliteTable("stranded_sessions", {
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   accountName: text("account_name").notNull(),
-  why: text("why").$type<"removed" | "signed-out">().notNull(),
+  why: storedEnum(StrandedWhySchema)("why").notNull(),
   since: stampedNow("since"),
 });
 
@@ -2779,7 +2796,7 @@ export const accountSignins = sqliteTable(
     /** When a credential from one of the machine's own stores was moved into this account there; null for a sign-in made in CawCo. */
     movedAt: timestamp("moved_at"),
     /** The store it was moved from: `claude` (`~/.claude`), `pi` or `opencode` (their own `auth.json`). */
-    movedFrom: text("moved_from").$type<HomeStore>(),
+    movedFrom: storedEnum(z.enum(HARNESSES))("moved_from"),
     /** Why the hub signed it out itself: the refusal a session on it met (`AccountSignin.reason`); null otherwise. */
     reason: text("reason"),
     /** How far that refusal reaches (`AccountSignin.refusalReach`): `account` comes back on a check, `machine` on a sign-in; null with no reason. */
@@ -2799,7 +2816,7 @@ export const loginMoves = sqliteTable(
   {
     machineId: machineColumn("machine_id").notNull(),
     /** `claude` (`~/.claude`), `pi` or `opencode` (their own `auth.json`). */
-    store: text("store").$type<HomeStore>().notNull(),
+    store: storedEnum(z.enum(HARNESSES))("store").notNull(),
     /** The provider's id in the store it leaves (OpenCode's `openai` for ChatGPT). */
     storeProvider: text("store_provider").notNull(),
     accountId: text("account_id")
@@ -2861,12 +2878,14 @@ export const accountRouting = sqliteTable("account_routing", {
   atLimitWaitMinutes: integer("at_limit_wait_minutes"),
   atLimitMoveWholeUnderK: integer("at_limit_move_whole_under_k"),
   atLimitStaleAfterHours: integer("at_limit_stale_after_hours"),
-  compactionAtLimit: text("compaction_at_limit").$type<CompactMethod>(),
-  compactionBeforeMove: text("compaction_before_move").$type<CompactMethod>(),
+  compactionAtLimit: storedEnum(z.enum(COMPACT_METHODS))("compaction_at_limit"),
+  compactionBeforeMove: storedEnum(z.enum(COMPACT_METHODS))(
+    "compaction_before_move"
+  ),
   compactionFileRoom: integer("compaction_file_room"),
-  compactionSummarizerHarness: text(
+  compactionSummarizerHarness: storedEnum(z.enum(HARNESSES))(
     "compaction_summarizer_harness"
-  ).$type<HarnessKind>(),
+  ),
   compactionSummarizerModel: text("compaction_summarizer_model"),
   /**
    * The policy as it was stored, when it did not read whole (migration 0399):
@@ -3263,9 +3282,7 @@ export const toolCallKeys = sqliteTable(
     /** The key, with the caller's credential and the route, hashed. */
     id: text("id").primaryKey(),
     /** `interrupted`: running in the hub's last process when it ended. */
-    state: text("state")
-      .$type<"running" | "answered" | "interrupted">()
-      .notNull(),
+    state: storedEnum(ToolCallKeyStateSchema)("state").notNull(),
     /** The answer's status, headers (as pairs) and body, once answered. */
     status: integer("status"),
     headers: storedJson(z.array(z.tuple([z.string(), z.string()])))("headers"),
@@ -4152,7 +4169,7 @@ export const ownerDevices = sqliteTable("owner_devices", {
   tokenHash: text("token_hash").notNull().unique(),
   /** "Chrome on Linux", "CawCo on iPhone". */
   name: text("name").notNull(),
-  kind: text("kind").$type<DeviceKind>().notNull(),
+  kind: storedEnum(DeviceKindSchema)("kind").notNull(),
   createdAt: timestamp("created_at").notNull(),
   lastUsedAt: timestamp("last_used_at"),
   /** The address it was last seen at. */
@@ -4343,13 +4360,11 @@ export const presenceDevices = sqliteTable("presence_devices", {
 export const projectOffers = sqliteTable("project_offers", {
   instanceId: sessionColumn("instance_id").primaryKey(),
   /** Which signal made it: `delegates`, `days`, `plan` or `repo`; `caw` when Caw asked in conversation. */
-  reason: text("reason")
-    .$type<import("@cawco/core/frames").ProjectOfferReason>()
-    .notNull(),
+  reason: storedEnum(ProjectOfferReasonSchema)("reason").notNull(),
   /** The sentence the offer says, naming why. */
   line: text("line").notNull(),
   offeredAt: timestamp("offered_at").notNull(),
-  answer: text("answer").$type<"accepted" | "dismissed">(),
+  answer: storedEnum(ProjectOfferAnswerSchema)("answer"),
   answeredAt: timestamp("answered_at"),
   /** The project accepting made or joined. */
   projectId: projectColumn("project_id"),
@@ -4380,7 +4395,7 @@ export const designOffers = sqliteTable("design_offers", {
  */
 export const trimOffers = sqliteTable("trim_offers", {
   projectId: projectColumn("project_id").primaryKey(),
-  answer: text("answer").$type<"on" | "dismissed">().notNull(),
+  answer: storedEnum(TrimOfferAnswerSchema)("answer").notNull(),
   answeredAt: timestamp("answered_at").notNull(),
 });
 
@@ -4394,7 +4409,7 @@ export const trimKept = sqliteTable(
   "trim_kept",
   {
     set: text("set").notNull(),
-    kind: text("kind").$type<"skill" | "server">().notNull(),
+    kind: storedEnum(StartingSetKindSchema)("kind").notNull(),
     name: text("name").notNull(),
     keptAt: timestamp("kept_at").notNull(),
   },
@@ -4416,7 +4431,7 @@ export const lfsOffers = sqliteTable("lfs_offers", {
   /** What is offered, a row per pattern (core `PlaceLfsRow`). */
   rows: storedJson(z.array(PlaceLfsRowSchema))("rows").notNull(),
   offeredAt: timestamp("offered_at").notNull(),
-  answer: text("answer").$type<"tracked" | "dismissed">(),
+  answer: storedEnum(LfsOfferAnswerSchema)("answer"),
   answeredAt: timestamp("answered_at"),
   /** The commit that took them through LFS. */
   commit: text("commit"),
@@ -4565,7 +4580,7 @@ export const projectStarterSources = sqliteTable(
     place: storedEnum(z.enum(STARTER_PLACES))("place").notNull(),
     position: integer("position").notNull(),
     seq: integer("seq").notNull(),
-    kind: text("kind").$type<StarterSourceKind>().notNull(),
+    kind: storedEnum(z.enum(STARTER_SOURCE_KINDS))("kind").notNull(),
     ref: text("ref").notNull(),
   },
   (table) => [
@@ -4596,7 +4611,7 @@ export const starterOutcomes = sqliteTable(
     /** The place the starter stood in. */
     place: storedEnum(z.enum(STARTER_PLACES))("place").notNull(),
     text: text("text").notNull(),
-    outcome: text("outcome").$type<StarterOutcome>().notNull(),
+    outcome: storedEnum(StarterOutcomeSchema)("outcome").notNull(),
     at: timestamp("at").notNull(),
   },
   (table) => [index("starter_outcomes_project").on(table.projectId, table.at)]
@@ -4822,7 +4837,7 @@ export const artifactChanges = sqliteTable(
       .references(() => artifacts.id, { onDelete: "cascade" }),
     key: text("key").notNull(),
     seq: integer("seq").notNull(),
-    by: text("by").$type<"person" | "agent">().notNull(),
+    by: storedEnum(ArtifactChangeBySchema)("by").notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.artifactId, table.key] }),
@@ -4960,9 +4975,7 @@ export const browsers = sqliteTable(
     /** The project of a `project:` key; null for a machine's own browser. */
     projectId: projectColumn("project_id"),
     name: text("name").notNull(),
-    host: text("host")
-      .$type<import("@cawco/core/browser").BrowserHostKind>()
-      .notNull(),
+    host: storedEnum(BrowserHostKindSchema)("host").notNull(),
     state: storedEnum(BrowserStateSchema)("state").notNull(),
     /** The workspace whose browser ask the person took, or `""` for a take-over nobody asked for; null while nobody holds it. */
     takeoverBy: text("takeover_by"),
@@ -5002,8 +5015,7 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** The relay's DNS name, suggested or given; null while none is known. */
   name: text("name"),
   /** `open` while it stands, `pointed` once it answered with the machine's address, `skipped`. */
-  nameState: text("name_state")
-    .$type<"open" | "pointed" | "skipped">()
+  nameState: storedEnum(RelayNameStateSchema)("name_state")
     .notNull()
     .default("open"),
   /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
@@ -5018,7 +5030,7 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** Why the certificate was not issued, in the error formula's words. */
   certificateWhy: text("certificate_why"),
   /** Put away from Needs you: `later` or `done-for-now`. */
-  closed: text("closed").$type<"later" | "done-for-now">(),
+  closed: storedEnum(RelayJourneyClosedSchema)("closed"),
   /** When the relay first went live on this journey: Settings shows its summary from then. */
   liveAt: timestamp("live_at"),
   createdAt: stampedNow("created_at"),
@@ -5263,7 +5275,7 @@ export const routines = sqliteTable(
      */
     madeWhy: text("made_why"),
     /** How that session is named in its notice: a delegate, or another session. */
-    madeBy: text("made_by").$type<RoutineMadeEvent["by"]>(),
+    madeBy: storedEnum(RoutineMadeBySchema)("made_by"),
     /**
      * When its notice went to you (routines.ts `announce`); null while it
      * waits for its why, and on routines no session made. A hub start
@@ -5319,7 +5331,7 @@ export const routineRuns = sqliteTable(
      * failed.
      */
     instanceId: sessionColumn("instance_id"),
-    outcome: text("outcome").$type<RoutineOutcome>(),
+    outcome: storedEnum(z.enum(ROUTINE_OUTCOMES))("outcome"),
     /** What its delegate said, when it said more than the contract's words. */
     output: text("output"),
     /** Why it was skipped or failed, as a sentence. */
@@ -5408,9 +5420,6 @@ export const connectionAreas = sqliteTable(
   ]
 );
 
-/** How an inbound event reached the hub. */
-export type InboundVia = "poll" | "webhook" | "connector";
-
 /**
  * One event from outside (Projects spec §5.5 Ingress, ingress.ts), stored
  * once under (source, delivery key) however many paths bring it in: a
@@ -5431,7 +5440,7 @@ export const inboundEvents = sqliteTable(
     /** The event as ingress.ts normalised it, JSON, at most 64 KB (cut with a marker). */
     payload: text("payload").notNull(),
     receivedAt: timestamp("received_at").notNull(),
-    via: text("via").$type<InboundVia>().notNull(),
+    via: storedEnum(InboundViaSchema)("via").notNull(),
     /** The routine a route sent it to, `conversation` for the project's conversation (handled once sent, else waiting in its inbox), or null while unrouted. */
     routedTo: text("routed_to"),
     /** The route it was delivered by: the oldest matching route to the routine it went to; null otherwise. */
@@ -5614,9 +5623,7 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   /** Issues opened after it become tasks; nothing older is copied. */
   boundAt: timestamp("bound_at").notNull(),
   cursor: storedJson(TrackerCursorSchema)("cursor").notNull(),
-  state: text("state")
-    .$type<import("@cawco/core/trackers").TrackerSyncState>()
-    .notNull(),
+  state: storedEnum(TrackerSyncStateSchema)("state").notNull(),
   /** Why it is refused, or why its last poll stopped short; null when all went through. */
   reason: text("reason"),
   polledAt: timestamp("polled_at"),
@@ -5731,7 +5738,7 @@ export const externalComments = sqliteTable(
     externalId: text("external_id").notNull(),
     taskId: text("task_id").notNull(),
     url: text("url").notNull(),
-    direction: text("direction").$type<"in" | "out">().notNull(),
+    direction: storedEnum(CommentDirectionSchema)("direction").notNull(),
     author: storedJson(ExternalActorSchema)("author").notNull(),
     /** When it was written on the source, ms. */
     at: integer("at").notNull(),
