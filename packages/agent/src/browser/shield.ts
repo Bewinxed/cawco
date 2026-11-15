@@ -66,7 +66,7 @@ import { nekoLogin } from "./container-host";
 import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import { restoreWindows } from "./own-size";
-import { extractFidoUri } from "./passkey-qr";
+import { PasskeyWatch } from "./passkey-qr";
 import {
   allBrowsers,
   type BrowserRecord,
@@ -106,6 +106,8 @@ interface Held extends Kept {
   cdp?: Promise<CdpTakeover | undefined>;
   /** Views the hub counts (its sockets for neko or the CDP bridge). */
   hubViewers: number;
+  /** The watch for a WebAuthn ceremony on the page shown, on a container's browser alone (passkey-qr.ts). */
+  passkey?: Promise<PasskeyWatch | undefined>;
   /** Since when no view was open; undefined while one is. */
   unwatchedSince?: number;
 }
@@ -121,14 +123,20 @@ export type ShieldPorts = Pick<
 /** The last FIDO URI emitted per browser key: emit only once per unique URI. */
 const lastQr = new Map<BrowserKey, string>();
 
-/** The browsers whose page could not be read for a passkey QR on the last tick, so a streak is said once. */
+/** The browsers whose passkey watch failed last, so a streak is said once. */
 const qrUnreadable = new Set<BrowserKey>();
 
 const shieldFile = (key: BrowserKey): string =>
   join(browserDir(key), "shield.json");
 
 const keep = (key: BrowserKey, take: Held): Promise<void> => {
-  const { cdp: _cdp, hubViewers: _h, unwatchedSince: _u, ...kept } = take;
+  const {
+    cdp: _cdp,
+    passkey: _p,
+    hubViewers: _h,
+    unwatchedSince: _u,
+    ...kept
+  } = take;
   return writeStateFile(shieldFile(key), `${JSON.stringify(kept, null, 2)}\n`, {
     mode: 0o600,
   });
@@ -637,6 +645,8 @@ export const handBackBrowser = async (
  * need not wait on it: it is ended as soon as it starts.
  */
 const endView = async (take: Held): Promise<void> => {
+  take.passkey?.then((opened) => opened?.close()).catch(() => undefined);
+  take.passkey = undefined;
   const starting = take.cdp;
   if (!starting) {
     return;
@@ -825,8 +835,8 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
       );
       continue;
     }
-    // While the take-over stands, check for a passkey QR on the page.
-    pollPasskeyQr(ports, key, take).catch(() => undefined);
+    // While the take-over stands, its shown page is watched for a passkey QR.
+    watchPasskey(ports, key, take).catch(() => undefined);
     const views = Math.max(take.hubViewers, (await take.cdp)?.viewers ?? 0);
     if (views > 0) {
       take.unwatchedSince = undefined;
@@ -845,49 +855,86 @@ const watchOnce = async (ports: ShieldPorts): Promise<void> => {
 };
 
 /**
- * Attempts to extract a FIDO URI from the page the person is looking at
- * during a take-over. When a new URI is found (one not already emitted for
- * this browser), it is sent to the hub as a `passkey_qr` frame.
+ * The take-over's watch for a WebAuthn ceremony, opened at the first count
+ * and opened again once its browser's DevTools connection closed, moved to
+ * the page the person sees. Each passkey QR it reads off the container's
+ * screen that was not sent already goes to the hub as a `passkey_qr` frame.
+ * A local host's browser has no container screen to read: its dialog is on
+ * the machine's own.
  */
-const pollPasskeyQr = async (
+const watchPasskey = async (
+  ports: ShieldPorts,
+  key: BrowserKey,
+  take: Held
+): Promise<void> => {
+  // One count's watch is still opening or moving: this count leaves it be.
+  if (passkeyBusy.has(key)) {
+    return;
+  }
+  passkeyBusy.add(key);
+  try {
+    await openPasskeyWatch(ports, key, take);
+  } finally {
+    passkeyBusy.delete(key);
+  }
+};
+
+/** The browsers whose passkey watch is being opened or moved now. */
+const passkeyBusy = new Set<BrowserKey>();
+
+const openPasskeyWatch = async (
   { machineId, passkeyQr }: ShieldPorts,
   key: BrowserKey,
   take: Held
 ): Promise<void> => {
-  if (!take.targetId) {
+  const targetId = frontTarget(key) ?? take.targetId;
+  if (!targetId) {
     return;
   }
-  const record = await readBrowser(key);
-  if (!record) {
-    return;
-  }
-  let link: CdpLink | undefined;
-  try {
-    link = await CdpLink.open(`http://127.0.0.1:${portsOf(record).devtools}`);
-    const session = await link.attach(take.targetId);
-    const uri = await extractFidoUri(link, session);
-    if (uri && uri !== lastQr.get(key)) {
-      lastQr.set(key, uri);
-      passkeyQr({
-        kind: "passkey_qr",
-        machineId,
-        key,
-        fidoUri: uri,
-        raisedAt: Date.now(),
-      });
-      console.info(`[browser] ${key}: passkey QR extracted`);
-    }
-    qrUnreadable.delete(key);
-  } catch (error) {
-    // The browser may not be reachable: this tick reads nothing, and the
-    // first of a streak says why.
+  const said = (error: unknown): void => {
     if (!qrUnreadable.has(key)) {
       qrUnreadable.add(key);
       console.info(`[browser] ${key}: passkey QR not read: ${why(error)}`);
     }
-  } finally {
-    link?.close();
+  };
+  // None yet, one that failed to open, or one whose browser connection closed.
+  const current = await take.passkey;
+  if (!current || current.closed) {
+    const record = await readBrowser(key);
+    const containerId = record?.container?.id;
+    if (!(record && record.host === "container" && containerId)) {
+      return;
+    }
+    take.passkey = PasskeyWatch.open(
+      `http://127.0.0.1:${portsOf(record).devtools}`,
+      containerId,
+      (uri) => {
+        qrUnreadable.delete(key);
+        if (uri === lastQr.get(key)) {
+          return;
+        }
+        lastQr.set(key, uri);
+        passkeyQr({
+          kind: "passkey_qr",
+          machineId,
+          key,
+          fidoUri: uri,
+          raisedAt: Date.now(),
+        });
+        console.info(`[browser] ${key}: passkey QR read off its screen`);
+      },
+      said
+    ).catch((error: unknown): undefined => {
+      said(error);
+    });
   }
+  const opened = await take.passkey;
+  // The take-over ended while the watch opened: endView let it go already.
+  if (!(opened && held.get(key) === take)) {
+    opened?.close();
+    return;
+  }
+  await opened.follow(targetId).catch(said);
 };
 
 const tellHub = (
