@@ -2759,6 +2759,20 @@
       "when": 1794698573328,
       "tag": "0401_gate_passes_table",
       "breakpoints": true
+    },
+    {
+      "idx": 402,
+      "version": "6",
+      "when": 1794702091162,
+      "tag": "0402_tool_updates",
+      "breakpoints": true
+    },
+    {
+      "idx": 403,
+      "version": "6",
+      "when": 1794702092447,
+      "tag": "0403_tool_install_starter",
+      "breakpoints": true
     }
   ]
 }
