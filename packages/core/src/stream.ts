@@ -365,12 +365,17 @@ import type { TailnetServing } from "./tailnet-https";
  * 74: a hook's save takes its `scope` only as one of `user`, `project` or
  *    `local`, where any text was taken and stored. A page built for 73 may
  *    send another, so it reloads first.
+ * 75: an attempt whose task file's outputs line does not read is refused
+ *    409 `dispatch-outputs-unread`, where it started with no outputs and
+ *    landed the files the line names: a project's requests, an attempt and
+ *    its retry may answer it. A task gains `outputsUnread`. A page built
+ *    for 74 does not know the new code, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 74;
+export const WIRE_PROTOCOL = 75;
 
 /**
  * What a session's stream carries: the changes each frame made to its

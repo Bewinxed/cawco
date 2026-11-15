@@ -12209,12 +12209,6 @@
     "type": "string",
     "const": "waits_on"
   },
-  "project_tasks.outputs": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
   "projects.account_at_limit": {
     "type": "string",
     "enum": [
@@ -15213,12 +15207,6 @@
         "const": "kept"
       }
     ]
-  },
-  "work_items.outputs": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
   },
   "work_items.state": {
     "type": "string",

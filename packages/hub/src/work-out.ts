@@ -9,13 +9,17 @@ const iso = (at: Date | null) => at?.toISOString() ?? null;
  * `WorkLanding`), as it was answered while that was one JSON column: null
  * when no commit of it was recorded. `passed` is its landing gate's
  * commands (project-work.ts `landedChecks`). A landing whose record did not
- * read is `landedUnread` beside it, as it was stored.
+ * read is `landedUnread` beside it, as it was stored. `outputs` are the
+ * outputs it declared (project-work.ts `workItemOutputs`), answered as they
+ * were while they were one JSON column: null when none.
  */
 export const workItemOut = (
   { landedSha, landedOnto, landedAt, landedGateTree, ...item }: WorkItemRow,
-  passed: string[]
+  passed: string[],
+  outputs: string[]
 ) => ({
   ...item,
+  outputs: outputs.length > 0 ? outputs : null,
   landed:
     landedSha === null
       ? null

@@ -30,6 +30,7 @@ import {
   workItemGatePasses,
   workItemGlobs,
   workItemLandedChecks,
+  workItemOutputs,
   workItems,
   workspaceCreates,
   workspaces,
@@ -254,10 +255,12 @@ export interface WorkRowsDb {
    * `delegate`): delegation-tree.ts `treeSessions`.
    */
   readonly childIdsOfParents: (parentInstanceIds: string[]) => string[];
-  /** Files a work item as the hub accepted it. */
-  /** Files a work item as the hub accepted it, the globs it owns with it in one transaction. */
+  /** Files a work item as the hub accepted it, the globs it owns and the outputs it declares with it in one transaction. */
   readonly createWorkItem: (
-    item: typeof workItems.$inferInsert & { owns?: string[] | null }
+    item: typeof workItems.$inferInsert & {
+      outputs?: string[] | null;
+      owns?: string[] | null;
+    }
   ) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */
   readonly createWorkspace: (
@@ -380,6 +383,8 @@ export interface WorkRowsDb {
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
   /** The globs a work item owns; none when it claims nothing. */
   readonly workItemGlobs: (itemId: string) => string[];
+  /** The outputs a work item declared, in the order it declared them; none when it declared none. */
+  readonly workItemOutputs: (itemId: string) => string[];
   /** A workspace's items, newest first. */
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
   /** Every work item any of these sessions delegated, newest first (delegation-tree.ts). */
@@ -388,6 +393,8 @@ export interface WorkRowsDb {
   readonly workspaceCreatesOn: (
     machineId: string
   ) => (typeof workspaceCreates.$inferSelect)[];
+  /** The outputs every item of a workspace declared, each once. */
+  readonly workspaceOutputs: (workspaceId: string) => string[];
   /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFrom`), in any state. */
   readonly workspacesCutFrom: (workspaceId: string) => WorkspaceRow[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
@@ -512,13 +519,19 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             .where(sql`${workspaces.id} LIKE ${`${idOrPrefix}%`}`)
             .all();
     },
-    createWorkItem: ({ owns, ...item }) =>
+    createWorkItem: ({ outputs, owns, ...item }) =>
       db.transaction((tx) => {
         const row = tx.insert(workItems).values(item).returning().get();
         const owned = [...new Set(owns ?? [])];
         if (owned.length > 0) {
           tx.insert(workItemGlobs)
             .values(owned.map((glob) => ({ itemId: row.id, glob })))
+            .run();
+        }
+        const declared = [...new Set(outputs ?? [])];
+        if (declared.length > 0) {
+          tx.insert(workItemOutputs)
+            .values(declared.map((path) => ({ itemId: row.id, path })))
             .run();
         }
         return row;
@@ -533,6 +546,26 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .orderBy(sql`rowid`)
         .all()
         .map(({ glob }) => glob),
+    workItemOutputs: (itemId) =>
+      db
+        .select({ path: workItemOutputs.path })
+        .from(workItemOutputs)
+        .where(eq(workItemOutputs.itemId, itemId))
+        .orderBy(sql`rowid`)
+        .all()
+        .map(({ path }) => path),
+    workspaceOutputs: (workspaceId) => [
+      ...new Set(
+        db
+          .select({ path: workItemOutputs.path })
+          .from(workItemOutputs)
+          .innerJoin(workItems, eq(workItems.id, workItemOutputs.itemId))
+          .where(eq(workItems.workspaceId, workspaceId))
+          .orderBy(sql`${workItemOutputs}.rowid`)
+          .all()
+          .map(({ path }) => path)
+      ),
+    ],
     liveOwningWorkItems: () => {
       const owning = new Map<string, { globs: string[]; item: WorkItemRow }>();
       for (const { item, glob } of db

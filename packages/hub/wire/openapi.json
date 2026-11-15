@@ -58864,6 +58864,10 @@
               "type": "string"
             }
           },
+          "outputsUnread": {
+            "description": "What its `outputs:` line holds that does not read as a list; null when\nit reads or there is none. While set, no attempt at it starts\n(dispatch.ts `startable`), and `startProblem` says why.",
+            "type": "string"
+          },
           "owns": {
             "description": "Globs of the repository's files an attempt owns.",
             "type": "array",
@@ -168216,6 +168220,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-outputs-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-parent-unfit"
                 ]
               },
@@ -178829,6 +178869,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-outputs-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "dispatch-parent-unfit"
                 ]
               },
@@ -182299,6 +182375,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "outputsUnread": {
+            "description": "What its `outputs:` line holds that does not read as a list; null when\nit reads or there is none. While set, no attempt at it starts\n(dispatch.ts `startable`), and `startProblem` says why.",
+            "type": "string"
           },
           "owns": {
             "description": "Globs of the repository's files an attempt owns.",
@@ -187042,6 +187122,42 @@
                 "type": "string",
                 "enum": [
                   "dispatch-nowhere"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "dispatch-outputs-unread"
                 ]
               },
               "detail": {

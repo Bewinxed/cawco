@@ -17,9 +17,9 @@
  * commit, against its hub; the seed below must fit that commit's Db.
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
- * budgets, at-limit policies, landings and gate passes besides
+ * budgets, at-limit policies, landings, gate passes and outputs besides
  * ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
- * {@link seedLanded}, {@link seedGatePasses}), written to
+ * {@link seedLanded}, {@link seedGatePasses}, {@link seedOutputs}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -43,8 +43,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * trashed type, a continued work item), every shape a budget took before
  * migration 0398, every shape a provider's at-limit policy took before
  * migration 0399, every shape a work item's landing took before migration
- * 0400, and every shape a work item's gate passes took before migration
- * 0401, written here.
+ * 0400, every shape a work item's gate passes took before migration 0401,
+ * and every shape a work item's and a task's outputs took before migration
+ * 0404, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -179,6 +180,7 @@ function seedTasks(db: HubDb, projects: string[]): void {
         todosTotal: 3,
         problem: null,
         budgetUnread: null,
+        outputsUnread: null,
         hash: Bun.hash(`${projectId}-${t}`).toString(16),
         updatedAt: new Date(Date.UTC(2026, 9, 2) + t * HOUR_MS),
       }))
@@ -695,6 +697,70 @@ function seedGatePasses(dbPath: string): void {
   sqlite.close();
 }
 
+/** Where outputs are seeded: past the items {@link seedGatePasses} keeps passes on. */
+const FIRST_OUTPUTS = FIRST_GATED + 12;
+
+/**
+ * Every shape migration 0404 reads a work item's and a task's outputs in,
+ * as the hub's writers stored them (work-items.ts `placing` writes null for
+ * none and a list of paths, each once; tasks.ts `indexRow` writes its
+ * file's list, `[]` for none) and as a hand edit could: none (null, `[]`),
+ * one path, several, a path kept twice; a list that is not JSON, JSON
+ * `null`, an object; one that reads in part (a number and a null among
+ * paths); and a task whose file's outputs line did not read, as the index
+ * held it.
+ */
+function seedOutputs(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const items = workItemIds(sqlite).slice(FIRST_OUTPUTS);
+  const lists: (string | null)[] = [
+    null,
+    "[]",
+    JSON.stringify(["report.md"]),
+    JSON.stringify(["report.md", "docs/notes", "assets/hero.png"]),
+    JSON.stringify(["report.md", "docs/notes", "report.md"]),
+    "report.md, docs/notes",
+    "null",
+    JSON.stringify({ path: "report.md" }),
+    JSON.stringify(["report.md", 42, null, "docs/notes"]),
+  ];
+  for (const [n, list] of lists.entries()) {
+    const item = items[n];
+    if (!item) {
+      throw new Error(
+        `The fixture has no work item ${FIRST_OUTPUTS + n} to give outputs.`
+      );
+    }
+    sqlite.run("UPDATE work_items SET outputs = ? WHERE id = ?", [list, item]);
+  }
+  const [, project] = sqlite
+    .query<{ id: string }, []>("SELECT id FROM projects ORDER BY rowid")
+    .all()
+    .map((row) => row.id);
+  if (!project) {
+    throw new Error("The fixture has no second project to give task outputs.");
+  }
+  const taskLists: [number, string, string | null][] = [
+    [1, JSON.stringify(["post.md"]), null],
+    [
+      2,
+      JSON.stringify(["post.md", "assets/hero.png", "notes/outline.md"]),
+      null,
+    ],
+    [3, JSON.stringify(["post.md", "post.md"]), null],
+    [4, "post.md", null],
+    [5, JSON.stringify(["post.md", 7]), null],
+    [6, "[]", "outputs: is not a list like [a, b]."],
+  ];
+  for (const [number, list, problem] of taskLists) {
+    sqlite.run(
+      "UPDATE project_tasks SET outputs = ?, problem = ? WHERE project_id = ? AND number = ?",
+      [list, problem, project, number]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -716,6 +782,7 @@ async function seed(
     seedAtLimit(dbPath);
     seedLanded(dbPath);
     seedGatePasses(dbPath);
+    seedOutputs(dbPath);
   }
 }
 

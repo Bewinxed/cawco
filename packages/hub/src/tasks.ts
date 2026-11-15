@@ -513,6 +513,12 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
   needsYou: boolean;
   number: number;
   outputs: string[];
+  /**
+   * What its `outputs:` line holds that does not read as a list; null when
+   * it reads or there is none. While set, no attempt at it starts
+   * (dispatch.ts `startable`), and `startProblem` says why.
+   */
+  outputsUnread: string | null;
   /** Globs of the repository's files an attempt owns. */
   owns: string[];
   partOf: string | null;
@@ -1218,6 +1224,26 @@ export const onFrontier = (task: TaskSummary): boolean =>
   !task.lastAttemptStopped &&
   task.startProblem === null;
 
+/**
+ * Why no attempt at a task starts while a line of its file does not read
+ * (dispatch.ts `startable`): its budget line, then its outputs line; null
+ * when both read.
+ */
+const unreadLineOf = (task: {
+  budgetUnread: string | null;
+  id: string;
+  outputsUnread: string | null;
+  path: string;
+}): string | null => {
+  if (task.budgetUnread !== null) {
+    return workWords.taskBudgetUnread(task.path, task.id, task.budgetUnread);
+  }
+  if (task.outputsUnread !== null) {
+    return workWords.taskOutputsUnread(task.path, task.id, task.outputsUnread);
+  }
+  return null;
+};
+
 const summaryOf = (
   row: TaskIndexRow,
   stages: Stages | undefined,
@@ -1291,6 +1317,7 @@ const viewOf = (
   owns: parsed.fields.owns,
   budget: parsed.fields.budget,
   budgetUnread: parsed.budgetUnread,
+  outputsUnread: parsed.outputsUnread,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
   accounts: parsed.fields.accounts,
@@ -1963,6 +1990,7 @@ export const createTasks = (store: TaskStore) => {
       budgetUnread: string | null;
       hash: string;
       id: string;
+      outputsUnread: string | null;
       partOf: string | null;
       path: string;
       stage: string;
@@ -2009,12 +2037,11 @@ export const createTasks = (store: TaskStore) => {
         open,
       lastAttemptStopped: last?.state === "cancelled" && open,
       queuedStart: context.queued.has(task.id),
-      // A budget line that does not read holds every start (dispatch.ts
-      // `startable`), so it is why the task does not start until it reads.
+      // A budget or outputs line that does not read holds every start
+      // (dispatch.ts `startable`), so it is why the task does not start
+      // until it reads.
       startProblem:
-        task.budgetUnread === null
-          ? (store.startProblem?.(projectId, task) ?? null)
-          : workWords.taskBudgetUnread(task.path, task.id, task.budgetUnread),
+        unreadLineOf(task) ?? store.startProblem?.(projectId, task) ?? null,
     };
   };
   /**
@@ -2166,6 +2193,7 @@ export const createTasks = (store: TaskStore) => {
       todosTotal: todos.total,
       problem: parsed.problems.join(" ") || null,
       budgetUnread: parsed.budgetUnread,
+      outputsUnread: parsed.outputsUnread,
       hash,
       updatedAt: new Date(),
     };
@@ -3381,6 +3409,7 @@ export const createTasks = (store: TaskStore) => {
         stage,
         hash,
         budgetUnread: parsed.budgetUnread,
+        outputsUnread: parsed.outputsUnread,
       },
       context
     );
