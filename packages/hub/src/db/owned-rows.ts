@@ -465,6 +465,11 @@ export const KNOWN_UNOWNED: readonly {
       "The project told an LFS endpoint refused, so it is told once: the record outlives a deleted project.",
   },
   {
+    column: moves.targetInstanceId,
+    reason:
+      "A project move's session, held under this id from the move's start until its start step spawns it (moves.ts): the move is kept a while after it settles, then deleted.",
+  },
+  {
     column: planChanges.instanceId,
     reason:
       "The session whose plan the person changed: the changes outlive the session.",

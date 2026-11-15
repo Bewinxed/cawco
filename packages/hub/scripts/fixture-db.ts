@@ -19,13 +19,17 @@
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
  * budgets, at-limit policies, landings, gate passes, outputs, queued
  * starts, MCP servers' platforms, the fleet's routes, a tracker's
- * baselines, asks and preview passes, and the values migrations 0410 to
- * 0413 lift into columns besides ({@link seedLists},
+ * baselines, asks and preview passes, the values migrations 0410 to 0413
+ * lift into columns, continuation jobs, project moves and the stream
+ * relay's ports and proofs besides ({@link seedLists},
  * {@link seedBudgets}, {@link seedAtLimit}, {@link seedLanded},
  * {@link seedGatePasses}, {@link seedOutputs}, {@link seedQueued},
  * {@link seedMcpServers}, {@link seedPlatformsRoutes}, {@link seedTracker},
  * {@link seedTrackerBaselines}, {@link seedAsks}, {@link seedAsksByHand},
- * {@link seedPassScopes}, {@link seedLiftedColumns}), written to
+ * {@link seedPassScopes}, {@link seedLiftedColumns},
+ * {@link seedContinuations}, {@link seedContinuationsByHand},
+ * {@link seedMoves}, {@link seedMovesByHand}, {@link seedRelayPorts}),
+ * written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -35,6 +39,7 @@ import { join, resolve } from "node:path";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import type { ContinuationAsker } from "../src/db/stored-types";
 import { hubInProcess } from "./hub-in-process";
 import { newestNightly } from "./shipped";
 
@@ -55,9 +60,13 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * 0405, every shape an MCP server's platforms and the fleet's routes
  * took before migration 0406, every shape a tracker link's baseline took
  * before migration 0407, every shape an ask's record took before migration
- * 0408, every shape a preview pass's scope took before migration 0409, and
+ * 0408, every shape a preview pass's scope took before migration 0409,
  * every shape a limit line, a workspace's source, a work item's block and a
- * send's origin took before migrations 0410 to 0413, written here.
+ * send's origin took before migrations 0410 to 0413, every shape a
+ * continuation's asker and wait took before migration 0414, every shape a
+ * project move's state took before migration 0415, and every shape a relay
+ * proof's chips and the relay's ports took before migration 0416, written
+ * here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -1761,6 +1770,413 @@ function seedLiftedColumns(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the fixture's continuations, moves and relay proofs were made: 2026-10-03, a minute apart. */
+const JOBS_AT = Date.UTC(2026, 9, 3);
+
+/** What a continuation job of `source` was prepared from: a short session, read whole. */
+const preparedOf = (source: Seeded) => ({
+  compacted: false,
+  entries: { live: 42, whole: 42, scope: 42 },
+  extracted: {
+    artifacts: "",
+    asks: ["Ship the retention cut behind a flag."],
+    covers: null,
+    middle: ["Read the board's archive query.", "Drafted the cut."],
+    tail: "The cut is drafted; the flag is next.",
+  },
+  liveContextTokens: 61_200,
+  openingTokens: 4100,
+  prompt: "Summarise the session for the next one.",
+  source: {
+    cwd: fixturePath(`/home/dev/src/${source.projectId}`),
+    harness: "claude" as const,
+    instanceId: source.id,
+    machineId: source.machineId,
+    model: "model-a",
+    title: "Archive finished tasks",
+  },
+  summariseInputTokens: 52_800,
+});
+
+/** An account a move names. */
+const account = (accountId: string, name: string) => ({
+  hue: "blue" as const,
+  id: accountId,
+  name,
+});
+
+/**
+ * Continuation jobs as the hub's own code writes them
+ * (`insertContinuation`), every one migration 0414 places whole: a
+ * person's own Continue that started, a session's `continue_session` that
+ * failed, a comment on a task that was cancelled, a move from a summary
+ * that waited for its source's work in flight and started, and a person's
+ * that waits now. {@link seedContinuationsByHand} adds the ones that do not
+ * read.
+ */
+function seedContinuations(db: HubDb, sessions: Seeded[]): void {
+  const [first, second, third] = sessions;
+  if (!(first && second && third)) {
+    return;
+  }
+  const movedLine = {
+    kind: "moved" as const,
+    from: account("acct-fixture-a", "Studio"),
+    to: account("acct-fixture-b", "Personal"),
+    sameOrganization: false,
+    tokens: 61_200,
+    window: "five_hour",
+    resetsAt: JOBS_AT + 3 * HOUR_MS,
+    because: { kind: "forecast" as const, runsOutAt: JOBS_AT + HOUR_MS },
+  };
+  const job = (
+    n: number,
+    source: Seeded,
+    stage: "waiting" | "started" | "failed" | "cancelled",
+    askedBy: ContinuationAsker,
+    waiting: { from: number; since: number | null; why: string } | null
+  ) =>
+    db.insertContinuation({
+      id: `cont-fixture-${n.toString().padStart(2, "0")}`,
+      sourceInstanceId: source.id,
+      request: { target: { harness: "claude", model: "model-a" } },
+      prepared: preparedOf(source),
+      summariserInstanceId: null,
+      targetInstanceId: `cont-fixture-target-${n}`,
+      openingUuid: `cont-fixture-opening-${n}`,
+      summary: null,
+      openItems: null,
+      stage,
+      error: stage === "failed" ? "The summariser's model can't fit it." : null,
+      askedBy,
+      waiting,
+    });
+  job(1, first, "started", { kind: "person" }, null);
+  job(2, second, "failed", { kind: "session", id: first.id }, null);
+  job(3, third, "cancelled", { kind: "task", id: "tsk-12" }, null);
+  job(
+    4,
+    first,
+    "started",
+    {
+      kind: "move",
+      line: "limit-fixture-1",
+      move: movedLine,
+      stopped: "limit",
+      to: "acct-fixture-b",
+    },
+    { from: JOBS_AT, since: JOBS_AT - MINUTE_MS, why: "a background command" }
+  );
+  job(
+    5,
+    second,
+    "waiting",
+    { kind: "person" },
+    {
+      from: JOBS_AT + MINUTE_MS,
+      since: null,
+      why: "a one-time wake-up",
+    }
+  );
+}
+
+/**
+ * Every shape migration 0414 reads a job's asker and wait in, as a hand
+ * edit or an older build could leave them, each beside a request and a
+ * prepared transcript copied from a job written whole: an asker never set
+ * (the column's default, the person's), and askers that do not read: an
+ * open job's that is a JSON text, JSON `null`, a session's with no id, an
+ * open move's with only its account; and waits that do not read: not JSON,
+ * one with no `since`, JSON `null`. No asker here is other than JSON: the
+ * fixture's schema is before migration 0391, whose `json_extract` over
+ * every asker stops on one.
+ */
+function seedContinuationsByHand(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const jobs: [string, string, string | null, string | null][] = [
+    ["cont-fixture-hand-default", "started", null, null],
+    ["cont-fixture-hand-text", "summarising", JSON.stringify("a person"), null],
+    ["cont-fixture-hand-null", "failed", "null", null],
+    [
+      "cont-fixture-hand-no-id",
+      "failed",
+      JSON.stringify({ kind: "session" }),
+      null,
+    ],
+    [
+      "cont-fixture-hand-move",
+      "starting",
+      JSON.stringify({ kind: "move", to: "acct-fixture-b" }),
+      null,
+    ],
+    [
+      "cont-fixture-hand-wait-text",
+      "started",
+      JSON.stringify({ kind: "person" }),
+      "soon",
+    ],
+    [
+      "cont-fixture-hand-wait-partly",
+      "waiting",
+      JSON.stringify({ kind: "person" }),
+      JSON.stringify({ from: JOBS_AT, why: "a background command" }),
+    ],
+    [
+      "cont-fixture-hand-wait-null",
+      "started",
+      JSON.stringify({ kind: "task", id: "tsk-12" }),
+      "null",
+    ],
+  ];
+  for (const [jobId, stage, askedBy, waiting] of jobs) {
+    sqlite.run(
+      `INSERT INTO continuations (id, source_instance_id, request, prepared, summariser_instance_id, target_instance_id, opening_uuid, summary, stage, error, created_at, updated_at, open_items${askedBy === null ? "" : ", asked_by"}, waiting) SELECT ?, source_instance_id, request, prepared, NULL, ?, ?, NULL, ?, NULL, ?, ?, NULL${askedBy === null ? "" : ", ?"}, ? FROM continuations WHERE id = 'cont-fixture-01'`,
+      [
+        jobId,
+        `${jobId}-target`,
+        `${jobId}-opening`,
+        stage,
+        JOBS_AT,
+        JOBS_AT,
+        ...(askedBy === null ? [] : [askedBy]),
+        waiting,
+      ]
+    );
+  }
+  sqlite.close();
+}
+
+/** A move's state as moves.ts keeps it, for project `projectId` from `source` to `target`. */
+const moveStateOf = (
+  n: number,
+  projectId: string,
+  source: string,
+  target: string
+) => ({
+  bigFiles: [],
+  bytes: 48_300_000,
+  from: { kind: "hub" as const },
+  ignoredSecrets: [],
+  ignores: true,
+  promptUuid: `move-fixture-prompt-${n}`,
+  snapshotBranch: `cawco/move-fixture-${n}`,
+  sourceHome: "/home/dev",
+  sourceMachineId: source,
+  sourcePath: `/home/dev/src/${projectId}`,
+  steps: [
+    "approval" as const,
+    "snapshot" as const,
+    "clone" as const,
+    "start" as const,
+  ],
+  targetHome: "/home/dev",
+  targetInstanceId: `move-fixture-session-${n}`,
+  targetMachineId: target,
+  targetPath: fixturePath(`/home/dev/src/${projectId}`),
+});
+
+/**
+ * Project moves as the hub's own code writes them (`insertMove`), every one
+ * migration 0415 places whole: one waiting on the person's "Move it", its
+ * ask parked; one approved that started; one from an outside remote that
+ * failed at its clone, its snapshot and progress kept. And the session row
+ * a move that does not read names ({@link seedMovesByHand}), held as a move
+ * holds it.
+ */
+function seedMoves(db: HubDb, projects: string[]): void {
+  const [first, second, third] = projects;
+  if (!(first && second && third)) {
+    return;
+  }
+  const request = {
+    machineId: "quarry",
+    spawn: { harness: "claude" as const },
+  };
+  const at = (n: number) => new Date(JOBS_AT + n * MINUTE_MS);
+  db.insertMove({
+    id: "move-fixture-1",
+    projectId: first,
+    stage: "approval",
+    request,
+    state: {
+      ...moveStateOf(1, first, "obsidian", "quarry"),
+      ask: {
+        bigFiles: [],
+        details: ["4 uncommitted files go with it."],
+        gitInit: false,
+        lines: ["Clone it to quarry, then start the session there."],
+        title: "Move it to quarry?",
+        key: "move-fixture-key-1",
+      },
+      askId: "move-fixture-ask-1",
+    },
+  });
+  db.insertMove({
+    id: "move-fixture-2",
+    projectId: second,
+    stage: "started",
+    request,
+    state: {
+      ...moveStateOf(2, second, "lumen", "quarry"),
+      approved: true,
+      moved: "The project is on quarry.",
+    },
+  });
+  db.insertMove({
+    id: "move-fixture-3",
+    projectId: third,
+    stage: "failed",
+    request,
+    state: {
+      ...moveStateOf(3, third, "marlin", "obsidian"),
+      from: { kind: "outside", host: "github.com" },
+      cloneUrl: "https://github.com/acme/archive.git",
+      approved: true,
+      snapshot: {
+        base: null,
+        branch: "cawco/move-fixture-3",
+        commit: "4b1f0c2",
+        files: 12,
+        sourceBranch: "main",
+      },
+      progress: { bytes: 12_000_000, total: 48_300_000 },
+      error: {
+        message: "The clone stopped: the remote hung up.",
+        stage: "clone",
+      },
+    },
+  });
+  db.holdMovingInstance({
+    id: "move-fixture-session-hand-partly",
+    machineId: "quarry",
+    cwd: fixturePath(`/home/dev/src/${first}`),
+    projectId: first,
+    harness: "claude",
+    at: at(10),
+  });
+}
+
+/**
+ * Every shape migration 0415 reads a move's state in, as a hand edit or an
+ * older build could leave it, each beside a request copied from a move
+ * written whole: an unsettled state that is not JSON (it names no row), a
+ * JSON text, one cancelled that is not JSON, and one partly readable: its
+ * session's id and its ask there, its steps gone (it holds the row it
+ * names, which is marked failed as the hub starts).
+ */
+function seedMovesByHand(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const project = sqlite
+    .query<{ projectId: string }, []>(
+      "SELECT project_id AS projectId FROM moves WHERE id = 'move-fixture-1'"
+    )
+    .get()?.projectId;
+  if (!project) {
+    sqlite.close();
+    return;
+  }
+  const { steps: _steps, ...partly } = moveStateOf(
+    9,
+    project,
+    "obsidian",
+    "quarry"
+  );
+  const states: [string, string, string][] = [
+    ["move-fixture-hand-text", "clone", "cloning"],
+    ["move-fixture-hand-string", "snapshot", JSON.stringify("snapshot")],
+    ["move-fixture-hand-cancelled", "cancelled", "{"],
+    [
+      "move-fixture-hand-partly",
+      "approval",
+      JSON.stringify({
+        ...partly,
+        targetInstanceId: "move-fixture-session-hand-partly",
+        askId: "move-fixture-ask-hand",
+      }),
+    ],
+  ];
+  for (const [moveId, stage, stored] of states) {
+    sqlite.run(
+      "INSERT INTO moves (id, project_id, stage, state, source_machine_id, target_machine_id, stop_on, request, created_at, updated_at) SELECT ?, project_id, ?, ?, source_machine_id, target_machine_id, NULL, request, ?, ? FROM moves WHERE id = 'move-fixture-1'",
+      [moveId, stage, stored, JOBS_AT, JOBS_AT]
+    );
+  }
+  sqlite.close();
+}
+
+/**
+ * Every shape migration 0416 reads a relay proof's chips and the relay's
+ * ports in, and the health 0417 drops, as the hub's writers leave them
+ * and as a hand edit could: the relay, its ports said, its health asked;
+ * proofs from outside (UDP and TLS), from a fleet machine (TCP), and one
+ * that answered nothing (never set). And, in rows the hub never reads
+ * (the relay is one row, `relay`), ports never said, not JSON and partly
+ * readable; and proofs whose chips do not read: not JSON, JSON `null`, a
+ * list with an entry that is not text, and a chip no writer makes.
+ */
+function seedRelayPorts(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const relays: [string, string | null][] = [
+    ["relay", JSON.stringify({ udp: true, tcp: true, tls: false })],
+    ["relay-fixture-never", null],
+    ["relay-fixture-text", "udp,tcp"],
+    ["relay-fixture-partly", JSON.stringify({ udp: true, tcp: true })],
+  ];
+  for (const [relayId, ports] of relays) {
+    sqlite.run(
+      "INSERT INTO stream_relay (id, machine_id, address, hostname, secret, wanted, state, ports, why, health, checked_at, created_at) VALUES (?, 'lumen', '203.0.113.24', NULL, 'not-sealed', 1, 'live', ?, NULL, ?, ?, ?)",
+      [
+        relayId,
+        ports,
+        JSON.stringify([
+          { port: "udp 3478", up: true },
+          { port: "tcp 3478", up: false, error: "timed out" },
+        ]),
+        JOBS_AT,
+        JOBS_AT,
+      ]
+    );
+  }
+  const proofs: [string, string, boolean, string][] = [
+    [
+      "device-fixture-outside",
+      "Chrome on Linux",
+      true,
+      JSON.stringify(["udp 3478", "tls 5349"]),
+    ],
+    ["machine:marlin", "marlin", true, JSON.stringify(["tcp 3478"])],
+    ["device-fixture-none", "CawCo on iPhone", false, JSON.stringify([])],
+    ["device-fixture-text", "Safari on macOS", true, "udp 3478"],
+    ["device-fixture-null", "Firefox on Linux", true, "null"],
+    [
+      "device-fixture-partly",
+      "Edge on Windows",
+      true,
+      JSON.stringify(["udp 3478", 7]),
+    ],
+    [
+      "device-fixture-unknown",
+      "Chrome on Android",
+      true,
+      JSON.stringify(["udp 3479"]),
+    ],
+  ];
+  for (const [n, [deviceId, device, outside, ports]] of proofs.entries()) {
+    sqlite.run(
+      "INSERT INTO stream_relay_proofs (device_id, device, address, outside, ports, refused, at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+      [
+        deviceId,
+        device,
+        outside ? "198.51.100.7" : "203.0.113.24",
+        outside ? 1 : 0,
+        ports,
+        JOBS_AT + n * MINUTE_MS,
+      ]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -1777,6 +2193,8 @@ async function seed(
     seedMcpServers(db, projects);
     seedTracker(db, projects);
     seedAsks(db, sessions);
+    seedContinuations(db, sessions);
+    seedMoves(db, projects);
   }
   lifetime.close();
   if (withLists) {
@@ -1792,6 +2210,9 @@ async function seed(
     seedAsksByHand(dbPath);
     seedPassScopes(dbPath);
     seedLiftedColumns(dbPath);
+    seedContinuationsByHand(dbPath);
+    seedMovesByHand(dbPath);
+    seedRelayPorts(dbPath);
   }
 }
 

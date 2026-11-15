@@ -314,6 +314,8 @@ export interface StreamRelay {
   ) => Promise<number | RelayMachineRefusal>;
   /** The relay's machine connected: a relay that should run is started again (kept as it is when it runs already). */
   connected: (machineId: string) => void;
+  /** Each port's last answer to the hub's health check; none before one. */
+  health: () => RelayPortHealth[];
   /** A machine's relay frame: the record follows it. */
   heard: (frame: RelayFrame) => void;
   /** A credential for `userId`, good for `ttlMs`; null while the fleet has no relay, or none that runs. */
@@ -344,6 +346,13 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
   const { db, call, changed } = deps;
   /** The latest progress of a pull, which the record does not keep. */
   let progress: { done: number; total: number } | undefined;
+  /**
+   * Each port's last answer to the hub's health check ({@link check}),
+   * which the record does not keep: asked again every minute and after each
+   * frame, and none until then. Emptied when the fleet's relay is set up
+   * again or removed.
+   */
+  let probed: RelayPortHealth[] = [];
 
   const machineName = (machineId: string): string =>
     deps.machines().find((one) => one.machineId === machineId)?.name ??
@@ -448,11 +457,11 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     if (!(relay?.wanted && relay.state === "live")) {
       return;
     }
-    const health = await probeRelay(
+    probed = await probeRelay(
       relay.address,
       relay.ports?.tls && relay.hostname ? relay.hostname : null
     );
-    update({ health, checkedAt: Date.now() });
+    changed();
   };
 
   /** `stream-relay-renew`: the certificate renewed when certbot says it is due, by DNS with the token the journey keeps. */
@@ -496,6 +505,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
 
   return {
     read: () => db.read(),
+    health: () => probed,
     progress: () => {
       const relay = db.read();
       return relay?.state === "pulling" ? progress : undefined;
@@ -537,6 +547,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         // its certificate volume and router mappings with it.
         await call(before.machineId, RELAY_REMOVE, [], STOP_MS);
       }
+      probed = [];
       db.set({
         machineId,
         address,
@@ -602,6 +613,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         });
       }
       db.forget();
+      probed = [];
       changed();
     },
     connected: (machineId) => {

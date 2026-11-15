@@ -481,8 +481,6 @@ import type {
   PropKindOutput,
   PropMetaOutput,
   RefusalReachOutput,
-  RelayPortHealthOutput,
-  RelayPortNameOutput,
   RelayPortsOutput,
   RelayProviderOutput,
   RelayReachOutput,
@@ -570,8 +568,6 @@ import type {
 } from "./stored-shapes";
 import type { CommandAckStage as CommandAckStageType } from "./stream";
 import type {
-  RelayPortHealth as RelayPortHealthType,
-  RelayPortName as RelayPortNameType,
   RelayPorts as RelayPortsType,
   RelayReach as RelayReachType,
   StreamRelayState as StreamRelayStateType,
@@ -828,8 +824,6 @@ prove<
     Same<ProjectNoteOutput, ProjectNoteType>,
     Same<ProjectOfferReasonOutput, ProjectOfferReasonType>,
     Same<RefusalReachOutput, RefusalReachType>,
-    Same<RelayPortNameOutput, RelayPortNameType>,
-    Same<RelayPortHealthOutput, RelayPortHealthType>,
     Same<RelayPortsOutput, RelayPortsType>,
     Same<RelayReachOutput, RelayReachType>,
     Same<RelayProviderOutput, RelayProviderType>,

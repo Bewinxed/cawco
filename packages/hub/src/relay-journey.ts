@@ -629,7 +629,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
           : null,
       ports:
         stored.state === "live"
-          ? stored.health.map((one) => ({
+          ? relay.health().map((one) => ({
               name: one.port,
               up: one.up,
               ...(one.error ? { error: one.error } : {}),

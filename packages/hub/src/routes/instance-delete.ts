@@ -46,7 +46,9 @@ export const instanceDeleteRoutes = ({
           detail: "No session with that id on this hub.",
         });
       }
-      if (moves.holds(row.id)) {
+      // A move whose state does not read holds the row from waking, never
+      // from the person's Remove: nothing of it can carry the row on.
+      if (moves.holds(row.id) === "move") {
         return problem(409, {
           code: "sessions-project-still-moving",
           detail:

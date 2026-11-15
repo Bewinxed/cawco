@@ -168,6 +168,13 @@ export const spawnWords = {
     forkNeedsMode: "Choose a permission mode for the fork.",
     moveChanged:
       "The move changed before it started. Open it and start it again.",
+    /**
+     * A session row held for a project move whose record does not read
+     * (hub moves.ts `resume`): the move goes no further and its session
+     * never starts. Its error's words, on the row.
+     */
+    moveUnread:
+      "Its project move doesn't read from its record, so the move stopped here and this session never starts. Remove it to clear it.",
     /** A move's reading: what Move & start does first, to the project or (several) the folder it takes. */
     moveReading: (what: string, machine: string, work: string, size: string) =>
       `${what} isn't on ${machine} yet. ${spawnWords.moveAndStart} clones it there first${work}${size}.`,

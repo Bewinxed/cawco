@@ -54,7 +54,6 @@ import type {
   CacheTtl as CacheTtlType,
   CommentDirection as CommentDirectionType,
   ConnectionSecret as ConnectionSecretType,
-  ContinuationAsker as ContinuationAskerType,
   ContinueRequest as ContinueRequestType,
   DelegateRequestKind as DelegateRequestKindType,
   DesignCheckState as DesignCheckStateType,
@@ -71,6 +70,7 @@ import type {
   LfsOfferAnswer as LfsOfferAnswerType,
   LimitCompactionStage as LimitCompactionStageType,
   McpAuthMode as McpAuthModeType,
+  MoveAsker as MoveAskerType,
   Origin as OriginType,
   PreparedContinuation as PreparedContinuationType,
   PresenceKind as PresenceKindType,
@@ -343,30 +343,6 @@ export const ConnectionSecretSchema: z.ZodType<ConnectionSecretType> =
   ConnectionSecretShape;
 export type ConnectionSecretOutput = z.output<typeof ConnectionSecretShape>;
 
-const ContinuationAskerShape = declared(
-  z.union([
-    z.object({ kind: z.literal("person") }),
-    z.object({ kind: z.literal("session"), id: z.string() }),
-    z.object({ kind: z.literal("task"), id: z.string() }),
-    z.object({
-      kind: z.literal("move"),
-      line: z.string(),
-      move: AccountMoveSchema,
-      stopped: z.union([
-        z.literal(false),
-        z.literal("limit"),
-        z.literal("signin"),
-      ]),
-      to: z.string(),
-    }),
-  ]),
-  "ContinuationAsker",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const ContinuationAskerSchema: z.ZodType<ContinuationAskerType> =
-  ContinuationAskerShape;
-export type ContinuationAskerOutput = z.output<typeof ContinuationAskerShape>;
-
 const ContinueRequestShape = declared(
   z.object({
     asksOnly: z.literal(true).optional(),
@@ -556,6 +532,23 @@ const McpAuthModeShape = declared(
 );
 export const McpAuthModeSchema: z.ZodType<McpAuthModeType> = McpAuthModeShape;
 export type McpAuthModeOutput = z.output<typeof McpAuthModeShape>;
+
+const MoveAskerShape = declared(
+  z.object({
+    line: z.string(),
+    move: AccountMoveSchema,
+    stopped: z.union([
+      z.literal(false),
+      z.literal("limit"),
+      z.literal("signin"),
+    ]),
+    to: z.string(),
+  }),
+  "MoveAsker",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const MoveAskerSchema: z.ZodType<MoveAskerType> = MoveAskerShape;
+export type MoveAskerOutput = z.output<typeof MoveAskerShape>;
 
 export const MoveStateShape = declared(
   z.object({

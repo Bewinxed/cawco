@@ -26,6 +26,7 @@ import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
+import { logContinuationsUnread } from "./continuation-askers-unread";
 import type { DbCore } from "./core";
 import { logCutFromUnread } from "./cut-from-unread";
 import { delegateTypesHandShape } from "./delegate-types-hand-shape";
@@ -37,11 +38,13 @@ import { logLimitLinesUnread } from "./limit-lines-unread";
 import { logMayStartNarrowed } from "./may-start-narrowed";
 import { mergeProjectPages } from "./merge-project-pages";
 import { FILE_HASHES } from "./migration-names";
+import { logMovesUnread } from "./move-states-unread";
 import { logOutputsUnread } from "./outputs-unread";
 import { logPassScopesUnread } from "./pass-scopes-unread";
 import { logPlatformsRoutesUnread } from "./platforms-routes-unread";
 import { logQueuedUnread } from "./queued-unread";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
+import { logRelayPortsUnread } from "./relay-ports-unread";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
 import { logSendOriginsUnread } from "./send-origins-unread";
@@ -235,6 +238,33 @@ export const MIGRATION_STEPS: readonly Step[] = [
     run: (client) => {
       // Every send whose origin's kind 0413 reads as null, read before it runs.
       logSendOriginsUnread(client);
+    },
+  },
+  {
+    name: "continuations-unread",
+    before: "0414_continuation_asker_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every continuation asker and wait 0414 keeps as not read, read before it runs.
+      logContinuationsUnread(client);
+    },
+  },
+  {
+    name: "moves-unread",
+    before: "0415_move_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every project move state 0415 keeps as not read, read before it runs.
+      logMovesUnread(client);
+    },
+  },
+  {
+    name: "relay-ports-unread",
+    before: "0416_relay_port_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every relay proof's chips and relay ports 0416 keeps as not read, read before it runs.
+      logRelayPortsUnread(client);
     },
   },
   {

@@ -2920,188 +2920,785 @@
     },
     "additionalProperties": {}
   },
-  "continuations.asked_by": {
-    "anyOf": [
-      {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "person"
-          }
-        },
-        "required": [
-          "kind"
-        ]
+  "continuations.asked_by_kind": {
+    "type": "string",
+    "enum": [
+      "person",
+      "session",
+      "task",
+      "move"
+    ]
+  },
+  "continuations.asked_by_move": {
+    "type": "object",
+    "properties": {
+      "line": {
+        "type": "string"
       },
-      {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "session"
-          },
-          "id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "id"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "task"
-          },
-          "id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "id"
-        ]
-      },
-      {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "const": "move"
-          },
-          "line": {
-            "type": "string"
-          },
-          "move": {
-            "anyOf": [
-              {
+      "move": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "moved"
+              },
+              "asked": {
+                "type": "boolean",
+                "const": true
+              },
+              "removed": {
+                "type": "boolean",
+                "const": true
+              },
+              "signedOut": {
+                "type": "boolean",
+                "const": true
+              },
+              "signedOutOn": {
+                "type": "string"
+              },
+              "compact": {
+                "type": "string",
+                "enum": [
+                  "filing",
+                  "compacting",
+                  "compacted",
+                  "stopped"
+                ]
+              },
+              "compactFirst": {
+                "type": "boolean",
+                "const": true
+              },
+              "compactBy": {
+                "type": "string",
+                "enum": [
+                  "opencode",
+                  "pi"
+                ]
+              },
+              "summaryRefused": {
+                "type": "string"
+              },
+              "relaunched": {
+                "type": "boolean",
+                "const": true
+              },
+              "from": {
                 "type": "object",
                 "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "moved"
-                  },
-                  "asked": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "removed": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "signedOut": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "signedOutOn": {
-                    "type": "string"
-                  },
-                  "compact": {
+                  "hue": {
                     "type": "string",
                     "enum": [
-                      "filing",
-                      "compacting",
-                      "compacted",
-                      "stopped"
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
                     ]
                   },
-                  "compactFirst": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "compactBy": {
-                    "type": "string",
-                    "enum": [
-                      "opencode",
-                      "pi"
-                    ]
-                  },
-                  "summaryRefused": {
+                  "id": {
                     "type": "string"
                   },
-                  "relaunched": {
-                    "type": "boolean",
-                    "const": true
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "to": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
+                    ]
                   },
-                  "from": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "sameOrganization": {
+                "type": "boolean"
+              },
+              "tokens": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "window": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "resetsAt": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "because": {
+                "anyOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "hue": {
+                      "kind": {
                         "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
+                        "const": "forecast"
                       },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
+                      "runsOutAt": {
+                        "type": "number"
                       }
                     },
                     "required": [
-                      "hue",
-                      "id",
-                      "name"
+                      "kind",
+                      "runsOutAt"
                     ]
                   },
-                  "to": {
+                  {
                     "type": "object",
                     "properties": {
-                      "hue": {
+                      "kind": {
                         "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
+                        "const": "cold"
                       },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
+                      "wake": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
-                      "hue",
-                      "id",
-                      "name"
+                      "kind",
+                      "wake"
                     ]
                   },
-                  "sameOrganization": {
-                    "type": "boolean"
-                  },
-                  "tokens": {
-                    "type": [
-                      "number",
-                      "null"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "refused"
+                      }
+                    },
+                    "required": [
+                      "kind"
                     ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "extra-usage"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  }
+                ]
+              },
+              "cost": {
+                "type": "object",
+                "properties": {
+                  "pct": {
+                    "type": "number"
                   },
                   "window": {
-                    "type": [
-                      "string",
-                      "null"
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pct",
+                  "window"
+                ]
+              },
+              "ended": {
+                "type": "object",
+                "properties": {
+                  "tasks": {
+                    "type": "number"
+                  },
+                  "wakeups": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "tasks",
+                  "wakeups"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to",
+              "sameOrganization",
+              "tokens",
+              "window",
+              "resetsAt"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "moving"
+              },
+              "from": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
                     ]
                   },
-                  "resetsAt": {
-                    "type": [
-                      "number",
-                      "null"
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "to": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "at": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cost": {
+                "type": "object",
+                "properties": {
+                  "pct": {
+                    "type": "number"
+                  },
+                  "window": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pct",
+                  "window"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to",
+              "at",
+              "tokens"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "waiting"
+              },
+              "account": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "frees": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "accounts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "account": {
+                      "type": "object",
+                      "properties": {
+                        "hue": {
+                          "type": "string",
+                          "enum": [
+                            "amber",
+                            "blue",
+                            "cyan",
+                            "green",
+                            "orange",
+                            "rose",
+                            "violet"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hue",
+                        "id",
+                        "name"
+                      ]
+                    },
+                    "backAt": {
+                      "type": "number"
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "signin"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "allowed"
+                            },
+                            "by": {
+                              "type": "string",
+                              "enum": [
+                                "project",
+                                "task"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "by"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "benched"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "reserve"
+                            },
+                            "pct": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "pct"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "unread"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "limit"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "backup"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "alone"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "room"
+                            },
+                            "leftPct": {
+                              "type": "number"
+                            },
+                            "movePct": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "leftPct",
+                            "movePct"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "runsOut"
+                            },
+                            "at": {
+                              "type": "number"
+                            },
+                            "leftPct": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "at",
+                            "leftPct"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "fits"
+                            },
+                            "carries": {
+                              "type": "boolean"
+                            },
+                            "leftPct": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "carries",
+                            "leftPct"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "account",
+                    "reason"
+                  ]
+                }
+              },
+              "until": {
+                "type": "number"
+              },
+              "why": {
+                "type": "string",
+                "enum": [
+                  "fork",
+                  "off",
+                  "full",
+                  "free",
+                  "room",
+                  "soon",
+                  "work"
+                ]
+              },
+              "tokens": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "account",
+              "until",
+              "why",
+              "tokens"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "continued"
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "hue": {
+                        "type": "string",
+                        "enum": [
+                          "amber",
+                          "blue",
+                          "cyan",
+                          "green",
+                          "orange",
+                          "rose",
+                          "violet"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hue",
+                      "id",
+                      "name"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "hue": {
+                        "type": "string",
+                        "enum": [
+                          "amber",
+                          "blue",
+                          "cyan",
+                          "green",
+                          "orange",
+                          "rose",
+                          "violet"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hue",
+                      "id",
+                      "name"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "writtenOn": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "hue": {
+                        "type": "string",
+                        "enum": [
+                          "amber",
+                          "blue",
+                          "cyan",
+                          "green",
+                          "orange",
+                          "rose",
+                          "violet"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "hue",
+                      "id",
+                      "name"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "by": {
+                "type": "string"
+              },
+              "asked": {
+                "type": "boolean",
+                "const": true
+              },
+              "asks": {
+                "type": "boolean",
+                "const": true
+              },
+              "move": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string",
+                    "enum": [
+                      "limit",
+                      "ahead"
                     ]
                   },
                   "because": {
@@ -3164,722 +3761,14 @@
                       }
                     ]
                   },
-                  "cost": {
-                    "type": "object",
-                    "properties": {
-                      "pct": {
-                        "type": "number"
-                      },
-                      "window": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "pct",
-                      "window"
-                    ]
-                  },
-                  "ended": {
-                    "type": "object",
-                    "properties": {
-                      "tasks": {
-                        "type": "number"
-                      },
-                      "wakeups": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "tasks",
-                      "wakeups"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "from",
-                  "to",
-                  "sameOrganization",
-                  "tokens",
-                  "window",
-                  "resetsAt"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "moving"
-                  },
-                  "from": {
-                    "type": "object",
-                    "properties": {
-                      "hue": {
-                        "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
-                      },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "hue",
-                      "id",
-                      "name"
-                    ]
-                  },
-                  "to": {
-                    "type": "object",
-                    "properties": {
-                      "hue": {
-                        "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
-                      },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "hue",
-                      "id",
-                      "name"
-                    ]
-                  },
-                  "at": {
-                    "type": "number"
-                  },
-                  "tokens": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "cost": {
-                    "type": "object",
-                    "properties": {
-                      "pct": {
-                        "type": "number"
-                      },
-                      "window": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "pct",
-                      "window"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "from",
-                  "to",
-                  "at",
-                  "tokens"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "waiting"
-                  },
-                  "account": {
-                    "type": "object",
-                    "properties": {
-                      "hue": {
-                        "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
-                      },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "hue",
-                      "id",
-                      "name"
-                    ]
-                  },
-                  "frees": {
-                    "type": "object",
-                    "properties": {
-                      "hue": {
-                        "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
-                      },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "hue",
-                      "id",
-                      "name"
-                    ]
-                  },
-                  "accounts": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "account": {
-                          "type": "object",
-                          "properties": {
-                            "hue": {
-                              "type": "string",
-                              "enum": [
-                                "amber",
-                                "blue",
-                                "cyan",
-                                "green",
-                                "orange",
-                                "rose",
-                                "violet"
-                              ]
-                            },
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "hue",
-                            "id",
-                            "name"
-                          ]
-                        },
-                        "backAt": {
-                          "type": "number"
-                        },
-                        "reason": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "signin"
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "allowed"
-                                },
-                                "by": {
-                                  "type": "string",
-                                  "enum": [
-                                    "project",
-                                    "task"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "by"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "benched"
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "reserve"
-                                },
-                                "pct": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "pct"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "unread"
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "limit"
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "backup"
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "alone"
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "room"
-                                },
-                                "leftPct": {
-                                  "type": "number"
-                                },
-                                "movePct": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "leftPct",
-                                "movePct"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "runsOut"
-                                },
-                                "at": {
-                                  "type": "number"
-                                },
-                                "leftPct": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "at",
-                                "leftPct"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "const": "fits"
-                                },
-                                "carries": {
-                                  "type": "boolean"
-                                },
-                                "leftPct": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "carries",
-                                "leftPct"
-                              ]
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "account",
-                        "reason"
-                      ]
-                    }
-                  },
-                  "until": {
-                    "type": "number"
-                  },
-                  "why": {
-                    "type": "string",
-                    "enum": [
-                      "fork",
-                      "off",
-                      "full",
-                      "free",
-                      "room",
-                      "soon",
-                      "work"
-                    ]
-                  },
-                  "tokens": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "account",
-                  "until",
-                  "why",
-                  "tokens"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "continued"
-                  },
-                  "from": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "hue": {
-                            "type": "string",
-                            "enum": [
-                              "amber",
-                              "blue",
-                              "cyan",
-                              "green",
-                              "orange",
-                              "rose",
-                              "violet"
-                            ]
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "hue",
-                          "id",
-                          "name"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "to": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "hue": {
-                            "type": "string",
-                            "enum": [
-                              "amber",
-                              "blue",
-                              "cyan",
-                              "green",
-                              "orange",
-                              "rose",
-                              "violet"
-                            ]
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "hue",
-                          "id",
-                          "name"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "writtenOn": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "hue": {
-                            "type": "string",
-                            "enum": [
-                              "amber",
-                              "blue",
-                              "cyan",
-                              "green",
-                              "orange",
-                              "rose",
-                              "violet"
-                            ]
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "hue",
-                          "id",
-                          "name"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "by": {
-                    "type": "string"
-                  },
                   "asked": {
                     "type": "boolean",
                     "const": true
                   },
-                  "asks": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "move": {
-                    "type": "object",
-                    "properties": {
-                      "at": {
-                        "type": "string",
-                        "enum": [
-                          "limit",
-                          "ahead"
-                        ]
-                      },
-                      "because": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "const": "forecast"
-                              },
-                              "runsOutAt": {
-                                "type": "number"
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "runsOutAt"
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "const": "cold"
-                              },
-                              "wake": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "wake"
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "const": "refused"
-                              }
-                            },
-                            "required": [
-                              "kind"
-                            ]
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "const": "extra-usage"
-                              }
-                            },
-                            "required": [
-                              "kind"
-                            ]
-                          }
-                        ]
-                      },
-                      "asked": {
-                        "type": "boolean",
-                        "const": true
-                      },
-                      "window": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "resetsAt": {
-                        "type": [
-                          "number",
-                          "null"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "at",
-                      "window",
-                      "resetsAt"
-                    ]
-                  },
-                  "tokens": {
+                  "window": {
                     "type": [
-                      "number",
+                      "string",
                       "null"
-                    ]
-                  },
-                  "preparedAtPct": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "from",
-                  "to",
-                  "writtenOn",
-                  "tokens",
-                  "preparedAtPct"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "stopped"
-                  },
-                  "account": {
-                    "type": "object",
-                    "properties": {
-                      "hue": {
-                        "type": "string",
-                        "enum": [
-                          "amber",
-                          "blue",
-                          "cyan",
-                          "green",
-                          "orange",
-                          "rose",
-                          "violet"
-                        ]
-                      },
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "hue",
-                      "id",
-                      "name"
                     ]
                   },
                   "resetsAt": {
@@ -3890,19 +3779,224 @@
                   }
                 },
                 "required": [
-                  "kind",
-                  "account",
+                  "at",
+                  "window",
                   "resetsAt"
                 ]
               },
-              {
+              "tokens": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "preparedAtPct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "from",
+              "to",
+              "writtenOn",
+              "tokens",
+              "preparedAtPct"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "stopped"
+              },
+              "account": {
                 "type": "object",
                 "properties": {
-                  "kind": {
+                  "hue": {
                     "type": "string",
-                    "const": "signed-out"
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
+                    ]
                   },
-                  "account": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              },
+              "resetsAt": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "account",
+              "resetsAt"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "signed-out"
+              },
+              "account": {
+                "type": "object",
+                "properties": {
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange",
+                      "rose",
+                      "violet"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hue",
+                  "id",
+                  "name"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "account"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "ended"
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "person"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "session"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "name"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "hub"
+                      },
+                      "why": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "why"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "outside"
+                      },
+                      "signal": {
+                        "type": "string"
+                      },
+                      "resumes": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "signal",
+                      "resumes"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "by"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unmoved"
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "move",
+                  "continue"
+                ]
+              },
+              "signedOut": {
+                "type": "boolean",
+                "const": true
+              },
+              "from": {
+                "anyOf": [
+                  {
                     "type": "object",
                     "properties": {
                       "hue": {
@@ -3929,241 +4023,103 @@
                       "id",
                       "name"
                     ]
+                  },
+                  {
+                    "type": "null"
                   }
-                },
-                "required": [
-                  "kind",
-                  "account"
                 ]
               },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "ended"
-                  },
-                  "by": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "const": "person"
-                          }
-                        },
-                        "required": [
-                          "kind"
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "hue": {
+                        "type": "string",
+                        "enum": [
+                          "amber",
+                          "blue",
+                          "cyan",
+                          "green",
+                          "orange",
+                          "rose",
+                          "violet"
                         ]
                       },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "const": "session"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "name"
-                        ]
+                      "id": {
+                        "type": "string"
                       },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "const": "hub"
-                          },
-                          "why": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "why"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "const": "outside"
-                          },
-                          "signal": {
-                            "type": "string"
-                          },
-                          "resumes": {
-                            "type": "boolean"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "signal",
-                          "resumes"
-                        ]
+                      "name": {
+                        "type": "string"
                       }
+                    },
+                    "required": [
+                      "hue",
+                      "id",
+                      "name"
                     ]
+                  },
+                  {
+                    "type": "null"
                   }
-                },
-                "required": [
-                  "kind",
-                  "by"
                 ]
               },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "unmoved"
-                  },
-                  "action": {
-                    "type": "string",
-                    "enum": [
-                      "move",
-                      "continue"
-                    ]
-                  },
-                  "signedOut": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "from": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "hue": {
-                            "type": "string",
-                            "enum": [
-                              "amber",
-                              "blue",
-                              "cyan",
-                              "green",
-                              "orange",
-                              "rose",
-                              "violet"
-                            ]
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "hue",
-                          "id",
-                          "name"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "to": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "hue": {
-                            "type": "string",
-                            "enum": [
-                              "amber",
-                              "blue",
-                              "cyan",
-                              "green",
-                              "orange",
-                              "rose",
-                              "violet"
-                            ]
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "hue",
-                          "id",
-                          "name"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "asked": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "step": {
-                    "type": "string",
-                    "enum": [
-                      "prepare",
-                      "summary",
-                      "start"
-                    ]
-                  },
-                  "reason": {
-                    "type": "string"
-                  },
-                  "waits": {
-                    "type": "boolean",
-                    "const": true
-                  }
-                },
-                "required": [
-                  "kind",
-                  "action",
-                  "from",
-                  "to",
-                  "step",
-                  "reason"
-                ]
-              }
-            ]
-          },
-          "stopped": {
-            "anyOf": [
-              {
+              "asked": {
                 "type": "boolean",
-                "const": false
+                "const": true
               },
-              {
+              "step": {
                 "type": "string",
-                "const": "limit"
+                "enum": [
+                  "prepare",
+                  "summary",
+                  "start"
+                ]
               },
-              {
-                "type": "string",
-                "const": "signin"
+              "reason": {
+                "type": "string"
+              },
+              "waits": {
+                "type": "boolean",
+                "const": true
               }
+            },
+            "required": [
+              "kind",
+              "action",
+              "from",
+              "to",
+              "step",
+              "reason"
             ]
-          },
-          "to": {
-            "type": "string"
           }
-        },
-        "required": [
-          "kind",
-          "line",
-          "move",
-          "stopped",
-          "to"
         ]
+      },
+      "stopped": {
+        "anyOf": [
+          {
+            "type": "boolean",
+            "const": false
+          },
+          {
+            "type": "string",
+            "const": "limit"
+          },
+          {
+            "type": "string",
+            "const": "signin"
+          }
+        ]
+      },
+      "to": {
+        "type": "string"
       }
+    },
+    "required": [
+      "line",
+      "move",
+      "stopped",
+      "to"
     ]
   },
   "continuations.prepared": {
@@ -4485,28 +4441,6 @@
       "started",
       "failed",
       "cancelled"
-    ]
-  },
-  "continuations.waiting": {
-    "type": "object",
-    "properties": {
-      "from": {
-        "type": "number"
-      },
-      "since": {
-        "type": [
-          "number",
-          "null"
-        ]
-      },
-      "why": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "from",
-      "since",
-      "why"
     ]
   },
   "decides_settings.hear": {
@@ -9295,182 +9229,9 @@
       "wakeups"
     ]
   },
-  "moves.request": {
+  "moves.learned": {
     "type": "object",
     "properties": {
-      "approved": {
-        "type": "string"
-      },
-      "attachments": {
-        "type": "array",
-        "items": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "content": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string",
-                  "const": "text"
-                },
-                "name": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "kind",
-                "name"
-              ]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "type": "string",
-                  "const": "file"
-                },
-                "mediaType": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "ref": {
-                  "type": "string"
-                },
-                "size": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "kind",
-                "mediaType",
-                "name",
-                "ref",
-                "size"
-              ]
-            }
-          ]
-        }
-      },
-      "from": {
-        "type": "string"
-      },
-      "images": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "data": {
-              "type": "string"
-            },
-            "mediaType": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "data",
-            "mediaType"
-          ]
-        }
-      },
-      "machineId": {
-        "type": "string"
-      },
-      "path": {
-        "type": "string"
-      },
-      "prompt": {
-        "type": "string"
-      },
-      "spawn": {
-        "type": "object",
-        "properties": {
-          "account": {
-            "type": "string"
-          },
-          "effort": {
-            "type": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              "xhigh",
-              "max"
-            ]
-          },
-          "harness": {
-            "type": "string",
-            "enum": [
-              "claude",
-              "opencode",
-              "pi"
-            ]
-          },
-          "model": {
-            "type": "string"
-          },
-          "permissionMode": {
-            "type": "string",
-            "enum": [
-              "default",
-              "acceptEdits",
-              "bypassPermissions",
-              "plan",
-              "dontAsk",
-              "auto",
-              "fullSend"
-            ]
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "harness"
-        ]
-      }
-    },
-    "required": [
-      "machineId",
-      "spawn"
-    ]
-  },
-  "moves.stage": {
-    "anyOf": [
-      {
-        "type": "string",
-        "enum": [
-          "approval",
-          "snapshot",
-          "clone",
-          "lfs",
-          "start"
-        ]
-      },
-      {
-        "type": "string",
-        "const": "started"
-      },
-      {
-        "type": "string",
-        "const": "failed"
-      },
-      {
-        "type": "string",
-        "const": "cancelled"
-      }
-    ]
-  },
-  "moves.state": {
-    "type": "object",
-    "properties": {
-      "approved": {
-        "type": "boolean"
-      },
       "ask": {
         "type": "object",
         "properties": {
@@ -9521,9 +9282,6 @@
           "lines",
           "title"
         ]
-      },
-      "askId": {
-        "type": "string"
       },
       "bigFiles": {
         "type": "array",
@@ -9787,9 +9545,6 @@
       "targetHome": {
         "type": "string"
       },
-      "targetInstanceId": {
-        "type": "string"
-      },
       "targetPath": {
         "x-code": "custom"
       }
@@ -9806,8 +9561,177 @@
       "sourcePath",
       "steps",
       "targetHome",
-      "targetInstanceId",
       "targetPath"
+    ]
+  },
+  "moves.request": {
+    "type": "object",
+    "properties": {
+      "approved": {
+        "type": "string"
+      },
+      "attachments": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "text"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "content",
+                "kind",
+                "name"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "file"
+                },
+                "mediaType": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "mediaType",
+                "name",
+                "ref",
+                "size"
+              ]
+            }
+          ]
+        }
+      },
+      "from": {
+        "type": "string"
+      },
+      "images": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "mediaType": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "mediaType"
+          ]
+        }
+      },
+      "machineId": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "spawn": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "claude",
+              "opencode",
+              "pi"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "permissionMode": {
+            "type": "string",
+            "enum": [
+              "default",
+              "acceptEdits",
+              "bypassPermissions",
+              "plan",
+              "dontAsk",
+              "auto",
+              "fullSend"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness"
+        ]
+      }
+    },
+    "required": [
+      "machineId",
+      "spawn"
+    ]
+  },
+  "moves.stage": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "approval",
+          "snapshot",
+          "clone",
+          "lfs",
+          "start"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "started"
+      },
+      {
+        "type": "string",
+        "const": "failed"
+      },
+      {
+        "type": "string",
+        "const": "cancelled"
+      }
     ]
   },
   "owed_moves.move": {
@@ -14630,57 +14554,6 @@
       "open",
       "pointed",
       "skipped"
-    ]
-  },
-  "stream_relay_proofs.ports": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
-  "stream_relay.health": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "error": {
-          "type": "string"
-        },
-        "port": {
-          "type": "string",
-          "enum": [
-            "udp 3478",
-            "tcp 3478",
-            "tls 5349"
-          ]
-        },
-        "up": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "port",
-        "up"
-      ]
-    }
-  },
-  "stream_relay.ports": {
-    "type": "object",
-    "properties": {
-      "tcp": {
-        "type": "boolean"
-      },
-      "tls": {
-        "type": "boolean"
-      },
-      "udp": {
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "tcp",
-      "tls",
-      "udp"
     ]
   },
   "stream_relay.reach": {

@@ -74,3 +74,12 @@ export const CONTINUED_IN = "Continued in";
 /** {@link CONTINUED_IN} with the new session's title, as one sentence. */
 export const continuedInWords = (title: string): string =>
   `${CONTINUED_IN} ${title}`;
+
+/**
+ * Why a continuation job stopped where it stood (hub continuations.ts): who
+ * asked for it, as a hub before migration 0414 stored it, does not read, so
+ * whether it goes on as the same session or a new one is not known. Its
+ * failure's words, on the job the dashboard shows.
+ */
+export const CONTINUATION_ASKER_UNREAD =
+  "Who asked for this continuation doesn't read from its record, so it stopped here. The session it continues goes on as it was; continue it again to start one.";

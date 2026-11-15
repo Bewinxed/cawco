@@ -502,21 +502,23 @@ export type ContinuationAsker =
   | { kind: "person" }
   | { kind: "session"; id: string }
   | { kind: "task"; id: string }
-  | {
-      /**
-       * Its provider's compaction policy, as its move to account `to`
-       * (core `Compaction` `summary`, limit-moves.ts `continueAsMove`): `stopped`
-       * says what stopped it there (its limit, its refused sign-in), or
-       * false ahead of a limit; `move` is the line the move would have
-       * written whole, under the id `line`, which a summary that fails
-       * writes as the native compaction it falls back to.
-       */
-      kind: "move";
-      line: string;
-      move: AccountMove;
-      stopped: false | "limit" | "signin";
-      to: string;
-    };
+  | ({ kind: "move" } & MoveAsker);
+
+/**
+ * A move that goes on from a summary, as its continuation keeps it
+ * (`continuations.asked_by_move`): its provider's compaction policy, as its
+ * move to account `to` (core `Compaction` `summary`, limit-moves.ts
+ * `continueAsMove`). `stopped` says what stopped it there (its limit, its
+ * refused sign-in), or false ahead of a limit; `move` is the line the move
+ * would have written whole, under the id `line`, which a summary that fails
+ * writes as the native compaction it falls back to.
+ */
+export interface MoveAsker {
+  line: string;
+  move: AccountMove;
+  stopped: false | "limit" | "signin";
+  to: string;
+}
 
 /**
  * A limit line as the hub keeps it (`limit_events.body`,

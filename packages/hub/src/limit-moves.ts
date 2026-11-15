@@ -1314,7 +1314,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     // session's move: a second one beside it (an owed move taken up, a
     // person's) would compact or carry the row that job folds away.
     const job = moveJobOf(row.id);
-    if (job?.askedBy.kind === "move") {
+    if (job?.askedBy?.kind === "move") {
       console.info(
         `[at-limit] ${ctx.sessionName(row)} isn't moved to ${ctx.accountWords(accountId)}: it is going on from a summary as its move to ${ctx.accountWords(job.askedBy.to)} already (${job.stage}), and that move stands.`
       );
@@ -1451,7 +1451,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       .find(
         (row) =>
           row.sourceInstanceId === instanceId &&
-          row.askedBy.kind === "move" &&
+          row.askedBy?.kind === "move" &&
           !ctx.SETTLED.has(row.stage)
       );
 
@@ -1466,7 +1466,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   const summaryMoveFailed = (row: ContinuationRow, reason: string): void => {
     const asker = row.askedBy;
     const [source] = ctx.db.getInstancesByIds([row.sourceInstanceId]);
-    if (asker.kind !== "move" || !source) {
+    if (asker?.kind !== "move" || !source) {
       return;
     }
     const why = `it couldn't go on from a summary: ${reason}`;

@@ -26,6 +26,7 @@ import type { WorkInFlight } from "@cawco/core/session/controls";
 import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
 import { ContinuationReadSchema } from "@cawco/core/stored-shapes";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
+import { CONTINUATION_ASKER_UNREAD } from "@cawco/core/words/relaunch";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import {
@@ -72,6 +73,19 @@ const askerWords = (by: ContinuationAsker): string => {
     case "person":
       return "a person (the dashboard or the API)";
   }
+};
+
+/**
+ * Who asked for `row`. A job whose asker, as a hub before migration 0414
+ * stored it, does not read goes no further: the step that needs it fails,
+ * in {@link CONTINUATION_ASKER_UNREAD}, so it is never folded into its
+ * source, never its source's move, and never retires it.
+ */
+const askerOf = (row: Pick<ContinuationRow, "askedBy">): ContinuationAsker => {
+  if (row.askedBy === null) {
+    throw new Error(CONTINUATION_ASKER_UNREAD);
+  }
+  return row.askedBy;
 };
 
 /**
@@ -496,11 +510,8 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     if (prepared instanceof ElysiaStatus) {
       return prepared;
     }
-    const refusal = await continuationRefusal(
-      prepared,
-      row.request,
-      row.askedBy
-    );
+    const asker = askerOf(row);
+    const refusal = await continuationRefusal(prepared, row.request, asker);
     if (refusal) {
       throw new Error(refusal);
     }
@@ -511,7 +522,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
         summarise && !row.request.asksOnly
           ? (row.summariserInstanceId ?? crypto.randomUUID())
           : null,
-      stage: firstStage(filesFirst(prepared, row.askedBy), summarise),
+      stage: firstStage(filesFirst(prepared, asker), summarise),
       waiting: null,
     });
   };
@@ -971,7 +982,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       `[continuation] ${row.prepared.source.title} couldn't continue in a new session: ${reason}.`
     );
     undoStart(row);
-    if (row.askedBy.kind === "move") {
+    if (row.askedBy?.kind === "move") {
       ctx.summaryMoveFailed(row, reason);
     }
   };
@@ -1040,7 +1051,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * is caused by none, and names its mode.
    */
   const continuationCauseMode = (row: ContinuationRow): string | undefined => {
-    const { askedBy } = row;
+    const askedBy = askerOf(row);
     let cause: string | undefined;
     switch (askedBy.kind) {
       case "person":
@@ -1162,7 +1173,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       // may be gone with its process meanwhile.
       sendOpening(ready, "continuation");
       afterFold(ready);
-    } else if (source && ready.askedBy.kind !== "person") {
+    } else if (source && askerOf(ready).kind !== "person") {
       oneSession(ready, source);
     } else {
       separateSession(ready, source);
@@ -1302,7 +1313,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       ? ctx.db.getInstancesByIds([job.summariserInstanceId])[0]
       : undefined;
     const asks = !!job.request.asksOnly;
-    const by = job.askedBy;
+    const by = askerOf(job);
     ctx.noteAtLimit(target, {
       kind: "continued",
       from: named(source.accountId),
@@ -1373,7 +1384,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       ctx.lifecycle.oweEndSession(from, "delete");
     }
     console.info(
-      `[continuation] ${ctx.sessionName(source)} (${from.slice(0, 8)}) goes on as ${to.slice(0, 8)}, one session, asked by ${askerWords(job.askedBy)}: ${from.slice(0, 8)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
+      `[continuation] ${ctx.sessionName(source)} (${from.slice(0, 8)}) goes on as ${to.slice(0, 8)}, one session, asked by ${askerWords(askerOf(job))}: ${from.slice(0, 8)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
     );
   };
 
@@ -1567,7 +1578,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       `[continuation] ${row.prepared.source.title}: its continuation in a new session was cancelled while ${row.stage}. Nothing starts from it.`
     );
     // A move's summary cancelled: what waited for it goes to the source.
-    if (row.askedBy.kind === "move") {
+    if (row.askedBy?.kind === "move") {
       ctx.releaseOwed({ instanceId: row.sourceInstanceId });
     }
     return { row: cancelled };
@@ -1652,6 +1663,21 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     };
   };
 
+  /**
+   * At the hub's start: each open job whose asker, as a hub before
+   * migration 0414 stored it, does not read fails where it stands, in
+   * {@link CONTINUATION_ASKER_UNREAD}: it is never folded into its source
+   * nor its source's move, and its new session, when its opening never
+   * went, is removed. Its source goes on as it was.
+   */
+  const unreadAskersFail = (): void => {
+    for (const row of continuationsWhole(false)) {
+      if (row.askedBy === null) {
+        failContinuation(row, CONTINUATION_ASKER_UNREAD);
+      }
+    }
+  };
+
   return {
     prepareContinuation,
     cloneForContinuation,
@@ -1669,5 +1695,6 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     cancelContinuation,
     settledContinuation,
     outcomeOf,
+    unreadAskersFail,
   };
 };
