@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9ba598e8-c636-4bc8-ad9e-cf2357b000ea",
-  "prevId": "269c2c23-f20f-41ff-9e31-a771916ef44a",
+  "id": "a74162c5-78ef-43ab-b5bc-25c1dc3578d3",
+  "prevId": "00798d8e-6af0-43c6-974f-03599396445d",
   "tables": {
     "account_bench": {
       "name": "account_bench",
@@ -1063,6 +1063,41 @@
         },
         "signin": {
           "name": "signin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "copy": {
+          "name": "copy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "wants": {
+          "name": "wants",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tried_at": {
+          "name": "tried_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "going_to": {
+          "name": "going_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "started_by": {
+          "name": "started_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -9419,6 +9454,62 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "project_task_outputs": {
+      "name": "project_task_outputs",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "output": {
+          "name": "output",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "project_task_outputs_project_id_path_project_tasks_project_id_path_fk": {
+          "name": "project_task_outputs_project_id_path_project_tasks_project_id_path_fk",
+          "tableFrom": "project_task_outputs",
+          "tableTo": "project_tasks",
+          "columnsFrom": [
+            "project_id",
+            "path"
+          ],
+          "columnsTo": [
+            "project_id",
+            "path"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "project_task_outputs_project_id_path_output_pk": {
+          "columns": [
+            "project_id",
+            "path",
+            "output"
+          ],
+          "name": "project_task_outputs_project_id_path_output_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "project_tasks": {
       "name": "project_tasks",
       "columns": {
@@ -9499,14 +9590,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "outputs": {
-          "name": "outputs",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
         "todos_done": {
           "name": "todos_done",
           "type": "integer",
@@ -9532,6 +9615,13 @@
         },
         "budget_unread": {
           "name": "budget_unread",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lists_unread": {
+          "name": "lists_unread",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -12803,6 +12893,31 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "tool_update_settings": {
+      "name": "tool_update_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updates": {
+          "name": "updates",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'update'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "tools": {
       "name": "tools",
       "columns": {
@@ -13887,6 +14002,52 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "work_item_outputs": {
+      "name": "work_item_outputs",
+      "columns": {
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "work_item_outputs_item_id_work_items_id_fk": {
+          "name": "work_item_outputs_item_id_work_items_id_fk",
+          "tableFrom": "work_item_outputs",
+          "tableTo": "work_items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "work_item_outputs_item_id_path_pk": {
+          "columns": [
+            "item_id",
+            "path"
+          ],
+          "name": "work_item_outputs_item_id_path_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "work_items": {
       "name": "work_items",
       "columns": {
@@ -13984,8 +14145,8 @@
           "autoincrement": false,
           "default": "'main'"
         },
-        "outputs": {
-          "name": "outputs",
+        "outputs_unread": {
+          "name": "outputs_unread",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
