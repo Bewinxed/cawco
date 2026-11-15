@@ -204,6 +204,19 @@ export const pluginSettingsWords = (
   return lines("Saved:", pluginLine(answer as FleetPlugin));
 };
 
+/** Where a server runs, after its other facts: nothing when it is every machine. */
+const platformWords = (server: FleetMcpServer): string => {
+  if (server.platformsUnread) {
+    return ` · saved platforms unreadable${server.platforms?.length ? ` (${listed(server.platforms)} read)` : ""}: on no machine until saved`;
+  }
+  if (!server.platforms) {
+    return "";
+  }
+  return server.platforms.length > 0
+    ? ` · ${listed(server.platforms)} only`
+    : " · on no machine";
+};
+
 const mcpLine = (server: FleetMcpServer): string => {
   const config = server.config as {
     command?: string;
@@ -211,7 +224,7 @@ const mcpLine = (server: FleetMcpServer): string => {
     url?: string;
   };
   const where = config.url ?? config.command ?? "";
-  return `- ${server.name}: ${config.type ?? "stdio"} ${where} · ${server.enabled ? "on" : "off"} · ${placeWords(server)}${server.platforms?.length ? ` · ${listed(server.platforms)} only` : ""}${server.shared ? " · shared per machine" : ""}${server.auth ? ` · sign-in ${server.auth.state}${server.auth.detail ? ` (${server.auth.detail})` : ""}` : ""}`;
+  return `- ${server.name}: ${config.type ?? "stdio"} ${where} · ${server.enabled ? "on" : "off"} · ${placeWords(server)}${platformWords(server)}${server.shared ? " · shared per machine" : ""}${server.auth ? ` · sign-in ${server.auth.state}${server.auth.detail ? ` (${server.auth.detail})` : ""}` : ""}`;
 };
 
 /** admin_mcp_servers: each server, or the one written. */

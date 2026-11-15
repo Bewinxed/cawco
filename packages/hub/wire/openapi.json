@@ -41575,6 +41575,11 @@
           "routes": {
             "type": "object",
             "description": "Every kind's member across the fleet, by kind id."
+          },
+          "routesUnread": {
+            "description": "Set while the fleet's saved routes can't be read (hub migration 0406):\n`routes` then sends every kind to `you`, never to core's seed. A save\nof the routes clears it.",
+            "const": true,
+            "type": "boolean"
           }
         },
         "required": [
@@ -42084,6 +42089,11 @@
                 "items": {
                   "$ref": "#/components/schemas/ToolPlatform"
                 }
+              },
+              "platformsUnread": {
+                "description": "Set while its saved platforms can't be read (hub migration 0406):\n`platforms` then holds those that read, and no machine is sent it\n({@link mcpRunsOn}). A save that names its platforms clears it.",
+                "const": true,
+                "type": "boolean"
               },
               "projectId": {
                 "description": "The hub `projects` row this is bound to. One of it and `areaId` is required unless `user`.",
@@ -82309,6 +82319,11 @@
           "routes": {
             "type": "object",
             "description": "Every kind's member across the fleet, by kind id."
+          },
+          "routesUnread": {
+            "description": "Set while the fleet's saved routes can't be read (hub migration 0406):\n`routes` then sends every kind to `you`, never to core's seed. A save\nof the routes clears it.",
+            "const": true,
+            "type": "boolean"
           },
           "skills": {
             "type": "array",

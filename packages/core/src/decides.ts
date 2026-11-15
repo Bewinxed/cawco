@@ -131,6 +131,12 @@ export interface FleetDecides {
   pictures: Partial<Record<FlockMember, CawPoseId>>;
   /** Every kind's member across the fleet, by kind id. */
   routes: Record<string, string>;
+  /**
+   * Set while the fleet's saved routes can't be read (hub migration 0406):
+   * `routes` then sends every kind to `you`, never to core's seed. A save
+   * of the routes clears it.
+   */
+  routesUnread?: true;
 }
 
 /** A project's table as the hub reads it. */

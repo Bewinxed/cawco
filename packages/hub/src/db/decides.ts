@@ -30,6 +30,7 @@ import {
   DECIDES_ID,
   decidesKinds,
   decidesMembers,
+  decidesRoutes,
   decidesSettings,
   turnUsage,
 } from "./schema";
@@ -109,13 +110,13 @@ export interface DecidesDb {
   readonly putSettlings: (rows: CardSettlingRow[]) => void;
   /** The member's record. */
   readonly record: (memberId: string) => MemberRecord;
-  /** A kind gone: its row, its fleet route; answers the open cards' rows filed under it. */
+  /** A kind gone: its row, its fleet route; answers the open cards' rows filed under it. Saved routes that can't be read stay so. */
   readonly removeKind: (id: string, moveTo: string) => CardSettlingRow[];
-  /** A member gone: its row, and its kinds back to `you` in the fleet routes; answers those kinds. */
+  /** A member gone: its row, and its kinds back to `you` in the fleet routes; answers the kinds it had. */
   readonly removeMember: (id: string) => string[];
   /** What he changed of the built-in members. */
   readonly setBuiltIn: (change: BuiltInChange) => void;
-  /** The fleet's routes, whole. */
+  /** The fleet's routes, whole: they replace what was saved, routes that could not be read included. */
   readonly setRoutes: (routes: Record<string, string>) => void;
   /** Where card `card` of `artifactId` went, when the hub routed it. */
   readonly settling: (
@@ -159,17 +160,6 @@ const builtIns = (settings: SettingsRow | undefined): Member[] =>
     return { ...member, pose };
   });
 
-/** The fleet's routes written whole, in the transaction `tx`. */
-const putRoutes = (
-  tx: Pick<BunSQLiteDatabase, "insert">,
-  routes: Record<string, string>
-): void => {
-  tx.insert(decidesSettings)
-    .values({ id: DECIDES_ID, routes })
-    .onConflictDoUpdate({ target: decidesSettings.id, set: { routes } })
-    .run();
-};
-
 export const decidesDb = (
   db: BunSQLiteDatabase,
   types: DelegateTypesShape
@@ -209,19 +199,33 @@ export const decidesDb = (
       .orderBy(asc(decidesMembers.createdAt))
       .all();
 
+  /** The member each kind he set goes to, by kind id. */
+  const storedRoutes = (): Map<string, string> =>
+    new Map(
+      db
+        .select()
+        .from(decidesRoutes)
+        .all()
+        .map((row) => [row.kindId, row.memberId])
+    );
+
   const fleet = (): FleetDecides => {
     const row = settings();
     const all = [...builtIns(row), ...members().map(memberOfRow)];
     const known = new Set(all.map((member) => member.id));
     const listed = kinds();
-    const stored = row?.routes ?? {};
+    // Saved routes that can't be read (migration 0406) send every kind to
+    // him, never to core's seed, until they are saved again.
+    const unread = typeof row?.routesUnread === "string";
+    const stored = storedRoutes();
     const routes = Object.fromEntries(
       listed.map((kind) => {
-        const member =
-          stored[kind.id] ??
-          (DEFAULT_ROUTES as Record<string, string>)[kind.id] ??
-          "you";
-        return [kind.id, known.has(member) ? member : "you"];
+        const member = unread
+          ? BUILT_IN.you.id
+          : (stored.get(kind.id) ??
+            (DEFAULT_ROUTES as Record<string, string>)[kind.id] ??
+            BUILT_IN.you.id);
+        return [kind.id, known.has(member) ? member : BUILT_IN.you.id];
       })
     );
     return {
@@ -229,6 +233,7 @@ export const decidesDb = (
       kinds: listed,
       routes,
       pictures: row?.pictures ?? {},
+      ...(unread ? { routesUnread: true } : {}),
     };
   };
 
@@ -236,7 +241,20 @@ export const decidesDb = (
     fleet,
     kinds,
     members,
-    setRoutes: (routes) => writeSettings({ routes }),
+    setRoutes: (routes) => {
+      // Written whole: they replace what was saved, routes that could not
+      // be read included.
+      db.transaction((tx) => {
+        tx.delete(decidesRoutes).run();
+        for (const [kindId, memberId] of Object.entries(routes)) {
+          tx.insert(decidesRoutes).values({ kindId, memberId }).run();
+        }
+        tx.update(decidesSettings)
+          .set({ routesUnread: null })
+          .where(eq(decidesSettings.id, DECIDES_ID))
+          .run();
+      });
+    },
     setBuiltIn: (change) => {
       const row = settings();
       writeSettings({
@@ -263,16 +281,16 @@ export const decidesDb = (
       });
     },
     removeMember: (id) => {
-      const routes = { ...fleet().routes };
+      const { routes } = fleet();
       const returned = Object.keys(routes).filter(
         (kind) => routes[kind] === id
       );
-      for (const kind of returned) {
-        routes[kind] = "you";
-      }
       db.transaction((tx) => {
         tx.delete(decidesMembers).where(eq(decidesMembers.id, id)).run();
-        putRoutes(tx, routes);
+        tx.update(decidesRoutes)
+          .set({ memberId: BUILT_IN.you.id })
+          .where(eq(decidesRoutes.memberId, id))
+          .run();
       });
       return returned;
     },
@@ -286,20 +304,18 @@ export const decidesDb = (
         .run();
     },
     removeKind: (id, moveTo) => {
-      const routes = { ...(settings()?.routes ?? {}) };
-      delete routes[id];
       const open = db
         .select()
         .from(cardSettlings)
         .where(and(eq(cardSettlings.kind, id), isNull(cardSettlings.settledAt)))
         .all();
       db.transaction((tx) => {
+        // Its route goes with it (`decides_routes` cascades).
         tx.delete(decidesKinds).where(eq(decidesKinds.id, id)).run();
         tx.update(cardSettlings)
           .set({ kind: moveTo })
           .where(eq(cardSettlings.kind, id))
           .run();
-        putRoutes(tx, routes);
       });
       return open;
     },

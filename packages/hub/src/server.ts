@@ -8098,10 +8098,7 @@ export const createServer = (
       if (!(
         browser?.enabled &&
         (browser.projectId === null || browser.projectId === projectId) &&
-        mcpRunsOn(
-          { platforms: browser.platforms ?? undefined },
-          machine ? machinePlatform(machine) : undefined
-        )
+        mcpRunsOn(browser, machine ? machinePlatform(machine) : undefined)
       )) {
         return;
       }

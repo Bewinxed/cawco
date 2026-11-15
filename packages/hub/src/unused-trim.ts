@@ -549,7 +549,8 @@ export const createTrim = (deps: TrimDeps) => {
           // As a read says it: the put keeps the secrets the server holds.
           config: maskMcpConfig(row.config),
           enabled: false,
-          ...(row.platforms ? { platforms: row.platforms } : {}),
+          // Its platforms left out stay as they are, saved platforms that
+          // can't be read included.
           reason,
         },
         toolUseId

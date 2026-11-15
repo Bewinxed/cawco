@@ -73,6 +73,12 @@ export interface FleetMcpServer extends FleetPlacement {
    * Absent: every machine.
    */
   platforms?: McpPlatform[];
+  /**
+   * Set while its saved platforms can't be read (hub migration 0406):
+   * `platforms` then holds those that read, and no machine is sent it
+   * ({@link mcpRunsOn}). A save that names its platforms clears it.
+   */
+  platformsUnread?: true;
   /** The config points at the hub's authenticated forwarder. */
   proxied?: boolean;
   /**
@@ -94,14 +100,19 @@ export const MCP_PLATFORMS = everyOf<ToolPlatform>()([
 ]);
 export type McpPlatform = (typeof MCP_PLATFORMS)[number];
 
-/** Whether a machine reporting `platform` is sent `server`: unscoped, or scoped to that platform. */
+/**
+ * Whether a machine reporting `platform` is sent `server`: unscoped, or
+ * scoped to that platform. One whose saved platforms can't be read goes to
+ * none.
+ */
 export const mcpRunsOn = (
-  server: Pick<FleetMcpServer, "platforms">,
+  server: Pick<FleetMcpServer, "platforms" | "platformsUnread">,
   platform: string | undefined
 ): boolean =>
-  !server.platforms ||
-  (platform !== undefined &&
-    (server.platforms as readonly string[]).includes(platform));
+  server.platformsUnread !== true &&
+  (!server.platforms ||
+    (platform !== undefined &&
+      (server.platforms as readonly string[]).includes(platform)));
 
 /**
  * A machine's platform, by the first report that names it: its capabilities

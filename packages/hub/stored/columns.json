@@ -4681,15 +4681,6 @@
       }
     }
   },
-  "decides_settings.routes": {
-    "type": "object",
-    "propertyNames": {
-      "type": "string"
-    },
-    "additionalProperties": {
-      "type": "string"
-    }
-  },
   "delegate_events.kind": {
     "type": "string",
     "enum": [
@@ -9257,6 +9248,14 @@
       "pi"
     ]
   },
+  "mcp_server_platforms.platform": {
+    "type": "string",
+    "enum": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
   "mcp_servers.auth_mode": {
     "type": "string",
     "enum": [
@@ -9365,17 +9364,6 @@
         ]
       }
     ]
-  },
-  "mcp_servers.platforms": {
-    "type": "array",
-    "items": {
-      "type": "string",
-      "enum": [
-        "darwin",
-        "linux",
-        "win32"
-      ]
-    }
   },
   "mcp_servers.scope": {
     "type": "string",
