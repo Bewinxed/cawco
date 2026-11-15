@@ -200,6 +200,21 @@ export interface ProposedFile {
   path: string;
 }
 
+/** What a config delete can move into the config trash (schema `configTrash`). */
+export type TrashKind =
+  | "rule"
+  | "hook"
+  | "skill"
+  | "plugin"
+  | "marketplace"
+  | "agent"
+  | "mcp"
+  | "delegateType"
+  | "memory"
+  | "memoryDoc"
+  | "connection"
+  | "harnessConfig";
+
 /**
  * Why the hub keeps a send queued instead of handing it to its session now
  * (sends.ts `deliverSend`): its machine is installing an update, so the

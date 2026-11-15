@@ -18,6 +18,13 @@
  * A row that fails its schema throws {@link StoredShapeError}, naming its
  * table, column, row and the zod issue. A stored row that fails means a
  * migration is missing: the fix is the migration, never a looser schema.
+ *
+ * A text column of a closed set of values (a state, a mode, a kind) is held
+ * the same way by {@link storedEnum}: the text is the value itself, checked
+ * against its set on every write and every read. `text(...).$type<T>()` is
+ * a label as `mode: "json"` is: a value outside T, written by another build
+ * or by hand, read back as T and sent code down a branch it thought
+ * impossible (an unknown landing mode landed nowhere).
  */
 
 import { typeAt } from "@cawco/core/stored-types";
@@ -34,7 +41,7 @@ import { z } from "zod";
 /** Which way a value failed its schema: read back from a row, or on its way into one. */
 export type StoredDirection = "read" | "write";
 
-/** A stored JSON value that is not the shape its column's schema says. */
+/** A stored value that is not the shape its column's schema says. */
 export class StoredShapeError extends Error {
   readonly table: string;
   readonly column: string;
@@ -101,7 +108,11 @@ const placeOf = (column: unknown): { table: string; column: string } =>
     ? { table: getTableName(column.table as Table), column: column.name }
     : { table: "(unknown table)", column: "(unknown column)" };
 
-const issueOf = (error: z.ZodError): string => z.prettifyError(error);
+/** What zod says is wrong; with `held`, a closed set's text, the value it holds first, which zod's words for a set leave out. */
+const issueOf = (error: z.ZodError, held?: unknown): string =>
+  typeof held === "string"
+    ? `it holds ${JSON.stringify(held)}. ${z.prettifyError(error)}`
+    : z.prettifyError(error);
 
 /** Where a key is in a stored value, from its column's root: each key or index on the way, the key itself last. */
 type KeyPath = readonly (string | number)[];
@@ -251,7 +262,7 @@ export const received = <S extends z.ZodType>(
 /**
  * `value`, parsed by `schema`: the checked value, or {@link StoredShapeError}
  * naming `place`. The one check a stored JSON value passes, by a column
- * ({@link storedJson}). A write is refused a key its schema would
+ * ({@link storedJson}, {@link storedEnum}). A write is refused a key its schema would
  * drop ({@link droppedKeys}), as it is a value of the wrong shape: on
  * 2026-11-04 a report's `notice` had been dropped from every write for
  * nine days, the type it was stored by never declaring it. A read keeps
@@ -259,14 +270,18 @@ export const received = <S extends z.ZodType>(
  * reads.
  */
 const checkStored = <S extends z.ZodType>(
-  schema: S,
+  { schema, text }: StoredShape<S>,
   value: unknown,
   place: { table: string; column: string; row?: string },
   direction: StoredDirection
 ): z.output<S> => {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    throw new StoredShapeError(place, direction, issueOf(parsed.error));
+    throw new StoredShapeError(
+      place,
+      direction,
+      issueOf(parsed.error, text ? value : undefined)
+    );
   }
   if (direction === "write") {
     const undeclared = undeclaredKeys(schema, value, parsed.data);
@@ -277,16 +292,20 @@ const checkStored = <S extends z.ZodType>(
   return parsed.data;
 };
 
-/** `text` parsed as JSON and by `schema`: the value, or what is wrong with it. */
+/** The value a column's text holds: the text itself for a closed set's ({@link storedEnum}), else its JSON parsed. */
+export const storedValueOf = (shape: StoredShape, text: string): unknown =>
+  shape.text ? text : JSON.parse(text);
+
+/** `text` read as `shape`'s column holds it and parsed by its schema: the value, or what is wrong with it. */
 const parseStored = <S extends z.ZodType>(
-  schema: S,
+  shape: StoredShape<S>,
   text: string
 ):
   | { ok: true; value: z.output<S> }
   | { ok: false; issue: string; cause?: unknown } => {
   let value: unknown;
   try {
-    value = JSON.parse(text);
+    value = storedValueOf(shape, text);
   } catch (error) {
     return {
       ok: false,
@@ -294,19 +313,23 @@ const parseStored = <S extends z.ZodType>(
       cause: error,
     };
   }
-  const parsed = schema.safeParse(value);
+  const parsed = shape.schema.safeParse(value);
   return parsed.success
     ? { ok: true, value: parsed.data }
-    : { ok: false, issue: issueOf(parsed.error), cause: parsed.error };
+    : {
+        ok: false,
+        issue: issueOf(parsed.error, shape.text ? value : undefined),
+        cause: parsed.error,
+      };
 };
 
-/** `text`, a stored JSON value's text, parsed and checked, or {@link StoredShapeError} naming `place`. */
+/** `text`, a stored column's text, read and checked, or {@link StoredShapeError} naming `place`. */
 export const readStoredText = <S extends z.ZodType>(
-  schema: S,
+  shape: StoredShape<S>,
   text: string,
   place: { table: string; column: string; row?: string }
 ): z.output<S> => {
-  const parsed = parseStored(schema, text);
+  const parsed = parseStored(shape, text);
   if (!parsed.ok) {
     throw new StoredShapeError(place, "read", parsed.issue, {
       cause: parsed.cause,
@@ -335,13 +358,15 @@ const rowOf = (column: unknown, raw: string): string | undefined => {
   }
 };
 
-/** What a stored JSON column is checked against, kept on the column (its custom type's config). */
+/** What a stored column is checked against, kept on the column (its custom type's config). */
 export interface StoredShape<S extends z.ZodType = z.ZodType> {
   schema: S;
   seal?: StoredSeal;
+  /** The column's text is the value itself, one of a closed set ({@link storedEnum}); absent, it is the value's JSON. */
+  text?: true;
 }
 
-/** The {@link StoredShape} a column was declared with by {@link storedJson}; undefined for any other column. */
+/** The {@link StoredShape} a column was declared with by {@link storedJson} or {@link storedEnum}; undefined for any other column. */
 export const storedShapeOf = (column: unknown): StoredShape | undefined => {
   if (!is(column, SQLiteCustomColumn)) {
     return;
@@ -365,7 +390,7 @@ const isStoredShape = (value: unknown): value is StoredShape =>
 const shapeOf = (column: unknown): StoredShape => {
   const shape = storedShapeOf(column);
   if (!shape) {
-    throw new Error("a stored JSON column without its shape");
+    throw new Error("a stored column without its shape");
   }
   return shape;
 };
@@ -386,28 +411,57 @@ const storedJsonType = customType<{
   // Drizzle writes null as SQL NULL without calling this
   // (sql.js: `chunk.value === null ? null : chunk.encoder.mapToDriverValue(chunk.value)`).
   toDriver(this: unknown, value) {
-    const { schema, seal } = shapeOf(this);
+    const shape = shapeOf(this);
     const text = JSON.stringify(
-      checkStored(schema, value, placeOf(this), "write")
+      checkStored(shape, value, placeOf(this), "write")
     );
-    return seal ? seal.close(text) : text;
+    return shape.seal ? shape.seal.close(text) : text;
   },
   fromDriver(this: unknown, raw) {
-    const { schema, seal } = shapeOf(this);
-    const text = seal ? seal.open(raw) : raw;
-    if (text === null) {
-      return null;
-    }
-    const parsed = parseStored(schema, text);
-    if (!parsed.ok) {
-      throw new StoredShapeError(
-        { ...placeOf(this), row: rowOf(this, raw) },
-        "read",
-        parsed.issue,
-        { cause: parsed.cause }
-      );
-    }
-    return parsed.value;
+    const shape = shapeOf(this);
+    const text = shape.seal ? shape.seal.open(raw) : raw;
+    return text === null ? null : readColumnText(this, shape, raw, text);
+  },
+});
+
+/** A column's `text`, read from the driver as `raw`, checked against `shape`, or {@link StoredShapeError} naming its row. */
+const readColumnText = (
+  column: unknown,
+  shape: StoredShape,
+  raw: string,
+  text: string
+): unknown => {
+  const parsed = parseStored(shape, text);
+  if (!parsed.ok) {
+    throw new StoredShapeError(
+      { ...placeOf(column), row: rowOf(column, raw) },
+      "read",
+      parsed.issue,
+      { cause: parsed.cause }
+    );
+  }
+  return parsed.value;
+};
+
+/**
+ * The custom type of every closed set's column ({@link storedEnum}): its
+ * text is its value, checked against the column's schema both ways, as a
+ * stored JSON column's is. The SQL type stays `text`, so a column moved to
+ * it changes no table.
+ */
+const storedEnumType = customType<{
+  data: unknown;
+  driverData: string;
+  config: StoredShape;
+  configRequired: true;
+}>({
+  dataType: () => "text",
+  // Null is SQL NULL without a call, as for storedJsonType.
+  toDriver(this: unknown, value) {
+    return String(checkStored(shapeOf(this), value, placeOf(this), "write"));
+  },
+  fromDriver(this: unknown, raw) {
+    return readColumnText(this, shapeOf(this), raw, raw);
   },
 });
 
@@ -433,4 +487,25 @@ export function storedJson<S extends z.ZodType>(
 export function storedJson<S extends z.ZodType>(schema: S, seal?: StoredSeal) {
   return (name: string) =>
     storedJsonType(name, seal ? { schema, seal } : { schema });
+}
+
+/** A schema of text from a closed set: an enum, or a union of enums and literals. `z.string()` is none: every text is its value. */
+type ClosedText<S extends z.ZodType<string>> =
+  string extends z.output<S> ? never : unknown;
+
+/**
+ * A text column holding one of a closed set of values, checked against
+ * `schema` on every write and every read, as {@link storedJson} checks its
+ * JSON: `storedEnum(z.enum(LANDS_MODES))("lands")`. Its TypeScript type is
+ * `z.output` of the schema. A value outside the set throws
+ * {@link StoredShapeError} naming its table, column, row and the value;
+ * none reads as a default. The set is recorded with the stored JSON columns'
+ * shapes (hub stored/columns.json), so a set made narrower needs a migration
+ * that rewrites its rows, and one made wider needs nothing.
+ */
+export function storedEnum<S extends z.ZodType<string>>(
+  schema: S & ClosedText<S>
+): (name: string) => StoredJsonBuilder<z.output<S>>;
+export function storedEnum(schema: z.ZodType<string>) {
+  return (name: string) => storedEnumType(name, { schema, text: true });
 }

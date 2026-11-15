@@ -604,6 +604,23 @@ export type MachineHarnessReport = Omit<HarnessReport, "auth"> & {
   auth?: AuthState;
 };
 
+/**
+ * A {@link HarnessReport} by its machine's own name for the harness, which
+ * may name one this build does not run: a newer agent's. What the hub files
+ * of a machine's report beat (its `agent_harnesses` rows), kept whatever
+ * the name; it reads each by `harnessNamed` before anything takes it as a
+ * {@link HarnessKind}, and a name it does not run goes to the machine's
+ * `AgentRow.unknownHarnesses`.
+ */
+export type NamedHarnessReport = Omit<HarnessReport, "harness"> & {
+  harness: string;
+};
+
+/** A {@link MachineHarnessReport} as a beat carries it, by its machine's own name for the harness ({@link NamedHarnessReport}). */
+export type ReportedHarness = Omit<NamedHarnessReport, "auth"> & {
+  auth?: AuthState;
+};
+
 /** The default for a harness adapter that reports nothing; adapters override. */
 export const CAPABILITIES_NONE: HarnessCapabilities = {
   interrupt: false,

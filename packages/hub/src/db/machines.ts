@@ -5,8 +5,13 @@ import type {
   FleetSyncOutcome,
   FleetSyncReport,
 } from "@cawco/core/fleet";
-import type { HarnessReport } from "@cawco/core/harness";
-import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import type { HarnessReport, NamedHarnessReport } from "@cawco/core/harness";
+import {
+  type HarnessKind,
+  harnessNamed,
+  type PermissionMode,
+  permissionModeNamed,
+} from "@cawco/core/harness/kinds";
 import {
   type MachinePath,
   MachinePathRefused,
@@ -64,6 +69,7 @@ export interface MachinesDb {
     fingerprint: string | null;
     generation: number;
   };
+  /** The machine's reports of the harnesses this hub runs ({@link harnessesByMachine}); undefined when it has none. */
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   /**
    * One machine's row as {@link listAgents} shapes it, read alone: what
@@ -80,7 +86,7 @@ export interface MachinesDb {
     harness: HarnessKind,
     mode: PermissionMode
   ) => void;
-  /** The permission mode the person last chose for `harness` on `machineId` (schema `chosenModes`); none when never. */
+  /** The permission mode the person last chose for `harness` on `machineId` (schema `chosenModes`); none when never, or when it is none CawCo offers. */
   readonly chosenMode: (
     machineId: string,
     harness: string
@@ -135,10 +141,12 @@ export interface MachinesDb {
    * What each harness on the machine can do, as its daemon's report beat
    * said: every harness the beat names is replaced, and one it leaves out
    * keeps its last report, since its daemon could not read it this time.
+   * Each is filed by the machine's own name for its harness, one this hub
+   * does not run included (core `NamedHarnessReport`).
    */
   readonly mergeAgentHarnesses: (
     machineId: string,
-    harnesses: HarnessReport[]
+    harnesses: NamedHarnessReport[]
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
@@ -319,11 +327,21 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     });
   };
 
-  /** Each machine's harness reports, in the order they were last reported; one machine's with `machineId`. */
+  /**
+   * Each machine's harness reports, in the order they were last reported;
+   * one machine's with `machineId`. A row keeps the machine's own name for
+   * its harness (core `NamedHarnessReport`), read here by `harnessNamed`:
+   * a harness this hub runs is among `known`, its report as one; any other
+   * name is among `unknown`, a harness this hub cannot run.
+   */
   const harnessesByMachine = (
     machineId?: string
-  ): Map<string, HarnessReport[]> => {
-    const byMachine = new Map<string, HarnessReport[]>();
+  ): {
+    known: Map<string, HarnessReport[]>;
+    unknown: Map<string, string[]>;
+  } => {
+    const known = new Map<string, HarnessReport[]>();
+    const unknown = new Map<string, string[]>();
     for (const row of db
       .select()
       .from(agentHarnesses)
@@ -334,15 +352,28 @@ export const machinesDb = (core: DbCore): MachinesDb => {
       )
       .orderBy(sql`rowid`)
       .all()) {
-      byMachine.set(row.machineId, [
-        ...(byMachine.get(row.machineId) ?? []),
-        row.report,
-      ]);
+      const harness = harnessNamed(row.harness);
+      if (harness) {
+        known.set(row.machineId, [
+          ...(known.get(row.machineId) ?? []),
+          { ...row.report, harness },
+        ]);
+      } else {
+        unknown.set(row.machineId, [
+          ...(unknown.get(row.machineId) ?? []),
+          row.harness,
+        ]);
+      }
     }
-    return byMachine;
+    return { known, unknown };
   };
 
-  /** Each machine's chosen permission mode by harness (schema `chosenModes`). */
+  /**
+   * Each machine's chosen permission mode by harness (schema `chosenModes`).
+   * A mode is kept as text, as a start named it; one CawCo does not offer
+   * (core `permissionModeNamed`) is no choice the form can open on, and is
+   * left out, as {@link DbShape.chosenMode} leaves it.
+   */
   const chosenModesByMachine = (
     machineId?: string
   ): Map<string, Partial<Record<HarnessKind, PermissionMode>>> => {
@@ -359,10 +390,13 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           : eq(chosenModes.machineId, machineId)
       )
       .all()) {
-      byMachine.set(row.machineId, {
-        ...byMachine.get(row.machineId),
-        [row.harness]: row.permissionMode,
-      });
+      const mode = permissionModeNamed(row.permissionMode);
+      if (mode) {
+        byMachine.set(row.machineId, {
+          ...byMachine.get(row.machineId),
+          [row.harness]: mode,
+        });
+      }
     }
     return byMachine;
   };
@@ -394,7 +428,8 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         ...agent
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
       }) => {
-        const harnesses = reports.get(agent.machineId);
+        const harnesses = reports.known.get(agent.machineId);
+        const unknownHarnesses = reports.unknown.get(agent.machineId);
         const chosen = modes.get(agent.machineId);
         return {
           ...agent,
@@ -406,6 +441,7 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           ...(fleetItems ? { fleetItems } : {}),
           ...(build ? { build } : {}),
           ...(harnesses ? { harnesses } : {}),
+          ...(unknownHarnesses ? { unknownHarnesses } : {}),
           ...(chosen ? { chosenModes: chosen } : {}),
           ...(home ? { home } : {}),
           ...(machineCapabilities ? { machineCapabilities } : {}),
@@ -430,18 +466,25 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         throw error;
       }
     },
-    agentHarnesses: (machineId) => harnessesByMachine(machineId).get(machineId),
-    chosenMode: (machineId, harness) =>
-      db
-        .select({ mode: chosenModes.permissionMode })
-        .from(chosenModes)
-        .where(
-          and(
-            eq(chosenModes.machineId, machineId),
-            eq(chosenModes.harness, harness as HarnessKind)
+    agentHarnesses: (machineId) =>
+      harnessesByMachine(machineId).known.get(machineId),
+    chosenMode: (machineId, harness) => {
+      const kind = harnessNamed(harness);
+      return kind
+        ? permissionModeNamed(
+            db
+              .select({ mode: chosenModes.permissionMode })
+              .from(chosenModes)
+              .where(
+                and(
+                  eq(chosenModes.machineId, machineId),
+                  eq(chosenModes.harness, kind)
+                )
+              )
+              .get()?.mode
           )
-        )
-        .get()?.mode,
+        : undefined;
+    },
     chooseMode: (machineId, harness, mode) => {
       const row = {
         machineId,

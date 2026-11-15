@@ -94,6 +94,13 @@
       "type": "string"
     }
   },
+  "accounts.at_plan_limit": {
+    "type": "string",
+    "enum": [
+      "move",
+      "extra-usage"
+    ]
+  },
   "agent_harnesses.report": {
     "type": "object",
     "properties": {
@@ -291,14 +298,6 @@
           "thinking"
         ]
       },
-      "harness": {
-        "type": "string",
-        "enum": [
-          "claude",
-          "opencode",
-          "pi"
-        ]
-      },
       "installed": {
         "type": "boolean"
       },
@@ -408,13 +407,16 @@
       },
       "version": {
         "type": "string"
+      },
+      "harness": {
+        "type": "string"
       }
     },
     "required": [
       "auth",
       "capabilities",
-      "harness",
-      "installed"
+      "installed",
+      "harness"
     ]
   },
   "agent_tools.signin": {
@@ -1616,6 +1618,13 @@
       "type": "number"
     }
   },
+  "areas.account_at_limit": {
+    "type": "string",
+    "enum": [
+      "wait",
+      "move"
+    ]
+  },
   "asks.record": {
     "type": "object",
     "properties": {
@@ -1978,6 +1987,23 @@
     },
     "required": [
       "asked"
+    ]
+  },
+  "config_trash.kind": {
+    "type": "string",
+    "enum": [
+      "rule",
+      "hook",
+      "skill",
+      "plugin",
+      "marketplace",
+      "agent",
+      "mcp",
+      "delegateType",
+      "memory",
+      "memoryDoc",
+      "connection",
+      "harnessConfig"
     ]
   },
   "config_trash.rows": {
@@ -4279,6 +4305,18 @@
       "target"
     ]
   },
+  "continuations.stage": {
+    "type": "string",
+    "enum": [
+      "waiting",
+      "filing",
+      "summarising",
+      "starting",
+      "started",
+      "failed",
+      "cancelled"
+    ]
+  },
   "continuations.waiting": {
     "type": "object",
     "properties": {
@@ -5845,6 +5883,15 @@
     "required": [
       "names",
       "skills"
+    ]
+  },
+  "instances.end_intent": {
+    "type": "string",
+    "enum": [
+      "stop",
+      "discard",
+      "delete",
+      "delete-transcript"
     ]
   },
   "instances.model_usage_seen": {
@@ -9009,6 +9056,32 @@
       "spawn"
     ]
   },
+  "moves.stage": {
+    "anyOf": [
+      {
+        "type": "string",
+        "enum": [
+          "approval",
+          "snapshot",
+          "clone",
+          "lfs",
+          "start"
+        ]
+      },
+      {
+        "type": "string",
+        "const": "started"
+      },
+      {
+        "type": "string",
+        "const": "failed"
+      },
+      {
+        "type": "string",
+        "const": "cancelled"
+      }
+    ]
+  },
   "moves.state": {
     "type": "object",
     "properties": {
@@ -11452,8 +11525,90 @@
       "type": "string"
     }
   },
+  "projects.account_at_limit": {
+    "type": "string",
+    "enum": [
+      "wait",
+      "move"
+    ]
+  },
+  "projects.lands": {
+    "type": "string",
+    "enum": [
+      "main",
+      "branch",
+      "pr",
+      "none"
+    ]
+  },
   "queued_task_starts.asked": {},
   "queued_work_items.request": {},
+  "relays.provider": {
+    "type": "string",
+    "enum": [
+      "github",
+      "stripe",
+      "generic"
+    ]
+  },
+  "routines.lands": {
+    "type": "string",
+    "enum": [
+      "main",
+      "branch",
+      "pr",
+      "none"
+    ]
+  },
+  "routines.target": {
+    "type": "string",
+    "enum": [
+      "delegate",
+      "orchestrator",
+      "conversation",
+      "curator",
+      "trim"
+    ]
+  },
+  "rules.match_kind": {
+    "type": "string",
+    "enum": [
+      "phrase",
+      "regex",
+      "meaning"
+    ]
+  },
+  "rules.scope_harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi"
+    ]
+  },
+  "rules.scope_role": {
+    "type": "string",
+    "enum": [
+      "orchestrator",
+      "leaf"
+    ]
+  },
+  "rules.timing": {
+    "type": "string",
+    "enum": [
+      "turn",
+      "message",
+      "immediate"
+    ]
+  },
+  "rules.watch": {
+    "type": "string",
+    "enum": [
+      "text",
+      "thinking",
+      "both"
+    ]
+  },
   "sent_messages.body": {
     "type": "object",
     "properties": {
@@ -12551,6 +12706,27 @@
       "machineId",
       "payload",
       "verb"
+    ]
+  },
+  "sent_messages.hold": {
+    "type": "string",
+    "enum": [
+      "agent",
+      "behind",
+      "blocked",
+      "build",
+      "compacting",
+      "filing",
+      "finishing",
+      "held",
+      "hub",
+      "limit",
+      "paused",
+      "recut",
+      "resting",
+      "signin",
+      "starting",
+      "update"
     ]
   },
   "sent_messages.owed": {
@@ -13968,11 +14144,30 @@
       "since"
     ]
   },
+  "work_items.lands": {
+    "type": "string",
+    "enum": [
+      "main",
+      "branch",
+      "pr",
+      "none"
+    ]
+  },
   "work_items.outputs": {
     "type": "array",
     "items": {
       "type": "string"
     }
+  },
+  "work_items.state": {
+    "type": "string",
+    "enum": [
+      "starting",
+      "running",
+      "done",
+      "failed",
+      "cancelled"
+    ]
   },
   "work_items.stopped_by": {
     "anyOf": [

@@ -30,9 +30,8 @@ import {
   ruleState,
   rules,
   skills,
-  type TrashKind,
 } from "./schema";
-import type { TrashedRows } from "./stored-types";
+import type { TrashedRows, TrashKind } from "./stored-types";
 import type { Tx } from "./tx";
 
 /**

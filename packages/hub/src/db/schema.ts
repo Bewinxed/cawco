@@ -1,13 +1,12 @@
-import type {
-  AccountKind,
-  AccountProvider,
-  AccountSetupStep,
-  AtPlanLimit,
-  HomeStore,
-  ProjectAtLimit,
-  RefusalReach,
-  SigninState,
-  StrategyChoice,
+import {
+  type AccountKind,
+  type AccountProvider,
+  type AccountSetupStep,
+  type HomeStore,
+  PROJECT_AT_LIMIT,
+  type RefusalReach,
+  type SigninState,
+  type StrategyChoice,
 } from "@cawco/core/accounts";
 import type { AccountHue, CompactMethod } from "@cawco/core/accounts/kinds";
 import type { CapPeriod, OnCap } from "@cawco/core/areas";
@@ -15,42 +14,33 @@ import { ASK_STORED, type AskState } from "@cawco/core/asks";
 import type { BlockPage, BlockWidth } from "@cawco/core/blocks";
 import type { ConnectionState } from "@cawco/core/connections";
 import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
-import type { MemoryRole } from "@cawco/core/fleet";
+import { MEMORY_ROLES, type MemoryRole } from "@cawco/core/fleet";
 import type { FleetScope } from "@cawco/core/fleet-placement";
 import type { ConnectAccess } from "@cawco/core/frames";
 import type { HarnessReport } from "@cawco/core/harness";
-import type {
-  EffortLevel,
-  HarnessKind,
-  OfferedMode,
-  PermissionMode,
-  SessionEffort,
+import {
+  type EffortLevel,
+  HARNESSES,
+  type HarnessKind,
+  type OfferedMode,
 } from "@cawco/core/harness/kinds";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
-import type { HookEvent } from "@cawco/core/hooks";
 import type { DeviceKind } from "@cawco/core/hub-auth";
 import type { ImageProviderId } from "@cawco/core/image-generation";
-import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
+import { type CheckoutMove, LANDS_MODES } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type { MoveStage } from "@cawco/core/move";
 import type { MachineState, PresenceClient } from "@cawco/core/notifications";
 import type { RoutineMadeEvent } from "@cawco/core/project-conversation";
 import type {
-  ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
   Envelope,
   InstanceStatus,
   SendPayload,
-  SessionEndIntent,
   SpawnPayload,
 } from "@cawco/core/protocol";
-import type {
-  RuleMatchKind,
-  RuleScope,
-  RuleTiming,
-  RuleWatch,
-} from "@cawco/core/rules";
+import { RELAY_PROVIDERS } from "@cawco/core/relays";
+import { ROUTINE_TARGETS } from "@cawco/core/routine-kinds";
 import type {
   AuthState,
   SendMode,
@@ -65,12 +55,14 @@ import type {
 import {
   AccountMoveSchema,
   AccountOverageSchema,
+  AtPlanLimitSchema,
   AttemptResultSchema,
   BuildInfoSchema,
   CheckoutMoveSchema,
   ClaudeModelUsageSchema,
   ConnectAccessSchema,
   ContextFillSchema,
+  ContinuationJobSchema,
   DelegateEventPayloadSchema,
   EndedBySchema,
   EnvelopeShape,
@@ -82,12 +74,13 @@ import {
   FleetSyncOutcomeSchema,
   FleetSyncReportSchema,
   GithubProjectSchema,
-  HarnessReportSchema,
   HookHandlerSchema,
   MachineCapabilitiesSchema,
   McpPlatformSchema,
   ModelInfoSchema,
   MoveEndedSchema,
+  MoveStageSchema,
+  NamedHarnessReportSchema,
   NamedMoveRequestSchema,
   NeutralUserMessageSchema,
   OpenCodeGoLimitsSchema,
@@ -99,9 +92,13 @@ import {
   RelayPortHealthSchema,
   RelayPortsSchema,
   RelayReachSchema,
+  RuleMatchKindSchema,
+  RuleTimingSchema,
+  RuleWatchSchema,
   ScratchWorktreeSchema,
   SendPayloadShape,
   SessionCommandsSchema,
+  SessionEndIntentSchema,
   SessionToolingSchema,
   SkillFileSchema,
   SpawnPayloadSchema,
@@ -117,6 +114,7 @@ import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
 import type { LimitWindow, UsageHarness } from "@cawco/core/usage/types";
 import type { StagesTemplate } from "@cawco/core/views";
+import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import type {
   WorkspaceCut,
   WorkspaceHolding,
@@ -139,7 +137,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 import { hubSecrets, openOrNull } from "../secret-box";
-import { storedJson } from "../stored-json";
+import { storedEnum, storedJson } from "../stored-json";
 import { machineColumn, projectColumn, sessionColumn } from "./owner-columns";
 import {
   AuthorizationServerMetadataSchema,
@@ -155,14 +153,15 @@ import {
   OAuthProtectedResourceMetadataSchema,
   OAuthTokensSchema,
   PreparedContinuationSchema,
+  SendHoldSchema,
   StoredSendRefusalSchema,
   TrackerCursorSchema,
   TrackerSyncedSchema,
   TrashedRowsSchema,
+  TrashKindSchema,
   WorkItemSubmissionSchema,
   WorkspaceFromSchema,
 } from "./stored-shapes";
-import type { SendHold } from "./stored-types";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 /** A time column a row's insert stamps with now, unless given one. */
@@ -214,6 +213,12 @@ const budgetColumns = () => ({
   budgetMinutes: integer("budget_minutes"),
   budgetUnread: text("budget_unread"),
 });
+
+/** What an area's or a project's sessions do at their account's limit (core `ProjectAtLimit`): wait for the reset, unless it says move. */
+const accountAtLimitColumn = () =>
+  storedEnum(z.enum(PROJECT_AT_LIMIT))("account_at_limit")
+    .notNull()
+    .default("wait");
 
 /** A row that goes with its area: deleted when the area is. */
 const areaKey = () =>
@@ -375,8 +380,9 @@ export const agentHarnesses = sqliteTable(
     machineId: machineColumn("machine_id")
       .notNull()
       .references(() => agents.machineId, { onDelete: "cascade" }),
-    harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
-    report: storedJson(HarnessReportSchema)("report").notNull(),
+    /** The machine's own name for it, one this hub does not run included (core `NamedHarnessReport`). */
+    harness: text("harness").notNull(),
+    report: storedJson(NamedHarnessReportSchema)("report").notNull(),
   },
   (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
 );
@@ -392,7 +398,7 @@ export const chosenModes = sqliteTable(
   {
     machineId: machineColumn("machine_id").notNull(),
     harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
-    permissionMode: text("permission_mode").$type<PermissionMode>().notNull(),
+    permissionMode: text("permission_mode").notNull(),
     chosenAt: timestamp("chosen_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
@@ -488,10 +494,7 @@ export const areas = sqliteTable("areas", {
     onDelete: "set null",
   }),
   /** What its projects' sessions on {@link account} do at that account's limit. */
-  accountAtLimit: text("account_at_limit")
-    .$type<ProjectAtLimit>()
-    .notNull()
-    .default("wait"),
+  accountAtLimit: accountAtLimitColumn(),
   /** The permission mode its projects' conversations start in; null: the fleet's. */
   cawMode: text("caw_mode").$type<OfferedMode>(),
   /** What each of its projects may spend in `cap_period`, in dollars; null: no cap. */
@@ -573,7 +576,7 @@ export const projects = sqliteTable("projects", {
    * Where its tasks' attempts land when the task file says nothing
    * (`lands:`): onto the default branch, as before there was a choice.
    */
-  lands: text("lands").$type<LandsMode>().notNull().default("main"),
+  lands: storedEnum(z.enum(LANDS_MODES))("lands").notNull().default("main"),
   /**
    * Where its tasks' attempts run when the task file says nothing
    * (`runs_on:`, runs-on.ts): a machine, or a capability like `apple`.
@@ -622,10 +625,7 @@ export const projects = sqliteTable("projects", {
    * `ProjectAtLimit`, placement.ts `runningAccounts`): wait for the reset
    * there, or move as a session on an account its start named moves.
    */
-  accountAtLimit: text("account_at_limit")
-    .$type<ProjectAtLimit>()
-    .notNull()
-    .default("wait"),
+  accountAtLimit: accountAtLimitColumn(),
   /**
    * When the person answered a move's ask "Don't move" (moves.ts): a folder
    * that still needs that ask can't move, and the New session modal says so
@@ -981,7 +981,7 @@ export const instances = sqliteTable("instances", {
   endRetryAt: timestamp("end_retry_at"),
   endAttempts: integer("end_attempts").notNull().default(0),
   /** The hub's decision, independent of process presence and attachment. */
-  endIntent: text("end_intent").$type<SessionEndIntent>(),
+  endIntent: storedEnum(SessionEndIntentSchema)("end_intent"),
   endConfirmedAt: timestamp("end_confirmed_at"),
   /**
    * A start the hub accepted but did not forward because its machine was
@@ -1204,7 +1204,7 @@ export const instances = sqliteTable("instances", {
    * sends no effort. Null until the first reading. What the session runs at,
    * shown on its chip; never what a launch asks for ({@link chosenEffort}).
    */
-  effort: text("effort").$type<SessionEffort>(),
+  effort: text("effort"),
   /**
    * The effort the operator chose for the session: the level its spawn named,
    * or the last `set-effort` sent it. Every launch of the session asks for it
@@ -1212,7 +1212,7 @@ export const instances = sqliteTable("instances", {
    * name none, so the harness runs its model's default. Only a choice writes
    * it, never a reading.
    */
-  chosenEffort: text("chosen_effort").$type<EffortLevel>(),
+  chosenEffort: text("chosen_effort"),
   /**
    * The session may start any delegate type (core `MayStart` `["any"]`): an
    * orchestrator. False: a leaf, which may start the types its
@@ -1715,7 +1715,7 @@ export const workItems = sqliteTable(
      * workspace's base branch, to `cawco/<task or item>` on origin, to that
      * branch with a pull request, or nowhere.
      */
-    lands: text("lands").$type<LandsMode>().notNull().default("main"),
+    lands: storedEnum(z.enum(LANDS_MODES))("lands").notNull().default("main"),
     /**
      * Files in its workspace, as paths from the clone's root, that the hub
      * copies into its project's folder (`assets/<task or item>/`) when it
@@ -1751,7 +1751,9 @@ export const workItems = sqliteTable(
     harness: text("harness").notNull(),
     model: text("model"),
     effort: text("effort"),
-    state: text("state").$type<WorkItemState>().notNull().default("starting"),
+    state: storedEnum(z.enum(WORK_ITEM_STATES))("state")
+      .notNull()
+      .default("starting"),
     /**
      * When the hub began landing it for a `finish_item` (its landing gate,
      * then the push), while that runs. Set, the item is landing: a hub that
@@ -2194,7 +2196,7 @@ export const sentMessages = sqliteTable(
      * it is kept and again at each look that keeps it; each hold's words
      * name what releases it (`HOLD_WORDS`). Null once it is handed.
      */
-    hold: text("hold").$type<SendHold>(),
+    hold: storedEnum(SendHoldSchema)("hold"),
     /**
      * The send whole, as its machine is handed it (`Envelope<SendPayload>`),
      * kept while it is pending: a process that went away before reading it
@@ -2684,8 +2686,7 @@ export const accounts = sqliteTable(
       .default(false),
     reservePct: integer("reserve_pct"),
     /** What its sessions do at a plan limit while its extra usage is on (core `AtPlanLimit`). */
-    atPlanLimit: text("at_plan_limit")
-      .$type<AtPlanLimit>()
+    atPlanLimit: storedEnum(AtPlanLimitSchema)("at_plan_limit")
       .notNull()
       .default("move"),
     /**
@@ -3316,8 +3317,7 @@ export const rules = sqliteTable("rules", {
   /** A disabled rule stays here, keeps its history, and stops firing. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   pattern: text("pattern").notNull(),
-  matchKind: text("match_kind")
-    .$type<RuleMatchKind>()
+  matchKind: storedEnum(RuleMatchKindSchema)("match_kind")
     .notNull()
     .default("phrase"),
   caseSensitive: integer("case_sensitive", { mode: "boolean" })
@@ -3327,10 +3327,10 @@ export const rules = sqliteTable("rules", {
     .notNull()
     .default(false),
   /** Whether the rule reads the session's answer, its reasoning, or both. */
-  watch: text("watch").$type<RuleWatch>().notNull().default("text"),
+  watch: storedEnum(RuleWatchSchema)("watch").notNull().default("text"),
   reply: text("reply").notNull(),
   /** `turn` wakes an idle session, `message` queues, `immediate` sends mid-stream. */
-  timing: text("timing").$type<RuleTiming>().notNull().default("turn"),
+  timing: storedEnum(RuleTimingSchema)("timing").notNull().default("turn"),
   /**
    * On, the rule fires again on every later match (up to the ceiling). Off, it
    * fires once per session and goes quiet.
@@ -3361,12 +3361,11 @@ export const rules = sqliteTable("rules", {
     onDelete: "cascade",
   }),
   /** The harness it fires on. */
-  scopeHarness:
-    text("scope_harness").$type<NonNullable<RuleScope["harness"]>>(),
+  scopeHarness: storedEnum(z.enum(HARNESSES))("scope_harness"),
   /** A model name it fires on, matched as a substring in any case. */
   scopeModel: text("scope_model"),
   /** The role of the sessions it fires on: `orchestrator` or `leaf` (roles.ts `memoryRoleOf`). */
-  scopeRole: text("scope_role").$type<NonNullable<RuleScope["role"]>>(),
+  scopeRole: storedEnum(z.enum(MEMORY_ROLES))("scope_role"),
   /** The delegate type the sessions it fires on were started as, by name. */
   scopeDelegateType: text("scope_delegate_type"),
   /** Turns of sessions this meaning rule was not judged on, because Jev did not answer in time. */
@@ -3411,21 +3410,6 @@ export const ruleState = sqliteTable(
   ]
 );
 
-/** What a config delete can move into {@link configTrash}. */
-export type TrashKind =
-  | "rule"
-  | "hook"
-  | "skill"
-  | "plugin"
-  | "marketplace"
-  | "agent"
-  | "mcp"
-  | "delegateType"
-  | "memory"
-  | "memoryDoc"
-  | "connection"
-  | "harnessConfig";
-
 /**
  * A deleted config item, kept whole for its undo window (JOURNEY.md Flow 5:
  * "an undo affordance after the fact rather than a confirm dialog before
@@ -3439,7 +3423,7 @@ export type TrashKind =
  */
 export const configTrash = sqliteTable("config_trash", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind").$type<TrashKind>().notNull(),
+  kind: storedEnum(TrashKindSchema)("kind").notNull(),
   /** The item's own key: a rule's id, a skill's name, a document's path. */
   key: text("key").notNull(),
   /** The item's own table first, then what hangs off it, in insert order. */
@@ -3463,7 +3447,7 @@ export const taskCommentIds = sqliteTable("task_comment_ids", {
 
 /** What a hook does and where, as {@link fleetHooks} and its history keep it (new columns each call). */
 const hookColumns = () => ({
-  event: text("event").$type<HookEvent>().notNull(),
+  event: text("event").notNull(),
   matcher: text("matcher"),
   handler: storedJson(HookHandlerSchema)("handler").notNull(),
   /** A command hook's script body, written to every machine that gets this hook. */
@@ -3921,7 +3905,7 @@ export const continuations = sqliteTable("continuations", {
   summary: text("summary"),
   /** The source's Open items section (open-items.ts), read from its records once before the opening goes. */
   openItems: text("open_items"),
-  stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
+  stage: storedEnum(ContinuationJobSchema.shape.stage)("stage").notNull(),
   error: text("error"),
   /**
    * Who asked for it. A person's own Continue starts a separate session;
@@ -4100,7 +4084,7 @@ export const moves = sqliteTable(
   {
     id: text("id").primaryKey(),
     projectId: projectKey(),
-    stage: text("stage").$type<MoveStage>().notNull(),
+    stage: storedEnum(MoveStageSchema)("stage").notNull(),
     /**
      * Everything the job has learned and decided, as moves.ts keeps it, read
      * and written whole, but the machines it names, which are its columns.
@@ -5278,12 +5262,12 @@ export const routines = sqliteTable(
     cron: text("cron").notNull(),
     /** An IANA zone the schedule reads in, like Europe/London. */
     timeZone: text("time_zone").notNull(),
-    target: text("target").$type<RoutineTarget>().notNull(),
+    target: storedEnum(z.enum(ROUTINE_TARGETS))("target").notNull(),
     prompt: text("prompt").notNull(),
     /** The delegate type a `delegate` run starts; null: the fleet's default. */
     delegateType: text("delegate_type"),
     /** Where a `delegate` run's commits go: `none` unless the routine says. */
-    lands: text("lands").$type<LandsMode>().notNull().default("none"),
+    lands: storedEnum(z.enum(LANDS_MODES))("lands").notNull().default("none"),
     /** What each run's work item may spend; one that did not read skips every run. */
     ...budgetColumns(),
     /** Dollars its runs may spend in a day of its time zone; null: no cap. */
@@ -5907,7 +5891,7 @@ export const relays = sqliteTable(
     /** 128 random bits, base64url: the path's last part. */
     id: text("id").primaryKey(),
     projectId: projectKey(),
-    provider: text("provider").$type<RelayProvider>().notNull(),
+    provider: storedEnum(z.enum(RELAY_PROVIDERS))("provider").notNull(),
     /** What deliveries are signed with: minted for a webhook the hub registers, else the owner's (`cawco relay set-secret`). */
     secret: sealedText("secret"),
     /** `minted` (the hub made it and gave it to the provider), `owner` (set from the owner's terminal), or null: none yet. */

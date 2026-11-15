@@ -6,10 +6,12 @@ import {
   type StartingSet,
   startsAny,
 } from "@cawco/core/delegate-types";
-import type {
-  EffortLevel,
-  HarnessKind,
-  SessionEffort,
+import {
+  EFFORT_NONE,
+  type EffortLevel,
+  type HarnessKind,
+  isEffortLevel,
+  type SessionEffort,
 } from "@cawco/core/harness/kinds";
 import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -102,13 +104,16 @@ type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
 
 /**
  * A session's stored row, its `cwd` named as {@link MachinePath}, which the
- * API's schema reads as the string it is on the wire.
+ * API's schema reads as the string it is on the wire, and its efforts
+ * narrowed to the levels this build knows ({@link sessionEfforts}).
  */
 type StoredInstanceRow = Omit<
   typeof instances.$inferSelect,
-  "cwd" | "mayStartAny" | "startsWithAll"
+  "cwd" | "mayStartAny" | "startsWithAll" | "effort" | "chosenEffort"
 > & {
   cwd: MachinePath;
+  effort: SessionEffort | null;
+  chosenEffort: EffortLevel | null;
   /** The delegate types it may start (core `MayStart`): `["any"]`, else the ones it names. */
   mayStart: MayStart;
   /** The skills and MCP servers it starts with (core `StartingSet`); null: everything installed. */
@@ -238,8 +243,26 @@ const {
   ...storedColumns
 } = getTableColumns(instances);
 
-/** A {@link StoredInstanceRow}'s columns: every one, its lists read whole in place of their flags. */
-const wholeColumns = { ...storedColumns, ...sessionLists };
+/**
+ * A session's two efforts as every read of its row narrows them. Each
+ * column keeps the level its harness named, as text: a newer harness may
+ * name one this build does not know. A level this build knows reads as
+ * itself (`none` too, for the effort read back); any other reads as null,
+ * as an effort not read yet and one nobody chose, so a launch never asks a
+ * harness for a level this build cannot name (launches.ts `bounded`).
+ */
+const sessionEfforts = {
+  effort: sql<SessionEffort | null>`${instances.effort}`.mapWith(
+    (value: string): SessionEffort | null =>
+      value === EFFORT_NONE || isEffortLevel(value) ? value : null
+  ),
+  chosenEffort: sql<EffortLevel | null>`${instances.chosenEffort}`.mapWith(
+    (value: string): EffortLevel | null => (isEffortLevel(value) ? value : null)
+  ),
+};
+
+/** A {@link StoredInstanceRow}'s columns: every one, its lists read whole in place of their flags, its efforts narrowed. */
+const wholeColumns = { ...storedColumns, ...sessionLists, ...sessionEfforts };
 
 const {
   endRetryAt: _endRetryAt,
@@ -685,12 +708,13 @@ export interface InstancesDb {
   readonly noteEndFailure: (id: string, error: string) => void;
   readonly noteEndReason: (id: string, reason: string) => void;
   /**
-   * The effort the session's agent read back from its harness (`EFFORT_READ`).
-   * Returns whether the row moved, so a reading repeated at every turn's end
-   * does not re-publish the board. A reading never moves the session's
-   * chosen effort ({@link DbShape.chooseEffort}).
+   * The effort the session's agent read back from its harness (`EFFORT_READ`),
+   * as the harness named it: a level this build does not know is kept, and
+   * reads as null ({@link sessionEfforts}). Returns whether the row moved, so
+   * a reading repeated at every turn's end does not re-publish the board. A
+   * reading never moves the session's chosen effort ({@link DbShape.chooseEffort}).
    */
-  readonly noteInstanceEffort: (id: string, effort: SessionEffort) => boolean;
+  readonly noteInstanceEffort: (id: string, effort: string) => boolean;
   /**
    * The SDK session an `init` frame named, so the row can be read back from —
    * with the directory it really opened in, which is the agent's word on where
