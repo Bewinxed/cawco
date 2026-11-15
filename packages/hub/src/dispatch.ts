@@ -700,12 +700,13 @@ const partsSection = (parts: string[]): string =>
 
 /**
  * How an attempt hands in its work (task-tools.ts `task_result`): what the
- * task's review shows first, its words over the artifact it presented. The
- * review draws a presented artifact with the artifact panel's renderer and
- * never a file's format, so the brief asks for the artifact first.
+ * task's review shows. The person judged the work when they asked for it,
+ * so a hand-in says it is done in a line, names only what needs them, and
+ * carries the thing itself where a person can use it. The commit is the
+ * evidence: the hub lands it and runs the checks on it.
  */
 const RESULT_LINE =
-  'Before finish_item, show your work, then hand it in. Show it with artifact_create: a page that draws what you made as its reader will meet it (the post as it will read, the report, the screen), or a preview of the app running. The review draws that artifact whole; it draws no file. Then call task_result: `summary`, what you did in a few sentences; `check`, what the reviewer should look at, one line each; `artifacts`, that artifact first (`kind: "artifact"`, its `artifactId`, `primary: true`), then each file by its path from the project folder and each link by its url. Words alone only when there is nothing to show.';
+  'Before finish_item, hand your work in with task_result. The person judged this work when they asked for it; they read your hand-in to learn that it is done and what needs them. `summary`: one line saying what is done. `check`: each caveat, what is left undone, each defect you found, and each thing the person must look at or decide, one line each; empty when there is none. `artifacts`: the thing itself, where a person can use it: the screen or component running (artifact_create as a preview, first, `kind: "artifact"`, its `artifactId`, `primary: true`), a post or document as it will read, each file by its path from the project folder, each link by its url; empty for work a person cannot open and use.';
 
 /** The most comments a brief carries: the newest. */
 const BRIEF_COMMENTS_MAX = 20;

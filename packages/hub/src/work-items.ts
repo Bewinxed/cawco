@@ -1042,7 +1042,7 @@ const REPORT_ARRIVES = workWords.reportArrives;
 
 /** How an open item ends, as the hub's reminders say it. */
 const FINISH_LINE =
-  "Finish the work and call finish_item with a report that quotes the output of every command that proves it, or call it with `blocked` and the exact command and error.";
+  "Finish the work and call finish_item: its report says what is done, then only caveats, what is left undone and defects you found; or call it with `blocked` and the exact command and error.";
 
 /** Whose word the sweep's wake is: the hub's about an item, as the quiet-turn word is. */
 const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: WORK_ITEM_ORIGIN };

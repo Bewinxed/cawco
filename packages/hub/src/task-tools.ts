@@ -819,17 +819,19 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_result",
-      "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create and hand that artifact in first, primary (its name or handle); files by folder path. Again replaces it.",
+      "Hand in your task's work before finish_item: one line of what is done, what needs the person, and the thing itself where a person can use it (a preview first, primary; files by folder path). Again replaces it.",
       {
         summary: z
           .string()
           .trim()
           .min(1)
-          .describe("What you did, in a few sentences."),
+          .describe("What is done, in one line."),
         check: z
           .array(z.string())
           .optional()
-          .describe("What the reviewer should look at, one line each."),
+          .describe(
+            "Each caveat, what is left undone, each defect found, and each thing the person must look at or decide, one line each."
+          ),
         artifacts: z
           .array(
             z.object({
