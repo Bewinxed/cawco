@@ -187,7 +187,7 @@ import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
 import type { createOpenItems } from "./open-items";
 import type { AnswerFrom, PendingShape } from "./pending";
-import type { PlacementInput } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import type { PlanChanges } from "./plan-changes";
 import type { createPlans } from "./plans";
 import type { createPreviewListeners, PreviewTarget } from "./preview";
@@ -931,7 +931,7 @@ export interface ClosureContext {
   placementInput: (
     machineId: string,
     payload: NamedSpawn,
-    task: { projectId?: string | null; taskId?: string | null },
+    task: { accounts?: string[] | null; projectId?: string | null },
     fork: { accountId: string | null } | undefined
   ) => PlacementInput | undefined;
   planChanges: PlanChanges | undefined;
@@ -1369,7 +1369,7 @@ export interface ClosureContext {
   taskAccounts: (
     projectId: string | null | undefined,
     taskId: string | null | undefined
-  ) => string[] | null;
+  ) => TaskAccounts;
   tasks: ReturnType<typeof createTasks>;
   tellEndedByMove: (row: { id: string; machineId: string }) => void;
   tellSession: (

@@ -818,14 +818,7 @@ interface WorkItemDeps extends Pick<
     machineId: string,
     session: Omit<NamedSpawn, "cwd">,
     task: { projectId: string | null; taskId?: string }
-  ) =>
-    | ItemPlacement
-    | ReturnType<
-        typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<400, { code: "spawn-not-placed"; detail: string }>
-      >;
+  ) => ItemPlacement | PlacementProblem;
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
@@ -906,12 +899,7 @@ interface WorkItemDeps extends Pick<
     | ReturnType<
         typeof problem<400, { code: "spawn-not-settled"; detail: string }>
       >
-    | ReturnType<
-        typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<400, { code: "spawn-not-placed"; detail: string }>
-      >
+    | PlacementProblem
     | ReturnType<
         typeof problem<409, { code: "starting-set-unread"; detail: string }>
       >
@@ -1077,6 +1065,21 @@ interface Settings {
  * session's spawn finds the boundary in its form and hands it over to no new
  * generation.
  */
+/** Why a session could not be placed (spawns.ts `placedOrProblem`): its project deleted, no account it may run on, or its task's allow-list unread. */
+type PlacementProblem =
+  | ReturnType<
+      typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<400, { code: "spawn-not-placed"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "spawn-task-accounts-unread"; detail: string }
+      >
+    >;
+
 export interface ItemPlacement {
   accountId?: string;
   launchesOn?: string;

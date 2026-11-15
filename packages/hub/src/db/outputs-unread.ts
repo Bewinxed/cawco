@@ -32,9 +32,11 @@ const GOVERNING = [
   "accounts",
   "waits_on",
 ] satisfies readonly TaskField[];
-const LINE_UNREAD = GOVERNING.map(
-  (field) => `problem LIKE '%${field}: is not a list%'`
-).join(" OR ");
+const LINE_UNREAD = [
+  ...GOVERNING.map((field) => `problem LIKE '%${field}: is not a list%'`),
+  // A wait that names no target, in the reader's words: it holds every attempt too.
+  "problem LIKE '%waits_on: “%” is not a task, card, pin%'",
+].join(" OR ");
 
 /** A stored value as the log shows it: cut short, on one line. */
 const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));

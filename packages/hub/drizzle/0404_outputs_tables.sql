@@ -26,8 +26,9 @@
 -- the task starts while that is set (dispatch.ts `startable`): an entry
 -- such a line leaves out widens what the attempt does. A row whose
 -- `problem` names such a line left open (the reader's words before this,
--- `<field>: is not a list`) has its hash cleared too, so it is read again
--- and fills `lists_unread`. A block list with a line that is not a
+-- `<field>: is not a list`), or a `waits_on` entry that names no target
+-- (`waits_on: “…” is not a task, card, pin, …`), has its hash cleared too,
+-- so it is read again and fills `lists_unread`. A block list with a line that is not a
 -- `- item` left no problem behind it, so its row cannot be told here: it
 -- fills when its file next changes, and dispatch reads the file itself at
 -- each start, so its attempt is refused before then. The step before this
@@ -56,6 +57,6 @@ ALTER TABLE `work_items` ADD `outputs_unread` text;--> statement-breakpoint
 UPDATE `work_items` SET `outputs_unread` = CASE WHEN CASE WHEN CASE WHEN json_valid(`outputs`) THEN json_type(`outputs`) = 'array' ELSE 0 END THEN NOT EXISTS (SELECT 1 FROM json_each(`outputs`) e WHERE e.`type` <> 'text') ELSE 0 END THEN NULL ELSE CAST(`outputs` AS TEXT) END WHERE `outputs` IS NOT NULL;--> statement-breakpoint
 INSERT OR IGNORE INTO `work_item_outputs` (`item_id`, `path`) SELECT w.`id`, e.`value` FROM `work_items` w, json_each(CASE WHEN CASE WHEN json_valid(w.`outputs`) THEN json_type(w.`outputs`) = 'array' ELSE 0 END THEN w.`outputs` ELSE '[]' END) e WHERE w.`outputs` IS NOT NULL AND e.`type` = 'text' ORDER BY w.`rowid`, e.`id`;--> statement-breakpoint
 INSERT OR IGNORE INTO `project_task_outputs` (`project_id`, `path`, `output`) SELECT t.`project_id`, t.`path`, e.`value` FROM `project_tasks` t, json_each(CASE WHEN CASE WHEN json_valid(t.`outputs`) THEN json_type(t.`outputs`) = 'array' ELSE 0 END THEN t.`outputs` ELSE '[]' END) e WHERE e.`type` = 'text' ORDER BY t.`rowid`, e.`id`;--> statement-breakpoint
-UPDATE `project_tasks` SET `hash` = '' WHERE NOT (CASE WHEN CASE WHEN json_valid(`outputs`) THEN json_type(`outputs`) = 'array' ELSE 0 END THEN NOT EXISTS (SELECT 1 FROM json_each(`outputs`) e WHERE e.`type` <> 'text') ELSE 0 END) OR `problem` LIKE '%outputs: is not a list%' OR `problem` LIKE '%owns: is not a list%' OR `problem` LIKE '%checks: is not a list%' OR `problem` LIKE '%accounts: is not a list%' OR `problem` LIKE '%waits_on: is not a list%';--> statement-breakpoint
+UPDATE `project_tasks` SET `hash` = '' WHERE NOT (CASE WHEN CASE WHEN json_valid(`outputs`) THEN json_type(`outputs`) = 'array' ELSE 0 END THEN NOT EXISTS (SELECT 1 FROM json_each(`outputs`) e WHERE e.`type` <> 'text') ELSE 0 END) OR `problem` LIKE '%outputs: is not a list%' OR `problem` LIKE '%owns: is not a list%' OR `problem` LIKE '%checks: is not a list%' OR `problem` LIKE '%accounts: is not a list%' OR `problem` LIKE '%waits_on: is not a list%' OR `problem` LIKE '%waits_on: “%” is not a task, card, pin%';--> statement-breakpoint
 ALTER TABLE `project_tasks` DROP COLUMN `outputs`;--> statement-breakpoint
 ALTER TABLE `work_items` DROP COLUMN `outputs`;

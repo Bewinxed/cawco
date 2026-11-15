@@ -366,12 +366,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    `local`, where any text was taken and stored. A page built for 73 may
  *    send another, so it reloads first.
  * 75: an attempt whose task file's `outputs:`, `owns:`, `checks:`,
- *    `accounts:` or `waits_on:` line does not read whole is refused 409
+ *    `accounts:` or `waits_on:` line does not read whole (a `waits_on`
+ *    entry that names no target included) is refused 409
  *    `dispatch-list-unread`, where it started on what of the line read
  *    (no outputs, fewer owned globs, checks, waits, any account): a
  *    project's requests, an attempt and its retry may answer it. A task
- *    gains `listsUnread`. A page built for 74 does not know the new code,
- *    so it reloads first.
+ *    gains `listsUnread`. A start, and the placement preview, on a task
+ *    whose `accounts:` line does not read whole are refused 409
+ *    `spawn-task-accounts-unread`, where they were placed on any account.
+ *    A page built for 74 does not know the new codes, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries

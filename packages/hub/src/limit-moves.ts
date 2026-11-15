@@ -47,7 +47,7 @@ import {
   refusedUntil,
   type Stall,
 } from "./limit-decision";
-import type { PlacementInput } from "./placement";
+import type { PlacementInput, TaskAccounts } from "./placement";
 import {
   accountFacts,
   place as placeAccount,
@@ -936,9 +936,26 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       projectAccounts: projectId
         ? runningAccounts(ctx.db.project(projectId), row.accountId)
         : null,
-      taskAccounts: ctx.taskAccounts(projectId, item?.taskId),
+      taskAccounts: allowedHere(row, ctx.taskAccounts(projectId, item?.taskId)),
       ...(typeAccount ? { typeAccount } : {}),
     };
+  };
+
+  /**
+   * A running session's task allow-list as a move reads it: the list, or,
+   * while its task's `accounts:` line does not read whole, the account the
+   * session is on alone, so it moves nowhere else on a list the hub cannot
+   * read (spawns.ts `taskAccounts`; a new start is refused for it).
+   */
+  const allowedHere = (
+    row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
+    allowed: TaskAccounts
+  ): string[] | null => {
+    if ("accounts" in allowed) {
+      return allowed.accounts;
+    }
+    const here = row.accountId ?? machineAccount(ctx.db, row.machineId);
+    return here ? [here] : null;
   };
 
   /** Whether a session's prompt cache is still warm, as the cold check reads it (keep-alive.ts `cacheWarmNow`). */

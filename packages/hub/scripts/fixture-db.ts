@@ -707,9 +707,10 @@ const FIRST_OUTPUTS = FIRST_GATED + 12;
  * file's list, `[]` for none) and as a hand edit could: none (null, `[]`),
  * one path, several, a path kept twice; a list that is not JSON, JSON
  * `null`, an object; one that reads in part (a number and a null among
- * paths); and tasks whose file's outputs, owns, checks, accounts, waits_on
- * or labels line was left open, as the index held them (labels' is shown
- * and read on, so its row is not read again).
+ * paths); tasks whose file's outputs, owns, checks, accounts, waits_on
+ * or labels line was left open, and one whose waits_on names no target, as
+ * the index held them (labels' is shown and read on, so its row is not read
+ * again).
  */
 function seedOutputs(dbPath: string): void {
   const sqlite = new Database(dbPath);
@@ -757,6 +758,11 @@ function seedOutputs(dbPath: string): void {
     [9, "[]", "accounts: is not a list like [a, b]."],
     [10, "[]", 'waits_on: is not a list like [138, "<artifact id>#<card>"].'],
     [11, "[]", "labels: is not a list like [a, b]."],
+    [
+      12,
+      "[]",
+      "waits_on: “the release card” is not a task, card, pin, pull request, Actions run or session.",
+    ],
   ];
   for (const [number, list, problem] of taskLists) {
     sqlite.run(
