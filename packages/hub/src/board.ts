@@ -432,7 +432,8 @@ export const createBoard = (ctx: BoardContext) => {
    * dashboard, this one among them; a snapshot that went is followed by
    * every law caught broken before it. Then the fleet's browsers, whole, to
    * a page on this wire: a browser view paints from them and follows each
-   * `browser_list` frame after, never polling.
+   * `browser_list` frame after, never polling. Then each passkey QR still in
+   * time, which the take-over view draws over its stream.
    */
   const greetDashboard = (ws: HubSocket, older: boolean): void => {
     const board = ctx.laws.hold(() => instancesFrame(""));
@@ -462,6 +463,15 @@ export const createBoard = (ctx: BoardContext) => {
         machineId: "hub",
         payload: { kind: "browser_list", browsers: ctx.browsers.list() },
       } satisfies Envelope<FramePayload>);
+      // Then each passkey QR still in time, so a page opened or reloaded
+      // after the prompt appeared still shows it over the take-over.
+      for (const payload of ctx.browsers.passkeyQrs()) {
+        ctx.sendFrame(ws, {
+          verb: "frames",
+          machineId: "hub",
+          payload,
+        } satisfies Envelope<FramePayload>);
+      }
     }
   };
   const overlayOf = (row: ReturnType<typeof boardRows>[number]): string =>

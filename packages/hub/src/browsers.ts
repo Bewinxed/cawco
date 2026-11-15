@@ -64,6 +64,7 @@ import {
   isBrowserKey,
   type ListedBrowser,
   PASSKEY_ADVERT_MAX_AGE_MS,
+  PASSKEY_QR_TTL_MS,
   type PasskeyQrFrame,
   type PasskeyRelayCapability,
 } from "@cawco/core/browser";
@@ -458,8 +459,14 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       passkeyQrs.set(frame.key, frame);
     },
 
-    /** The latest passkey QR of each browser that has one. */
+    /** The latest unexpired passkey QR of each browser that has one; an expired one is let go. */
     passkeyQrs(): PasskeyQrFrame[] {
+      const now = Date.now();
+      for (const [key, frame] of passkeyQrs) {
+        if (frame.raisedAt + PASSKEY_QR_TTL_MS <= now) {
+          passkeyQrs.delete(key);
+        }
+      }
       return [...passkeyQrs.values()];
     },
 
