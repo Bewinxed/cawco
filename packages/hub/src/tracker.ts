@@ -82,12 +82,13 @@ import {
 import { connectionsWords } from "@cawco/core/words/connections";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
-import type { TrackerCursor, TrackerSynced } from "./db/stored-types";
+import type { TrackerCursor } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type {
-  TrackerAgreementRow,
+  TrackerAgreement,
   TrackerBindingRow,
   TrackerLinkRow,
+  TrackerSynced,
   TrackersDb,
 } from "./db/trackers";
 import type { ExternalItems } from "./external-items";
@@ -307,6 +308,8 @@ interface Round {
   /** Why the task moves, when its item's Status moved it. */
   statusWhy: string | undefined;
   sync: Sync;
+  /** What they last agreed on: the link's baseline, read whole. */
+  synced: TrackerSynced;
   task: TaskView;
 }
 
@@ -429,8 +432,7 @@ const holdPulls = (round: Round): void => {
 
 /** Per field, the side that moved off what they agreed wins, the tracker's where both did. */
 const planFields = (round: Round): void => {
-  const { remote, file, link } = round;
-  const { synced } = link;
+  const { remote, file, synced } = round;
   for (const field of FIELDS) {
     if (sameField(remote[field], synced[field])) {
       if (!sameField(file[field], synced[field])) {
@@ -452,8 +454,7 @@ const planFields = (round: Round): void => {
 
 /** The issue's state moved: the stage it puts the task in. The stage moved: the state it puts the issue in. */
 const planState = (round: Round): void => {
-  const { sync, issue, task, link } = round;
-  const { synced } = link;
+  const { sync, issue, task, link, synced } = round;
   const { targetName } = sync.binding;
   const current = stageOf(sync, task.stage);
   if (issue.state.token !== synced.state) {
@@ -494,13 +495,13 @@ const planState = (round: Round): void => {
 const remoteStatus = (
   read: ProjectRead,
   issueKey: string,
-  agreed: string | null | undefined
+  agreed: string | null
 ): string | null => {
   const item = read.items.get(issueKey);
   if (item) {
     return item.optionId;
   }
-  return read.complete ? null : (agreed ?? null);
+  return read.complete ? null : agreed;
 };
 
 /** The stage a Status option puts its task in: `current` when it maps there, else the first stage that does. */
@@ -526,17 +527,13 @@ const optionName = (project: GithubProject, id: string): string =>
  * moved too, to another kind of stage, the state stands.
  */
 const planStatus = (round: Round): void => {
-  const { sync, link, task, issue } = round;
+  const { sync, link, task, issue, synced } = round;
   const { onProject } = sync;
   if (!onProject) {
     return;
   }
-  const remote = remoteStatus(
-    onProject.read,
-    link.issueKey,
-    link.synced.status
-  );
-  if (remote === (link.synced.status ?? null)) {
+  const remote = remoteStatus(onProject.read, link.issueKey, synced.status);
+  if (remote === synced.status) {
     return;
   }
   round.statusMoved = true;
@@ -554,7 +551,7 @@ const planStatus = (round: Round): void => {
   }
   const state = stateFor(to, sync.states);
   if (
-    issue.state.token !== link.synced.state &&
+    issue.state.token !== synced.state &&
     state?.token !== issue.state.token
   ) {
     return;
@@ -578,17 +575,17 @@ const planStatus = (round: Round): void => {
 
 /** The task moved, here or by its issue's state: its item's Status follows the stage it ends in. */
 const planStatusPush = (round: Round): void => {
-  const { sync, link, task } = round;
+  const { sync, link, task, synced } = round;
   if (!sync.onProject || round.statusMoved) {
     return;
   }
   const remote = remoteStatus(
     sync.onProject.read,
     link.issueKey,
-    link.synced.status
+    synced.status
   );
   const ends = round.moveTo ?? task.stage;
-  if (ends === link.synced.stage) {
+  if (ends === synced.stage) {
     return;
   }
   const want = statusOptionFor(ends, sync.onProject.project);
@@ -597,6 +594,57 @@ const planStatusPush = (round: Round): void => {
   } else {
     round.next.status = remote;
   }
+};
+
+/**
+ * The Status a held link's task and issue agree on: null where the binding
+ * has no Project; undefined while they differ, or the item or the Project
+ * was not read this sync.
+ */
+const agreedStatus = (
+  sync: Sync,
+  link: TrackerLinkRow,
+  task: TaskView
+): string | null | undefined => {
+  const { onProject } = sync;
+  if (!onProject) {
+    return sync.binding.githubProject ? undefined : null;
+  }
+  const item = onProject.read.items.get(link.issueKey);
+  if (!(item || onProject.read.complete)) {
+    return;
+  }
+  const remote = item?.optionId ?? null;
+  return statusOptionFor(task.stage, onProject.project) === remote
+    ? remote
+    : undefined;
+};
+
+/**
+ * A held link's fresh baseline: its task and issue agreeing on every field
+ * the merge compares (title, description and labels; the issue's state the
+ * one the task's stage puts it in; on a Project, the Status that stage maps
+ * to). Every baseline merges that to nothing, so it is what they agree on.
+ * Undefined while they differ, or a part was not read: the hold stands.
+ */
+const agreedOf = (
+  sync: Sync,
+  link: TrackerLinkRow,
+  task: TaskView,
+  issue: Issue
+): TrackerSynced | undefined => {
+  const file = fileFields(task);
+  const remote = remoteFields(issue);
+  const current = stageOf(sync, task.stage);
+  const agrees =
+    FIELDS.every((field) => sameField(file[field], remote[field])) &&
+    current !== undefined &&
+    stateFor(current, sync.states)?.token === issue.state.token;
+  const status = agreedStatus(sync, link, task);
+  if (!agrees || status === undefined) {
+    return;
+  }
+  return { ...remote, stage: task.stage, state: issue.state.token, status };
 };
 
 /** A field the task sent to its issue: agreed as the tracker took it, its own form brought back. */
@@ -875,7 +923,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       if (heldByRate(item)) {
         return item;
       }
-      round.next.stage = link.synced.stage;
+      round.next.stage = round.synced.stage;
       round.said.push(statusStopped(sync, item));
       return;
     }
@@ -968,6 +1016,10 @@ export const createTrackers = (deps: TrackersDeps) => {
    * One linked task and its issue made one record again: per field, the
    * side that moved off what they last agreed wins, the tracker's where
    * both did; the state and stage likewise. Its outbound comments go after.
+   * A held link (its baseline does not read) merges nothing and posts no
+   * comment (one written on the issue is still added, by `carryIn`): its
+   * record link keeps the issue as read, until the task and the issue
+   * agree, which is written as their baseline and the round runs.
    */
   const reconcile = async (
     sync: Sync,
@@ -985,6 +1037,23 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (task instanceof ElysiaStatus) {
       return task;
     }
+    const synced = link.baseline.held
+      ? agreedOf(sync, link, task, issue)
+      : link.baseline.synced;
+    if (!synced) {
+      db.trackers.updateLink(sync.projectId, link.taskId, {
+        ...heldOf(issue),
+        syncedAt: new Date(),
+        problem: null,
+      });
+      return;
+    }
+    if (link.baseline.held) {
+      db.trackers.updateLink(sync.projectId, link.taskId, { synced });
+      console.info(
+        `[tracker] ${sync.projectId} ${link.taskId}: held sync resumes, its task and ${link.ref} agreeing`
+      );
+    }
     const round: Round = {
       sync,
       link,
@@ -992,7 +1061,8 @@ export const createTrackers = (deps: TrackersDeps) => {
       issue,
       file: fileFields(task),
       remote: remoteFields(issue),
-      next: { ...link.synced },
+      synced,
+      next: { ...synced },
       item: sync.onProject?.read.items.get(link.issueKey),
       pull: {},
       push: {},
@@ -1142,16 +1212,18 @@ export const createTrackers = (deps: TrackersDeps) => {
     sync: Sync,
     task: TaskView,
     issue: Issue,
-    agreed: Fields & Pick<TrackerSynced, "state" | "status">,
+    agreed: Fields &
+      Pick<TrackerSynced, "state"> &
+      Partial<Pick<TrackerSynced, "status">>,
     /** Comments written after it, on either side, are carried to the other. */
     linkedAt: Date,
     /** Its opener, when the tracker does not vouch for them: its pulls wait for you. */
     unvouched: string | null = null
   ): void => {
-    const agreement: TrackerAgreementRow = {
+    const agreement: TrackerAgreement = {
       projectId: sync.projectId,
       taskId: task.id,
-      synced: { ...agreed, stage: task.stage },
+      synced: { ...agreed, stage: task.stage, status: agreed.status ?? null },
       linkedAt,
       unvouched,
     };
@@ -1212,7 +1284,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     sync: Sync,
     task: TaskView,
     issue: Issue
-  ): Promise<Pick<TrackerSynced, "status"> | Stopped> => {
+  ): Promise<Partial<Pick<TrackerSynced, "status">> | Stopped> => {
     const { onProject } = sync;
     const want = onProject
       ? statusOptionFor(task.stage, onProject.project)
@@ -1585,8 +1657,12 @@ export const createTrackers = (deps: TrackersDeps) => {
       // GitHub moved its item's Status: the issue's own list does not say so.
       const statusMoved =
         sync.onProject !== undefined &&
-        remoteStatus(sync.onProject.read, link.issueKey, link.synced.status) !==
-          (link.synced.status ?? null);
+        !link.baseline.held &&
+        remoteStatus(
+          sync.onProject.read,
+          link.issueKey,
+          link.baseline.synced.status
+        ) !== link.baseline.synced.status;
       const touched =
         task !== undefined &&
         (marked.has(link.taskId) ||

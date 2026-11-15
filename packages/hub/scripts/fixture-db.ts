@@ -18,11 +18,12 @@
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
  * budgets, at-limit policies, landings, gate passes, outputs, queued
- * starts, MCP servers' platforms and the fleet's routes besides
- * ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
- * {@link seedLanded}, {@link seedGatePasses}, {@link seedOutputs},
- * {@link seedQueued}, {@link seedMcpServers}, {@link seedPlatformsRoutes}),
- * written to
+ * starts, MCP servers' platforms, the fleet's routes and a tracker's
+ * baselines besides ({@link seedLists}, {@link seedBudgets},
+ * {@link seedAtLimit}, {@link seedLanded}, {@link seedGatePasses},
+ * {@link seedOutputs}, {@link seedQueued}, {@link seedMcpServers},
+ * {@link seedPlatformsRoutes}, {@link seedTracker},
+ * {@link seedTrackerBaselines}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -49,8 +50,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * 0400, every shape a work item's gate passes took before migration 0401,
  * every shape a work item's and a task's outputs took before migration
  * 0404, every shape a queued start's kept call took before migration
- * 0405, and every shape an MCP server's platforms and the fleet's routes
- * took before migration 0406, written here.
+ * 0405, every shape an MCP server's platforms and the fleet's routes
+ * took before migration 0406, and every shape a tracker link's baseline
+ * took before migration 0407, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -1071,6 +1073,153 @@ function seedPlatformsRoutes(dbPath: string): void {
   sqlite.close();
 }
 
+/** The fixture's tracker: a GitHub repository, and the tasks that name its issues, #41 onward. */
+const TRACKED = {
+  target: "dev/project-2",
+  url: "https://github.com/dev/project-2",
+  tasks: ["tsk-1", "tsk-2", "tsk-3", "tsk-4", "tsk-5", "tsk-6", "tsk-7"],
+};
+
+/**
+ * The second project bound to a GitHub repository as the hub's tracker sync
+ * writes it (`trackers.bind`, `trackers.putLink`): six tasks linked to their
+ * issues, their baselines with a null Status, a Status option, labels and
+ * none; and one task whose `issue:` names an issue the hub keeps no link
+ * for (no baseline yet). A hand edit takes one baseline's Status away and
+ * replaces three ({@link seedTrackerBaselines}).
+ */
+function seedTracker(db: HubDb, projects: string[]): void {
+  const [, projectId] = projects;
+  if (!projectId) {
+    return;
+  }
+  const boundAt = new Date(Date.UTC(2026, 9, 1));
+  const since = boundAt.getTime() + 30 * HOUR_MS;
+  db.trackers.bind({
+    projectId,
+    provider: "github",
+    connection: "github-dev",
+    target: TRACKED.target,
+    targetName: TRACKED.target,
+    targetUrl: TRACKED.url,
+    boundAt,
+    cursor: { since, etag: null, commentsSince: since, commentsEtag: null },
+    state: "synced",
+    reason: null,
+    polledAt: new Date(since),
+    resumeAt: null,
+    githubProject: null,
+    githubProjectReason: null,
+  });
+  const baselines = [
+    {
+      title: "Fix the board's scroll after a reconnect",
+      description: "The board jumps to the top when the hub comes back.",
+      labels: ["bug", "release"],
+      stage: "doing",
+      state: "open",
+      status: null,
+    },
+    {
+      title: "Tidy the preview pane",
+      description: "",
+      labels: [],
+      stage: "done",
+      state: "closed:completed",
+      status: null,
+    },
+    {
+      title: "Make the release proof faster",
+      description: "Run the binary's smoke test once per build.",
+      labels: ["perf"],
+      stage: "review",
+      state: "open",
+      status: "PVTSSO_review",
+    },
+  ];
+  for (const [index, taskId] of TRACKED.tasks.entries()) {
+    const number = 41 + index;
+    const synced = baselines[index % baselines.length] ?? {
+      title: "",
+      description: "",
+      labels: [],
+      stage: "inbox",
+      state: "open",
+      status: null,
+    };
+    const record = {
+      projectId,
+      taskId,
+      url: `${TRACKED.url}/issues/${number}`,
+      source: "github" as const,
+      kind: "issue" as const,
+      externalId: `I_kwDOfixture${number}`,
+      number,
+      ref: `#${number}`,
+      title: synced.title,
+      state: synced.state === "open" ? ("open" as const) : ("closed" as const),
+      stateName: synced.state === "open" ? "Open" : "Closed",
+      author: null,
+      labels: synced.labels,
+      mode: "record" as const,
+      remoteUpdatedAt: since,
+      syncedAt: new Date(since),
+      problem: null,
+      etag: null,
+    };
+    if (taskId === "tsk-7") {
+      db.taskLinks.putRef(record);
+      continue;
+    }
+    db.trackers.putLink(
+      {
+        projectId,
+        taskId,
+        synced,
+        linkedAt: boundAt,
+        unvouched: number === 43 ? "a person GitHub does not vouch for" : null,
+      },
+      record
+    );
+  }
+}
+
+/**
+ * Every shape migration 0407 reads a tracker link's baseline in, beside
+ * what {@link seedTracker} saved, as a hand edit could leave them: one with
+ * no Status key (as a baseline written before its binding had a Project,
+ * or after `forgetStatus`, is), one that is not JSON, JSON `null`, and one
+ * partly readable (title, description and state text; stage missing; a
+ * label that is not text; a Status that is a number).
+ */
+function seedTrackerBaselines(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  sqlite.run(
+    "UPDATE tracker_links SET synced = json_remove(synced, '$.status') WHERE task_id = 'tsk-1'"
+  );
+  const baselines: [string, string][] = [
+    ["tsk-4", "title: Fix the rail, stage: doing"],
+    [
+      "tsk-5",
+      JSON.stringify({
+        title: "Check the migration on a real database",
+        description: "Copy the live hub's database and run the new step on it.",
+        labels: ["migration", 7],
+        state: "open",
+        status: 3,
+      }),
+    ],
+    ["tsk-6", "null"],
+  ];
+  for (const [taskId, value] of baselines) {
+    sqlite.run(
+      "UPDATE tracker_links SET synced = ? WHERE task_id = ? AND project_id = (SELECT project_id FROM tracker_bindings)",
+      [value, taskId]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -1085,6 +1234,7 @@ async function seed(
   if (withLists) {
     seedDelegateTypes(db);
     seedMcpServers(db, projects);
+    seedTracker(db, projects);
   }
   lifetime.close();
   if (withLists) {
@@ -1096,6 +1246,7 @@ async function seed(
     seedOutputs(dbPath);
     seedQueued(dbPath);
     seedPlatformsRoutes(dbPath);
+    seedTrackerBaselines(dbPath);
   }
 }
 

@@ -40213,6 +40213,11 @@
           "author": {
             "$ref": "#/components/schemas/ExternalActor"
           },
+          "baselineUnread": {
+            "description": "Set on a task's record link while the tracker sync's baseline with its\nissue (what the two last agreed on) does not read: its sync is held,\nnothing pulled into the task or pushed from it, until a sync finds the\ntask and the issue agreeing.",
+            "const": true,
+            "type": "boolean"
+          },
           "id": {
             "description": "The source's own id: GitHub's node id, Linear's uuid; empty until the item was read.",
             "type": "string"

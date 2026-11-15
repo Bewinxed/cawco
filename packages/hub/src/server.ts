@@ -58,6 +58,7 @@ import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
+import type { ExternalRef } from "@cawco/core/external-items";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
@@ -8460,8 +8461,16 @@ export const createServer = (
     waiters: db.taskWaiters,
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
-    links: (projectId, taskId) =>
-      db.taskLinks.ofTask(projectId, taskId).map(linkRefOf),
+    links: (projectId, taskId) => {
+      const held = db.trackers.held(projectId, taskId);
+      return db.taskLinks
+        .ofTask(projectId, taskId)
+        .map((row): ExternalRef =>
+          held && row.mode === "record"
+            ? { ...linkRefOf(row), baselineUnread: true }
+            : linkRefOf(row)
+        );
+    },
     carried: (projectId, taskId) =>
       db.taskLinks.comments(projectId, taskId).map((row) => ({
         ...linkViaOf(row),

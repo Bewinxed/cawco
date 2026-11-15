@@ -292,7 +292,7 @@ const linkLine = (link: ExternalRef): string => {
   const words = externalItemWords;
   const state =
     link.stateName || (link.state ? words.state[link.state] : words.unread);
-  return `- ${words.source[link.source]} ${words.kind[link.kind]} ${link.ref}${link.title ? ` “${link.title}”` : ""}, ${state}${link.author ? `, by ${link.author.login}` : ""}${link.mode === "record" ? ", its record" : ""}: ${link.url}${link.problem ? `. Its last read stopped short: ${link.problem}` : ""}`;
+  return `- ${words.source[link.source]} ${words.kind[link.kind]} ${link.ref}${link.title ? ` “${link.title}”` : ""}, ${state}${link.author ? `, by ${link.author.login}` : ""}${link.mode === "record" ? ", its record" : ""}: ${link.url}${link.problem ? `. Its last read stopped short: ${link.problem}` : ""}${link.baselineUnread ? `. ${words.baselineUnread}` : ""}`;
 };
 
 const historyLine = (event: TaskHistoryEvent, now: number): string =>

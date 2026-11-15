@@ -217,7 +217,6 @@ import {
   TaskEdgeKindSchema,
   ToolCallKeyStateSchema,
   TrackerCursorSchema,
-  TrackerSyncedSchema,
   TrashedRowsSchema,
   TrashKindSchema,
   TrimOfferAnswerSchema,
@@ -5800,9 +5799,17 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
 
 /**
  * A task linked to its issue by the tracker sync (tracker.ts): what the
- * two last agreed on, and who opened the issue. The issue itself is the
- * task's record link (`task_links`, mode `record`), which the file names
- * (`issue:`, its URL).
+ * two last agreed on (the baseline of their three-way merge: the `synced_`
+ * columns and the {@link trackerLinkSyncedLabels} rows), and who opened
+ * the issue. The issue itself is the task's record link (`task_links`,
+ * mode `record`), which the file names (`issue:`, its URL).
+ *
+ * Every writer writes the whole baseline, `synced_unread` null. A baseline
+ * migration 0407 found stored but not reading whole is kept as stored in
+ * `synced_unread`, the fields of it that read placed beside it: while it is
+ * set (or a field is null) the link's merge is held, nothing pulled into
+ * the task or pushed from it (db trackers.ts `baselineOf`), until a sync
+ * finds the task and its issue agreeing and writes a fresh baseline.
  */
 export const trackerLinks = sqliteTable(
   "tracker_links",
@@ -5810,7 +5817,18 @@ export const trackerLinks = sqliteTable(
     projectId: projectKey(),
     /** The task, `tsk-12`. */
     taskId: text("task_id").notNull(),
-    synced: storedJson(TrackerSyncedSchema)("synced").notNull(),
+    /** The title they agreed on. */
+    syncedTitle: text("synced_title"),
+    /** The description they agreed on, as the task file holds it. */
+    syncedDescription: text("synced_description"),
+    /** The stage the task stood in when they agreed. */
+    syncedStage: text("synced_stage"),
+    /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
+    syncedState: text("synced_state"),
+    /** GitHub: the Status option its Project item stood in; null when not on the Project, no Status, or no Project. */
+    syncedStatus: text("synced_status"),
+    /** A baseline 0407 could not read whole, as it was stored; set, the link's merge is held. */
+    syncedUnread: text("synced_unread"),
     /** Comments written after it, on either side, are carried to the other. */
     linkedAt: timestamp("linked_at").notNull(),
     /**
@@ -5821,6 +5839,23 @@ export const trackerLinks = sqliteTable(
     unvouched: text("unvouched"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]
+);
+
+/** The labels a task and its issue last agreed on (`tracker_links`), as a set: one row each. */
+export const trackerLinkSyncedLabels = sqliteTable(
+  "tracker_link_synced_labels",
+  {
+    projectId: projectColumn("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    label: text("label").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.taskId, table.label] }),
+    foreignKey({
+      columns: [table.projectId, table.taskId],
+      foreignColumns: [trackerLinks.projectId, trackerLinks.taskId],
+    }).onDelete("cascade"),
+  ]
 );
 
 /**

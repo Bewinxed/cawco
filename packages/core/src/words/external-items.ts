@@ -32,6 +32,13 @@ export const externalItemWords = {
   },
   /** A link whose last read stopped short, in place of its state: the source's words follow it. */
   readFailed: "Can't read",
+  /**
+   * A record link whose tracker baseline (what the task and its issue last
+   * agreed on) does not read (`ExternalRef.baselineUnread`): its sync is
+   * held, nothing pulled or pushed, until the two match.
+   */
+  baselineUnread:
+    "Sync held: baseline unreadable. Resumes once task and issue match.",
   /** Reads a link again from its source, and its wait. */
   readAgain: "Retry",
   readingAgain: "Retrying…",
