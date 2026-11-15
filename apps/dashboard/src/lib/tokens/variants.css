@@ -312,6 +312,7 @@
 @custom-variant kind-stream (&[data-kind="stream"]);
 @custom-variant kind-tablet (&[data-kind="tablet"]);
 @custom-variant kind-tailnet (&[data-kind="tailnet"]);
+@custom-variant kind-watch (&[data-kind="watch"]);
 @custom-variant kind-you (&[data-kind="you"]);
 @custom-variant lead-expiring (&[data-lead="expiring"]);
 @custom-variant lead-paused (&[data-lead="paused"]);
