@@ -384,7 +384,7 @@ export const accountsWords = {
      * code): the settings shown are the restrictive policy the hub acts on.
      */
     unread: (fields: string) =>
-      `The saved at-limit policy can’t be read (${fields}). CawCo moves, compacts and files nothing by itself until you save it here.`,
+      `Saved at-limit policy unreadable (${fields}). No automatic moves, compaction or filing until saved.`,
     move: "Move running sessions between accounts",
     wait: "Wait if the window resets within",
     minutes: "minutes",
