@@ -1,4 +1,6 @@
 import type { HarnessKind } from "../harness/kinds";
+import { firstCopy } from "../tool-updates";
+import type { ToolStatus } from "../tools";
 import { accountsWords } from "./accounts";
 import { andList } from "./helpers";
 
@@ -86,10 +88,25 @@ export const harnessRefusedWords = {
    * A stored conversation its machine reads only through the harness's CLI,
    * asked while an install of that CLI runs there and no server of a
    * version CawCo runs could answer it (hub history.ts `refusedRead`): the
-   * page reads it again by itself once the install lands.
+   * page reads it again by itself once the install lands. Who started it
+   * by the cell's `startedBy`, and installing or updating by `firstCopy`,
+   * the choices the page's own line makes (words/tool-updates.ts
+   * `putting`); a cell too old to say who is said with neither.
    */
-  updatingUnread: (name: string, machine: string, to: string | undefined) =>
-    `CawCo is updating ${name} on ${machine}${to ? ` to ${to}` : ""}`,
+  updatingUnread: (
+    name: string,
+    machine: string,
+    cell: Pick<ToolStatus, "startedBy" | "state" | "to" | "version">
+  ) => {
+    const verb = firstCopy(cell) ? "installing" : "updating";
+    const what = `${name} on ${machine}${cell.to ? ` to ${cell.to}` : ""}`;
+    if (cell.startedBy === "cawco") {
+      return `CawCo is ${verb} ${what}`;
+    }
+    return cell.startedBy === "person"
+      ? `You started ${verb} ${what}`
+      : `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${what}`;
+  },
   /**
    * A stored conversation read through the harness's CLI whose read failed
    * while its machine, connected again, had not yet said which tools it has
