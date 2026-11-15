@@ -117,13 +117,14 @@ export const toolUpdateWords = {
   /**
    * A session page's conversation while an install of its CLI runs: the
    * wait, said as one, by what the install puts on (core tool-updates.ts
-   * `firstCopy` of the machine's cell).
+   * `firstCopy` of the machine's cell); with no cell to say, as the hub's
+   * own word for it, updating.
    */
   readWaits: (
     name: string,
     cell: Pick<ToolStatus, "state" | "version"> | undefined
   ) =>
-    `This conversation shows once ${name} is ${firstCopy(cell) ? "installed" : "updated"}`,
+    `This conversation shows once ${name} is ${cell && firstCopy(cell) ? "installed" : "updated"}`,
   /**
    * A refused harness whose CLI an install the person pressed puts on now
    * (core `ToolStatus.startedBy` "person"), beside CawCo's own (core words
