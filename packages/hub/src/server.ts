@@ -7313,7 +7313,10 @@ export const createServer = (
    * copy CawCo was already keeping current (agent tools.ts `takeOverKept`),
    * said in the hub's log the first time its cell says so.
    */
-  const sayTakenOver = (machineId: string, tools: ToolStatus[]): void => {
+  const sayTakenOver = (
+    machineId: string,
+    tools: ReportedToolStatus[]
+  ): void => {
     const before = db.agentTools(machineId);
     for (const tool of tools) {
       const copy = tool.copy?.by === "cawco" ? tool.copy : undefined;
