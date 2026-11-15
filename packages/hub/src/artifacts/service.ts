@@ -2629,14 +2629,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /* ── Files: what reached the person ─────────────────────────────────── */
 
   /**
-   * Whether `row`'s session put it in front of the person: not handed up
-   * and not held for a parent; a try only while its session can still run
+   * Whether `row`'s session put it in front of the person: not handed up,
+   * not held for a parent, not a design check's verifier's working
+   * material (needs.ts `mayWait`); a try only while its session can still run
    * it (not ended, not moved on from), since a try nobody saw is nothing to
    * keep. Whether it asks anything is Needs you's rule (needs.ts), not this.
    */
   const putBeforePerson = (row: ArtifactRow): boolean => {
     const kept = factsOf(row);
-    if (kept.draft || kept.handed || row.heldFor !== null) {
+    if (kept.draft || kept.handed || kept.verifier || row.heldFor !== null) {
       return false;
     }
     if (row.does !== "try") {

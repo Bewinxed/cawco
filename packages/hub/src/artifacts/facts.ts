@@ -18,6 +18,7 @@ import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
 import { readKept } from "../decision-program";
+import { isVerifierParent } from "../work-item-state";
 import { boardOf } from "./access";
 import type { ArtifactServiceDeps } from "./deps";
 import type { ArtifactFacts, ArtifactSessions } from "./needs";
@@ -189,6 +190,9 @@ export const createFacts = (ctx: FactsContext) => {
       revisedAt: meta.get("revisedAt") ?? null,
       handed: meta.get("handed") === true,
       unsent: unsentChoices(state, sentAt),
+      verifier: isVerifierParent(
+        deps.instance(row.madeBy ?? row.instanceId ?? "")?.parentInstanceId
+      ),
     };
     factsKept.set(row.id, { facts, mark });
     return heldNext ? { ...facts, handed: true } : facts;

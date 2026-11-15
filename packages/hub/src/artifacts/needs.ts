@@ -105,6 +105,8 @@ export interface ArtifactFacts {
   revisedAt: string | null;
   /** What Send sends now: picks and notes since the last Send. */
   unsent: number;
+  /** Made by a design check's verifier (hub work-item-state.ts `isVerifierParent`): the hub's own helper's working material, never the person's to act on. */
+  verifier: boolean;
 }
 
 /** What the hub holds of an artifact's sessions, as its rules read it. */
@@ -162,19 +164,23 @@ const unanswered = (facts: ArtifactFacts): boolean =>
 /**
  * Whether `row` could wait on the person or notice them at all, read from
  * its facts alone: the rest of its rules need its sessions (their plans,
- * their turns, whether they ended), read only for these.
+ * their turns, whether they ended), read only for these. One a design
+ * check's verifier made never does: it is the hub's helper's working
+ * material, and Needs you holds only what the session he works with put
+ * there (the owner's page-route pick, 2026-11-15).
  */
 export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
-  pinsAsk(row, facts) ||
-  (!facts.draft &&
-    row.heldFor === null &&
-    row.does !== "try" &&
-    ((asks(row, facts) && (unjudged(row, facts) || unanswered(facts))) ||
-      facts.closed.length > 0 ||
-      (facts.changes !== null &&
-        facts.changes.count > 0 &&
-        row.openedRevision !== null &&
-        row.openedRevision < row.revision)));
+  !facts.verifier &&
+  (pinsAsk(row, facts) ||
+    (!facts.draft &&
+      row.heldFor === null &&
+      row.does !== "try" &&
+      ((asks(row, facts) && (unjudged(row, facts) || unanswered(facts))) ||
+        facts.closed.length > 0 ||
+        (facts.changes !== null &&
+          facts.changes.count > 0 &&
+          row.openedRevision !== null &&
+          row.openedRevision < row.revision))));
 
 /**
  * Whether what the person wrote on `row` goes to its session by itself
