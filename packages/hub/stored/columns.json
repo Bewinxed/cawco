@@ -104,199 +104,8 @@
   "agent_harnesses.report": {
     "type": "object",
     "properties": {
-      "accounts": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "account": {
-              "type": "string"
-            },
-            "identity": {
-              "type": "object",
-              "properties": {
-                "email": {
-                  "type": "string"
-                },
-                "organization": {
-                  "type": "string"
-                },
-                "orgId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "email",
-                "organization",
-                "orgId"
-              ]
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "subscription",
-                "console",
-                "oauth",
-                "api_key"
-              ]
-            },
-            "loggedIn": {
-              "type": "boolean"
-            },
-            "provider": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "account",
-            "loggedIn"
-          ]
-        }
-      },
-      "auth": {
-        "type": "string",
-        "enum": [
-          "authenticated",
-          "unauthenticated",
-          "unreadable-credentials"
-        ]
-      },
       "authReason": {
         "type": "string"
-      },
-      "capabilities": {
-        "type": "object",
-        "properties": {
-          "compaction": {
-            "type": "boolean"
-          },
-          "contextUsage": {
-            "type": "boolean"
-          },
-          "costUsd": {
-            "type": "boolean"
-          },
-          "deleteSession": {
-            "type": "boolean"
-          },
-          "effort": {
-            "type": "boolean"
-          },
-          "fleet": {
-            "type": "boolean"
-          },
-          "fork": {
-            "type": "boolean"
-          },
-          "getSessionMessages": {
-            "type": "boolean"
-          },
-          "handoff": {
-            "type": "boolean"
-          },
-          "hooks": {
-            "type": "boolean"
-          },
-          "images": {
-            "type": "boolean"
-          },
-          "interrupt": {
-            "type": "boolean"
-          },
-          "listSessions": {
-            "type": "boolean"
-          },
-          "mcpControl": {
-            "type": "boolean"
-          },
-          "mcpStatus": {
-            "type": "boolean"
-          },
-          "permissionModes": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "default",
-                "acceptEdits",
-                "bypassPermissions",
-                "plan",
-                "dontAsk",
-                "auto",
-                "fullSend"
-              ]
-            }
-          },
-          "plugins": {
-            "type": "boolean"
-          },
-          "reloadSkills": {
-            "type": "boolean"
-          },
-          "renameSession": {
-            "type": "boolean"
-          },
-          "rewind": {
-            "type": "boolean"
-          },
-          "setModel": {
-            "type": "boolean"
-          },
-          "skills": {
-            "type": "boolean"
-          },
-          "subagents": {
-            "type": "boolean"
-          },
-          "supportedCommands": {
-            "type": "boolean"
-          },
-          "supportedModels": {
-            "type": "boolean"
-          },
-          "tagSession": {
-            "type": "boolean"
-          },
-          "tasks": {
-            "type": "boolean"
-          },
-          "thinking": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "compaction",
-          "contextUsage",
-          "costUsd",
-          "deleteSession",
-          "effort",
-          "fleet",
-          "fork",
-          "getSessionMessages",
-          "handoff",
-          "hooks",
-          "images",
-          "interrupt",
-          "listSessions",
-          "mcpControl",
-          "mcpStatus",
-          "permissionModes",
-          "plugins",
-          "reloadSkills",
-          "renameSession",
-          "rewind",
-          "setModel",
-          "skills",
-          "subagents",
-          "supportedCommands",
-          "supportedModels",
-          "tagSession",
-          "tasks",
-          "thinking"
-        ]
       },
       "installed": {
         "type": "boolean"
@@ -370,13 +179,6 @@
       "modelsUnread": {
         "type": "string"
       },
-      "refused": {
-        "type": "string",
-        "enum": [
-          "not-installed",
-          "version"
-        ]
-      },
       "signInFaults": {
         "type": "array",
         "items": {
@@ -408,14 +210,188 @@
       "version": {
         "type": "string"
       },
+      "accounts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "identity": {
+              "type": "object",
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "organization": {
+                  "type": "string"
+                },
+                "orgId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "email",
+                "organization",
+                "orgId"
+              ]
+            },
+            "loggedIn": {
+              "type": "boolean"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "account",
+            "loggedIn"
+          ]
+        }
+      },
+      "auth": {
+        "type": "string"
+      },
+      "capabilities": {
+        "type": "object",
+        "properties": {
+          "compaction": {
+            "type": "boolean"
+          },
+          "contextUsage": {
+            "type": "boolean"
+          },
+          "costUsd": {
+            "type": "boolean"
+          },
+          "deleteSession": {
+            "type": "boolean"
+          },
+          "effort": {
+            "type": "boolean"
+          },
+          "fleet": {
+            "type": "boolean"
+          },
+          "fork": {
+            "type": "boolean"
+          },
+          "getSessionMessages": {
+            "type": "boolean"
+          },
+          "handoff": {
+            "type": "boolean"
+          },
+          "hooks": {
+            "type": "boolean"
+          },
+          "images": {
+            "type": "boolean"
+          },
+          "interrupt": {
+            "type": "boolean"
+          },
+          "listSessions": {
+            "type": "boolean"
+          },
+          "mcpControl": {
+            "type": "boolean"
+          },
+          "mcpStatus": {
+            "type": "boolean"
+          },
+          "plugins": {
+            "type": "boolean"
+          },
+          "reloadSkills": {
+            "type": "boolean"
+          },
+          "renameSession": {
+            "type": "boolean"
+          },
+          "rewind": {
+            "type": "boolean"
+          },
+          "setModel": {
+            "type": "boolean"
+          },
+          "skills": {
+            "type": "boolean"
+          },
+          "subagents": {
+            "type": "boolean"
+          },
+          "supportedCommands": {
+            "type": "boolean"
+          },
+          "supportedModels": {
+            "type": "boolean"
+          },
+          "tagSession": {
+            "type": "boolean"
+          },
+          "tasks": {
+            "type": "boolean"
+          },
+          "thinking": {
+            "type": "boolean"
+          },
+          "permissionModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "compaction",
+          "contextUsage",
+          "costUsd",
+          "deleteSession",
+          "effort",
+          "fleet",
+          "fork",
+          "getSessionMessages",
+          "handoff",
+          "hooks",
+          "images",
+          "interrupt",
+          "listSessions",
+          "mcpControl",
+          "mcpStatus",
+          "plugins",
+          "reloadSkills",
+          "renameSession",
+          "rewind",
+          "setModel",
+          "skills",
+          "subagents",
+          "supportedCommands",
+          "supportedModels",
+          "tagSession",
+          "tasks",
+          "thinking",
+          "permissionModes"
+        ]
+      },
       "harness": {
+        "type": "string"
+      },
+      "refused": {
         "type": "string"
       }
     },
     "required": [
+      "installed",
       "auth",
       "capabilities",
-      "installed",
       "harness"
     ]
   },
@@ -429,12 +405,7 @@
         "type": "string"
       },
       "state": {
-        "type": "string",
-        "enum": [
-          "signed-in",
-          "signed-out",
-          "unknown"
-        ]
+        "type": "string"
       }
     },
     "required": [
@@ -1478,90 +1449,8 @@
             "available": {
               "type": "boolean"
             },
-            "id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "const": "git"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "claude",
-                    "opencode",
-                    "pi"
-                  ]
-                },
-                {
-                  "type": "string",
-                  "const": "node"
-                },
-                {
-                  "type": "string",
-                  "const": "browser"
-                },
-                {
-                  "type": "string",
-                  "const": "container-runtime"
-                },
-                {
-                  "type": "string",
-                  "const": "passkey-relay"
-                },
-                {
-                  "type": "string",
-                  "const": "public-address"
-                },
-                {
-                  "type": "string",
-                  "const": "service-manager"
-                },
-                {
-                  "type": "string",
-                  "const": "workspace"
-                }
-              ]
-            },
             "installCommand": {
               "type": "string"
-            },
-            "media": {
-              "type": "string",
-              "enum": [
-                "udp+tcp",
-                "tcp",
-                "none"
-              ]
-            },
-            "missing": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "command": {
-                    "type": "string"
-                  },
-                  "lookedIn": {
-                    "type": "string"
-                  },
-                  "need": {
-                    "type": "string",
-                    "enum": [
-                      "walls",
-                      "checkout"
-                    ]
-                  },
-                  "package": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "command",
-                  "lookedIn",
-                  "need",
-                  "package"
-                ]
-              }
             },
             "nat": {
               "type": "object",
@@ -1586,12 +1475,44 @@
             },
             "version": {
               "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "media": {
+              "type": "string"
+            },
+            "missing": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "lookedIn": {
+                    "type": "string"
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "need": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "command",
+                  "lookedIn",
+                  "package",
+                  "need"
+                ]
+              }
             }
           },
           "required": [
             "available",
-            "id",
-            "installCommand"
+            "installCommand",
+            "id"
           ]
         }
       },
@@ -11517,6 +11438,13 @@
     "required": [
       "event",
       "title"
+    ]
+  },
+  "project_places.kind": {
+    "type": "string",
+    "enum": [
+      "checkout",
+      "hub"
     ]
   },
   "project_tasks.outputs": {

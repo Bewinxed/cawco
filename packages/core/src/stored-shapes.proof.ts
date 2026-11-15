@@ -49,9 +49,9 @@ import type {
   BrowserState as BrowserStateType,
 } from "./browser";
 import type {
-  MachineCapabilities as MachineCapabilitiesType,
   MachineCapability as MachineCapabilityType,
   MediaPath as MediaPathType,
+  NamedMachineCapabilities as NamedMachineCapabilitiesType,
   WorkspaceTool as WorkspaceToolType,
 } from "./capabilities";
 import type {
@@ -376,7 +376,6 @@ import type {
   ItemEndOutput,
   KeptProcessOutput,
   LimitWindowOutput,
-  MachineCapabilitiesOutput,
   MachineCapabilityOutput,
   MachinePathOutput,
   MayStartOutput,
@@ -403,7 +402,9 @@ import type {
   MoveStepOutput,
   NamedAccountOutput,
   NamedHarnessReportOutput,
+  NamedMachineCapabilitiesOutput,
   NamedMoveRequestOutput,
+  NamedToolSigninOutput,
   NeutralContentBlockOutput,
   NeutralOriginOutput,
   NeutralSessionInfoOutput,
@@ -511,7 +512,10 @@ import type {
   RelayReach as RelayReachType,
 } from "./stream-relay";
 import type { WaitWitness as WaitWitnessType } from "./task-views";
-import type { ToolSignin as ToolSigninType } from "./tools";
+import type {
+  NamedToolSignin as NamedToolSigninType,
+  ToolSignin as ToolSigninType,
+} from "./tools";
 import type {
   GithubProject as GithubProjectType,
   StatusOption as StatusOptionType,
@@ -557,6 +561,7 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
+    Same<AccountKindOutput, AccountKindType>,
     Same<CompactStageOutput, CompactStageType>,
     Same<HarnessKindOutput, HarnessKindType>,
     Same<AccountHueOutput, AccountHueType>,
@@ -661,6 +666,14 @@ prove<
     Same<FleetSyncReportOutput, FleetSyncReportType>,
     Same<StatusOptionOutput, StatusOptionType>,
     Same<GithubProjectOutput, GithubProjectType>,
+    Same<AccountIdentityOutput, AccountIdentityType>,
+    Same<AccountProviderOutput, AccountProviderType>,
+    Same<AccountReportOutput, AccountReportType>,
+    Same<AuthStateOutput, AuthStateType>,
+    Same<HarnessCapabilitiesOutput, HarnessCapabilitiesType>,
+    Same<ModelInfoOutput, ModelInfoType>,
+    Same<SignInFaultOutput, SignInFaultType>,
+    Same<HarnessReportOutput, HarnessReportType>,
     Same<InstallRouteOutput, InstallRouteType>,
     Same<InstallSignInOutput, InstallSignInType>,
     Same<InstallDraftOutput, InstallDraftType>,
@@ -672,9 +685,7 @@ prove<
     Same<InstallOutput, InstallType>,
     Same<WorkspaceToolOutput, WorkspaceToolType>,
     Same<MachineCapabilityOutput, MachineCapabilityType>,
-    Same<MachineCapabilitiesOutput, MachineCapabilitiesType>,
     Same<McpPlatformOutput, McpPlatformType>,
-    Same<ModelInfoOutput, ModelInfoType>,
     Same<EndedTaskOutput, EndedTaskType>,
     Same<MoveEndedOutput, MoveEndedType>,
     Same<MoveLargeFileOutput, MoveLargeFileType>,
@@ -689,17 +700,12 @@ prove<
     Same<MoveErrorOutput, MoveErrorType>,
     Same<MoveJobOutput, MoveJobType>,
     Same<MachinePathOutput, MachinePathType>,
-    Same<AccountIdentityOutput, AccountIdentityType>,
-    Same<AccountKindOutput, AccountKindType>,
-    Same<AccountProviderOutput, AccountProviderType>,
-    Same<AccountReportOutput, AccountReportType>,
-    Same<AuthStateOutput, AuthStateType>,
-    Same<HarnessCapabilitiesOutput, HarnessCapabilitiesType>,
-    Same<SignInFaultOutput, SignInFaultType>,
-    Same<HarnessReportOutput, HarnessReportType>,
     Same<NamedHarnessReportOutput, NamedHarnessReportType>,
+    Same<NamedMachineCapabilitiesOutput, NamedMachineCapabilitiesType>,
     Same<MoveRequestOutput, MoveRequestType>,
     Same<NamedMoveRequestOutput, NamedMoveRequestType>,
+    Same<ToolSigninOutput, ToolSigninType>,
+    Same<NamedToolSigninOutput, NamedToolSigninType>,
     Same<NeutralSessionInfoOutput, NeutralSessionInfoType>,
     Same<LimitWindowOutput, LimitWindowType>,
     Same<OpenCodeGoLimitsOutput, OpenCodeGoLimitsType>,
@@ -783,7 +789,6 @@ prove<
     Same<StoppedCommandsOutput, StoppedCommandsType>,
     Same<SendRefusalOutput, SendRefusalType>,
     Same<ModeAskOutput, ModeAskType>,
-    Same<ToolSigninOutput, ToolSigninType>,
     Same<WaitWitnessOutput, WaitWitnessType>,
     Same<WorkspaceCutOutput, WorkspaceCutType>,
     Same<WorkspaceHoldingOutput, WorkspaceHoldingType>,

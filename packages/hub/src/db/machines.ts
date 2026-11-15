@@ -1,5 +1,10 @@
 /** Machines: each one's row, what its daemon reports, and re-keying and removing one. */
 
+import type { AccountReport } from "@cawco/core/accounts";
+import type {
+  MachineCapabilities,
+  NamedMachineCapabilities,
+} from "@cawco/core/capabilities";
 import type {
   FleetItemStatus,
   FleetSyncOutcome,
@@ -23,7 +28,20 @@ import type {
   RunKind,
   StoppedCommands,
 } from "@cawco/core/protocol";
-import type { ToolStatus } from "@cawco/core/tools";
+import {
+  AccountKindSchema,
+  HarnessReportSchema,
+  MachineCapabilitySchema,
+  MediaPathShape,
+  PermissionModeShape,
+  ToolSigninSchema,
+  WorkspaceToolSchema,
+} from "@cawco/core/stored-shapes";
+import type {
+  ReportedToolStatus,
+  ToolSignin,
+  ToolStatus,
+} from "@cawco/core/tools";
 import { stoppedWords } from "@cawco/core/words/machine-pause";
 import { and, asc, eq, getTableName, ne, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -62,6 +80,74 @@ const machineKept = (tx: Tx, machineId: string): boolean =>
     .from(agents)
     .where(eq(agents.machineId, machineId))
     .get() !== undefined;
+
+/** An account a machine's harness report names, read: a kind this build does not know left out. */
+export const accountReportOf = ({
+  kind,
+  ...account
+}: NonNullable<NamedHarnessReport["accounts"]>[number]): AccountReport => {
+  const named = AccountKindSchema.safeParse(kind);
+  return named.success ? { ...account, kind: named.data } : account;
+};
+
+/**
+ * A filed harness report (core `NamedHarnessReport`) read as a
+ * {@link HarnessReport}: a permission mode or an account kind this build
+ * does not know left out, and the report whole by its schema, so one whose
+ * harness, sign-in word or refusal this build does not know is none it can
+ * run (undefined).
+ */
+const harnessReportOf = ({
+  accounts,
+  capabilities,
+  ...report
+}: NamedHarnessReport): HarnessReport | undefined => {
+  const parsed = HarnessReportSchema.safeParse({
+    ...report,
+    capabilities: {
+      ...capabilities,
+      permissionModes: capabilities.permissionModes.filter(
+        (mode) => PermissionModeShape.safeParse(mode).success
+      ),
+    },
+    ...(accounts ? { accounts: accounts.map(accountReportOf) } : {}),
+  });
+  return parsed.success ? parsed.data : undefined;
+};
+
+/** A tool's sign-in state as its machine said it, read: one this build does not know is `unknown`, as a read that said neither is. */
+const signinStateOf = (state: string): ToolSignin["state"] => {
+  const parsed = ToolSigninSchema.shape.state.safeParse(state);
+  return parsed.success ? parsed.data : "unknown";
+};
+
+/**
+ * What a machine reported it has installed (core `NamedMachineCapabilities`),
+ * read: an item, a media path or a missing tool this build does not know is
+ * left out.
+ */
+const capabilitiesOf = ({
+  items,
+  ...capabilities
+}: NamedMachineCapabilities): MachineCapabilities => ({
+  ...capabilities,
+  items: items.flatMap(({ media, missing, ...item }) => {
+    const parsed = MachineCapabilitySchema.safeParse({
+      ...item,
+      ...(media !== undefined && MediaPathShape.safeParse(media).success
+        ? { media }
+        : {}),
+      ...(missing
+        ? {
+            missing: missing.filter(
+              (tool) => WorkspaceToolSchema.safeParse(tool).success
+            ),
+          }
+        : {}),
+    });
+    return parsed.success ? [parsed.data] : [];
+  }),
+});
 
 export interface MachinesDb {
   /** The machine's fleet generation and the fingerprint of what it was to hold at it (hub fleet-sync.ts); generation 0 for a machine never sent one. */
@@ -149,7 +235,10 @@ export interface MachinesDb {
     harnesses: NamedHarnessReport[]
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
-  readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
+  readonly mergeAgentTools: (
+    machineId: string,
+    statuses: ReportedToolStatus[]
+  ) => void;
   /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
   readonly namedMachines: () => { hostname: string; machineId: string }[];
   /**
@@ -173,7 +262,7 @@ export interface MachinesDb {
   /** What the machine has installed, as its latest capabilities beat said. */
   readonly setAgentCapabilities: (
     machineId: string,
-    capabilities: import("@cawco/core/capabilities").MachineCapabilities
+    capabilities: NamedMachineCapabilities
   ) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
@@ -193,7 +282,10 @@ export interface MachinesDb {
     machineId: string,
     outcome: FleetSyncOutcome
   ) => void;
-  readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
+  readonly setAgentToolCell: (
+    machineId: string,
+    status: ReportedToolStatus
+  ) => void;
   /**
    * Pauses a machine until `until`, with what the pause stopped as it began,
    * or ends its pause (null, null); false when no such machine (machine-pause.ts).
@@ -272,7 +364,9 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     ...(row.version === null ? {} : { version: row.version }),
     ...(row.method === null ? {} : { method: row.method }),
     ...(row.detail === null ? {} : { detail: row.detail }),
-    ...(row.signin === null ? {} : { signin: row.signin }),
+    ...(row.signin === null
+      ? {}
+      : { signin: { ...row.signin, state: signinStateOf(row.signin.state) } }),
   });
 
   /** Each machine's tool statuses by catalog id; one machine's with `machineId`. */
@@ -301,7 +395,10 @@ export const machinesDb = (core: DbCore): MachinesDb => {
     toolsByMachine(machineId).get(machineId) ?? {};
 
   /** Each status over the machine's cell for its tool, the rest kept, in one transaction. */
-  const putToolCells = (machineId: string, statuses: ToolStatus[]): void => {
+  const putToolCells = (
+    machineId: string,
+    statuses: ReportedToolStatus[]
+  ): void => {
     db.transaction((tx) => {
       // A machine the hub keeps no row for has no cells to keep.
       if (!machineKept(tx, machineId)) {
@@ -329,10 +426,10 @@ export const machinesDb = (core: DbCore): MachinesDb => {
 
   /**
    * Each machine's harness reports, in the order they were last reported;
-   * one machine's with `machineId`. A row keeps the machine's own name for
-   * its harness (core `NamedHarnessReport`), read here by `harnessNamed`:
-   * a harness this hub runs is among `known`, its report as one; any other
-   * name is among `unknown`, a harness this hub cannot run.
+   * one machine's with `machineId`. A row keeps the machine's report in its
+   * own words (core `NamedHarnessReport`), read here ({@link harnessReportOf}):
+   * one this hub can read is among `known`; any other's harness is among
+   * `unknown`, by the machine's name for it, a harness this hub cannot run.
    */
   const harnessesByMachine = (
     machineId?: string
@@ -352,12 +449,9 @@ export const machinesDb = (core: DbCore): MachinesDb => {
       )
       .orderBy(sql`rowid`)
       .all()) {
-      const harness = harnessNamed(row.harness);
-      if (harness) {
-        known.set(row.machineId, [
-          ...(known.get(row.machineId) ?? []),
-          { ...row.report, harness },
-        ]);
+      const report = harnessReportOf(row.report);
+      if (report) {
+        known.set(row.machineId, [...(known.get(row.machineId) ?? []), report]);
       } else {
         unknown.set(row.machineId, [
           ...(unknown.get(row.machineId) ?? []),
@@ -444,7 +538,9 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           ...(unknownHarnesses ? { unknownHarnesses } : {}),
           ...(chosen ? { chosenModes: chosen } : {}),
           ...(home ? { home } : {}),
-          ...(machineCapabilities ? { machineCapabilities } : {}),
+          ...(machineCapabilities
+            ? { machineCapabilities: capabilitiesOf(machineCapabilities) }
+            : {}),
         };
       }
     );

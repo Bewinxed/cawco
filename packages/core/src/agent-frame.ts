@@ -10,7 +10,7 @@
 import type { ProviderAccountReading } from "./accounts";
 import type { BinaryUpdatePhase, BinaryUpdateState } from "./binary-updates";
 import { BINARY_UPDATE_PHASES } from "./binary-updates";
-import type { MachineCapabilities } from "./capabilities";
+import type { NamedMachineCapabilities } from "./capabilities";
 import type { FleetHeld } from "./fleet";
 import type { FramePayload } from "./frames";
 import type { ReportedHarness } from "./harness";
@@ -26,11 +26,11 @@ import type {
   SessionTooling,
 } from "./protocol";
 import { MESSAGES_HELD } from "./session-messages";
-import { isToolStatus, type ToolStatus } from "./tools";
+import { isToolStatus, type ReportedToolStatus } from "./tools";
 import type { OpenCodeGoLimits, UsageBucket } from "./usage/types";
 
-/** Tools a machine reported, each sign-in unread (the hub keeps what its type declares). */
-type ReportedTool = ToolStatus;
+/** Tools a machine reported, each sign-in in the machine's own words (the hub keeps what its type declares). */
+type ReportedTool = ReportedToolStatus;
 
 /** A register's or a beat's payload, read once. */
 interface AgentFrameReads {
@@ -80,7 +80,7 @@ interface AgentFrameReads {
   /** A launch's ask, as the machine sent it. */
   launchAsk: LaunchAsk | undefined;
   /** What the machine has installed, on its own beat once its probe has asked every tool. */
-  machineCapabilities: MachineCapabilities | undefined;
+  machineCapabilities: NamedMachineCapabilities | undefined;
   os: string | undefined;
   /** A `permission_settled`'s outcome. */
   outcome: string | undefined;
@@ -257,8 +257,10 @@ const harnessesOf = (value: unknown): ReportedHarness[] | undefined => {
   );
 };
 
-const capabilitiesOf = (value: unknown): MachineCapabilities | undefined => {
-  const report = value as MachineCapabilities | null | undefined;
+const capabilitiesOf = (
+  value: unknown
+): NamedMachineCapabilities | undefined => {
+  const report = value as NamedMachineCapabilities | null | undefined;
   if (
     !report ||
     typeof report.platform !== "string" ||

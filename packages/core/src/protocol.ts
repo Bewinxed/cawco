@@ -805,8 +805,9 @@ export interface AgentRow {
   tools?: Record<string, ToolStatus>;
   /**
    * Harnesses the machine reported that this hub cannot run, by the
-   * machine's own name for each: a newer agent's. Kept as reported, never
-   * among {@link harnesses}. Absent when there are none.
+   * machine's own name for each: one this hub does not know, or one whose
+   * sign-in word or refusal it does not know (a newer agent's report). Kept
+   * as reported, never among {@link harnesses}. Absent when there are none.
    */
   unknownHarnesses?: string[];
 }

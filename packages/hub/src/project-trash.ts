@@ -439,6 +439,19 @@ const folderBrings = (
 });
 
 /** Counts by table, added. */
+/** A restore's places of a kind no longer kept (db forget.ts `retired`), said in its log. */
+const sayRetired = (
+  id: string,
+  retired: Partial<Record<string, number>>
+): void => {
+  const places = retired.project_places ?? 0;
+  if (places > 0) {
+    console.log(
+      `${projectTrashWords.restoreLine(id)} left out ${places} place(s) of a kind this hub no longer keeps: \`workspace\`, which migration 0322 deleted`
+    );
+  }
+};
+
 const summed = (
   ...counts: Record<string, number>[]
 ): Record<string, number> => {
@@ -1052,7 +1065,8 @@ export const projectTrash = (
       }
       // Its rows are live again: the record has nothing left to keep.
       await rm(recordPath(entry.entry), { force: true });
-      const left = summed(restored.taken, restored.gone);
+      const left = summed(restored.taken, restored.gone, restored.retired);
+      sayRetired(id, restored.retired);
       // Its browsers were never moved: each its machine still keeps is its
       // own again, its profile where it was; one removed since is gone.
       const browsers = stillKept(record.browsers);
