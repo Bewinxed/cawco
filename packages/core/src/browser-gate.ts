@@ -21,6 +21,11 @@ export function crossSiteRefusal(
   header: (name: string) => string | null | undefined,
   ownOrigin: string
 ): string | null {
+  // The Chrome extension is a trusted local client (it holds the owner's
+  // token); its requests carry its own origin and a cross-site fetch mode.
+  if (header("origin")?.startsWith("chrome-extension://")) {
+    return null;
+  }
   const site = header("sec-fetch-site");
   const dest = header("sec-fetch-dest");
   const navigation =
