@@ -407,12 +407,17 @@ interface ActionItem {
 
 /**
  * Fleet watch telling you about a session (core `FleetWatchNotice`): a
- * triage said so, or its project's Caw is off. It opens the session, and
- * leaves once you write to it or it moves on.
+ * triage said so, its project's Caw is off, or its deletion keeps failing.
+ * Its first line names the session, its second says why (the notice's
+ * body). It opens the session while the board holds its row; a notice that
+ * outlived its row (a deleted conversation) is titled by the notice and
+ * opens nothing, since the session has no page. It leaves once you write to
+ * it or it moves on.
  */
 interface WatchItem {
   cwd: string;
-  href: string;
+  /** The session's page; none once the board holds no row for it. */
+  href?: string;
   instanceId: string;
   key: string;
   kind: "watch";
@@ -1188,7 +1193,9 @@ class Home {
         cwd: row?.cwd ?? "",
         title: row ? instanceTitle(row) : notice.title,
         place: row ? placeOfRow(row) : machineName(notice.machineId),
-        href: conversationHref(notice.instanceId, boardStore.instanceIndex),
+        ...(row
+          ? { href: conversationHref(row.id, boardStore.instanceIndex) }
+          : {}),
         raisedAt: notice.at,
       };
     });
