@@ -1,5 +1,6 @@
 /** Browser-neutral release policy and machine state consumed by API clients. */
 import { unhandled } from "./unhandled";
+import { unmanagedInstallWords } from "./words/unmanaged-installs";
 import { updatesWords } from "./words/updates";
 
 export interface BinaryUpdatePolicy {
@@ -20,10 +21,12 @@ export interface BinaryUpdatePolicy {
  * which it speaks, or the hub's own machine is still deciding the trial of
  * the build it runs (`hubWait`); the install stands, and goes ahead by itself
  * once the hub runs a build that overlaps it and has confirmed it. Nothing
- * failed.
+ * failed. `unmanaged`: the machine takes no update by this route, for the
+ * reason its `unmanaged` names ({@link UnmanagedReason}).
  */
 export const BINARY_UPDATE_PHASES = [
   "none",
+  "unmanaged",
   "available",
   "downloading",
   "ready",
@@ -273,6 +276,37 @@ export const HUB_RESTARTING =
  */
 export type HubWait = "behind" | "unanswered" | "trial";
 
+/**
+ * Why a machine takes no update by this route (`unmanaged`): it runs from a
+ * source checkout (`source`); it runs a release build with no installation
+ * record beside it, so it was installed some other way (`elsewhere`); its
+ * installation record does not read (`unreadable`, the state's `error`
+ * says why); or its agent has reported no update state at all
+ * (`unreported`: a build from before agents reported this, or one whose
+ * updater stopped before it reported), which the hub says for it.
+ */
+export type UnmanagedReason =
+  "source" | "elsewhere" | "unreadable" | "unreported";
+
+/** What a machine that takes no update by this route says, by its reason. */
+export const unmanagedWords = (
+  reason: UnmanagedReason,
+  error: string | undefined
+): string => {
+  switch (reason) {
+    case "source":
+      return unmanagedInstallWords.source;
+    case "elsewhere":
+      return unmanagedInstallWords.elsewhere;
+    case "unreadable":
+      return unmanagedInstallWords.unreadable(error ?? "");
+    case "unreported":
+      return unmanagedInstallWords.unreported;
+    default:
+      unhandled("unmanaged reason", reason);
+  }
+};
+
 /** What a machine waiting for its hub (`waiting-for-hub`) says it waits for, by its `hubWait`. */
 export const hubWaitWords = (version: string, wait: HubWait): string => {
   switch (wait) {
@@ -479,6 +513,8 @@ export interface BinaryUpdateState {
    * taken up.
    */
   unconfirmedVersion?: string;
+  /** Why the machine takes no update by this route, with `phase` `unmanaged`; absent in every other phase. */
+  unmanaged?: UnmanagedReason;
   /** When anything in this state last changed. Not an identity for anything. */
   updatedAt: number;
   /** What `ready` waits for: the work in flight a restart would cut now. */

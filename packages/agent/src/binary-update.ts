@@ -52,7 +52,9 @@ import {
   type RestartHold,
   type RestartReadiness,
   type RetiringKeeper,
+  type UnmanagedReason,
   UPDATE_DRAIN_MS,
+  unmanagedWords,
   waitedOut,
   waitingWords,
 } from "@cawco/core/binary-updates";
@@ -79,7 +81,7 @@ import {
   downloadResumably,
   fileMatches,
 } from "@cawco/core/resumable-download";
-import { runtimeVersion } from "@cawco/core/runtime";
+import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { readRecord } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -623,15 +625,30 @@ export class BinaryUpdater {
     return this.#state;
   }
 
-  /** Starts only on a binary install; a source checkout has nothing to update. */
+  /**
+   * Starts only on a binary install. A machine with none (a source checkout,
+   * a build installed some other way) or whose installation record does not
+   * read says so as its state ({@link #unmanage}), so its hub lists it with
+   * why it takes no update, and runs no pass.
+   */
   async start(): Promise<void> {
-    if (!(await readInstallation())) {
+    let installation: BinaryInstallation | undefined;
+    try {
+      installation = await readInstallation();
+    } catch (error) {
+      this.#unmanage(
+        "unreadable",
+        error instanceof Error ? error.message : String(error)
+      );
       return;
     }
-    this.#hostsHub = (await readInstallation())?.role === "hub";
+    if (!installation) {
+      this.#unmanage(standalone ? "elsewhere" : "source");
+      return;
+    }
+    this.#hostsHub = installation.role === "hub";
     console.info(`[update] updating the binary install at ${binaryRoot()}`);
     startedUpdater = this;
-    await this.#load();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
     this.#trialTimer = setInterval(
@@ -639,7 +656,23 @@ export class BinaryUpdater {
       10_000
     );
     this.#trialTimer.unref();
+    // The first pass reads the state file and reports it: one that does not
+    // read is that pass's failure, reported and written whole again, never
+    // an updater that stopped before it said anything.
     await this.tick();
+  }
+
+  /** This machine takes no update by this route, for `reason`: its state says so, held in memory alone, and no pass runs. */
+  #unmanage(reason: UnmanagedReason, error?: string): void {
+    this.#state = {
+      ...this.#state,
+      phase: "unmanaged",
+      unmanaged: reason,
+      ...(error === undefined ? {} : { error }),
+      updatedAt: Date.now(),
+    };
+    console.info(`[update] ${unmanagedWords(reason, error)}`);
+    this.#report(this.#state);
   }
 
   stop(): void {
@@ -708,6 +741,18 @@ export class BinaryUpdater {
     command: { commandId?: string; version?: string } = {}
   ): Promise<UpdateReport> {
     const from = this.#state.installedVersion;
+    const { unmanaged, error } = this.#state;
+    if (unmanaged) {
+      return {
+        from,
+        built: false,
+        changed: [],
+        installed: false,
+        pulled: "nothing",
+        restarted: [],
+        skipped: unmanagedWords(unmanaged, error),
+      };
+    }
     const id = command.commandId ?? crypto.randomUUID();
     if (this.#state.commands?.includes(id)) {
       return {
@@ -1276,6 +1321,9 @@ export class BinaryUpdater {
    * failure, logs it and the next tick runs.
    */
   tick(): Promise<void> {
+    if (this.#state.phase === "unmanaged") {
+      return Promise.resolve();
+    }
     this.#running ??= this.#pass().finally(() => {
       this.#running = undefined;
     });

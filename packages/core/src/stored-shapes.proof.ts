@@ -44,6 +44,7 @@ import type {
   RestartHoldReason as RestartHoldReasonType,
   RestartHold as RestartHoldType,
   RetiringKeeper as RetiringKeeperType,
+  UnmanagedReason as UnmanagedReasonType,
 } from "./binary-updates";
 import type {
   BrowserHostKind as BrowserHostKindType,
@@ -545,6 +546,7 @@ import type {
   ToolWantsOutput,
   TrackerOutput,
   TrackerSyncStateOutput,
+  UnmanagedReasonOutput,
   UserAnswersOutput,
   UserQuestionAnsweredOutput,
   UserQuestionDismissedOutput,
@@ -654,6 +656,7 @@ prove<
     Same<BinaryUpdatePhaseOutput, BinaryUpdatePhaseType>,
     Same<KeptProcessOutput, KeptProcessType>,
     Same<RetiringKeeperOutput, RetiringKeeperType>,
+    Same<UnmanagedReasonOutput, UnmanagedReasonType>,
     Same<BinaryUpdateStateOutput, BinaryUpdateStateType>,
     Same<BrowserHostKindOutput, BrowserHostKindType>,
     Same<MediaPathOutput, MediaPathType>,

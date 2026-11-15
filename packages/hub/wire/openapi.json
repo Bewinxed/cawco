@@ -34335,6 +34335,7 @@
           "installing",
           "none",
           "ready",
+          "unmanaged",
           "waiting-for-channel",
           "waiting-for-hub",
           "waiting-sessions"
@@ -34499,6 +34500,10 @@
             "description": "The build whose trial no update helper could decide (cli binary-apply.ts\n`endUndecided`), with `phase` `failed`: it may be the build that runs, its\nhealth never confirmed, not rolled back, and not installed again by\nitself (`failedVersion` names it too). Stays until a newer build is\ntaken up.",
             "type": "string"
           },
+          "unmanaged": {
+            "$ref": "#/components/schemas/BinaryUpdateStateUnmanaged",
+            "description": "Why the machine takes no update by this route, with `phase` `unmanaged`; absent in every other phase."
+          },
           "updatedAt": {
             "description": "When anything in this state last changed. Not an identity for anything.",
             "type": "number"
@@ -34529,6 +34534,15 @@
           "behind",
           "trial",
           "unanswered"
+        ]
+      },
+      "BinaryUpdateStateUnmanaged": {
+        "type": "string",
+        "enum": [
+          "elsewhere",
+          "source",
+          "unreadable",
+          "unreported"
         ]
       },
       "BlockArrangement": {

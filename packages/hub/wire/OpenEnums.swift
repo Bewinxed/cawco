@@ -722,6 +722,7 @@ public enum OpenEnums {
         case installing
         case none
         case ready
+        case unmanaged
         case waitingForChannel
         case waitingForHub
         case waitingSessions
@@ -738,6 +739,7 @@ public enum OpenEnums {
             case "installing": self = .installing
             case "none": self = .none
             case "ready": self = .ready
+            case "unmanaged": self = .unmanaged
             case "waiting-for-channel": self = .waitingForChannel
             case "waiting-for-hub": self = .waitingForHub
             case "waiting-sessions": self = .waitingSessions
@@ -755,6 +757,7 @@ public enum OpenEnums {
             case .installing: "installing"
             case .none: "none"
             case .ready: "ready"
+            case .unmanaged: "unmanaged"
             case .waitingForChannel: "waiting-for-channel"
             case .waitingForHub: "waiting-for-hub"
             case .waitingSessions: "waiting-sessions"
@@ -766,7 +769,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.available, .downloading, .failed, .failedRolledBack, .installed, .installing, .none, .ready, .waitingForChannel, .waitingForHub, .waitingSessions]
+        public static let allCases: [Self] = [.available, .downloading, .failed, .failedRolledBack, .installed, .installing, .none, .ready, .unmanaged, .waitingForChannel, .waitingForHub, .waitingSessions]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -846,6 +849,50 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.behind, .trial, .unanswered]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/BinaryUpdateStateUnmanaged`.
+    public enum BinaryUpdateStateUnmanaged: OpenEnum {
+        case elsewhere
+        case source
+        case unreadable
+        case unreported
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "elsewhere": self = .elsewhere
+            case "source": self = .source
+            case "unreadable": self = .unreadable
+            case "unreported": self = .unreported
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .elsewhere: "elsewhere"
+            case .source: "source"
+            case .unreadable: "unreadable"
+            case .unreported: "unreported"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.elsewhere, .source, .unreadable, .unreported]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

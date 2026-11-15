@@ -28,6 +28,7 @@ typeOverrides:
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase
     BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
     BinaryUpdateStateHubWait: OpenEnums.BinaryUpdateStateHubWait
+    BinaryUpdateStateUnmanaged: OpenEnums.BinaryUpdateStateUnmanaged
     BlockMetadataAction: OpenEnums.BlockMetadataAction
     BlockMetadataAt: OpenEnums.BlockMetadataAt
     BlockMetadataCompact: OpenEnums.BlockMetadataCompact

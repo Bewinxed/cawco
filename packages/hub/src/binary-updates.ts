@@ -41,7 +41,7 @@ import type {
 } from "@cawco/core/binary-updates";
 import { makeFolderSync } from "@cawco/core/folders";
 import { hubUpdatePolicyPath } from "@cawco/core/paths/hub";
-import type { DamagedHubRecord } from "@cawco/core/protocol";
+import type { BuildInfo, DamagedHubRecord } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
   parseRecord,
@@ -68,10 +68,19 @@ interface Options {
     policy: BinaryUpdatePolicy
   ) => Promise<unknown>;
   dbPath: string;
-  online: () => string[];
+  /** Every machine whose agent holds a link to the hub now. */
+  online: () => OnlineMachine[];
   /** Records what a machine says its update state is, ahead of its next heartbeat. */
   setState: (machineId: string, state: BinaryUpdateState) => void;
   states: () => ReadonlyMap<string, BinaryUpdateState>;
+}
+
+/** A machine whose agent holds a link to the hub, as its update list reads it. */
+interface OnlineMachine {
+  /** The build its agent said at register, when it said one. */
+  build?: BuildInfo;
+  hostsHub: boolean;
+  machineId: string;
 }
 
 /** How many migrations the hub's database has applied. */
@@ -289,12 +298,28 @@ export function createBinaryUpdates(options: Options) {
     } satisfies SignedRelease & { dbSchemaVersion: number };
   };
 
+  /**
+   * The state of an online machine whose agent reported none: its build as
+   * its register said, on the fleet's channel (the first policy's while the
+   * policy record is damaged), as of its agent's start.
+   */
+  const unreported = (machine: OnlineMachine): BinaryUpdateState => ({
+    phase: "unmanaged",
+    unmanaged: "unreported",
+    installedVersion: machine.build?.version ?? "",
+    channel: ("damaged" in held ? FIRST_POLICY : held.policy).channel,
+    hostsHub: machine.hostsHub,
+    updatedAt: machine.build?.startedAt ?? 0,
+  });
+
   /** A new policy, written whole, and every online machine told. */
   const adopt = async (policy: BinaryUpdatePolicy) => {
     savePolicy(policy);
     forget();
     await Promise.all(
-      options.online().map((id) => options.configure(id, policy))
+      options
+        .online()
+        .map(({ machineId }) => options.configure(machineId, policy))
     );
     return policy;
   };
@@ -317,7 +342,9 @@ export function createBinaryUpdates(options: Options) {
     // answer (restarting) looks at its own next poll; the check stands.
     const policy = policyNow();
     await Promise.allSettled(
-      options.online().map((id) => options.configure(id, policy))
+      options
+        .online()
+        .map(({ machineId }) => options.configure(machineId, policy))
     );
     return {
       version: found.manifest.version,
@@ -362,8 +389,18 @@ export function createBinaryUpdates(options: Options) {
       console.info(`[updates] ${held.damaged.file} reset: updates are on`);
       return adopt(FIRST_POLICY);
     })
+    // Every online machine, each with its state: one whose agent reported
+    // none (a build from before agents reported it, or an updater that
+    // stopped before it did) is listed as `unreported`, never left out.
     .get("/api/binary-updates/machines", () => ({
-      machines: Object.fromEntries(options.states()),
+      machines: Object.fromEntries(
+        options
+          .online()
+          .map((machine): [string, BinaryUpdateState] => [
+            machine.machineId,
+            options.states().get(machine.machineId) ?? unreported(machine),
+          ])
+      ),
     }))
     .post("/api/binary-updates/check", () => check())
     .get("/api/binary-updates/channels", () => channels(false))

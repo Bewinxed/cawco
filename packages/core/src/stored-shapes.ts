@@ -456,6 +456,13 @@ const RetiringKeeperShape = declared(
 );
 export type RetiringKeeperOutput = z.output<typeof RetiringKeeperShape>;
 
+const UnmanagedReasonShape = declared(
+  z.enum(["source", "elsewhere", "unreadable", "unreported"]),
+  "UnmanagedReason",
+  "packages/core/src/binary-updates.ts"
+);
+export type UnmanagedReasonOutput = z.output<typeof UnmanagedReasonShape>;
+
 const BinaryUpdateStateShape = declared(
   z.object({
     availableVersion: z.string().optional(),
@@ -490,6 +497,7 @@ const BinaryUpdateStateShape = declared(
     sessiondKept: z.array(KeptProcessShape).optional(),
     sessiondVersion: z.string().optional(),
     unconfirmedVersion: z.string().optional(),
+    unmanaged: UnmanagedReasonShape.optional(),
     updatedAt: z.number(),
     waitingOn: z.array(RestartHoldShape).optional(),
     waitingSince: z.number().optional(),

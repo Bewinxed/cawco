@@ -11944,7 +11944,11 @@ export const createServer = (
       db
         .listAgents()
         .filter((row) => registry.agent(row.machineId))
-        .map((row) => row.machineId),
+        .map((row) => ({
+          machineId: row.machineId,
+          build: row.build,
+          hostsHub: row.machineId === ownMachineIdRead,
+        })),
     setState: (machineId, state) => {
       const known = binaryUpdateOf(state);
       if (known) {

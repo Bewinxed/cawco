@@ -13,6 +13,8 @@ import {
   type KeptProcess,
   RESTART_WAIT_CAP_MS,
   type RetiringKeeper,
+  type UnmanagedReason,
+  unmanagedWords,
 } from "@cawco/core/binary-updates";
 import type { CawStatus } from "@cawco/core/project-conversation";
 import { downloadWords } from "@cawco/core/words/downloads";
@@ -150,7 +152,7 @@ export interface Cell {
   icon?: CellIcon;
   /** A second line under the words. */
   meta?: string;
-  /** Plain muted words with no badge (`Runs from source`). */
+  /** Plain muted words with no badge (a machine that takes no update here). */
   plain: boolean;
   /** Which row of the table in the spec matched. */
   row: number;
@@ -236,11 +238,23 @@ export function cellFor(
     return EMPTY(1);
   }
   const u = machine.binaryUpdate;
+  // An online machine whose agent reported no state takes no update here,
+  // as one that says it takes none does (`unmanaged`).
   if (!u) {
-    return { ...EMPTY(2), plain: true, text: "Runs from source" };
+    return unmanagedCell("unreported", undefined);
   }
   return u.sessiondKept ? keptCell(u.sessiondKept) : phaseCell(u, policy);
 }
+
+/** Row 2: a machine that takes no update by this route, and why. */
+const unmanagedCell = (
+  reason: UnmanagedReason,
+  error: string | undefined
+): Cell => ({
+  ...EMPTY(2),
+  plain: true,
+  text: unmanagedWords(reason, error),
+});
 
 /** Row 13: the current sessiond isn't answering, and isn't restarted while processes CawCo didn't start hold it. */
 const keptCell = (kept: readonly KeptProcess[]): Cell => ({
@@ -274,7 +288,7 @@ const failedCell = (u: BinaryUpdateState, v: string, cur: string): Cell =>
         buttons: ["error"],
       };
 
-/** Rows 3 to 12, 14 and 15: the cell by the update's phase. */
+/** Rows 2 to 12, 14 and 15: the cell by the update's phase. */
 function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
   const v = u.availableVersion ? displayVersion(u.availableVersion) : "";
   const cur = displayVersion(u.installedVersion);
@@ -346,6 +360,8 @@ function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
         text: words(v, "available"),
         buttons: ["install"],
       };
+    case "unmanaged":
+      return unmanagedCell(u.unmanaged ?? "unreported", u.error);
     case "installed":
     case "none":
       break;
@@ -373,7 +389,7 @@ export function runningOf(machine: UpdateMachine): string {
   if (!isOnline(machine)) {
     return "—";
   }
-  if (machine.binaryUpdate) {
+  if (machine.binaryUpdate && machine.binaryUpdate.unmanaged !== "source") {
     return displayVersion(machine.binaryUpdate.installedVersion);
   }
   return machine.build?.commit ? machine.build.commit.slice(0, 7) : "—";
