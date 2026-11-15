@@ -85,7 +85,7 @@ const DIFFSTAT_LINES = 40;
 /** A full commit id, as a machine names one: never an option or a ref. */
 const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
 /** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
-const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
+export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
 const MIB = 1024 * 1024;
 /**
@@ -489,6 +489,27 @@ const gateSection = (
 ): string => {
   const lines = landingGateLines(landing);
   return lines ? `\n\n${workWords.gateHeading}\n${lines}` : "";
+};
+/**
+ * The merge checks a done item's report names, heading and lines, as its
+ * landing wrote them ({@link finishedReport}: its summary, then
+ * {@link gateSection}); undefined when it names none. A landed item passed
+ * every step, so each is one line.
+ */
+export const reportedGate = (
+  item: Pick<WorkItemRow, "result" | "summary">
+): string | undefined => {
+  const { result, summary } = item;
+  if (!(result && summary !== null && result.startsWith(summary))) {
+    return;
+  }
+  const rest = result.slice(summary.length);
+  const head = `\n\n${workWords.gateHeading}\n`;
+  if (!rest.startsWith(head)) {
+    return;
+  }
+  const end = rest.indexOf("\n\n", head.length);
+  return rest.slice(2, end === -1 ? undefined : end);
 };
 /**
  * A finished item's report to its parent: what it said it did (its own

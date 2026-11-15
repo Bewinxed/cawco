@@ -250,6 +250,7 @@ import { turnCutWords } from "@cawco/core/words/cuts";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
 import { harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
+import { judgedWords } from "@cawco/core/words/judged";
 import {
   machineFaultWords,
   machineSilenceWords,
@@ -475,6 +476,8 @@ import {
 } from "./keep-alive";
 import { isBlockProgram, moveKeptBlocks, pageSourcePaths } from "./kept-blocks";
 import { boardTitle, sessionLabel } from "./labels";
+import { landedDiff } from "./landed";
+import { landingBranch } from "./landing-run";
 import { createLaunchAccounts } from "./launch-accounts";
 import { createLaunches } from "./launches";
 import { createLaws } from "./laws";
@@ -8924,6 +8927,28 @@ export const createServer = (
         clone
       ),
     db,
+    // A landed attempt's diff, read in the checkout its workspace was cut
+    // from on its machine, for the judge of its task's acceptance criteria.
+    landedDiff: (item, sha, limit) => {
+      const [workspace] = db.workspacesNamed(item.workspaceId);
+      return workspace
+        ? landedDiff(
+            {
+              online: (machineId) => Boolean(registry.agent(machineId)),
+              run: runOnMachine,
+            },
+            {
+              machineId: workspace.machineId,
+              root: workspace.repoRoot,
+              base: workspace.base,
+              onto: item.landedOnto,
+              sha,
+              ...(item.landedOnto ? {} : { branch: landingBranch(item) }),
+            },
+            limit
+          )
+        : Promise.resolve({ unread: judgedWords.noWorkspace });
+    },
     lifetime,
     tasks,
     conversationFor: (projectId, by) => caw.conversationFor(projectId, by),

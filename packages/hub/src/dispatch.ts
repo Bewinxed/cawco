@@ -151,7 +151,11 @@ import type { JevAccess } from "./jev";
 import {
   DISPATCH_ASKED_MAX,
   type DispatchJudgement,
+  head,
   JevFailed,
+  JUDGED_DIFF_MAX,
+  JUDGED_NOTES_MAX,
+  JUDGED_REPORT_MAX,
   jevDispatch,
   jevJudged,
   jevType,
@@ -160,6 +164,8 @@ import {
   TRIAGE_FIELD,
   tailOf,
 } from "./jev-placement";
+import type { LandedDiff } from "./landed";
+import { fenced, reportedGate } from "./landing-run";
 import type { HubLifetimeShape } from "./lifetime";
 import type { Memory } from "./memory";
 import type { ProblemsOf } from "./refusal";
@@ -245,6 +251,16 @@ export interface DispatchDeps {
   readonly designSection: (
     clone: CloneRef
   ) => Promise<string | ProblemsOf<ReturnType<typeof designSectionOf>>>;
+  /**
+   * The diff `item`'s landing put on origin, its commit `sha`, read in the
+   * checkout its workspace was cut from, its patch up to `limit` bytes and
+   * one more (landed.ts `landedDiff`); why it could not be read.
+   */
+  readonly landedDiff: (
+    item: WorkItemRow,
+    sha: string,
+    limit: number
+  ) => Promise<LandedDiff | { unread: string }>;
   /** Runs the safety net until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /**
@@ -418,12 +434,14 @@ const landedAs = (
 };
 
 /**
- * What an attempt's acceptance criteria are judged over: its finish_item
- * report with how it landed, then its hand-in on the task (task_result: what
- * it did, what to check, what it made), last so a report cut to its end
- * keeps it. Before, Jev read the finish_item report alone and found none of
- * a design build's four criteria shown (0.07 to 0.32, nightly 3944): the
- * sourced tokens and DESIGN.md's answers were said only in its task_result.
+ * What an attempt that landed nothing (a post or document in the project's
+ * folder, a host run, a folder's change set) is judged over: its
+ * finish_item report with how it landed, then its hand-in on the task
+ * (task_result: what it did, what to check, what it made), last so a report
+ * cut to its end keeps it. Its report still carries the deliverable whole.
+ * Before, Jev read the finish_item report alone and found none of a design
+ * build's four criteria shown (0.07 to 0.32, nightly 3944): the sourced
+ * tokens and DESIGN.md's answers were said only in its task_result.
  */
 const attemptReport = (item: WorkItemRow): string => {
   const report = (item.digest ?? item.result ?? "").trim();
@@ -447,6 +465,151 @@ const attemptReport = (item: WorkItemRow): string => {
   ]
     .filter(Boolean)
     .join("\n\n");
+};
+
+/** How much of an attempt's work one judge reads ({@link attemptWork}), in characters. */
+interface WorkReads {
+  /** Of its landed diff, cut file by file. */
+  diff: number;
+  /** Of its merge checks, and of its caveats, each. */
+  notes: number;
+  /** Of its report, when it landed nothing: its end. */
+  report: number;
+}
+
+/** What Jev reads: as much as its window holds (jev-placement.ts). */
+const JEV_READS: WorkReads = {
+  diff: JUDGED_DIFF_MAX,
+  notes: JUDGED_NOTES_MAX,
+  report: JUDGED_REPORT_MAX,
+};
+
+/**
+ * What the project's conversation reads in its wake: enough to begin; it
+ * reads the rest of the commits itself with git, as its skill says
+ * (project-attempt-judgement).
+ */
+const LEAD_READS: WorkReads = { diff: 12_000, notes: 4000, report: 4000 };
+
+/** The most paths a cut diff names of the files it left out. */
+const CUT_PATHS_NAMED = 20;
+
+/** Where a file's patch begins in a diff. */
+const FILE_PATCH = /^diff --git /gmu;
+
+/**
+ * What an attempt is judged over ({@link attemptWork}): `text`, and, when
+ * its diff was cut to fit, `cut` saying what was left out; `unread`, why
+ * its landed diff could not be read, `text` then its checks and caveats.
+ */
+interface AttemptWork {
+  cut?: string;
+  text: string;
+  unread?: string;
+}
+
+/**
+ * A landed diff cut to fit `max` characters. The rule: each file's patch
+ * is kept whole, in git's order, until the next one would take the diff
+ * past `max`; that file and every one after it are left out, and `cut`
+ * says how many of how many files that is, their lines added and removed,
+ * and names the first {@link CUT_PATHS_NAMED} of them. A patch the read
+ * stopped inside (landed.ts `landedDiff` reads `max` bytes and one more) is
+ * left out with them.
+ */
+const cutDiff = (
+  diff: LandedDiff,
+  max: number
+): { cut?: string; kept: string } => {
+  const starts = [...diff.patch.matchAll(FILE_PATCH)].map(
+    (match) => match.index
+  );
+  const patches = starts.map((start, index) =>
+    diff.patch.slice(start, starts[index + 1])
+  );
+  if (Buffer.byteLength(diff.patch) > max) {
+    patches.pop();
+  }
+  let kept = "";
+  let count = 0;
+  for (const patch of patches) {
+    if (kept.length + patch.length > max) {
+      break;
+    }
+    kept += patch;
+    count += 1;
+  }
+  const left = diff.files.slice(count);
+  if (left.length === 0) {
+    return { kept };
+  }
+  return {
+    kept,
+    cut: judgedWords.diffCut({
+      left: left.length,
+      files: diff.files.length,
+      added: left.reduce((sum, file) => sum + (file.added ?? 0), 0),
+      removed: left.reduce((sum, file) => sum + (file.removed ?? 0), 0),
+      paths: left.slice(0, CUT_PATHS_NAMED).map((file) => file.path),
+      more: Math.max(0, left.length - CUT_PATHS_NAMED),
+    }),
+  };
+};
+
+/**
+ * A landed attempt's merge checks and caveats, as the judge reads them
+ * after its diff: the merge checks the hub ran on it, as its landing wrote
+ * them in its report (landing-run.ts `reportedGate`), then the `check`
+ * lines of its hand-in on the task, which are its caveats.
+ */
+const landedNotes = (item: WorkItemRow, max: number): string => {
+  const checks = reportedGate(item) ?? judgedWords.checksUnsaid;
+  const caveats = item.taskResult?.check ?? [];
+  return [
+    head(checks, max),
+    head(
+      caveats.length > 0
+        ? `${judgedWords.caveatsHead}\n${caveats.map((line) => `- ${line}`).join("\n")}`
+        : judgedWords.noCaveats,
+      max
+    ),
+  ].join("\n\n");
+};
+
+/**
+ * What an attempt's acceptance criteria are judged over. The owner's rule
+ * (2026-11-15): "the proof is the commit and anything in a report should
+ * only note any caveats or remainders or defects". An attempt that landed
+ * commits is judged over the work itself: their diff (landed.ts
+ * `landedDiff`, cut by {@link cutDiff}), the merge checks the hub ran on
+ * them, and its hand-in's caveats ({@link landedNotes}); its finish_item
+ * report is not read. One that landed none is judged over its report and
+ * hand-in ({@link attemptReport}). `reads` is how much of each the judge
+ * takes.
+ */
+const attemptWork = async (
+  item: WorkItemRow,
+  reads: WorkReads,
+  readDiff: DispatchDeps["landedDiff"]
+): Promise<AttemptWork> => {
+  if (item.landedSha === null && item.landedUnread === null) {
+    return { text: tailOf(attemptReport(item), reads.report) };
+  }
+  const notes = landedNotes(item, reads.notes);
+  const diff =
+    item.landedSha === null
+      ? { unread: judgedWords.landingUnread }
+      : await readDiff(item, item.landedSha, reads.diff);
+  if ("unread" in diff) {
+    return { text: notes, unread: diff.unread };
+  }
+  const { kept, cut } = cutDiff(diff, reads.diff);
+  const shown =
+    diff.files.length === 0 ? ` ${judgedWords.diffEmpty}` : fenced(kept);
+  return {
+    text: `${judgedWords.diffHead(diff.range)}${shown}${cut ? `\n\n${cut}` : ""}\n\n${notes}`,
+    ...(cut ? { cut } : {}),
+  };
 };
 
 /** How a session is named in a sentence. */
@@ -834,6 +997,7 @@ export const createDispatcher = ({
   db,
   designSection,
   conversationFor,
+  landedDiff,
   lifetime,
   pauses,
   placement,
@@ -2298,9 +2462,10 @@ export const createDispatcher = ({
   };
 
   /**
-   * The stage kind an ended attempt sends its task to, once a landed one's
-   * acceptance criteria are judged ({@link judgeCriteria}); `conversation` while it
-   * judges them, `stays` when Jev did not answer.
+   * The stage kind an ended attempt sends its task to, once a done one's
+   * acceptance criteria are judged over its work ({@link judgeCriteria});
+   * `conversation` while the project's conversation judges them, `stays`
+   * when a criterion was not judged ({@link judgedByJev}).
    */
   const kindAfterJudged = async (
     projectId: string,
@@ -2365,16 +2530,15 @@ export const createDispatcher = ({
   };
 
   /**
-   * Judged checks (§5.9) for an attempt that landed at a task with
-   * acceptance criteria: never by the session that did the work. Jev on:
-   * done when Jev shows every criterion met; else back to `todo`, as a
-   * failed attempt lands, with a comment naming the ones it does not, the
-   * attempt stamped unmet so the task counts it failed (tasks.ts
-   * `lastAttemptFailed`) and its starter retries it or moves on. A Jev that
-   * does not answer leaves the task where it is (`stays`), its work landed,
-   * with a comment saying so. Jev off: the project's conversation judges
-   * them (`conversation`: it is woken, the task stays); with events off,
-   * shell checks passed and the rest is yours.
+   * Judged checks (§5.9) for an attempt that ended done at a task with
+   * acceptance criteria: never by the session that did the work. Each is
+   * judged over the work ({@link attemptWork}): what it landed (its diff,
+   * the merge checks the hub ran, its hand-in's caveats), or its report and
+   * hand-in when it landed nothing. Jev on ({@link judgedByJev}): `done`,
+   * `todo` with the attempt stamped unmet, or `stays`. Jev off: the
+   * project's conversation judges them (`conversation`: it is woken with
+   * the work, the task stays); with events off, shell checks passed and the
+   * rest is yours (`you`).
    */
   const judgeCriteria = async (
     projectId: string,
@@ -2382,12 +2546,13 @@ export const createDispatcher = ({
     criteria: string[],
     item: WorkItemRow
   ) => {
-    const report = attemptReport(item);
     const access = placement.access();
     if (access) {
       return await judgedByJev(access, projectId, task, criteria, item);
     }
     if (db.project(projectId)?.eventsOn) {
+      const work = await attemptWork(item, LEAD_READS, landedDiff);
+      const attempt = attemptNamed(item, task);
       offLine(
         "judged",
         projectId,
@@ -2397,7 +2562,14 @@ export const createDispatcher = ({
         projectId,
         task,
         item,
-        `Judge ${taskLink(projectId, task.id, task.title)}: ${attemptNamed(item, task)} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the report shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's report:\n\n${tailOf(report, 4000)}`
+        judgedWords.leadJudges(
+          taskLink(projectId, task.id, task.title),
+          attempt,
+          criteria,
+          work.unread === undefined
+            ? work.text
+            : `${judgedWords.diffUnread(attempt, work.unread)}\n\n${work.text}`
+        )
       );
       return "conversation";
     }
@@ -2410,10 +2582,15 @@ export const createDispatcher = ({
   };
 
   /**
-   * {@link judgeCriteria} with Jev on: done when Jev shows every criterion
-   * met; else back to todo, with a comment naming the ones it does not and
-   * the attempt stamped unmet; `stays`, with a comment, when Jev does not
-   * answer.
+   * {@link judgeCriteria} with Jev on: `done` when Jev shows every criterion
+   * met; else `todo`, with a comment naming the ones it does not, the
+   * attempt stamped unmet so the task counts it failed (tasks.ts
+   * `lastAttemptFailed`) and its starter retries it or moves on. The task
+   * stays where it is (`stays`), its work landed, with a comment saying
+   * why, when a criterion is not judged: Jev did not answer, the landed
+   * diff could not be read, or Jev did not show a criterion met over a
+   * diff cut to fit its window, where what was left out may show it. A
+   * cut never stamps an attempt unmet.
    */
   const judgedByJev = async (
     access: JevAccess,
@@ -2423,50 +2600,55 @@ export const createDispatcher = ({
     item: WorkItemRow
   ) => {
     const about = hubActor(`attempt ${short(item.id)} judged`);
+    const attempt = attemptNamed(item, task);
+    const stays = async (comment: string) => {
+      const said = await tasks.comment(projectId, task.id, comment, about);
+      return said instanceof ElysiaStatus ? said : "stays";
+    };
+    const work = await attemptWork(item, JEV_READS, landedDiff);
+    if (work.unread !== undefined) {
+      return await stays(
+        judgedWords.notJudged(
+          judgedWords.diffUnread(attempt, work.unread),
+          attempt,
+          task.stage
+        )
+      );
+    }
+    let judged: Awaited<ReturnType<typeof jevJudged>>;
     try {
-      const judged = await jevJudged(
-        access,
-        projectId,
-        task,
-        criteria,
-        attemptReport(item)
-      );
-      const unmet = judged.filter((each) => !each.met);
-      if (unmet.length === 0) {
-        return "done";
-      }
-      const said = await tasks.comment(
-        projectId,
-        task.id,
-        judgedWords.notShownMet(
-          attemptNamed(item, task),
-          unmet
-            .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
-            .join("\n")
-        ),
-        about
-      );
-      if (said instanceof ElysiaStatus) {
-        return said;
-      }
-      db.markAttemptUnmet(item.id);
-      return "todo";
+      judged = await jevJudged(access, projectId, task, criteria, work.text);
     } catch (error) {
       if (!(error instanceof JevFailed)) {
         throw error;
       }
-      const said = await tasks.comment(
-        projectId,
-        task.id,
-        judgedWords.notJudged(
-          error.message,
-          attemptNamed(item, task),
-          task.stage
-        ),
-        about
+      return await stays(
+        judgedWords.notJudged(error.message, attempt, task.stage)
       );
-      return said instanceof ElysiaStatus ? said : "stays";
     }
+    const unmet = judged.filter((each) => !each.met);
+    if (unmet.length === 0) {
+      return "done";
+    }
+    const lines = unmet
+      .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
+      .join("\n");
+    if (work.cut) {
+      return await stays(
+        judgedWords.cutHides(attempt, work.cut, lines, task.stage)
+      );
+    }
+    const said = await tasks.comment(
+      projectId,
+      task.id,
+      judgedWords.notShownMet(attempt, lines),
+      about
+    );
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
+    db.markAttemptUnmet(item.id);
+    return "todo";
   };
 
   /**
