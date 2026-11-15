@@ -18,6 +18,9 @@
  * A row that fails its schema throws {@link StoredShapeError}, naming its
  * table, column, row and the zod issue. A stored row that fails means a
  * migration is missing: the fix is the migration, never a looser schema.
+ * A change that narrows a stored JSON column's shape is now caught before it
+ * lands, by `scripts/stored-compat.ts --check` in `bun run check`, unless a
+ * migration that rewrites the column is listed in its REWRITES.
  *
  * A text column of a closed set of values (a state, a mode, a kind) is held
  * the same way by {@link storedEnum}: the text is the value itself, checked

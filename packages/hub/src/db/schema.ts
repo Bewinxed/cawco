@@ -2357,14 +2357,26 @@ export const sentMessages = sqliteTable(
      */
     held: integer("held", { mode: "boolean" }).notNull().default(false),
     /**
-     * A send the hub accepted and its machine has not been handed yet, as the
-     * envelope to hand it: its session's start is held (its machine is
-     * installing an update) or its machine's agent is away within the grace a
-     * restart gets. The record is `pending`, which every screen draws as
-     * queued; the envelope goes once the hold ends, in the order accepted.
-     * Null for every send its machine has.
+     * The hub holds the send: accepted, and its machine not handed it yet.
+     * Its session's start is held (its machine is installing an update), its
+     * machine's agent is away within the grace a restart gets, or it is kept
+     * for its session ({@link sentMessages.hold}). The record is `pending`,
+     * which every screen draws as queued; {@link sentMessages.envelope} goes
+     * once the hold ends, in the order accepted. False for every send its
+     * machine has.
      */
-    owed: storedJson(SendEnvelopeSchema)("owed"),
+    owedHeld: integer("owed_held", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
+     * What migration 0421 did not place when it folded the owed envelope it
+     * replaced into {@link sentMessages.envelope}, as stored: the envelope
+     * the send kept beside an owed one that differed (the owed one is what
+     * the hub handed, so it is the envelope now), or an owed envelope that
+     * did not read, whose send stays owed with no envelope and is never
+     * handed on. Written by 0421 alone; null on every other send.
+     */
+    owedUnread: text("owed_unread"),
     /**
      * Why an owed send waits (stored-types.ts `SendHold`), written as
      * it is kept and again at each look that keeps it; each hold's words
@@ -2374,9 +2386,13 @@ export const sentMessages = sqliteTable(
     /**
      * The send whole, as its machine is handed it (`Envelope<SendPayload>`),
      * kept while it is pending: a process that went away before reading it
-     * leaves the hub what to hand the session's next process. Null once the
-     * send is no longer pending, and on a keep-alive ping, which nothing
-     * hands on.
+     * leaves the hub what to hand the session's next process, and an owed
+     * send ({@link sentMessages.owedHeld}) is handed this once its hold
+     * ends. A send its machine handed back keeps what the machine handed
+     * back. Null once the send is no longer pending, on a keep-alive ping,
+     * which nothing hands on, and on an owed send whose owed envelope did
+     * not read at 0421 ({@link sentMessages.owedUnread}), which is never
+     * handed on.
      */
     envelope: storedJson(SendEnvelopeSchema)("envelope"),
     /**

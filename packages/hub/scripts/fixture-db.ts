@@ -29,9 +29,10 @@
  * {@link seedPassScopes}, {@link seedLiftedColumns},
  * {@link seedContinuations}, {@link seedContinuationsByHand},
  * {@link seedMoves}, {@link seedMovesByHand}, {@link seedRelayPorts},
- * {@link seedSessionPlans}, {@link seedSessionPlansByHand}, and the
+ * {@link seedSessionPlans}, {@link seedSessionPlansByHand}, the
  * sealed values migration 0420 opens and places ({@link seedSealedFacts},
- * sealed with the fixtures' key), written to
+ * sealed with the fixtures' key), and the owed sends migration 0421 folds
+ * into their envelopes ({@link seedOwedSends}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -69,7 +70,8 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * project move's state took before migration 0415, and every shape a relay
  * proof's chips and the relay's ports took before migration 0416, and every
  * shape a connection's sealed value and a fleet MCP server's sign-in under
- * way took before migration 0420, written here.
+ * way took before migration 0420, and every shape a send's owed envelope
+ * took beside its kept one before migration 0421, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -2665,6 +2667,147 @@ async function seedSealedFacts(db: HubDb, dbPath: string): Promise<void> {
   db.trash.put({ kind: "mcp", key: "trashed-signing-in" }, SEALED_AT);
 }
 
+/** When the fixture's owed sends were accepted: 2026-10-05, a minute apart. */
+const OWED_AT = Date.UTC(2026, 9, 5);
+
+/**
+ * Pending sends as migration 0421 finds them (`sent_messages.owed` beside
+ * `envelope`), written by hand, as the hub writes each: owed with its kept
+ * envelope the same (an accepted send held at the hub), owed alone (a
+ * record from before envelopes were kept), an envelope alone (a send its
+ * machine has), owed differing from its kept envelope (one its machine
+ * handed back, the hub's reminder and the person's presence folded into
+ * its words), and two owed envelopes that do not read: not JSON, and JSON
+ * with no message beside a kept envelope that reads.
+ */
+function seedOwedSends(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const live = sqlite
+    .query<{ id: string; machineId: string }, []>(
+      "SELECT id, machine_id AS machineId FROM instances WHERE status = 'starting' ORDER BY id LIMIT 2"
+    )
+    .all();
+  const message = (uuid: string, content: string) => ({
+    type: "user",
+    uuid,
+    message: { role: "user", content },
+    origin: { kind: "human" },
+    reminder: "Sent from the board.",
+  });
+  const envelopeOf = (
+    to: { id: string; machineId: string },
+    uuid: string,
+    delivery: string,
+    content: string
+  ) => ({
+    verb: "send",
+    machineId: to.machineId,
+    instanceId: to.id,
+    payload: {
+      instanceId: to.id,
+      delivery,
+      message: message(uuid, content),
+    },
+  });
+  const words = "Check the migration on a real database.";
+  const handedBack = (to: { id: string; machineId: string }) => {
+    const sent = envelopeOf(to, "send-owed-different", "delivery-back", words);
+    const { reminder: _reminder, ...rest } = sent.payload.message;
+    return {
+      ...sent,
+      payload: {
+        ...sent.payload,
+        message: {
+          ...rest,
+          message: {
+            role: "user",
+            content: `${words}\n\n<system-reminder>\nSent from the board.\nThe person is on the board.\n</system-reminder>`,
+          },
+        },
+      },
+    };
+  };
+  const [first, second = first] = live;
+  if (!(first && second)) {
+    throw new Error("seedOwedSends: the fixture has no live session");
+  }
+  const same = JSON.stringify(
+    envelopeOf(first, "send-owed-same", "delivery-same", words)
+  );
+  /** Each send: its uuid, its session, its owed and kept envelopes as stored, and the hand-off its record names. */
+  const sends: [
+    string,
+    { id: string; machineId: string },
+    string | null,
+    string | null,
+    string,
+  ][] = [
+    ["send-owed-same", first, same, same, "delivery-same"],
+    [
+      "send-owed-alone",
+      first,
+      JSON.stringify(
+        envelopeOf(first, "send-owed-alone", "delivery-alone", words)
+      ),
+      null,
+      "delivery-alone",
+    ],
+    [
+      "send-owed-envelope-alone",
+      second,
+      null,
+      JSON.stringify(
+        envelopeOf(second, "send-owed-envelope-alone", "delivery-kept", words)
+      ),
+      "delivery-kept",
+    ],
+    [
+      "send-owed-different",
+      second,
+      JSON.stringify(handedBack(second)),
+      JSON.stringify(
+        envelopeOf(second, "send-owed-different", "delivery-back", words)
+      ),
+      "delivery-back",
+    ],
+    [
+      "send-owed-not-json",
+      first,
+      '{"verb":"send","machineId":',
+      null,
+      "delivery-cut",
+    ],
+    [
+      "send-owed-no-message",
+      second,
+      JSON.stringify({
+        verb: "send",
+        machineId: second.machineId,
+        payload: { instanceId: second.id, delivery: "delivery-gone" },
+      }),
+      JSON.stringify(
+        envelopeOf(second, "send-owed-no-message", "delivery-gone", words)
+      ),
+      "delivery-gone",
+    ],
+  ];
+  for (const [at, [uuid, to, owed, envelope, delivery]] of sends.entries()) {
+    sqlite.run(
+      "INSERT INTO sent_messages (uuid, instance_id, accepted_at, body, mode, state, owed, envelope, delivery) VALUES (?, ?, ?, ?, 'turn', 'pending', ?, ?, ?)",
+      [
+        uuid,
+        to.id,
+        OWED_AT + at * MINUTE_MS,
+        JSON.stringify(message(uuid, words)),
+        owed,
+        envelope,
+        delivery,
+      ]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -2704,6 +2847,7 @@ async function seed(
     seedMovesByHand(dbPath);
     seedRelayPorts(dbPath);
     seedSessionPlansByHand(dbPath);
+    seedOwedSends(dbPath);
   }
 }
 

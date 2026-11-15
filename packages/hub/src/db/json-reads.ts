@@ -8,8 +8,9 @@
  * counts them read with the same text, from the same frozen shape.
  *
  * A shape here is the subset of JSON Schema those records use: `type` (one
- * or several), `properties` with `required`, `items`, `enum`, `const`,
- * `anyOf`, made with the builders below. A key a shape does not declare is
+ * or several), `properties` with `required`, `items`, `additionalProperties`
+ * (`values`: a record's every value), `enum`, `const`, `anyOf`, made with
+ * the builders below. A key a shape does not declare is
  * ignored, as zod's objects drop it. A value zod checks in code
  * (`z.custom`, a refine) is recorded only as `x-code`; such a shape names
  * its SQL mirror instead, by `mirror`.
@@ -46,6 +47,8 @@ export interface JsonShape {
   readonly properties?: Readonly<Record<string, JsonShape>>;
   readonly required?: readonly string[];
   readonly type?: JsonType | readonly JsonType[];
+  /** Each value of a record (`additionalProperties`, `z.record`). */
+  readonly values?: JsonShape;
 }
 
 /* The builders a frozen shape is written with. */
@@ -70,6 +73,13 @@ export const literal = (value: string): JsonShape => ({
 export const listOf = (items: JsonShape): JsonShape => ({
   type: "array",
   items,
+});
+/** Any JSON value at all (`z.unknown()`). */
+export const ANY: JsonShape = {};
+/** An object whose every value is `values` (`z.record(z.string(), values)`). */
+export const recordOf = (values: JsonShape = ANY): JsonShape => ({
+  type: "object",
+  values,
 });
 export const anyOf = (...shapes: JsonShape[]): JsonShape => ({
   anyOf: shapes,
@@ -189,19 +199,27 @@ const holds = (
     ...(shape.const === undefined ? [] : [constTest(shape.const, type, value)]),
     ...propertyTests(doc, shape, place, depth),
   ];
-  if (shape.items) {
+  for (const [inner, kind] of [
+    [shape.items, "array"],
+    [shape.values, "object"],
+  ] as const) {
+    if (!inner) {
+      continue;
+    }
     const entry = `e${depth}`;
     const each = holds(
       doc,
-      shape.items,
+      inner,
       { base: `${entry}.fullkey`, suffix: "" },
       depth + 1
     );
     tests.push(
-      `CASE WHEN ${type} = 'array' THEN NOT EXISTS (SELECT 1 FROM json_each(${doc}, ${path}) ${entry} WHERE NOT coalesce(${each}, 0)) ELSE 0 END`
+      `CASE WHEN ${type} = '${kind}' THEN NOT EXISTS (SELECT 1 FROM json_each(${doc}, ${path}) ${entry} WHERE NOT coalesce(${each}, 0)) ELSE 0 END`
     );
   }
-  return tests.length > 0 ? `(${tests.join(" AND ")})` : "1";
+  // A shape that asks nothing of a value ({@link ANY}) asks that it is
+  // there: `z.unknown()` under a required key wants the key.
+  return tests.length > 0 ? `(${tests.join(" AND ")})` : `${type} IS NOT NULL`;
 };
 
 /**

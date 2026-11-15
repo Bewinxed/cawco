@@ -37,9 +37,12 @@ interface AgentFrameReads {
   /**
    * A machine's word on its binary update, off a `register` or any heartbeat.
    * Absent from a daemon that is not a binary install; a phase this hub does not
-   * know is dropped rather than passed through to a board that cannot render it.
+   * know is dropped rather than passed through to a board that cannot render it
+   * ({@link binaryUpdatePhaseDropped} says which).
    */
   binaryUpdate: BinaryUpdateState | undefined;
+  /** The phase {@link binaryUpdate} was dropped for, as the machine said it: one this hub does not know. */
+  binaryUpdatePhaseDropped: BinaryUpdatePhaseDropped | undefined;
   /**
    * `register`'s word on the cawco the daemon is running (NEW.md §12). Absent
    * from the re-announce, and the row keeps what it had. As the machine sent
@@ -232,16 +235,36 @@ const buildOf = (value: unknown): BuildInfo | undefined => {
     : undefined;
 };
 
-/** A binary update's state as a machine reported it, when its phase is one this hub knows. */
+/** A binary update's phase a machine said that this hub does not know, as it said it: any JSON value, or none. */
+export interface BinaryUpdatePhaseDropped {
+  phase: unknown;
+}
+
+/**
+ * A binary update's state as a machine reported it (`state`), when its phase
+ * is one this hub knows; when it is not, the state is dropped and `dropped`
+ * names the phase, for the hub's caller to say.
+ */
 export const binaryUpdateOf = (
   value: unknown
-): BinaryUpdateState | undefined => {
+): {
+  dropped: BinaryUpdatePhaseDropped | undefined;
+  state: BinaryUpdateState | undefined;
+} => {
   const state = recordOf(value) as Partial<BinaryUpdateState> | undefined;
-  return state !== undefined &&
-    BINARY_UPDATE_PHASES.includes(state.phase as BinaryUpdatePhase) &&
-    typeof state.installedVersion === "string"
-    ? ({ ...state, hostsHub: state.hostsHub === true } as BinaryUpdateState)
-    : undefined;
+  if (state === undefined) {
+    return { state: undefined, dropped: undefined };
+  }
+  if (!BINARY_UPDATE_PHASES.includes(state.phase as BinaryUpdatePhase)) {
+    return { state: undefined, dropped: { phase: state.phase } };
+  }
+  return {
+    state:
+      typeof state.installedVersion === "string"
+        ? ({ ...state, hostsHub: state.hostsHub === true } as BinaryUpdateState)
+        : undefined,
+    dropped: undefined,
+  };
 };
 
 const harnessesOf = (value: unknown): ReportedHarness[] | undefined => {
@@ -374,6 +397,7 @@ export const decodeAgentFrame = (payload: unknown): AgentFrame => {
   const previews = said?.previews;
   const addresses = said?.sessionAddresses;
   const kind = textOf(said, "kind");
+  const binaryUpdate = binaryUpdateOf(said?.binaryUpdate);
   return {
     instances: stringsOf(said?.instances),
     credentialHashes: stringsOf(said?.credentialHashes).filter((hash) =>
@@ -413,7 +437,8 @@ export const decodeAgentFrame = (payload: unknown): AgentFrame => {
     os: textOf(said, "os"),
     fleetHeld: said?.fleetHeld as FleetHeld | undefined,
     relaysHubPreviews: said?.relaysHubPreviews === true,
-    binaryUpdate: binaryUpdateOf(said?.binaryUpdate),
+    binaryUpdate: binaryUpdate.state,
+    binaryUpdatePhaseDropped: binaryUpdate.dropped,
     harnesses: harnessesOf(said?.harnesses),
     tools: Array.isArray(said?.tools) ? said.tools.filter(isToolStatus) : [],
     machineCapabilities: capabilitiesOf(said?.machineCapabilities),

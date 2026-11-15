@@ -573,7 +573,7 @@ export const createSends = (ctx: SendsContext) => {
       sendSettles.delete(uuid);
       return sent.response.detail;
     }
-    const owed = sent?.state === "pending" && sent.owed !== null;
+    const owed = sent?.state === "pending" && sent.owedHeld;
     const outcome =
       owed || (sent && sent.state !== "pending") ? sent : await settled;
     sendSettles.delete(uuid);
@@ -983,7 +983,7 @@ export const createSends = (ctx: SendsContext) => {
     // an end ("fail") ends it, and nothing owes it twice.
     const all = ctx.db
       .sendsIn(instanceId, ["pending"])
-      .filter((send) => unstored === "fail" || !send.owed)
+      .filter((send) => unstored === "fail" || !send.owedHeld)
       .filter(only);
     const sends = all.filter((send) => !deciding.has(send.uuid));
     const whole = sends.length === all.length;
@@ -1136,7 +1136,7 @@ export const createSends = (ctx: SendsContext) => {
     return (
       record?.instanceId === instanceId &&
       record.state === "pending" &&
-      !record.owed &&
+      !record.owedHeld &&
       (record.delivery ?? undefined) === send.delivery
     );
   };
@@ -1282,7 +1282,7 @@ export const createSends = (ctx: SendsContext) => {
     row: SentMessageRow,
     machineId: string
   ): Promise<"withdrawn" | "started"> => {
-    if (row.owed !== null && ctx.db.takeOwedSend(row.uuid) !== undefined) {
+    if (row.owedHeld && ctx.db.takeOwedSend(row.uuid)) {
       changeSend(row, { state: "cancelled" });
       return "withdrawn";
     }
@@ -1344,8 +1344,7 @@ export const createSends = (ctx: SendsContext) => {
     const unread = ctx.db.sendsIn(instanceId, ["pending"]).filter((send) => {
       const origin = (send.body as SentMessage | null)?.origin;
       return (
-        send.owed === null &&
-        !isKeepAlive(send.body) &&
+        !(send.owedHeld || isKeepAlive(send.body)) &&
         !!origin &&
         ctx.workItems.finishingFor(instanceId, origin)
       );
@@ -2044,7 +2043,7 @@ export const createSends = (ctx: SendsContext) => {
    *
    * ONE RULE FOR EVERY HOLD: a send its session cannot take yet is never
    * handed to the machine, where a session with no process refuses it, and
-   * never refused for the hold. It is accepted as owed (`sent_messages.owed`),
+   * never refused for the hold. It is accepted as owed (`sent_messages.owed_held`),
    * drawn queued like any pending send, and goes once the hold ends
    * ({@link releaseOwed}), in the order accepted. The holds: the session's
    * start held while its machine installs an update (`holdingStarts`),
@@ -2147,9 +2146,11 @@ export const createSends = (ctx: SendsContext) => {
    * goes to the session the work goes on in under a fresh uuid, behind what
    * that session was owed; the hub's word to the old process is cancelled.
    */
-  const moveOwedSend = (send: SentMessageRow): void => {
-    const owed = ctx.db.takeOwedSend(send.uuid);
-    if (owed === undefined) {
+  const moveOwedSend = (
+    send: SentMessageRow,
+    owed: Envelope<SendPayload>
+  ): void => {
+    if (!ctx.db.takeOwedSend(send.uuid)) {
       return;
     }
     const moved = toContinuation(owed, "carried");
@@ -2675,7 +2676,7 @@ export const createSends = (ctx: SendsContext) => {
     const outcome = accepted
       ? {
           state: "pending" as const,
-          ...(owed ? { owed: whole } : {}),
+          ...(owed ? { owedHeld: true } : {}),
           ...(delivery ? { envelope: whole, delivery } : {}),
         }
       : {
@@ -2907,7 +2908,7 @@ export const createSends = (ctx: SendsContext) => {
    * a send its machine has.
    */
   const holdOf = (record: SentMessageRow): SendHold | undefined => {
-    if (!record.owed) {
+    if (!record.owedHeld) {
       return;
     }
     const [row] = ctx.db.getInstancesByIds([record.instanceId]);
@@ -3094,17 +3095,25 @@ export const createSends = (ctx: SendsContext) => {
       return;
     }
     const still = ctx.db.sendRecord(send.uuid);
-    if (still?.state === "pending" && still.owed) {
+    if (still?.state === "pending" && still.owedHeld) {
       keepHold(still);
     }
   };
 
   /** {@link releaseOne}'s hand: true once the send has left the hub's keeping (handed, moved or failed). */
   const handOwed = (send: SentMessageRow): boolean => {
+    // Owed with no envelope to hand: one whose owed envelope did not read
+    // when migration 0421 folded it into `envelope` (its record's
+    // `owed_unread`). It stays owed, never handed or carried on with an
+    // envelope made up for it.
+    const { envelope } = send;
+    if (!envelope) {
+      return false;
+    }
     const [row] = ctx.db.getInstancesByIds([send.instanceId]);
     // Owed to a session whose work a continuation took on: it goes there.
     if (row?.continuedInto) {
-      moveOwedSend(send);
+      moveOwedSend(send, envelope);
       return true;
     }
     const agent = row ? ctx.registry.agent(row.machineId) : undefined;
@@ -3122,10 +3131,6 @@ export const createSends = (ctx: SendsContext) => {
       ctx.keptAsleep(row) ||
       ctx.waitingForProcess.has(send.instanceId)
     ) {
-      return false;
-    }
-    const envelope = send.owed;
-    if (!envelope) {
       return false;
     }
     // Kept while its account is at its limit: it goes once that is over.
@@ -3158,7 +3163,7 @@ export const createSends = (ctx: SendsContext) => {
     if (
       ctx.db.owesSpawn(send.instanceId) ||
       !(now && (now.status === "running" || now.status === "starting")) ||
-      ctx.db.takeOwedSend(send.uuid) === undefined
+      !ctx.db.takeOwedSend(send.uuid)
     ) {
       return false;
     }
@@ -3204,7 +3209,7 @@ export const createSends = (ctx: SendsContext) => {
       if (!waitsOnMachine(send)) {
         continue;
       }
-      if (ctx.db.takeOwedSend(send.uuid) !== undefined) {
+      if (ctx.db.takeOwedSend(send.uuid)) {
         failSend(send, machineAwayWords(machineId), {
           kind: "machine-away",
           machineId,
