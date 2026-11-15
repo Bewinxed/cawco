@@ -21,12 +21,12 @@ export const askUnreadWords = (id: string): string =>
   `Your ask ${id} was withdrawn unanswered: its stored record no longer reads, so it can't be shown or answered. Nothing it asked ran. If you still need it, ask again.`;
 
 /**
- * What a session is told of a permission whose sealed input no longer opens
- * as it is approved (hub ask-presentation.ts `answeredWithOriginal`): another
- * key, or damage. Withdrawn: nothing it asked ran.
+ * What a session is told of an ask whose sealed call input no longer opens
+ * as it is approved (hub ask-presentation.ts `answeredWithOriginal`, asks.ts
+ * `carryOut`): another key, or damage. Nothing it asked ran.
  */
 export const askInputUnreadWords = (id: string): string =>
-  `Your permission request ${id} was withdrawn: the call's input the hub kept sealed no longer opens, so it was not run with anything guessed. Nothing it asked ran. If you still need it, ask again.`;
+  `Your ask ${id} was not run: the call's input the hub kept sealed no longer opens, so it was not run with anything guessed. Nothing it asked ran. If you still need it, ask again.`;
 
 /** What an approve ask's call answers at once, in one paragraph. */
 export const askRecordedWords = (ask: { id: string; link: string }): string =>

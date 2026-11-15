@@ -2990,6 +2990,20 @@
       "when": 1794769669336,
       "tag": "0434_parked_ask_input_sealed_kept",
       "breakpoints": true
+    },
+    {
+      "idx": 435,
+      "version": "6",
+      "when": 1794772013574,
+      "tag": "0435_ask_inputs_digested",
+      "breakpoints": true
+    },
+    {
+      "idx": 436,
+      "version": "6",
+      "when": 1794772019896,
+      "tag": "0436_ask_inputs_digested_kept",
+      "breakpoints": true
     }
   ]
 }

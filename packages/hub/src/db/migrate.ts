@@ -24,6 +24,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { logAccountReadingsUnread } from "./account-readings-unread";
+import { sealAskInputs } from "./asks-inputs";
 import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
@@ -425,6 +426,21 @@ export const MIGRATION_STEPS: readonly Step[] = [
       const sealed = sealParkedInputs(client);
       console.info(
         `[migrations] 0434: ${sealed} parked ask input(s) sealed, each envelope kept as every screen reads it`
+      );
+    },
+  },
+  {
+    name: "ask-inputs",
+    before: "0436_ask_inputs_digested_kept",
+    at: "migrator",
+    run: (client) => {
+      // Every parked ask's call digested, every permit kept by its digest
+      // and every approval's call input sealed, each record keeping the
+      // card's input, before 0436 holds every parked ask to a digest
+      // (asks-inputs.ts).
+      const done = sealAskInputs(client);
+      console.info(
+        `[migrations] 0436: ${done.parked} parked ask(s) digested, ${done.permits} permit(s) kept by their digest, ${done.approvals} approval input(s) sealed`
       );
     },
   },

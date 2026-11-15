@@ -6,6 +6,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { passedValue, redacted } from "../redactor";
 import { contextSizeCalls } from "../session-calls";
 
 /**
@@ -218,7 +219,9 @@ export const instanceTitleRoutes = ({
             .map((row) => [row.id, row] as const)
         );
 
-        return await Promise.all(
+        // Through the redactor: a title read off a conversation's first
+        // turn is that conversation's words.
+        const titled = await Promise.all(
           // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves every field of one supervisor answer (title, model, harness, whether it needs asking again) in one place; splitting it would scatter the fallback order this route depends on.
           [...asked.values()].map(async (ask) => {
             const row = rows.get(ask.id);
@@ -289,5 +292,6 @@ export const instanceTitleRoutes = ({
             return { id: ask.id, title: derived || null };
           })
         );
+        return passedValue(redacted(titled));
       }
     );

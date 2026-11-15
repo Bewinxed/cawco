@@ -75,6 +75,11 @@ interface Rewrite {
 
 const REWRITES: readonly Rewrite[] = [
   {
+    column: "asks.kept",
+    migration: "0436_ask_inputs_digested_kept",
+    why: "every permit's record gets the keyed digest of the call it was asked for and keeps the card's input; every approval's keeps the card's input, its call's own sealed in input_sealed (db/asks-inputs.ts); a record that does not read is left as stored, and no row is deleted",
+  },
+  {
     column: "queued_work_items.request",
     migration: "0405_queued_request_schemas",
     why: "a kept call that does not read whole as a QueuedRequest moves, as stored, to request_unread with request null; the delegate is held, never started, and no row is deleted",

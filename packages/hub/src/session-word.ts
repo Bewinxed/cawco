@@ -7,6 +7,7 @@ import type {
   Envelope,
   SendPayload,
 } from "@cawco/core/protocol";
+import { passedValue, type Redacted, type Typed } from "./redactor";
 
 export const sessionWord = (
   row: { id: string; machineId: string },
@@ -29,6 +30,18 @@ export const sessionWord = (
     },
   },
 });
+
+/**
+ * One session's words to another, from session `origin` names: a send whose
+ * words are only what the redactor passed (redactor.ts), as every path
+ * carrying a session's words to another session takes them.
+ */
+export const peerWord = <F extends Redacted<string>>(
+  row: { id: string; machineId: string },
+  words: Typed<F>,
+  origin: Extract<SendPayload["message"]["origin"], { kind: "peer" }>,
+  more: { shouldQuery?: boolean } = {}
+): Envelope<SendPayload> => sessionWord(row, passedValue(words), origin, more);
 
 /** The hub's `control` to a session's process: `method` with `args`, answered at `requestId`. */
 export const sessionControl = (

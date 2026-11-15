@@ -191,6 +191,9 @@ const askOut = (payload: Record<string, unknown>): Record<string, unknown> => {
   };
 };
 
+/** A data URL of bytes (`data:image/png;base64,…`): a picture's or a file's, never words. */
+const INLINE_BYTES = /^data:[\w.+-]+\/[\w.+-]+(?:;[\w.+-]+=[\w.+-]+)*;base64,/u;
+
 /** Every object and array this module froze: already through it, taken as it is. */
 const passed = new WeakSet<object>();
 
@@ -260,9 +263,18 @@ const frozenOut = (value: unknown, cut: Iterator<string>): unknown => {
 const redactedValue = <T>(value: T): Frozen<T> => {
   const strings: string[] = [];
   const copy = copied(value, strings);
-  const found = rangesOfEach(strings, credentialRanges);
-  const cut = strings.map((text, index) => {
-    const ranges = found[index] ?? [];
+  // A picture's or a file's bytes inline (`data:…;base64,`) are no words:
+  // read as text, a run of them could pass for a token and be cut, and the
+  // picture broken.
+  const words = strings.filter((text) => !INLINE_BYTES.test(text));
+  const found = rangesOfEach(words, credentialRanges);
+  let at = 0;
+  const cut = strings.map((text) => {
+    if (INLINE_BYTES.test(text)) {
+      return text;
+    }
+    const ranges = found[at] ?? [];
+    at += 1;
     return ranges.length > 0 ? cutOut(text, ranges) : text;
   });
   return frozenOut(copy, cut.values()) as Frozen<T>;
@@ -275,6 +287,18 @@ export const redactedFrame = <T extends ClientFrame>(frame: T): Redacted<T> =>
 /** A parked ask as it leaves the hub for a client, a phone or a parent session (module: an ask). */
 export const redactedAsk = (ask: ParkedAsk): Redacted<ParkedAsk> =>
   mint<ParkedAsk>(redactedValue(ask));
+
+/**
+ * A tool call's input as its card shows it (module: an ask): every value
+ * core `redact` reads as a credential hidden, a connector write's URL cut
+ * to its open part, every string's credentials cut. What an ask's row keeps
+ * of a call (asks.ts; db/asks-inputs.ts).
+ */
+export const redactedInput = (
+  tool: string,
+  input: Record<string, unknown>
+): Redacted<Record<string, unknown>> =>
+  mint<Record<string, unknown>>(redactedValue(hiddenInput(tool, input)));
 
 /**
  * Any value the hub's words carry to a phone or another session (a row, a

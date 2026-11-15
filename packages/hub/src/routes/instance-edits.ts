@@ -8,6 +8,7 @@ import type { HubContext } from "../hub-context";
 import { instanceTimes } from "../instance-out";
 import { awayProblem, silentProblem } from "../machine-answers";
 import type { MachineReadsContext } from "../machine-reads";
+import { passedValue, redacted } from "../redactor";
 import { attachmentsOfPages } from "../session-attachments";
 import type { HistoryFault } from "../transcripts";
 
@@ -103,12 +104,21 @@ export const instanceEditRoutes = (
             // for a first paint and a reader whose board no longer lists it.
             const now = query.before ? id : continuationNow(id);
             const [to] = now === id ? [] : db.getInstancesByIds([now]);
-            return to
-              ? {
-                  ...page,
-                  continuedTo: { instanceId: to.id, title: sessionName(to) },
-                }
-              : page;
+            // Through the redactor, as every frame of it was live: what
+            // the session's tools and agent said, read back.
+            return passedValue(
+              redacted(
+                to
+                  ? {
+                      ...page,
+                      continuedTo: {
+                        instanceId: to.id,
+                        title: sessionName(to),
+                      },
+                    }
+                  : page
+              )
+            );
           }
           switch (page.fault) {
             case "offline":
@@ -192,10 +202,13 @@ export const instanceEditRoutes = (
           }
         }
         const [first] = read.pages;
-        return {
-          harness: (first as TranscriptPage).where.harness,
-          attachments: attachmentsOfPages(read.pages),
-        } satisfies SessionAttachments;
+        // Through the redactor: a text the conversation carried is its words.
+        return passedValue(
+          redacted({
+            harness: (first as TranscriptPage).where.harness,
+            attachments: attachmentsOfPages(read.pages),
+          } satisfies SessionAttachments)
+        );
       })
       .patch(
         "/api/instances/:id",

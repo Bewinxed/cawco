@@ -28,10 +28,11 @@ import {
   passedValue,
   type Redacted,
   redactedAsk,
+  redactedWords,
   type Typed,
 } from "./redactor";
 import type { createSends } from "./sends";
-import { sessionWord } from "./session-word";
+import { peerWord } from "./session-word";
 
 /** `text` with `line` after its marker (core `markerTag`, its first line), when there is a line. */
 const withContext = (text: string, line: string | undefined): string => {
@@ -429,19 +430,21 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       "answers are keyed by the exact question text and the value is the chosen option label " +
       "(pass deny=true to refuse it).";
     const sent = ctx.deliverSend(
-      sessionWord(
+      peerWord(
         parent,
-        withContext(
-          delegateAskText({
-            label,
-            body,
-            instance: delegate.id,
-            request: String(ask.requestId),
-            instruction,
-          }),
-          conversationContext(
-            parent,
-            `${sessionLink(delegate.id, boardTitle(delegate))} asked a question`
+        redactedWords(
+          withContext(
+            delegateAskText({
+              label,
+              body,
+              instance: delegate.id,
+              request: String(ask.requestId),
+              instruction,
+            }),
+            conversationContext(
+              parent,
+              `${sessionLink(delegate.id, boardTitle(delegate))} asked a question`
+            )
           )
         ),
         {
@@ -512,9 +515,14 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
           uuid,
           message: {
             role: "user",
-            content: withContext(
-              delegateWaitNotice(line, body, about),
-              conversationContext(parent, line)
+            // A delegate's ask, said to its parent: through the redactor.
+            content: passedValue(
+              redactedWords(
+                withContext(
+                  delegateWaitNotice(line, body, about),
+                  conversationContext(parent, line)
+                )
+              )
             ),
           },
           parent_tool_use_id: null,
@@ -562,9 +570,11 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       ctx.artifacts.handedUnopened(parent.id, delegate.id)
     );
     const sent = ctx.deliverSend(
-      sessionWord(
+      peerWord(
         parent,
-        `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}${handed}`,
+        redactedWords(
+          `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}${handed}`
+        ),
         {
           kind: "peer",
           from: delegate.id,

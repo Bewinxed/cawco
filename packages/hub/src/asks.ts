@@ -66,7 +66,6 @@ import {
   isAdminWrite,
   newAskId,
   type SourceFacts,
-  sameCall,
   UserQuestionShape,
 } from "@cawco/core/asks";
 import { canonicalJson } from "@cawco/core/canonical-json";
@@ -80,17 +79,20 @@ import type {
 } from "@cawco/core/session-messages";
 import {
   askClosedWords,
+  askInputUnreadWords,
   askQuestionWords,
   askRecordedWords,
   askUnreadWords,
 } from "@cawco/core/words/ask-lines";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
+import { callDigest } from "./call-digest";
 import type { DbShape } from "./db";
 import { tool as mcpTool, sentence } from "./mcp-tool";
 import { uuidOf } from "./named-uuid";
 import type { AnswerFrom } from "./pending";
 import { askEnvelope } from "./pending";
+import { passedValue, redactedInput } from "./redactor";
 import type { AnyProblem } from "./refusal";
 
 /** The session tools asks give, by name: what a call is routed by (delegation-mcp.ts). */
@@ -241,14 +243,34 @@ const ASKED_AGAIN_WHY = "its session asked the same call again";
  */
 const answerSend = (askId: string): string => uuidOf(`${askId}\u0000answer`);
 
-/** A parked prompt's tool call, as its frame carries it. */
-const callOf = (envelope: Envelope): AskedPermit => {
+/** A prompt's tool call, as its frame carries it. */
+const callOf = (
+  envelope: Envelope
+): { tool: string; input: Record<string, unknown> } => {
   const { toolName, input } = envelope.payload as {
     toolName: string;
     input: Record<string, unknown>;
   };
-  return { kind: "permit", tool: toolName, input };
+  return { tool: toolName, input };
 };
+
+/**
+ * A permit as its row keeps it (core asks.ts `PERMIT_ASKED`): the call's
+ * tool, its input as the card shows it, and the keyed digest of the call as
+ * it was asked (call-digest.ts), which the session's next call is matched
+ * by. `input` is already the card's (a parked ask the ledger holds,
+ * pending.ts); it is passed through the redactor again all the same.
+ */
+const permitOf = (
+  tool: string,
+  input: Record<string, unknown>,
+  digest: string
+): AskedPermit => ({
+  kind: "permit",
+  tool,
+  input: passedValue(redactedInput(tool, input)),
+  digest,
+});
 
 export const createAsks = (deps: AsksDeps) => {
   /** The answer's message, to the session that asked now (a fold moves its row). */
@@ -279,20 +301,34 @@ export const createAsks = (deps: AsksDeps) => {
     }
   };
 
-  const carryOut = async (ask: AskRecord, asked: Approve): Promise<void> => {
-    const { tool, input } = asked;
+  const carryOut = async (ask: AskRecord, shown: Approve): Promise<void> => {
     const asker = deps.instance(ask.instanceId);
     if (ask.answer?.result.behavior !== "allow") {
+      // A Decline reads the card's input alone: nothing is opened.
       if (asker) {
-        deps.declined(tool, input, asker);
+        deps.declined(shown.tool, shown.input, asker);
       }
       tellAnswered(ask);
       return;
     }
+    // Approved: the call's own input, opened from its seal here alone. One
+    // that does not open fails, its session told; nothing runs with anything
+    // guessed.
+    const input = deps.asks.asAsked(ask.id);
+    if (!input) {
+      const ended = deps.asks.carried(ask.id, {
+        at: Date.now(),
+        failed: askInputUnreadWords(ask.id),
+      });
+      tellAnswered(ended ?? ask);
+      return;
+    }
+    const asked = { ...shown, input };
+    const { tool } = asked;
     console.log(
       `[asks] ${tool} (${ask.id}) approved; the hub runs it for ${ask.instanceId}`
     );
-    const stale = asker ? await deps.stale(ask) : undefined;
+    const stale = asker ? await deps.stale({ ...ask, asked }) : undefined;
     if (asker && stale !== undefined) {
       const ended = deps.asks.carried(ask.id, {
         at: Date.now(),
@@ -328,6 +364,8 @@ export const createAsks = (deps: AsksDeps) => {
     source: SourceFacts | undefined,
     toolUseId?: string
   ): string => {
+    // The card's input kept with the ask; the call's own sealed beside it,
+    // opened only when the approved call runs ({@link carryOut}).
     const ask: AskRecord = {
       id: newAskId(),
       instanceId: actor.id,
@@ -336,13 +374,13 @@ export const createAsks = (deps: AsksDeps) => {
       asked: {
         kind: "approve",
         tool: name,
-        input,
+        input: passedValue(redactedInput(name, input)),
         carry: { by: "hub", tool: name },
         ...(source ? { source } : {}),
       },
       ...(toolUseId ? { toolUseId } : {}),
     };
-    deps.asks.add(ask);
+    deps.asks.add(ask, input);
     deps.park(askEnvelope(ask, actor));
     console.log(
       `[asks] ${actor.id} asks the person to approve ${name} (${ask.id})`
@@ -572,13 +610,14 @@ export const createAsks = (deps: AsksDeps) => {
      * The prompt's own frame is replaced, not settled; a prompt routed to
      * its session's parent stays routed there.
      */
-    keep(prompt: Envelope, asker: InstanceRow): void {
+    keep(prompt: Envelope, asker: InstanceRow, digest: string): void {
       const { raisedAt, routedTo, toolUseId } = prompt.payload as {
         raisedAt?: number;
         routedTo?: string;
         toolUseId?: string;
       };
-      const asked = callOf(prompt);
+      const call = callOf(prompt);
+      const asked = permitOf(call.tool, call.input, digest);
       const ask: AskRecord = {
         id: prompt.requestId ?? newAskId(),
         instanceId: asker.id,
@@ -603,8 +642,11 @@ export const createAsks = (deps: AsksDeps) => {
      */
     granted(asker: InstanceRow, prompt: Envelope): boolean {
       const call = callOf(prompt);
+      const digest = callDigest(call.tool, call.input);
       const permitted = (ask: AskRecord): boolean =>
-        ask.asked.kind === "permit" && sameCall(ask.asked, call);
+        ask.asked.kind === "permit" &&
+        ask.asked.tool === call.tool &&
+        ask.asked.digest === digest;
       const grant = deps.asks.grant(asker.id, permitted, Date.now());
       if (grant) {
         console.log(

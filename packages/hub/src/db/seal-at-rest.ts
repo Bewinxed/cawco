@@ -36,6 +36,9 @@ const SECRET_COLUMNS = [
   { table: "mcp_servers", key: "name", columns: ["config"] },
   // A parked ask's call input as it was asked (db/parked-inputs.ts).
   { table: "parked_asks", key: "request_id", columns: ["input_sealed"] },
+  // An approval's call input as it was asked (db/asks-inputs.ts), and a
+  // record migration 0408 kept as not read, which can hold one whole.
+  { table: "asks", key: "id", columns: ["input_sealed", "record_unread"] },
   { table: "connections", key: "id", columns: ["sealed_unread"] },
   {
     table: "connection_secrets",

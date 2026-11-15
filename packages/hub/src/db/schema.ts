@@ -6755,6 +6755,13 @@ export const parkedAsks = sqliteTable(
      * sealed the input every row held before (db/parked-inputs.ts).
      */
     inputSealed: text("input_sealed").notNull(),
+    /**
+     * The keyed digest of the call as it was asked (call-digest.ts): what a
+     * prompt kept as a permit when its process goes is matched by (asks.ts
+     * `keep`), so keeping one opens nothing. Migration 0436's step made it
+     * for every row parked before (db/asks-inputs.ts).
+     */
+    callDigest: text("call_digest").notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
 );
@@ -6797,6 +6804,13 @@ export const asks = sqliteTable(
     lapsedAt: integer("lapsed_at"),
     /** What was asked, who answered, what the call said (core `ASK_KEPT`); every writer sets it and clears `record_unread`. Null: `record_unread` set. */
     kept: storedJson(ASK_KEPT)("kept"),
+    /**
+     * An approval's call input as it was asked, sealed under the hub's key
+     * (secret-box.ts): `kept` holds the card's input alone. Opened only when
+     * the approved call runs (asks.ts `carryOut`). Null for a question and a
+     * permit, whose call is matched by its digest (`kept`'s `digest`).
+     */
+    inputSealed: text("input_sealed"),
     /**
      * A record that did not read whole when it became columns (migration
      * 0408), as it was stored, `kept` null beside it; what of it read is

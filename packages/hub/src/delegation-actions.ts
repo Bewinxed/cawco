@@ -64,6 +64,12 @@ import { byId, handleId, isHandle, mentioned } from "./handles";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
+import {
+  passedValue,
+  type Redacted,
+  redactedWords,
+  type Typed,
+} from "./redactor";
 import type { AnyProblem, ProblemsOf } from "./refusal";
 import type { SessionCalls } from "./session-calls";
 import {
@@ -533,19 +539,23 @@ const startedText = ({
   "It is in the sidebar now, under this session, and the user can open its transcript. " +
   `Hand it more work later with handoff("${leafOf(folder)}#${id.slice(0, 8)}", ...).`;
 
-/** `body` from session `from` (called `name`) into session `to`. */
-const peerSend = (
+/**
+ * `words` from session `from` (called `name`) into session `to`: one
+ * session's words to another, only as the redactor passed them
+ * (redactor.ts).
+ */
+const peerSend = <F extends Redacted<string>>(
   to: string,
   from: string,
   name: string,
-  body: string,
+  words: Typed<F>,
   extra: { shouldQuery?: false } = {}
 ): SendPayload => ({
   instanceId: to,
   message: {
     type: "user",
     uuid: crypto.randomUUID(),
-    message: { role: "user", content: body },
+    message: { role: "user", content: passedValue(words) },
     parent_tool_use_id: null,
     origin: { kind: "peer", from, name, fromSession: from },
     ...extra,
@@ -1754,7 +1764,7 @@ export const handoffActions = ({
         verb: "send",
         machineId: peer.row.machineId,
         instanceId: peer.row.id,
-        payload: peerSend(peer.row.id, instanceId, from, body, {
+        payload: peerSend(peer.row.id, instanceId, from, redactedWords(body), {
           shouldQuery: false,
         }),
       });
@@ -1861,7 +1871,7 @@ export const handoffActions = ({
       // opening prompt as a peer message and render it as `user.peer` instead of
       // the reader's own words — the same marker `handoff()` already uses.
       const body = `${handoffMarker(from, instanceId)}${prompt}`;
-      const opening = peerSend(id, instanceId, from, body);
+      const opening = peerSend(id, instanceId, from, redactedWords(body));
       emit({ verb: "send", machineId, instanceId: id, payload: opening });
       return {
         id,

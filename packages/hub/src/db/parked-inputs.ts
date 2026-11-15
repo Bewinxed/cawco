@@ -29,11 +29,11 @@ import { passedValue, redacted, redactedAsk } from "../redactor";
 import { hubSecrets } from "../secret-box";
 import { movedOutOfPlain } from "./seal-at-rest";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** What `raw` (an envelope as stored) parses to, or null when it is not JSON. */
-const parsed = (raw: string): unknown => {
+export const parsed = (raw: string): unknown => {
   try {
     return JSON.parse(raw);
   } catch {

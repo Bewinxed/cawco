@@ -7,3 +7,8 @@
  */
 export const PARKED_TOKEN = `ghp_${"Fx7".repeat(12)}`;
 export const PARKED_KEY = `sk-${"fixtureKey9".repeat(3)}`;
+/** The tokens a transcript line quotes (fixture-db.ts `seedReadBack`), read back through the transcript route cut. */
+export const READ_BACK_TOKEN = `ghp_${"Rb5".repeat(12)}`;
+export const READ_BACK_KEY = `sk-${"readBackKey7".repeat(3)}`;
+/** The id of that line. */
+export const READ_BACK_LINE = "watch-read-back";

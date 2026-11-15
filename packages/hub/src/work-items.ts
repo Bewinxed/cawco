@@ -180,7 +180,12 @@ import { signedInOn } from "./placement";
 import type { Plans } from "./plans";
 import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
-import { type Redacted, redactedWords, type Typed } from "./redactor";
+import {
+  passedValue,
+  type Redacted,
+  redactedWords,
+  type Typed,
+} from "./redactor";
 import type { AnyProblem, ProblemsOf } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
@@ -1135,11 +1140,11 @@ const forkLine = (workspace: WorkspaceRow): string =>
  * opens with the handoff marker, which survives SDK storage, so the stored
  * transcript renders it as the peer message the live frame drew.
  */
-const messageOf = (
+const messageOf = <F extends Redacted<string>>(
   instanceId: string,
   machineId: string,
   parent: Parent,
-  content: string
+  words: Typed<F>
 ): Envelope<SendPayload> => ({
   verb: "send",
   machineId,
@@ -1149,7 +1154,7 @@ const messageOf = (
     message: {
       type: "user",
       uuid: crypto.randomUUID(),
-      message: { role: "user", content },
+      message: { role: "user", content: passedValue(words) },
       parent_tool_use_id: null,
       origin: {
         kind: "peer",
@@ -3120,7 +3125,9 @@ export const createWorkItems = ({
       isFolderOverlay(workspace)
         ? brief
         : withLandingLine(brief, workspace.base, landingOf(item, outputs));
-    const sent = send(messageOf(session.id, session.machineId, parent, told));
+    const sent = send(
+      messageOf(session.id, session.machineId, parent, redactedWords(told))
+    );
     if (sent.state === "failed") {
       update(item.id, {
         state: "failed",
@@ -4533,22 +4540,24 @@ export const createWorkItems = ({
           instanceId,
           workspace.machineId,
           parent,
-          isHostFolder(workspace)
-            ? withHostLine(
-                content,
-                workspace.path,
-                machineName(db, workspace.machineId),
-                item.projectId ? outputsFolder(item) : undefined
-              )
-            : withWorkspaceLine(
-                content,
-                {
-                  ...workspace,
-                  ...workspaces.askedIn(workspace, request.cwd ?? parent.cwd),
-                },
-                workspace.base,
-                landingOf(item, db.workItemOutputs(item.id))
-              )
+          redactedWords(
+            isHostFolder(workspace)
+              ? withHostLine(
+                  content,
+                  workspace.path,
+                  machineName(db, workspace.machineId),
+                  item.projectId ? outputsFolder(item) : undefined
+                )
+              : withWorkspaceLine(
+                  content,
+                  {
+                    ...workspace,
+                    ...workspaces.askedIn(workspace, request.cwd ?? parent.cwd),
+                  },
+                  workspace.base,
+                  landingOf(item, db.workItemOutputs(item.id))
+                )
+          )
         )
       );
     };

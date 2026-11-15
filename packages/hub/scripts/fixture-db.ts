@@ -52,7 +52,13 @@ import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { ContinuationAsker } from "../src/db/stored-types";
-import { PARKED_KEY, PARKED_TOKEN } from "./fixture-db-values";
+import {
+  PARKED_KEY,
+  PARKED_TOKEN,
+  READ_BACK_KEY,
+  READ_BACK_LINE,
+  READ_BACK_TOKEN,
+} from "./fixture-db-values";
 import { hubInProcess, writeFixtureKey } from "./hub-in-process";
 import { newestNightly } from "./shipped";
 
@@ -1325,11 +1331,21 @@ function seedAsks(db: HubDb, sessions: Seeded[]): void {
     blocks: true,
     waiting: "Deleting finished tasks older than the cut",
   };
-  const permit = (command: string) => ({
-    kind: "permit" as const,
-    tool: "Bash",
-    input: { command, description: "Run the release proof" },
-  });
+  // The build this fixture is seeded at keeps no digest on a permit (its
+  // type has none, and a write that holds one is refused): migration 0436's
+  // step makes it from the input it kept. This build's type has one, so it
+  // is here, and left out of what the seeded build writes.
+  const permit = (command: string) =>
+    Object.defineProperty(
+      {
+        kind: "permit" as const,
+        tool: "Bash",
+        input: { command, description: "Run the release proof" },
+        digest: "",
+      },
+      "digest",
+      { enumerable: false }
+    );
   const installing = raised(first.id);
   db.asks.add({
     ...installing,
@@ -1409,8 +1425,24 @@ function seedAsks(db: HubDb, sessions: Seeded[]): void {
     behavior: "deny",
     message: "",
   });
-  answered(raised(third.id), permit("git push origin main"), 26, {
-    behavior: "allow",
+  answered(
+    raised(third.id),
+    permit(`GITHUB_TOKEN=${PARKED_TOKEN} git push origin main`),
+    26,
+    { behavior: "allow" }
+  );
+  // An open approval whose call carries a key, as the person was asked it.
+  db.asks.add({
+    ...raised(first.id),
+    asked: approve("admin_mcp_servers_write", {
+      action: "add",
+      name: "search",
+      config: {
+        url: "https://search.example/mcp",
+        headers: { Authorization: `Bearer ${PARKED_KEY}` },
+      },
+      reason: "Search the release notes.",
+    }),
   });
   answered(raised(third.id), permit("bun run check"), 27, {
     behavior: "allow",
@@ -3423,6 +3455,37 @@ function seedParkedAsks(dbPath: string): void {
   sqlite.close();
 }
 
+/**
+ * A line the hub keeps in a session's transcript (`session_lines`, fleet
+ * watch's), quoting the tool call it saw with the credentials the call
+ * carried, on a session that never reported a key, so its transcript reads
+ * from the hub's own rows with no machine: what migrations:check reads
+ * back through `/api/instances/:id/transcript`, cut.
+ */
+function seedReadBack(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const [session] = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE session_id IS NULL ORDER BY id LIMIT 1"
+    )
+    .all();
+  if (!session) {
+    throw new Error(
+      "the lists fixture's read-back line needs a session with no key"
+    );
+  }
+  sqlite.run(
+    "INSERT INTO session_lines (instance_id, kind, id, at, content, stayed) VALUES (?, 'watch', ?, ?, ?, NULL)",
+    [
+      session.id,
+      READ_BACK_LINE,
+      KEPT_AT,
+      `Fleet watch: this session ran \`GITHUB_TOKEN=${READ_BACK_TOKEN} git push origin main\` four times, and its tool result said \`curl -H "Authorization: Bearer ${READ_BACK_KEY}" https://search.example/mcp\` answered 401.`,
+    ]
+  );
+  sqlite.close();
+}
+
 function seedPlansSettingsCursorsReadings(dbPath: string): void {
   const sqlite = new Database(dbPath);
   const sessions = sqlite
@@ -3641,6 +3704,7 @@ async function seed(
     seedColdWaitsHeads(dbPath);
     seedPlansSettingsCursorsReadings(dbPath);
     seedParkedAsks(dbPath);
+    seedReadBack(dbPath);
   }
 }
 

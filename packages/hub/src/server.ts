@@ -2762,15 +2762,13 @@ export const createServer = (
     if (!row || endedForGood(row.id)) {
       return false;
     }
-    // The ledger holds the card's input; the permit kept is the call as it
-    // was asked, which its session's next prompt for the same call matches
-    // (core asks.ts `sameCall`). One whose sealed input does not open is
-    // not kept: it goes with its process, and its session asks again.
-    const input = pending.asAsked(parked.requestId ?? "");
-    if (!input) {
+    // The ledger holds the card's input and the call's digest; the permit
+    // kept is matched by that digest (asks.ts `keep`), so nothing is opened.
+    const digest = pending.callDigest(parked.requestId ?? "");
+    if (!digest) {
       return false;
     }
-    hubAsks.keep({ ...parked, payload: { ...payload, input } }, row);
+    hubAsks.keep(parked, row, digest);
     return true;
   };
   /**
@@ -13242,8 +13240,13 @@ export const createServer = (
     // never dropped. Normalizing dropped it, so a caller on an old shape
     // (setup-send's `{ card }` once the show took `{ at: { card } }`,
     // 5646cadda) was answered as if it had sent nothing. No route declares
-    // a response schema, so none is held to one.
-    new Elysia({ normalize: false })
+    // a response schema, so none is held to one. A request a schema
+    // refuses is told what was wrong with it, as in development, in the
+    // binary too, which runs in production (scripts/binary/production.ts):
+    // the unknown-fields 422 and every schema's own words read Elysia's
+    // validation details, which production otherwise drops. A thrown 5xx's
+    // message is still never answered there.
+    new Elysia({ normalize: false, allowUnsafeValidationDetails: true })
       // A request with a field its route doesn't take: a 422 naming each
       // (unknown-fields.ts), before any plugin's or route's own error
       // words, which would say only that the shape was wrong.

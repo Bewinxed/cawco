@@ -19,10 +19,14 @@ import type {
 import type { ParkedAsk } from "@cawco/core/frames";
 import { and, asc, eq, isNotNull, isNull, notInArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { hubSecrets } from "../secret-box";
 import type { DbCore } from "./core";
 import { askPushes, asks, parkedAsks } from "./schema";
 
 type AskRow = typeof asks.$inferSelect;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** What an answer to an ask came to: taken, or refused since it was answered or withdrawn already. */
 export type AskAnswered =
@@ -35,7 +39,12 @@ export interface UnreadAsk {
 }
 
 export interface AsksDb {
-  readonly add: (ask: AskRecord) => void;
+  /**
+   * Writes a new ask. An approval's call input as it was asked (`asked`) is
+   * sealed under the hub's key beside it (`input_sealed`, secret-box.ts):
+   * its row keeps the card's input alone.
+   */
+  readonly add: (ask: AskRecord, asked?: Record<string, unknown>) => void;
   /**
    * The person's answer, with the start of the approved call when an approve ask allows,
    * in one transaction; undefined when no ask has `id`, or its row does not read as one.
@@ -44,6 +53,13 @@ export interface AsksDb {
     id: string,
     answer: { at: number; by: AskAnswer; result: AskResult }
   ) => AskAnswered | undefined;
+  /**
+   * An approval's call input as it was asked, opened from its seal: what
+   * the hub runs once the person approves (asks.ts `carryOut`), and nothing
+   * else reads. Undefined when it holds none, or it does not open (another
+   * key, damage) or is not an object.
+   */
+  readonly asAsked: (id: string) => Record<string, unknown> | undefined;
   /** How the approved call ended: what it said, or why it failed. */
   readonly carried: (
     id: string,
@@ -308,15 +324,39 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
       .orderBy(asc(asks.raisedAt))
       .all();
   return {
-    add: (ask) => {
+    add: (ask, asked) => {
       db.insert(asks)
         .values({
           id: ask.id,
           instanceId: ask.instanceId,
           raisedAt: ask.raisedAt,
           ...columnsOf(ask),
+          inputSealed:
+            asked === undefined
+              ? null
+              : hubSecrets().seal(JSON.stringify(asked)),
         })
         .run();
+    },
+    asAsked: (id) => {
+      const sealed = db
+        .select({ inputSealed: asks.inputSealed })
+        .from(asks)
+        .where(eq(asks.id, id))
+        .get()?.inputSealed;
+      if (!sealed) {
+        return;
+      }
+      let input: unknown;
+      try {
+        input = JSON.parse(hubSecrets().open(sealed));
+      } catch (error) {
+        console.warn(
+          `[asks] ask ${id}'s sealed input does not open: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return;
+      }
+      return isRecord(input) ? input : undefined;
     },
     answer: (id, answer) =>
       db.transaction(() => {
@@ -441,15 +481,20 @@ export interface AskPartsDb {
    * read once as it boots, written as each is parked and dropped as it ends.
    * Each is kept as every screen reads it (`envelope`), its call's own input
    * sealed beside it (`inputSealed`, secret-box.ts), which only an Approve
-   * opens (pending.ts `asAsked`).
+   * opens (pending.ts `asAsked`), and the call's keyed digest
+   * (`callDigest`, call-digest.ts), which keeping it as a permit reads.
    */
   readonly parkedAsks: {
     readonly drop: (requestId: string) => void;
-    readonly list: () => { envelope: ParkedAsk; inputSealed: string }[];
+    readonly list: () => {
+      callDigest: string;
+      envelope: ParkedAsk;
+      inputSealed: string;
+    }[];
     readonly save: (
       requestId: string,
       envelope: ParkedAsk,
-      inputSealed: string
+      kept: { callDigest: string; inputSealed: string }
     ) => void;
   };
 }
@@ -467,16 +512,18 @@ export const askPartsDb = (core: DbCore): AskPartsDb => {
           .select({
             envelope: parkedAsks.envelope,
             inputSealed: parkedAsks.inputSealed,
+            callDigest: parkedAsks.callDigest,
           })
           .from(parkedAsks)
           .all(),
-      save: (requestId, envelope, inputSealed) => {
+      save: (requestId, envelope, { callDigest, inputSealed }) => {
         const row = {
           requestId,
           instanceId: envelope.instanceId ?? null,
           machineId: envelope.machineId,
           envelope,
           inputSealed,
+          callDigest,
         };
         db.insert(parkedAsks)
           .values(row)

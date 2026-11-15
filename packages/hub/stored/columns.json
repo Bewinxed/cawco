@@ -1907,11 +1907,15 @@
                   "type": "string"
                 },
                 "additionalProperties": {}
+              },
+              "digest": {
+                "type": "string"
               }
             },
             "required": [
               "tool",
-              "input"
+              "input",
+              "digest"
             ]
           }
         ]
