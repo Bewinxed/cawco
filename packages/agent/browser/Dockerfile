@@ -29,3 +29,4 @@ COPY policies.json /etc/chromium/policies/managed/policies.json
 # chromium.conf's --load-extension and allowed by policies.json.
 COPY passkey-extension/ /opt/cawco/passkey-extension/
 COPY --chown=neko preferences.json /home/neko/.config/chromium/Default/Preferences
+RUN rm -f /etc/chromium.d/extensions
