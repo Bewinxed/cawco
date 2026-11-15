@@ -58,6 +58,32 @@
     );
   });
 
+  /** The extension's Bluetooth status, as its content script posts it. */
+  let extensionStatus = $state<string | null>(null);
+
+  $effect(() => {
+    function onStatus(event: MessageEvent) {
+      if (event.source !== window || event.origin !== window.location.origin) {
+        return;
+      }
+      const data = event.data as Record<string, unknown> | null;
+      if (
+        data?.type === "cawco:ble_status" &&
+        typeof data.status === "string"
+      ) {
+        extensionStatus = data.status;
+      }
+    }
+    window.addEventListener("message", onStatus);
+    return () => window.removeEventListener("message", onStatus);
+  });
+
+  const extensionLine = $derived(
+    extensionStatus
+      ? (passkeyWords.extensionStatus[extensionStatus] ?? null)
+      : null
+  );
+
   /** An advert the extension captured goes to the hub over this page's own socket. */
   $effect(() => {
     function onMessage(event: MessageEvent) {
@@ -154,10 +180,16 @@
         </p>
       {/if}
 
-      <!-- Extension install prompt. -->
-      <p class="m-0 type-meta text-center text-ink-subtle">
-        {passkeyWords.extensionPrompt}
-      </p>
+      <!-- Extension status when it answered, else the install prompt. -->
+      {#if extensionLine}
+        <p class="m-0 type-meta text-center text-ink-muted" role="status">
+          {extensionLine}
+        </p>
+      {:else}
+        <p class="m-0 type-meta text-center text-ink-subtle">
+          {passkeyWords.extensionPrompt}
+        </p>
+      {/if}
 
       <!-- Dismiss button. -->
       <button

@@ -8,10 +8,12 @@
  */
 import { defineBackground } from "wxt/utils/define-background";
 import {
+  BLE_STATUS_KEY,
   type BridgeMessage,
   type BridgeState,
   IDLE_STATE,
   type PageQr,
+  type StoredBleStatus,
 } from "../lib/state";
 
 /** How long a passkey QR lives, ms (core `PASSKEY_QR_TTL_MS`: the CTAP spec's 5 minutes). */
@@ -19,6 +21,10 @@ const PASSKEY_QR_TTL_MS = 5 * 60_000;
 const OFFSCREEN_PATH = "offscreen.html";
 
 export default defineBackground(() => {
+  // The content script reads `ble_status` to tell the dashboard page.
+  chrome.storage.session
+    .setAccessLevel({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" })
+    .catch(() => undefined);
   let state: BridgeState = IDLE_STATE;
   /** The dashboard tab that raised the QR: adverts go back to it. */
   let dashboardTab: number | undefined;
@@ -28,6 +34,14 @@ export default defineBackground(() => {
     state = { ...state, ...next };
     chrome.action.setBadgeText({ text: state.qr ? "🔑" : "" });
     chrome.action.setBadgeBackgroundColor({ color: "#E54D2E" });
+    chrome.storage.session
+      .set({
+        [BLE_STATUS_KEY]: {
+          status: state.ble,
+          detail: state.bleDetail,
+        } satisfies StoredBleStatus,
+      })
+      .catch(() => undefined);
     chrome.runtime
       .sendMessage({ type: "state", state } satisfies BridgeMessage)
       .catch(() => undefined);
@@ -57,7 +71,7 @@ export default defineBackground(() => {
   const clearQr = () => {
     clearTimeout(expiry);
     dashboardTab = undefined;
-    setState({ qr: null, scan: "idle", scanDetail: undefined });
+    setState({ qr: null, ble: "idle", bleDetail: undefined });
     stopScan();
   };
 
@@ -72,7 +86,7 @@ export default defineBackground(() => {
     const same = state.qr?.fidoUri === frame.fidoUri;
     setState({
       qr: { fidoUri: frame.fidoUri, expiresAt, rpOrigin: frame.rpOrigin },
-      ...(same ? {} : { scan: "scanning", scanDetail: undefined }),
+      ...(same ? {} : { ble: "scanning", bleDetail: undefined }),
     });
     // The dashboard posts the same QR again whenever it redraws: one scan serves them all.
     if (!same) {
@@ -93,20 +107,17 @@ export default defineBackground(() => {
             break;
           }
           chrome.tabs.sendMessage(dashboardTab, message).catch(() => undefined);
-          setState({ scan: "captured" });
+          setState({ ble: "captured", bleDetail: undefined });
           break;
         }
         case "scan:running": {
-          if (state.scan !== "captured") {
-            setState({ scan: "scanning", scanDetail: undefined });
+          if (state.ble !== "captured") {
+            setState({ ble: "scanning", bleDetail: undefined });
           }
           break;
         }
         case "scan:failed": {
-          setState({
-            scan: message.reason === "flag" ? "needs-flag" : "failed",
-            scanDetail: message.detail,
-          });
+          setState({ ble: message.reason, bleDetail: message.detail });
           break;
         }
         case "dismiss": {

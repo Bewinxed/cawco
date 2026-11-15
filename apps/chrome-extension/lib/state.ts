@@ -1,17 +1,35 @@
 /**
  * What the popup shows, kept in memory by the background worker, and the
- * messages between the extension's pages. The bridge keeps nothing on disk
- * and asks for no storage permission.
+ * messages between the extension's pages. The scan's status is also kept in
+ * `chrome.storage.session` (cleared when the browser closes), nothing on disk.
  */
 /** The hub's passkey relay phases (core `PasskeyRelayStatus`). */
 export interface BridgeState {
   qr: { expiresAt: number; fidoUri: string; rpOrigin?: string } | null;
-  scan: "idle" | "scanning" | "captured" | "needs-flag" | "failed";
-  /** Why a scan did not start, for the person. */
-  scanDetail?: string;
+  ble: BleStatus;
+  /** The error's message when `ble` is `error`. */
+  bleDetail?: string;
 }
 
-export const IDLE_STATE: BridgeState = { qr: null, scan: "idle" };
+/** Where the Bluetooth scan stands: kept in `chrome.storage.session` under `BLE_STATUS_KEY`. */
+type BleStatus =
+  | "idle"
+  | "no_bluetooth"
+  | "no_scan_api"
+  | "permission_denied"
+  | "scanning"
+  | "captured"
+  | "error";
+
+export const BLE_STATUS_KEY = "ble_status";
+
+/** The stored value: the status and, for `error`, its message. */
+export interface StoredBleStatus {
+  status: BleStatus;
+  detail?: string;
+}
+
+export const IDLE_STATE: BridgeState = { qr: null, ble: "idle" };
 
 /** A passkey QR as the dashboard page posts it. */
 export interface PageQr {
@@ -24,7 +42,11 @@ export interface PageQr {
 export type BridgeMessage =
   | { type: "scan:start" }
   | { type: "scan:stop" }
-  | { type: "scan:failed"; reason: "flag" | "failed"; detail: string }
+  | {
+      type: "scan:failed";
+      reason: Exclude<BleStatus, "idle" | "scanning" | "captured">;
+      detail?: string;
+    }
   | { type: "scan:running" }
   | {
       type: "advert";

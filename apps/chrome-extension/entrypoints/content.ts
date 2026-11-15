@@ -7,7 +7,11 @@
  * own authenticated socket. The extension holds no hub address and no token.
  */
 import { defineContentScript } from "wxt/utils/define-content-script";
-import type { BridgeMessage } from "../lib/state";
+import {
+  BLE_STATUS_KEY,
+  type BridgeMessage,
+  type StoredBleStatus,
+} from "../lib/state";
 
 export default defineContentScript({
   matches: ["*://*/*"],
@@ -16,6 +20,23 @@ export default defineContentScript({
     if (!document.body.hasAttribute("data-cawco")) {
       return;
     }
+
+    /** Tells the dashboard page where the Bluetooth scan stands, so its overlay can say so. */
+    const postStatus = (stored: StoredBleStatus | undefined) => {
+      window.postMessage(
+        { type: "cawco:ble_status", status: stored?.status ?? "idle" },
+        window.location.origin
+      );
+    };
+    chrome.storage.session
+      .get(BLE_STATUS_KEY)
+      .then((items) => postStatus(items[BLE_STATUS_KEY] as StoredBleStatus))
+      .catch(() => undefined);
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "session" && BLE_STATUS_KEY in changes) {
+        postStatus(changes[BLE_STATUS_KEY]?.newValue as StoredBleStatus);
+      }
+    });
 
     window.addEventListener("message", (event) => {
       if (event.source !== window || event.origin !== window.location.origin) {

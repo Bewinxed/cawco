@@ -116,3 +116,15 @@ body {
 .dismiss:hover {
   color: #666;
 }
+
+.scan-line.status {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.status-warn {
+  color: #b42318 !important;
+}
+.status-ok {
+  color: #067647 !important;
+}

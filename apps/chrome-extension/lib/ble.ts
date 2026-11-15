@@ -12,7 +12,18 @@ const ADVERT_BYTES = 20;
 
 /** What the person does when Chrome has no `requestLEScan`. */
 export const FLAG_INSTRUCTION =
-  "Enable chrome://flags/#enable-experimental-web-platform-features and restart Chrome";
+  "Enable chrome://flags/#enable-experimental-web-platform-features";
+
+/** What this page context can do about Bluetooth scanning, before any scan starts. */
+export function bleAvailability(): "no_bluetooth" | "no_scan_api" | "ready" {
+  const bluetooth = (navigator as { bluetooth?: ScanningBluetooth }).bluetooth;
+  if (!bluetooth) {
+    return "no_bluetooth";
+  }
+  return typeof bluetooth.requestLEScan === "function"
+    ? "ready"
+    : "no_scan_api";
+}
 
 /** The experimental scan API, which `lib.dom` does not type. */
 interface LEScanOptions {
@@ -41,7 +52,11 @@ export interface CapturedAdvert {
 
 export type ScanStart =
   | { ok: true; stop: () => void }
-  | { ok: false; reason: "flag" | "failed"; detail: string };
+  | {
+      ok: false;
+      reason: "no_bluetooth" | "no_scan_api" | "permission_denied" | "error";
+      detail?: string;
+    };
 
 const base64 = (bytes: Uint8Array): string => {
   let binary = "";
@@ -56,8 +71,11 @@ export async function startScan(
   onAdvert: (advert: CapturedAdvert) => void
 ): Promise<ScanStart> {
   const bluetooth = (navigator as { bluetooth?: ScanningBluetooth }).bluetooth;
-  if (!bluetooth || typeof bluetooth.requestLEScan !== "function") {
-    return { ok: false, reason: "flag", detail: FLAG_INSTRUCTION };
+  if (!bluetooth) {
+    return { ok: false, reason: "no_bluetooth" };
+  }
+  if (typeof bluetooth.requestLEScan !== "function") {
+    return { ok: false, reason: "no_scan_api" };
   }
   const listener = (event: Event) => {
     const { serviceData, rssi } = event as AdvertisementEvent;
@@ -88,9 +106,19 @@ export async function startScan(
     };
   } catch (error) {
     bluetooth.removeEventListener("advertisementreceived", listener);
+    const name = error instanceof Error ? error.name : "";
+    if (name === "TypeError") {
+      return { ok: false, reason: "no_scan_api" };
+    }
+    if (name === "NotFoundError") {
+      return { ok: false, reason: "no_bluetooth" };
+    }
+    if (name === "NotAllowedError") {
+      return { ok: false, reason: "permission_denied" };
+    }
     return {
       ok: false,
-      reason: "failed",
+      reason: "error",
       detail: error instanceof Error ? error.message : String(error),
     };
   }

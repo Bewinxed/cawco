@@ -89,7 +89,14 @@ export const passkeyWords = {
   /** The line when no RP origin is known. */
   scan: "Scan with your phone to sign in",
   /** The extension prompt. */
-  extensionPrompt: "For easier scanning, install the CawCo Chrome extension",
+  extensionPrompt:
+    "Install the CawCo Chrome extension to relay your phone's Bluetooth signal",
+  /** What the extension says about its Bluetooth scan, by status; a status not listed says nothing. */
+  extensionStatus: {
+    scanning: "Extension scanning for Bluetooth...",
+    no_bluetooth: "No Bluetooth on your device — use the CawCo iOS app instead",
+    no_scan_api: "Enable experimental web features in chrome://flags",
+  } as Readonly<Record<string, string>>,
   /** The extension prompt's link. */
   install: "Install",
   /** The QR expired. */

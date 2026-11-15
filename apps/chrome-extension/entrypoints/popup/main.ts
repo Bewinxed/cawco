@@ -4,7 +4,7 @@
  * background worker for its state and redraws when it changes.
  */
 import { encode } from "uqr";
-import { FLAG_INSTRUCTION } from "../../lib/ble";
+import { bleAvailability, FLAG_INSTRUCTION } from "../../lib/ble";
 import {
   type BridgeMessage,
   type BridgeState,
@@ -24,28 +24,47 @@ const escape = (text: string): string =>
       ] ?? c
   );
 
-const scanLine = (state: BridgeState, dashboards: number): string => {
-  if (dashboards === 0) {
-    return "No dashboard";
-  }
-  switch (state.scan) {
+/** The status line: this page checks Bluetooth itself, so it speaks before any QR arrives. */
+const statusLine = (
+  state: BridgeState
+): { text: string; tone: "ok" | "warn" | "plain" } => {
+  switch (state.ble) {
+    case "no_bluetooth": {
+      return { text: "No Bluetooth on this device", tone: "warn" };
+    }
+    case "no_scan_api": {
+      return { text: `Enable ${FLAG_INSTRUCTION}`, tone: "warn" };
+    }
+    case "permission_denied": {
+      return { text: "Bluetooth permission denied", tone: "warn" };
+    }
+    case "error": {
+      return {
+        text: `Scan failed: ${state.bleDetail ?? "unknown error"}`,
+        tone: "warn",
+      };
+    }
     case "scanning": {
-      return "Scanning...";
+      return { text: "Scanning for passkey...", tone: "plain" };
     }
     case "captured": {
-      return "Captured!";
-    }
-    case "needs-flag": {
-      return FLAG_INSTRUCTION;
-    }
-    case "failed": {
-      return `Scan failed: ${state.scanDetail ?? "unknown error"}`;
+      return { text: "Captured! Relaying to hub...", tone: "ok" };
     }
     default: {
-      return "Connected";
+      const ready = bleAvailability();
+      if (ready === "no_bluetooth") {
+        return { text: "No Bluetooth on this device", tone: "warn" };
+      }
+      if (ready === "no_scan_api") {
+        return { text: `Enable ${FLAG_INSTRUCTION}`, tone: "warn" };
+      }
+      return { text: "Ready: no passkey sign-in waiting", tone: "plain" };
     }
   }
 };
+
+const dashboardLine = (dashboards: number): string =>
+  dashboards === 0 ? "No dashboard detected" : "Connected to dashboard";
 
 const qrSvg = (fidoUri: string, label: string): string => {
   const { data, size } = encode(fidoUri, { ecc: "M", border: 2 });
@@ -64,15 +83,17 @@ function render(state: BridgeState, dashboards: number) {
   const { qr } = state;
   const rp = qr?.rpOrigin?.replace(/^https?:\/\//u, "");
 
+  const status = statusLine(state);
   app.innerHTML = `
     <div class="header">${KEY_SVG}<span class="title">CawCo Passkey Bridge</span></div>
+    <p class="scan-line status status-${status.tone}" role="status">${escape(status.text)}</p>
+    <p class="scan-line">${dashboardLine(dashboards)}</p>
     ${
       qr
         ? `<div class="qr-container">${qrSvg(qr.fidoUri, `Passkey QR code${rp ? ` for ${rp}` : ""}`)}</div>
            <p class="scan-line">${rp ? `Passkey for <span class="origin">${escape(rp)}</span>` : "Passkey sign-in"}</p>`
         : `<div class="empty"><p class="empty-line">No passkey sign-in waiting</p></div>`
     }
-    <p class="scan-line" role="status">${escape(scanLine(state, dashboards))}</p>
     ${qr ? `<button class="dismiss" id="dismiss">Dismiss</button>` : ""}
   `;
 
