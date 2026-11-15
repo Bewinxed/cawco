@@ -1369,11 +1369,13 @@
    * What waits on the person here, on the tray row's chip and the list it
    * opens (waiting/): the hub's list of what its tree asked him, after its
    * parked asks. A permission's row brings the composer's ask back up; a
-   * sign-in's brings its card into view.
+   * sign-in's brings its card into view. The hub keeps that list by its
+   * row, so a conversation it holds no row for (a stored transcript, one
+   * deleted) asks it for nothing: the read would only be refused.
    */
   const waitList = new SessionWaiting({
     instanceId: () => viewId,
-    onScreen: () => visible,
+    onScreen: () => visible && isLive,
     asks: () => waitingAsks,
     showAsk: (row) => {
       if (row.kind === "connect") {
