@@ -11,7 +11,9 @@
   import RowList from "#lib/cawco/config/RowList.svelte";
   import { RowActs } from "#lib/cawco/config/row-acts.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import SectionRow, {
+    type RowNote,
+  } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import {
@@ -55,6 +57,20 @@
     if (fleet) {
       upsert(fleet.config.mcp, row, (other) => other.name === row.name);
     }
+  }
+
+  /**
+   * A row's line: its sign-in under way, else saved platforms that don't
+   * read (on no machine until they are saved).
+   */
+  function noteOf(row: FleetMcpServerView): RowNote | undefined {
+    if (waiting[row.name]) {
+      return { tone: "busy", text: words.signingIn(row.name) };
+    }
+    if (row.platformsUnread) {
+      return { tone: "fail", text: words.platformsUnread };
+    }
+    return undefined;
   }
 
   /** Why Sync all was refused: said under it. */
@@ -149,9 +165,7 @@
               )
             : describeMcp(row.config)}
           name={row.name}
-          note={waiting[row.name]
-            ? { tone: "busy", text: words.signingIn(row.name) }
-            : undefined}
+          note={noteOf(row)}
           ontoggle={(next) => acts.toggle(row, next)}
           toggling={acts.busy[row.name] === true}
         >

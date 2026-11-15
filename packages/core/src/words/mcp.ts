@@ -25,6 +25,8 @@ export const mcpWords = {
 
   /** A row's sign-in, for a server that signs in with OAuth. */
   signIn: "Sign in",
+  /** The row's line while its saved platforms don't read (core `FleetMcpServer.platformsUnread`): no machine is sent it. */
+  platformsUnread: "On no machine: saved platforms unreadable.",
   /** The row's line while a sign-in is under way: where it is finished. */
   signingIn: (name: string) => `Finish in the ${name} tab.`,
   /** The button's word between the press and the sign-in tab opening. */

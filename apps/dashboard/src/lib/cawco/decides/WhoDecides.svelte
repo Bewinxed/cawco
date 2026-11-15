@@ -21,7 +21,8 @@
    *
    * A read that failed stands in the page with the hub's words and Try
    * again; decides.md that doesn't read is said under the head, every kind
-   * his until it does.
+   * his until it does; so are the fleet's saved routes that don't read
+   * (core `FleetDecides.routesUnread`), until a hand-over saves them.
    */
   import type { Member } from "@cawco/core/decides";
   import { configureWords } from "@cawco/core/words/configure";
@@ -34,8 +35,9 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconFolder, IconGlobe } from "#lib/icons.js";
+  import { IconFolder, IconGlobe, IconWarningTriangle } from "#lib/icons.js";
   import { WhoDecides } from "./decides.svelte";
   import KindsOfChoice from "./KindsOfChoice.svelte";
   import WhoRoster from "./WhoRoster.svelte";
@@ -109,6 +111,12 @@
       {/each}
     </div>
   {:else}
+    {#if who.routesUnread}
+      <Alert role="status" variant="warning">
+        <IconWarningTriangle />
+        <AlertDescription>{decidesWords.routesUnread}</AlertDescription>
+      </Alert>
+    {/if}
     {#if who.problems.length > 0}
       <p class="type-meta text-status-fail-ink text-pretty" role="alert">
         {decidesWords.fileProblems(who.problems.join(" "))}
