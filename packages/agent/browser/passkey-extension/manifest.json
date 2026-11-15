@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "CawCo Passkey Bridge (Agent)",
+  "version": "1.0.0",
+  "description": "Hands the agent browser's WebAuthn requests to the CawCo daemon.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsXJ21f4kbkvu52b/8uikuanhN2M2NrleyjlnDh6k+DMh3/3iAE3Rxe/lY1z7p2knGPLnKtrzoutE80T2R1UUXMQpHMPArHycgXplBjCyEteA1H8NokYpCaO6ljRqJSmrl3gWRp/T58MpgsfpPL3osU/XUY7aNqyuGbUqHPRjMTgJUIugDlQKsTOJF/mW8FKf0mfld6H/+1kOVRE05E8vUEcUf2fYvkXG0oe6qZPOQZXcH9Lx8k/fkWGFpRxsqQ7pX+8Ow7NNpJLZJ1G0v+OT+hrA4FrWueyVA1jKMZCYT1LXzYqThibBXB335aOPNgF1GIVS9iiDgN/+LK4KXFdKKQIDAQAB",
+  "minimum_chrome_version": "115",
+  "permissions": ["webAuthenticationProxy", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

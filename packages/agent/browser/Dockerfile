@@ -27,4 +27,7 @@ ENV NEKO_DESKTOP_INPUT_ENABLED=false
 
 COPY chromium.conf /etc/neko/supervisord/chromium.conf
 COPY policies.json /etc/chromium/policies/managed/policies.json
+# CawCo's WebAuthn proxy (passkey-extension/background.js), loaded by
+# chromium.conf's --load-extension and allowed by policies.json.
+COPY passkey-extension/ /opt/cawco/passkey-extension/
 COPY --chown=neko preferences.json /home/neko/.config/chromium/Default/Preferences

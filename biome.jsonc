@@ -284,6 +284,12 @@
   },
   "overrides": [
     {
+      // The agent browser's passkey bridge runs as a Chromium extension's
+      // service worker, where `chrome` is the extension API.
+      "includes": ["packages/agent/browser/passkey-extension/**"],
+      "javascript": { "globals": ["chrome"] },
+    },
+    {
       // boundary/'s files call each other in one direction: what must call
       // round a loop (ensuring a boundary follows its host, whose exit
       // ensures it again) is one file, ensure.ts.

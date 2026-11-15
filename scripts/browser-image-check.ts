@@ -22,7 +22,7 @@
  * Prints each that fails; exits 1 on any.
  */
 import { readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
 export const checkReads = ["packages/agent/browser/"];
@@ -81,7 +81,12 @@ if (installs.includes("ibus")) {
   );
 }
 
-for (const name of await readdir(join(ROOT, DIR))) {
+const entries = await readdir(join(ROOT, DIR), {
+  recursive: true,
+  withFileTypes: true,
+});
+for (const entry of entries.filter((each) => each.isFile())) {
+  const name = relative(join(ROOT, DIR), join(entry.parentPath, entry.name));
   const text = await read(`${DIR}/${name}`);
   for (const [at, line] of text.split("\n").entries()) {
     if (DAEMON.test(line) && !COMMENT.test(line)) {
