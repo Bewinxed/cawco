@@ -740,6 +740,31 @@ export const RailLayoutShape = z.object({
 });
 export type RailLayoutOutput = z.output<typeof RailLayoutShape>;
 
+const RestoreHeldWhyShape = z.union([
+  z.object({ kind: z.literal("unread"), columns: z.array(z.string()) }),
+  z.object({ kind: z.literal("shape"), column: z.string(), issue: z.string() }),
+  z.object({ kind: z.literal("constraint"), detail: z.string() }),
+  z.object({
+    kind: z.literal("depends"),
+    table: z.string(),
+    title: z.string().nullable(),
+    id: z.string().nullable(),
+  }),
+  z.object({ kind: z.literal("taken") }),
+  z.object({ kind: z.literal("orphan"), parent: z.string().nullable() }),
+  z.object({ kind: z.literal("table") }),
+]);
+export type RestoreHeldWhyOutput = z.output<typeof RestoreHeldWhyShape>;
+
+const RestoreHeldRowShape = z.object({
+  id: z.string().nullable(),
+  table: z.string(),
+  title: z.string().nullable(),
+  why: RestoreHeldWhyShape,
+});
+export const RestoreHeldRowSchema = RestoreHeldRowShape;
+export type RestoreHeldRowOutput = z.output<typeof RestoreHeldRowShape>;
+
 const RoutineActShape = z.enum(["run", "pause", "resume", "keep", "remove"]);
 export type RoutineActOutput = z.output<typeof RoutineActShape>;
 

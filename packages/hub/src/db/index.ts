@@ -39,7 +39,7 @@ import {
 } from "./find";
 import { type FleetCatalogDb, fleetCatalogDb } from "./fleet-catalog";
 import { type FoldDb, foldDb } from "./fold";
-import { type ForgetDb, forgetDb } from "./forget";
+import { type ForgetDb, forgetDb, schemaTables } from "./forget";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type HubSettingsDb, hubSettingsDb } from "./hub-settings";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -268,7 +268,7 @@ const make = async (path: string): Promise<DbShape> => {
   runOpenedSteps(db);
 
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
-  const forgetting = forgetDb(db, core.dropArtifacts);
+  const forgetting = forgetDb(db, core.dropArtifacts, await schemaTables());
   const store: DbShape = {
     ...dataMigrationsDb(core),
     ...foldDb(core),

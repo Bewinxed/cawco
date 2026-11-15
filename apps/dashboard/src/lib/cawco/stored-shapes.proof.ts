@@ -32,6 +32,10 @@ import type {
   ThreadEntry as ThreadEntryType,
 } from "@cawco/core/comments/model";
 import type {
+  RestoreHeldRow as RestoreHeldRowType,
+  RestoreHeldWhy as RestoreHeldWhyType,
+} from "@cawco/core/forgotten-project";
+import type {
   ArtifactSessionFrame as ArtifactSessionFrameType,
   BrowserAskFrame as BrowserAskFrameType,
   PreviewFrame as PreviewFrameType,
@@ -189,6 +193,8 @@ import type {
   PreviewSourceOutput,
   RailLayoutOutput,
   RefusalOutput,
+  RestoreHeldRowOutput,
+  RestoreHeldWhyOutput,
   RoutineActOutput,
   RoutineRefusalOutput,
   RunningSessionOutput,
@@ -331,6 +337,8 @@ prove<
     Same<SessionDraftOutput, SessionDraftType>,
     Same<ParkedStartOutput, ParkedStartType>,
     Same<RailLayoutOutput, RailLayoutType>,
+    Same<RestoreHeldWhyOutput, RestoreHeldWhyType>,
+    Same<RestoreHeldRowOutput, RestoreHeldRowType>,
     Same<RoutineActOutput, RoutineActType>,
     Same<RoutineRefusalOutput, RoutineRefusalType>,
     Same<SessionContextOutput, SessionContextType>,

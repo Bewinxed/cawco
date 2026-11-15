@@ -43,6 +43,7 @@
   import { madeWords } from "@cawco/core/words/made";
   import { setupWords } from "@cawco/core/words/onboarding";
   import { projectWords } from "@cawco/core/words/project";
+  import { projectTrashWords } from "@cawco/core/words/project-trash";
   import { viewsWords } from "@cawco/core/words/views";
   import { onMount, type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -89,6 +90,7 @@
   import { QUESTION_KEYS } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
+  import { restoreHeld } from "#lib/cawco/restore-held.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
@@ -147,6 +149,7 @@
     Alert,
     AlertAction,
     AlertDescription,
+    AlertTitle,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -1244,6 +1247,8 @@
       shown !== "routines" &&
       shown !== "decisions"
   );
+  /** The rows its restore held back, until dismissed (restore-held.svelte.ts). */
+  const heldBack = $derived(restoreHeld.of(projectId));
   const unreadStages = $derived(
     `stages.md in the project folder does not read: ${(board.stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
   );
@@ -2150,6 +2155,38 @@
                 <AlertDescription
                   >{board.list.problems.join(" ")}</AlertDescription
                 >
+              </Alert>
+            {/if}
+            {#if heldBack.length > 0}
+              <!-- What its restore held back, each row by its table, its
+                 title or id, and why: said where the restore landed, until
+                 dismissed. -->
+              <Alert
+                data-id-page-notice
+                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                variant="warning"
+              >
+                <AlertTitle
+                  >{projectTrashWords.heldTitle(heldBack.length)}</AlertTitle
+                >
+                <AlertDescription>
+                  <p>{projectTrashWords.heldKept}</p>
+                  <ul
+                    class="max-h-48 list-disc overflow-y-auto ps-space-5 break-words"
+                  >
+                    {#each heldBack as row, at (at)}
+                      <li>{projectTrashWords.heldRow(row)}</li>
+                    {/each}
+                  </ul>
+                </AlertDescription>
+                <AlertAction>
+                  <Button
+                    label={projectTrashWords.heldDismiss}
+                    onclick={() => restoreHeld.dismiss(projectId)}
+                    size="sm"
+                    variant="outline"
+                  />
+                </AlertAction>
               </Alert>
             {/if}
             {#if unread && !paneSaysUnread}
