@@ -41,7 +41,6 @@ import type { MachinePath as MachinePathType } from "./machine-path";
 import { isMachinePath } from "./machine-path";
 import { MOVE_JOB_STEPS } from "./move";
 import type { MachineState as MachineStateType } from "./notifications";
-import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
 import type { RoutineMadeBy as RoutineMadeByType } from "./project-conversation";
 import type {
   DelegateAskStatus as DelegateAskStatusType,
@@ -2483,21 +2482,6 @@ const OpenCodeGoLimitsShape = declared(
 export const OpenCodeGoLimitsSchema = OpenCodeGoLimitsShape;
 export type OpenCodeGoLimitsOutput = z.output<typeof OpenCodeGoLimitsShape>;
 
-const PlanCommentShape = declared(
-  z.object({ at: z.string(), text: z.string() }),
-  "PlanComment",
-  "packages/core/src/plan.ts"
-);
-export type PlanCommentOutput = z.output<typeof PlanCommentShape>;
-
-const OrphanedCommentsShape = declared(
-  z.object({ comments: z.array(PlanCommentShape), step: z.string() }),
-  "OrphanedComments",
-  "packages/core/src/plan.ts"
-);
-export const OrphanedCommentsSchema = OrphanedCommentsShape;
-export type OrphanedCommentsOutput = z.output<typeof OrphanedCommentsShape>;
-
 const OwedMoveWaitShape = declared(
   z.enum(["turn", "work", "machine"]),
   "OwedMoveWait",
@@ -2674,36 +2658,6 @@ const PlaceLfsRowShape = declared(
 );
 export const PlaceLfsRowSchema = PlaceLfsRowShape;
 export type PlaceLfsRowOutput = z.output<typeof PlaceLfsRowShape>;
-
-const PlanStepPriorityShape = declared(
-  z.enum(PLAN_STEP_PRIORITIES),
-  "PlanStepPriority",
-  "packages/core/src/plan.ts"
-);
-export type PlanStepPriorityOutput = z.output<typeof PlanStepPriorityShape>;
-
-const PlanStepStatusShape = declared(
-  z.enum(PLAN_STEP_STATUSES),
-  "PlanStepStatus",
-  "packages/core/src/plan.ts"
-);
-export type PlanStepStatusOutput = z.output<typeof PlanStepStatusShape>;
-
-const PlanStepShape = declared(
-  z.object({
-    comments: z.array(PlanCommentShape).optional(),
-    content: z.string(),
-    depth: z.number(),
-    id: z.string(),
-    priority: PlanStepPriorityShape.optional(),
-    status: PlanStepStatusShape,
-    waitsOn: z.string().optional(),
-  }),
-  "PlanStep",
-  "packages/core/src/plan.ts"
-);
-export const PlanStepSchema = PlanStepShape;
-export type PlanStepOutput = z.output<typeof PlanStepShape>;
 
 const PolicyShape = declared(
   z.object({

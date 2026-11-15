@@ -21,3 +21,13 @@ export const planWords = {
   spec: "Spec",
   openInCanvas: "Open in canvas",
 };
+
+/**
+ * The plan panel's words the dashboard alone says: the app's panel has no
+ * place for them yet, so `bun run words` does not write them into it.
+ */
+export const planPanelWords = {
+  /** The panel's stop when the plan holds steps stored earlier that do not read (core `SessionPlan.unread`). */
+  unread:
+    "Steps stored for this plan earlier do not read. They are kept as stored and not shown.",
+};

@@ -250,7 +250,9 @@ const stepParameter = () =>
 /**
  * Steps as written, nested by depth: each one at most one deeper than the
  * one before, and each without an id given its position (`2`, `2.1`); the
- * refusal of a wait that names nothing, or of a step too deep.
+ * refusal of a wait that names nothing, of a step too deep, or of an id
+ * two steps have (a plan's step is found by its id: db
+ * `session_plan_steps`, unique in its plan).
  */
 const stepsOf = async (
   written: z.infer<ReturnType<typeof stepParameter>>[],
@@ -280,8 +282,16 @@ const stepsOf = async (
     }
     counts.length = depth + 1;
     counts[depth] = (counts[depth] ?? 0) + 1;
+    const id = step.id ?? counts.join(".");
+    const before = steps.findIndex((one) => one.id === id);
+    if (before !== -1) {
+      return problem(400, {
+        code: "todo-step-id-twice",
+        detail: `Step ${index + 1} (“${step.content}”) has id ${id}, as step ${before + 1} does: give each step its own id, or none.`,
+      });
+    }
     steps.push({
-      id: step.id ?? counts.join("."),
+      id,
       content: step.content,
       status: step.status,
       depth,

@@ -304,6 +304,13 @@ export interface SessionPlan {
   taskId?: string;
   /** On a task attempt: the task's to-dos, nested and ticked as its file has them. */
   todos?: TaskTodo[];
+  /**
+   * The plan holds steps stored before they were rows (hub migration 0418)
+   * that did not read whole: kept as they were stored, none of them in
+   * {@link steps} or {@link orphanedComments}, and none read for anything.
+   * Absent on every plan that read.
+   */
+  unread?: true;
 }
 
 /** One RFC 6902 operation (https://www.rfc-editor.org/rfc/rfc6902). */

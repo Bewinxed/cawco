@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { SessionPlan } from "@cawco/core/plan";
-  import { planWords } from "@cawco/core/words/plan";
+  import { planPanelWords, planWords } from "@cawco/core/words/plan";
   import { refusedOrUnreached } from "#lib/platform/hub-read.js";
   import { stepsTree, todosTree } from "../plan";
   import { boardStore } from "../stores/board.svelte";
@@ -43,6 +43,7 @@
    * to the room over the row (to the top of the composer's dock).
    */
   import { untrack } from "svelte";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
@@ -215,6 +216,13 @@
       >
         {plan.taskId}
       </p>
+    {/if}
+    {#if plan?.unread}
+      <!-- Steps stored before they were rows that did not read (hub
+           migration 0418): kept as stored, none of them in the tree. -->
+      <Alert data-slot="plan-unread" variant="warning">
+        <AlertDescription>{planPanelWords.unread}</AlertDescription>
+      </Alert>
     {/if}
     {#if steps.length > 0}
       {#if stepsHeaded}

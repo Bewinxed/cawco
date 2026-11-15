@@ -142,7 +142,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       byPlan.set(row.instanceId, [...(byPlan.get(row.instanceId) ?? []), row]);
     }
     const parts = [...byPlan].map(([instanceId, changes]) => {
-      const steps = db.sessionPlan(instanceId)?.steps ?? [];
+      const plan = db.sessionPlan(instanceId);
       const own = to.kind === "session" && to.instanceId === instanceId;
       const { whose, next } = own
         ? {
@@ -155,7 +155,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         ...changes.map((change) => `- ${changeLine(change)}`),
         "",
         `${own ? "Your plan" : "That plan"} now:`,
-        stepLines(db, instanceId, steps),
+        stepLines(db, instanceId, plan),
         "",
         next,
       ].join("\n");

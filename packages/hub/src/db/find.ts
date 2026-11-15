@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   eq,
   getTableColumns,
   inArray,
@@ -22,7 +23,7 @@ import {
   purgedSessions,
   routineRuns,
   routines,
-  sessionPlans,
+  sessionPlanSteps,
   workItems,
   workspaces,
 } from "./schema";
@@ -117,7 +118,7 @@ export interface FindDb {
    * `instances.seen_at`, the one record of it), by session id.
    */
   readonly lookedAt: () => Map<string, number>;
-  /** Each session's plan step under way, by session. */
+  /** Each session's plan step under way, by session: the first in its list in progress, found by its rows. */
   readonly planSteps: () => Map<string, string>;
   /** The person purged these sessions of `machineId` (their harness session ids) now. */
   readonly purge: (machineId: string, sessionIds: string[]) => void;
@@ -250,12 +251,16 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
   planSteps: () => {
     const steps = new Map<string, string>();
     for (const row of db
-      .select({ id: sessionPlans.instanceId, steps: sessionPlans.steps })
-      .from(sessionPlans)
+      .select({
+        id: sessionPlanSteps.instanceId,
+        content: sessionPlanSteps.content,
+      })
+      .from(sessionPlanSteps)
+      .where(eq(sessionPlanSteps.status, "in_progress"))
+      .orderBy(asc(sessionPlanSteps.instanceId), asc(sessionPlanSteps.position))
       .all()) {
-      const step = row.steps.find((each) => each.status === "in_progress");
-      if (step) {
-        steps.set(row.id, step.content);
+      if (!steps.has(row.id)) {
+        steps.set(row.id, row.content);
       }
     }
     return steps;

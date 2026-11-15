@@ -830,6 +830,7 @@ const SessionPlanShape = z.object({
   steps: z.array(PlanStepShape),
   taskId: z.string().optional(),
   todos: z.array(TaskTodoShape).optional(),
+  unread: z.literal(true).optional(),
 });
 export const SessionPlanSchema = SessionPlanShape;
 export type SessionPlanOutput = z.output<typeof SessionPlanShape>;
