@@ -682,13 +682,35 @@ export interface ToolInstallRecord {
 }
 
 /**
- * `tool-installs.json`: each tool's last install by CawCo, by tool id, and
- * when the one-time pass that took the copies CawCo was already keeping
+ * An install of CawCo's that has begun and not yet answered, written before
+ * its method runs ({@link markUnderway}) so the copy it leaves is CawCo's
+ * from the moment it is there ({@link landedBy}), not only once the install
+ * records it: the copy it replaces (`path`, none when there was none, and
+ * the version it said, `from`), the version it puts on (`to`, none when it
+ * puts on the newest), the method's label, when it began, and the process
+ * that runs it (`pid`). One whose process is gone (the agent restarted
+ * mid-install, which takes the installer down with it) is settled at the
+ * next start ({@link settleUnderway}).
+ */
+export interface ToolInstallUnderway {
+  at: number;
+  from?: string;
+  method?: string;
+  path?: string;
+  pid: number;
+  to?: string;
+}
+
+/**
+ * `tool-installs.json`: each tool's last install by CawCo, by tool id; the
+ * installs of CawCo's under way, by tool id ({@link ToolInstallUnderway});
+ * and when the one-time pass that took the copies CawCo was already keeping
  * current into its care ran ({@link takeOverKept}); absent until it has.
  */
 export interface ToolInstalls {
   installs: Record<string, ToolInstallRecord>;
   tookOverAt?: number;
+  underway?: Record<string, ToolInstallUnderway>;
 }
 
 /**
@@ -711,10 +733,6 @@ const readInstallFile = async (): Promise<ToolInstalls> => {
     return { installs: {} };
   }
 };
-
-/** What CawCo installed here, by tool id ({@link readInstallFile}). */
-const readInstalls = async (): Promise<Record<string, ToolInstallRecord>> =>
-  (await readInstallFile()).installs;
 
 let installWrites: Promise<void> = Promise.resolve();
 
@@ -750,9 +768,163 @@ const writeInstalls = (
  */
 const recordInstall = (id: string, record: ToolInstallRecord): Promise<void> =>
   writeInstalls(`${id}'s install as CawCo's`, (file) => ({
-    ...file,
+    ...withoutUnderway(file, id),
     installs: { ...file.installs, [id]: record },
   }));
+
+/** `file` without `id`'s install under way, or only when it is the one begun at `at`. */
+const withoutUnderway = (
+  file: ToolInstalls,
+  id: string,
+  at?: number
+): ToolInstalls => {
+  const mine = file.underway?.[id];
+  if (!mine || (at !== undefined && mine.at !== at)) {
+    return file;
+  }
+  const { [id]: _gone, ...underway } = file.underway ?? {};
+  const { underway: _all, ...rest } = file;
+  return Object.keys(underway).length > 0 ? { ...rest, underway } : rest;
+};
+
+/**
+ * Whether the copy at `at` that says `version` is the one the install
+ * under way (`underway`) put on: at the path of the copy it replaces (any,
+ * when there was none), saying the version it puts on, or, when it puts on
+ * the newest, any version other than the one the copy said as it began.
+ * The record of a copy at its version before then ({@link copyOf}) decides
+ * any other.
+ */
+const landedBy = (
+  underway: ToolInstallUnderway,
+  at: Found,
+  version: string | undefined
+): boolean =>
+  (underway.path === undefined ||
+    underway.path === at.path ||
+    realOf(underway.path) === at.file) &&
+  version !== undefined &&
+  (underway.to === undefined
+    ? version !== underway.from
+    : version === underway.to);
+
+/**
+ * Whether the copy at `at` is the install under way (`underway`) half done:
+ * at the path of the copy it replaces, it says no version (npm has the
+ * package aside for seconds, the link still there; an installer a restart
+ * killed left a copy that doesn't run, which {@link settleOne} keeps the
+ * entry for). It is CawCo's to put right, never a hand's.
+ */
+const midway = (
+  underway: ToolInstallUnderway,
+  at: Found,
+  version: string | undefined
+): boolean =>
+  version === undefined &&
+  underway.path !== undefined &&
+  (underway.path === at.path || realOf(underway.path) === at.file);
+
+/**
+ * CawCo's install of `spec` is about to run its method over `copy` (none:
+ * there is none), which says `from`, to put on `to` with `method`: written
+ * first, so the copy it leaves reads as CawCo's while it is under way and
+ * after a restart cuts it short ({@link ToolInstallUnderway}). Its `at`, for
+ * {@link endUnderway}.
+ */
+const markUnderway = async (
+  spec: ToolSpec,
+  method: ToolInstallMethod,
+  copy: { at?: Found; from?: string },
+  to: string | undefined
+): Promise<number> => {
+  const at = Date.now();
+  const underway: ToolInstallUnderway = {
+    at,
+    pid: process.pid,
+    method: method.label,
+    ...(copy.at ? { path: copy.at.path } : {}),
+    ...(copy.from ? { from: copy.from } : {}),
+    ...(to ? { to } : {}),
+  };
+  await writeInstalls(`${spec.id}'s install under way`, (file) => ({
+    ...file,
+    underway: { ...file.underway, [spec.id]: underway },
+  }));
+  return at;
+};
+
+/** The install of `id` begun at `at` answered: its entry under way goes, when {@link recordInstall} has not taken it already. */
+const endUnderway = (id: string, at: number): Promise<void> =>
+  writeInstalls(`the end of ${id}'s install`, (file) =>
+    withoutUnderway(file, id, at)
+  );
+
+/** Whether process `pid` still runs here. */
+const runs = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: it runs, as another user.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * THE INSTALLS A RESTART CUT SHORT ARE SETTLED, AT THE START. An install
+ * under way whose process is gone (systemd and launchd take an agent's
+ * installer down with it) left the copy as it stands: one it put on
+ * ({@link landedBy}) is recorded as CawCo's install, as the install would
+ * have recorded it; one at its path that says no version is one it broke
+ * ({@link midway}), and the entry stays, so the copy is CawCo's to put right
+ * and the next start looks again; any other is left to the record of
+ * before, and the entry goes, so an install that never finished makes no
+ * later copy CawCo's. An install another process still runs (`cawco
+ * binary-pins` beside the agent) is its own.
+ */
+const settleUnderway = async (): Promise<void> => {
+  const { underway = {} } = await readInstallFile();
+  for (const [id, entry] of Object.entries(underway)) {
+    const ours = entry.pid === process.pid;
+    if (!(ours ? installing.has(id) : runs(entry.pid))) {
+      await settleOne(id, entry);
+    }
+  }
+};
+
+/** One install a restart cut short, settled ({@link settleUnderway}). */
+const settleOne = async (
+  id: string,
+  entry: ToolInstallUnderway
+): Promise<void> => {
+  const spec = toolSpec(id);
+  const at = spec ? await findCopy(spec) : undefined;
+  const version = spec && at ? await probeVersion(spec, at.path) : undefined;
+  const name = spec?.name ?? id;
+  const began = new Date(entry.at).toISOString();
+  if (spec && at && landedBy(entry, at, version)) {
+    console.info(
+      `[tools] ${name} ${version} ${copyWords(spec, at.path).at} is CawCo's: its install that began ${began} put it on and stopped before it was recorded`
+    );
+    await recordInstall(id, {
+      path: at.path,
+      ...(entry.method ? { method: entry.method } : {}),
+      ...(version ? { version } : {}),
+      at: entry.at,
+    });
+    return;
+  }
+  if (spec && at && midway(entry, at, version)) {
+    console.info(
+      `[tools] ${name} ${copyWords(spec, at.path).at} says no version: its install that began ${began} stopped half done, so it stays CawCo's to put right`
+    );
+    return;
+  }
+  console.info(
+    `[tools] ${name}'s install that began ${began} stopped before it put a copy on; the copy there stays whose it was`
+  );
+  await endUnderway(id, entry.at);
+};
 
 /**
  * THE COPIES CAWCO WAS ALREADY KEEPING CURRENT ARE CAWCO'S, ONCE. Before
@@ -887,6 +1059,8 @@ const noneThere = async (spec: ToolSpec): Promise<boolean> => {
 
 /** {@link takeOverKept}, once a process: every read of the tools waits on it. */
 let tookOver: Promise<void> | undefined;
+/** {@link settleUnderway}, once a process, before {@link takeOverKept}: every read of the tools waits on it. */
+let settled: Promise<void> | undefined;
 
 /**
  * Whether a copy at a record's path that says `version` is still the one the
@@ -908,35 +1082,43 @@ const stillRecorded = (
     olderThan(recorded, version));
 
 /**
- * WHOSE THE COPY AT `at` IS (core `ToolCopy`). CawCo's, when its record of
- * its own install names this copy's path (the link the PATH finds, or the
- * file it resolves to: a package manager's update rewrites the file under
- * the same link) and the copy still says the version that install put on
- * ({@link stillRecorded}): a copy that says another was put on over CawCo's
- * by another hand, and the person's own is never updated unasked (the
- * owner, 2026-11-14). For a copy
- * no record names, which every copy CawCo put on before it kept the record
- * is: CawCo's when it says a version a CawCo build ran as its one version
- * (core `ToolSpec.formerVersions`, and this build's own) and one of the
- * catalog's methods holds it, the method an install would run again. Any
- * other is the person's.
+ * WHOSE THE COPY AT `at` IS (core `ToolCopy`). CawCo's, when an install of
+ * CawCo's under way put it on ({@link landedBy}). Else, when CawCo's record
+ * of its own install names this copy's path (the link the PATH finds, or
+ * the file it resolves to: a package manager's update rewrites the file
+ * under the same link), the record alone decides: CawCo's while the copy
+ * still says the version that install put on ({@link stillRecorded}), and
+ * the person's when it says another, which another hand put on over
+ * CawCo's, whatever version that is; the person's own is never updated
+ * unasked (the owner, 2026-11-14). Only for a copy no record names, which
+ * every copy CawCo put on before it kept the record is: CawCo's when it
+ * says a version a CawCo build ran as its one version (core
+ * `ToolSpec.formerVersions`, and this build's own) and one of the catalog's
+ * methods holds it, the method an install would run again. Any other is the
+ * person's.
  */
 const copyOf = async (
   spec: ToolSpec,
   at: Found,
   version: string | undefined
 ): Promise<ToolCopy> => {
-  const record = (await readInstalls())[spec.id];
+  const file = await readInstallFile();
+  const underway = file.underway?.[spec.id];
   if (
-    record &&
-    (record.path === at.path || realOf(record.path) === at.file) &&
-    stillRecorded(spec, record.version, version)
+    underway &&
+    (landedBy(underway, at, version) || midway(underway, at, version))
   ) {
-    return {
-      by: "cawco",
-      at: record.at,
-      ...(record.takenOver ? { takenOver: true } : {}),
-    };
+    return { by: "cawco", at: underway.at };
+  }
+  const record = file.installs[spec.id];
+  if (record && (record.path === at.path || realOf(record.path) === at.file)) {
+    return stillRecorded(spec, record.version, version)
+      ? {
+          by: "cawco",
+          at: record.at,
+          ...(record.takenOver ? { takenOver: true } : {}),
+        }
+      : { by: "person" };
   }
   const pinned = [...(spec.formerVersions ?? []), spec.exactVersion];
   if (version && at.method && pinned.includes(version)) {
@@ -1726,6 +1908,13 @@ export const lookAtCopies = async (): Promise<void> => {
  */
 export const probeTools = async (): Promise<ToolStatus[]> => {
   probeStarted();
+  settled ??= settleUnderway().catch((error: unknown) => {
+    settled = undefined;
+    console.warn(
+      `[tools] the installs a restart cut short were not settled, so the next read tries again: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  await settled;
   tookOver ??= takeOverKept().catch((error: unknown) => {
     tookOver = undefined;
     console.warn(
@@ -2142,14 +2331,54 @@ const install = async (
     );
   }
 
-  const left = await copyNow(spec, ask);
-  if (left) {
-    return left;
+  const now = await copyNow(spec, ask);
+  if ("left" in now) {
+    return now.left;
   }
+  const began = await markUnderway(spec, method, now, version);
+  try {
+    return await runInstall(spec, method, version, ask, began);
+  } finally {
+    await closeUnderway(spec, began);
+  }
+};
 
+/**
+ * The install of `spec` begun at `began` answered: its entry under way goes
+ * ({@link endUnderway}), unless the copy at its path says no version, one
+ * the install broke ({@link midway}), which stays CawCo's to put right.
+ */
+const closeUnderway = async (spec: ToolSpec, began: number): Promise<void> => {
+  const entry = (await readInstallFile()).underway?.[spec.id];
+  if (entry?.at !== began) {
+    return;
+  }
+  const at = await findCopy(spec);
+  if (at && midway(entry, at, await probeVersion(spec, at.path))) {
+    console.info(
+      `[tools] ${spec.name} ${copyWords(spec, at.path).at} says no version after CawCo's install, so it stays CawCo's to put right`
+    );
+    return;
+  }
+  await endUnderway(spec.id, began);
+};
+
+/**
+ * {@link install}'s method, run once nothing stands in its way, with its
+ * entry under way written (`began`, {@link markUnderway}): what the machine
+ * looks like after it. A copy it put on is recorded as CawCo's, a copy that
+ * runs ({@link ownInstall}) and one it moved that CawCo doesn't run too
+ * ({@link landedBy}), so its own install is never read as a hand's.
+ */
+const runInstall = async (
+  spec: ToolSpec,
+  method: ToolInstallMethod,
+  version: string | undefined,
+  { newest }: InstallAsk,
+  began: number
+): Promise<ToolStatus> => {
   const ran = await runMethod(spec, method, version);
   const probed = await probeTool(spec, version ?? spec.exactVersion);
-  const { newest } = ask;
   if (probed.state === "installed") {
     // The copy this install left is CawCo's from now on.
     const landed = {
@@ -2175,6 +2404,7 @@ const install = async (
     }
     return remember(landed);
   }
+  const moved = await movedBy(spec, began);
   return await settle(
     spec,
     {
@@ -2185,8 +2415,18 @@ const install = async (
       ...(probed.version ? { version: probed.version } : {}),
       at: Date.now(),
     },
-    probed
+    moved ? { ...probed, copy: await ownInstall(spec, method, probed) } : probed
   );
+};
+
+/** Whether the install of `spec` begun at `began` left the copy there now ({@link landedBy}). */
+const movedBy = async (spec: ToolSpec, began: number): Promise<boolean> => {
+  const entry = (await readInstallFile()).underway?.[spec.id];
+  const at = await findCopy(spec);
+  if (!(entry?.at === began && at)) {
+    return false;
+  }
+  return landedBy(entry, at, await probeVersion(spec, at.path));
 };
 
 /**
@@ -2199,16 +2439,17 @@ const install = async (
  * is the install's `from` ({@link installingAs}), and an install CawCo
  * started (`automatic`, or `startedBy` CawCo) over a copy that is now the
  * person's runs nothing and answers the copy as it stands (returned), whose
- * `copy` tells the hub. A person's press runs whoever's the copy is: the
- * press is the ask. Nothing returned: the method runs.
+ * `copy` tells the hub (`left`). A person's press runs whoever's the copy
+ * is: the press is the ask. Otherwise the method runs, over the copy read
+ * (`at`, none when there is none) and the version it said (`from`).
  */
 const copyNow = async (
   spec: ToolSpec,
   ask: InstallAsk
-): Promise<ToolStatus | undefined> => {
+): Promise<{ left: ToolStatus } | { at?: Found; from?: string }> => {
   const at = await findCopy(spec);
   if (!at) {
-    return;
+    return {};
   }
   const from = await probeVersion(spec, at.path);
   const as = installingAs.get(spec.id);
@@ -2217,12 +2458,12 @@ const copyNow = async (
   }
   const unasked = ask.automatic === true || ask.startedBy === "cawco";
   if (!unasked || (await copyOf(spec, at, from)).by !== "person") {
-    return;
+    return { at, ...(from ? { from } : {}) };
   }
   console.info(
     `[tools] ${spec.name} ${from ?? "(no version said)"} ${copyWords(spec, at.path).at} is the person's own copy now, so CawCo's update of it ran nothing`
   );
-  return await probeTool(spec);
+  return { left: await probeTool(spec) };
 };
 
 /**
