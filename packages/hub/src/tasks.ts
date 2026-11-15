@@ -509,16 +509,18 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
    * source last said it.
    */
   links: ExternalRef[];
+  /**
+   * What its `outputs:`, `owns:`, `checks:`, `accounts:` or `waits_on:`
+   * line holds that does not read as its list (task-file.ts
+   * `GOVERNING_LISTS`); null when they read or there are none. While set,
+   * no attempt at it starts (dispatch.ts `startable`), and `startProblem`
+   * says why.
+   */
+  listsUnread: string | null;
   /** It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}). */
   needsYou: boolean;
   number: number;
   outputs: string[];
-  /**
-   * What its `outputs:` line holds that does not read as a list; null when
-   * it reads or there is none. While set, no attempt at it starts
-   * (dispatch.ts `startable`), and `startProblem` says why.
-   */
-  outputsUnread: string | null;
   /** Globs of the repository's files an attempt owns. */
   owns: string[];
   partOf: string | null;
@@ -1226,20 +1228,20 @@ export const onFrontier = (task: TaskSummary): boolean =>
 
 /**
  * Why no attempt at a task starts while a line of its file does not read
- * (dispatch.ts `startable`): its budget line, then its outputs line; null
- * when both read.
+ * (dispatch.ts `startable`): its budget line, then a list line that governs
+ * its attempt; null when they read.
  */
 const unreadLineOf = (task: {
   budgetUnread: string | null;
   id: string;
-  outputsUnread: string | null;
+  listsUnread: string | null;
   path: string;
 }): string | null => {
   if (task.budgetUnread !== null) {
     return workWords.taskBudgetUnread(task.path, task.id, task.budgetUnread);
   }
-  if (task.outputsUnread !== null) {
-    return workWords.taskOutputsUnread(task.path, task.id, task.outputsUnread);
+  if (task.listsUnread !== null) {
+    return workWords.taskListUnread(task.path, task.id, task.listsUnread);
   }
   return null;
 };
@@ -1317,7 +1319,7 @@ const viewOf = (
   owns: parsed.fields.owns,
   budget: parsed.fields.budget,
   budgetUnread: parsed.budgetUnread,
-  outputsUnread: parsed.outputsUnread,
+  listsUnread: parsed.listsUnread,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
   accounts: parsed.fields.accounts,
@@ -1990,7 +1992,7 @@ export const createTasks = (store: TaskStore) => {
       budgetUnread: string | null;
       hash: string;
       id: string;
-      outputsUnread: string | null;
+      listsUnread: string | null;
       partOf: string | null;
       path: string;
       stage: string;
@@ -2193,7 +2195,7 @@ export const createTasks = (store: TaskStore) => {
       todosTotal: todos.total,
       problem: parsed.problems.join(" ") || null,
       budgetUnread: parsed.budgetUnread,
-      outputsUnread: parsed.outputsUnread,
+      listsUnread: parsed.listsUnread,
       hash,
       updatedAt: new Date(),
     };
@@ -3409,7 +3411,7 @@ export const createTasks = (store: TaskStore) => {
         stage,
         hash,
         budgetUnread: parsed.budgetUnread,
-        outputsUnread: parsed.outputsUnread,
+        listsUnread: parsed.listsUnread,
       },
       context
     );

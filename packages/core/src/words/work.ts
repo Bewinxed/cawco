@@ -196,11 +196,12 @@ export const workWords = {
     `${path} has a budget line that does not read, so no attempt at ${id} starts until it reads or is taken out: ${why}`,
   /**
    * Why no attempt at a task starts (hub dispatch.ts `startable`, and the
-   * task's `startProblem`): its file's `outputs:` line does not read as a
-   * list; `why` is what does not, quoted from the line.
+   * task's `startProblem`): its file's `outputs:`, `owns:`, `checks:`,
+   * `accounts:` or `waits_on:` line does not read whole as its list; `why`
+   * is what does not, quoted from the line.
    */
-  taskOutputsUnread: (path: string, id: string, why: string) =>
-    `${path} has an outputs line that does not read, so no attempt at ${id} starts until it reads or is taken out: the files it names would land with the rest of the work. ${why}`,
+  taskListUnread: (path: string, id: string, why: string) =>
+    `${path} has a list line that does not read, so no attempt at ${id} starts until it reads: an entry it leaves out would widen what the attempt does. ${why}`,
   /**
    * A work item's landing refused because its outputs did not read as they
    * became rows (hub schema.ts `workItems.outputsUnread`); `stored` is the

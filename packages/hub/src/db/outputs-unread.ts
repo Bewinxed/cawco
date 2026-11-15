@@ -1,14 +1,15 @@
 /**
  * Before migration 0404's SQL runs, the hub's log names every work item
  * whose stored outputs 0404 keeps as `outputs_unread` (a list that is there
- * and does not read whole), and every task index row whose outputs 0404
- * has read again from its file, with why: the journal of the day it runs
- * records each item whose landing pushes nothing because the hub cannot
- * read which of its files were declared outputs, and each task the next
- * listing reads again. Selected with 0404's own predicates, over the JSON
+ * and does not read whole), and every task index row 0404 has read again
+ * from its file (its outputs, or a list line that governs its attempts, do
+ * not read), with why: the journal of the day it runs records each item
+ * whose landing pushes nothing because the hub cannot read which of its
+ * files were declared outputs, and each task the next listing reads again. Selected with 0404's own predicates, over the JSON
  * `outputs` columns as they stand before it.
  */
 import type { Database } from "bun:sqlite";
+import type { TaskField } from "../task-file";
 
 /**
  * A list 0404 reads whole: a JSON list whose every entry is text. Each JSON
@@ -19,8 +20,21 @@ import type { Database } from "bun:sqlite";
 const READS =
   "CASE WHEN CASE WHEN json_valid(outputs) THEN json_type(outputs) = 'array' ELSE 0 END THEN NOT EXISTS (SELECT 1 FROM json_each(outputs) e WHERE e.type <> 'text') ELSE 0 END";
 
-/** The words task-file.ts `readList` keeps in a row's problem for an outputs line that is not a list. */
-const LINE_UNREAD = "%outputs: is not a list%";
+/**
+ * The list fields whose line, left open, holds every attempt from 0404 on
+ * (task-file.ts `GOVERNING_LISTS`): a row whose problem names one in the
+ * reader's words before 0404 (`<field>: is not a list`) is read again.
+ */
+const GOVERNING = [
+  "outputs",
+  "owns",
+  "checks",
+  "accounts",
+  "waits_on",
+] satisfies readonly TaskField[];
+const LINE_UNREAD = GOVERNING.map(
+  (field) => `problem LIKE '%${field}: is not a list%'`
+).join(" OR ");
 
 /** A stored value as the log shows it: cut short, on one line. */
 const shown = (raw: string): string => JSON.stringify(raw.slice(0, 160));
@@ -88,10 +102,10 @@ const unreadItems = (client: Database): ItemRow[] =>
 /** Every task index row 0404 clears the hash of, by project and file. */
 const rereadTasks = (client: Database): TaskRow[] =>
   client
-    .query<TaskRow, [string]>(
-      `SELECT project_id AS project, path, problem, CAST(outputs AS TEXT) AS raw, ${READS} AS reads FROM project_tasks WHERE NOT (${READS}) OR problem LIKE ?1 ORDER BY project_id, number, path`
+    .query<TaskRow, []>(
+      `SELECT project_id AS project, path, problem, CAST(outputs AS TEXT) AS raw, ${READS} AS reads FROM project_tasks WHERE NOT (${READS}) OR ${LINE_UNREAD} ORDER BY project_id, number, path`
     )
-    .all(LINE_UNREAD);
+    .all();
 
 /** Logs every list of outputs 0404 keeps as not read, or reads again, one line each. Run only in a start that applies 0404 (db/migrate.ts). */
 export const logOutputsUnread = (client: Database): void => {
@@ -103,7 +117,7 @@ export const logOutputsUnread = (client: Database): void => {
   for (const row of rereadTasks(client)) {
     const said =
       row.reads === 1
-        ? `its file's outputs line does not read (${row.problem ?? "no problem kept"})`
+        ? `a list line of its file that governs its attempts does not read, and no attempt at it starts until it does (${row.problem ?? "no problem kept"})`
         : `its indexed outputs ${shown(row.raw ?? "")} do not read (${why(row.raw ?? "")}), ${placed(row.raw ?? "")}`;
     console.info(
       `[migrations] 0404: task ${row.path} in project ${row.project} is read again from its file at the next listing: ${said}`
