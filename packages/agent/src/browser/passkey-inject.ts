@@ -25,6 +25,9 @@ import {
 
 const DEV_VHCI = "/dev/vhci";
 
+/** Whether this machine has `/dev/vhci` (the `hci_vhci` kernel module), so a virtual BLE adapter can stand. */
+export const vhciAvailable = (): boolean => existsSync(DEV_VHCI);
+
 /** The BlueZ management tool that powers an adapter on. */
 const BTMGMT = "btmgmt";
 
@@ -286,14 +289,16 @@ const readCreationResponse = (fd: number): Promise<number> =>
  * Passkey BLE advert injector: creates a virtual HCI adapter via `/dev/vhci`
  * and writes fabricated LE Advertising Report events carrying FIDO caBLE
  * service data, so Chromium's BLE scanning sees them as real adverts.
- * @public Consumed by the browser host once core browser.ts BROWSER_INJECT_ADVERT lands (branch cawco/b8448dff).
  */
-export class PasskeyInjector {
+class PasskeyInjector {
   /** The open fd for `/dev/vhci`. -1 when not started or after stop. */
   #fd = -1;
   /** The adapter index the kernel assigned (hciN). */
   #adapterIndex = -1;
-  /** Whether the fd is dead (closed by kernel, ENXIO on a prior write). */
+  /** Whether the adapter is powered on: false until setup ends, and after stop. */
+  #up = false;
+  /** The setup under way, shared by every caller until it settles. */
+  #starting: Promise<void> | undefined;
   /** The polling interval handle. */
   #poll: ReturnType<typeof setInterval> | undefined;
   /** Random static BLE address reused for every injected advert. */
@@ -309,63 +314,40 @@ export class PasskeyInjector {
     this.#bdAddr = randomBytes(6);
   }
 
-  /** Whether `/dev/vhci` is available on this machine. */
-  static available(): boolean {
-    return existsSync(DEV_VHCI);
-  }
-
-  /** Create a virtual BLE adapter. Resolves when the adapter is UP. */
-  async start(): Promise<void> {
-    let fd: number;
-    try {
-      fd = openSync(
-        DEV_VHCI,
-        // Two distinct flag bits: their sum is their union.
-        constants.O_RDWR + constants.O_NONBLOCK
-      );
-    } catch (cause: unknown) {
-      throw new Error(
-        "Passkey relay needs the hci_vhci kernel module. Run: sudo modprobe hci_vhci",
-        { cause }
-      );
+  /**
+   * The virtual BLE adapter, made and powered on if it is not up: Chromium
+   * drops the hybrid transport ("Use a phone or tablet") from a WebAuthn
+   * dialog when it finds no adapter present (device/fido
+   * fido_request_handler_base.cc `OnBluetoothAdapterEnumerated`), so the
+   * adapter stands before a ceremony, not at its first advert. Callers at
+   * once share one setup; a lost adapter (ENXIO) is made again.
+   */
+  ensureAdapter(): Promise<void> {
+    if (this.#fd >= 0 && this.#up) {
+      return Promise.resolve();
     }
-    this.#fd = fd;
-
-    // Read the 4-byte creation response: 2 bytes opcode + 2 bytes adapter index.
-    const adapterIndex = await readCreationResponse(fd);
-    this.#adapterIndex = adapterIndex;
-    console.info(
-      `[browser] passkey-inject: virtual adapter hci${adapterIndex} created`
-    );
-
-    // Start polling for HCI commands from the kernel.
-    this.#startReadLoop();
-
-    // Power on the adapter — btmgmt sends management commands that trigger
-    // a second round of HCI init, which our read loop handles concurrently.
-    await this.#powerOn();
-    console.info(`[browser] passkey-inject: hci${adapterIndex} is UP`);
+    this.#starting ??= this.#start().finally(() => {
+      this.#starting = undefined;
+    });
+    return this.#starting;
   }
 
-  /** Inject a relayed FIDO BLE advert into the virtual adapter. */
-  inject(serviceData: Buffer): void {
+  /** Inject a relayed FIDO BLE advert, the adapter made first if it is not up. */
+  async inject(serviceData: Buffer): Promise<void> {
     if (serviceData.length !== 20) {
-      console.warn(
-        `[browser] passkey-inject: serviceData must be exactly 20 bytes, got ${serviceData.length}`
+      throw new Error(
+        `Expected 20-byte service data, got ${serviceData.length}`
       );
-      return;
     }
-    if (!this.#writable()) {
-      return;
-    }
+    await this.ensureAdapter();
 
     const packet = this.#buildAdvertPacket(serviceData);
     try {
       writeSync(this.#fd, packet);
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === "ENXIO") {
-        // The kernel took the adapter away: close it, so the next inject
-        // says it is not started.
+        // The kernel took the adapter away: close it, so the next call
+        // makes it again.
         console.warn("[browser] passkey-inject: adapter lost (ENXIO), closing");
         this.stop();
       } else {
@@ -376,6 +358,7 @@ export class PasskeyInjector {
 
   /** Tear down the virtual adapter. */
   stop(): void {
+    this.#up = false;
     if (this.#poll !== undefined) {
       clearInterval(this.#poll);
       this.#poll = undefined;
@@ -395,15 +378,38 @@ export class PasskeyInjector {
 
   // ── Private ────────────────────────────────────────────────────
 
-  /** Whether the adapter fd is open: stopped, or lost to ENXIO, it is not. */
-  #writable(): boolean {
-    if (this.#fd < 0) {
-      console.warn(
-        "[browser] passkey-inject: not started or adapter lost, cannot inject"
+  /** Open `/dev/vhci`, answer the kernel's HCI init, and power the adapter on. */
+  async #start(): Promise<void> {
+    let fd: number;
+    try {
+      fd = openSync(
+        DEV_VHCI,
+        // Two distinct flag bits: their sum is their union.
+        constants.O_RDWR + constants.O_NONBLOCK
       );
-      return false;
+    } catch (cause: unknown) {
+      throw new Error(
+        "Passkey relay needs the hci_vhci kernel module. Run: sudo modprobe hci_vhci",
+        { cause }
+      );
     }
-    return true;
+    this.#fd = fd;
+    try {
+      // The 4-byte creation response: 2 bytes opcode + 2 bytes adapter index.
+      this.#adapterIndex = await readCreationResponse(fd);
+      console.info(
+        `[browser] passkey-inject: virtual adapter hci${this.#adapterIndex} created`
+      );
+      // Answer the kernel's HCI commands, then power on: btmgmt's management
+      // commands start a second round of HCI init the read loop answers.
+      this.#startReadLoop();
+      await this.#powerOn();
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
+    this.#up = true;
+    console.info(`[browser] passkey-inject: hci${this.#adapterIndex} is UP`);
   }
 
   /**
@@ -510,3 +516,9 @@ export class PasskeyInjector {
     return wrapLeMetaEvent(SUB_LE_ADV_REPORT, sub);
   }
 }
+
+/**
+ * The machine's one virtual BLE adapter: every browser container on it
+ * shares the host kernel's Bluetooth stack, so one adapter serves them all.
+ */
+export const passkeyInjector = new PasskeyInjector();

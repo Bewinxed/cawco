@@ -35,7 +35,6 @@
  * would relay.
  */
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
 import {
@@ -71,6 +70,7 @@ import {
   slotAddress,
   slotHost,
 } from "./media-network";
+import { passkeyInjector, vhciAvailable } from "./passkey-inject";
 import { machineHostOf, wantedHostRules } from "./preview-names";
 import { relayKeyOf, relayUrlsFor } from "./relay-urls";
 import type { Runtime } from "./runtime";
@@ -84,8 +84,22 @@ import {
   portsOf,
 } from "./state";
 
-/** Whether this machine has `/dev/vhci`, so containers can run a virtual BLE adapter for passkey relay. */
-const hasVhci = (): boolean => existsSync("/dev/vhci");
+/**
+ * The virtual BLE adapter, up before Chromium starts: a WebAuthn dialog
+ * offers a phone or tablet only when it finds an adapter present
+ * (passkey-inject.ts `ensureAdapter`). Without one the browser starts all
+ * the same, with no passkey relay.
+ */
+const standAdapter = async (key: string): Promise<void> => {
+  if (!vhciAvailable()) {
+    return;
+  }
+  await passkeyInjector.ensureAdapter().catch((error: unknown) => {
+    console.warn(
+      `[browser] ${key}: no virtual BLE adapter, so no passkey relay: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+};
 
 /** Where a container in a namespace of its own reaches the machine, and so the relay on it: pasta's `--map-guest-addr`, Podman 5.3 on. */
 const MACHINE_FROM_PASTA = "host.containers.internal";
@@ -458,6 +472,7 @@ export class ContainerHost implements BrowserHost {
       })
     );
     options.progress({ state: "starting" });
+    await standAdapter(record.key);
     const owner = await browserOwner();
     const kept = record.container;
     const volume = await this.#volumeFor(record, owner);
@@ -680,7 +695,7 @@ export class ContainerHost implements BrowserHost {
           }),
         }
       : undefined;
-    const vhci = hasVhci();
+    const vhci = vhciAvailable();
     const created = await this.#docker.createContainer({
       name: nameOf(owner, record.key),
       Image: image,

@@ -8,10 +8,11 @@ FROM ghcr.io/m1k1o/neko/chromium:3.2.0
 # 127.0.0.1 only, for the agent's gate). The X server's mouse driver is the
 # desktop's pointer (xorg.conf). ibus-gtk3 is Chromium's input method
 # (chromium.conf's GTK_IM_MODULE), its module alone, with no ibus daemon.
-# bluez: BLE stack for passkey proximity relay (virtual HCI adapter, agent passkey-inject.ts)
+# bluez: BLE stack for passkey proximity relay (virtual HCI adapter, agent
+# passkey-inject.ts). x11-utils (xdpyinfo) and x11-apps (xwd) read the X display.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3 bluez; \
+    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3 bluez x11-utils x11-apps; \
     apt-get clean -y; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
