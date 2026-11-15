@@ -439,11 +439,18 @@ export interface AskPartsDb {
   /**
    * The asks the hub holds parked (`pending.ts`), kept across its restarts:
    * read once as it boots, written as each is parked and dropped as it ends.
+   * Each is kept as every screen reads it (`envelope`), its call's own input
+   * sealed beside it (`inputSealed`, secret-box.ts), which only an Approve
+   * opens (pending.ts `asAsked`).
    */
   readonly parkedAsks: {
     readonly drop: (requestId: string) => void;
-    readonly list: () => ParkedAsk[];
-    readonly save: (requestId: string, envelope: ParkedAsk) => void;
+    readonly list: () => { envelope: ParkedAsk; inputSealed: string }[];
+    readonly save: (
+      requestId: string,
+      envelope: ParkedAsk,
+      inputSealed: string
+    ) => void;
   };
 }
 
@@ -457,16 +464,19 @@ export const askPartsDb = (core: DbCore): AskPartsDb => {
       },
       list: () =>
         db
-          .select({ envelope: parkedAsks.envelope })
+          .select({
+            envelope: parkedAsks.envelope,
+            inputSealed: parkedAsks.inputSealed,
+          })
           .from(parkedAsks)
-          .all()
-          .map((row) => row.envelope),
-      save: (requestId, envelope) => {
+          .all(),
+      save: (requestId, envelope, inputSealed) => {
         const row = {
           requestId,
           instanceId: envelope.instanceId ?? null,
           machineId: envelope.machineId,
           envelope,
+          inputSealed,
         };
         db.insert(parkedAsks)
           .values(row)

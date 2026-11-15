@@ -137,7 +137,10 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
           }
           ctx.streams.sequence(
             row.id,
-            redactedFrame<SessionStreamFrame>({ ...frame, keepAlive: true })
+            redactedFrame({
+              ...frame,
+              keepAlive: true,
+            } satisfies SessionStreamFrame)
           );
           return "stop";
         } else {

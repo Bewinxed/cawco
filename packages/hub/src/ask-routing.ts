@@ -24,7 +24,12 @@ import type { ReportTold } from "./hub-shapes";
 import { boardTitle, sessionLabel } from "./labels";
 import { peek } from "./payload-peeks";
 import { outlivesSession } from "./pending";
-import { type Redacted, redactedAsk } from "./redactor";
+import {
+  passedValue,
+  type Redacted,
+  redactedAsk,
+  type Typed,
+} from "./redactor";
 import type { createSends } from "./sends";
 import { sessionWord } from "./session-word";
 
@@ -411,11 +416,12 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       : undefined;
   };
 
-  const deliverDelegateAsk = (
+  const deliverDelegateAsk = <F extends Redacted<Envelope>>(
     delegate: InstanceRow,
     parent: { id: string; machineId: string },
-    ask: Redacted<Envelope>
+    passed: Typed<F>
   ): void => {
+    const ask = passedValue(passed);
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
     const instruction =

@@ -66,9 +66,6 @@
     // A folder is made through packages/core/src/folders.ts, which gives
     // each of CawCo's own its mode whatever the umask.
     "./scripts/lint/one-folder-maker.grit",
-    // A Redacted value is made by packages/hub/src/redactor.ts alone: every
-    // send to a client, broadcast, relay of an ask and push takes one.
-    "./scripts/lint/redacted-brand.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

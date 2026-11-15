@@ -16,7 +16,7 @@ import {
   messageCollapseId,
   turnCollapseId,
 } from "../notifications";
-import { redactedAsk } from "../redactor";
+import { passedValue, redactedAsk, redactedFrame } from "../redactor";
 
 export const pendingRoutes = ({
   archiveView,
@@ -124,8 +124,14 @@ export const pendingRoutes = ({
     // `artifact.needs` frame (artifacts/lane.ts): the lane whole, from
     // the hub, which no session's ask names.
     .get("/api/pending", (): (ParkedAsk | Envelope<ArtifactNeedsFrame>)[] => [
-      ...pending.list().map(redactedAsk),
-      { verb: "frames", machineId: "hub", payload: artifactLane.frame() },
+      ...pending.list().map((ask) => passedValue(redactedAsk(ask))),
+      passedValue(
+        redactedFrame({
+          verb: "frames",
+          machineId: "hub",
+          payload: artifactLane.frame(),
+        } satisfies Envelope<ArtifactNeedsFrame>)
+      ),
     ])
     // Needs you's artifacts and their notices as they stand (core
     // artifact-needs.ts); each change after arrives as an

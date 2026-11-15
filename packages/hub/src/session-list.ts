@@ -276,7 +276,7 @@ const saidOf = async (
 ): Promise<SessionSaid> => ({
   at,
   from: fromOf(send.body.origin),
-  words: clip(await redactSecrets(wordsOf(send.body)), WORDS_MAX),
+  words: clip(redactSecrets(wordsOf(send.body)), WORDS_MAX),
 });
 
 /**

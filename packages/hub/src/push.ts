@@ -127,7 +127,7 @@ import {
   turnCollapseId,
 } from "./notifications";
 
-import type { Redacted } from "./redactor";
+import { passedValue, type Redacted, type Typed } from "./redactor";
 import type { Decided } from "./settling";
 import type { TaskEvent } from "./tasks";
 
@@ -696,7 +696,7 @@ export interface PushServices {
   readonly task: (
     projectId: string,
     taskId: string
-  ) => Promise<{ kind: string | null; title: string } | undefined>;
+  ) => Promise<Redacted<{ kind: string | null; title: string }> | undefined>;
 }
 
 /** Each harness as the operator knows it. */
@@ -1724,7 +1724,8 @@ export const createPush = ({
      * however often it is called. `envelope` is what the redactor passed
      * (redactor.ts), as everything that leaves the hub is.
      */
-    onAsk(envelope: Redacted<Envelope>): void {
+    onAsk<F extends Redacted<Envelope>>(passed: Typed<F>): void {
+      const envelope = passedValue(passed);
       const payload = envelope.payload as Partial<PermissionRequestFrame> & {
         /** An ask no session row stands behind names its project itself (a memory proposal, memory.ts). */
         projectId?: string;
@@ -1812,7 +1813,11 @@ export const createPush = ({
      * as {@link artifactLeft}: a look at the artifact, or every pin
      * answered, takes it down.
      */
-    pinAsked(need: ArtifactNeed, text: string): void {
+    pinAsked<F extends Redacted<string>>(
+      need: ArtifactNeed,
+      passed: Typed<F>
+    ): void {
+      const text = passedValue(passed);
       const count = askingOf(need);
       pinCounts.set(need.artifactId, count);
       console.log(
@@ -1944,7 +1949,8 @@ export const createPush = ({
       const { projectId, id } = event;
       const at = new Date();
       task(projectId, id)
-        .then((view) => {
+        .then((passed) => {
+          const view = passed && passedValue(passed);
           if (view?.kind !== "you") {
             return;
           }
@@ -1961,7 +1967,10 @@ export const createPush = ({
             instanceId: row?.id ?? null,
             landedAt: at,
             // Moved on (or back) before the burst went out: not counted.
-            still: async () => (await task(projectId, id))?.kind === "you",
+            still: async () => {
+              const now = await task(projectId, id);
+              return now !== undefined && passedValue(now).kind === "you";
+            },
             notification: {
               shown: alert,
               sealed: alert,
@@ -1992,7 +2001,8 @@ export const createPush = ({
      * and nothing reaches the phone. Named by its task's title, which the
      * owner wrote; an item's own title is the delegating agent's words.
      */
-    itemEnded(item: WorkItemRow): void {
+    itemEnded<F extends Redacted<WorkItemRow>>(passed: Typed<F>): void {
+      const item = passedValue(passed);
       const { taskId, projectId } = item;
       if (item.state !== "failed" || !item.byPerson || !taskId || !projectId) {
         return;
@@ -2010,11 +2020,14 @@ export const createPush = ({
             still: () => true,
             notification: {
               shown: alertOf(
-                view?.title || sessionName(item.instanceId) || "A task",
+                (view && passedValue(view).title) ||
+                  sessionName(item.instanceId) ||
+                  "A task",
                 project
               ),
               sealed: alertOf(
-                view?.title || (row ? boardTitle(row) : "A task"),
+                (view && passedValue(view).title) ||
+                  (row ? boardTitle(row) : "A task"),
                 project
               ),
               category: PUSH_CATEGORIES.attempt,
@@ -2040,15 +2053,18 @@ export const createPush = ({
      * words, which go sealed. Named by the routine's name, which its maker
      * gave it, so it goes sealed too; the visible title is "Routine".
      */
-    routine(run: {
-      failed: boolean;
-      instanceId: string | null;
-      name: string;
-      output: string | null;
-      projectId: string | null;
-      routineId: string;
-      runId: string;
-    }): void {
+    routine<
+      F extends Redacted<{
+        failed: boolean;
+        instanceId: string | null;
+        name: string;
+        output: string | null;
+        projectId: string | null;
+        routineId: string;
+        runId: string;
+      }>,
+    >(passed: Typed<F>): void {
+      const run = passedValue(passed);
       const [row] = run.instanceId
         ? db.getInstancesByIds([run.instanceId])
         : [];
@@ -2093,14 +2109,17 @@ export const createPush = ({
      * "New routine". Open only: there is nothing to answer from the lock
      * screen, and Keep and Turn off are on its notice.
      */
-    routineMade(made: {
-      /** The sealed line under its name: its schedule and when it turns off. */
-      line: string;
-      name: string;
-      /** Null for a routine in no project. */
-      projectId: string | null;
-      routineId: string;
-    }): void {
+    routineMade<
+      F extends Redacted<{
+        /** The sealed line under its name: its schedule and when it turns off. */
+        line: string;
+        name: string;
+        /** Null for a routine in no project. */
+        projectId: string | null;
+        routineId: string;
+      }>,
+    >(passed: Typed<F>): void {
+      const made = passedValue(passed);
       const project = projectName(made.projectId);
       arrive({
         ask: false,
@@ -2132,7 +2151,8 @@ export const createPush = ({
      * session, Reply writes to it); the visible words say "Fleet watch" and
      * "Needs you", the sealed ones the session and what was noticed.
      */
-    watchNotice(notice: FleetWatchNotice): void {
+    watchNotice<F extends Redacted<FleetWatchNotice>>(passed: Typed<F>): void {
+      const notice = passedValue(passed);
       const [row] = db.getInstancesByIds([notice.instanceId]);
       const project = projectName(notice.projectId);
       arrive({
@@ -2169,7 +2189,11 @@ export const createPush = ({
      * from the same session replaces the older; a look at the session takes
      * it down.
      */
-    userMessage(instanceId: string, text: string): void {
+    userMessage<F extends Redacted<string>>(
+      instanceId: string,
+      passed: Typed<F>
+    ): void {
+      const text = passedValue(passed);
       const [row] = db.getInstancesByIds([instanceId]);
       if (!row) {
         return;
@@ -2205,7 +2229,11 @@ export const createPush = ({
      * turn's push and a look at the session takes it down. The visible words
      * say who and "Failed", the sealed ones the reason's first line.
      */
-    sessionFailed(instanceId: string, reason: string): void {
+    sessionFailed<F extends Redacted<string>>(
+      instanceId: string,
+      passed: Typed<F>
+    ): void {
+      const reason = passedValue(passed);
       const [row] = db.getInstancesByIds([instanceId]);
       if (
         !row ||
@@ -2245,13 +2273,16 @@ export const createPush = ({
      * the state, the sealed ones the connection and `said` (the proposer's
      * reason, or why it failed).
      */
-    action(action: {
-      connection: string;
-      id: string;
-      projectId: string;
-      said: string;
-      state: Extract<ActionState, "proposed" | "failed" | "unknown">;
-    }): void {
+    action<
+      F extends Redacted<{
+        connection: string;
+        id: string;
+        projectId: string;
+        said: string;
+        state: Extract<ActionState, "proposed" | "failed" | "unknown">;
+      }>,
+    >(passed: Typed<F>): void {
+      const action = passedValue(passed);
       const project = projectName(action.projectId);
       const { body, ask } = {
         proposed: { body: NEEDS_YOU, ask: "approve?" },
@@ -2316,7 +2347,8 @@ export const createPush = ({
      * notification goes based on activity and presence"). The person's act
      * on the outcome makes it over and takes it down ({@link installSettled}).
      */
-    install(install: Install): void {
+    install<F extends Redacted<Install>>(passed: Typed<F>): void {
+      const install = passedValue(passed);
       const collapseId = installCollapseId(install.id);
       const alert = alertOf(installName(install), null, causeLine(install));
       settledInstalls.delete(install.id);
@@ -2346,7 +2378,8 @@ export const createPush = ({
      * and the question, its body the pick and why, sealed. Picked again or
      * opened before it goes, it is over ({@link decidedSeen}).
      */
-    decided(decided: Decided): void {
+    decided<F extends Redacted<Decided>>(passed: Typed<F>): void {
+      const decided = passedValue(passed);
       const collapseId = decidedCollapseId(decided.artifactId, decided.card);
       seenDecisions.delete(collapseId);
       const project = projectName(decided.projectId);
@@ -2401,7 +2434,10 @@ export const createPush = ({
      * the person gate decide where it goes; signed in again before it goes
      * out, it is over ({@link mcpSignedIn}).
      */
-    mcpSignInEnded(ended: { at: Date; name: string; why: string }): void {
+    mcpSignInEnded<F extends Redacted<{ at: Date; name: string; why: string }>>(
+      passed: Typed<F>
+    ): void {
+      const ended = passedValue(passed);
       const collapseId = mcpCollapseId(ended.name);
       const title = mcpWords.signInAgain(ended.name);
       const body = mcpWords.signInEnded(configurePage("mcp"));

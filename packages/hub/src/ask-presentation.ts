@@ -19,6 +19,7 @@ import {
 import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { askInputUnreadWords } from "@cawco/core/words/ask-lines";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
@@ -29,16 +30,29 @@ const isPermission = (payload: PermissionRequestFrame): boolean =>
 
 /**
  * An answer to a parked permission, carrying the call's own input: clients
- * only ever held the redacted copy (redactor.ts `redactedAsk`), so the
- * input they echo back is replaced by the ledger's.
+ * and the ledger's own copy only ever held the redacted one (redactor.ts
+ * `redactedAsk`), so an Approve opens the call's sealed input
+ * (`asAsked`, pending.ts) and sends that. The one place it is opened. One
+ * whose sealed input does not open is withdrawn, its reason said to its
+ * session: nothing it asked runs, never with anything guessed.
  */
 export const answeredWithOriginal = (
   parked: ParkedAsk,
-  result: PermissionResult
-): PermissionResult =>
-  isPermission(parked.payload) && result.behavior === "allow"
-    ? { ...result, updatedInput: parked.payload.input }
-    : result;
+  result: PermissionResult,
+  asAsked: () => Record<string, unknown> | undefined
+): PermissionResult => {
+  if (!(isPermission(parked.payload) && result.behavior === "allow")) {
+    return result;
+  }
+  const input = asAsked();
+  return input
+    ? { ...result, updatedInput: input }
+    : {
+        behavior: "deny",
+        message: askInputUnreadWords(parked.requestId ?? ""),
+        ...(result.toolUseID ? { toolUseID: result.toolUseID } : {}),
+      };
+};
 
 export const createAskPresenter = (
   db: DbShape,

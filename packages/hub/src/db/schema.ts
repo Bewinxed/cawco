@@ -6742,8 +6742,19 @@ export const parkedAsks = sqliteTable(
     requestId: text("request_id").primaryKey(),
     instanceId: sessionColumn("instance_id"),
     machineId: machineColumn("machine_id").notNull(),
-    /** The `permission_request` envelope, `raisedAt` stamped on its payload. */
+    /**
+     * The `permission_request` envelope as every screen reads it (redactor.ts
+     * `redactedAsk`: its input hidden as its card shows it, every string's
+     * credentials cut), `raisedAt` stamped on its payload.
+     */
     envelope: storedJson(ParkedAskShape)("envelope").notNull(),
+    /**
+     * The call's own input, as it was asked, sealed under the hub's key
+     * (secret-box.ts): opened only where an Approve sends it to its machine
+     * (ask-presentation.ts `answeredWithOriginal`); migration 0434's step
+     * sealed the input every row held before (db/parked-inputs.ts).
+     */
+    inputSealed: text("input_sealed").notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
 );

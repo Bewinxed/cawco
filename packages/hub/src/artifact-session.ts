@@ -18,15 +18,15 @@ import { ARTIFACT_SESSION_REFUSED } from "@cawco/core/artifact-session";
 import type { ArtifactSessionFrame } from "@cawco/core/frames";
 import { ARTIFACT_GONE } from "@cawco/core/words/artifact-session";
 import { redactedFrame } from "./redactor";
-import { type HubSocket, sendToClient } from "./wire-socket";
+import { type ClientSocket, sendToClient } from "./wire-socket";
 
 /** A tab's socket, which the hub closes once its artifact is gone. */
-type ArtifactTabSocket = HubSocket & {
+type ArtifactTabSocket = ClientSocket & {
   close: (code?: number, reason?: string) => void;
 };
 
 export interface ArtifactSessionsShape {
-  close: (socket: HubSocket) => void;
+  close: (socket: ClientSocket) => void;
   open: (
     socket: ArtifactTabSocket,
     instanceId: string,

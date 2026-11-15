@@ -524,6 +524,17 @@ const sealedValues = (
   return new Map(rows.map((row) => [row.key, row.value]));
 };
 
+/** The fixture unpacked into `dir` as a hub's database, with a home beside it: its path. */
+const fixtureCopy = async (dir: string): Promise<string> => {
+  mkdirSync(join(dir, "home"), { recursive: true });
+  const path = join(dir, "hub.db");
+  await Bun.write(
+    path,
+    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
+  );
+  return path;
+};
+
 /**
  * KEY ABSENT, THEN RESTORED, on a scratch copy of the fixture before 0420
  * (db/sealed-facts-unread.ts): opened as the hub opens it with no key file
@@ -535,12 +546,7 @@ const sealedValues = (
  */
 const keyCase = async (): Promise<string> => {
   const dir = join(scratch, "case-key");
-  mkdirSync(join(dir, "home"), { recursive: true });
-  const path = join(dir, "hub.db");
-  await Bun.write(
-    path,
-    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
-  );
+  const path = await fixtureCopy(dir);
   const probe = new Database(path, { readwrite: true });
   const holds =
     probe
@@ -601,6 +607,100 @@ const keyCase = async (): Promise<string> => {
     keys.filter((key) => key.startsWith(kind)).length;
   const sealedKeys = sealed.map(([key]) => key);
   return `case key absent, then restored: ${sealed.length} sealed value(s) (${of(sealedKeys, "connection")} connection(s), ${of(sealedKeys, "sign-in")} sign-in(s)) kept as stored with no key, none deleted or rewritten, the hub opened; with the fixtures' key back, ${of(placed, "connection")} connection(s) and ${of(placed, "sign-in")} sign-in(s) placed at the next start, ${sealed.length - placed.length} still not read, as with the key there from the start`;
+};
+
+/**
+ * PARKED ASKS SEALED, on a scratch copy of the fixture before 0434
+ * (db/parked-inputs.ts): opened as the hub opens it, every parked ask's call
+ * input is sealed with the hub's key in `input_sealed`, its envelope keeps
+ * none of the credentials it held (the card's input, each string's
+ * credentials cut), and no byte of them is left in the file; the sealed
+ * input opens with the fixtures' key to the call as it was asked, and is
+ * opened only where an Approve sends it (ask-presentation.ts
+ * `answeredWithOriginal`): a Decline opens nothing. One line.
+ */
+const parkedCase = async (): Promise<string> => {
+  const dir = join(scratch, "case-parked");
+  const path = await fixtureCopy(dir);
+  const { parkedInputsToSeal } = await import("../src/db/parked-inputs");
+  const before = new Database(path, { readwrite: true });
+  const toSeal = parkedInputsToSeal(before);
+  before.close();
+  if (toSeal.length === 0) {
+    return `case parked asks sealed: the ${FIXTURE_NAME} fixture holds no parked ask; the lists fixture runs it`;
+  }
+  const { PARKED_KEY, PARKED_TOKEN } = await import("./fixture-db-values");
+  const { ParkedAskShape } = await import("@cawco/core/stored-shapes");
+  const asked = new Map(
+    toSeal.map(({ requestId, envelope }) => [
+      requestId,
+      JSON.stringify(ParkedAskShape.parse(JSON.parse(envelope)).payload.input),
+    ])
+  );
+  writeFixtureKey(dir);
+  openAsHubAlone(path);
+  const { hubSecrets, isSealed } = await import("../src/secret-box");
+  const { answeredWithOriginal } = await import("../src/ask-presentation");
+  const after = new Database(path, { readwrite: true });
+  const rows = after
+    .query<{ requestId: string; envelope: string; inputSealed: string }, []>(
+      "SELECT request_id AS requestId, envelope, input_sealed AS inputSealed FROM parked_asks"
+    )
+    .all();
+  after.close();
+  const wrong: string[] = [];
+  let opened = 0;
+  /** What a Decline would open, were it to: nothing. */
+  const declineOpens: Record<string, unknown> | undefined = undefined;
+  for (const row of rows) {
+    if (!isSealed(row.inputSealed)) {
+      wrong.push(`${row.requestId}: its input is not sealed`);
+      continue;
+    }
+    if (
+      [PARKED_KEY, PARKED_TOKEN].some((secret) => row.envelope.includes(secret))
+    ) {
+      wrong.push(`${row.requestId}: its envelope still holds a credential`);
+    }
+    const parked = ParkedAskShape.parse(JSON.parse(row.envelope));
+    const declined = answeredWithOriginal(
+      parked,
+      { behavior: "deny", message: "no" },
+      () => {
+        opened += 1;
+        return declineOpens;
+      }
+    );
+    const approved = answeredWithOriginal(parked, { behavior: "allow" }, () => {
+      opened += 1;
+      return JSON.parse(hubSecrets().open(row.inputSealed));
+    });
+    if (
+      declined.behavior !== "deny" ||
+      approved.behavior !== "allow" ||
+      JSON.stringify(approved.updatedInput) !== asked.get(row.requestId)
+    ) {
+      wrong.push(
+        `${row.requestId}: an Approve does not send the call as asked`
+      );
+    }
+  }
+  const bytes = Buffer.from(await Bun.file(path).arrayBuffer());
+  const left = [PARKED_KEY, PARKED_TOKEN].filter((secret) =>
+    bytes.includes(secret)
+  );
+  if (left.length > 0) {
+    wrong.push(`${left.length} credential(s) still in the file's bytes`);
+  }
+  if (rows.length !== toSeal.length || opened !== rows.length) {
+    wrong.push(
+      `${toSeal.length} to seal, ${rows.length} kept, opened ${opened} time(s) for ${rows.length} Approve(s)`
+    );
+  }
+  if (wrong.length > 0) {
+    throw new Error(`case parked asks sealed: ${wrong.join("; ")}`);
+  }
+  return `case parked asks sealed: ${rows.length} parked ask(s) whose input held credentials, each input sealed in input_sealed and its envelope kept as every screen reads it, no credential left in the file's bytes; each opened once, by its Approve, to the call as asked, and by no Decline`;
 };
 
 /** The project the restore case forgets: the lists fixture's, whose tasks, tracker links and move hold the moved columns. */
@@ -1766,6 +1866,7 @@ try {
   const cases = await identityCases(dbPath, journal);
   if (!GIVEN) {
     cases.push(await keyCase());
+    cases.push(await parkedCase());
     cases.push(await restoreCase());
   }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);

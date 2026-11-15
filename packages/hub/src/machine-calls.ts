@@ -34,7 +34,7 @@ import {
 } from "./skills";
 import { MACHINE_DISCONNECTED } from "./spawns";
 import { unreachable } from "./unreachable";
-import type { HubSocket } from "./wire-socket";
+import type { MachineSocket } from "./wire-socket";
 import { caughtUp } from "./wire-socket";
 
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
@@ -251,7 +251,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
 
   /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
   const sendAnswerable = <T extends Envelope>(
-    socket: HubSocket,
+    socket: MachineSocket,
     frame: T
   ): T => {
     ctx.sendToMachine(socket, frame);

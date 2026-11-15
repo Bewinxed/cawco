@@ -24,6 +24,7 @@ import type { MachineLine } from "./db/session-lines";
 import { isKeepAlive } from "./keep-alive";
 import { uuidOf } from "./named-uuid";
 import { peek } from "./payload-peeks";
+import { redactedWords } from "./redactor";
 import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
 
@@ -581,7 +582,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       ctx.planChanges?.cannotGoOn(instanceId, reason);
     }
     ctx.escalateRoutedAsks(instanceId);
-    ctx.push.sessionFailed(instanceId, reason);
+    ctx.push.sessionFailed(instanceId, redactedWords(reason));
     ctx.publishInstances(machineId);
   };
 

@@ -841,16 +841,20 @@ export const pollRepo = async (input: {
       },
       { endpoint: octokit.request.endpoint }
     ) as unknown as Octokit["request"];
-    const pages = octokit.paginate
-      .iterator(request, {
-        method: "GET",
-        url: path,
-        ...query,
-        ...(etag ? { headers: { "if-none-match": etag } } : {}),
-        // `Parameters<R>[0]` reads the route-string overload of a request
-        // function; the iterator takes its endpoint options alike.
-      } as never)
-      [Symbol.asyncIterator]();
+    // `Parameters<R>[0]` reads the route-string overload of a request
+    // function; the iterator takes its endpoint options alike, so it is
+    // read here as the overload that takes them.
+    const iterate: (
+      on: Octokit["request"],
+      options: Parameters<Octokit["request"]>[1]
+    ) => AsyncIterable<Awaited<ReturnType<Octokit["request"]>>> =
+      octokit.paginate.iterator;
+    const pages = iterate(request, {
+      method: "GET",
+      url: path,
+      ...query,
+      ...(etag ? { headers: { "if-none-match": etag } } : {}),
+    })[Symbol.asyncIterator]();
     return () =>
       readWithin(REQUEST_MS, (each) => {
         signal = each;

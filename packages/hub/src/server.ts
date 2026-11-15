@@ -605,7 +605,16 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
-import { redactedAsk, redactedFrame, redactProblemDetail } from "./redactor";
+import {
+  admittedFromMachine,
+  passedValue,
+  redacted,
+  redactedAsk,
+  redactedFrame,
+  redactedWords,
+  redactProblemDetail,
+  redactThrown,
+} from "./redactor";
 import type { AnyProblem } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
@@ -742,9 +751,13 @@ import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
 import { WelcomeConverge } from "./welcome-converge";
 import {
+  type ClientSocket,
+  clientSocket,
   closeLine,
   drainLine,
   type HubSocket,
+  type MachineSocket,
+  machineSocket,
   openLine,
   receiveFrame,
   sendToClient,
@@ -1212,7 +1225,7 @@ export interface ServerOptions {
 }
 
 /** A machine's socket: one the hub may close, from an address. */
-type AgentSocket = AuthSocket & { remoteAddress: string };
+type AgentSocket = AuthSocket<MachineSocket> & { remoteAddress: string };
 
 /**
  * One verb of a machine's socket, handled once its envelope is decoded and
@@ -1225,7 +1238,7 @@ type AgentVerb = (
 ) => void | Promise<void>;
 
 /** A dashboard's (or the app's) socket: its upgrade's headers, from an address. */
-type DashboardSocket = HubSocket & {
+type DashboardSocket = ClientSocket & {
   headers: Record<string, string | undefined>;
   remoteAddress: string;
 };
@@ -2399,7 +2412,7 @@ export const createServer = (
     return waitingForProcess.delete(instanceId);
   };
   /** The one way a command leaves this hub for a machine: a start or attach sent is a process event. */
-  const sendToMachine = (socket: HubSocket, frame: object): void => {
+  const sendToMachine = (socket: MachineSocket, frame: object): void => {
     const envelope = frame as Partial<Envelope<Partial<SpawnPayload>>>;
     const instanceId = envelope.instanceId ?? envelope.payload?.instanceId;
     if (envelope.verb === "spawn" && instanceId) {
@@ -2502,7 +2515,9 @@ export const createServer = (
     // A task the folder does not read is none to push about.
     task: async (projectId, id) => {
       const task = await tasks.get(projectId, id);
-      return task instanceof ElysiaStatus ? undefined : task;
+      return task instanceof ElysiaStatus
+        ? undefined
+        : redacted({ kind: task.kind, title: task.title });
     },
   });
   /**
@@ -2747,7 +2762,15 @@ export const createServer = (
     if (!row || endedForGood(row.id)) {
       return false;
     }
-    hubAsks.keep(parked, row);
+    // The ledger holds the card's input; the permit kept is the call as it
+    // was asked, which its session's next prompt for the same call matches
+    // (core asks.ts `sameCall`). One whose sealed input does not open is
+    // not kept: it goes with its process, and its session asks again.
+    const input = pending.asAsked(parked.requestId ?? "");
+    if (!input) {
+      return false;
+    }
+    hubAsks.keep({ ...parked, payload: { ...payload, input } }, row);
     return true;
   };
   /**
@@ -3185,7 +3208,7 @@ export const createServer = (
     }
   };
   const recordSessionAddress = (
-    agent: HubSocket,
+    agent: MachineSocket,
     machineId: string,
     claim: SessionAddress
   ): void => {
@@ -3906,7 +3929,7 @@ export const createServer = (
           payload: frame,
         } satisfies Envelope<FramePayload>)
       ),
-    outcome: (install) => push.install(install),
+    outcome: (install) => push.install(redacted(install)),
     settled: (id) => push.installSettled(id),
     synced: (machineId, signal) => welcomeConverge.settled(machineId, signal),
     // Stands further down, beside the installs a tool policy sends.
@@ -4653,7 +4676,7 @@ export const createServer = (
     project: (id) => db.project(id),
     tellCaw: (projectId, event) =>
       caw.tell(projectId, { by: "event", kind: "decision", ...event }),
-    heard: (decided) => push.decided(decided),
+    heard: (decided) => push.decided(redacted(decided)),
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
   /**
@@ -4848,7 +4871,7 @@ export const createServer = (
         (one) => one.artifactId === artifactId
       );
       if (need) {
-        push.pinAsked(need, text);
+        push.pinAsked(need, redactedWords(text));
       }
     },
     // A look at the artifact takes its push down.
@@ -5631,9 +5654,10 @@ export const createServer = (
         remoteAddress: string;
       },
     >(
-      handle: (ws: S, message: unknown) => void
+      handle: (ws: S & ClientSocket, message: unknown) => void
     ) =>
-    (ws: S, incoming: unknown): void =>
+    (handed: S, incoming: unknown): void => {
+      const ws = clientSocket(handed);
       // A message too long for one frame arrives as parts, read in order
       // through the socket's inbox (`wire-socket.ts`).
       receiveFrame(ws, incoming, (message) => {
@@ -5644,6 +5668,7 @@ export const createServer = (
           dashboardThrew(ws, message, error);
         }
       });
+    };
   /**
    * NO DASHBOARD MESSAGE THAT THROWS VANISHES. A message off a dashboard (or
    * the app) whose handling threw, synchronously or later, is answered so its
@@ -5664,7 +5689,7 @@ export const createServer = (
    * answered, so a send whose relay threw got no ack and no log line.
    */
   const dashboardThrew = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: unknown,
     error: unknown
   ): void => {
@@ -5794,9 +5819,10 @@ export const createServer = (
         close: (code?: number, reason?: string) => unknown;
       },
     >(
-      handle: (ws: S, message: unknown) => Promise<void>
+      handle: (ws: S & MachineSocket, message: unknown) => Promise<void>
     ) =>
-    (ws: S, incoming: unknown): void => {
+    (handed: S, incoming: unknown): void => {
+      const ws = machineSocket(handed);
       // Word from its machine as it arrives, however long the inbox holds
       // it (machine-contact.ts).
       wordFrom(ws);
@@ -6207,7 +6233,10 @@ export const createServer = (
     });
 
   /** A stored Stop survives reconnects; its caller still gets a bounded receipt. */
-  const stopFromDashboard = (dashboard: HubSocket, message: Envelope): void => {
+  const stopFromDashboard = (
+    dashboard: ClientSocket,
+    message: Envelope
+  ): void => {
     const { instanceId } = message;
     if (!instanceId) {
       sendToClient(
@@ -6358,7 +6387,7 @@ export const createServer = (
   /** Registers a socket's correlation before dispatch; Ledger commands own their ack route. */
   const forward = (
     envelope: Envelope,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     remember = true
   ): boolean => {
     let outgoing = envelope;
@@ -6415,7 +6444,7 @@ export const createServer = (
    * board that reports 178 live sessions and one that reports 42.
    */
   const restore = (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     reattachOnly: SpawnPayload["reattachOnly"] = false
   ): void => {
@@ -6472,7 +6501,7 @@ export const createServer = (
    * skipped. Marked restoring, then attaching, before its spawn goes.
    */
   const reattach = (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     asked: NamedSpawn,
     reattachOnly: NonNullable<SpawnPayload["reattachOnly"]>
@@ -6506,7 +6535,7 @@ export const createServer = (
    * spawn goes.
    */
   const relaunch = (
-    agent: HubSocket,
+    agent: MachineSocket,
     row: InstanceRow,
     asked: NamedSpawn
   ): void => {
@@ -6671,7 +6700,7 @@ export const createServer = (
    * before the socket's inbox works it, or its agent's ping. Only the
    * machine's registered connection speaks for it.
    */
-  const wordFrom = (ws: HubSocket): void => {
+  const wordFrom = (ws: MachineSocket): void => {
     const machineId = socketMachines.get(ws.id);
     if (machineId !== undefined && registry.agent(machineId)?.id === ws.id) {
       contact.heard(machineId);
@@ -6700,7 +6729,7 @@ export const createServer = (
     ws.remoteAddress ??
     null;
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
-  const dashboardDevices = new Map<AuthSocket, string | null>();
+  const dashboardDevices = new Map<AuthSocket<ClientSocket>, string | null>();
   /**
    * Each dashboard socket opened from a page in an agent's own browser, by
    * its id: the gate id its DevTools gate marked the page with (core
@@ -6716,7 +6745,7 @@ export const createServer = (
    */
   const artifactDevices = new Map<
     string,
-    { device: string | null; socket: AuthSocket }
+    { device: string | null; socket: AuthSocket<ClientSocket> }
   >();
   /**
    * Closes an artifact tab's socket for it to open again as what its device
@@ -6736,7 +6765,7 @@ export const createServer = (
   const dashboardClients = new Map<string, AnswerFrom>();
   /** `page`: the origin it sent, if any; `device`: the paired device it came as. */
   const noteDashboardClient = (
-    socket: HubSocket,
+    socket: ClientSocket,
     page: string | undefined | null,
     device: { name: string } | null | undefined
   ): void => {
@@ -6745,7 +6774,7 @@ export const createServer = (
       ...(device ? { name: device.name } : {}),
     });
   };
-  const answeredFrom = (socket: HubSocket): AnswerFrom => {
+  const answeredFrom = (socket: ClientSocket): AnswerFrom => {
     const from = dashboardClients.get(socket.id);
     if (!from) {
       throw new Error(
@@ -6808,7 +6837,10 @@ export const createServer = (
    * admitted is held, told it waits, and listed for the person to Admit.
    * Neither touches the machine's real connection.
    */
-  const registerProven = (ws: AuthSocket, message: Envelope): boolean => {
+  const registerProven = (
+    ws: AuthSocket<MachineSocket>,
+    message: Envelope
+  ): boolean => {
     const bound = socketMachines.get(ws.id) ?? waitingSockets.get(ws.id);
     if (bound && bound !== message.machineId) {
       const fault = `register refused: this connection registered as machine ${bound}, not ${message.machineId}`;
@@ -6860,7 +6892,7 @@ export const createServer = (
    * A held connection that registers again proving the key (its register
    * lapsed and went again once the key was there) is held no more.
    */
-  const unhold = (ws: AuthSocket, machineId: string): void => {
+  const unhold = (ws: AuthSocket<MachineSocket>, machineId: string): void => {
     if (waitingSockets.get(ws.id) === machineId) {
       waitingSockets.delete(ws.id);
       hubAuth.released(machineId, ws.id);
@@ -6869,7 +6901,7 @@ export const createServer = (
 
   /** The person's refusal, said on `ws` before the hub closes it, so the machine's install ends with it. */
   const refuseSocket = (
-    ws: AuthSocket,
+    ws: AuthSocket<MachineSocket>,
     machineId: string,
     reason: string
   ): void => {
@@ -6882,7 +6914,10 @@ export const createServer = (
   };
 
   /** A connection that proved no key, from a machine never admitted: held, told it waits, listed for the person. */
-  const holdWaiting = (ws: AuthSocket, message: Envelope): void => {
+  const holdWaiting = (
+    ws: AuthSocket<MachineSocket>,
+    message: Envelope
+  ): void => {
     const identity = message.payload as {
       hostname?: unknown;
       os?: unknown;
@@ -6944,7 +6979,10 @@ export const createServer = (
    * hub that trusts its network takes the register's word, as it takes its id.
    * Synchronous: a register's socket is bound before its next frame is read.
    */
-  const takeFormerId = (ws: AuthSocket, message: Envelope): void => {
+  const takeFormerId = (
+    ws: AuthSocket<MachineSocket>,
+    message: Envelope
+  ): void => {
     const former = peek(message.payload, "formerMachineId");
     if (!former || former === message.machineId) {
       return;
@@ -7528,7 +7566,7 @@ export const createServer = (
    */
   const keepFleetReport = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     peeked: FleetSyncReport,
     riding: RidingChanges | undefined
   ): void => {
@@ -7820,7 +7858,7 @@ export const createServer = (
   // A sign-in that ended without the person is pushed, routed by presence;
   // the next sign-in takes that push down.
   const fleetMcp = new FleetMcp(db, announceMcp, lifetime, {
-    ended: (ended) => push.mcpSignInEnded(ended),
+    ended: (ended) => push.mcpSignInEnded(redacted(ended)),
     signedIn: (name) => {
       push.mcpSignedIn(name);
       // Every connect ask waiting on it is answered.
@@ -8311,7 +8349,7 @@ export const createServer = (
     itemEnded: (item) =>
       soon(() => {
         dispatcher.itemEnded(item);
-        push.itemEnded(item);
+        push.itemEnded(redacted(item));
         routines.itemEnded(item);
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
@@ -8363,7 +8401,11 @@ export const createServer = (
     },
     unblocked: (instanceId) => releaseOwed({ instanceId }),
     report: (row, body, failed, notice, headline, outputs) => {
-      reportToParent(row, body, failed, { notice, headline, outputs });
+      reportToParent(row, passedValue(body), failed, {
+        notice,
+        headline: headline && passedValue(headline),
+        outputs,
+      });
       // An item that ends while its session is at rest (checks a restarted
       // hub ran again) has no turn's end left to stop it at.
       sleepFinished(row.id);
@@ -9169,7 +9211,7 @@ export const createServer = (
           })
         ),
       online: (machineId) => Boolean(registry.agent(machineId)),
-      push: (notice) => push.watchNotice(notice),
+      push: (notice) => push.watchNotice(redacted(notice)),
       send: (envelope) => {
         const sent = deliverSend(envelope);
         if (sent instanceof ElysiaStatus) {
@@ -10147,13 +10189,14 @@ export const createServer = (
     push: {
       routine: (said) => {
         push.routine(said);
-        if (said.failed) {
-          projectStarters.routineFailed(said.projectId);
+        const run = passedValue(said);
+        if (run.failed) {
+          projectStarters.routineFailed(run.projectId);
         }
       },
       routineMade: (said) => {
         push.routineMade(said);
-        projectStarters.routineMade(said.projectId);
+        projectStarters.routineMade(passedValue(said).projectId);
       },
     },
     types: (projectId) => projectTypes.typesFor(projectId),
@@ -11177,7 +11220,7 @@ export const createServer = (
     personOwed: (actor) => db.personUnanswered(actor.id) === "read",
     sendToUser: (actor, message) => {
       db.noteAnswered(actor.id, new Date());
-      push.userMessage(actor.id, message);
+      push.userMessage(actor.id, redactedWords(message));
     },
     shownRefusal: (actor, tool, paths) =>
       shownRefusal(shownDeps, {
@@ -11850,7 +11893,7 @@ export const createServer = (
    * dashboard told it is up under its id now. True when the start named a
    * former id.
    */
-  const resumeFormer = (ws: HubSocket, message: Envelope): boolean => {
+  const resumeFormer = (ws: ClientSocket, message: Envelope): boolean => {
     const named = message.instanceId;
     const now = named ? db.instanceIdOf(named) : undefined;
     if (!(named && now) || now === named) {
@@ -11902,7 +11945,7 @@ export const createServer = (
    * the machine updates.
    */
   const sendDashboardStart = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     instanceId: string,
     payload: SpawnPayload
@@ -11953,7 +11996,7 @@ export const createServer = (
    * an agent's browser opened it (`gatedPages`): the session whose gate id
    * it is, or the session of its workspace's live item (else its newest).
    */
-  const gatedOwner = (ws: HubSocket): string | undefined => {
+  const gatedOwner = (ws: ClientSocket): string | undefined => {
     const gate = gatedPages.get(ws.id);
     if (!gate) {
       return;
@@ -11974,7 +12017,7 @@ export const createServer = (
    * that exists (`known`) keeps the origin and parent it opened with.
    */
   const dashboardStartOf = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     known: boolean,
     cwd: string
@@ -12035,7 +12078,7 @@ export const createServer = (
    * words sent.
    */
   const dashboardBegins = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     before: { projectId?: string | null } | undefined,
     payload: NamedSpawn
@@ -12061,7 +12104,7 @@ export const createServer = (
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
   const startFromDashboard = (
-    ws: HubSocket,
+    ws: ClientSocket,
     message: Envelope,
     asked: Awaited<ReturnType<typeof piDefaultFor>>
   ): void => {
@@ -12985,14 +13028,17 @@ export const createServer = (
    */
   const agentMessage = async (
     ws: AgentSocket,
-    message: unknown
+    arrived: unknown
   ): Promise<void> => {
-    if (!isEnvelope(message)) {
-      const fault = envelopeFault(message);
-      console.warn(`[hub] agent ${fault}`, message);
-      sendToMachine(ws, refusalFrame(message, fault));
+    if (!isEnvelope(arrived)) {
+      const fault = envelopeFault(arrived);
+      console.warn(`[hub] agent ${fault}`, arrived);
+      sendToMachine(ws, refusalFrame(arrived, fault));
       return;
     }
+    // Where a machine's words enter the hub: its failure words cut before
+    // anything reads, stores or copies them (redactor.ts).
+    const message = admittedFromMachine(arrived);
     const agentFrame = decodeAgentFrame(message.payload);
     if (!speaksForMachine(ws, message)) {
       return;
@@ -13207,14 +13253,14 @@ export const createServer = (
         // machine, when away, is named on it by the one setter a returned
         // answer meets below. Returning it here would add it to every
         // route's answers.
-        // Its words through the redactor as every returned problem's are
-        // (`redactProblemDetail` below): a machine's failure can quote a
-        // command line.
+        // Its words were cut where they entered (machine-answers.ts).
         if (error instanceof MachineProblem) {
-          redactProblemDetail({ responseValue: error.value() });
           nameAway({ responseValue: error.value(), set });
           return;
         }
+        // A thrown problem skips `mapResponse` (Elysia 2.0.0-rc.4): its
+        // words through the redactor here (redactor.ts `redactThrown`).
+        redactThrown(error);
         const unknown = unknownFieldsOf(error);
         if (!unknown) {
           return;
@@ -13445,8 +13491,9 @@ export const createServer = (
         // up to the largest message the wire carries. Bun has one WebSocket
         // config per server, so both routes name the same limit.
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
-        open(ws) {
-          openLine(ws, "machine");
+        open(handed) {
+          openLine(handed, "machine");
+          const ws = machineSocket(handed);
           // The first frame on every connection: the nonce its register
           // answers with its key's proof (hub-auth.ts).
           const nonce = randomBytes(24).toString("base64url");
@@ -13464,7 +13511,7 @@ export const createServer = (
         // deadline): word from its machine that waits behind no message
         // (machine-contact.ts). Bun answers it with a pong either way.
         ping(ws) {
-          wordFrom(ws);
+          wordFrom(machineSocket(ws));
         },
         message: guardedAgentMessage(agentMessage),
         close(ws) {
@@ -13534,8 +13581,9 @@ export const createServer = (
         drain(ws) {
           drainLine(ws);
         },
-        open(ws) {
-          openLine(ws, "client");
+        open(handed) {
+          openLine(handed, "client");
+          const ws = clientSocket(handed);
           const { instance, artifact } = ws.params;
           // The person's alone, read here rather than at the gate (hub-auth.ts
           // lets this upgrade through): a browser cannot read the answer to a
@@ -13593,7 +13641,8 @@ export const createServer = (
           console.warn(`[hub] ${fault}`, message);
           sendToClient(ws, redactedFrame(refusalFrame(message, fault)));
         }),
-        close(ws) {
+        close(handed) {
+          const ws = clientSocket(handed);
           closeLine(ws);
           artifactDevices.delete(ws.id);
           artifactSessions.close(ws);
@@ -13608,9 +13657,10 @@ export const createServer = (
         drain(ws) {
           drainLine(ws);
         },
-        open(ws) {
+        open(handed) {
           // Before anything is sent to it: every frame goes through its line.
-          openLine(ws, "client");
+          openLine(handed, "client");
+          const ws = clientSocket(handed);
           // The person's alone (the gate refused anyone else at the upgrade;
           // read again here, so nothing but the person ever holds one). Its
           // device is kept, so removing the device closes it.
@@ -13698,7 +13748,8 @@ export const createServer = (
           );
         },
         message: guardedDashboardMessage(dashboardMessage),
-        close(ws) {
+        close(handed) {
+          const ws = clientSocket(handed);
           closeLine(ws);
           dashboardDevices.delete(ws);
           dashboardClients.delete(ws.id);

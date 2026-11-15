@@ -9,6 +9,7 @@ import type { FramePayload } from "@cawco/core/frames";
 import type { Envelope } from "@cawco/core/protocol";
 import type { DbShape } from "../db";
 import type { AuthSocket } from "../hub-shapes";
+import type { MachineSocket } from "../wire-socket";
 
 export type FrameAnswer = "stop" | "continue";
 
@@ -22,7 +23,7 @@ export interface FrameRun {
   message: Envelope;
   /** The session the frame names, when this machine holds it. */
   ownedSession: ReturnType<DbShape["ownedInstance"]>;
-  ws: AuthSocket;
+  ws: AuthSocket<MachineSocket>;
 }
 
 export type FrameStage = (run: FrameRun) => FrameAnswer;

@@ -14,9 +14,11 @@
  * client's (a dashboard, the apps, an artifact tab), and each send names
  * the peer it is for: a client is sent only what the redactor passed
  * (redactor.ts, `Redacted`), a machine the hub's command as it is (a
- * machine runs it, keys and an approved call's input included). A frame
- * sent through the other peer's door is a fault in the hub's own code, and
- * throws before anything goes.
+ * machine runs it, keys and an approved call's input included). Each peer's
+ * socket is its own type ({@link MachineSocket}, {@link ClientSocket}),
+ * given only by the line opened for it ({@link machineSocket},
+ * {@link clientSocket}), so a send through the other peer's door does not
+ * compile; one that reached it anyway throws before anything goes.
  *
  * WHEN A PEER STOPS READING. A socket that takes nothing for
  * `WIRE_STALL_MS` while frames wait is closed (1013, try again later); one
@@ -38,7 +40,12 @@ import {
   WireAssembler,
   WireError,
 } from "@cawco/core/wire";
-import type { ClientFrame, Redacted } from "./redactor";
+import {
+  type ClientFrame,
+  passedValue,
+  type Redacted,
+  type Typed,
+} from "./redactor";
 
 type RawSocket = ServerSocketLike;
 
@@ -53,6 +60,14 @@ export interface HubSocket {
 
 /** Who reads a line: a machine's agent, or a client (a dashboard, the apps, an artifact tab). */
 export type Peer = "machine" | "client";
+
+declare const PEER: unique symbol;
+
+/** A machine's socket: its line was opened for a machine ({@link machineSocket}). */
+export type MachineSocket = HubSocket & { readonly [PEER]: "machine" };
+
+/** A client's socket (a dashboard, the apps, an artifact tab): its line was opened for a client ({@link clientSocket}). */
+export type ClientSocket = HubSocket & { readonly [PEER]: "client" };
 
 interface Line {
   assembler: WireAssembler;
@@ -102,6 +117,27 @@ export const openLine = (
   });
 };
 
+/**
+ * `socket` as its peer's own type, read off the line its route opened
+ * ({@link openLine}): every callback of a route is handed a fresh handle,
+ * which each takes as its peer's socket here. A line opened for the other
+ * peer throws (module: two doors); a closed one is still its peer's.
+ */
+export const machineSocket = <S extends HubSocket>(
+  socket: S
+): S & MachineSocket => {
+  lineFor(socket, "machine");
+  return socket as S & MachineSocket;
+};
+
+/** {@link machineSocket}'s twin for a client's line. */
+export const clientSocket = <S extends HubSocket>(
+  socket: S
+): S & ClientSocket => {
+  lineFor(socket, "client");
+  return socket as S & ClientSocket;
+};
+
 /** The socket's line, when it is still open; one opened for another peer throws (module: two doors). */
 const lineFor = (socket: HubSocket, peer: Peer): Line | undefined => {
   const line = lines.get(socket.id);
@@ -113,16 +149,21 @@ const lineFor = (socket: HubSocket, peer: Peer): Line | undefined => {
   return line;
 };
 
-/** A frame to a client's socket: only what the redactor passed (redactor.ts). */
-export const sendToClient = (
-  socket: HubSocket,
-  frame: Redacted<ClientFrame>
+/**
+ * A frame to a client's socket: only what the redactor passed (redactor.ts),
+ * its frozen copy read off the value the redactor made: a value it did not
+ * make has none, and reading it throws before anything is written.
+ */
+export const sendToClient = <F extends Redacted<ClientFrame>>(
+  socket: ClientSocket,
+  frame: Typed<F>
 ): void => {
-  lineFor(socket, "client")?.outbox.send(frame);
+  const sent = passedValue(frame);
+  lineFor(socket, "client")?.outbox.send(sent);
 };
 
 /** The hub's command to a machine's socket, as it is: the machine runs it. */
-export const sendToMachine = (socket: HubSocket, frame: object): void => {
+export const sendToMachine = (socket: MachineSocket, frame: object): void => {
   lineFor(socket, "machine")?.outbox.send(frame);
 };
 

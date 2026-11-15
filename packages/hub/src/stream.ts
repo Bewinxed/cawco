@@ -53,10 +53,16 @@ import {
   type StreamSubscribe,
 } from "@cawco/core/stream";
 import type { HubLifetimeShape } from "./lifetime";
-import { type ClientFrame, type Redacted, redactedFrame } from "./redactor";
+import {
+  type ClientFrame,
+  passedValue,
+  type Redacted,
+  redactedFrame,
+  type Typed,
+} from "./redactor";
 import type { AnyProblem } from "./refusal";
 import { refusalFrame } from "./registry";
-import { type HubSocket, sendToClient } from "./wire-socket";
+import { type ClientSocket, sendToClient } from "./wire-socket";
 
 /**
  * A control whose `control_result` never came stops being an ack anybody is
@@ -136,7 +142,7 @@ export interface StreamPorts {
   /** The dashboard `control` relay, verbatim — false when the relay refused it. */
   readonly relayControl: (
     envelope: Envelope<ControlPayload>,
-    dashboard: HubSocket
+    dashboard: ClientSocket
   ) => boolean;
   /**
    * The one send path. It always takes the send: a machine that is not there
@@ -192,7 +198,7 @@ export interface StreamHubShape {
    * Returns true when it consumed it, so the envelope path never sees a shape
    * it would only log as malformed.
    */
-  readonly handleClientMessage: (socket: HubSocket, raw: unknown) => boolean;
+  readonly handleClientMessage: (socket: ClientSocket, raw: unknown) => boolean;
   /** The last seq assigned to a session; 0 when it has never been relayed. */
   readonly head: (sessionId: string) => number;
   /**
@@ -206,9 +212,9 @@ export interface StreamHubShape {
     instanceIds: readonly string[]
   ) => Record<string, IngestMark>;
   /** A session's plan frame, to every socket following it: only what the redactor passed. */
-  readonly planToFollowers: (
+  readonly planToFollowers: <F extends Redacted<PlanSnapshot | PlanDelta>>(
     sessionId: string,
-    message: Redacted<PlanSnapshot | PlanDelta>
+    message: Typed<F>
   ) => void;
   /**
    * Stamps a relayed frame with the session's next `seq`, files it in the ring
@@ -218,9 +224,9 @@ export interface StreamHubShape {
    * could not answer a resume. The frame is what the redactor passed
    * (redactor.ts): the ring replays what it holds to every resume.
    */
-  readonly sequence: (
+  readonly sequence: <F extends Redacted<SessionStreamFrame>>(
     sessionId: string,
-    frame: Redacted<SessionStreamFrame>
+    frame: Typed<F>
   ) => SessionStreamEvent;
   /**
    * A `control_result` off an agent socket. Returns true when it answered a
@@ -250,7 +256,7 @@ interface Follower {
   /** Sessions whose plan alone it follows (`plan.follow`). */
   plans: Set<string>;
   readonly sessions: Set<string>;
-  socket: HubSocket;
+  socket: ClientSocket;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -326,7 +332,10 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   /** One write to one socket, through its outbox (wire-socket.ts): only what the redactor passed. */
-  const deliver = (socket: HubSocket, message: Redacted<ClientFrame>): void => {
+  const deliver = <F extends Redacted<ClientFrame>>(
+    socket: ClientSocket,
+    message: Typed<F>
+  ): void => {
     sendToClient(socket, message);
   };
 
@@ -349,7 +358,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     }
   };
 
-  const entryFor = (socket: HubSocket): Follower => {
+  const entryFor = (socket: ClientSocket): Follower => {
     const existing = sockets.get(socket.id);
     if (existing) {
       // Elysia builds a fresh handle per callback; the newest one is the one
@@ -362,28 +371,39 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return entry;
   };
 
-  const ackTo = (socket: HubSocket, ack: CommandAck): void => {
+  const ackTo = (socket: ClientSocket, ack: CommandAck): void => {
     deliver(socket, redactedFrame(ack));
   };
 
-  const fail = (socket: HubSocket, commandId: string, reason: string): void => {
+  const fail = (
+    socket: ClientSocket,
+    commandId: string,
+    reason: string
+  ): void => {
     ackTo(socket, { type: "command.ack", commandId, stage: "failed", reason });
   };
 
   /** A stream message too malformed to act on: logged, and the sender told which field. */
-  const malformed = (socket: HubSocket, raw: unknown, fault: string): void => {
+  const malformed = (
+    socket: ClientSocket,
+    raw: unknown,
+    fault: string
+  ): void => {
     console.warn(`[hub] ${fault}`, raw);
     deliver(socket, redactedFrame(refusalFrame(raw, fault)));
   };
 
-  const sequence = (
+  const sequence = <F extends Redacted<SessionStreamFrame>>(
     sessionId: string,
-    frame: Redacted<SessionStreamFrame>
+    frame: Typed<F>
   ): SessionStreamEvent => {
-    const event = ringOf(sessionId).record(sessionId, frame);
+    const event = ringOf(sessionId).record(sessionId, passedValue(frame));
     const perSession = followers.get(sessionId);
     if (perSession) {
-      const delta = redactedFrame<StreamDelta>({ type: "stream.event", event });
+      const delta = redactedFrame({
+        type: "stream.event",
+        event,
+      } satisfies StreamDelta);
       // Iterated live, no defensive copy: this runs on every frame of every
       // session, and deleting from a Set mid-iteration is well defined — which
       // is exactly what a failed delivery does.
@@ -407,7 +427,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * live delta the socket can possibly receive is `head + 1`. Never a
    * duplicate, never a gap, without a buffer-and-splice dance.
    */
-  const subscribe = (socket: HubSocket, message: StreamSubscribe): void => {
+  const subscribe = (socket: ClientSocket, message: StreamSubscribe): void => {
     const { sessionId } = message;
     const entry = entryFor(socket);
     entry.sessions.add(sessionId);
@@ -474,7 +494,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * general-purpose remote call. A kind may only ever become its own method.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every command kind (send vs. each control method) through one shared validate-then-relay pipeline; splitting it would scatter the ordering guarantees documented above across several functions.
-  const command = (socket: HubSocket, message: CommandEnvelope): void => {
+  const command = (socket: ClientSocket, message: CommandEnvelope): void => {
     const { commandId, kind, sessionId, machineId } = message;
     // Known by id from here on, and with the newest handle: an `applied` ack
     // arrives later, off an agent socket, and has to find a socket to land on
@@ -685,7 +705,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   const subscribeMessage = (
-    socket: HubSocket,
+    socket: ClientSocket,
     raw: Record<string, unknown>
   ): void => {
     if (!nonEmpty(raw.sessionId)) {
@@ -714,7 +734,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * left as it is. A session it did not follow is no change.
    */
   const unsubscribe = (
-    socket: HubSocket,
+    socket: ClientSocket,
     raw: Record<string, unknown>
   ): void => {
     const { sessionId } = raw;
@@ -740,7 +760,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * as it comes to the session's followers.
    */
   const followPlans = (
-    socket: HubSocket,
+    socket: ClientSocket,
     raw: Record<string, unknown>
   ): void => {
     const { instanceIds } = raw;
@@ -766,7 +786,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
 
   /** A client found a gap in a session's plan: the plan whole, to it alone. */
   const resyncPlan = (
-    socket: HubSocket,
+    socket: ClientSocket,
     raw: Record<string, unknown>
   ): void => {
     const { instanceId } = raw;
@@ -782,7 +802,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   /** What a socket follows: each message that changes it, by its type. */
   const FOLLOWS = new Map<
     string,
-    (socket: HubSocket, raw: Record<string, unknown>) => void
+    (socket: ClientSocket, raw: Record<string, unknown>) => void
   >([
     ["stream.subscribe", subscribeMessage],
     ["stream.unsubscribe", unsubscribe],
@@ -790,7 +810,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     ["plan.resync", resyncPlan],
   ]);
 
-  const handleClientMessage = (socket: HubSocket, raw: unknown): boolean => {
+  const handleClientMessage = (socket: ClientSocket, raw: unknown): boolean => {
     if (!isRecord(raw) || typeof raw.type !== "string") {
       return false;
     }
@@ -800,7 +820,10 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // deltas queued for this tab, which a tab that hears nothing within its
     // deadline otherwise took for a dead socket while they arrived.
     if (raw.type === "heartbeat") {
-      deliver(socket, redactedFrame<StreamHeartbeat>({ type: "heartbeat" }));
+      deliver(
+        socket,
+        redactedFrame({ type: "heartbeat" } satisfies StreamHeartbeat)
+      );
       return true;
     }
 

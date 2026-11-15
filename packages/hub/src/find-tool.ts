@@ -517,7 +517,7 @@ const told = async (
             })
             .map(async (turn) => ({
               ...turn,
-              text: clip(await redactSecrets(turn.text), chars),
+              text: clip(redactSecrets(turn.text), chars),
             }))
         ),
       };
@@ -526,7 +526,7 @@ const told = async (
 const redacted = async <Value extends string | null | undefined>(
   value: Value
 ): Promise<Value> =>
-  (typeof value === "string" ? await redactSecrets(value) : value) as Value;
+  (typeof value === "string" ? redactSecrets(value) : value) as Value;
 
 /**
  * A moment's words rendered from `from` to `to` of `marked`: each secret
@@ -588,17 +588,17 @@ const rendered = (
  * them is its snippet, masked harder (`outOfSentenceRanges`: every
  * password-shaped word cut). The words around it go no further.
  */
-const shownMoment = async (
+const shownMoment = (
   moment: HeldMoment,
   words: readonly string[]
-): Promise<FindMoment> => {
+): FindMoment => {
   const { context, ...shown } = moment;
   const text = context ?? moment.excerpt;
   const marked = withWords(marksOf(text), words);
   const secrets =
     context === undefined
-      ? await outOfSentenceRanges(marked.plain)
-      : await secretRanges(marked.plain);
+      ? outOfSentenceRanges(marked.plain)
+      : secretRanges(marked.plain);
   return {
     ...shown,
     excerpt: rendered(
@@ -1018,7 +1018,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     return {
       around: {
         ...target.header,
-        title: await redactSecrets(target.header.title),
+        title: redactSecrets(target.header.title),
       },
       turns: read.turns,
       ...(more
@@ -1033,10 +1033,8 @@ export const createFindTool = (deps: FindToolDeps) => {
   const shownMoments = (
     moments: FindMoment[],
     words: readonly string[]
-  ): Promise<FindMoment[]> =>
-    Promise.all(
-      moments.map((moment) => shownMoment(moment as HeldMoment, words))
-    );
+  ): FindMoment[] =>
+    moments.map((moment) => shownMoment(moment as HeldMoment, words));
 
   /**
    * A hit's words as an agent reads them: its title, every moment's excerpt
@@ -1047,7 +1045,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     result: FindResult,
     words: readonly string[]
   ): Promise<FindResult> => {
-    const title = await redactSecrets(result.title);
+    const title = redactSecrets(result.title);
     switch (result.kind) {
       case "conversation":
         return {
@@ -1057,7 +1055,7 @@ export const createFindTool = (deps: FindToolDeps) => {
           lastReport: result.lastReport
             ? {
                 ...result.lastReport,
-                headline: await redactSecrets(result.lastReport.headline),
+                headline: redactSecrets(result.lastReport.headline),
               }
             : null,
           moments: await shownMoments(result.moments, words),

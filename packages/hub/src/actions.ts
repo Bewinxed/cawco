@@ -58,6 +58,7 @@ import {
   actionWords,
 } from "./presenters/project";
 import type { Push } from "./push";
+import { redacted } from "./redactor";
 import { roleOf } from "./roles";
 import { stageNamed } from "./stages";
 import { actionActor, sessionActor, type Tasks } from "./tasks";
@@ -237,16 +238,18 @@ export const createActions = ({
 
   /** The phone hears of one that needs you, while it still does. */
   const pushFor = (row: ActionRow): void =>
-    push.action({
-      id: row.id,
-      connection: row.connection,
-      projectId: row.projectId,
-      said: row.state === "proposed" ? row.reason : (row.error ?? row.reason),
-      state:
-        row.state === "proposed" || row.state === "failed"
-          ? row.state
-          : "unknown",
-    });
+    push.action(
+      redacted({
+        id: row.id,
+        connection: row.connection,
+        projectId: row.projectId,
+        said: row.state === "proposed" ? row.reason : (row.error ?? row.reason),
+        state:
+          row.state === "proposed" || row.state === "failed"
+            ? row.state
+            : "unknown",
+      })
+    );
 
   // --- proposing -----------------------------------------------------------------
 

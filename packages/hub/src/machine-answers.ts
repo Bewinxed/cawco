@@ -5,6 +5,7 @@ import { SkillFileSchema } from "@cawco/core/stored-shapes";
 import { isToolStatus, type ToolStatus } from "@cawco/core/tools";
 import { HTTPError, problem } from "elysia";
 import { z } from "zod";
+import { redactCredentials } from "./secret-filter";
 import { received } from "./stored-json";
 
 /** A machine ask that got no answer: not connected ("dead") or silent past its deadline ("timeout"). */
@@ -65,26 +66,34 @@ export class MachineProblem extends HTTPError {
   readonly type = "about:blank";
   readonly problem: AwayProblem | SilentProblem | MachineFailed;
   constructor(answer: AwayProblem | SilentProblem | MachineFailed) {
-    super(answer.response.detail);
+    // Where a machine's words enter as a problem: cut before anything
+    // copies them (redactor.ts, module: where a machine's words enter).
+    const held = said(answer, redactCredentials(answer.response.detail));
+    super(held.response.detail);
     this.name = "MachineProblem";
-    this.problem = answer;
+    this.problem = held;
   }
   override value() {
     return this.problem;
   }
   /** The same cause in `detail`'s words: what a step says of it as it passes it up. */
   saying(detail: string): MachineProblem {
-    const held = this.problem;
-    if (held.status === 503) {
-      return new MachineProblem(awayProblem(held.response.machineId, detail));
-    }
-    return new MachineProblem(
-      held.status === 504
-        ? silentProblem(detail)
-        : problem(502, { code: held.response.code, detail })
-    );
+    return new MachineProblem(said(this.problem, detail));
   }
 }
+
+/** `answer`'s cause in `detail`'s words: its status, its code and its machine kept. */
+const said = (
+  answer: AwayProblem | SilentProblem | MachineFailed,
+  detail: string
+): AwayProblem | SilentProblem | MachineFailed => {
+  if (answer.status === 503) {
+    return awayProblem(answer.response.machineId, detail);
+  }
+  return answer.status === 504
+    ? silentProblem(detail)
+    : problem(502, { code: answer.response.code, detail });
+};
 
 /**
  * A thrown `error` said again in `words` by a step that passes it up: a

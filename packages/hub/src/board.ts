@@ -13,7 +13,7 @@ import type { KeepAliveRow } from "./keep-alive";
 import { keepAliveState } from "./keep-alive";
 import { previewTargets } from "./preview";
 import { redactedFrame } from "./redactor";
-import type { HubSocket } from "./wire-socket";
+import type { ClientSocket } from "./wire-socket";
 import { isHubParent } from "./work-item-state";
 
 export type BoardContext = Pick<
@@ -438,7 +438,7 @@ export const createBoard = (ctx: BoardContext) => {
    * `browser_list` frame after, never polling. Then each passkey QR still in
    * time, which the take-over view draws over its stream.
    */
-  const greetDashboard = (ws: HubSocket, older: boolean): void => {
+  const greetDashboard = (ws: ClientSocket, older: boolean): void => {
     const board = ctx.laws.hold(() => instancesFrame(""));
     const broken = ctx.laws.broken();
     if (board) {

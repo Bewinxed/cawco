@@ -1886,7 +1886,7 @@ export const createMemory = ({
    * `secret`; a duplicate said so.
    */
   const byRules = async (projectId: string, words: string) => {
-    const redacted = await redactSecrets(words);
+    const redacted = redactSecrets(words);
     if (redacted !== words) {
       const secret: { text: string; verdict: Verdict | null } = {
         text: redacted,

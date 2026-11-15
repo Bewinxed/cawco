@@ -8,7 +8,8 @@
  *
  * The rules: the hub-path ban (scripts/lint/hub-path-by-hand.ts) over every
  * caller of the hub's source; the problem rule (scripts/lint/problem-kept.ts)
- * over the hub's own; the closed-set column rule (scripts/lint/closed-text-column.ts)
+ * and the redactor's brand rule (scripts/lint/redacted-brand.ts) over the
+ * hub's own; the closed-set column rule (scripts/lint/closed-text-column.ts)
  * over the hub's schema; Eden's requests read by hub-read's readers alone
  * (scripts/lint/eden-answers-read.ts) over the dashboard's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
@@ -30,6 +31,7 @@ import { edenAnswersRead } from "./scripts/lint/eden-answers-read.ts";
 import { hubPathByHand } from "./scripts/lint/hub-path-by-hand.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
 import { problemKept } from "./scripts/lint/problem-kept.ts";
+import { redactedBrand } from "./scripts/lint/redacted-brand.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
 /** The planted mistakes, read by their own globs below and never as product code. */
@@ -46,6 +48,8 @@ const EDEN_ANSWERS_FIXTURES = `${LINT_FIXTURES}eden-answers.ts`;
 const CLOSED_TEXT_FIXTURES = `${LINT_FIXTURES}closed-text-column.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
+/** The ways to make the redactor's brand without it that the brand rule must refuse. */
+const REDACTED_BRAND_FIXTURES = `${LINT_FIXTURES}redacted-brand.ts`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -145,6 +149,10 @@ export default defineConfig({
       {
         files: hub.map(literal),
         rules: [problemKept],
+      },
+      {
+        files: [...hub.map(literal), REDACTED_BRAND_FIXTURES],
+        rules: [redactedBrand],
       },
       {
         files: [...schema.map(literal), CLOSED_TEXT_FIXTURES],

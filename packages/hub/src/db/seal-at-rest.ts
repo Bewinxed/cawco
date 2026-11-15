@@ -34,6 +34,8 @@ const SECRET_COLUMNS = [
     ],
   },
   { table: "mcp_servers", key: "name", columns: ["config"] },
+  // A parked ask's call input as it was asked (db/parked-inputs.ts).
+  { table: "parked_asks", key: "request_id", columns: ["input_sealed"] },
   { table: "connections", key: "id", columns: ["sealed_unread"] },
   {
     table: "connection_secrets",
@@ -82,6 +84,14 @@ const sayFreshKey = (marked: readonly string[]): void => {
   }
 };
 
+/** Values a migration step moved out of plain text at this start (db/parked-inputs.ts), whose old bytes the file's freed pages still hold. */
+let moved = 0;
+
+/** A migration step moved `count` values out of plain text: this start rewrites the file ({@link sealAtRest}). */
+export const movedOutOfPlain = (count: number): void => {
+  moved += count;
+};
+
 /** Seals each plain secret in place, in one transaction; answers how many, by `table.column`. */
 export const sealAtRest = (sqlite: Database): Record<string, number> => {
   const sealed: Record<string, number> = {};
@@ -119,13 +129,15 @@ export const sealAtRest = (sqlite: Database): Record<string, number> => {
     })
     .immediate();
   sayFreshKey(marked);
-  if (Object.keys(sealed).length > 0) {
+  if (Object.keys(sealed).length > 0 || moved > 0) {
     // An UPDATE leaves the old bytes in the file's freed space and in the
     // WAL until something writes over them: the plain values would still be
     // on disk. VACUUM rewrites the file without them, and a truncating
-    // checkpoint empties the WAL. Once, on the start that sealed anything.
+    // checkpoint empties the WAL. Once, on the start that sealed anything
+    // or whose migration moved a value out of plain text.
     sqlite.run("VACUUM");
     sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)");
+    moved = 0;
   }
   return sealed;
 };

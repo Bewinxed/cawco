@@ -180,6 +180,7 @@ import { signedInOn } from "./placement";
 import type { Plans } from "./plans";
 import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
+import { type Redacted, redactedWords, type Typed } from "./redactor";
 import type { AnyProblem, ProblemsOf } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
@@ -800,14 +801,19 @@ interface WorkItemDeps extends Pick<
   /**
    * Hands a report to the parent of the item's session: `body` the full
    * report, `headline` its one-or-two-sentence outcome when there is one,
-   * `outputs` the folder paths its finish copied its outputs to.
+   * `outputs` the folder paths its finish copied its outputs to. Its words
+   * are what the redactor passed (redactor.ts): a parent session is sent
+   * no credential an agent, a tool or a machine wrote.
    */
-  readonly report: (
+  readonly report: <
+    Body extends Redacted<string>,
+    Headline extends Redacted<string>,
+  >(
     row: InstanceRow,
-    body: string,
+    body: Typed<Body>,
     failed: boolean,
     notice?: boolean,
-    headline?: string,
+    headline?: Typed<Headline>,
     outputs?: string[]
   ) => void;
   /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; or its refusal in its words. */
@@ -1453,7 +1459,15 @@ export const createWorkItems = ({
    * may still run, and a report, a retry or a failure filed meanwhile was
    * read as the work's outcome while it went on.
    */
-  const report: WorkItemDeps["report"] = (row, body, ...rest) => {
+  /** {@link WorkItemDeps.report}, its words through the redactor. */
+  const report = (
+    row: InstanceRow,
+    body: string,
+    failed: boolean,
+    notice?: boolean,
+    headline?: string,
+    outputs?: string[]
+  ): void => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
     if (item?.stoppingAt && LIVE.has(item.state)) {
       console.log(
@@ -1461,7 +1475,14 @@ export const createWorkItems = ({
       );
       return;
     }
-    reportTo(row, body, ...rest);
+    reportTo(
+      row,
+      redactedWords(body),
+      failed,
+      notice,
+      headline === undefined ? undefined : redactedWords(headline),
+      outputs
+    );
   };
   /** Turns in a row each live item's session ended having done nothing, with nothing coming, by item. */
   const quiet = new Map<string, number>();

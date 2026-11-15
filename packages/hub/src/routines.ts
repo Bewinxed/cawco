@@ -137,6 +137,7 @@ import {
 } from "./presenters/project";
 import { handle } from "./presenters/words";
 import type { Push } from "./push";
+import { redacted } from "./redactor";
 import {
   cronOf,
   EVENT_SLOT,
@@ -579,15 +580,17 @@ const surfaceRun = (
         : words;
     const { projectId } = routine;
     if (!projectId) {
-      push.routine({
-        failed: false,
-        instanceId,
-        name: routine.name,
-        output: words,
-        projectId: null,
-        routineId: routine.id,
-        runId: run.id,
-      });
+      push.routine(
+        redacted({
+          failed: false,
+          instanceId,
+          name: routine.name,
+          output: words,
+          projectId: null,
+          routineId: routine.id,
+          runId: run.id,
+        })
+      );
       return false;
     }
     // A conversation run's result is Caw's own answer; the curator's reaches
@@ -630,15 +633,17 @@ const surfaceRun = (
     return false;
   }
   note(routine, run, "failed", end.reason ?? undefined);
-  push.routine({
-    failed: true,
-    instanceId,
-    name: routine.name,
-    output: end.reason,
-    projectId: routine.projectId,
-    routineId: routine.id,
-    runId: run.id,
-  });
+  push.routine(
+    redacted({
+      failed: true,
+      instanceId,
+      name: routine.name,
+      output: end.reason,
+      projectId: routine.projectId,
+      routineId: routine.id,
+      runId: run.id,
+    })
+  );
   return true;
 };
 
@@ -2095,12 +2100,14 @@ export const createRoutines = ({
     if (routine.projectId) {
       madeNotice(routine, routine.projectId, maker, by, lasts);
     }
-    push.routineMade({
-      line: [schedule.words, lasts].filter(Boolean).join(" · "),
-      name: routine.name,
-      projectId: routine.projectId,
-      routineId: routine.id,
-    });
+    push.routineMade(
+      redacted({
+        line: [schedule.words, lasts].filter(Boolean).join(" · "),
+        name: routine.name,
+        projectId: routine.projectId,
+        routineId: routine.id,
+      })
+    );
     console.log(
       `[routines] ${routine.name} made by ${maker}: announced, why ${routine.madeWhy ? JSON.stringify(routine.madeWhy.slice(0, 60)) : "none"}`
     );

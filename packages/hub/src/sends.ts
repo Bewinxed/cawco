@@ -488,12 +488,12 @@ export const createSends = (ctx: SendsContext) => {
     if (isKeepAlive(row.body)) {
       ctx.streams.sequence(
         row.instanceId,
-        redactedFrame<SessionStreamFrame>({
+        redactedFrame({
           kind: "send",
           instanceId: row.instanceId,
           keepAlive: true,
           record: toSendRecord(row),
-        })
+        } satisfies SessionStreamFrame)
       );
       return;
     }

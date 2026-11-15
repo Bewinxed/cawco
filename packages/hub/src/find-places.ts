@@ -101,15 +101,15 @@ export function placesHeard(
  * "Hide secrets in Find" is on (`hide`), each names where its excerpt's
  * secrets stand, for the screen to draw as dots (find-secrets.ts).
  */
-export async function placesForScreens(
+export function placesForScreens(
   places: readonly TranscriptPlace[],
   hide: boolean
-): Promise<FindPlace[]> {
+): FindPlace[] {
   const kept = places.flatMap(placeOf);
   if (!hide) {
     return kept;
   }
-  const spans: SecretSpan[][] = await secretRangesOf(
+  const spans: SecretSpan[][] = secretRangesOf(
     kept.map((place) => unmarked(place.excerpt))
   );
   return kept.map((place, index) => {

@@ -63,7 +63,7 @@ import { redactedFrame } from "./redactor";
 import type { AnyProblem } from "./refusal";
 import type { createSends } from "./sends";
 import { unreachable } from "./unreachable";
-import type { HubSocket } from "./wire-socket";
+import type { ClientSocket } from "./wire-socket";
 
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
@@ -264,8 +264,11 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     if (!parked || parked.instanceId !== instanceId) {
       throw new Error("That request is no longer pending.");
     }
-    // Clients held the ask with its secrets hidden; the call runs as asked.
-    const result = answeredWithOriginal(parked, answer);
+    // Clients held the ask with its secrets hidden; the call runs as asked,
+    // its input opened from its seal here alone.
+    const result = answeredWithOriginal(parked, answer, () =>
+      ctx.pending.asAsked(requestId)
+    );
     if (ctx.answeringPermissions.has(requestId)) {
       throw new Error("That request is already being answered.");
     }
@@ -442,7 +445,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    */
   const answerControl = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean,
     requestId: string,
     frame: ControlResult
@@ -459,7 +462,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
 
   const relayPermissionAnswer = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const answer = peekAnswer(message.payload);
@@ -562,7 +565,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    */
   const relayModelCrossing = (
     message: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame: boolean
   ): boolean => {
     const { instanceId, payload } = message;
@@ -616,7 +619,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
 
   const relayControl = (
     asked: Envelope<ControlPayload>,
-    dashboard: HubSocket,
+    dashboard: ClientSocket,
     replyAsFrame = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {

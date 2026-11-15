@@ -13,7 +13,7 @@ import type { ControlResult } from "./machine-answers";
 import { peekToolStatus } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { keptReleases, releaseTarget } from "./tool-releases";
-import type { HubSocket } from "./wire-socket";
+import type { MachineSocket } from "./wire-socket";
 
 /**
  * How long a tool install the hub runs itself (a joined machine's harness
@@ -65,7 +65,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
    * failures for the rest of its boot, so an install that will not work waits
    * for a click instead of going out on every reconnect.
    */
-  const autoInstall = (machineId: string, agent: HubSocket): void => {
+  const autoInstall = (machineId: string, agent: MachineSocket): void => {
     const cells = ctx.db.agentTools(machineId);
     if (Object.keys(cells).length === 0) {
       return;
@@ -143,7 +143,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
    */
   const sendInstall = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     install: {
       newest?: string;
       pin?: string;
@@ -245,7 +245,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
    */
   const keepCopies = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     cells: Record<string, ToolStatus>
   ): boolean => {
     if (ctx.machinePause.until(machineId) !== undefined) {
@@ -317,7 +317,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   const leftBy = (
     machineId: string,
     cell: ToolStatus,
-    agent: HubSocket | undefined
+    agent: MachineSocket | undefined
   ): UpdateAllLeft["why"] | undefined => {
     if (cell.copy?.by !== "cawco") {
       return "own";
@@ -351,7 +351,7 @@ export const createToolInstalls = (ctx: ToolInstallsContext) => {
   /** One machine's part of {@link updateAll}: its Update, as a press sends it, published. */
   const pressUpdate = (
     machineId: string,
-    agent: HubSocket,
+    agent: MachineSocket,
     toolId: string,
     cell: ToolStatus & { wants: ToolWants }
   ): void => {

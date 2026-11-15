@@ -274,8 +274,9 @@
         "@octokit/auth-app": "8.3.1",
         "@octokit/rest": "22.0.1",
         "@openuidev/lang-core": "1.0.1",
-        "@secretlint/core": "^13.0.7",
-        "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
+        "@secretlint/core": "^13.1.0",
+        "@secretlint/secretlint-rule-preset-recommend": "^13.1.0",
+        "@secretlint/types": "^13.1.0",
         "@tailwindcss/postcss": "4.3.3",
         "ajv": "^8.20.0",
         "browserslist": "4.29.3",
@@ -1488,13 +1489,13 @@
 
     "@sec-ant/readable-stream": ["@sec-ant/readable-stream@0.4.1", "", {}, "sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg=="],
 
-    "@secretlint/core": ["@secretlint/core@13.0.7", "", { "dependencies": { "@secretlint/profiler": "13.0.7", "@secretlint/types": "13.0.7", "debug": "^4.4.3", "structured-source": "^4.0.0" } }, "sha512-IcOR87MpNjp/WTO7bVMsIj3qkhVD+Qr/oNaA0Xl4Ok1LqG4bjXu5RjiY0Kid70BoR9eCJgkoq5gNHDGXPx+o1g=="],
+    "@secretlint/core": ["@secretlint/core@13.1.0", "", { "dependencies": { "@secretlint/profiler": "13.1.0", "@secretlint/types": "13.1.0", "debug": "^4.4.3", "structured-source": "^4.0.0" } }, "sha512-GL4qNP7G95zSdCpVOMeBVX6mROOko3uMuJNSXD+WmFG9vxChszbmTzpHRzogHHlr+TMqxHw5FE5LHl0OkB0luw=="],
 
-    "@secretlint/profiler": ["@secretlint/profiler@13.0.7", "", {}, "sha512-srhOnrrS8u6vkje+YhYZXoXXwgwZlt60x5q9C2vDjPHfkQcEXMXNDdtX7Dx1Bkw7GKuCNIn+3R5AEOphHikQ/Q=="],
+    "@secretlint/profiler": ["@secretlint/profiler@13.1.0", "", {}, "sha512-Ss/n6FduYkhLLaqDP/CSH5i6Q3YpGd+x2CAnZWxjm9uvJbZpO8eiSnqqORayHC+FcoW3PwS/9wWbHmfEQ7noYw=="],
 
-    "@secretlint/secretlint-rule-preset-recommend": ["@secretlint/secretlint-rule-preset-recommend@13.0.7", "", {}, "sha512-hfdYra+ZB6RmviEApxeL/YCx4ovBtpj0d9c+uhlCZaCikObjb8Sb8yqBN6g8/9tt7qD7LXGE3k9RtVvGK1fNVw=="],
+    "@secretlint/secretlint-rule-preset-recommend": ["@secretlint/secretlint-rule-preset-recommend@13.1.0", "", {}, "sha512-dPnplMyjJYpVCJDNTjpUA8c/AfoHbWANJJJWKroK50DGGhAB4Oumzk+XinBMyMMAwgOsjU9CB9lUHXDvObMVCg=="],
 
-    "@secretlint/types": ["@secretlint/types@13.0.7", "", {}, "sha512-5DI1W8vTjBt5ZSrLXNMCX439f+36fzQLrSGi0JPu1vhBKl3QLxPu/ilPJ5x2Ul7pU3aWUrpRva9mvojSAi4h0A=="],
+    "@secretlint/types": ["@secretlint/types@13.1.0", "", {}, "sha512-ZslrDXhpdfqp9Kp+9XZO5M/ehiwuIRCbjGZumfmE8crCvKqszirQKBxM4HPPsoWFUlf3H/eCNxx8vE93KY5I4g=="],
 
     "@shikijs/core": ["@shikijs/core@4.5.0", "", { "dependencies": { "@shikijs/primitive": "4.5.0", "@shikijs/types": "4.5.0", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.5", "hast-util-to-html": "^9.0.5" } }, "sha512-6CIgwq+bt2JZ3OSjb/nBkkwEf/CfpHcbam+Mg5Pllco7HAGRQ2/EFhZrrJtbyNTgKwknfVS+llsXGygiDGwJWw=="],
 

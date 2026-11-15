@@ -153,10 +153,7 @@ const marked = (
  * (`hide`), every secret its results' words hold named ({@link FindSecrets},
  * `FindMoment.secrets`); either way, no moment's surrounding words.
  */
-export const forScreens = (
-  answer: FindAnswer,
-  hide: boolean
-): Promise<FindAnswer> | FindAnswer =>
+export const forScreens = (answer: FindAnswer, hide: boolean): FindAnswer =>
   hide
     ? withSecrets(answer)
     : {
@@ -169,9 +166,9 @@ export const forScreens = (
       };
 
 /** `answer` with every secret its results' words hold named ({@link FindSecrets}, `FindMoment.secrets`). */
-const withSecrets = async (answer: FindAnswer): Promise<FindAnswer> => {
+const withSecrets = (answer: FindAnswer): FindAnswer => {
   const said = answer.results.map(saidOf);
-  const spans = await secretRangesOf(
+  const spans = secretRangesOf(
     said.flatMap((texts) => texts.map((each) => each.text))
   );
   let at = 0;
