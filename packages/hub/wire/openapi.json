@@ -19563,6 +19563,33 @@
         }
       }
     },
+    "/api/projects/held": {
+      "get": {
+        "operationId": "getApiProjectsHeld",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsHeld 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsHeld200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsHeld 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsHeld422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}": {
       "patch": {
         "parameters": [
@@ -22888,6 +22915,156 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiProjectsByIdGate504"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/held/discard": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "forgottenAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "forgottenAt"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdHeldDiscard",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdHeldDiscard 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldDiscard200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdHeldDiscard 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldDiscard404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdHeldDiscard 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldDiscard422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/held/retry": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "forgottenAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "forgottenAt"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdHeldRetry",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdHeldRetry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldRetried"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdHeldRetry 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldRetry400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdHeldRetry 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldRetry404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdHeldRetry 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldRetry409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdHeldRetry 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdHeldRetry422"
                 }
               }
             }
@@ -44277,6 +44454,76 @@
           "task"
         ]
       },
+      "HeldRetried": {
+        "description": "What a try of held rows again came to: how many went back, and each still held back, named; none, and the entry is gone.",
+        "type": "object",
+        "properties": {
+          "back": {
+            "description": "Rows that went back into the project.",
+            "type": "number"
+          },
+          "held": {
+            "description": "Every row still held back, each named, and why.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestoreHeldRow"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "back",
+          "held",
+          "id",
+          "name"
+        ]
+      },
+      "HeldRows": {
+        "description": "The rows a restore held back of a project, listed in Forgotten projects\nunder the project they belong to (`GET /api/projects/held`, hub\nproject-trash.ts) until a try takes the last of them\n(`POST /api/projects/:id/held/retry`) or they are deleted for good\n(`POST /api/projects/:id/held/discard`). Never a forgotten project: the\nproject is live, and nothing brings it back from here.",
+        "type": "object",
+        "properties": {
+          "forgottenAt": {
+            "description": "When the project these rows come from was forgotten, ms since the epoch: which entry this is.",
+            "type": "number"
+          },
+          "heldAt": {
+            "description": "When they were last tried, ms since the epoch: the restore, or the latest try again.",
+            "type": "number"
+          },
+          "id": {
+            "description": "The project's id.",
+            "type": "string"
+          },
+          "live": {
+            "description": "Whether the project is live now; false: forgotten again, and nothing goes back into it until it is brought back.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The project's name: its live one, else the one its record kept.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Each row held back, named, and why.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestoreHeldRow"
+            }
+          }
+        },
+        "required": [
+          "forgottenAt",
+          "heldAt",
+          "id",
+          "live",
+          "name",
+          "rows"
+        ]
+      },
       "HeldSendFrame": {
         "description": "Daemon-originated: a send the machine was handed and no process took: it\nfound no live process for its session, or the process it was handed to went\naway (slept, exited, failed, relaunched, refused by the session keeper)\nbefore reading it. Whole, as it was sent, under the hand-off it was given\n(`SendPayload.delivery`); the hub owes it to the session's next process.",
         "type": "object",
@@ -52358,7 +52605,7 @@
             "description": "What came back."
           },
           "held": {
-            "description": "Every row held back, each named: its record stays in the trash while there is one.",
+            "description": "Every row held back, each named: listed in Forgotten projects ({@link HeldRows}) while there is one.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RestoreHeldRow"
@@ -54413,7 +54660,7 @@
         ]
       },
       "RestoreHeldWhy": {
-        "description": "Why a row of a forgotten project's record stayed out of its restore\n(hub db forget.ts): its record stays in the trash, the row in it.",
+        "description": "Why a row of a forgotten project's record stayed out of its restore, or\nout of a try of it again (hub db forget.ts): the row stays listed in\nForgotten projects ({@link HeldRows}) until a try takes it.",
         "anyOf": [
           {
             "type": "object",
@@ -107154,6 +107401,48 @@
             "type": "number",
             "enum": [
               504
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiProjectsHeld200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/HeldRows"
+        }
+      },
+      "getApiProjectsHeld422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
             ]
           },
           "title": {
@@ -163769,6 +164058,513 @@
           "status",
           "title",
           "type"
+        ]
+      },
+      "postApiProjectsByIdHeldDiscard200": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "rows"
+        ]
+      },
+      "postApiProjectsByIdHeldDiscard404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "held-rows-none"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiProjectsByIdHeldDiscard422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "restore-record-unreadable"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdHeldRetry400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-area-id-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-project-id-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiProjectsByIdHeldRetry404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "held-rows-none"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiProjectsByIdHeldRetry409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "held-project-forgotten"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiProjectsByIdHeldRetry422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "held-rows-unreadable"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "restore-record-unreadable"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
         ]
       },
       "postApiProjectsByIdIngressGithubPoll404": {

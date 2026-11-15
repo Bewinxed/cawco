@@ -12,9 +12,17 @@
  * row the restore held back (restore-held.svelte.ts). A refusal is never
  * a toast: it is kept (refusals.svelte.ts) and said on its row in Forgotten
  * projects, with Try again, through a reload.
+ *
+ * So are the rows a restore held back, listed there under their project:
+ * Try again puts back what now reads. Every row back, its entry goes and a
+ * toast says so; some still held back, or the hub refusing, the words are
+ * kept and said under the entry, through a reload, until it is tried again
+ * or deleted.
  */
 import { detach } from "@cawco/core/detach";
+import type { HeldRows } from "@cawco/core/forgotten-project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
+import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { toast } from "#lib/platform/toasts.js";
 import { goto } from "$app/navigation";
@@ -22,7 +30,12 @@ import type { ProjectRow } from "./projects";
 import { refusals } from "./refusals.svelte";
 import { restoreHeld } from "./restore-held.svelte";
 import type { EndKind } from "./stop-work.svelte";
-import { restoreProject, StandingRefusal } from "./stores/projects.svelte";
+import {
+  discardHeldRows,
+  restoreProject,
+  retryHeldRows,
+  StandingRefusal,
+} from "./stores/projects.svelte";
 
 let asked = $state<{
   at: string;
@@ -128,3 +141,35 @@ export function offerBringBack(project: { id: string; name: string }): void {
     },
   });
 }
+
+/** The key what an entry of held rows' last Try again came to is kept under: the entry in Forgotten projects. */
+const heldKey = (one: Pick<HeldRows, "forgottenAt" | "id">): string =>
+  `held:${one.id}:${one.forgottenAt}`;
+
+/** Tries an entry's held rows again (as above). */
+export async function tryHeldAgain(one: HeldRows): Promise<void> {
+  const key = heldKey(one);
+  try {
+    const retried = await retryHeldRows(one.id, one.forgottenAt);
+    if (retried.held.length === 0) {
+      refusals.delete(key);
+      toast(projectTrashWords.heldAllBack(retried.name, retried.back));
+      return;
+    }
+    refusals.set(key, {
+      reason: projectTrashWords.heldStill(retried.back, retried.held.length),
+    });
+  } catch (error) {
+    refusals.set(key, { reason: failureWords(error) });
+  }
+}
+
+/** Deletes an entry's held rows for good; a refusal is thrown in the hub's words. */
+export async function deleteHeld(one: HeldRows): Promise<void> {
+  await discardHeldRows(one.id, one.forgottenAt);
+  refusals.delete(heldKey(one));
+}
+
+/** What an entry's last Try again came to, in words; null: nothing to say. */
+export const heldSaid = (one: HeldRows): string | null =>
+  refusals.reason(heldKey(one));

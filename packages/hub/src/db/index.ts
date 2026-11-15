@@ -157,6 +157,8 @@ interface HubStore {
   /** Relays: a project's public webhook paths through Funnel (relay.ts). */
   readonly relays: RelaysDb;
   readonly restoreProject: ForgetDb["restore"];
+  /** Rows a project's restore held back, put back (forget.ts `retry`). */
+  readonly retryHeldRows: ForgetDb["retry"];
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** The background tasks each Claude session's process runs now (session-tasks.ts). */
@@ -338,6 +340,7 @@ const make = async (path: string): Promise<DbShape> => {
     trash: trashDb(db),
     forgetProject: forgetting.forget,
     restoreProject: forgetting.restore,
+    retryHeldRows: forgetting.retry,
     projectWork: projectWorkDb(db),
   };
   return store;

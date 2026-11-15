@@ -1,7 +1,8 @@
 /**
  * What this hub's trash held on 2026-11-04, as `GET /api/projects/forgotten`
  * listed it: two projects forgotten with their names and eighteen folders
- * forgotten before the hub kept names. Forgotten projects' stories and its
+ * forgotten before the hub kept names; and rows restores held back, as
+ * `GET /api/projects/held` lists them. Forgotten projects' stories and its
  * preview (`/dev/project-ends`) draw from it.
  */
 
@@ -10,6 +11,8 @@ import type {
   ForgottenFolderHints,
   ForgottenPlace,
   ForgottenProject,
+  HeldRows,
+  RestoreHeldRow,
 } from "@cawco/core/forgotten-project";
 
 /** The clock the dates read against: the evening the list was read. */
@@ -207,4 +210,110 @@ export const FOLDED: ForgottenProject = {
     tasks: 2,
     tasksIn: { id: "4d2f1968", name: "Cawco", tasks: 2 },
   }),
+};
+
+/** A row held back because a migration kept a column of it as not read. */
+const unreadRow = (
+  table: string,
+  id: string,
+  column: string,
+  title: string | null = null
+): RestoreHeldRow => ({
+  table,
+  title,
+  id,
+  why: { kind: "unread", columns: [column] },
+});
+
+/**
+ * Private office, brought back on the morning of 2026-11-04 with five rows
+ * held back, as the restore across migrations held the lists project's: a
+ * server whose platforms did not read, two tracker links whose baselines
+ * did not, the label hanging off one, and a task whose number a task made
+ * since holds.
+ */
+export const HELD_OFFICE: HeldRows = {
+  id: "4d2f1968-0c0e-4b7e-9a51-73f2a8e0c1d4",
+  name: "Private office",
+  live: true,
+  forgottenAt: Date.parse("2026-11-03T16:12:40Z"),
+  heldAt: Date.parse("2026-11-04T09:02:11Z"),
+  rows: [
+    unreadRow("mcp_servers", "linear", "platforms_unread", "linear"),
+    unreadRow("tracker_links", "4d2f1968/tsk-14", "synced_unread"),
+    unreadRow("tracker_links", "4d2f1968/tsk-15", "synced_unread"),
+    {
+      table: "tracker_link_synced_labels",
+      title: null,
+      id: "4d2f1968/tsk-15/needs-quote",
+      why: {
+        kind: "depends",
+        table: "tracker_links",
+        title: null,
+        id: "4d2f1968/tsk-15",
+      },
+    },
+    {
+      table: "project_tasks",
+      title:
+        "Order the standing desk from Fully before the November price change",
+      id: "4d2f1968/tsk-22",
+      why: { kind: "taken" },
+    },
+  ],
+};
+
+/** The same entry after a Try again that put the server and one link back: three still held back. */
+export const HELD_OFFICE_AFTER: HeldRows = {
+  ...HELD_OFFICE,
+  heldAt: Date.parse("2026-11-04T20:41:05Z"),
+  rows: HELD_OFFICE.rows.slice(2),
+};
+
+/**
+ * Balcony garden's rows held back by an earlier restore, while it is
+ * forgotten again: nothing goes back into it until it is brought back.
+ */
+export const HELD_GONE: HeldRows = {
+  id: BALCONY.id,
+  name: "Balcony garden",
+  live: false,
+  forgottenAt: Date.parse("2026-11-01T11:20:09Z"),
+  heldAt: Date.parse("2026-11-02T08:15:44Z"),
+  rows: [
+    {
+      table: "routines",
+      title: "Water the tomatoes when the soil sensor reads below 30%",
+      id: "rtn-3",
+      why: {
+        kind: "shape",
+        column: "schedule",
+        issue: "every: expected one of hourly, daily, weekly; got fortnightly",
+      },
+    },
+    {
+      table: "project_notes",
+      title: "Seed order",
+      id: "note-9",
+      why: { kind: "orphan", parent: "instances" },
+    },
+  ],
+};
+
+/** A restore that held twenty-four rows back: the list under its entry scrolls in its place. */
+export const HELD_MANY: HeldRows = {
+  ...HELD_OFFICE,
+  rows: Array.from({ length: 24 }, (_, at) =>
+    at % 3 === 2
+      ? {
+          table: "project_task_outputs",
+          title: null,
+          id: `4d2f1968/tsk-${30 + at}/report-${at}`,
+          why: {
+            kind: "constraint",
+            detail: "CHECK constraint failed: project_task_outputs_kind",
+          },
+        }
+      : unreadRow("tracker_links", `4d2f1968/tsk-${30 + at}`, "synced_unread")
+  ),
 };

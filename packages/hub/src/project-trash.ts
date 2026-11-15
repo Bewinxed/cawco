@@ -36,12 +36,19 @@
  *
  * Nothing in the trash is erased: a restore moves its folder back and drops
  * its record, whose rows are live again. A restore that held rows back
- * (db forget.ts) keeps the record whole beside the trash's entries, as
- * `<entry>.held.json`, and names each row it held back in its answer.
+ * (db forget.ts) names each in its answer and writes its record over with
+ * them alone (`kind: "held"`): the rows as the hub's schema held them, the
+ * migrations that schema is, the cut links waiting on them, and each row's
+ * reason. That entry is listed apart from the forgotten projects
+ * (`GET /api/projects/held`), under the project it belongs to, and is never
+ * brought back as a project: a try again (`retry`) puts its rows back as a
+ * restore puts a record's, through every migration since, and writes it
+ * over with what is still held back, or drops it once none is. Deleting it
+ * for good (`discardHeld`), or its project (project-delete.ts), drops it.
  */
 
 import { rmSync } from "node:fs";
-import { readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_NAME } from "@cawco/core/artifact-kinds";
 import type { BrowserKey } from "@cawco/core/browser";
@@ -51,6 +58,8 @@ import type {
   ForgottenFolderHints,
   ForgottenPlace,
   ForgottenProject,
+  HeldRetried,
+  HeldRows,
   ProjectRestored,
   RestoreHeldRow,
 } from "@cawco/core/forgotten-project";
@@ -66,7 +75,13 @@ import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
-import { type ProjectRows, ProjectRowsSchema } from "./db/forget";
+import {
+  heldRowsAt,
+  type ProjectRows,
+  ProjectRowsSchema,
+  projectRowsAt,
+  type RowsPut,
+} from "./db/forget";
 import {
   migratedRows,
   RecordMigrationsSchema,
@@ -112,7 +127,31 @@ const ForgottenSchema = z.object({
   browsers: z.array(KeptBrowserSchema).default([]),
 });
 
-/** What a forget writes beside the folder, or a fold: the entry's own word on what it is. */
+/** Why a row was held back (core forgotten-project.ts `RestoreHeldWhy`). */
+const RestoreHeldWhySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("unread"), columns: z.array(z.string()) }),
+  z.object({ kind: z.literal("shape"), column: z.string(), issue: z.string() }),
+  z.object({ kind: z.literal("constraint"), detail: z.string() }),
+  z.object({
+    kind: z.literal("depends"),
+    table: z.string(),
+    title: z.string().nullable(),
+    id: z.string().nullable(),
+  }),
+  z.object({ kind: z.literal("taken") }),
+  z.object({ kind: z.literal("orphan"), parent: z.string().nullable() }),
+  z.object({ kind: z.literal("table") }),
+]);
+
+/** One row held back, named, and why (core `RestoreHeldRow`). */
+const RestoreHeldRowSchema: z.ZodType<RestoreHeldRow> = z.object({
+  id: z.string().nullable(),
+  table: z.string(),
+  title: z.string().nullable(),
+  why: RestoreHeldWhySchema,
+});
+
+/** What a forget writes beside the folder, a fold, or the rows a restore held back: the entry's own word on what it is. */
 const EntryRecordSchema = z.discriminatedUnion("kind", [
   z.discriminatedUnion("version", [
     /** Written before a record named its schema: a restore places it by its columns (db restore-schema.ts). */
@@ -131,6 +170,23 @@ const EntryRecordSchema = z.discriminatedUnion("kind", [
     into: z.string(),
     foldedAt: z.number(),
   }),
+  z.object({
+    kind: z.literal("held"),
+    version: z.literal(1),
+    id: z.string(),
+    /** The project's name when its rows were held back. */
+    name: z.string(),
+    /** When it was forgotten, ms since the epoch: the entry's name says it too. */
+    forgottenAt: z.number(),
+    /** When the rows were last tried: the restore, or the latest try again. */
+    heldAt: z.number(),
+    /** The migrations the hub had applied as they were held back: `rows`' schema. */
+    migrations: RecordMigrationsSchema,
+    /** The rows held back, and the cut links naming them (db forget.ts `kept`). */
+    rows: ProjectRowsSchema,
+    /** Each row held back, named, and why, as the latest try said it. */
+    held: z.array(RestoreHeldRowSchema).min(1),
+  }),
 ]);
 type EntryRecord = z.input<typeof EntryRecordSchema>;
 type KeptBrowser = z.infer<typeof KeptBrowserSchema>;
@@ -143,6 +199,8 @@ const RECORD = ".json";
  * it holds the project's rows whole (its rules, prompts and pages).
  */
 const RECORD_WRITE = { exclusive: true, mode: 0o600 } as const;
+/** Rows held back are written over their entry's record, which held them: read by the hub alone, as it is. */
+const HELD_WRITE = { mode: 0o600 } as const;
 /** The line every commit a fold made carries (tasks.ts `adopt`, project-merge.ts). */
 const MERGE_LINE = `${TRAILERS.change}: ${CHANGES.merge}`;
 
@@ -154,16 +212,6 @@ const TRASH_MACHINE = "hub";
 
 const recordPath = (entry: string): string =>
   join(PROJECT_TRASH_DIR, `${entry}${RECORD}`);
-
-/**
- * A record whose restore held rows back (db forget.ts), kept whole beside
- * the trash's entries and out of them: its project is live again. Deleting
- * the project for good deletes it ({@link purgeTrash}).
- */
-const HELD = ".held.json";
-
-const heldPath = (entry: string): string =>
-  join(PROJECT_TRASH_DIR, `${entry}${HELD}`);
 
 /** One entry in the trash: what it holds, read off its names. */
 interface Entry {
@@ -190,8 +238,7 @@ const entries = async (): Promise<Entry[]> => {
   );
   const found = new Map<string, Entry>();
   for (const one of names) {
-    const record =
-      one.isFile() && one.name.endsWith(RECORD) && !one.name.endsWith(HELD);
+    const record = one.isFile() && one.name.endsWith(RECORD);
     if (!(record || one.isDirectory())) {
       continue;
     }
@@ -549,15 +596,16 @@ const migratedRecord = async (id: string, record: ForgottenRecord) => {
   console.log(
     `${projectTrashWords.restoreLine(id)} its record's rows, at ${placed.found === "marked" ? "the schema it names" : `${placed.found.tag}, found by its columns`}, brought through the migrations since on a scratch database`
   );
-  const migrated = await migratedRows(id, record.rows, placed.journal).catch(
-    (error: unknown) =>
-      problem(422, {
-        code: "restore-record-unreadable",
-        detail: projectTrashWords.migrationFailed(
-          record.name,
-          error instanceof Error ? error.message : String(error)
-        ),
-      })
+  const migrated = await migratedRows(record.rows, placed.journal, (scratch) =>
+    projectRowsAt(scratch, id)
+  ).catch((error: unknown) =>
+    problem(422, {
+      code: "restore-record-unreadable",
+      detail: projectTrashWords.migrationFailed(
+        record.name,
+        error instanceof Error ? error.message : String(error)
+      ),
+    })
   );
   if (migrated instanceof ElysiaStatus) {
     return migrated;
@@ -572,24 +620,37 @@ const migratedRecord = async (id: string, record: ForgottenRecord) => {
 };
 
 /**
- * The entry's record once its rows went back: dropped when every row did,
- * else kept whole beside the trash's entries ({@link HELD}), out of the list
- * of forgotten projects (the project is live), each row held back said in
- * the log.
+ * The entry's record once rows went back, from it or from its rows held
+ * back: dropped when none is held back, else written over with the rows
+ * held back alone (`kind: "held"`), each said in the log.
  */
 const keepHeld = async (
-  id: string,
   entry: string,
-  held: readonly RestoreHeldRow[]
+  of: { id: string; name: string; forgottenAt: number },
+  put: Pick<RowsPut, "held" | "kept" | "migrations">
 ): Promise<void> => {
-  if (held.length === 0) {
+  if (put.held.length === 0) {
     await rm(recordPath(entry), { force: true });
     return;
   }
-  await rename(recordPath(entry), heldPath(entry));
-  for (const one of held) {
+  writeStateFileSync(
+    recordPath(entry),
+    JSON.stringify({
+      kind: "held",
+      version: 1,
+      id: of.id,
+      name: of.name,
+      forgottenAt: of.forgottenAt,
+      heldAt: Date.now(),
+      migrations: put.migrations,
+      rows: put.kept,
+      held: put.held,
+    } satisfies EntryRecord),
+    HELD_WRITE
+  );
+  for (const one of put.held) {
     console.log(
-      `${projectTrashWords.restoreLine(id)} held back ${projectTrashWords.heldRow(one)}`
+      `${projectTrashWords.restoreLine(of.id)} held back ${projectTrashWords.heldRow(one)}`
     );
   }
 };
@@ -645,11 +706,13 @@ const heldIn = async (mine: readonly Entry[]): Promise<TrashedProject> => {
   };
   for (const entry of mine) {
     const record = await recordOf(entry).catch(() => undefined);
-    if (record?.kind !== "forgotten") {
+    if (!(record?.kind === "forgotten" || record?.kind === "held")) {
       continue;
     }
     held.name ??= record.name;
-    held.browsers.push(...record.browsers);
+    if (record.kind === "forgotten") {
+      held.browsers.push(...record.browsers);
+    }
     held.sessions.push(
       ...record.rows.unlinked
         .filter((one) => one.table === "instances")
@@ -719,7 +782,7 @@ export const diskPlaces = (
     }));
 };
 
-/** Every entry of project `id` in the trash gone for good, its folder and its record, and each record a restore held rows back in: how many entries. */
+/** Every entry of project `id` in the trash gone for good, its folder and its record, rows a restore held back with them: how many entries. */
 export const purgeTrash = async (id: string): Promise<number> => {
   const mine = (await entries()).filter((one) => one.id === id);
   for (const entry of mine) {
@@ -728,13 +791,6 @@ export const purgeTrash = async (id: string): Promise<number> => {
       force: true,
     });
     await rm(recordPath(entry.entry), { force: true });
-  }
-  const held = (await readdir(PROJECT_TRASH_DIR).catch(() => [])).filter(
-    (name) =>
-      name.endsWith(HELD) && ENTRY.exec(name.slice(0, -HELD.length))?.[1] === id
-  );
-  for (const name of held) {
-    await rm(join(PROJECT_TRASH_DIR, name), { force: true });
   }
   return mine.length;
 };
@@ -787,6 +843,7 @@ export const projectTrash = (
     | "namedMachines"
     | "project"
     | "restoreProject"
+    | "retryHeldRows"
   >
 ) => {
   /** The live project holding `id`, refused in words (restore-id-taken). */
@@ -869,7 +926,7 @@ export const projectTrash = (
     if (restored instanceof ElysiaStatus) {
       return restored;
     }
-    await keepHeld(id, entry.entry, restored.held);
+    await keepHeld(entry.entry, record, restored);
     const left = heldByTable(restored.held);
     // Its browsers were never moved: each its machine still keeps is its
     // own again, its profile where it was; one removed since is gone.
@@ -1073,7 +1130,7 @@ export const projectTrash = (
         }
         throw error;
       });
-      if (record?.kind === "folded") {
+      if (record?.kind === "folded" || record?.kind === "held") {
         continue;
       }
       if (record) {
@@ -1230,12 +1287,154 @@ export const projectTrash = (
           ),
         });
       }
+      // Rows held back are no forgotten project: tried again, never brought back.
+      if (record?.kind === "held") {
+        return problem(404, {
+          code: "restore-not-forgotten",
+          detail: projectTrashWords.heldNotForgotten(
+            db.project(id)?.name ?? record.name,
+            record.held.length
+          ),
+        });
+      }
       if (!record) {
         return await restoreFolder(entry, asked);
       }
       return await restoreRecord(id, entry, record);
     },
+
+    /** Every entry of rows a restore held back, newest first, each under its project (core `HeldRows`). */
+    held: async (): Promise<HeldRows[]> => {
+      const out: HeldRows[] = [];
+      for (const entry of await entries()) {
+        const record = entry.record
+          ? await recordOf(entry).catch((error: unknown) => {
+              if (isDamagedRecord(error)) {
+                console.warn(
+                  `[hub] rows held back of project ${entry.id}: ${error.message}`
+                );
+                return;
+              }
+              throw error;
+            })
+          : undefined;
+        if (record?.kind !== "held") {
+          continue;
+        }
+        const live = db.project(record.id);
+        out.push({
+          id: record.id,
+          name: live?.name ?? record.name,
+          live: live !== undefined,
+          forgottenAt: record.forgottenAt,
+          heldAt: record.heldAt,
+          rows: record.held,
+        });
+      }
+      return out;
+    },
+
+    /**
+     * Puts the rows a restore of project `id` held back (its entry forgotten
+     * at `forgottenAt`) back into it, as its restore put the rest: through
+     * every migration since they were held back, then checked and held back
+     * again as a restore's are. The entry is written over with what is still
+     * held back, or dropped once none is. Refused in words while the project
+     * is not live, or the entry is gone or does not read.
+     */
+    retry: async (id: string, { forgottenAt }: { forgottenAt: number }) => {
+      const found = await heldEntry(id, forgottenAt);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      const { entry, record } = found;
+      const live = db.project(id);
+      if (!live) {
+        return problem(409, {
+          code: "held-project-forgotten",
+          detail: projectTrashWords.heldProjectForgotten(record.name),
+        });
+      }
+      const placed = recordSchema(record.rows, record.migrations);
+      if (!placed.ok) {
+        return problem(422, {
+          code: "held-rows-unreadable",
+          detail: unplacedWords(live.name, placed),
+        });
+      }
+      const migrated = await migratedRows(
+        record.rows,
+        placed.journal,
+        (scratch) => heldRowsAt(scratch, record.rows)
+      ).catch((error: unknown) =>
+        problem(422, {
+          code: "held-rows-unreadable",
+          detail: projectTrashWords.migrationFailed(
+            live.name,
+            error instanceof Error ? error.message : String(error)
+          ),
+        })
+      );
+      if (migrated instanceof ElysiaStatus) {
+        return migrated;
+      }
+      if (!migrated.ok) {
+        return problem(422, {
+          code: "held-rows-unreadable",
+          detail: projectTrashWords.columnMissing(live.name, migrated.missing),
+        });
+      }
+      const done = db.retryHeldRows(id, {
+        tables: migrated.tables,
+        unlinked: record.rows.unlinked,
+      });
+      if (!done.ok) {
+        return problem(409, {
+          code: "held-project-forgotten",
+          detail: projectTrashWords.heldProjectForgotten(record.name),
+        });
+      }
+      await keepHeld(entry.entry, { ...record, name: live.name }, done);
+      const retried: HeldRetried = {
+        id,
+        name: live.name,
+        back: Object.values(done.back).reduce((sum, n) => sum + n, 0),
+        held: done.held,
+      };
+      return retried;
+    },
+
+    /** The rows a restore of project `id` held back (its entry forgotten at `forgottenAt`) deleted for good; refused in words when there is no such entry. */
+    discardHeld: async (
+      id: string,
+      { forgottenAt }: { forgottenAt: number }
+    ) => {
+      const found = await heldEntry(id, forgottenAt);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      await rm(recordPath(found.entry.entry), { force: true });
+      return {
+        name: db.project(id)?.name ?? found.record.name,
+        rows: found.record.held.length,
+      };
+    },
   };
+};
+
+/** Project `id`'s entry forgotten at `forgottenAt` when it holds rows a restore held back; refused in words when there is none, or its record does not read. */
+const heldEntry = async (id: string, forgottenAt: number) => {
+  const { entry, record } = await newestEntry(id, forgottenAt);
+  if (record instanceof ElysiaStatus) {
+    return record;
+  }
+  if (!(entry && record?.kind === "held")) {
+    return problem(404, {
+      code: "held-rows-none",
+      detail: projectTrashWords.heldNone(id),
+    });
+  }
+  return { entry, record };
 };
 
 export type ProjectTrash = ReturnType<typeof projectTrash>;

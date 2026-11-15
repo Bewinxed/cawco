@@ -233,6 +233,10 @@ export const projectRoutes = ({
     // Every project forgotten that the trash can bring back, newest
     // first, with what each brings (project-trash.ts).
     .get("/api/projects/forgotten", () => forgottenProjects.forgotten())
+    // The rows each restore held back, newest first, each entry under its
+    // project, listed in Forgotten projects to be tried again
+    // (project-trash.ts).
+    .get("/api/projects/held", () => forgottenProjects.held())
     .delete("/api/projects/:id", async ({ params, request }) => {
       const asked = askerOf(request);
       const said = (outcome: string) =>
@@ -369,6 +373,64 @@ export const projectRoutes = ({
           restored.brought.folder
         );
         return restored;
+      }
+    )
+    // The rows a restore of the project held back (its entry forgotten at
+    // `forgottenAt`) tried again, as the restore put the rest
+    // (project-trash.ts): the answer names each still held back. Refused,
+    // in the hub's words, while the project is forgotten again or there is
+    // no such entry.
+    .post(
+      "/api/projects/:id/held/retry",
+      { body: t.Object({ forgottenAt: t.Number() }) },
+      async ({ params, body, request }) => {
+        const head = `${projectTrashWords.heldLine(params.id, "retry")} ${askerOf(request)}`;
+        const retried = await forgottenProjects.retry(params.id, body);
+        if (retried instanceof ElysiaStatus) {
+          console.log(
+            `${head} outcome=refused status=${retried.status}: ${retried.response.detail}`
+          );
+          return retried;
+        }
+        // Task rows that went back, read against its folder's task files.
+        const caught = await tasks.catchUp(params.id);
+        if (caught) {
+          console.log(
+            `${head} outcome=refused status=${caught.status}: ${caught.response.detail}`
+          );
+          return caught;
+        }
+        console.log(
+          `${head} outcome=tried back=${retried.back} held=${retried.held.length}`
+        );
+        projectMoved(
+          params.id,
+          db.project(params.id)?.places.map((place) => place.machineId) ?? [],
+          false
+        );
+        return retried;
+      }
+    )
+    // The rows a restore of the project held back (its entry forgotten at
+    // `forgottenAt`) deleted for good; the project itself stays.
+    .post(
+      "/api/projects/:id/held/discard",
+      { body: t.Object({ forgottenAt: t.Number() }) },
+      async ({ params, body, request }) => {
+        const head = `${projectTrashWords.heldLine(params.id, "discard")} ${askerOf(request)}`;
+        const discarded = await forgottenProjects.discardHeld(params.id, body);
+        if (discarded instanceof ElysiaStatus) {
+          console.log(
+            `${head} outcome=refused status=${discarded.status}: ${discarded.response.detail}`
+          );
+          return discarded;
+        }
+        console.log(
+          `${head} outcome=deleted name=${JSON.stringify(discarded.name)} rows=${discarded.rows}`
+        );
+        // Every dashboard reads its lists again.
+        projectMoved(params.id, [], false);
+        return discarded;
       }
     )
     // Another checkout of the project's repository, named by hand.

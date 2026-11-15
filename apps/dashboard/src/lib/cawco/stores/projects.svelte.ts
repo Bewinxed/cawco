@@ -9,6 +9,8 @@ import type { OnCap, ProjectCap } from "@cawco/core/areas";
 import { PRESENCE_HEADER } from "@cawco/core/browser-gate";
 import type {
   ForgottenProject,
+  HeldRetried,
+  HeldRows,
   ProjectRestored,
 } from "@cawco/core/forgotten-project";
 import type { ProjectStopFrame } from "@cawco/core/frames";
@@ -23,6 +25,7 @@ import {
 import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
+import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { hub } from "#lib/platform/hub.js";
 import {
   hubData,
@@ -394,6 +397,52 @@ export async function restoreProject(
   );
   await readProjects();
   return restored;
+}
+
+/** The rows each restore held back, newest first, each entry under its project (hub project-trash.ts). */
+export async function readHeldRows(): Promise<HeldRows[]> {
+  return await hubData(hub.api.projects.held.get(), (refused) =>
+    hubRefusal(refused, projectTrashWords.heldUnreadThen)
+  );
+}
+
+/**
+ * Tries the rows a restore of project `id` held back (its entry forgotten
+ * at `forgottenAt`) again: the answer names each still held back. A refusal
+ * is thrown in the hub's words. The projects are read again, so every list
+ * has what went back.
+ */
+export async function retryHeldRows(
+  id: string,
+  forgottenAt: number
+): Promise<HeldRetried> {
+  const retried = await hubData(
+    hub.api
+      .projects({ id })
+      .held.retry.post(
+        { forgottenAt },
+        { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+      ),
+    (refused) => hubRefusal(refused, projectTrashWords.heldNotRetriedThen)
+  );
+  await readProjects();
+  return retried;
+}
+
+/** Deletes the rows a restore of project `id` held back (its entry forgotten at `forgottenAt`) for good; a refusal is thrown in the hub's words. */
+export async function discardHeldRows(
+  id: string,
+  forgottenAt: number
+): Promise<void> {
+  await hubDone(
+    hub.api
+      .projects({ id })
+      .held.discard.post(
+        { forgottenAt },
+        { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+      ),
+    (refused) => hubRefusal(refused, projectTrashWords.heldNotDeletedThen)
+  );
 }
 
 /** Reads the projects again, as the hub has them now. */

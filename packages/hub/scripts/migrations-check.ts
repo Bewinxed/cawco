@@ -764,6 +764,9 @@ const migratedRecord = async (
 ) => {
   const { migratedRows, recordSchema } =
     await import("../src/db/restore-schema");
+  const { projectRowsAt } = await import("../src/db/forget");
+  const readOut = (on: Parameters<typeof projectRowsAt>[0]) =>
+    projectRowsAt(on, RESTORED);
   const marked = recordSchema(record.rows, record.migrations);
   const found = recordSchema(record.rows, undefined);
   if (!(marked.ok && found.ok && typeof found.found === "object")) {
@@ -771,8 +774,8 @@ const migratedRecord = async (
       `case restore: the record's schema was not placed: ${JSON.stringify(marked.ok ? found : marked)}`
     );
   }
-  const migrated = await migratedRows(RESTORED, record.rows, marked.journal);
-  const byColumns = await migratedRows(RESTORED, record.rows, found.journal);
+  const migrated = await migratedRows(record.rows, marked.journal, readOut);
+  const byColumns = await migratedRows(record.rows, found.journal, readOut);
   if (!(migrated.ok && byColumns.ok)) {
     throw new Error(
       `case restore: the record's rows did not go in at its schema: ${JSON.stringify(migrated.ok ? byColumns : migrated)}`
@@ -842,6 +845,103 @@ const restoredOn = async (
   }
 };
 
+/** What a restore, or a try again, kept of the rows it held back, and the migrations its schema is: the entry project-trash.ts writes. */
+type HeldKept = Pick<
+  Extract<Awaited<ReturnType<typeof restoredOn>>, { ok: true }>,
+  "kept" | "migrations"
+>;
+
+/**
+ * The rows `held` keeps tried again on the database at `path`, as
+ * project-trash.ts `retry` tries an entry's: placed at the schema it names,
+ * brought through the migrations since on a scratch database and read out
+ * from the rows themselves (db restore-schema.ts, forget.ts `heldRowsAt`),
+ * then put back by db forget.ts `retry`.
+ */
+const retriedOn = async (path: string, held: HeldKept) => {
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { forgetDb, heldRowsAt, schemaTables } =
+    await import("../src/db/forget");
+  const { artifactEvents } = await import("../src/db/artifacts");
+  const { migratedRows, recordSchema } =
+    await import("../src/db/restore-schema");
+  const placed = recordSchema(held.kept, held.migrations);
+  if (!placed.ok) {
+    throw new Error(
+      `case restore: the held rows' schema was not placed: ${JSON.stringify(placed)}`
+    );
+  }
+  const migrated = await migratedRows(held.kept, placed.journal, (on) =>
+    heldRowsAt(on, held.kept)
+  );
+  if (!migrated.ok) {
+    throw new Error(
+      `case restore: the held rows did not go in at their schema: ${migrated.missing}`
+    );
+  }
+  const db = drizzle(path);
+  db.$client.run("PRAGMA foreign_keys = ON");
+  try {
+    const retried = forgetDb(
+      db,
+      artifactEvents(db).dropArtifacts,
+      await schemaTables()
+    ).retry(RESTORED, {
+      tables: migrated.tables,
+      unlinked: held.kept.unlinked,
+    });
+    if (!retried.ok) {
+      throw new Error(`case restore: not tried again: ${retried.why}`);
+    }
+    return retried;
+  } finally {
+    db.$client.close();
+  }
+};
+
+/** How many rows `kept` holds, of every table. */
+const keptCount = (held: HeldKept): number =>
+  held.kept.tables.reduce((sum, one) => sum + one.rows.length, 0);
+
+/** Each held row as one key: its table and its id. */
+const heldKeys = (held: readonly { id: string | null; table: string }[]) =>
+  held.map((one) => `${one.table}/${one.id}`).toSorted();
+
+/** The task of {@link RESTORED} whose tracker link the lists fixture seeded with a baseline that does not read, and a label beside it. */
+const FIXED_TASK = "tsk-5";
+
+/**
+ * `held` with {@link FIXED_TASK}'s tracker link's baseline set readable, as
+ * a sync that found the task and its issue agreeing would leave it: the
+ * fields that read stand beside it, nothing kept as not read.
+ */
+const fixedLink = (held: HeldKept): HeldKept => ({
+  ...held,
+  kept: {
+    ...held.kept,
+    tables: held.kept.tables.map((kept) => {
+      if (kept.table !== "tracker_links") {
+        return kept;
+      }
+      const taskAt = kept.columns.indexOf("task_id");
+      const unreadAt = kept.columns.indexOf("synced_unread");
+      if (taskAt < 0 || unreadAt < 0) {
+        throw new Error(
+          "case restore: the held tracker links have no task_id or synced_unread to fix"
+        );
+      }
+      return {
+        ...kept,
+        rows: kept.rows.map((row) =>
+          row[taskAt] === FIXED_TASK
+            ? row.map((cell, index) => (index === unreadAt ? null : cell))
+            : row
+        ),
+      };
+    }),
+  },
+});
+
 /** The value `column` holds in `table`'s row named `name`, of `rows` ({@link rowsText}). */
 const valueIn = (
   rows: Map<string, string[]>,
@@ -866,7 +966,13 @@ const valueIn = (
  * exactly those rows, but the ones held back, each of them a value a
  * migration kept as not read or a row hanging off one, named with why. The
  * record's schema found from its columns alone (a record made before
- * records named their migrations) brings the same rows. One line.
+ * records named their migrations) brings the same rows. The rows held back,
+ * as the entry project-trash.ts writes keeps them, are tried again on the
+ * same build (project-trash.ts `retry`'s steps): every one is held back and
+ * named again, the entry keeping them all. Then one tracker link's baseline
+ * is fixed in the entry and they are tried again: it and the label hanging
+ * off it go back, the rest stay, named, and the entry keeps them alone. One
+ * line.
  */
 const restoreCase = async (): Promise<string> => {
   const dir = join(scratch, "case-restore");
@@ -929,7 +1035,63 @@ const restoreCase = async (): Promise<string> => {
   const back = Object.values(restored.back).reduce((sum, n) => sum + n, 0);
   const of = (kind: string) =>
     held.filter((one) => one.why.kind === kind).length;
-  return `case restore across migrations: ${RESTORED} forgotten at ${copies.baseTag}, its schema the record names and, found from its columns alone, ${foundTag}, bringing the same rows; restored on today's schema: ${back} rows back in ${Object.keys(restored.back).length} tables, each as the migrations place it on a hub where it stayed (${count("mcp_server_platforms")} server platform rows, ${count("project_task_outputs")} task outputs, ${count("tracker_link_synced_labels")} tracker labels, ${count("moves")} moves), ${held.length} held back and named (${of("unread")} kept as not read, ${of("depends")} hanging off one), as "${projectTrashWords.heldRow(unread)}"`;
+  if (keptCount(restored) !== held.length) {
+    throw new Error(
+      `case restore: ${held.length} rows were held back and the entry keeps ${keptCount(restored)}`
+    );
+  }
+  // Tried again on the same build: nothing changed, so every row is held
+  // back again, named again, and the entry keeps them all.
+  const again = await retriedOn(copies.forgotten, restored);
+  const againBack = Object.values(again.back).reduce((sum, n) => sum + n, 0);
+  if (
+    againBack !== 0 ||
+    keptCount(again) !== held.length ||
+    heldKeys(again.held).join() !== heldKeys(held).join()
+  ) {
+    throw new Error(
+      `case restore: tried again unchanged, ${againBack} went back and ${again.held.length} held back (${heldKeys(again.held).join(", ")}), the entry keeping ${keptCount(again)}, where all ${held.length} stay (${heldKeys(held).join(", ")})`
+    );
+  }
+  // One tracker link's baseline fixed in the entry: it and the label that
+  // hangs off it go back, the rest stay.
+  const linkId = `${RESTORED}/${FIXED_TASK}`;
+  const link = held.find(
+    (one) => one.table === "tracker_links" && one.id === linkId
+  );
+  const dependents = held.filter(
+    (one) =>
+      one.why.kind === "depends" &&
+      one.why.table === "tracker_links" &&
+      one.why.id === linkId
+  );
+  if (!link || dependents.length === 0) {
+    throw new Error(
+      `case restore: ${FIXED_TASK}'s tracker link was not held back with a row hanging off it`
+    );
+  }
+  const fixed = await retriedOn(copies.forgotten, fixedLink(again));
+  const fixedBack = Object.values(fixed.back).reduce((sum, n) => sum + n, 0);
+  const stillKeys = heldKeys(fixed.held);
+  const meant = heldKeys(
+    held.filter((one) => one !== link && !dependents.includes(one))
+  );
+  const settled = await rowsOn(copies.forgotten);
+  const linked = (settled.get("tracker_links") ?? [])
+    .map((text) => z.record(z.string(), z.unknown()).parse(JSON.parse(text)))
+    .find((row) => row.task_id === FIXED_TASK);
+  if (
+    fixedBack !== 1 + dependents.length ||
+    stillKeys.join() !== meant.join() ||
+    keptCount(fixed) !== meant.length ||
+    !linked ||
+    linked.synced_unread !== null
+  ) {
+    throw new Error(
+      `case restore: with ${FIXED_TASK}'s link fixed, ${fixedBack} went back (the link and ${dependents.length} hanging off it meant) and ${stillKeys.join(", ")} stay, where ${meant.join(", ")} were meant to`
+    );
+  }
+  return `case restore across migrations: ${RESTORED} forgotten at ${copies.baseTag}, its schema the record names and, found from its columns alone, ${foundTag}, bringing the same rows; restored on today's schema: ${back} rows back in ${Object.keys(restored.back).length} tables, each as the migrations place it on a hub where it stayed (${count("mcp_server_platforms")} server platform rows, ${count("project_task_outputs")} task outputs, ${count("tracker_link_synced_labels")} tracker labels, ${count("moves")} moves), ${held.length} held back and named (${of("unread")} kept as not read, ${of("depends")} hanging off one), as "${projectTrashWords.heldRow(unread)}"; tried again on the same build: ${againBack} back, ${again.held.length} held back and named again, the entry keeping ${keptCount(again)}; tried again with ${FIXED_TASK}'s tracker link's baseline fixed: ${fixedBack} back (it and ${dependents.length} hanging off it), ${fixed.held.length} still held back and named, the entry keeping ${keptCount(fixed)}`;
 };
 
 /**
