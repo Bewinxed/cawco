@@ -430,7 +430,7 @@ export const agentTools = sqliteTable(
     /** On `installing`: the version being put on (core `ToolStatus.to`). */
     goingTo: text("going_to"),
     /** On `installing`: who started it (core `ToolStatus.startedBy`). */
-    startedBy: text("started_by").$type<"cawco" | "person">(),
+    startedBy: storedEnum(z.enum(["cawco", "person"]))("started_by"),
     /** When this was learnt. */
     at: timestamp("at").notNull(),
   },
