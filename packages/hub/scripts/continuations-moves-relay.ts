@@ -19,33 +19,14 @@
  * db/move-states-unread.ts, db/relay-ports-unread.ts); a table its
  * migration has run on is said so and not counted.
  */
-import { Database } from "bun:sqlite";
 import { continuationsKept } from "../src/db/continuation-askers-unread";
 import { movesKept } from "../src/db/move-states-unread";
 import { relayPortsKept } from "../src/db/relay-ports-unread";
+import { countedDatabase } from "./counted-database";
 
-const [path] = process.argv.slice(2);
-if (!path) {
-  console.error(
-    "continuations-moves-relay: name the database: bun run continuations-moves-relay <path>"
-  );
-  process.exit(2);
-}
-const client = new Database(path, { readonly: true });
-/** Whether `table` has `column`: the JSON column a migration drops is still there. */
-const has = (table: string, column: string): boolean =>
-  client
-    .query<{ found: number }, [string, string]>(
-      "SELECT count(*) AS found FROM pragma_table_info(?) WHERE name = ?"
-    )
-    .get(table, column)?.found === 1;
+const { client, has, ran } = countedDatabase("continuations-moves-relay");
 /** A value as this shows it: cut short, on one line. */
 const shown = (raw: string): string => JSON.stringify(raw.slice(0, 120));
-const ran = (column: string, migration: string): void => {
-  console.log(
-    `${column}: ${migration} has run on ${path}; read a copy taken before it`
-  );
-};
 
 if (has("continuations", "asked_by")) {
   const jobs = continuationsKept(client);

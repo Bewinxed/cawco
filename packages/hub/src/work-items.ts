@@ -129,6 +129,7 @@ import {
   isBlocked,
   itemBlockOf,
   landedWork,
+  lastWaitOf,
   type QueuedCall,
   type QueuedWorkItemRow,
   type WorkItemRow,
@@ -1655,11 +1656,7 @@ export const createWorkItems = ({
       state: "running",
       waitUntil,
       waitReason: reason,
-      waitHistory: {
-        count: ((db.workItem(item.id) ?? item).waitHistory?.count ?? 0) + 1,
-        until: waitUntil.getTime(),
-        reason,
-      },
+      waitCount: (db.workItem(item.id) ?? item).waitCount + 1,
     }) as WorkItemRow;
     armWait(waiting);
     return waiting;
@@ -5504,18 +5501,32 @@ export const createWorkItems = ({
     waitSummary(instanceId: string, parentInstanceId: string): string {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      const history =
-        item?.parentInstanceId === parentInstanceId ? item.waitHistory : null;
-      return history
-        ? `\n\nWaited ${history.count} time${history.count === 1 ? "" : "s"} since its last delivered message; last wait until ${waitClock(new Date(history.until))}: ${history.reason}.`
-        : "";
+      if (item?.parentInstanceId !== parentInstanceId) {
+        return "";
+      }
+      if (item.waitHistoryUnread !== null) {
+        return `\n\n${workWords.waitsUnread}`;
+      }
+      if (item.waitCount === 0) {
+        return "";
+      }
+      const last = lastWaitOf(item);
+      return `\n\nWaited ${item.waitCount} time${item.waitCount === 1 ? "" : "s"} since its last delivered message${last ? `; last wait until ${waitClock(last.until)}: ${last.reason}` : ""}.`;
     },
 
     delivered(instanceId: string, parentInstanceId: string): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item?.parentInstanceId === parentInstanceId && item.waitHistory) {
-        db.updateWorkItem(item.id, { waitHistory: null });
+      if (
+        item?.parentInstanceId === parentInstanceId &&
+        (item.waitCount > 0 || item.waitHistoryUnread !== null)
+      ) {
+        db.updateWorkItem(item.id, {
+          waitCount: 0,
+          waitLastUntil: null,
+          waitLastReason: null,
+          waitHistoryUnread: null,
+        });
       }
     },
 

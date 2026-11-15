@@ -32,10 +32,12 @@
  * {@link seedSessionPlans}, {@link seedSessionPlansByHand}, the
  * sealed values migration 0420 opens and places ({@link seedSealedFacts},
  * sealed with the fixtures' key), the owed sends migration 0421 folds
- * into their envelopes ({@link seedOwedSends}), and the skills', plugins'
+ * into their envelopes ({@link seedOwedSends}), the skills', plugins'
  * and kept versions' files and last fetches migrations 0422 and 0423 move
- * ({@link seedFleetFiles}) and the pauses, sign-ins and capabilities 0424
- * moves ({@link seedMachineColumns}), written to
+ * ({@link seedFleetFiles}), the pauses, sign-ins and capabilities 0424
+ * moves ({@link seedMachineColumns}), and the cold readings, waits,
+ * witnesses and heads migrations 0425 to 0428 lift into columns and rows
+ * ({@link seedColdWaitsHeads}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -77,8 +79,10 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * way took before migration 0420, every shape a send's owed envelope
  * took beside its kept one before migration 0421, every shape a skill's,
  * plugin's and kept version's files and last fetch took before migrations
- * 0422 and 0423, and every shape a machine's pause, a tool's sign-in and
- * a machine's capabilities took before migration 0424, written here.
+ * 0422 and 0423, every shape a machine's pause, a tool's sign-in and a
+ * machine's capabilities took before migration 0424, and every shape a
+ * session's cold reading, a work item's waits and witnesses and a retired
+ * workspace's head took before migrations 0425 to 0428, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -3150,6 +3154,174 @@ function seedMachineColumns(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the fixture's cold readings, waits and heads were stored: 2026-10-06, a minute apart. */
+const KEPT_AT = Date.UTC(2026, 9, 6);
+
+/** Where the waits since a last delivered message are seeded: past the items {@link seedOutputs} gives outputs. */
+const FIRST_HISTORY = FIRST_OUTPUTS + 9;
+
+/** Where an attempt's witnesses are seeded: past the items {@link FIRST_HISTORY} gives waits. */
+const FIRST_WITNESSED = FIRST_HISTORY + 8;
+
+/**
+ * Every shape migrations 0425 to 0428 read in, written by hand as the hub's
+ * writers stored each and as a hand edit could, beside rows never set:
+ * sessions' cold readings (`instances.cache_cold`, keep-alive.ts
+ * `keepAliveResult`: what a ping that missed its cache read, and when),
+ * work items' waits since their last delivered message
+ * (`work_items.wait_history`, work-items.ts `declareWait`: how many, the
+ * last one's end and reason, a copy of the live wait while it lasts),
+ * attempts' witnesses (`work_items.waited_on`, dispatch.ts `witnessesOf`:
+ * each card or pin with the value it settled with) and retired workspaces'
+ * heads (`workspaces.head`, workspaces.ts `closeWorkspace`: a branch and a
+ * commit, with a carry or none). Each column has values that read whole,
+ * that are not JSON, JSON `null` or another kind, and that read in part.
+ */
+function seedColdWaitsHeads(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const sessions = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances ORDER BY rowid LIMIT 8 OFFSET 120"
+    )
+    .all()
+    .map((row) => row.id);
+  const colds: string[] = [
+    JSON.stringify({ reason: "ping read 12%", at: KEPT_AT }),
+    JSON.stringify({ reason: "ping reported no cache usage", at: KEPT_AT + 1 }),
+    JSON.stringify({ reason: "ping read 4%", at: KEPT_AT + 2, ms: 900 }),
+    "ping read 12%",
+    "null",
+    JSON.stringify(["ping read 12%", KEPT_AT]),
+    JSON.stringify({ reason: "ping read 3%" }),
+    JSON.stringify({ reason: 12, at: KEPT_AT + 3 }),
+  ];
+  for (const [n, cold] of colds.entries()) {
+    const session = sessions[n];
+    if (!session) {
+      throw new Error(
+        `The fixture has no session ${120 + n} to keep a cold reading on.`
+      );
+    }
+    sqlite.run("UPDATE instances SET cache_cold = ? WHERE id = ?", [
+      cold,
+      session,
+    ]);
+  }
+  const items = workItemIds(sqlite);
+  const live = KEPT_AT + 30 * MINUTE_MS;
+  const waiting = "the release proof is running on marlin";
+  /** Each item's waits as stored, and the live wait beside them: its end and reason, or none. */
+  const histories: [string, number | null, string | null][] = [
+    [JSON.stringify({ count: 1, until: live, reason: waiting }), live, waiting],
+    [
+      JSON.stringify({ count: 3, until: KEPT_AT, reason: "CI is red on main" }),
+      null,
+      null,
+    ],
+    [
+      JSON.stringify({ count: 2, until: KEPT_AT, reason: "CI is red on main" }),
+      live,
+      waiting,
+    ],
+    ["waited 2 times", null, null],
+    ["null", null, null],
+    [JSON.stringify({ count: 2, until: KEPT_AT }), null, null],
+    [
+      JSON.stringify({ count: "two", until: live, reason: waiting }),
+      live,
+      waiting,
+    ],
+    [JSON.stringify([1, KEPT_AT, waiting]), null, null],
+  ];
+  for (const [n, [history, until, reason]] of histories.entries()) {
+    const item = items[FIRST_HISTORY + n];
+    if (!item) {
+      throw new Error(
+        `The fixture has no work item ${FIRST_HISTORY + n} to keep waits on.`
+      );
+    }
+    sqlite.run(
+      "UPDATE work_items SET wait_history = ?, wait_until = ?, wait_reason = ? WHERE id = ?",
+      [history, until, reason, item]
+    );
+  }
+  const card = (name: string) => `0b6c41d2-5f1e-4d7a-9c3e-2a8f4e61b0d7#${name}`;
+  const pin = "0b6c41d2-5f1e-4d7a-9c3e-2a8f4e61b0d7/3";
+  const witness = (target: string, value: string) => ({ target, value });
+  const witnesses: string[] = [
+    "[]",
+    JSON.stringify([witness(card("layout"), "Two columns")]),
+    JSON.stringify([
+      witness(card("layout"), "Two columns"),
+      witness(card("motion"), "Spring, 240ms"),
+      witness(pin, "resolved"),
+    ]),
+    JSON.stringify([
+      witness(card("layout"), "Two columns"),
+      witness(card("layout"), "Two columns"),
+    ]),
+    JSON.stringify([{ ...witness(card("copy"), "Short"), at: KEPT_AT }]),
+    `${card("layout")}=Two columns`,
+    "null",
+    JSON.stringify(witness(card("layout"), "Two columns")),
+    JSON.stringify([{ target: card("layout") }]),
+    JSON.stringify([
+      witness(card("layout"), "Two columns"),
+      7,
+      { target: card("motion") },
+      witness(pin, "resolved"),
+    ]),
+    JSON.stringify([
+      witness(card("layout"), "Two columns"),
+      witness(card("layout"), "One column"),
+      witness(card("motion"), "Spring, 240ms"),
+    ]),
+  ];
+  for (const [n, list] of witnesses.entries()) {
+    const item = items[FIRST_WITNESSED + n];
+    if (!item) {
+      throw new Error(
+        `The fixture has no work item ${FIRST_WITNESSED + n} to keep witnesses on.`
+      );
+    }
+    sqlite.run("UPDATE work_items SET waited_on = ? WHERE id = ?", [
+      list,
+      item,
+    ]);
+  }
+  const workspaces = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM workspaces ORDER BY rowid LIMIT 8 OFFSET 20"
+    )
+    .all()
+    .map((row) => row.id);
+  const commit = gitName("HEAD as the clone retired");
+  const carry = "/home/dev/.cawco/carries/7f3e1c20";
+  const heads: string[] = [
+    JSON.stringify({ branch: "main", commit }),
+    JSON.stringify({ branch: "cawco/7f3e1c20", commit, carry }),
+    JSON.stringify({ branch: "main", commit, at: KEPT_AT }),
+    `main@${commit}`,
+    "null",
+    JSON.stringify({ branch: "main" }),
+    JSON.stringify({ branch: "main", commit, carry: null }),
+    JSON.stringify([commit, "main"]),
+  ];
+  for (const [n, head] of heads.entries()) {
+    const workspace = workspaces[n];
+    if (!workspace) {
+      throw new Error(
+        `The fixture has no workspace ${20 + n} to keep a head on.`
+      );
+    }
+    sqlite.run(
+      "UPDATE workspaces SET state = 'archived', head = ? WHERE id = ?",
+      [head, workspace]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -3192,6 +3364,7 @@ async function seed(
     seedOwedSends(dbPath);
     seedFleetFiles(dbPath);
     seedMachineColumns(dbPath);
+    seedColdWaitsHeads(dbPath);
   }
 }
 

@@ -1017,7 +1017,9 @@ export interface InstancesDb {
         | "lastRequestAt"
         | "contextTokens"
         | "contextReadAt"
-        | "cacheCold"
+        | "cacheColdAt"
+        | "cacheColdReason"
+        | "cacheColdUnread"
         | "keepAliveTurn"
       >
     >

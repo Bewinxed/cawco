@@ -26,6 +26,7 @@ import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { logAsksUnread } from "./asks-unread";
 import { logAtLimitUnread } from "./at-limit-unread";
 import { logBudgetUnread } from "./budget-unread";
+import { logCacheColdUnread } from "./cache-cold-unread";
 import { logContinuationsUnread } from "./continuation-askers-unread";
 import type { DbCore } from "./core";
 import { logCutFromUnread } from "./cut-from-unread";
@@ -55,6 +56,9 @@ import { placeSealedFacts } from "./sealed-facts-unread";
 import { logSendOriginsUnread } from "./send-origins-unread";
 import { logPlansUnread } from "./session-plans-unread";
 import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
+import { logWaitHistoryUnread } from "./wait-history-unread";
+import { logWaitsUnread } from "./waits-unread";
+import { logWorkspaceHeadsUnread } from "./workspace-heads-unread";
 
 /** Where a step's work runs. */
 type Step =
@@ -331,6 +335,42 @@ export const MIGRATION_STEPS: readonly Step[] = [
       // Every machine's pause and tool sign-in 0424 keeps as not read, and
       // each platform it drops that was not its os's, read before it runs.
       logMachineColumnsUnread(client);
+    },
+  },
+  {
+    name: "cache-cold-unread",
+    before: "0425_cache_cold_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every session's cold reading 0425 keeps as not read, read before it runs.
+      logCacheColdUnread(client);
+    },
+  },
+  {
+    name: "wait-history-unread",
+    before: "0426_wait_count_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every work item's waits 0426 keeps as not read, read before it runs.
+      logWaitHistoryUnread(client);
+    },
+  },
+  {
+    name: "waits-unread",
+    before: "0427_work_item_waits",
+    at: "migrator",
+    run: (client) => {
+      // Every attempt's witnesses 0427 keeps as not read, read before it runs.
+      logWaitsUnread(client);
+    },
+  },
+  {
+    name: "workspace-heads-unread",
+    before: "0428_workspace_head_columns",
+    at: "migrator",
+    run: (client) => {
+      // Every retired workspace's head 0428 keeps as not read, read before it runs.
+      logWorkspaceHeadsUnread(client);
     },
   },
   {

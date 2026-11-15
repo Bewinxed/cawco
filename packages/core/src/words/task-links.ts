@@ -32,6 +32,12 @@ export const taskLinkWords = {
   decidedDifferently: "decided differently",
   /** A card or pin a done task was built on, reopened since. */
   reopened: "reopened",
+  /**
+   * A card or pin a done task waits on that its attempt's record of what it
+   * was started on does not name, that record not reading (hub tasks.ts
+   * `builtOnOf`, migration 0427): it may have been decided differently since.
+   */
+  maybeDecidedDifferently: "maybe decided differently",
   /** A pull request waited on, closed without merging: its wait's flag. */
   closedUnmerged: "closed unmerged",
   /** An Actions run waited on, red: its wait's flag. */
@@ -43,6 +49,13 @@ export const taskLinkWords = {
   wasReopened: "was reopened",
   /** A live attempt's word that a card it started on moved: answered differently. */
   wasAnsweredDifferently: "was answered differently",
+  /**
+   * A live attempt's word for a card or pin its task waits on that its
+   * record of what it was started on does not name, that record not
+   * reading (hub tasks.ts `tellMoved`, migration 0427).
+   */
+  mayHaveMoved:
+    "may have been answered differently since this work started: the record of what it was started on does not read.",
   /** The comment a task's related links became when links were cut over. */
   seeAlso: "See also:",
 } as const;

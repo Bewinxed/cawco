@@ -5799,21 +5799,6 @@
       "server"
     ]
   },
-  "instances.cache_cold": {
-    "type": "object",
-    "properties": {
-      "reason": {
-        "type": "string"
-      },
-      "at": {
-        "type": "number"
-      }
-    },
-    "required": [
-      "reason",
-      "at"
-    ]
-  },
   "instances.cache_ttl": {
     "type": "string",
     "enum": [
@@ -14210,61 +14195,6 @@
       "at",
       "check",
       "summary"
-    ]
-  },
-  "work_items.wait_history": {
-    "type": "object",
-    "properties": {
-      "count": {
-        "type": "number"
-      },
-      "until": {
-        "type": "number"
-      },
-      "reason": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "count",
-      "until",
-      "reason"
-    ]
-  },
-  "work_items.waited_on": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "target": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "target",
-        "value"
-      ]
-    }
-  },
-  "workspaces.head": {
-    "type": "object",
-    "properties": {
-      "branch": {
-        "type": "string"
-      },
-      "carry": {
-        "type": "string"
-      },
-      "commit": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "branch",
-      "commit"
     ]
   },
   "workspaces.holding": {

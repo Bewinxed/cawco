@@ -48,7 +48,12 @@ import { z } from "zod";
 import type { ServedOwed } from "./artifacts/served";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
-import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
+import {
+  headColumns,
+  headOf,
+  type WorkItemRow,
+  type WorkspaceRow,
+} from "./db/project-work";
 import { soon } from "./lifetime";
 import { thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
@@ -821,7 +826,7 @@ export const createWorkspaces = ({
         boundaryPid: null,
         holding: null,
         heldAt: null,
-        head: cutAgainAt(head, carry, unlanded === "carry"),
+        ...headColumns(cutAgainAt(head, carry, unlanded === "carry")),
         ...(carry ? { carry } : {}),
       }) ?? workspace;
     workspaceChanged?.(archived);
@@ -1140,7 +1145,7 @@ export const createWorkspaces = ({
         state: "active",
         holding: null,
         heldAt: null,
-        head: null,
+        ...headColumns(null),
         tmp: frame.tmp,
       }) ?? row;
     console.log(
@@ -1975,9 +1980,9 @@ export const createWorkspaces = ({
     if (member.kind === "folderOverlay") {
       return workspace.carry === null;
     }
+    const head = headOf(workspace);
     return (
-      workspace.head !== null &&
-      (workspace.carry === null || workspace.head.carry !== undefined)
+      head !== null && (workspace.carry === null || head.carry !== undefined)
     );
   };
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
@@ -1993,6 +1998,9 @@ export const createWorkspaces = ({
       .find((cut) => cut.cutFromLanded === true);
     if (taker) {
       return `its workspace ${handle(workspace.id)} retired: its work went on in workspace ${handle(taker.id)}, cut from it, which landed it, so it is not cut again; workspace ${handle(taker.id)} is where that work goes on.`;
+    }
+    if (workspace.headUnread !== null) {
+      return workWords.headUnread(handle(workspace.id));
     }
     return `its workspace ${handle(workspace.id)} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
   };
@@ -2076,7 +2084,7 @@ export const createWorkspaces = ({
   /** What a workspace made again records: active, its new boundary, and for a repository's the commit it was cut again at, for its delegate to be told. */
   const recutRecord = (
     checkout: WorkspaceCheckout,
-    head: WorkspaceRow["head"]
+    head: WorkspaceCut | null
   ): Partial<WorkspaceRow> => ({
     state: "active",
     boundaryPid: checkout.boundaryPid,
@@ -2098,7 +2106,7 @@ export const createWorkspaces = ({
   /** The log line of a workspace made again. */
   const recutLine = (
     workspace: WorkspaceRow,
-    head: WorkspaceRow["head"]
+    head: WorkspaceCut | null
   ): string =>
     head
       ? `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
@@ -2118,7 +2126,7 @@ export const createWorkspaces = ({
           })
         : pending;
     }
-    const { head } = workspace;
+    const head = headOf(workspace);
     if (!head && workspaceOf(workspace).kind !== "folderOverlay") {
       return Promise.reject(
         new Error(

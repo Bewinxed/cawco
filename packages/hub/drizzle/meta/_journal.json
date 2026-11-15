@@ -2920,6 +2920,34 @@
       "when": 1794754501206,
       "tag": "0424_machine_pause_signin_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 425,
+      "version": "6",
+      "when": 1794757229359,
+      "tag": "0425_cache_cold_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 426,
+      "version": "6",
+      "when": 1794757250696,
+      "tag": "0426_wait_count_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 427,
+      "version": "6",
+      "when": 1794757256711,
+      "tag": "0427_work_item_waits",
+      "breakpoints": true
+    },
+    {
+      "idx": 428,
+      "version": "6",
+      "when": 1794757271734,
+      "tag": "0428_workspace_head_columns",
+      "breakpoints": true
     }
   ]
 }

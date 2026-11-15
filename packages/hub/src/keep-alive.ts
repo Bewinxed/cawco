@@ -39,11 +39,28 @@ const keepAliveCap = (row: KeepAliveRow): number => {
   );
 };
 
+/**
+ * Whether the hub measured `row`'s cache cold: a keep-alive ping missed it
+ * since the last real turn (`cacheColdAt`), or such a reading is kept as not
+ * read (`cacheColdUnread`, migration 0425), which only a miss wrote.
+ */
+export const measuredCold = (
+  row: Pick<KeepAliveRow, "cacheColdAt" | "cacheColdUnread">
+): boolean => row.cacheColdAt !== null || row.cacheColdUnread !== null;
+
+/** What the hub measured of `row`'s cold cache, as the wire says it; null when none reads. */
+const coldReading = (
+  row: Pick<KeepAliveRow, "cacheColdAt" | "cacheColdReason">
+): KeepAlive["cold"] =>
+  row.cacheColdAt !== null && row.cacheColdReason !== null
+    ? { reason: row.cacheColdReason, at: row.cacheColdAt }
+    : null;
+
 export const promptCacheExpiresAt = (
   row: KeepAliveRow,
   lastTurnAt?: string | null
 ): number | null => {
-  if (row.cacheCold) {
+  if (measuredCold(row)) {
     return null;
   }
   if (row.cacheTtl && row.lastRequestAt) {
@@ -61,7 +78,7 @@ export const promptCacheExpiresAt = (
 /**
  * The cold check's one test (`handoff`'s, delegation-actions.ts
  * `checkCold`): a session's prompt cache is warm mid-turn, never measured,
- * or unexpired; one the hub measured cold (`cacheCold`: a keep-alive that
+ * or unexpired; one the hub measured cold ({@link measuredCold}: a keep-alive that
  * read under 90% from its cache, 3ab2fcf2a) is cold until a turn warms it.
  * Never measured stays warm (c262ee706): only a measured lifetime proves an
  * expiry, so a session nothing timed is never refused for it. A session it
@@ -76,7 +93,7 @@ export const cacheWarmNow = (
   if (midTurn) {
     return true;
   }
-  if (row.cacheCold) {
+  if (measuredCold(row)) {
     return false;
   }
   const expires = promptCacheExpiresAt(row, lastTurnAt);
@@ -95,7 +112,7 @@ export const keepAliveState = (
     sent: row.keepAliveSent,
     cap: keepAliveCap(row),
     ttl: row.cacheTtl,
-    cold: row.cacheCold,
+    cold: coldReading(row),
     contextTokens: row.contextTokens,
     contextReadAt: row.contextReadAt?.getTime() ?? null,
   };
@@ -105,7 +122,7 @@ export const keepAliveState = (
   if (row.status === "sleeping") {
     return { ...base, state: "asleep" };
   }
-  if (row.cacheCold) {
+  if (measuredCold(row)) {
     return { ...base, state: "cold" };
   }
   // Paused while the window that binds the session (core `headroom` over
@@ -153,14 +170,19 @@ export const keepAliveResult = (
   const at = Date.now();
   // Cold is measured: a ping that missed its cache (a changed prefix) is
   // cold, and a real turn, whose requests wrote whatever they missed, is warm.
-  let cold = row.cacheCold;
+  // Either replaces a reading kept as not read; anything else leaves it.
+  let cold: Pick<
+    Parameters<DbShape["updateKeepAlive"]>[1],
+    "cacheColdAt" | "cacheColdReason" | "cacheColdUnread"
+  > = {};
   if (ping && !cacheHit(usage)) {
     cold = {
-      reason:
+      cacheColdAt: at,
+      cacheColdReason:
         input > 0
           ? `ping read ${Math.round((read / input) * 100)}%`
           : "ping reported no cache usage",
-      at,
+      cacheColdUnread: null,
     };
   } else if (
     !ping &&
@@ -168,7 +190,7 @@ export const keepAliveResult = (
     result.lastRequestAt !== undefined &&
     input > 0
   ) {
-    cold = null;
+    cold = { cacheColdAt: null, cacheColdReason: null, cacheColdUnread: null };
   }
   const sent = ping ? row.keepAliveSent + 1 : 0;
   // An unknown lifetime remains unknown. Cache reads retain the last observed write lifetime.
@@ -195,7 +217,7 @@ export const keepAliveResult = (
       ? {}
       : { lastRequestAt: new Date(result.lastRequestAt) }),
     keepAliveSent: sent,
-    cacheCold: cold,
+    ...cold,
     keepAliveTurn: null,
     keepAliveStopped: stopped,
     ...(stopped ? { keepAliveEnabled: false } : {}),

@@ -542,7 +542,6 @@ import type {
   UserQuestionResultOutput,
   VerbOutput,
   WaitReasonOutput,
-  WaitWitnessOutput,
   WorkItemStateOutput,
   WorkspaceArchivedOutput,
   WorkspaceCheckoutOutput,
@@ -558,7 +557,6 @@ import type {
   RelayReach as RelayReachType,
   StreamRelayState as StreamRelayStateType,
 } from "./stream-relay";
-import type { WaitWitness as WaitWitnessType } from "./task-views";
 import type {
   NamedToolSignin as NamedToolSigninType,
   ToolCopy as ToolCopyType,
@@ -865,7 +863,6 @@ prove<
     Same<ToolCopyOutput, ToolCopyType>,
     Same<ToolWantsOutput, ToolWantsType>,
     Same<TrackerSyncStateOutput, TrackerSyncStateType>,
-    Same<WaitWitnessOutput, WaitWitnessType>,
     Same<WorkspaceCutOutput, WorkspaceCutType>,
     Same<WorkspaceHoldingOutput, WorkspaceHoldingType>,
     Same<WorkspaceArchivedOutput, WorkspaceArchivedType>,

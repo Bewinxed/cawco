@@ -7,6 +7,8 @@
  */
 
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { WaitWitness } from "@cawco/core/task-views";
+import type { WorkspaceCut } from "@cawco/core/workspace/controls";
 import {
   and,
   asc,
@@ -32,6 +34,7 @@ import {
   workItemLandedChecks,
   workItemOutputs,
   workItems,
+  workItemWaits,
   workspaceCreates,
   workspaces,
 } from "./schema";
@@ -174,6 +177,49 @@ export const itemBlockOf = (
     : null;
 
 /**
+ * Where a retired workspace's clone was as it went, as its columns hold it
+ * (core `WorkspaceCut`); null when it has none that reads: never said, or
+ * kept as not read (`headUnread`).
+ */
+export const headOf = (
+  workspace: Pick<WorkspaceRow, "headBranch" | "headCarry" | "headCommit">
+): WorkspaceCut | null =>
+  workspace.headBranch !== null && workspace.headCommit !== null
+    ? {
+        branch: workspace.headBranch,
+        commit: workspace.headCommit,
+        ...(workspace.headCarry === null ? {} : { carry: workspace.headCarry }),
+      }
+    : null;
+
+/** A workspace's head as its columns hold it ({@link headOf}), a head kept as not read replaced. */
+export const headColumns = (head: WorkspaceCut | null) => ({
+  headBranch: head?.branch ?? null,
+  headCommit: head?.commit ?? null,
+  headCarry: head?.carry ?? null,
+  headUnread: null,
+});
+
+/**
+ * The last wait an item declared: its live one ({@link workItems.waitUntil},
+ * `waitReason`), else the one it last declared that is over
+ * (`waitLastUntil`, `waitLastReason`); null when neither is there.
+ */
+export const lastWaitOf = (
+  item: Pick<
+    WorkItemRow,
+    "waitLastReason" | "waitLastUntil" | "waitReason" | "waitUntil"
+  >
+): { reason: string; until: Date } | null => {
+  if (item.waitUntil !== null && item.waitReason !== null) {
+    return { until: item.waitUntil, reason: item.waitReason };
+  }
+  return item.waitLastUntil !== null && item.waitLastReason !== null
+    ? { until: item.waitLastUntil, reason: item.waitLastReason }
+    : null;
+};
+
+/**
  * Whether any of an item's work landed: its landing recorded the commit
  * pushed, or its landing is there and did not read as landings became
  * columns (schema.ts `workItems.landedUnread`), which holds it landed so it
@@ -214,7 +260,10 @@ export type WorkItemChange = Partial<
     | "waitUntil"
     | "waitReason"
     | "waitResumeBy"
-    | "waitHistory"
+    | "waitCount"
+    | "waitLastReason"
+    | "waitLastUntil"
+    | "waitHistoryUnread"
     | "heldAt"
     | "heldAsleepAt"
     | "stoppingAt"
@@ -228,6 +277,32 @@ export type WorkItemChange = Partial<
     | "taskResult"
   >
 > & { gatePasses?: null; landed?: WorkLanding };
+
+/**
+ * The last wait's columns a change moves with its live wait: a wait that
+ * clears (`waitUntil: null`) leaves its end and reason as the last wait, and
+ * a wait declared holds them itself, so the last ones clear. Read off the row
+ * as it stood before the change, in the same statement.
+ */
+const lastWaitColumns = (waitUntil: Date | null | undefined) => {
+  if (waitUntil === undefined) {
+    return {};
+  }
+  if (waitUntil !== null) {
+    return { waitLastUntil: null, waitLastReason: null };
+  }
+  return {
+    waitLastUntil: sql`coalesce(${workItems.waitUntil}, ${workItems.waitLastUntil})`,
+    waitLastReason: sql`CASE WHEN ${workItems.waitUntil} IS NULL THEN ${workItems.waitLastReason} ELSE ${workItems.waitReason} END`,
+  };
+};
+
+/**
+ * A work item at a task as dispatch and the task reads take it: its row and
+ * the cards and pins it was dispatched on ({@link workItemWaits}), in the
+ * order kept; what of them did not read is its `waitsUnread`.
+ */
+export type WorkItemAttempt = WorkItemRow & { waitedOn: WaitWitness[] };
 
 /** A landing's columns on its work item, the record it replaces cleared. */
 const landedColumns = (landed: WorkLanding) => ({
@@ -314,11 +389,12 @@ export interface WorkRowsDb {
    * `delegate`): delegation-tree.ts `treeSessions`.
    */
   readonly childIdsOfParents: (parentInstanceIds: string[]) => string[];
-  /** Files a work item as the hub accepted it, the globs it owns and the outputs it declares with it in one transaction. */
+  /** Files a work item as the hub accepted it, the globs it owns, the outputs it declares and the cards and pins it was dispatched on with it in one transaction. */
   readonly createWorkItem: (
     item: typeof workItems.$inferInsert & {
       outputs?: string[] | null;
       owns?: string[] | null;
+      waitedOn?: readonly WaitWitness[] | null;
     }
   ) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */
@@ -387,7 +463,7 @@ export interface WorkRowsDb {
    * Every work item that is an attempt at one of the project's tasks, newest
    * first (dispatch.ts).
    */
-  readonly projectAttempts: (projectId: string) => WorkItemRow[];
+  readonly projectAttempts: (projectId: string) => WorkItemAttempt[];
   /** Every work item of the project, newest first (handed-inputs.ts names one by its handle). */
   readonly projectWorkItems: (projectId: string) => WorkItemRow[];
   /** Every hook start waiting for a slot in the project, oldest first (dispatch.ts). */
@@ -436,7 +512,10 @@ export interface WorkRowsDb {
         | "cutFromCommit"
         | "cutFromLanded"
         | "cutFromWorkspace"
-        | "head"
+        | "headBranch"
+        | "headCarry"
+        | "headCommit"
+        | "headUnread"
         | "heldAt"
         | "holding"
         | "movedUntold"
@@ -458,6 +537,8 @@ export interface WorkRowsDb {
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
   /** Every work item any of these sessions delegated, newest first (delegation-tree.ts). */
   readonly workItemsOfParents: (parentInstanceIds: string[]) => WorkItemRow[];
+  /** The cards and pins a work item was dispatched on, in the order kept; none when it waited on none. */
+  readonly workItemWaits: (itemId: string) => WaitWitness[];
   /** Unfiled creates to discard when this machine next registers. */
   readonly workspaceCreatesOn: (
     machineId: string
@@ -489,15 +570,39 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           .where(and(eq(instances.id, from), eq(instances.workItemId, itemId)))
           .run();
       }),
-    projectAttempts: (projectId) =>
-      db
+    projectAttempts: (projectId) => {
+      const items = db
         .select()
         .from(workItems)
         .where(
           and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
         )
         .orderBy(desc(workItems.createdAt), desc(workItems.id))
-        .all(),
+        .all();
+      const witnesses = new Map<string, WaitWitness[]>();
+      for (const { itemId, target, value } of db
+        .select({
+          itemId: workItemWaits.itemId,
+          target: workItemWaits.target,
+          value: workItemWaits.value,
+        })
+        .from(workItemWaits)
+        .innerJoin(workItems, eq(workItems.id, workItemWaits.itemId))
+        .where(
+          and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
+        )
+        .orderBy(sql`${workItemWaits}.rowid`)
+        .all()) {
+        witnesses.set(itemId, [
+          ...(witnesses.get(itemId) ?? []),
+          { target, value },
+        ]);
+      }
+      return items.map((item) => ({
+        ...item,
+        waitedOn: witnesses.get(item.id) ?? [],
+      }));
+    },
     projectWorkItems: (projectId) =>
       db
         .select()
@@ -589,7 +694,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
             .where(sql`${workspaces.id} LIKE ${`${idOrPrefix}%`}`)
             .all();
     },
-    createWorkItem: ({ outputs, owns, ...item }) =>
+    createWorkItem: ({ outputs, owns, waitedOn, ...item }) =>
       db.transaction((tx) => {
         const row = tx.insert(workItems).values(item).returning().get();
         const owned = [...new Set(owns ?? [])];
@@ -602,6 +707,18 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         if (declared.length > 0) {
           tx.insert(workItemOutputs)
             .values(declared.map((path) => ({ itemId: row.id, path })))
+            .run();
+        }
+        if (waitedOn?.length) {
+          tx.insert(workItemWaits)
+            .values(
+              waitedOn.map(({ target, value }) => ({
+                itemId: row.id,
+                target,
+                value,
+              }))
+            )
+            .onConflictDoNothing()
             .run();
         }
         return row;
@@ -624,6 +741,13 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .orderBy(sql`rowid`)
         .all()
         .map(({ path }) => path),
+    workItemWaits: (itemId) =>
+      db
+        .select({ target: workItemWaits.target, value: workItemWaits.value })
+        .from(workItemWaits)
+        .where(eq(workItemWaits.itemId, itemId))
+        .orderBy(sql`rowid`)
+        .all(),
     workspaceOutputs: (workspaceId) => [
       ...new Set(
         db
@@ -939,7 +1063,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
       if (!landed && gatePasses !== null) {
         return db
           .update(workItems)
-          .set(change)
+          .set({ ...change, ...lastWaitColumns(change.waitUntil) })
           .where(eq(workItems.id, id))
           .returning()
           .get();
@@ -963,6 +1087,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           .update(workItems)
           .set({
             ...change,
+            ...lastWaitColumns(change.waitUntil),
             ...(gatePasses === null ? { gatePassesUnread: null } : {}),
             ...(landed ? landedColumns(landed) : {}),
           })

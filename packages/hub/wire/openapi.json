@@ -36366,7 +36366,7 @@
         ]
       },
       "BuiltOn": {
-        "description": "A card or pin a done task's attempt was dispatched on whose value moved\nsince: answered differently, or reopened. Nothing reopens on its own.",
+        "description": "A card or pin a done task's attempt was dispatched on whose value moved\nsince: answered differently, or reopened; or, its attempt's record of\nwhat it was dispatched on not reading, one that record does not name,\nmaybe decided differently. Nothing reopens on its own.",
         "type": "object",
         "properties": {
           "href": {
@@ -36393,6 +36393,7 @@
         "type": "string",
         "enum": [
           "decided differently",
+          "maybe decided differently",
           "reopened"
         ]
       },
@@ -204232,6 +204233,9 @@
           },
           "head": {
             "$ref": "#/components/schemas/WorkspaceCut"
+          },
+          "headUnread": {
+            "type": "string"
           },
           "heldAt": {
             "type": "string"

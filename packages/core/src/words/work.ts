@@ -9,6 +9,21 @@ export const workWords = {
   /** A work item whose commits the hub pushed to `base`. */
   landedOn: (base: string) => `Landed on ${base}`,
   /**
+   * The line a parent's message carries for a delegate whose waits since
+   * its last delivered message were kept as not read (hub work-items.ts
+   * `waitSummary`, migration 0426): it waited, and how often and until when
+   * do not read.
+   */
+  waitsUnread:
+    "Waited since its last delivered message; the record of those waits does not read, so how often and until when are unknown.",
+  /**
+   * Why a retired workspace is not cut again when the commit its clone was
+   * on was kept as not read (hub workspaces.ts `archivedWords`, migration
+   * 0428): no commit is known to cut it at.
+   */
+  headUnread: (workspace: string) =>
+    `its workspace ${workspace} retired, and the record of the commit its clone was on does not read, so it is not cut again: a cut anywhere else could leave its commits behind.`,
+  /**
    * A host-scope delegation refused (hub work-items.ts `hostProblem`,
    * `hostFolderProblem`): each `line` names a field and why it cannot go.
    */
