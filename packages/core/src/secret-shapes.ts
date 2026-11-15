@@ -52,6 +52,29 @@ export const isSecretName = (name: string): boolean => {
   );
 };
 
+/** Read anywhere in a config name's letters run together, beside {@link SECRET_NAMES}: `X-Auth`, `SESSION`, `passwort`. */
+const CONFIG_SECRET_FRAGMENTS = ["auth", "session", "passw"];
+/** Read as a whole segment of a config name: `KEY`, `DEPLOY_KEYS`, `connect.sid`, `DB_PASS`. */
+const CONFIG_SECRET_SEGMENTS = new Set(["key", "keys", "sid", "pass", "pwd"]);
+
+/**
+ * An MCP server's `env`, header or URL query value treated as secret by its
+ * name alone. Wider than {@link isSecretName} on purpose: there a missed
+ * secret is the harm, so a credential name anywhere in the name's letters
+ * run together counts (`AUTHOR` too), as do the bare segments above. Every
+ * name the old substring rule counted still counts: its words, less their
+ * `-`/`_`, are each a fragment here or a segment (`^key$`).
+ */
+export const isSecretConfigName = (name: string): boolean => {
+  const segments = segmentsOf(name);
+  const joined = segments.join("");
+  return (
+    [...SECRET_NAMES, ...CONFIG_SECRET_FRAGMENTS].some((fragment) =>
+      joined.includes(fragment)
+    ) || segments.some((segment) => CONFIG_SECRET_SEGMENTS.has(segment))
+  );
+};
+
 /** A value that reads as a credential whatever its field is called. */
 const SECRET_VALUE = [
   /^(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/u,

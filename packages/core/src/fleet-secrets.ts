@@ -10,7 +10,7 @@
  *
  * - every value under `env` and `headers`;
  * - the secret parts of `url`: a query parameter whose name reads as a
- *   credential ({@link isSecretName}) or whose value looks like one
+ *   credential ({@link isSecretConfigName}) or whose value looks like one
  *   ({@link looksSecret}), and the password of `user:password@host`.
  *   The read's `url` has those parts cut, and its `urlSecret` is
  *   {@link SECRET_SET} when any were.
@@ -37,7 +37,7 @@ import type {
   FleetMcpConfig,
   FleetMcpServer,
 } from "./fleet";
-import { isSecretName, looksSecret } from "./secret-shapes";
+import { isSecretConfigName, looksSecret } from "./secret-shapes";
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
@@ -120,7 +120,7 @@ const secretQueryPart = (part: string): boolean => {
     return false;
   }
   return (
-    isSecretName(decoded(part.slice(0, at))) ||
+    isSecretConfigName(decoded(part.slice(0, at))) ||
     looksSecret(decoded(part.slice(at + 1)))
   );
 };
@@ -180,7 +180,7 @@ export const secretValuesOf = (config: FleetMcpConfig): string[] => {
       }
       // Only what reads as a credential, by its name or its shape: a
       // `DEBUG=1` or an `Accept` value is no secret and stays in the text.
-      if (isSecretName(name) || looksSecret(value)) {
+      if (isSecretConfigName(name) || looksSecret(value)) {
         values.push(value);
       } else {
         // A value that is a URL gives up its own secret parts alone.
