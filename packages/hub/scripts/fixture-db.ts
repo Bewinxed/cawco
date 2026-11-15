@@ -29,7 +29,9 @@
  * {@link seedPassScopes}, {@link seedLiftedColumns},
  * {@link seedContinuations}, {@link seedContinuationsByHand},
  * {@link seedMoves}, {@link seedMovesByHand}, {@link seedRelayPorts},
- * {@link seedSessionPlans}, {@link seedSessionPlansByHand}), written to
+ * {@link seedSessionPlans}, {@link seedSessionPlansByHand}, and the
+ * sealed values migration 0420 opens and places ({@link seedSealedFacts},
+ * sealed with the fixtures' key), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -40,7 +42,7 @@ import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { ContinuationAsker } from "../src/db/stored-types";
-import { hubInProcess } from "./hub-in-process";
+import { hubInProcess, writeFixtureKey } from "./hub-in-process";
 import { newestNightly } from "./shipped";
 
 /** A fixture folder on a fixture machine, made as every machine path is. */
@@ -65,8 +67,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * send's origin took before migrations 0410 to 0413, every shape a
  * continuation's asker and wait took before migration 0414, every shape a
  * project move's state took before migration 0415, and every shape a relay
- * proof's chips and the relay's ports took before migration 0416, written
- * here.
+ * proof's chips and the relay's ports took before migration 0416, and every
+ * shape a connection's sealed value and a fleet MCP server's sign-in under
+ * way took before migration 0420, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -2339,6 +2342,329 @@ function seedSessionPlansByHand(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the sealed fixtures were written, and when a sign-in under way they hold lapses. */
+const SEALED_AT = Date.UTC(2026, 9, 4);
+const SIGN_IN_LAPSES = SEALED_AT + 10 * MINUTE_MS;
+
+/** The client a fleet MCP server's sign-in starts with, as the SDK registers one. */
+const FLEET_CLIENT = {
+  client_id: "fleet-client-fixture",
+  redirect_uris: ["https://cawco.example.invalid/api/fleet/oauth/callback"],
+  client_name: "CawCo fleet",
+  grant_types: ["authorization_code", "refresh_token"],
+  response_types: ["code"],
+  token_endpoint_auth_method: "none",
+};
+
+/**
+ * What migration 0420 moves out of the sealed values, each as the hub kept
+ * it at the fixture's commit: what a connection held (`connections.sealed`)
+ * and a fleet MCP server's sign-in under way (`fleet_mcp_oauth.pending`),
+ * sealed with the fixtures' key (hub-in-process.ts `writeFixtureKey`) as
+ * the hub's own box seals them. Connections placed whole: a machine's gh, an
+ * installed GitHub App with its organization, a Linear app signed in, a code
+ * sign-in under way, an MCP server's OAuth client and tokens, a bearer key,
+ * one kept as plain JSON from before secrets were sealed; one never set; and
+ * four kept as not read: sealed under another key, not JSON, a gh account
+ * without its machine, and tokens without their type. Sign-ins under way: one
+ * placed, one never set, one under another key, one without its state. And
+ * the trash: a connection put there placed, one not read, and an MCP server
+ * put there with its sign-in under way, each through the hub's own trash.
+ */
+async function seedSealedFacts(db: HubDb, dbPath: string): Promise<void> {
+  const { hubSecrets } = await import("../src/secret-box");
+  const seal = (value: unknown): string =>
+    hubSecrets().seal(JSON.stringify(value));
+  /** A value sealed under a key no hub here holds: it does not open. */
+  const otherKey = `v1:${Buffer.from(
+    Array.from({ length: 48 }, (_, n) => (n * 37 + 11) % 256)
+  ).toString("base64url")}`;
+  const sqlite = new Database(dbPath);
+  const connections: [
+    string,
+    string,
+    string,
+    string,
+    string | null,
+    string,
+    string | null,
+  ][] = [
+    [
+      "conn-fixture-gh",
+      "github-dev-fixture",
+      "github",
+      "gh",
+      "signed-in",
+      "https://api.githubcopilot.com/mcp/",
+      seal({
+        gh: { machineId: "obsidian", host: "github.com", login: "dev-fixture" },
+        key: "gho_fixture000000000000000000000000000001",
+      }),
+    ],
+    [
+      "conn-fixture-app",
+      "github-app-fixture",
+      "github",
+      "app",
+      "signed-in",
+      "https://api.githubcopilot.com/mcp/",
+      seal({
+        org: "fixture-org",
+        app: {
+          service: "github",
+          appId: "1100231",
+          slug: "cawco-fixture-org",
+          privateKey:
+            "-----BEGIN RSA PRIVATE KEY-----\nfixture-not-a-key\n-----END RSA PRIVATE KEY-----",
+          clientId: "Iv23liFixture0001",
+          clientSecret: "fixture-client-secret-0001",
+          webhookSecret: "fixture-webhook-secret-0001",
+          installationId: "58831204",
+        },
+      }),
+    ],
+    [
+      "conn-fixture-linear",
+      "linear-fixture",
+      "linear",
+      "app",
+      "signed-in",
+      "https://mcp.linear.app/mcp",
+      seal({
+        app: {
+          service: "linear",
+          clientId: "lin-client-fixture-0001",
+          clientSecret: "lin-secret-fixture-0001",
+        },
+        tokens: {
+          access_token: "lin_oauth_fixture_access_0001",
+          token_type: "Bearer",
+          expires_in: 86_399,
+          refresh_token: "lin_oauth_fixture_refresh_0001",
+          scope: "read,write,app:assignable",
+        },
+      }),
+    ],
+    [
+      "conn-fixture-device",
+      "github-device-fixture",
+      "github",
+      "device",
+      "needs-sign-in",
+      "https://api.githubcopilot.com/mcp/",
+      seal({
+        device: {
+          deviceCode: "fixture-device-code-0001",
+          userCode: "WDJB-MJHT",
+          verificationUri: "https://github.com/login/device",
+          expiresAt: SEALED_AT + 15 * MINUTE_MS,
+          interval: 5,
+        },
+      }),
+    ],
+    [
+      "conn-fixture-oauth",
+      "notion-fixture",
+      "notion",
+      "oauth",
+      "signed-in",
+      "https://mcp.notion.example.invalid/mcp",
+      seal({
+        client: {
+          client_id: "notion-client-fixture",
+          redirect_uris: [
+            "https://cawco.example.invalid/api/connections/oauth/callback",
+          ],
+          token_endpoint_auth_method: "none",
+        },
+        tokens: {
+          access_token: "notion_fixture_access_0001",
+          token_type: "bearer",
+        },
+      }),
+    ],
+    [
+      "conn-fixture-bearer",
+      "sentry-fixture",
+      "sentry",
+      "bearer",
+      "signed-in",
+      "https://mcp.sentry.example.invalid/mcp",
+      seal({ key: "sntrys_fixture_0001" }),
+    ],
+    [
+      "conn-fixture-plain",
+      "posthog-fixture",
+      "posthog",
+      "bearer",
+      "signed-in",
+      "https://mcp.posthog.example.invalid/mcp",
+      JSON.stringify({ key: "phx_fixture_plain_0001" }),
+    ],
+    [
+      "conn-fixture-never",
+      "docs-fixture",
+      "docs",
+      "none",
+      "signed-in",
+      "https://mcp.docs.example.invalid/mcp",
+      null,
+    ],
+    [
+      "conn-fixture-other-key",
+      "stripe-fixture",
+      "stripe",
+      "bearer",
+      "signed-in",
+      "https://mcp.stripe.example.invalid/mcp",
+      otherKey,
+    ],
+    [
+      "conn-fixture-not-json",
+      "figma-fixture",
+      "figma",
+      "bearer",
+      "signed-in",
+      "https://mcp.figma.example.invalid/mcp",
+      hubSecrets().seal("figd_fixture_not_json"),
+    ],
+    [
+      "conn-fixture-gh-partly",
+      "github-partly-fixture",
+      "github",
+      "gh",
+      "error",
+      "https://api.githubcopilot.com/mcp/",
+      seal({
+        gh: { host: "github.com", login: "partly-fixture" },
+        key: "gho_fixture000000000000000000000000000002",
+      }),
+    ],
+    [
+      "conn-fixture-tokens-partly",
+      "asana-fixture",
+      "asana",
+      "oauth",
+      "signed-in",
+      "https://mcp.asana.example.invalid/mcp",
+      seal({
+        client: { client_id: "asana-client-fixture" },
+        tokens: { access_token: "asana_fixture_access_0001" },
+      }),
+    ],
+    [
+      "conn-fixture-trashed",
+      "github-trashed-fixture",
+      "github",
+      "bearer",
+      "signed-in",
+      "https://api.githubcopilot.com/mcp/",
+      seal({ key: "github_pat_fixture_trashed_0001" }),
+    ],
+    [
+      "conn-fixture-trashed-unread",
+      "slack-trashed-fixture",
+      "slack",
+      "bearer",
+      "signed-in",
+      "https://mcp.slack.example.invalid/mcp",
+      otherKey,
+    ],
+  ];
+  for (const [
+    connectionId,
+    name,
+    service,
+    auth,
+    standing,
+    url,
+    sealed,
+  ] of connections) {
+    sqlite.run(
+      "INSERT INTO connections (id, name, service, account, transport, url, command, args, auth, header, state, reason, sealed, discovery, sign_in_state, sign_in_redirect, sign_in_expires_at, sign_in_url, tokens_expire_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'http', ?, NULL, NULL, ?, NULL, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)",
+      [
+        connectionId,
+        name,
+        service,
+        `${service} account`,
+        url,
+        auth,
+        standing,
+        standing === "needs-sign-in" ? "A sign-in is under way." : null,
+        sealed,
+        SEALED_AT,
+        SEALED_AT,
+      ]
+    );
+  }
+  const oauth = (
+    name: string,
+    pending: string | null,
+    tokens: string | null
+  ): void => {
+    sqlite.run(
+      "INSERT INTO fleet_mcp_oauth (name, generation, upstream, resource, issuer, metadata, client, tokens, expires_at, token_client, pending, last_opened_at, ended_at, ended_why, access, identity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, NULL, NULL)",
+      [
+        name,
+        `gen-${name}`,
+        "https://mcp.example.invalid/mcp",
+        JSON.stringify({ resource: "https://mcp.example.invalid/mcp" }),
+        "https://auth.example.invalid",
+        JSON.stringify({
+          issuer: "https://auth.example.invalid",
+          authorization_endpoint: "https://auth.example.invalid/authorize",
+          token_endpoint: "https://auth.example.invalid/token",
+          registration_endpoint: "https://auth.example.invalid/register",
+          response_types_supported: ["code"],
+          code_challenge_methods_supported: ["S256"],
+        }),
+        seal(FLEET_CLIENT),
+        tokens,
+        tokens === null ? null : seal(FLEET_CLIENT),
+        pending,
+        SEALED_AT,
+      ]
+    );
+  };
+  const pendingOf = (signInState: string) =>
+    seal({
+      client: FLEET_CLIENT,
+      redirectUri: FLEET_CLIENT.redirect_uris[0],
+      verifier: `fixture-verifier-${signInState}`,
+      state: signInState,
+      expiresAt: SIGN_IN_LAPSES,
+      access: "read",
+    });
+  oauth("linear-docs", pendingOf("4b0e2a0c-fixture-pending-1"), null);
+  oauth(
+    "figma-bridge",
+    null,
+    seal({ access_token: "figma_fleet_fixture_access", token_type: "Bearer" })
+  );
+  oauth("notes-index", otherKey, null);
+  oauth(
+    "local-search",
+    seal({
+      client: FLEET_CLIENT,
+      redirectUri: FLEET_CLIENT.redirect_uris[0],
+      verifier: "fixture-verifier-no-state",
+      expiresAt: SIGN_IN_LAPSES,
+    }),
+    null
+  );
+  db.putMcpServer({ name: "trashed-signing-in", config: HTTP_SERVER });
+  oauth(
+    "trashed-signing-in",
+    pendingOf("4b0e2a0c-fixture-pending-trashed"),
+    null
+  );
+  sqlite.close();
+  for (const key of ["github-trashed-fixture", "slack-trashed-fixture"]) {
+    db.trash.put({ kind: "connection", key }, SEALED_AT);
+  }
+  db.trash.put({ kind: "mcp", key: "trashed-signing-in" }, SEALED_AT);
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -2358,6 +2684,7 @@ async function seed(
     seedContinuations(db, sessions);
     seedMoves(db, projects);
     seedSessionPlans(db, sessions);
+    await seedSealedFacts(db, dbPath);
   }
   lifetime.close();
   if (withLists) {
@@ -2386,6 +2713,8 @@ if (out) {
   try {
     const dbPath = join(scratch, "hub.db");
     mkdirSync(join(scratch, "home"));
+    // The fixtures' key beside it: every value its hub seals opens in the check.
+    writeFixtureKey(scratch);
     await seed(dbPath, join(scratch, "home"), process.argv.includes(LISTS));
     const sqlite = new Database(dbPath);
     sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)");

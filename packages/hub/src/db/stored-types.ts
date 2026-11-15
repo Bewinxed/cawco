@@ -33,7 +33,6 @@ import type {
   ModeAsk,
   SendRefusal,
 } from "@cawco/core/session-messages";
-import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 /** The session being continued, as the header names it. */
 export interface ContinuationSource {
@@ -551,51 +550,6 @@ export interface DesignProposalFile {
   after: string;
   before: string;
   path: string;
-}
-
-/**
- * An `app` connection's registration (connections.ts): a GitHub App the hub
- * registered from a manifest (its id, slug, private key, client and webhook
- * secrets, and once installed its installation), or a Linear OAuth app's
- * client id and secret.
- */
-export type ConnectionAppSecret =
-  | {
-      appId: string;
-      clientId?: string;
-      clientSecret?: string;
-      /** Set once GitHub's setup redirect names it and the app's JWT reads it. */
-      installationId?: string;
-      privateKey: string;
-      service: "github";
-      slug?: string;
-      webhookSecret?: string;
-    }
-  | { clientId: string; clientSecret: string; service: "linear" };
-
-/** What a connection's sealed `secret` holds. */
-export interface ConnectionSecret {
-  app?: ConnectionAppSecret;
-  client?: import("@modelcontextprotocol/sdk/shared/auth.js").OAuthClientInformationMixed;
-  /**
-   * A `device` connection's code sign-in under way: the device code the hub
-   * polls GitHub with, the code the person enters and where, when it lapses
-   * (epoch ms), and the least seconds between two polls.
-   */
-  device?: {
-    deviceCode: string;
-    expiresAt: number;
-    interval: number;
-    userCode: string;
-    verificationUri: string;
-  };
-  /** A `gh` connection's machine and account, whose gh the token (`key`) is read from. */
-  gh?: { host: string; login: string; machineId: string };
-  key?: string;
-  /** A GitHub App's organization, which its sign-in registers it under again when restarted from its row. */
-  org?: string;
-  tokens?: OAuthTokens;
-  verifier?: string;
 }
 
 /**

@@ -14,6 +14,7 @@ import { ARTIFACT_DOES, ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
 import { ASK_KEPT, ASK_KINDS } from "@cawco/core/asks";
 import { BLOCK_PAGES, BLOCK_WIDTHS } from "@cawco/core/blocks";
 import {
+  APP_SERVICES,
   CONNECTION_AUTHS,
   CONNECTION_TRANSPORTS,
 } from "@cawco/core/connections";
@@ -176,7 +177,6 @@ import {
   AuthorizationServerMetadataSchema,
   CacheTtlSchema,
   CommentDirectionSchema,
-  ConnectionSecretSchema,
   ContinueRequestSchema,
   DelegateRequestKindSchema,
   DesignCheckStateSchema,
@@ -195,6 +195,7 @@ import {
   MoveAskerSchema,
   MoveStateShape,
   OAuthClientInformationFullSchema,
+  OAuthClientInformationMixedSchema,
   OAuthDiscoveryStateSchema,
   OAuthProtectedResourceMetadataSchema,
   OAuthTokensSchema,
@@ -2506,8 +2507,9 @@ export const mcpServerPlatforms = sqliteTable(
 
 /**
  * Private OAuth material. Only the hub's OAuth manager reads these rows. The
- * clients (which may hold a client secret), the tokens and a sign-in under
- * way (its PKCE verifier) are sealed; the discovered metadata is public.
+ * clients (which may hold a client secret), the tokens and a sign-in
+ * under way's PKCE verifier are sealed; the sign-in's state, redirect and
+ * expiry and the discovered metadata are plain.
  */
 export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   name: text("name").primaryKey(),
@@ -2523,18 +2525,31 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   expiresAt: timestamp("expires_at"),
   /** The client the stored tokens were issued to; refreshing them must use that one. */
   tokenClient: sealedJson(OAuthClientInformationFullSchema)("token_client"),
-  pending: sealedJson(
-    z.object({
-      /** The client this sign-in started with, which is the one its code is exchanged by. */
-      client: OAuthClientInformationFullSchema,
-      redirectUri: z.string(),
-      verifier: z.string(),
-      state: z.string(),
-      expiresAt: z.number(),
-      /** The access this sign-in asks for: what `access` keeps once it lands. */
-      access: ConnectAccessSchema.nullable().optional(),
-    })
-  )("pending"),
+  /**
+   * A sign-in under way (fleet-mcp.ts `start`): the `state` its redirect
+   * brings back, found by this column, null once it is taken or when none
+   * is under way. Null with {@link fleetMcpOauth.pendingRedirectUri},
+   * {@link fleetMcpOauth.pendingExpiresAt}, {@link fleetMcpOauth.pendingAccess}
+   * and {@link fleetMcpOauth.pendingVerifier}. Its code is exchanged by
+   * {@link fleetMcpOauth.client}, which the same write keeps.
+   */
+  pendingState: text("pending_state").unique(),
+  /** Where that sign-in's redirect comes back to. */
+  pendingRedirectUri: text("pending_redirect_uri"),
+  /** When it lapses: no redirect after it is matched. */
+  pendingExpiresAt: timestamp("pending_expires_at"),
+  /** The access it asks for (core `ConnectAccess`), what {@link fleetMcpOauth.access} keeps once it lands; null: every scope the server names. */
+  pendingAccess: storedEnum(ConnectAccessSchema)("pending_access"),
+  /** Its PKCE verifier, the one secret of a sign-in under way: sealed. */
+  pendingVerifier: sealedText("pending_verifier"),
+  /**
+   * A sign-in under way as it was stored before it became columns (migration
+   * 0420), when it was there and did not read: it did not open with the
+   * hub's key, or opened to something that is no sign-in. Kept sealed as it
+   * was; nothing of it is placed, so no redirect matches it. A new sign-in
+   * clears it.
+   */
+  pendingUnread: text("pending_unread"),
   lastOpenedAt: timestamp("last_opened_at"),
   /**
    * When the sign-in ended without the person (fleet-mcp.ts `#end`): the
@@ -5835,10 +5850,12 @@ export const routineRuns = sqliteTable(
 
 /**
  * A connection (Projects spec §5.5, connections.ts): an outside service's MCP
- * server the hub signs in to and calls for sessions. Its key, or its OAuth
- * tokens, client and the verifier of a sign-in under way, are its `secret`,
- * a sealed column; nothing else in the row is secret, and no route or tool
- * answers the secret.
+ * server the hub signs in to and calls for sessions. What the hub decides
+ * on (which machine's gh, which app and installation, a code sign-in's
+ * expiry) is a plain column here; its secrets (its key, its OAuth tokens and
+ * client, a sign-in's verifier, an app's private key and client secret) are
+ * {@link connectionSecrets}, each sealed alone. No route or tool answers a
+ * secret.
  */
 export const connections = sqliteTable("connections", {
   id: text("id").primaryKey(),
@@ -5856,8 +5873,47 @@ export const connections = sqliteTable("connections", {
   header: text("header"),
   state: storedEnum(ConnectionStateSchema)("state").notNull(),
   reason: text("reason"),
-  /** Its key, or its OAuth tokens, client and a sign-in's verifier: sealed. */
-  secret: sealedJson(ConnectionSecretSchema)("sealed"),
+  /**
+   * A `gh` connection's machine, host and account, whose gh its token is
+   * read from (connections.ts `ghToken`): null together, for any other.
+   */
+  ghMachineId: text("gh_machine_id"),
+  ghHost: text("gh_host"),
+  ghLogin: text("gh_login"),
+  /** A GitHub App's organization, which its sign-in registers it under again when restarted from its row. */
+  org: text("org"),
+  /**
+   * An `app` connection's registration, once it is held: a GitHub App's or
+   * a Linear app's. Null with every other `app_` column; its secrets are in
+   * {@link connectionSecrets}.
+   */
+  appService: storedEnum(z.enum(APP_SERVICES))("app_service"),
+  /** A GitHub App's id. */
+  appId: text("app_id"),
+  /** A GitHub App's name in its URL. */
+  appSlug: text("app_slug"),
+  /** The app's OAuth client id: a Linear app's always, a GitHub App's once registered. */
+  appClientId: text("app_client_id"),
+  /** A GitHub App's installation, set once GitHub's setup redirect names it and the app's JWT reads it. */
+  appInstallationId: text("app_installation_id"),
+  /**
+   * A `device` connection's code sign-in under way: the code the person
+   * enters and where, when it lapses and the least seconds between two
+   * polls. Null together, with its device code in {@link connectionSecrets}.
+   */
+  deviceUserCode: text("device_user_code"),
+  deviceVerificationUri: text("device_verification_uri"),
+  deviceExpiresAt: timestamp("device_expires_at"),
+  deviceInterval: integer("device_interval"),
+  /**
+   * What the connection held as it was stored before it became columns
+   * (migration 0420), when it was there and did not read: it did not open
+   * with the hub's key, or opened to something that is not what a
+   * connection holds. Kept sealed as it was; nothing of it is placed, and
+   * the row reads as not signed in until it is signed in again, which
+   * clears it.
+   */
+  sealedUnread: text("sealed_unread"),
   /** The OAuth discovery the SDK saved (resource and authorization server metadata): public documents. */
   discovery: storedJson(OAuthDiscoveryStateSchema)("discovery"),
   /** A sign-in under way: the `state` its redirect must bring back, and where to. */
@@ -5870,6 +5926,28 @@ export const connections = sqliteTable("connections", {
   tokensExpireAt: timestamp("tokens_expire_at"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
+ * A connection's secrets (connections.ts), each sealed alone: its key, its
+ * OAuth tokens and client (the provider's and the SDK's records, each
+ * sealed whole), a sign-in's verifier, a GitHub App's private key, client
+ * and webhook secrets or a Linear app's client secret, and a code sign-in's
+ * device code. No row: it holds none. Only connections.ts opens them; no
+ * match or filter reads them.
+ */
+export const connectionSecrets = sqliteTable("connection_secrets", {
+  connectionId: text("connection_id")
+    .primaryKey()
+    .references(() => connections.id, { onDelete: "cascade" }),
+  key: sealedText("key"),
+  tokens: sealedJson(OAuthTokensSchema)("tokens"),
+  client: sealedJson(OAuthClientInformationMixedSchema)("client"),
+  verifier: sealedText("verifier"),
+  appPrivateKey: sealedText("app_private_key"),
+  appClientSecret: sealedText("app_client_secret"),
+  appWebhookSecret: sealedText("app_webhook_secret"),
+  deviceCode: sealedText("device_code"),
 });
 
 /** The projects whose every session may use a connection, beside the delegate types that list it. */

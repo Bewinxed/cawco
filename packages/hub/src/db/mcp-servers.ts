@@ -6,7 +6,7 @@ import type {
   McpPlatform,
 } from "@cawco/core/fleet";
 import type { ToolPolicy } from "@cawco/core/tools";
-import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DbCore } from "./core";
 import { bindingOf, placementOf } from "./fleet-bindings";
@@ -59,6 +59,15 @@ export const listedPlatforms = (
   }
   return listed;
 };
+
+/** A fleet MCP server's sign-in under way, let go: no redirect matches it. */
+export const SIGN_IN_TAKEN = {
+  pendingState: null,
+  pendingRedirectUri: null,
+  pendingExpiresAt: null,
+  pendingAccess: null,
+  pendingVerifier: null,
+} as const;
 
 /** A fleet MCP server's detail between saving a new config and the server's first answer. */
 const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
@@ -121,6 +130,11 @@ export interface McpServersDb {
     mode: "direct" | "oauth",
     error?: string
   ) => void;
+  /**
+   * The row whose sign-in under way `state` names, while it has not lapsed,
+   * with that sign-in let go in the same transaction: a second redirect with
+   * the same `state` finds nothing.
+   */
   readonly takeMcpAuthorization: (
     state: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
@@ -216,19 +230,19 @@ export const mcpServersDb = (core: DbCore): McpServersDb => {
     },
     takeMcpAuthorization: (state) =>
       db.transaction((tx) => {
-        // A sign-in under way is sealed, so its state is found by opening
-        // each one: a fleet holds a handful.
         const row = tx
           .select()
           .from(fleetMcpOauth)
-          .where(isNotNull(fleetMcpOauth.pending))
-          .all()
-          .find((one) => one.pending?.state === state);
-        if (!row?.pending || row.pending.expiresAt <= Date.now()) {
+          .where(eq(fleetMcpOauth.pendingState, state))
+          .get();
+        if (
+          !row?.pendingExpiresAt ||
+          row.pendingExpiresAt.getTime() <= Date.now()
+        ) {
           return;
         }
         tx.update(fleetMcpOauth)
-          .set({ pending: null })
+          .set(SIGN_IN_TAKEN)
           .where(eq(fleetMcpOauth.name, row.name))
           .run();
         return row;

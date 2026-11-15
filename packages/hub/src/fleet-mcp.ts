@@ -23,6 +23,7 @@ import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
+import { SIGN_IN_TAKEN } from "./db/mcp-servers";
 import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
@@ -753,20 +754,19 @@ export class FleetMcp {
       );
     }
     const expiresAt = Date.now() + SIGN_IN_TTL_MS;
+    // The code is exchanged by `client`, kept in this same write.
     this.#db.putMcpOauth({
       ...row,
       client,
       lastOpenedAt: new Date(),
-      pending: {
-        client,
-        redirectUri: SHARED_REDIRECT,
-        state,
-        verifier: codeVerifier,
-        expiresAt,
-        access: offers.some((offer) => offer.access === access)
-          ? access
-          : (offers.at(-1)?.access ?? null),
-      },
+      pendingState: state,
+      pendingRedirectUri: SHARED_REDIRECT,
+      pendingExpiresAt: new Date(expiresAt),
+      pendingAccess: offers.some((offer) => offer.access === access)
+        ? access
+        : (offers.at(-1)?.access ?? null),
+      pendingVerifier: codeVerifier,
+      pendingUnread: null,
     });
     return { authorizationUrl: authorizationUrl.toString(), expiresAt };
   }
@@ -778,7 +778,7 @@ export class FleetMcp {
   ): Promise<{ name: string }> {
     // Consumed synchronously before the exchange, so concurrent callbacks cannot spend a code twice.
     const row = this.#db.takeMcpAuthorization(state);
-    if (!row?.pending) {
+    if (!(row?.client && row.pendingVerifier && row.pendingRedirectUri)) {
       throw new Error(
         "This sign-in expired or was already completed. Start sign-in again."
       );
@@ -801,10 +801,10 @@ export class FleetMcp {
     try {
       tokens = await exchangeAuthorization(row.issuer, {
         metadata: row.metadata,
-        clientInformation: row.pending.client,
+        clientInformation: row.client,
         authorizationCode: code,
-        codeVerifier: row.pending.verifier,
-        redirectUri: row.pending.redirectUri,
+        codeVerifier: row.pendingVerifier,
+        redirectUri: row.pendingRedirectUri,
         resource: new URL(row.resource.resource),
       });
     } catch {
@@ -821,15 +821,15 @@ export class FleetMcp {
     this.#db.putMcpOauth({
       ...row,
       tokens,
-      tokenClient: row.pending.client,
+      tokenClient: row.client,
       expiresAt:
         tokens.expires_in === undefined
           ? null
           : new Date(Date.now() + tokens.expires_in * 1000),
-      pending: null,
+      ...SIGN_IN_TAKEN,
       endedAt: null,
       endedWhy: null,
-      access: row.pending.access ?? null,
+      access: row.pendingAccess,
       identity: identityOf(tokens),
     });
     this.#issued.set(row.name, Date.now());

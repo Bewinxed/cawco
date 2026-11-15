@@ -4,8 +4,8 @@
  * accounts of one service are two rows, never merged.
  *
  * THE INVARIANT: a connection's credential lives only in the hub. Its key, or
- * its OAuth tokens, are sealed in the row (secret-box.ts) and opened only
- * here, to build the one request or the one stdio process that carries them.
+ * its OAuth tokens, are sealed beside the row (`connection_secrets`, each
+ * secret alone, secret-box.ts) and opened only here, to build the one request or the one stdio process that carries them.
  * Nothing a session reads holds them: a session whose delegate type or
  * project lists a connection is listed its tools as `conn__<name>__<tool>` on
  * CawCo's own MCP server, and every call to one runs here, as the hub. A key
@@ -78,6 +78,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
+import { connectionReasons } from "@cawco/core/words/connection-reasons";
 import { connectionsWords } from "@cawco/core/words/connections";
 import { cutShort } from "@cawco/core/words/helpers";
 import { LinearClient } from "@linear/sdk";
@@ -117,8 +118,15 @@ import { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { readsOnly } from "./connection-writes";
-import type { ConnectionRow, ConnectionsDb } from "./db/connections";
-import type { ConnectionAppSecret, ConnectionSecret } from "./db/stored-types";
+import {
+  type AppFacts,
+  type ConnectionFacts,
+  type ConnectionHeld,
+  type ConnectionRow,
+  type ConnectionsDb,
+  factsOf,
+  type HeldApp,
+} from "./db/connections";
 import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
@@ -437,7 +445,7 @@ export interface AppInput {
 }
 
 /** `input` as a Linear app's registration, or why it is not one. */
-const linearAppOf = (input: AppInput): ConnectionAppSecret | string => {
+const linearAppOf = (input: AppInput): HeldApp | string => {
   const clientId = input.clientId.trim();
   const clientSecret = input.clientSecret.trim();
   if (
@@ -453,7 +461,7 @@ const linearAppOf = (input: AppInput): ConnectionAppSecret | string => {
  * What names an app, for a view: never its private key or client secret. A
  * GitHub App is named once it is installed: before, it reads nothing.
  */
-const appView = (app: ConnectionAppSecret): ConnectionApp | undefined => {
+const appView = (app: AppFacts): ConnectionApp | undefined => {
   if (app.service === "linear") {
     return { service: app.service, clientId: app.clientId };
   }
@@ -560,9 +568,11 @@ const whereOf = (one: {
   header: one.header ?? null,
 });
 
-/** What a row lets go of when it moves: its secret, discovery and any sign-in. */
+/**
+ * What a row lets go of when it moves, beside what it holds
+ * ({@link ConnectionsDb.hold} with nothing): its discovery and any sign-in.
+ */
 const LET_GO = {
-  secret: null,
   discovery: null,
   signInState: null,
   signInRedirect: null,
@@ -644,27 +654,23 @@ export const createConnections = (deps: ConnectionsDeps) => {
     db.byName(name) ?? misfit(`There is no connection ${name}.`);
 
   /**
-   * A row's secret, as its sealed column opened it. One the hub's key cannot
-   * open reads as none (db/schema.ts `sealedJson`), so the connection asks
-   * for its key or sign-in again rather than every listing failing.
+   * What a row holds, its secrets opened. A secret the hub's key cannot open
+   * reads as none (db/schema.ts `sealedText`), so the connection asks for
+   * its key or sign-in again rather than every listing failing. What only
+   * needs its plain facts reads them off the row ({@link factsOf}).
    */
-  const opened = (r: ConnectionRow): ConnectionSecret => r.secret ?? {};
+  const opened = (r: ConnectionRow): ConnectionHeld => db.held(r);
 
-  /** Changes a row's secret, read fresh: an OAuth step and a refresh may interleave. */
+  /** Changes what a row holds, read fresh: an OAuth step and a refresh may interleave. */
   const reseal = (
     id: string,
-    change: (secret: ConnectionSecret) => ConnectionSecret
+    change: (held: ConnectionHeld) => ConnectionHeld
   ) => {
     const fresh = db.byId(id);
     if (!fresh) {
       return;
     }
-    const kept = Object.fromEntries(
-      Object.entries(change(opened(fresh))).filter(
-        ([, value]) => value !== undefined
-      )
-    ) as ConnectionSecret;
-    db.update(id, { secret: Object.keys(kept).length > 0 ? kept : null });
+    db.hold(id, change(opened(fresh)));
   };
 
   /** Every secret string a row holds: what is cut out of anything a session is answered. */
@@ -703,7 +709,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   const githubAppOctokit = (
     r: ConnectionRow,
-    app: Extract<ConnectionAppSecret, { service: "github" }>
+    app: Extract<HeldApp, { service: "github" }>
   ): Octokit => {
     if (!app.installationId) {
       return misfit(
@@ -780,7 +786,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
    */
   const accessRefreshed = (
     r: ConnectionRow,
-    tokens: ConnectionSecret["tokens"],
+    tokens: ConnectionHeld["tokens"],
     refresh: (refreshToken: string | undefined) => Promise<string>
   ): Promise<string> => {
     if (!tokens) {
@@ -970,37 +976,36 @@ export const createConnections = (deps: ConnectionsDeps) => {
     );
 
   /** A `gh` connection's machine and account, and a code sign-in's code while it can finish, for a view. */
-  const githubWays = (
-    sealed: ConnectionSecret
-  ): Pick<ConnectionView, "device" | "gh"> => {
-    const { device, gh } = sealed;
-    return {
-      ...(gh
-        ? {
-            gh: {
-              machineId: gh.machineId,
-              machine: deps.gh.machineName(gh.machineId),
-              host: gh.host,
-              login: gh.login,
-            },
-          }
-        : {}),
-      ...(device && device.expiresAt > Date.now()
-        ? {
-            device: {
-              userCode: device.userCode,
-              verificationUri: device.verificationUri,
-              expiresAt: device.expiresAt,
-            },
-          }
-        : {}),
-    };
-  };
+  const githubWays = ({
+    device,
+    gh,
+  }: ConnectionFacts): Pick<ConnectionView, "device" | "gh"> => ({
+    ...(gh
+      ? {
+          gh: {
+            machineId: gh.machineId,
+            machine: deps.gh.machineName(gh.machineId),
+            host: gh.host,
+            login: gh.login,
+          },
+        }
+      : {}),
+    ...(device && device.expiresAt > Date.now()
+      ? {
+          device: {
+            userCode: device.userCode,
+            verificationUri: device.verificationUri,
+            expiresAt: device.expiresAt,
+          },
+        }
+      : {}),
+  });
 
   const view = (r: ConnectionRow): ConnectionView => {
+    const facts = factsOf(r);
     const sealed = opened(r);
     const tools = listed.get(r.id);
-    const app = sealed.app ? appView(sealed.app) : undefined;
+    const app = facts.app ? appView(facts.app) : undefined;
     return {
       id: r.id,
       name: r.name,
@@ -1012,7 +1017,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       ...(r.args?.length ? { args: r.args } : {}),
       auth: r.auth,
       ...(app ? { app } : {}),
-      ...githubWays(sealed),
+      ...githubWays(facts),
       ...(r.header ? { header: r.header } : {}),
       state: r.state,
       ...(r.reason ? { reason: r.reason } : {}),
@@ -1356,7 +1361,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         : "Sign in to register its app again.";
     }
     if (r.auth === "gh") {
-      const { gh } = opened(r);
+      const { gh } = factsOf(r);
       return gh
         ? `Run gh auth login on ${deps.gh.machineName(gh.machineId)}; the next read picks it up.`
         : "Connect it again.";
@@ -1746,7 +1751,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     service: string
   ): Pick<ConnectionRow, "state" | "reason"> => {
     if (authKind === "none" || authKind === "gh") {
-      return { state: "error", reason: "Not looked at yet." };
+      return { state: "error", reason: connectionReasons.notLookedAt };
     }
     const reasons: Record<Exclude<ConnectionAuth, "none" | "gh">, string> = {
       oauth: connectionsWords.saidSignIn,
@@ -1839,6 +1844,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       db.setAreas(r.id, patch.areas);
     }
     if (moved) {
+      db.hold(r.id, {});
       drop(r.id);
       listed.delete(r.id);
       console.info(`[connections] ${name} moved: its secret was let go`);
@@ -1879,7 +1885,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     reseal(r.id, () => ({ key: key.trim() }));
     drop(r.id);
-    db.update(r.id, { state: "error", reason: "Not looked at yet." });
+    db.update(r.id, { state: "error", reason: connectionReasons.notLookedAt });
     console.info(`[connections] ${name}: key set`);
     await probe(name);
     reached(name, db.projectsOf(r.id));
@@ -1985,7 +1991,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     base: URL,
     organization: string | undefined
   ): { authorizationUrl: string } => {
-    const org = (organization ?? opened(r).org ?? "").trim();
+    const org = (organization ?? factsOf(r).org ?? "").trim();
     if (org && !GITHUB_LOGIN.test(org)) {
       return misfit(
         "The organization is its login on GitHub, like the name in github.com/your-org."
@@ -2187,7 +2193,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       signInExpiresAt: null,
       signInUrl: null,
       state: "error",
-      reason: "Not looked at yet.",
+      reason: connectionReasons.notLookedAt,
     });
     githubApps.delete(r.id);
     appExpiry.delete(r.id);
@@ -2332,7 +2338,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (answer.access_token) {
       endDevice(id);
       keepTokens(id, answer as OAuthTokens);
-      db.update(id, { state: "error", reason: "Not looked at yet." });
+      db.update(id, { state: "error", reason: connectionReasons.notLookedAt });
       drop(id);
       console.info(`[connections] ${r.name}: signed in with a code`);
       await probe(r.name);
@@ -2374,7 +2380,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   }> => {
     const { signIns, unread } = await deps.gh.accounts();
     const made = db.list().flatMap((r) => {
-      const { gh } = r.auth === "gh" ? opened(r) : {};
+      const { gh } = r.auth === "gh" ? factsOf(r) : {};
       return gh ? [{ name: r.name, ...gh }] : [];
     });
     return {
@@ -2430,7 +2436,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       account: input.login,
       ...whereOf({ transport: "http", url: GITHUB_MCP, auth: "gh" }),
       state: "error",
-      reason: "Not looked at yet.",
+      reason: connectionReasons.notLookedAt,
       ...LET_GO,
       createdAt: now,
       updatedAt: now,
@@ -2540,7 +2546,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       await exchangeMcp(r, code, state, iss);
     }
     reseal(r.id, (sealed) => ({ ...sealed, verifier: undefined }));
-    db.update(r.id, { state: "error", reason: "Not looked at yet." });
+    db.update(r.id, { state: "error", reason: connectionReasons.notLookedAt });
     drop(r.id);
     console.info(`[connections] ${r.name}: signed in`);
     await probe(r.name);
@@ -2845,7 +2851,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
      */
     start: () => {
       for (const r of db.list()) {
-        const { device } = opened(r);
+        const { device } = factsOf(r);
         if (device) {
           pollDeviceIn(r.id, device.interval);
         }

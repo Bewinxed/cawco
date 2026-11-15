@@ -25,6 +25,7 @@
     "platforms-routes": "bun scripts/platforms-routes.ts",
     "queued-requests": "bun scripts/queued-requests.ts",
     "roles:check": "bun scripts/role-budgets.ts",
+    "sealed-facts": "bun scripts/sealed-facts.ts",
     "session-plans": "bun scripts/session-plans.ts",
     "skills:check": "bun scripts/skills-check.ts",
     "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts",
