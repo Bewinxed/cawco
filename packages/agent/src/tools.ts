@@ -12,8 +12,10 @@ import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { toolInstallsPath } from "@cawco/core/paths/cawco";
+import { ownIdentity } from "@cawco/core/process-identity";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { identifiedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
 import type {
@@ -688,16 +690,20 @@ export interface ToolInstallRecord {
  * records it: the copy it replaces (`path`, none when there was none, and
  * the version it said, `from`), the version it puts on (`to`, none when it
  * puts on the newest), the method's label, when it began, and the process
- * that runs it (`pid`). One whose process is gone (the agent restarted
+ * that runs it (`pid`, its start and the boot it runs in, core
+ * `ownIdentity`, so a pid used again is never taken for it). One whose
+ * process is gone (the agent restarted
  * mid-install, which takes the installer down with it) is settled at the
  * next start ({@link settleUnderway}).
  */
 export interface ToolInstallUnderway {
   at: number;
+  bootId?: string;
   from?: string;
   method?: string;
   path?: string;
   pid: number;
+  procStart?: string;
   to?: string;
 }
 
@@ -840,7 +846,7 @@ const markUnderway = async (
   const at = Date.now();
   const underway: ToolInstallUnderway = {
     at,
-    pid: process.pid,
+    ...(await ownIdentity()),
     method: method.label,
     ...(copy.at ? { path: copy.at.path } : {}),
     ...(copy.from ? { from: copy.from } : {}),
@@ -859,17 +865,6 @@ const endUnderway = (id: string, at: number): Promise<void> =>
     withoutUnderway(file, id, at)
   );
 
-/** Whether process `pid` still runs here. */
-const runs = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM: it runs, as another user.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 /**
  * THE INSTALLS A RESTART CUT SHORT ARE SETTLED, AT THE START. An install
  * under way whose process is gone (systemd and launchd take an agent's
@@ -885,8 +880,11 @@ const runs = (pid: number): boolean => {
 const settleUnderway = async (): Promise<void> => {
   const { underway = {} } = await readInstallFile();
   for (const [id, entry] of Object.entries(underway)) {
-    const ours = entry.pid === process.pid;
-    if (!(ours ? installing.has(id) : runs(entry.pid))) {
+    const runs =
+      entry.pid === process.pid
+        ? installing.has(id)
+        : (await identifiedPid(entry)) !== undefined;
+    if (!runs) {
       await settleOne(id, entry);
     }
   }
@@ -921,7 +919,7 @@ const settleOne = async (
     return;
   }
   console.info(
-    `[tools] ${name}'s install that began ${began} stopped before it put a copy on; the copy there stays whose it was`
+    `[tools] ${name}'s install that began ${began} stopped, and no copy there now is one it put on; the copy there is whose the record says`
   );
   await endUnderway(id, entry.at);
 };

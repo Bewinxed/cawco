@@ -168,10 +168,12 @@ export type ToolInstallRecordOutput = z.output<typeof ToolInstallRecordShape>;
 const ToolInstallUnderwayShape = declared(
   z.object({
     at: z.number(),
+    bootId: z.string().optional(),
     from: z.string().optional(),
     method: z.string().optional(),
     path: z.string().optional(),
     pid: z.number(),
+    procStart: z.string().optional(),
     to: z.string().optional(),
   }),
   "ToolInstallUnderway",
