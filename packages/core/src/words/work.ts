@@ -212,6 +212,23 @@ export const workWords = {
   /** A routine's run skipped because its budget does not read (`budgetUnread`). */
   routineBudgetUnread: (why: string) =>
     `The run is skipped: ${why}. Set the routine's budget again, or clear it, and its runs start.`,
+  /**
+   * A queued `delegate` held (hub queued_work_items.request_unread): what
+   * the hub kept of its call did not read as a delegate call when that
+   * column gained its schema, so no part of it is read as what it asked.
+   */
+  queuedRequestUnread: (stored: string) =>
+    `the call the hub kept for it while it waited, “${stored.length > 400 ? `${stored.slice(0, 400)}…` : stored}”, does not read as a delegate call, so the hub cannot tell what it asked: its brief, its limits, what it may start or the files it owns`,
+  /** Its parent told once that a queued delegate is held (`queuedRequestUnread`). */
+  queuedHeld: (title: string, id: string, why: string) =>
+    `Your queued delegate “${title}” (${id}) is held and will not start: ${why}. Withdraw it with stop_delegate and delegate the work again.`,
+  /**
+   * A queued attempt held (hub queued_task_starts.asked_unread): what the
+   * `delegate` naming its task asked did not read when that column gained
+   * its schema, so it does not start as though it asked nothing.
+   */
+  queuedAskUnread: (stored: string) =>
+    `its queued start is held and will not start: what the delegate call that named it asked, “${stored.length > 120 ? `${stored.slice(0, 120)}…` : stored}”, does not read as an attempt's ask, so the hub cannot tell its brief, its limits, what it may start or the files it owns. Start or move the task again, which replaces it`,
   /** How long a session with no minutes budget may sleep and be woken. */
   aDay: "a day",
   /** The limit of an item with a minutes budget. */

@@ -17,9 +17,10 @@
  * commit, against its hub; the seed below must fit that commit's Db.
  *
  * With `--lists`, the same fleet and the lists fixture's sessions, types,
- * budgets, at-limit policies, landings, gate passes and outputs besides
- * ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
- * {@link seedLanded}, {@link seedGatePasses}, {@link seedOutputs}), written to
+ * budgets, at-limit policies, landings, gate passes, outputs and queued
+ * starts besides ({@link seedLists}, {@link seedBudgets}, {@link seedAtLimit},
+ * {@link seedLanded}, {@link seedGatePasses}, {@link seedOutputs},
+ * {@link seedQueued}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
@@ -44,8 +45,9 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * migration 0398, every shape a provider's at-limit policy took before
  * migration 0399, every shape a work item's landing took before migration
  * 0400, every shape a work item's gate passes took before migration 0401,
- * and every shape a work item's and a task's outputs took before migration
- * 0404, written here.
+ * every shape a work item's and a task's outputs took before migration
+ * 0404, and every shape a queued start's kept call took before migration
+ * 0405, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -773,6 +775,178 @@ function seedOutputs(dbPath: string): void {
   sqlite.close();
 }
 
+/**
+ * Every shape migration 0405 reads a queued start's kept call in, as the
+ * hub's writers stored it (work-items.ts `delegate` through
+ * `queueWorkItem`, its owned globs as rows; dispatch.ts `queuedForOwns` from
+ * an `AttemptAsk`, null for a hook's start) and as a hand edit could: a
+ * call that names every field and one that names only what it must, which
+ * read; a call that is not JSON and an ask that is a list, which do not;
+ * and one of each that does not read in one of the fields a start is
+ * stopped by: a budget whose key is not a limit or whose limit is words,
+ * what it may start or its outputs given as one name, and owned globs that
+ * are no list or kept in a delegate's call, where they are rows.
+ */
+function seedQueued(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const sessions = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances ORDER BY rowid LIMIT 2"
+    )
+    .all()
+    .map((row) => row.id);
+  const projects = sqlite
+    .query<{ id: string }, []>("SELECT id FROM projects ORDER BY rowid LIMIT 1")
+    .all()
+    .map((row) => row.id);
+  const [parent, other] = sessions;
+  const [project] = projects;
+  if (!(parent && other && project)) {
+    throw new Error("The fixture has no sessions or project to queue under.");
+  }
+  const at = Date.UTC(2026, 10, 14, 9);
+  const whole = {
+    prompt: "Make the board's scroll hold after a reconnect.",
+    title: "Hold the board's scroll",
+    type: "high",
+    harness: "claude",
+    model: "claude-opus-5-5",
+    account: "work",
+    lands: "branch",
+    budget: { usd: 4.5, turns: 60, minutes: 90 },
+    mayStart: ["browser", "advisor"],
+    outputs: ["docs/scroll-hold.md"],
+    skills: ["svelte-house-rules"],
+    inputs: ["/home/dev/notes/scroll.md", { report: "a1b2c3d4" }],
+    group: "board",
+    fork: false,
+  };
+  const calls: [string, string, string[]][] = [
+    [
+      "Hold the board's scroll",
+      JSON.stringify({
+        ...whole,
+        parentInstanceId: parent,
+        cwd: "/home/dev/atlas",
+        machineId: "obsidian",
+        clean: false,
+        host: false,
+      }),
+      ["apps/dashboard/src/board/**"],
+    ],
+    [
+      "Tidy the preview pane",
+      JSON.stringify({
+        parentInstanceId: other,
+        prompt: "Tidy the preview pane's header.",
+        title: "Tidy the preview pane",
+      }),
+      [],
+    ],
+    ["Answer the queued ask", "delegate: answer the queued ask", []],
+    [
+      "Fix the rail's title",
+      JSON.stringify({
+        parentInstanceId: other,
+        prompt: "The rail shows the wrong title.",
+        title: "Fix the rail's title",
+        budget: { dollars: 5 },
+      }),
+      ["apps/dashboard/src/rail/**"],
+    ],
+    [
+      "Move tasks to the new stage",
+      JSON.stringify({
+        parentInstanceId: parent,
+        prompt: "Move the tasks to the new stage.",
+        title: "Move tasks to the new stage",
+        mayStart: "any",
+      }),
+      [],
+    ],
+    [
+      "Make the release proof faster",
+      JSON.stringify({
+        parentInstanceId: other,
+        prompt: "Make the release proof faster.",
+        title: "Make the release proof faster",
+        outputs: "docs/release-proof.md",
+      }),
+      ["scripts/release/**"],
+    ],
+    [
+      "Check the migration on a real database",
+      JSON.stringify({
+        parentInstanceId: parent,
+        prompt: "Check the migration on a copy of a real database.",
+        title: "Check the migration on a real database",
+        owns: ["packages/hub/drizzle/**"],
+      }),
+      [],
+    ],
+  ];
+  for (const [n, [title, request, globs]] of calls.entries()) {
+    const queued = id("queued", n);
+    sqlite.run(
+      "INSERT INTO queued_work_items (id, parent_instance_id, request, project_id, task_id, queued_instance_id, title, queued_at) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?)",
+      [
+        queued,
+        n % 2 === 0 ? parent : other,
+        request,
+        id("session", n),
+        title,
+        at + n * 60_000,
+      ]
+    );
+    for (const glob of globs) {
+      sqlite.run(
+        "INSERT INTO queued_work_item_globs (queued_id, glob) VALUES (?, ?)",
+        [queued, glob]
+      );
+    }
+  }
+  const asks: (string | null)[] = [
+    JSON.stringify({ ...whole, owns: ["apps/dashboard/src/board/**"] }),
+    null,
+    JSON.stringify({
+      prompt: "Write the canvas's pin notes.",
+      title: "Write the canvas's pin notes",
+    }),
+    JSON.stringify(["Fix the board's scroll"]),
+    JSON.stringify({
+      prompt: "Fix it.",
+      title: "Fix it",
+      budget: { usd: "five" },
+    }),
+    JSON.stringify({ prompt: "Fix it.", title: "Fix it", mayStart: [1] }),
+    JSON.stringify({
+      prompt: "Fix it.",
+      title: "Fix it",
+      outputs: ["docs/post.md", 3],
+    }),
+    JSON.stringify({
+      prompt: "Fix it.",
+      title: "Fix it",
+      owns: "src/theme/**",
+    }),
+  ];
+  for (const [n, asked] of asks.entries()) {
+    sqlite.run(
+      "INSERT INTO queued_task_starts (project_id, task_id, stage, parent_instance_id, queued_at, why, retry, origin, asked) VALUES (?, ?, 'doing', ?, ?, ?, 0, ?, ?)",
+      [
+        project,
+        `tsk-${900 + n}`,
+        asked === null ? null : parent,
+        at + n * 60_000,
+        asked === null ? "cap" : "owns",
+        asked === null ? "event" : "you",
+        asked,
+      ]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -795,6 +969,7 @@ async function seed(
     seedLanded(dbPath);
     seedGatePasses(dbPath);
     seedOutputs(dbPath);
+    seedQueued(dbPath);
   }
 }
 

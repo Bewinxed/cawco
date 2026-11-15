@@ -405,6 +405,7 @@ import { checkoutOf } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
 import type {
   AgentAuth,
+  AttemptAsk,
   ContinuationAsker,
   ContinueRequest,
   StoredSendRefusal,
@@ -433,7 +434,7 @@ import {
 } from "./design-offers";
 import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
-import { type AttemptAsk, createDispatcher, dispatchRoutes } from "./dispatch";
+import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
 import { createFind } from "./find";

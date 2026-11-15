@@ -1497,9 +1497,14 @@ export const createPush = ({
   ): string | undefined => {
     const delegates =
       db.liveWorkItemsOf(instanceId).length +
+      // A held queued delegate is not at work: it waits on its parent.
       db
         .queuedWorkItems()
-        .filter((request) => request.parentInstanceId === instanceId).length;
+        .filter(
+          (waiting) =>
+            waiting.parentInstanceId === instanceId &&
+            waiting.requestUnread === null
+        ).length;
     const parts = [
       [delegates, "delegate(s) at work"],
       [wakes?.background ?? 0, "background task(s) running"],

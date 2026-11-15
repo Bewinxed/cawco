@@ -39628,7 +39628,7 @@
             }
           },
           "held": {
-            "description": "Ready tasks it does not start, each with why (its `startProblem`): a\nbudget line that does not read, or the hub's last try failing on the\nfile as it stands.",
+            "description": "Tasks it does not start, each with why: a ready task's `startProblem`\n(a budget line that does not read, or the hub's last try failing on the\nfile as it stands), and a queued start held because what the\n`delegate` call that named its task asked does not read.",
             "type": "array",
             "items": {
               "type": "object",

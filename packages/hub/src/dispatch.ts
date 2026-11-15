@@ -143,7 +143,7 @@ import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import type { Origin, WorkBudget } from "./db/stored-types";
+import type { AttemptAsk, Origin, WorkBudget } from "./db/stored-types";
 import { needsDesignSystem } from "./design-offers";
 import type { designSection as designSectionOf } from "./design-system";
 import type { JevAccess } from "./jev";
@@ -302,33 +302,6 @@ export interface DispatchDeps {
   readonly workPlace: (project: ProjectRow, ask?: WorkAsk) => WorkPlace;
 }
 
-/**
- * What a `delegate` call that names its task asks of the attempt over the
- * task file: its brief, which the attempt's brief carries above the task
- * file, its name, and how it runs. Where the attempt runs is the task's
- * (`runs_on`, the project's place for its work), so it names no machine, folder or
- * workspace.
- */
-export type AttemptAsk = Pick<
-  WorkItemRequest,
-  | "prompt"
-  | "title"
-  | "account"
-  | "budget"
-  | "fork"
-  | "from"
-  | "group"
-  | "harness"
-  | "inputs"
-  | "lands"
-  | "mayStart"
-  | "model"
-  | "outputs"
-  | "owns"
-  | "skills"
-  | "type"
->;
-
 /** How an attempt starts ({@link Dispatcher.startAttempt}); each left out, as a plain task_start. */
 export interface AttemptHow {
   /** What a `delegate` naming the task asked over its task file. */
@@ -352,9 +325,10 @@ export interface DispatchView {
   /** The tasks it would start next, in order. */
   frontier: string[];
   /**
-   * Ready tasks it does not start, each with why (its `startProblem`): a
-   * budget line that does not read, or the hub's last try failing on the
-   * file as it stands.
+   * Tasks it does not start, each with why: a ready task's `startProblem`
+   * (a budget line that does not read, or the hub's last try failing on the
+   * file as it stands), and a queued start held because what the
+   * `delegate` call that named its task asked does not read.
    */
   held: { task: string; why: string }[];
   /** Where an attempt lands when its task and type say nothing. */
@@ -1856,11 +1830,24 @@ export const createDispatcher = ({
     const live = liveAttempts(project.id).length + startingIn(project.id);
     const review = list.tasks.filter((task) => task.kind === "you").length;
     const frontier = list.tasks.filter(onFrontier).map((task) => task.id);
-    const held = list.tasks.flatMap((task) =>
-      task.ready && task.startProblem !== null
-        ? [{ task: task.id, why: task.startProblem }]
-        : []
-    );
+    const queued = db.queuedTaskStarts(project.id);
+    const held = [
+      ...list.tasks.flatMap((task) =>
+        task.ready && task.startProblem !== null
+          ? [{ task: task.id, why: task.startProblem }]
+          : []
+      ),
+      ...queued.flatMap((each) =>
+        each.askedUnread === null
+          ? []
+          : [
+              {
+                task: each.taskId,
+                why: workWords.queuedAskUnread(each.askedUnread),
+              },
+            ]
+      ),
+    ];
     const paused = pauseOf(project, {
       stagesProblems: list.stagesProblems,
       review,
@@ -1879,7 +1866,7 @@ export const createDispatcher = ({
       paused,
       frontier,
       held,
-      queued: db.queuedTaskStarts(project.id).map((each) => each.taskId),
+      queued: queued.map((each) => each.taskId),
     };
     return view;
   };
@@ -2028,14 +2015,22 @@ export const createDispatcher = ({
    * The hook starts that waited for a slot, oldest first, while the project
    * has slots: each one whose task is still in the stage that asked, with no
    * live attempt, and someone to report to. Each leaves the queue as it is
-   * tried; a start that fails is remembered on the task, as any start is.
+   * tried; a start that fails is remembered on the task, as any start is. A
+   * held one, whose ask as kept did not read (`askedUnread`), stays and is
+   * not tried: none of its ask is read as what it asked, so it never starts
+   * with its limits, its may-start, its outputs or its owned files read as
+   * none; the dispatch view says why ({@link viewOf}), and a later start or
+   * move of its task replaces it.
    */
   const drainQueued = async (projectId: string): Promise<void> => {
     const project = db.project(projectId);
     if (!project) {
       return;
     }
-    for (const queued of db.queuedTaskStarts(projectId)) {
+    const unheld = db
+      .queuedTaskStarts(projectId)
+      .filter((queued) => queued.askedUnread === null);
+    for (const queued of unheld) {
       const owns = queued.why === "owns";
       // A start that waited for owned files was asked for, so the cap does
       // not hold it back; a hook's does.
@@ -2095,8 +2090,7 @@ export const createDispatcher = ({
       ...(stage?.kind === "active" ? { stage } : {}),
       retry: queued.retry,
       ...(queued.origin ? { origin: queued.origin } : {}),
-      // Written by queuedForOwns from an AttemptAsk alone.
-      ...(queued.asked ? { asked: queued.asked as AttemptAsk } : {}),
+      ...(queued.asked ? { asked: queued.asked } : {}),
     });
   };
 

@@ -35,6 +35,7 @@ import type {
 import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness/kinds";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
 import type { DeviceKind as DeviceKindType } from "./hub-auth";
+import { LANDS_MODES } from "./injected";
 import { COMMAND_STEPS, INSTALL_CHECKS, SSH_STEPS } from "./install";
 import type { MachinePath as MachinePathType } from "./machine-path";
 import { isMachinePath } from "./machine-path";
@@ -334,6 +335,20 @@ const AtPlanLimitShape = declared(
 );
 export const AtPlanLimitSchema: z.ZodType<AtPlanLimitType> = AtPlanLimitShape;
 export type AtPlanLimitOutput = z.output<typeof AtPlanLimitShape>;
+
+export const LandsModeShape = declared(
+  z.enum(LANDS_MODES),
+  "LandsMode",
+  "packages/core/src/injected.ts"
+);
+export type LandsModeOutput = z.output<typeof LandsModeShape>;
+
+export const MayStartShape = declared(
+  z.array(z.string()),
+  "MayStart",
+  "packages/core/src/delegate-types.ts"
+);
+export type MayStartOutput = z.output<typeof MayStartShape>;
 
 const ArtifactBaseShape = declared(
   z.object({ name: z.string().optional(), primary: z.boolean().optional() }),
@@ -3543,13 +3558,6 @@ const SessionInstructionShape = declared(
   "packages/core/src/fleet.ts"
 );
 export type SessionInstructionOutput = z.output<typeof SessionInstructionShape>;
-
-const MayStartShape = declared(
-  z.array(z.string()),
-  "MayStart",
-  "packages/core/src/delegate-types.ts"
-);
-export type MayStartOutput = z.output<typeof MayStartShape>;
 
 const SessionRoleShape = declared(
   z.enum(SESSION_ROLES),

@@ -12290,7 +12290,98 @@
       "linear"
     ]
   },
-  "queued_task_starts.asked": {},
+  "queued_task_starts.asked": {
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "account": {
+        "type": "string"
+      },
+      "budget": {
+        "type": "object",
+        "properties": {
+          "minutes": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "number"
+          },
+          "usd": {
+            "type": "number"
+          }
+        }
+      },
+      "fork": {
+        "type": "boolean"
+      },
+      "from": {
+        "type": "string"
+      },
+      "group": {
+        "type": "string"
+      },
+      "harness": {
+        "type": "string",
+        "enum": [
+          "claude",
+          "opencode",
+          "pi"
+        ]
+      },
+      "inputs": {
+        "type": "array",
+        "items": {}
+      },
+      "lands": {
+        "type": "string",
+        "enum": [
+          "main",
+          "branch",
+          "pr",
+          "none"
+        ]
+      },
+      "mayStart": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "model": {
+        "type": "string"
+      },
+      "outputs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "owns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "skills": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "type": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt",
+      "title"
+    ]
+  },
   "queued_task_starts.origin": {
     "type": "string",
     "enum": [
@@ -12305,7 +12396,111 @@
       "owns"
     ]
   },
-  "queued_work_items.request": {},
+  "queued_work_items.request": {
+    "type": "object",
+    "properties": {
+      "account": {
+        "type": "string"
+      },
+      "budget": {
+        "type": "object",
+        "properties": {
+          "minutes": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "number"
+          },
+          "usd": {
+            "type": "number"
+          }
+        }
+      },
+      "clean": {
+        "type": "boolean"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "fork": {
+        "type": "boolean"
+      },
+      "from": {
+        "type": "string"
+      },
+      "group": {
+        "type": "string"
+      },
+      "harness": {
+        "type": "string",
+        "enum": [
+          "claude",
+          "opencode",
+          "pi"
+        ]
+      },
+      "host": {
+        "type": "boolean"
+      },
+      "inputs": {
+        "type": "array",
+        "items": {}
+      },
+      "lands": {
+        "type": "string",
+        "enum": [
+          "main",
+          "branch",
+          "pr",
+          "none"
+        ]
+      },
+      "machineId": {
+        "type": "string"
+      },
+      "mayStart": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "model": {
+        "type": "string"
+      },
+      "outputs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "parentInstanceId": {
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "skills": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "title": {
+        "type": "string"
+      },
+      "type": {
+        "type": "string"
+      },
+      "workspace": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "parentInstanceId",
+      "prompt",
+      "title"
+    ]
+  },
   "relays.provider": {
     "type": "string",
     "enum": [

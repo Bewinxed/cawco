@@ -53,7 +53,7 @@ import type { BriefTarget } from "@cawco/core/fleet";
 import { byPerson } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
 import { WORK_ITEM_ORIGIN } from "@cawco/core/harness/kinds";
-import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
+import type { CheckoutMove } from "@cawco/core/injected";
 import {
   type DashboardReach,
   handoffMarker,
@@ -126,12 +126,14 @@ import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
 import {
   landedWork,
+  type QueuedCall,
   type QueuedWorkItemRow,
   type WorkItemRow,
   type WorkspaceRow,
 } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type {
+  DelegateCall,
   ItemBlock,
   Origin,
   StoredSendRefusal,
@@ -504,7 +506,6 @@ const cleanProblem = (request: WorkItemRequest): string | undefined => {
     : undefined;
 };
 
-/** What `delegate` asks for. */
 /** An item's clone as a brief reads it: its workspace, on its machine (commands in it run inside its boundary). */
 export interface CloneRef {
   id: string;
@@ -512,9 +513,11 @@ export interface CloneRef {
   path: string;
 }
 
-export interface WorkItemRequest {
-  /** The account its session must run on (an id or label); placement chooses when absent. */
-  account?: string;
+/**
+ * A start of a work item: a `delegate` call's asks (db/stored-types.ts
+ * `DelegateCall`), and what the hub sets of a start alone.
+ */
+export interface WorkItemRequest extends DelegateCall {
   /**
    * The brief, written from the item's clone once it is cut or reused and
    * before the item is filed: what the clone holds that the brief carries
@@ -527,21 +530,11 @@ export interface WorkItemRequest {
   briefFromClone?: (
     clone: CloneRef
   ) => Promise<string | ProblemsOf<ReturnType<typeof designSection>>>;
-  /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
-  budget?: WorkBudget;
   /**
    * A person started it himself (work_items.by_person): set by the
    * dispatcher for an attempt he started from the dashboard.
    */
   byPerson?: boolean;
-  /**
-   * Its session starts clean (core `SpawnPayload.clean`): no instruction
-   * context, and none of its type's skills. Not with skills, fork or
-   * workspace, which would bring context back ({@link cleanProblem}).
-   */
-  clean?: boolean;
-  /** The repository a new workspace is cut from; the parent's directory by default. */
-  cwd?: string;
   /**
    * The commit a new workspace's worktree is moved to, detached, before its
    * session starts (workspaces.ts `detachNew`): a design check's verifier's judged
@@ -549,60 +542,11 @@ export interface WorkItemRequest {
    */
   detachAt?: string;
   /**
-   * The item's session forks its parent's conversation as it stands now, on
-   * the parent's harness and model so the parent's prompt cache still holds.
-   * Always a new workspace.
-   */
-  fork?: boolean;
-  /**
-   * A workspace of the caller's, with no live item: the new workspace's
-   * branch is cut at that workspace's head, its commits carried in a
-   * bundle, on its machine and from its repository.
-   */
-  from?: string;
-  /** Its group under its parent: one combined report once every item of it has ended. */
-  group?: string;
-  harness?: HarnessKind;
-  /**
-   * Host scope: its session runs on the machine itself (`machineId`, the
-   * parent's by default) in `cwd` (the agent user's home when left out),
-   * with no clone and no boundary ({@link startHost}). It lands nothing, and
-   * takes nothing that needs a clone ({@link hostProblem}).
-   */
-  host?: boolean;
-  /**
-   * What its parent hands it (hub handed-input.ts), written into its
-   * workspace's `$TMPDIR/inputs/` before the brief that names them: files
-   * on the parent's machine by absolute path (agent inputs.ts), and what
-   * the hub holds by name, resolved here (handed-inputs.ts). Checked as
-   * they come: the route takes any list.
-   */
-  inputs?: unknown[];
-  /** Where its commits go once it passes the landing gate; `main` when left out. */
-  lands?: LandsMode;
-  /** The machine a new workspace is cut on; the parent's by default. */
-  machineId?: string;
-  /**
-   * The delegate types it may start (core `MayStart`); its type's list when
-   * absent. Never past what its parent may start itself ({@link Settings}).
-   */
-  mayStart?: MayStart;
-  model?: string;
-  /**
    * Whose work it is (work_items.origin). Left out, its parent's: Caw's, the
    * origin of the turn he is in; a work item's session, its own item's; any
    * other session's, `you`. The dispatcher and routines set it.
    */
   origin?: Origin;
-  /**
-   * Files in its workspace, as paths from the clone's root, that the hub
-   * copies into its project's folder when it finishes. Needs a project.
-   */
-  outputs?: string[];
-  /** Globs of the repository's files it owns: it waits while a live item's overlap them. */
-  owns?: string[];
-  parentInstanceId: string;
-  prompt: string;
   /**
    * The ids a queued `delegate` stood under in its parent's tray while it
    * waited (the queued row's id, and a session id made then): its item and
@@ -634,28 +578,14 @@ export interface WorkItemRequest {
    * delegate calls. Set by the hub alone, never by a tool call.
    */
   settlesCards?: true;
-  skills?: string[];
   /**
    * The project task the item is an attempt at (dispatch.ts). Only for a new
    * workspace; the item's session may write that task's to-dos.
    */
   task?: { id: string; projectId: string };
-  /** What the caller named the work: the item's title and its session's. */
-  title: string;
-  type?: string;
   /** An attempt's cards and pins and the values they settled with as it was dispatched (dispatch.ts): its witnesses. */
   waitedOn?: WaitWitness[];
-  /**
-   * An existing workspace's id or unique prefix: the item is its follow-up,
-   * on the session its last item ran, so type, model, harness, skills and
-   * fork are the session's own and not the request's to set.
-   */
-  workspace?: string;
 }
-
-/** A request as `queued_work_items` keeps it: with the ids it stands under while it waits. */
-type QueuedRequest = WorkItemRequest &
-  Required<Pick<WorkItemRequest, "queuedAs">>;
 
 /**
  * A `delegate` waiting in the queue for owned files, as `delegate_list`
@@ -668,6 +598,8 @@ export interface QueuedDelegate {
   queuedAt: string;
   state: "queued";
   title: string;
+  /** Held: why it never starts, its call as the hub kept it not reading (core `workWords.queuedRequestUnread`); null otherwise. */
+  unread: string | null;
 }
 
 /**
@@ -1846,11 +1778,13 @@ export const createWorkItems = ({
     queued: QueuedWorkItemRow,
     dismissedAt: Date | null = null
   ): WorkItemSummary => {
-    const request = queued.request as QueuedRequest;
+    const { request } = queued;
+    // A held one's call did not read: it starts on no machine of its own.
+    const asked = queued.requestUnread === null ? queued.request : undefined;
     const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
-    const machineId = request.workspace
-      ? db.workspacesNamed(request.workspace)[0]?.machineId
-      : (request.machineId ?? parent?.machineId);
+    const machineId = asked?.workspace
+      ? db.workspacesNamed(asked.workspace)[0]?.machineId
+      : (asked?.machineId ?? parent?.machineId);
     return {
       id: queued.id,
       parentInstanceId: queued.parentInstanceId,
@@ -1871,7 +1805,11 @@ export const createWorkItems = ({
       waitUntil: null,
       waitReason: null,
       checkQueue: null,
-      firstLines: { brief: firstLine(request.prompt), result: "", error: "" },
+      firstLines: {
+        brief: asked ? firstLine(asked.prompt) : "",
+        result: "",
+        error: "",
+      },
     };
   };
 
@@ -2809,16 +2747,36 @@ export const createWorkItems = ({
   /**
    * One queued delegate, started when its files are free under the ids its
    * chip stood under; a start that fails takes the chip off and tells the
-   * parent why, as it waits for a report that will not come.
+   * parent why, as it waits for a report that will not come. A held one,
+   * whose call as kept did not read (`requestUnread`), never starts: none
+   * of its call is read as what it asked, so it is neither started with
+   * its limits, its may-start, its outputs or its owned files read as none
+   * nor dropped with what it held. Its parent is told once a process why,
+   * as it waits for a report, and it waits in the tray until its parent
+   * withdraws it ({@link withdrawQueued}).
    */
   const startQueued = async (queued: QueuedWorkItemRow): Promise<void> => {
-    const request = queued.request as QueuedRequest;
     const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
     if (!parent) {
       unqueue(queued);
       return;
     }
-    if (heldBy(queued, parent)) {
+    if (queued.requestUnread !== null) {
+      if (!toldHeld.has(queued.id)) {
+        toldHeld.add(queued.id);
+        tell(
+          parent,
+          workWords.queuedHeld(
+            queued.title,
+            queued.id.slice(0, 8),
+            workWords.queuedRequestUnread(queued.requestUnread)
+          )
+        );
+      }
+      return;
+    }
+    const { request } = queued;
+    if (heldBy(request, parent)) {
       return;
     }
     startingQueued.add(queued.id);
@@ -2846,13 +2804,14 @@ export const createWorkItems = ({
 
   /** Queued delegates whose start is running now: a withdraw would race their filed item. */
   const startingQueued = new Set<string>();
+  /** Held queued delegates whose parent this process has told why ({@link startQueued}). */
+  const toldHeld = new Set<string>();
 
   /** The live item and the globs that hold a queued delegate back; nothing once its files are free. */
   const heldBy = (
-    queued: QueuedWorkItemRow,
+    request: QueuedCall,
     parent: InstanceRow
   ): ReturnType<typeof ownsBlocker> => {
-    const request = queued.request as QueuedRequest;
     const repo = repoOfRequest(
       request,
       parent,
@@ -2876,10 +2835,9 @@ export const createWorkItems = ({
       );
   /** The conversation of a queued delegate's project, unless it queued it. */
   const queuedLead = (queued: QueuedWorkItemRow): InstanceRow | undefined => {
-    const request = queued.request as QueuedRequest;
     const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
     return projectLead(
-      request.task?.projectId ?? parent?.projectId ?? null,
+      queued.request.task?.projectId ?? parent?.projectId ?? null,
       queued.parentInstanceId
     );
   };
@@ -5369,9 +5327,7 @@ export const createWorkItems = ({
      * its parent's tray from now on under the ids its item and session take
      * when it starts. Every other refusal is the caller's.
      */
-    async delegate(called: WorkItemRequest) {
-      // A role is the hub's to give (a curator run's), never a caller's.
-      const { role: _role, ...asked } = called;
+    async delegate(asked: DelegateCall) {
       // The fleet's guidance for briefing this delegate, before anything
       // starts, when the caller has not read it since its start or its
       // last compaction (briefings.ts).
@@ -5394,7 +5350,7 @@ export const createWorkItems = ({
         return started;
       }
       const id = crypto.randomUUID();
-      const request: QueuedRequest = {
+      const request: QueuedCall = {
         ...asked,
         queuedAs: { id, instanceId: crypto.randomUUID() },
       };
@@ -5488,12 +5444,19 @@ export const createWorkItems = ({
     queuedOf(caller: string): QueuedDelegate[] {
       return queuedFor(caller).map((queued) => {
         const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
-        const held = parent ? heldBy(queued, parent) : undefined;
+        const held =
+          parent && queued.requestUnread === null
+            ? heldBy(queued.request, parent)
+            : undefined;
         return {
           id: queued.id,
           title: queued.title,
           state: "queued",
           queuedAt: queued.queuedAt.toISOString(),
+          unread:
+            queued.requestUnread === null
+              ? null
+              : workWords.queuedRequestUnread(queued.requestUnread),
           heldBy: held
             ? {
                 itemId: held.item.id,
