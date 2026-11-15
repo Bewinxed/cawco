@@ -2,6 +2,7 @@
  * The fleet's hooks and their versions.
  */
 
+import { FLEET_SCOPES } from "@cawco/core/fleet-placement";
 import { HOOK_TEMPLATES, type HookDraft, hookProblem } from "@cawco/core/hooks";
 import { Elysia, ElysiaStatus, problem, status, t } from "elysia";
 import type { Static } from "typebox";
@@ -31,7 +32,7 @@ export const hookBody = t.Object({
   // object; `hookProblem` checks the fields that make it runnable.
   handler: t.Optional(t.Record(t.String(), t.Unknown())),
   script: t.Optional(t.Nullable(t.String())),
-  scope: t.Optional(t.Nullable(t.String())),
+  scope: t.Optional(t.Nullable(t.UnionEnum(FLEET_SCOPES))),
   projectId: t.Optional(t.Nullable(t.String())),
   areaId: t.Optional(t.Nullable(t.String())),
   expectedHash: t.Optional(t.String()),
@@ -74,11 +75,8 @@ export const fleetHookCalls = ({
     }
 
     const draft = hookDraftOf(current, patch);
-    if (typeof draft.enabled !== "boolean") {
-      return problem(400, {
-        code: "say-whether-hook-enabled",
-        detail: "Say whether the hook is enabled.",
-      });
+    if (typeof draft === "string") {
+      return problem(400, { code: "hook-invalid", detail: draft });
     }
     const [first] = [
       boundProblem(draft),

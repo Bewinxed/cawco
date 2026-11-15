@@ -104,3 +104,5 @@ scripts/lint/fixtures/design/planted-style-spaces.svelte:8:26 house/no-style-und
 scripts/lint/fixtures/eden-answers.ts:17:39 house/eden-answers-read
 scripts/lint/fixtures/eden-answers.ts:18:30 house/eden-answers-read
 scripts/lint/fixtures/eden-answers.ts:19:36 house/eden-answers-read
+scripts/lint/fixtures/closed-text-column.ts:13:10 house/closed-text-column
+scripts/lint/fixtures/closed-text-column.ts:14:12 house/closed-text-column

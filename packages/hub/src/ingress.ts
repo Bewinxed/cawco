@@ -84,7 +84,7 @@ import type {
   EventRouteRow,
   InboundEventRow,
 } from "./db/ingress";
-import type { InboundVia } from "./db/schema";
+import type { InboundVia } from "./db/stored-types";
 import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
 import { githubReposOf, pollRepo, readRunWait } from "./github";

@@ -8,7 +8,8 @@
  *
  * The rules: the hub-path ban (scripts/lint/hub-path-by-hand.ts) over every
  * caller of the hub's source; the problem rule (scripts/lint/problem-kept.ts)
- * over the hub's own; Eden's requests read by hub-read's readers alone
+ * over the hub's own; the closed-set column rule (scripts/lint/closed-text-column.ts)
+ * over the hub's schema; Eden's requests read by hub-read's readers alone
  * (scripts/lint/eden-answers-read.ts) over the dashboard's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
@@ -24,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { getEnvironmentData, isMainThread } from "node:worker_threads";
 import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
+import { closedTextColumn } from "./scripts/lint/closed-text-column.ts";
 import { edenAnswersRead } from "./scripts/lint/eden-answers-read.ts";
 import { hubPathByHand } from "./scripts/lint/hub-path-by-hand.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
@@ -40,6 +42,8 @@ const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
 /** The Eden requests read outside hub-read's readers that the rule must refuse. */
 const EDEN_ANSWERS_FIXTURES = `${LINT_FIXTURES}eden-answers.ts`;
+/** The closed sets held as a `text(...).$type<T>()` label that the column rule must refuse. */
+const CLOSED_TEXT_FIXTURES = `${LINT_FIXTURES}closed-text-column.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
 
@@ -102,6 +106,8 @@ const hubCallers = within(
 ).filter((path) => !path.startsWith(LINT_FIXTURES));
 // The hub's source, whose helpers return Elysia's problems (scripts/lint/problem-kept.ts).
 const hub = within(tracked("packages/hub/src/**/*.ts"));
+// The hub's tables, whose closed sets are storedEnum columns (scripts/lint/closed-text-column.ts).
+const schema = within(tracked("packages/hub/src/db/schema.ts"));
 const designed = within(
   tracked("apps/dashboard/src/**/*.ts", "apps/dashboard/src/**/*.svelte")
 );
@@ -139,6 +145,10 @@ export default defineConfig({
       {
         files: hub.map(literal),
         rules: [problemKept],
+      },
+      {
+        files: [...schema.map(literal), CLOSED_TEXT_FIXTURES],
+        rules: [closedTextColumn],
       },
       {
         files: [...designed.map(literal), EDEN_ANSWERS_FIXTURES],

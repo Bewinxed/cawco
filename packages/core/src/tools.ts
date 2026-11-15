@@ -8,6 +8,8 @@
  * dashboard only renders {@link ToolStatus} rows it is handed.
  */
 
+import { everyOf } from "./every-of";
+
 /** The platforms a daemon reports itself as — `platform()` from `node:os`. */
 export type ToolPlatform = "linux" | "darwin" | "win32";
 
@@ -261,7 +263,7 @@ export const CONTROL_BEGIN_TOOL_SIGNIN = "beginToolSignin";
 export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 
 /** What a probe or an install attempt found. The unit every surface renders. */
-type ToolState =
+export type ToolState =
   "installed" | "missing" | "installing" | "failed" | "unsupported";
 
 /** @socketFrame fromHub */
@@ -750,13 +752,13 @@ export const pinnedTools = (): Record<string, string> =>
   );
 
 /** The states a daemon may claim for a tool; anything else is not a status. */
-const TOOL_STATES: readonly ToolState[] = [
+export const TOOL_STATES = everyOf<ToolState>()([
   "installed",
   "missing",
   "installing",
   "failed",
   "unsupported",
-];
+]);
 
 export const isToolStatus = (value: unknown): value is ToolStatus =>
   typeof value === "object" &&

@@ -105,13 +105,17 @@ import type {
   SessionInstruction as SessionInstructionType,
   SkillFile as SkillFileType,
 } from "./fleet";
-import type { FleetScope as FleetScopeType } from "./fleet-placement";
+import type {
+  FleetPlacement as FleetPlacementType,
+  FleetScope as FleetScopeType,
+} from "./fleet-placement";
 import type {
   BrowserAskFrame as BrowserAskFrameType,
   ConnectAccess as ConnectAccessType,
   ConnectAskFrame as ConnectAskFrameType,
   ParkedAsk as ParkedAskType,
   PermissionRequestFrame as PermissionRequestFrameType,
+  ProjectOfferReason as ProjectOfferReasonType,
 } from "./frames";
 import type {
   ChildLimit as ChildLimitType,
@@ -128,8 +132,10 @@ import type {
 } from "./harness/kinds";
 import type { HarnessConfigKind as HarnessConfigKindType } from "./harness-config";
 import type {
+  FleetHook as FleetHookType,
   HookAgentHandler as HookAgentHandlerType,
   HookCommandHandler as HookCommandHandlerType,
+  HookDraft as HookDraftType,
   HookEvent as HookEventType,
   HookHandler as HookHandlerType,
   HookHttpHandler as HookHttpHandlerType,
@@ -137,6 +143,7 @@ import type {
   HookMcpToolHandler as HookMcpToolHandlerType,
   HookPromptHandler as HookPromptHandlerType,
 } from "./hooks";
+import type { DeviceKind as DeviceKindType } from "./hub-auth";
 import type { HubRepoKey as HubRepoKeyType } from "./hub-repo";
 import type { CheckoutMove as CheckoutMoveType } from "./injected";
 import type {
@@ -186,6 +193,7 @@ import type {
   DesignOfferNote as DesignOfferNoteType,
   ProjectNoteEvent as ProjectNoteEventType,
   ProjectNote as ProjectNoteType,
+  RoutineMadeBy as RoutineMadeByType,
   RoutineMadeEvent as RoutineMadeEventType,
   RoutineMadeNote as RoutineMadeNoteType,
   RoutineSchedule as RoutineScheduleType,
@@ -288,6 +296,7 @@ import type {
   StyleDelta as StyleDeltaType,
   TokenKind as TokenKindType,
 } from "./stage";
+import type { StarterOutcome as StarterOutcomeType } from "./starters";
 import type {
   AccountHueOutput,
   AccountIdentityOutput,
@@ -340,6 +349,7 @@ import type {
   DesignMapOutput,
   DesignOfferEventOutput,
   DesignOfferNoteOutput,
+  DeviceKindOutput,
   DownloadProgressOutput,
   EffortLevelOutput,
   EndedByOutput,
@@ -356,10 +366,12 @@ import type {
   FilingWroteOutput,
   FleetConvergeStateOutput,
   FleetFaultCauseOutput,
+  FleetHookOutput,
   FleetItemStateOutput,
   FleetItemStatusOutput,
   FleetMcpConfigOutput,
   FleetPlacedStatesOutput,
+  FleetPlacementOutput,
   FleetRefreshOutput,
   FleetScopeOutput,
   FleetSyncOutcomeOutput,
@@ -378,6 +390,7 @@ import type {
   HeldReasonOutput,
   HookAgentHandlerOutput,
   HookCommandHandlerOutput,
+  HookDraftOutput,
   HookEventOutput,
   HookHandlerOutput,
   HookHttpHandlerOutput,
@@ -459,6 +472,7 @@ import type {
   PresenceClientOutput,
   ProjectNoteEventOutput,
   ProjectNoteOutput,
+  ProjectOfferReasonOutput,
   PropKindOutput,
   PropMetaOutput,
   RefusalReachOutput,
@@ -477,6 +491,7 @@ import type {
   RestartHoldReasonOutput,
   ResultArtifactOutput,
   RetiringKeeperOutput,
+  RoutineMadeByOutput,
   RoutineMadeEventOutput,
   RoutineMadeNoteOutput,
   RoutineScheduleOutput,
@@ -516,6 +531,7 @@ import type {
   SpawnPayloadOutput,
   StageErrorKindOutput,
   StageErrorOutput,
+  StarterOutcomeOutput,
   StartingSetOutput,
   StatusOptionOutput,
   StoppedCommandsOutput,
@@ -526,6 +542,7 @@ import type {
   TokenKindOutput,
   ToolSigninOutput,
   TrackerOutput,
+  TrackerSyncStateOutput,
   UserAnswersOutput,
   UserQuestionAnsweredOutput,
   UserQuestionDismissedOutput,
@@ -536,6 +553,7 @@ import type {
   WaitWitnessOutput,
   WorkItemStateOutput,
   WorkspaceArchivedOutput,
+  WorkspaceCheckoutOutput,
   WorkspaceCutOutput,
   WorkspaceHoldingOutput,
   WorkspaceKindOutput,
@@ -559,6 +577,7 @@ import type {
   GithubProject as GithubProjectType,
   IssueTracker as IssueTrackerType,
   StatusOption as StatusOptionType,
+  TrackerSyncState as TrackerSyncStateType,
   Tracker as TrackerType,
 } from "./trackers";
 import type {
@@ -573,6 +592,7 @@ import type {
   CarryRestored as CarryRestoredType,
   PlaceLfsRow as PlaceLfsRowType,
   WorkspaceArchived as WorkspaceArchivedType,
+  WorkspaceCheckout as WorkspaceCheckoutType,
   WorkspaceCut as WorkspaceCutType,
   WorkspaceHolding as WorkspaceHoldingType,
   WorkspaceKind as WorkspaceKindType,
@@ -615,6 +635,7 @@ prove<
     Same<ContinueStepOutput, ContinueStepType>,
     Same<AccountMoveOutput, AccountMoveType>,
     Same<AccountOverageOutput, AccountOverageType>,
+    Same<AuthStateOutput, AuthStateType>,
     Same<DownloadProgressOutput, DownloadProgressType>,
     Same<ArchiveFetchingOutput, ArchiveFetchingType>,
     Same<ArtifactThumbnailOutput, ArtifactThumbnailType>,
@@ -630,9 +651,9 @@ prove<
     Same<KeptProcessOutput, KeptProcessType>,
     Same<RetiringKeeperOutput, RetiringKeeperType>,
     Same<BinaryUpdateStateOutput, BinaryUpdateStateType>,
+    Same<BrowserHostKindOutput, BrowserHostKindType>,
     Same<MediaPathOutput, MediaPathType>,
     Same<BrowserPortsOutput, BrowserPortsType>,
-    Same<BrowserHostKindOutput, BrowserHostKindType>,
     Same<BrowserKeyOutput, BrowserKeyType>,
     Same<BrowserRelayReachOutput, BrowserRelayReachType>,
     Same<BrowserRelayOutput, BrowserRelayType>,
@@ -678,6 +699,7 @@ prove<
     Same<InteractionOutput, InteractionType>,
     Same<DesignCardOutput, DesignCardType>,
     Same<DesignMapOutput, DesignMapType>,
+    Same<DeviceKindOutput, DeviceKindType>,
     Same<VerbOutput, VerbType>,
     Same<EnvelopeOutput, EnvelopeType>,
     Same<ExternalSourceOutput, ExternalSourceType>,
@@ -715,11 +737,13 @@ prove<
     Same<AccountIdentityOutput, AccountIdentityType>,
     Same<AccountProviderOutput, AccountProviderType>,
     Same<AccountReportOutput, AccountReportType>,
-    Same<AuthStateOutput, AuthStateType>,
     Same<HarnessCapabilitiesOutput, HarnessCapabilitiesType>,
     Same<ModelInfoOutput, ModelInfoType>,
     Same<SignInFaultOutput, SignInFaultType>,
     Same<HarnessReportOutput, HarnessReportType>,
+    Same<FleetPlacementOutput, FleetPlacementType>,
+    Same<FleetHookOutput, FleetHookType>,
+    Same<HookDraftOutput, HookDraftType>,
     Same<InstallRouteOutput, InstallRouteType>,
     Same<InstallSignInOutput, InstallSignInType>,
     Same<InstallDraftOutput, InstallDraftType>,
@@ -782,12 +806,14 @@ prove<
     Same<RoutineScheduleOutput, RoutineScheduleType>,
     Same<WorkItemStateOutput, WorkItemStateType>,
     Same<ItemEndOutput, ItemEndType>,
+    Same<RoutineMadeByOutput, RoutineMadeByType>,
     Same<RoutineMadeEventOutput, RoutineMadeEventType>,
     Same<RoutineMadeNoteOutput, RoutineMadeNoteType>,
     Same<DesignOfferEventOutput, DesignOfferEventType>,
     Same<DesignOfferNoteOutput, DesignOfferNoteType>,
     Same<ProjectNoteEventOutput, ProjectNoteEventType>,
     Same<ProjectNoteOutput, ProjectNoteType>,
+    Same<ProjectOfferReasonOutput, ProjectOfferReasonType>,
     Same<RefusalReachOutput, RefusalReachType>,
     Same<RelayPortNameOutput, RelayPortNameType>,
     Same<RelayPortHealthOutput, RelayPortHealthType>,
@@ -844,15 +870,18 @@ prove<
     Same<StartingSetOutput, StartingSetType>,
     Same<WorkspaceRefOutput, WorkspaceRefType>,
     Same<SpawnPayloadOutput, SpawnPayloadType>,
+    Same<StarterOutcomeOutput, StarterOutcomeType>,
     Same<RunKindOutput, RunKindType>,
     Same<StoppedCommandsOutput, StoppedCommandsType>,
     Same<SendRefusalOutput, SendRefusalType>,
     Same<ModeAskOutput, ModeAskType>,
     Same<StreamRelayStateOutput, StreamRelayStateType>,
+    Same<TrackerSyncStateOutput, TrackerSyncStateType>,
     Same<WaitWitnessOutput, WaitWitnessType>,
     Same<WorkspaceCutOutput, WorkspaceCutType>,
     Same<WorkspaceHoldingOutput, WorkspaceHoldingType>,
     Same<WorkspaceArchivedOutput, WorkspaceArchivedType>,
     Same<WorkspaceKindOutput, WorkspaceKindType>,
+    Same<WorkspaceCheckoutOutput, WorkspaceCheckoutType>,
   ]
 >();

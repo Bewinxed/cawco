@@ -8897,6 +8897,11 @@
                     ]
                   },
                   "scope": {
+                    "enum": [
+                      "local",
+                      "project",
+                      "user"
+                    ],
                     "type": [
                       "string",
                       "null"
@@ -45519,7 +45524,7 @@
             "type": "string"
           },
           "origin": {
-            "$ref": "#/components/schemas/InstanceRowOrigin",
+            "$ref": "#/components/schemas/SessionOrigin",
             "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
           },
           "owedMove": {
@@ -45701,15 +45706,6 @@
           "known",
           "unknown",
           "unread"
-        ]
-      },
-      "InstanceRowOrigin": {
-        "type": "string",
-        "enum": [
-          "check",
-          "delegate",
-          "person",
-          "project"
         ]
       },
       "InstanceRowTitleSource": {
@@ -51242,13 +51238,6 @@
           "pending"
         ]
       },
-      "PostApiWorkspacesByIdArchive200Kind": {
-        "type": "string",
-        "enum": [
-          "folder",
-          "repo"
-        ]
-      },
       "PresenceDevice": {
         "description": "One device as the person's presence menu lists it: a machine whose agent reads its desktop.",
         "type": "object",
@@ -54129,12 +54118,20 @@
           "statements"
         ]
       },
+      "RoutineMadeBy": {
+        "description": "Who made a routine: a delegate, or a session in conversation.",
+        "type": "string",
+        "enum": [
+          "delegate",
+          "session"
+        ]
+      },
       "RoutineMadeIn": {
         "description": "Where a routine was made: the session whose `routine_create` call made\nit, and how its notice names that session.",
         "type": "object",
         "properties": {
           "by": {
-            "$ref": "#/components/schemas/RoutineMadeInBy"
+            "$ref": "#/components/schemas/RoutineMadeBy"
           },
           "instanceId": {
             "type": "string"
@@ -54143,13 +54140,6 @@
         "required": [
           "by",
           "instanceId"
-        ]
-      },
-      "RoutineMadeInBy": {
-        "type": "string",
-        "enum": [
-          "delegate",
-          "session"
         ]
       },
       "RoutineRunState": {
@@ -55247,6 +55237,16 @@
         "required": [
           "content",
           "path"
+        ]
+      },
+      "SessionOrigin": {
+        "description": "Who started a session, stamped by the hub as it starts from who asked,\nnever from what the start carried: `person`, a person's own start (the\nNew session form, a move); `delegate`, a `delegate` call (a work item,\na routine's run and a design check among them); `project`, started by\nits project's events (the session they reach); `check`, an agent's `start_session`, a start\nfrom a page in an agent's own browser, and the hub's own workers. Only a\nperson's sessions stand at a project's top in the rails; every other one\nnests under the session that started it.",
+        "type": "string",
+        "enum": [
+          "check",
+          "delegate",
+          "person",
+          "project"
         ]
       },
       "SessionPlan": {
@@ -61719,6 +61719,14 @@
           "bytes",
           "dirty",
           "stashes"
+        ]
+      },
+      "WorkspaceKind": {
+        "description": "What a workspace was made from: a repository's root, which lands by git\n(rebase onto its base, the merge checks, push), or any other folder, which\nlands by its change set ({@link CONTROL_WORKSPACE_APPLY}).",
+        "type": "string",
+        "enum": [
+          "folder",
+          "repo"
         ]
       },
       "WorkspaceRef": {
@@ -84029,7 +84037,7 @@
               "type": "string"
             },
             "origin": {
-              "$ref": "#/components/schemas/InstanceRowOrigin"
+              "$ref": "#/components/schemas/SessionOrigin"
             },
             "owedMove": {
               "type": "object",
@@ -109952,7 +109960,7 @@
             "type": "string"
           },
           "origin": {
-            "$ref": "#/components/schemas/InstanceRowOrigin"
+            "$ref": "#/components/schemas/SessionOrigin"
           },
           "parentInstanceId": {
             "type": "string"
@@ -169443,6 +169451,42 @@
             "type": "object",
             "properties": {
               "code": {
+                "type": "string",
+                "enum": [
+                  "workspace-cut-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
                 "type": "string"
               },
               "detail": {
@@ -179548,6 +179592,42 @@
             "type": "object",
             "properties": {
               "code": {
+                "type": "string",
+                "enum": [
+                  "workspace-cut-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
                 "type": "string"
               },
               "detail": {
@@ -187727,6 +187807,42 @@
                 "type": "string",
                 "enum": [
                   "design-clone-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "workspace-cut-unread"
                 ]
               },
               "detail": {
@@ -201493,7 +201609,7 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/PostApiWorkspacesByIdArchive200Kind"
+            "$ref": "#/components/schemas/WorkspaceKind"
           },
           "machineId": {
             "type": "string"
@@ -205916,79 +206032,39 @@
         ]
       },
       "putApiFleetHooksById400": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "hook-invalid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "hook-invalid"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "say-whether-hook-enabled"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              400
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "putApiFleetHooksById409": {

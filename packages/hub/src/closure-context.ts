@@ -615,7 +615,7 @@ export interface ClosureContext {
       areaId?: string | null;
       projectId?: string | null;
     }
-  ) => HookDraft;
+  ) => HookDraft | string;
   hubAsks: ReturnType<typeof createAsks>;
   hubAuth: ReturnType<typeof createHubAuth>;
   hubBuild: BuildInfo;

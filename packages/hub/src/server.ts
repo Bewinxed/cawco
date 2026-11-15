@@ -221,6 +221,7 @@ import {
 } from "@cawco/core/stage";
 import {
   FleetSyncReportSchema,
+  HookDraftSchema,
   NamedHarnessReportSchema,
   NamedMachineCapabilitiesSchema,
   NamedToolSigninSchema,
@@ -235,7 +236,7 @@ import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
-import type { UsageSpend } from "@cawco/core/usage/types";
+import { USAGE_HARNESSES, type UsageSpend } from "@cawco/core/usage/types";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -290,6 +291,7 @@ import type { FolderWeight } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
+import { z } from "zod";
 import { createAccountCarry } from "./account-carry";
 import { createAccountProbes } from "./account-probes";
 import { createAccountSignin } from "./account-signin";
@@ -390,7 +392,7 @@ import {
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { ContinuationRow } from "./db/continuations";
-import { type AgentAuth, accountReportOf } from "./db/machines";
+import { accountReportOf } from "./db/machines";
 import { SPLIT_CONTINUATIONS, TAG_MARKERS } from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
@@ -399,6 +401,7 @@ import type { ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
 import type {
+  AgentAuth,
   ContinuationAsker,
   ContinueRequest,
   StoredSendRefusal,
@@ -7356,7 +7359,9 @@ export const createServer = (
 
   /**
    * A hook as a partial write leaves it: each given field over what is
-   * stored, `null` clearing one, its binding as asked ({@link boundAsAsked}).
+   * stored, `null` clearing one, its binding as asked ({@link boundAsAsked}),
+   * read as a hook by its stored shape (core `HookDraft`); or what is wrong
+   * with it, when it does not read as one.
    */
   const hookDraftOf = (
     current: FleetHook | undefined,
@@ -7364,7 +7369,7 @@ export const createServer = (
       areaId?: string | null;
       projectId?: string | null;
     }
-  ): HookDraft => {
+  ): HookDraft | string => {
     const merged: Record<string, unknown> = {};
     if (current) {
       const { id: _id, hash: _hash, ...stored } = current;
@@ -7377,7 +7382,8 @@ export const createServer = (
         merged[key] = value;
       }
     }
-    return boundAsAsked(merged, patch) as unknown as HookDraft;
+    const read = HookDraftSchema.safeParse(boundAsAsked(merged, patch));
+    return read.success ? read.data : z.prettifyError(read.error);
   };
 
   const boundProblem = ({
@@ -12545,8 +12551,18 @@ export const createServer = (
     for (const reading of accounts ?? []) {
       noteProviderReading(db, message.machineId, reading);
     }
-    if (buckets && buckets.length > 0) {
-      db.putUsageBuckets(message.machineId, buckets);
+    // A bucket of a harness this build does not scan (a newer agent's) is
+    // left out, as `usage_buckets.harness` holds only the harnesses it reads.
+    const scanned = (buckets ?? []).filter((bucket) =>
+      USAGE_HARNESSES.some((harness) => harness === bucket.harness)
+    );
+    if (scanned.length < (buckets?.length ?? 0)) {
+      console.warn(
+        `[usage] ${machineName(message.machineId)}: ${(buckets?.length ?? 0) - scanned.length} bucket(s) of a harness this hub does not scan left out`
+      );
+    }
+    if (scanned.length > 0) {
+      db.putUsageBuckets(message.machineId, scanned);
       // Spend moved: every capped project's state with it.
       caps.recheck();
     }

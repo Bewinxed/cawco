@@ -4,7 +4,7 @@
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
 import {
-  BrowserHostKindShape,
+  BrowserHostKindSchema,
   BrowserKeyShape,
   BrowserPortsShape,
   BrowserRelayShape,
@@ -52,7 +52,7 @@ const BrowserRecordShape = declared(
         volume: z.string(),
       })
       .optional(),
-    host: BrowserHostKindShape,
+    host: BrowserHostKindSchema,
     key: BrowserKeyShape,
     lastUsedAt: z.number(),
     local: z
