@@ -291,6 +291,11 @@ export interface DispatchDeps {
   readonly start: (request: WorkItemRequest) => ReturnType<WorkItems["start"]>;
   readonly tasks: Tasks;
   /**
+   * One line to the session `item` reports to (work-items.ts `reportees`),
+   * as a hub notice after its report (ask-routing.ts `reportToParent`).
+   */
+  readonly tellStarter: (item: WorkItemRow, line: string) => void;
+  /**
    * How a delegate type lands its work, when it says. Fleet delegate types
    * do not; a project's own (`delegates/*.md`, §5.1) will, through this.
    */
@@ -976,6 +981,7 @@ export const createDispatcher = ({
   placement,
   start,
   tasks,
+  tellStarter,
   typeLands,
   workPlace,
 }: DispatchDeps) => {
@@ -2593,7 +2599,10 @@ export const createDispatcher = ({
    * why, when a criterion is not judged: Jev did not answer, the landed
    * diff could not be read, or Jev did not show a criterion met over a
    * diff cut to fit its window, where what was left out may show it. A
-   * cut never stamps an attempt unmet.
+   * cut never stamps an attempt unmet. Either way the session the attempt
+   * reports to hears one line naming the lines left ({@link
+   * DispatchDeps.tellStarter}): the comment alone left tsk-327 in working
+   * with no attempt live until its starter happened to read the task.
    */
   const judgedByJev = async (
     access: JevAccess,
@@ -2604,9 +2613,16 @@ export const createDispatcher = ({
   ) => {
     const about = hubActor(`attempt ${short(item.id)} judged`);
     const attempt = attemptNamed(item, task);
-    const stays = async (comment: string) => {
+    const link = taskLink(projectId, task.id, task.title);
+    // The comment on the task, then one line to the attempt's starter
+    // naming the lines left, so a task no attempt works is moved on.
+    const stays = async (comment: string, left: readonly string[]) => {
       const said = await tasks.comment(projectId, task.id, comment, about);
-      return said instanceof ElysiaStatus ? said : "stays";
+      if (said instanceof ElysiaStatus) {
+        return said;
+      }
+      tellStarter(item, judgedWords.toldStarter(link, left, task.stage));
+      return "stays";
     };
     const work = await attemptWork(item, JEV_READS, landedDiff);
     if (work.unread !== undefined) {
@@ -2615,7 +2631,8 @@ export const createDispatcher = ({
           judgedWords.diffUnread(attempt, work.unread),
           attempt,
           task.stage
-        )
+        ),
+        criteria
       );
     }
     let judged: Awaited<ReturnType<typeof jevJudged>>;
@@ -2626,7 +2643,8 @@ export const createDispatcher = ({
         throw error;
       }
       return await stays(
-        judgedWords.notJudged(error.message, attempt, task.stage)
+        judgedWords.notJudged(error.message, attempt, task.stage),
+        criteria
       );
     }
     const unmet = judged.filter((each) => !each.met);
@@ -2638,7 +2656,8 @@ export const createDispatcher = ({
       .join("\n");
     if (work.cut) {
       return await stays(
-        judgedWords.cutHides(attempt, work.cut, lines, task.stage)
+        judgedWords.cutHides(attempt, work.cut, lines, task.stage),
+        unmet.map((each) => each.criterion)
       );
     }
     const said = await tasks.comment(
@@ -2651,6 +2670,13 @@ export const createDispatcher = ({
       return said;
     }
     db.markAttemptUnmet(item.id);
+    tellStarter(
+      item,
+      judgedWords.toldStarter(
+        link,
+        unmet.map((each) => each.criterion)
+      )
+    );
     return "todo";
   };
 

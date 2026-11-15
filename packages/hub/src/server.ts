@@ -9173,6 +9173,14 @@ export const createServer = (
       },
     },
     start: (request) => workItems.start(request),
+    // A judgement that left acceptance lines, to whoever hears the
+    // attempt's report, after it.
+    tellStarter: (item, line) => {
+      const [delegate] = db.getInstancesByIds([item.instanceId]);
+      if (delegate) {
+        reportToParent(delegate, line, false, { notice: true });
+      }
+    },
   });
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);

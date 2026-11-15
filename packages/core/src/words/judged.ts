@@ -32,6 +32,24 @@ export const judgedWords = {
    */
   cutHides: (attempt: string, cut: string, lines: string, stage: string) =>
     `Jev judged the acceptance criteria against the work of ${attempt}, its diff cut to fit what Jev reads. ${cut} These were not shown met, and what the cut left out may show them, so they are not judged and the task stays in ${stage}:\n\n${lines}`,
+  /**
+   * The one line the session an attempt reports to hears after its landed
+   * work was judged and lines were left: `task` (a link) stays in `stage`
+   * with `criteria` not judged, or its attempt counts as failed with them
+   * not shown met (`stage` undefined). Its next step: move the task on or
+   * retry it.
+   */
+  toldStarter: (
+    task: string,
+    criteria: readonly string[],
+    stage?: string
+  ): string => {
+    const lines = `${criteria.length} acceptance ${criteria.length === 1 ? "line" : "lines"}`;
+    const listed = criteria.map((each) => `“${each}”`).join("; ");
+    return stage === undefined
+      ? `${task}: Jev did not show ${lines} met (${listed}), so its attempt counts as failed. task_retry starts it again.`
+      : `${task} stays in ${stage}: Jev left ${lines} not judged (${listed}). Judge them and move the task with task_update, or task_retry it.`;
+  },
   /** How an attempt sent back unmet ended, beside it on the task. */
   unmetHow: "Jev did not show its acceptance criteria met",
   /** Jev did not answer (`failed`, its words, a sentence): the work stays landed, the task where it is. */
