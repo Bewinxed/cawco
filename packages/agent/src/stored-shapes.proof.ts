@@ -27,10 +27,12 @@ import type {
   SetHookOutput,
   ToolInstallRecordOutput,
   ToolInstallsOutput,
+  ToolInstallUnderwayOutput,
 } from "./stored-shapes";
 import type {
   ToolInstallRecord as ToolInstallRecordType,
   ToolInstalls as ToolInstallsType,
+  ToolInstallUnderway as ToolInstallUnderwayType,
 } from "./tools";
 
 /**
@@ -64,6 +66,7 @@ prove<
     Same<FleetPlaceSetOutput, FleetPlaceSetType>,
     Same<MediaMeasurementOutput, MediaMeasurementType>,
     Same<ToolInstallRecordOutput, ToolInstallRecordType>,
+    Same<ToolInstallUnderwayOutput, ToolInstallUnderwayType>,
     Same<ToolInstallsOutput, ToolInstallsType>,
   ]
 >();
