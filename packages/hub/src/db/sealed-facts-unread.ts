@@ -38,7 +38,7 @@
  */
 import type { Database } from "bun:sqlite";
 import { connectionReasons } from "@cawco/core/words/connection-reasons";
-import { z } from "zod";
+import type { z } from "zod";
 import { hubSecrets, isSealed, type SecretBox } from "../secret-box";
 import {
   inJson,
@@ -56,8 +56,8 @@ import {
   OAuthClientInformationFullSchema,
   OAuthClientInformationMixedSchema,
   OAuthTokensSchema,
-  TrashedRowsSchema,
 } from "./stored-shapes";
+import { trashedEntries } from "./trash";
 
 /** The migration whose SQL this step runs before, as its log names it. */
 const AT = "0420";
@@ -428,39 +428,14 @@ const readPending = (
   return read;
 };
 
-/** The trash's entries, each as its rows parse; one that does not parse is not the trash's to move here. */
-const TrashRows = z.array(TrashedRowsSchema);
-
-interface TrashEntry {
-  id: number;
-  kind: string;
-  rows: z.output<typeof TrashRows>;
-}
-
-const trashEntries = (client: Database): TrashEntry[] =>
-  client
-    .query<{ id: number; kind: string; rows: string }, []>(
-      "SELECT id, kind, rows FROM config_trash WHERE kind IN ('connection', 'mcp') ORDER BY id"
-    )
-    .all()
-    .flatMap((entry) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(entry.rows);
-      } catch {
-        return [];
-      }
-      const rows = TrashRows.safeParse(parsed);
-      return rows.success
-        ? [{ id: entry.id, kind: entry.kind, rows: rows.data }]
-        : [];
-    });
+/** The trash's kinds whose rows hold a connection's or a sign-in's sealed value. */
+const TRASH_KINDS = ["connection", "mcp"] as const;
 
 /** The trash's connections and sign-ins under way, as 0420 reads them. */
 const trashKept = (client: Database, box: () => SecretBox): SealedFacts => {
   const connections: Kept[] = [];
   const pending: Kept[] = [];
-  for (const entry of trashEntries(client)) {
+  for (const entry of trashedEntries(client, TRASH_KINDS)) {
     for (const part of entry.rows) {
       for (const row of part.rows) {
         if (part.table === "connections" && typeof row.id === "string") {
@@ -663,7 +638,7 @@ const moveTrash = (
   );
   const keptOf = (kinds: Kept[], trash: number, id: string): Kept | undefined =>
     kinds.find((one) => one.trash === trash && one.id === id);
-  for (const entry of trashEntries(client)) {
+  for (const entry of trashedEntries(client, TRASH_KINDS)) {
     const parts = entry.rows.flatMap((part) => {
       if (part.table === "connections") {
         const moved = part.rows.map((row) => {

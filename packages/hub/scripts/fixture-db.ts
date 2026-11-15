@@ -31,14 +31,18 @@
  * {@link seedMoves}, {@link seedMovesByHand}, {@link seedRelayPorts},
  * {@link seedSessionPlans}, {@link seedSessionPlansByHand}, the
  * sealed values migration 0420 opens and places ({@link seedSealedFacts},
- * sealed with the fixtures' key), and the owed sends migration 0421 folds
- * into their envelopes ({@link seedOwedSends}), written to
+ * sealed with the fixtures' key), the owed sends migration 0421 folds
+ * into their envelopes ({@link seedOwedSends}), and the skills', plugins'
+ * and kept versions' files and last fetches migrations 0422 and 0423 move
+ * ({@link seedFleetFiles}) and the pauses, sign-ins and capabilities 0424
+ * moves ({@link seedMachineColumns}), written to
  * fixtures/lists-db.sqlite.gz: the migration check runs over both.
  */
 import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { hashFiles } from "@cawco/core/file-hash";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -70,8 +74,11 @@ export const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
  * project move's state took before migration 0415, and every shape a relay
  * proof's chips and the relay's ports took before migration 0416, and every
  * shape a connection's sealed value and a fleet MCP server's sign-in under
- * way took before migration 0420, and every shape a send's owed envelope
- * took beside its kept one before migration 0421, written here.
+ * way took before migration 0420, every shape a send's owed envelope
+ * took beside its kept one before migration 0421, every shape a skill's,
+ * plugin's and kept version's files and last fetch took before migrations
+ * 0422 and 0423, and every shape a machine's pause, a tool's sign-in and
+ * a machine's capabilities took before migration 0424, written here.
  */
 export const LISTS_FIXTURE = join(HUB, "fixtures", "lists-db.sqlite.gz");
 const LISTS = "--lists";
@@ -2809,6 +2816,340 @@ function seedOwedSends(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the fixture's skills, plugins, pauses and sign-ins were written: 2026-10-06. */
+const FLEET_AT = Date.UTC(2026, 9, 6);
+
+/** One file as a skill's `files` held it (core `SkillFile`). */
+const skillFile = (path: string, content: Uint8Array, executable = false) => ({
+  contentBase64: Buffer.from(content).toString("base64"),
+  executable,
+  path,
+});
+
+/** A skill's files as a fetch stores them: text, an executable script and bytes that are no UTF-8. */
+const fetchedFiles = (name: string) => [
+  skillFile(
+    "SKILL.md",
+    new TextEncoder().encode(
+      `---\nname: ${name}\nversion: 1.2.0\ndescription: Checks a migration on a copy of a real database.\n---\n\nRun the check, read its counts, say what moved.\n`
+    )
+  ),
+  skillFile(
+    "scripts/check.sh",
+    new TextEncoder().encode("set -eu\nbun run migrations:check\n"),
+    true
+  ),
+  skillFile(
+    "assets/mark.bin",
+    Uint8Array.from([0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28, 0x0a, 0x00])
+  ),
+];
+
+/** A plugin's files as a fetch stores them. */
+const pluginFilesOf = (name: string) => [
+  skillFile(
+    ".claude-plugin/plugin.json",
+    new TextEncoder().encode(
+      JSON.stringify({ name, version: "0.4.1", description: "Board tidying." })
+    )
+  ),
+  skillFile(
+    "hooks/tidy.sh",
+    new TextEncoder().encode("set -eu\necho tidy\n"),
+    true
+  ),
+  skillFile("assets/icon.bin", Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0xff])),
+];
+
+/** The bytes a list of files holds, decoded. */
+const bytesOf = (files: { contentBase64: string }[]): number =>
+  files.reduce(
+    (total, file) => total + Buffer.byteLength(file.contentBase64, "base64"),
+    0
+  );
+
+/**
+ * Skills, plugins and kept skill versions as migrations 0422 and 0423 read
+ * them, written by hand at the columns' shape before them: files that read
+ * (text, an executable script and bytes that are no UTF-8), never set, not
+ * JSON, partly readable (one file with no bytes), base64 that no one set of
+ * bytes encodes to, two files at one path and an empty list; last fetches
+ * placed whole and bare, never said, not JSON, an outcome no fetch has and
+ * one partly readable (its time a text); a trashed skill and a trashed
+ * plugin, one whose files and last fetch read and one whose do not.
+ */
+function seedFleetFiles(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  const refreshed = JSON.stringify({
+    at: FLEET_AT,
+    outcome: "updated",
+    fromHash: "a".repeat(64),
+    fromVersion: "1.1.0",
+    toHash: "b".repeat(64),
+    toVersion: "1.2.0",
+  });
+  const skillRows: [string, string | null, string | null][] = [
+    [
+      "migration-check",
+      JSON.stringify(fetchedFiles("migration-check")),
+      refreshed,
+    ],
+    [
+      "board-scroll",
+      JSON.stringify(fetchedFiles("board-scroll")),
+      JSON.stringify({ at: FLEET_AT, outcome: "unchanged" }),
+    ],
+    ["release-proof", null, null],
+    [
+      "preview-pane",
+      '[{"path":"SKILL.md","executable":false,"contentBase64":',
+      '{"at":',
+    ],
+    [
+      "queued-ask",
+      JSON.stringify([
+        fetchedFiles("queued-ask")[0],
+        { path: "scripts/answer.sh", executable: true },
+      ]),
+      JSON.stringify({ at: FLEET_AT, outcome: "maybe" }),
+    ],
+    [
+      "rail-title",
+      JSON.stringify([
+        { path: "SKILL.md", executable: false, contentBase64: "aGk" },
+      ]),
+      JSON.stringify({
+        at: String(FLEET_AT),
+        outcome: "failed",
+        error: "timed out",
+      }),
+    ],
+    [
+      "canvas-pins",
+      JSON.stringify([
+        fetchedFiles("canvas-pins")[0],
+        fetchedFiles("canvas-pins")[0],
+      ]),
+      null,
+    ],
+    ["stage-move", JSON.stringify([]), null],
+  ];
+  const hashOf = (raw: string | null): string | null => {
+    if (raw === null) {
+      return null;
+    }
+    try {
+      const files = JSON.parse(raw);
+      return Array.isArray(files) &&
+        files.every((one) => one?.contentBase64 !== undefined)
+        ? hashFiles(files)
+        : "c".repeat(64);
+    } catch {
+      return "c".repeat(64);
+    }
+  };
+  const bytesOfRaw = (raw: string | null): number | null => {
+    try {
+      const files = raw === null ? null : JSON.parse(raw);
+      return Array.isArray(files)
+        ? bytesOf(files.filter((one) => typeof one?.contentBase64 === "string"))
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  for (const [n, [name, files, refresh]] of skillRows.entries()) {
+    sqlite.run(
+      "INSERT INTO skills (name, source, enabled, hash, bytes, error, files, version, last_refresh, created_at) VALUES (?, ?, 1, ?, ?, NULL, ?, ?, ?, ?)",
+      [
+        name,
+        `skills:fixture/skills@${name}`,
+        hashOf(files),
+        bytesOfRaw(files),
+        files,
+        files === null ? null : "1.2.0",
+        refresh,
+        FLEET_AT + n * MINUTE_MS,
+      ]
+    );
+  }
+  const pluginRows: [string, string | null, string | null][] = [
+    [
+      "board-tidy@fixture",
+      JSON.stringify(pluginFilesOf("board-tidy")),
+      refreshed,
+    ],
+    ["release-notes@fixture", null, null],
+    [
+      "canvas-lint@fixture",
+      JSON.stringify({ path: "plugin.json" }),
+      JSON.stringify({ outcome: "updated" }),
+    ],
+  ];
+  for (const [n, [pluginId, files, refresh]] of pluginRows.entries()) {
+    sqlite.run(
+      "INSERT INTO plugins (id, enabled, hash, bytes, error, files, version, last_refresh, created_at) VALUES (?, 1, ?, ?, NULL, ?, ?, ?, ?)",
+      [
+        pluginId,
+        hashOf(files),
+        bytesOfRaw(files),
+        files,
+        files === null ? null : "0.4.1",
+        refresh,
+        FLEET_AT + n * MINUTE_MS,
+      ]
+    );
+  }
+  const versions: [string, string][] = [
+    [
+      "migration-check",
+      JSON.stringify(fetchedFiles("migration-check").slice(0, 2)),
+    ],
+    ["board-scroll", JSON.stringify(fetchedFiles("board-scroll"))],
+    ["preview-pane", "SKILL.md"],
+  ];
+  for (const [n, [name, files]] of versions.entries()) {
+    sqlite.run(
+      "INSERT INTO fleet_skill_history (name, skill_source, hash, bytes, files, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        name,
+        `skills:fixture/skills@${name}`,
+        hashOf(files) ?? "c".repeat(64),
+        bytesOfRaw(files) ?? 0,
+        files,
+        n === 1 ? "machine:obsidian" : "fleet",
+        FLEET_AT + n * MINUTE_MS,
+      ]
+    );
+  }
+  // A trashed skill and a trashed plugin, kept as the trash keeps a row:
+  // every column as the driver reads it.
+  const trashed: [string, string, string, string | null, string | null][] = [
+    [
+      "skill",
+      "skills",
+      "trashed-skill",
+      JSON.stringify(fetchedFiles("trashed-skill")),
+      refreshed,
+    ],
+    ["plugin", "plugins", "trashed-plugin@fixture", "[1, 2]", '{"at":"soon"}'],
+  ];
+  for (const [n, [kind, table, key, files, refresh]] of trashed.entries()) {
+    if (kind === "skill") {
+      sqlite.run(
+        "INSERT INTO skills (name, source, enabled, hash, bytes, files, version, last_refresh, created_at) VALUES (?, ?, 1, ?, ?, ?, '1.2.0', ?, ?)",
+        [
+          key,
+          `skills:fixture/skills@${key}`,
+          hashOf(files),
+          bytesOfRaw(files),
+          files,
+          refresh,
+          FLEET_AT,
+        ]
+      );
+    } else {
+      sqlite.run(
+        "INSERT INTO plugins (id, enabled, hash, bytes, files, version, last_refresh, created_at) VALUES (?, 1, ?, NULL, ?, NULL, ?, ?)",
+        [key, "d".repeat(64), files, refresh, FLEET_AT]
+      );
+    }
+    const keyColumn = table === "skills" ? "name" : "id";
+    const rows = sqlite
+      .query<Record<string, string | number | null>, [string]>(
+        `SELECT * FROM ${table} WHERE ${keyColumn} = ?`
+      )
+      .all(key);
+    sqlite.run(`DELETE FROM ${table} WHERE ${keyColumn} = ?`, [key]);
+    sqlite.run(
+      "INSERT INTO config_trash (kind, key, rows, deleted_at) VALUES (?, ?, ?, ?)",
+      [kind, key, JSON.stringify([{ table, rows }]), FLEET_AT + n * MINUTE_MS]
+    );
+  }
+  sqlite.close();
+}
+
+/**
+ * Machines' pauses, tools' sign-ins and machines' capabilities as migration
+ * 0424 reads them, written by hand at the columns' shape before it: a pause
+ * that read whole, never set, not counts (a text) and partly readable (a
+ * kind no pause has); sign-ins that read whole (one in a word this build
+ * does not know, one with words), never set, not JSON and partly readable
+ * (no time); capabilities naming their os's platform, another, and none.
+ */
+function seedMachineColumns(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  // Far ahead, so the pauses still stand when the migration check's hub starts.
+  const until = Date.UTC(2036, 0, 1);
+  const pauses: [string, number | null, string | null][] = [
+    ["obsidian", until, JSON.stringify({ "merge check": 2, command: 1 })],
+    ["lumen", null, null],
+    ["quarry", until, JSON.stringify({ "merge check": "two" })],
+    ["marlin", until, JSON.stringify({ command: 1, deploy: 3 })],
+  ];
+  for (const [machineId, pausedUntil, stopped] of pauses) {
+    sqlite.run(
+      "UPDATE agents SET paused_until = ?, pause_stopped = ? WHERE machine_id = ?",
+      [pausedUntil, stopped, machineId]
+    );
+  }
+  const capabilities = (platform?: string) =>
+    JSON.stringify({
+      at: FLEET_AT,
+      items: [
+        {
+          id: "git",
+          available: true,
+          installCommand: "",
+          version: "2.47.1",
+        },
+      ],
+      ...(platform === undefined ? {} : { platform }),
+    });
+  const named: [string, string][] = [
+    ["obsidian", capabilities("linux")],
+    ["marlin", capabilities("linux")],
+    ["quarry", capabilities()],
+  ];
+  for (const [machineId, value] of named) {
+    sqlite.run(
+      "UPDATE agents SET machine_capabilities = ? WHERE machine_id = ?",
+      [value, machineId]
+    );
+  }
+  const signins: [string, string, string | null][] = [
+    ["obsidian", "agy", JSON.stringify({ at: FLEET_AT, state: "signed-in" })],
+    [
+      "lumen",
+      "agy",
+      JSON.stringify({
+        at: FLEET_AT,
+        state: "expired",
+        detail: "Token expired at 09:00.",
+      }),
+    ],
+    [
+      "quarry",
+      "agy",
+      JSON.stringify({
+        at: FLEET_AT,
+        state: "unknown",
+        detail: "It printed nothing.",
+      }),
+    ],
+    ["marlin", "agy", null],
+    ["obsidian", "gemini", "signed-in"],
+    ["lumen", "gemini", JSON.stringify({ state: "signed-out" })],
+  ];
+  for (const [machineId, toolId, signin] of signins) {
+    sqlite.run(
+      "INSERT INTO agent_tools (machine_id, tool_id, state, version, method, detail, at, signin) VALUES (?, ?, 'installed', '1.0.3', 'npm', NULL, ?, ?)",
+      [machineId, toolId, FLEET_AT, signin]
+    );
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -2849,6 +3190,8 @@ async function seed(
     seedRelayPorts(dbPath);
     seedSessionPlansByHand(dbPath);
     seedOwedSends(dbPath);
+    seedFleetFiles(dbPath);
+    seedMachineColumns(dbPath);
   }
 }
 

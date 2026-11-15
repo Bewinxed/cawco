@@ -69,7 +69,7 @@ export const mcpBody = t.Object({
   enabled: t.Optional(t.Boolean()),
   ...boundFields,
   /**
-   * The machine platforms it runs on (`machine_capabilities.platform`):
+   * The machine platforms it runs on (core `machinePlatform`, from its `os`):
    * any other machine is never sent it. Null or empty: every
    * machine. Left out: as it was.
    */

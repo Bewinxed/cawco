@@ -139,9 +139,8 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       listed.map((project) => [project.id, project.areaId])
     );
     // A server scoped to platforms reaches only a machine of one of them,
-    // by whichever of its reports came first (core `machinePlatform`: its
-    // capabilities, else its register's `os`); any other is not sent it, so
-    // its agent removes what it had and probes nothing.
+    // by its register's `os` (core `machinePlatform`); any other is not sent
+    // it, so its agent removes what it had and probes nothing.
     const targetRow = ctx.db
       .listAgents()
       .find((agentRow) => agentRow.machineId === machineId);

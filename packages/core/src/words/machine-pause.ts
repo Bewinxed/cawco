@@ -23,6 +23,15 @@ const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
   command: ["command", "commands"],
 };
 
+export const machinePauseWords = {
+  /**
+   * What a pause stopped when the hub kept its counts and could not read
+   * them (hub migration 0424): said in place of {@link stoppedWords}, after
+   * a comma, until the pause ends.
+   */
+  stoppedUncounted: "stopped running work it no longer counts",
+} as const;
+
 /**
  * "stopped 1 running merge check", "stopped 2 running merge checks and 1
  * running command"; undefined when the pause stopped nothing.

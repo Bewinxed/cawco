@@ -5,6 +5,7 @@
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { NO_SKILL, READ_SKILL_FILES } from "@cawco/core/fleet";
+import { fleetFilesWords } from "@cawco/core/words/fleet-files";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Static } from "typebox";
 import { undoable } from "../db/trash";
@@ -289,6 +290,12 @@ export const fleetSkillRoutes = (
             return problem(404, {
               code: "no-skill-version",
               detail: `no skill version ${body.id}`,
+            });
+          }
+          if (version.files === null) {
+            return problem(409, {
+              code: "skill-version-unread",
+              detail: fleetFilesWords.versionUnread,
             });
           }
           const current = db

@@ -539,24 +539,6 @@
       }
     ]
   },
-  "agent_tools.signin": {
-    "type": "object",
-    "properties": {
-      "at": {
-        "type": "number"
-      },
-      "detail": {
-        "type": "string"
-      },
-      "state": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "at",
-      "state"
-    ]
-  },
   "agent_tools.started_by": {
     "type": "string",
     "enum": [
@@ -1707,29 +1689,12 @@
             "id"
           ]
         }
-      },
-      "platform": {
-        "type": "string"
       }
     },
     "required": [
       "at",
-      "items",
-      "platform"
+      "items"
     ]
-  },
-  "agents.pause_stopped": {
-    "type": "object",
-    "propertyNames": {
-      "type": "string",
-      "enum": [
-        "merge check",
-        "command"
-      ]
-    },
-    "additionalProperties": {
-      "type": "number"
-    }
   },
   "agents.status": {
     "type": "string",
@@ -5792,28 +5757,6 @@
       "orchestrator",
       "leaf"
     ]
-  },
-  "fleet_skill_history.files": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "contentBase64": {
-          "type": "string"
-        },
-        "executable": {
-          "type": "boolean"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "contentBase64",
-        "executable",
-        "path"
-      ]
-    }
   },
   "github_poll_cursors.resource": {
     "type": "string",
@@ -11044,61 +10987,12 @@
       "move"
     ]
   },
-  "plugins.files": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "contentBase64": {
-          "type": "string"
-        },
-        "executable": {
-          "type": "boolean"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "contentBase64",
-        "executable",
-        "path"
-      ]
-    }
-  },
-  "plugins.last_refresh": {
-    "type": "object",
-    "properties": {
-      "at": {
-        "type": "number"
-      },
-      "error": {
-        "type": "string"
-      },
-      "fromHash": {
-        "type": "string"
-      },
-      "fromVersion": {
-        "type": "string"
-      },
-      "outcome": {
-        "type": "string",
-        "enum": [
-          "updated",
-          "unchanged",
-          "failed"
-        ]
-      },
-      "toHash": {
-        "type": "string"
-      },
-      "toVersion": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "at",
-      "outcome"
+  "plugins.refresh_outcome": {
+    "type": "string",
+    "enum": [
+      "updated",
+      "unchanged",
+      "failed"
     ]
   },
   "presence_clients.kind": {
@@ -13496,61 +13390,12 @@
       "completed"
     ]
   },
-  "skills.files": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "contentBase64": {
-          "type": "string"
-        },
-        "executable": {
-          "type": "boolean"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "contentBase64",
-        "executable",
-        "path"
-      ]
-    }
-  },
-  "skills.last_refresh": {
-    "type": "object",
-    "properties": {
-      "at": {
-        "type": "number"
-      },
-      "error": {
-        "type": "string"
-      },
-      "fromHash": {
-        "type": "string"
-      },
-      "fromVersion": {
-        "type": "string"
-      },
-      "outcome": {
-        "type": "string",
-        "enum": [
-          "updated",
-          "unchanged",
-          "failed"
-        ]
-      },
-      "toHash": {
-        "type": "string"
-      },
-      "toVersion": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "at",
-      "outcome"
+  "skills.refresh_outcome": {
+    "type": "string",
+    "enum": [
+      "updated",
+      "unchanged",
+      "failed"
     ]
   },
   "skills.scope": {

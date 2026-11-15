@@ -28,7 +28,8 @@ import {
   type HookVersion,
   hookEventNamed,
 } from "@cawco/core/hooks";
-import { and, desc, eq, isNull, notInArray, type SQL } from "drizzle-orm";
+import { fleetFilesWords } from "@cawco/core/words/fleet-files";
+import { and, asc, desc, eq, isNull, notInArray, type SQL } from "drizzle-orm";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
@@ -54,10 +55,14 @@ import {
   marketplaces,
   mcpServers,
   memoryBriefings,
+  pluginFiles,
   plugins,
   projects,
+  skillFiles,
   skills,
+  skillVersionFiles,
 } from "./schema";
+import type { Tx } from "./tx";
 
 /** A line its machine said about a session, kept on its row ({@link DbShape.noteMachineLine}). */
 /**
@@ -145,9 +150,9 @@ export interface HookVersionMaterial {
   script?: string;
 }
 
-/** A skill row as everything outside the hub reads it: the row, minus its files. */
+/** A skill row as everything outside the hub reads it: its files are rows of their own. */
 const skillMeta = (
-  row: Omit<typeof skills.$inferSelect, "files" | "createdAt">
+  row: Omit<typeof skills.$inferSelect, "createdAt">
 ): FleetSkillMeta => ({
   name: row.name,
   source: row.source,
@@ -155,48 +160,112 @@ const skillMeta = (
   ...fetched(row),
 });
 
+/** The columns a skill and a plugin row keep their last fetch in (core `FleetRefresh`). */
+type RefreshColumns = Pick<
+  typeof skills.$inferSelect,
+  | "refreshAt"
+  | "refreshOutcome"
+  | "refreshError"
+  | "refreshFromHash"
+  | "refreshFromVersion"
+  | "refreshToHash"
+  | "refreshToVersion"
+  | "refreshUnread"
+>;
+
 /** The columns a skill and a plugin row keep their {@link FleetVersioned} in. */
 type VersionColumns = Pick<
   typeof skills.$inferSelect,
   | "hash"
   | "version"
-  | "lastRefresh"
   | "latestHash"
   | "latestVersion"
   | "checkedAt"
   | "checkError"
->;
+> &
+  RefreshColumns;
+
+/** A row's last fetch; none while it never had one, or while the one it kept does not read (`refresh_unread`). */
+const lastRefreshOf = (row: RefreshColumns): FleetRefresh | undefined =>
+  row.refreshAt && row.refreshOutcome
+    ? {
+        at: row.refreshAt.getTime(),
+        outcome: row.refreshOutcome,
+        ...(row.refreshError === null ? {} : { error: row.refreshError }),
+        ...(row.refreshFromHash === null
+          ? {}
+          : { fromHash: row.refreshFromHash }),
+        ...(row.refreshFromVersion === null
+          ? {}
+          : { fromVersion: row.refreshFromVersion }),
+        ...(row.refreshToHash === null ? {} : { toHash: row.refreshToHash }),
+        ...(row.refreshToVersion === null
+          ? {}
+          : { toVersion: row.refreshToVersion }),
+      }
+    : undefined;
+
+/** The columns a last fetch is written to: none for null, which clears it and any kept as not read. */
+const refreshColumns = (refresh: FleetRefresh | null): RefreshColumns => ({
+  refreshAt: refresh ? new Date(refresh.at) : null,
+  refreshOutcome: refresh?.outcome ?? null,
+  refreshError: refresh?.error ?? null,
+  refreshFromHash: refresh?.fromHash ?? null,
+  refreshFromVersion: refresh?.fromVersion ?? null,
+  refreshToHash: refresh?.toHash ?? null,
+  refreshToVersion: refresh?.toVersion ?? null,
+  refreshUnread: null,
+});
 
 /** A row's version, what its source held when last read, and its last fetch. */
-const versioned = (row: VersionColumns): FleetVersioned => ({
-  ...(row.version ? { version: row.version } : {}),
-  ...(row.lastRefresh ? { lastRefresh: row.lastRefresh } : {}),
-  ...(row.latestHash ? { latestHash: row.latestHash } : {}),
-  ...(row.latestVersion ? { latestVersion: row.latestVersion } : {}),
-  ...(row.checkedAt ? { checkedAt: row.checkedAt.getTime() } : {}),
-  ...(row.checkError ? { checkError: row.checkError } : {}),
-  ...(row.hash && row.latestHash && row.latestHash !== row.hash
-    ? { updateAvailable: true }
-    : {}),
-});
+const versioned = (row: VersionColumns): FleetVersioned => {
+  const lastRefresh = lastRefreshOf(row);
+  return {
+    ...(row.version ? { version: row.version } : {}),
+    ...(lastRefresh ? { lastRefresh } : {}),
+    ...(row.latestHash ? { latestHash: row.latestHash } : {}),
+    ...(row.latestVersion ? { latestVersion: row.latestVersion } : {}),
+    ...(row.checkedAt ? { checkedAt: row.checkedAt.getTime() } : {}),
+    ...(row.checkError ? { checkError: row.checkError } : {}),
+    ...(row.hash && row.latestHash && row.latestHash !== row.hash
+      ? { updateAvailable: true }
+      : {}),
+  };
+};
+
+/**
+ * Why a row's fetch stands as it does: the last resolve's failure, else,
+ * while the files it kept do not read (`files_unread`, hub migration 0423),
+ * that no machine is sent them.
+ */
+const errorOf = (
+  row: Pick<typeof skills.$inferSelect, "error" | "filesUnread">
+): string | undefined =>
+  row.error || (row.filesUnread === null ? undefined : fleetFilesWords.unread);
 
 /** A skill's or a plugin's row as both read: whether it is on, its last fetch, and its versions. */
 const fetched = (
   row: VersionColumns &
-    Pick<typeof skills.$inferSelect, "enabled" | "bytes" | "error">
+    Pick<
+      typeof skills.$inferSelect,
+      "enabled" | "bytes" | "error" | "filesUnread"
+    >
 ): Pick<FleetPlugin, "enabled" | "hash" | "bytes" | "error"> &
-  FleetVersioned => ({
-  enabled: row.enabled,
-  ...(row.hash ? { hash: row.hash } : {}),
-  ...(row.bytes === null ? {} : { bytes: row.bytes }),
-  ...(row.error ? { error: row.error } : {}),
-  ...versioned(row),
-});
+  FleetVersioned => {
+  const error = errorOf(row);
+  return {
+    enabled: row.enabled,
+    ...(row.hash ? { hash: row.hash } : {}),
+    ...(row.bytes === null ? {} : { bytes: row.bytes }),
+    ...(error ? { error } : {}),
+    ...versioned(row),
+  };
+};
 
 /** A row nothing has fetched or checked yet. */
 const noVersionColumns = {
   version: null,
-  lastRefresh: null,
+  ...refreshColumns(null),
   latestHash: null,
   latestVersion: null,
   checkedAt: null,
@@ -215,7 +284,14 @@ const sourceColumnsOf = (
   stored?.source === source
     ? {
         version: stored.version,
-        lastRefresh: stored.lastRefresh,
+        refreshAt: stored.refreshAt,
+        refreshOutcome: stored.refreshOutcome,
+        refreshError: stored.refreshError,
+        refreshFromHash: stored.refreshFromHash,
+        refreshFromVersion: stored.refreshFromVersion,
+        refreshToHash: stored.refreshToHash,
+        refreshToVersion: stored.refreshToVersion,
+        refreshUnread: stored.refreshUnread,
         latestHash: stored.latestHash,
         latestVersion: stored.latestVersion,
         checkedAt: stored.checkedAt,
@@ -225,7 +301,7 @@ const sourceColumnsOf = (
 
 /** The columns a {@link SourceNote} writes. */
 const noteColumns = ({ lastRefresh, checked }: SourceNote) => ({
-  ...(lastRefresh === undefined ? {} : { lastRefresh }),
+  ...(lastRefresh === undefined ? {} : refreshColumns(lastRefresh)),
   ...(checked === null
     ? {
         checkedAt: null,
@@ -348,15 +424,145 @@ export const hashHookMaterial = (hook: {
     ])
   );
 
+/** One file as its files table keeps it: its path, its place in its list, its execute bit and its bytes. */
+interface FileRow {
+  content: Buffer;
+  executable: boolean;
+  path: string;
+  position: number;
+}
+
+/** Files as their rows keep them: each one's bytes read off its base64, in the order given. */
+const fileRows = (files: readonly SkillFile[]): FileRow[] =>
+  files.map((file, position) => ({
+    path: file.path,
+    position,
+    executable: file.executable,
+    content: Buffer.from(file.contentBase64, "base64"),
+  }));
+
+/** Files as the wire carries them (core `SkillFile`), from their rows, in their list's order. */
+const wireFiles = (rows: readonly FileRow[]): SkillFile[] =>
+  rows
+    .toSorted((a, b) => a.position - b.position)
+    .map((row) => ({
+      contentBase64: row.content.toString("base64"),
+      executable: row.executable,
+      path: row.path,
+    }));
+
+/** What `files` hash to (core `hashFiles`) as their rows give them back. */
+const heldHash = (files: readonly SkillFile[]): string =>
+  hashFiles(wireFiles(fileRows(files)));
+
 /**
  * The hash a row of files is stored under: always its files' own
- * (hashFiles), whatever its writer passed, so a stored hash changes exactly
- * when its files do and no write leaves the two disagreeing.
+ * (hashFiles), as their rows give them back, whatever its writer passed,
+ * so a stored hash changes exactly when its files do and no write leaves
+ * the two disagreeing.
  */
 export const storedHash = (
-  files: SkillFile[] | null | undefined,
+  files: readonly SkillFile[] | null | undefined,
   given: string | null | undefined
-): string | null => (files ? hashFiles(files) : (given ?? null));
+): string | null => (files ? heldHash(files) : (given ?? null));
+
+/** Each file's row under `owner`, for its files table. */
+const fileValues = <Owner extends object>(
+  files: readonly SkillFile[],
+  owner: Owner
+): (FileRow & Owner)[] => fileRows(files).map((row) => ({ ...row, ...owner }));
+
+/** The columns every files table reads a file's row with. */
+const FILE_COLUMNS = {
+  skill: {
+    path: skillFiles.path,
+    position: skillFiles.position,
+    executable: skillFiles.executable,
+    content: skillFiles.content,
+  },
+  plugin: {
+    path: pluginFiles.path,
+    position: pluginFiles.position,
+    executable: pluginFiles.executable,
+    content: pluginFiles.content,
+  },
+  version: {
+    path: skillVersionFiles.path,
+    position: skillVersionFiles.position,
+    executable: skillVersionFiles.executable,
+    content: skillVersionFiles.content,
+  },
+} as const;
+
+/** A skill's files, as the wire carries them. */
+export const skillFilesOf = (
+  tx: Pick<Tx, "select">,
+  name: string
+): SkillFile[] =>
+  wireFiles(
+    tx
+      .select(FILE_COLUMNS.skill)
+      .from(skillFiles)
+      .where(eq(skillFiles.skillName, name))
+      .orderBy(asc(skillFiles.position))
+      .all()
+  );
+
+/** A plugin's files, as the wire carries them. */
+export const pluginFilesOf = (
+  tx: Pick<Tx, "select">,
+  id: string
+): SkillFile[] =>
+  wireFiles(
+    tx
+      .select(FILE_COLUMNS.plugin)
+      .from(pluginFiles)
+      .where(eq(pluginFiles.pluginId, id))
+      .orderBy(asc(pluginFiles.position))
+      .all()
+  );
+
+/** A kept skill version's files, as the wire carries them. */
+export const versionFilesOf = (
+  tx: Pick<Tx, "select">,
+  id: number
+): SkillFile[] =>
+  wireFiles(
+    tx
+      .select(FILE_COLUMNS.version)
+      .from(skillVersionFiles)
+      .where(eq(skillVersionFiles.versionId, id))
+      .orderBy(asc(skillVersionFiles.position))
+      .all()
+  );
+
+/** A skill's files replaced by `files`; none when null. */
+const putSkillFiles = (
+  tx: Pick<Tx, "delete" | "insert">,
+  name: string,
+  files: readonly SkillFile[] | null
+): void => {
+  tx.delete(skillFiles).where(eq(skillFiles.skillName, name)).run();
+  if (files && files.length > 0) {
+    tx.insert(skillFiles)
+      .values(fileValues(files, { skillName: name }))
+      .run();
+  }
+};
+
+/** A plugin's files replaced by `files`; none when null. */
+const putPluginFiles = (
+  tx: Pick<Tx, "delete" | "insert">,
+  id: string,
+  files: readonly SkillFile[] | null
+): void => {
+  tx.delete(pluginFiles).where(eq(pluginFiles.pluginId, id)).run();
+  if (files && files.length > 0) {
+    tx.insert(pluginFiles)
+      .values(fileValues(files, { pluginId: id }))
+      .run();
+  }
+};
 
 export interface FleetCatalogDb {
   /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
@@ -375,10 +581,16 @@ export interface FleetCatalogDb {
   readonly fleetMemoryVersion: (
     id: number
   ) => (MemoryVersion & { content: string }) | undefined;
-  /** A skill's superseded version in full: what restoring it writes back. */
+  /**
+   * A skill's superseded version in full: what restoring it writes back.
+   * Its files are null while the ones it kept do not read (hub migration
+   * 0423): it is not restored.
+   */
   readonly fleetSkillVersion: (
     id: number
-  ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
+  ) =>
+    | (SkillVersion & { skillSource: string; files: SkillFile[] | null })
+    | undefined;
   /** Forgets every briefer document a session was handed: its context no longer holds them. */
   readonly forgetBriefings: (instanceId: string) => void;
   readonly getFleetHook: (id: string) => FleetHook | undefined;
@@ -552,7 +764,7 @@ export interface FleetCatalogDb {
     name: string;
     skillSource: string;
     hash: string;
-    files: SkillFile[];
+    files: readonly SkillFile[];
     source: string;
   }) => void;
   /**
@@ -654,28 +866,86 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
   }: {
     name: string;
     skillSource: string;
-    files: SkillFile[];
+    files: readonly SkillFile[];
     source: string;
   }): void => {
-    db.insert(fleetSkillHistory)
-      .values({
-        name,
-        skillSource,
-        hash: hashFiles(files),
-        bytes: files.reduce(
-          (total, file) =>
-            total + Buffer.byteLength(file.contentBase64, "base64"),
-          0
-        ),
-        files,
-        source,
-      })
-      .run();
+    db.transaction((tx) => {
+      const { id } = tx
+        .insert(fleetSkillHistory)
+        .values({
+          name,
+          skillSource,
+          hash: heldHash(files),
+          bytes: files.reduce(
+            (total, file) =>
+              total + Buffer.byteLength(file.contentBase64, "base64"),
+            0
+          ),
+          source,
+        })
+        .returning({ id: fleetSkillHistory.id })
+        .get();
+      if (files.length > 0) {
+        tx.insert(skillVersionFiles)
+          .values(fileValues(files, { versionId: id }))
+          .run();
+      }
+    });
     pruneHistory(
       fleetSkillHistory,
       fleetSkillHistory.id,
       eq(fleetSkillHistory.name, name)
     );
+  };
+
+  /** The skill's row `stored`, its files or the ones it kept as not read, as a version in its history. */
+  const keepVersion = (
+    stored: typeof skills.$inferSelect,
+    hash: string,
+    files: readonly SkillFile[] | null
+  ): void => {
+    if (files) {
+      recordFleetSkill({
+        name: stored.name,
+        skillSource: stored.source,
+        files,
+        source: "fleet",
+      });
+    } else if (stored.filesUnread !== null) {
+      db.insert(fleetSkillHistory)
+        .values({
+          name: stored.name,
+          skillSource: stored.source,
+          hash,
+          bytes: stored.bytes ?? 0,
+          filesUnread: stored.filesUnread,
+          source: "fleet",
+        })
+        .run();
+      pruneHistory(
+        fleetSkillHistory,
+        fleetSkillHistory.id,
+        eq(fleetSkillHistory.name, stored.name)
+      );
+    }
+  };
+
+  /**
+   * What a write of files hashing to `fileHash` replaces, kept first, as a
+   * hook's or a memory document's is: every refresh, adopt, new source or
+   * restore that moves the fleet's copy leaves the old one (`stored`, its
+   * `files`) in the skill's history. Files the row kept as not read (hub
+   * migration 0423) are kept there as they were, as a version that is not
+   * restored.
+   */
+  const keepReplaced = (
+    stored: typeof skills.$inferSelect | undefined,
+    files: readonly SkillFile[] | null,
+    fileHash: string | null | undefined
+  ): void => {
+    if (stored?.hash && fileHash !== undefined && fileHash !== stored.hash) {
+      keepVersion(stored, stored.hash, files);
+    }
   };
 
   const getFleetMemory = () => {
@@ -794,7 +1064,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
    */
   /**
    * Each enabled skill's and plugin's files, by the hash its row names: read
-   * from its row only when that hash is new. The fleet's config is built for
+   * from its files table only when that hash is new. The fleet's config is built for
    * every machine's welcome and delta, and it read and parsed every skill's
    * and plugin's files each time, 78 MB on the live hub, 267 ms a build
    * (measured on a copy of the live database, 2026-10-23). A row's hash is its files' (fleet
@@ -805,18 +1075,14 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
   const keptFiles = (
     key: string,
     hash: string,
-    read: () => SkillFile[] | null | undefined
-  ): SkillFile[] | undefined => {
+    read: () => SkillFile[]
+  ): SkillFile[] => {
     const held = filesKept.get(key);
     if (held?.hash === hash) {
       return held.files;
     }
-    const files = read() ?? undefined;
-    if (files) {
-      filesKept.set(key, { files, hash });
-    } else {
-      filesKept.delete(key);
-    }
+    const files = read();
+    filesKept.set(key, { files, hash });
     return files;
   };
 
@@ -920,6 +1186,8 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
             .select({
               name: skills.name,
               hash: skills.hash,
+              filesHeld: skills.filesHeld,
+              filesUnread: skills.filesUnread,
               projectId: skills.projectId,
               areaId: skills.areaId,
               scope: skills.scope,
@@ -927,30 +1195,37 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
             .from(skills)
             .where(eq(skills.enabled, true))
             .all()
-            .flatMap(({ name, hash, projectId, areaId, scope }) => {
-              const files = hash
-                ? keptFiles(
-                    `skill:${name}`,
-                    hash,
-                    () =>
-                      db
-                        .select({ files: skills.files })
-                        .from(skills)
-                        .where(eq(skills.name, name))
-                        .get()?.files
-                  )
-                : undefined;
-              return hash && files
-                ? [
-                    {
-                      name,
-                      hash,
-                      files,
-                      ...bindingOf({ projectId, areaId, scope }, "project"),
-                    },
-                  ]
-                : [];
-            }),
+            .flatMap(
+              ({
+                name,
+                hash,
+                filesHeld,
+                filesUnread,
+                projectId,
+                areaId,
+                scope,
+              }) => {
+                const files =
+                  hash && filesHeld
+                    ? keptFiles(`skill:${name}`, hash, () =>
+                        skillFilesOf(db, name)
+                      )
+                    : undefined;
+                // Files kept that do not read are sent as the hash alone: a
+                // machine that holds that copy keeps it, and one that does
+                // not installs nothing and says the bytes are missing.
+                return hash && (files || filesUnread !== null)
+                  ? [
+                      {
+                        name,
+                        hash,
+                        ...(files ? { files } : {}),
+                        ...bindingOf({ projectId, areaId, scope }, "project"),
+                      },
+                    ]
+                  : [];
+              }
+            ),
           // CawCo's own; a fleet skill of the same name, on or off, is the operator's word on it.
           ...(() => {
             const named = new Set(
@@ -980,25 +1255,20 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
             id: plugins.id,
             hash: plugins.hash,
             bytes: plugins.bytes,
+            filesHeld: plugins.filesHeld,
+            filesUnread: plugins.filesUnread,
             version: plugins.version,
           })
           .from(plugins)
           .where(eq(plugins.enabled, true))
           .all()
-          .flatMap(({ id, hash, bytes, version }) => {
-            const files = hash
-              ? keptFiles(
-                  `plugin:${id}`,
-                  hash,
-                  () =>
-                    db
-                      .select({ files: plugins.files })
-                      .from(plugins)
-                      .where(eq(plugins.id, id))
-                      .get()?.files
-                )
-              : undefined;
-            if (!(hash && files)) {
+          .flatMap(({ id, hash, bytes, filesHeld, filesUnread, version }) => {
+            const files =
+              hash && filesHeld
+                ? keptFiles(`plugin:${id}`, hash, () => pluginFilesOf(db, id))
+                : undefined;
+            // As a skill's: files kept that do not read go as the hash alone.
+            if (!(hash && (files || filesUnread !== null))) {
               return [];
             }
             const name = id.split("@")[0] ?? id;
@@ -1008,7 +1278,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
                 marketplace: id.split("@")[1] ?? "",
                 hash,
                 bytes: bytes ?? 0,
-                files,
+                ...(files ? { files } : {}),
                 ...(version ? { version } : {}),
               },
             ];
@@ -1121,20 +1391,24 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         return moved;
       }),
     putPluginPayload: ({ id, hash, bytes, error, files, version }) => {
-      db.update(plugins)
-        .set(
-          error === undefined
-            ? {
-                hash: storedHash(files, hash),
-                bytes: bytes ?? null,
-                error: null,
-                files: files ?? null,
-                version: version ?? null,
-              }
-            : { error }
-        )
-        .where(eq(plugins.id, id))
-        .run();
+      if (error !== undefined) {
+        db.update(plugins).set({ error }).where(eq(plugins.id, id)).run();
+        return;
+      }
+      db.transaction((tx) => {
+        tx.update(plugins)
+          .set({
+            hash: storedHash(files, hash),
+            bytes: bytes ?? null,
+            error: null,
+            filesHeld: files !== undefined,
+            filesUnread: null,
+            version: version ?? null,
+          })
+          .where(eq(plugins.id, id))
+          .run();
+        putPluginFiles(tx, id, files ?? null);
+      });
     },
     noteSource: (row, note) => {
       const set = noteColumns(note);
@@ -1160,19 +1434,27 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           return null;
         }
         const skillRows = tx
-          .select({ key: skills.name, files: skills.files })
+          .select({ key: skills.name, held: skills.filesHeld })
           .from(skills)
           .all()
-          .map((row) => ({ key: row.key, version: skillVersion(row.files) }));
+          .map((row) => ({
+            key: row.key,
+            version: row.held
+              ? skillVersion(skillFilesOf(tx, row.key))
+              : undefined,
+          }));
         // The marketplace entry's version is not stored; the next fetch or
         // update check reads it.
         const pluginRows = tx
-          .select({ key: plugins.id, files: plugins.files })
+          .select({ key: plugins.id, held: plugins.filesHeld })
           .from(plugins)
           .all()
           .map((row) => ({
             key: row.key,
-            version: pluginVersion(row.files, undefined),
+            version: pluginVersion(
+              row.held ? pluginFilesOf(tx, row.key) : null,
+              undefined
+            ),
           }));
         for (const { key, version } of skillRows) {
           if (version) {
@@ -1212,8 +1494,16 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           hash: plugins.hash,
           bytes: plugins.bytes,
           error: plugins.error,
+          filesUnread: plugins.filesUnread,
           version: plugins.version,
-          lastRefresh: plugins.lastRefresh,
+          refreshAt: plugins.refreshAt,
+          refreshOutcome: plugins.refreshOutcome,
+          refreshError: plugins.refreshError,
+          refreshFromHash: plugins.refreshFromHash,
+          refreshFromVersion: plugins.refreshFromVersion,
+          refreshToHash: plugins.refreshToHash,
+          refreshToVersion: plugins.refreshToVersion,
+          refreshUnread: plugins.refreshUnread,
           latestHash: plugins.latestHash,
           latestVersion: plugins.latestVersion,
           checkedAt: plugins.checkedAt,
@@ -1252,35 +1542,9 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         .from(marketplaces)
         .where(eq(marketplaces.name, name))
         .get()?.source,
-    listSkills: () =>
-      db
-        .select({
-          name: skills.name,
-          source: skills.source,
-          enabled: skills.enabled,
-          hash: skills.hash,
-          bytes: skills.bytes,
-          error: skills.error,
-          scope: skills.scope,
-          projectId: skills.projectId,
-          areaId: skills.areaId,
-          version: skills.version,
-          lastRefresh: skills.lastRefresh,
-          latestHash: skills.latestHash,
-          latestVersion: skills.latestVersion,
-          checkedAt: skills.checkedAt,
-          checkError: skills.checkError,
-        })
-        .from(skills)
-        .all()
-        .map(skillMeta),
+    listSkills: () => db.select().from(skills).all().map(skillMeta),
     heldSkillNames: (name) => {
-      const stored = db
-        .select({ files: skills.files })
-        .from(skills)
-        .where(eq(skills.name, name))
-        .get();
-      const declared = skillName(stored?.files);
+      const declared = skillName(skillFilesOf(db, name));
       return declared && declared !== name ? [name, declared] : [name];
     },
     putSkill: ({
@@ -1304,54 +1568,64 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
       // unreachable for a minute is no reason to take a working skill off them.
       const keep = error !== undefined && stored?.source === source;
       const fileHash = files ? storedHash(files, hash) : hash;
-      // What this change replaces is kept first, as a hook's or a memory
-      // document's is: every refresh, adopt, new source or restore that
-      // moves the fleet's copy leaves the old one in the skill's history.
-      if (
-        !keep &&
-        stored?.hash &&
-        stored.files &&
-        fileHash !== undefined &&
-        fileHash !== stored.hash
-      ) {
-        recordFleetSkill({
-          name,
-          skillSource: stored.source,
-          files: stored.files,
-          source: "fleet",
-        });
+      const storedFiles = stored?.filesHeld ? skillFilesOf(db, name) : null;
+      if (!keep) {
+        keepReplaced(stored, storedFiles, fileHash);
       }
+      // Kept, the row's files stay as they are, and so does a list of
+      // them kept as not read; otherwise this write's files replace both.
+      const held = keep
+        ? {
+            hash: stored.hash,
+            bytes: stored.bytes,
+            files: storedFiles,
+            filesUnread: stored.filesUnread,
+          }
+        : {
+            hash: fileHash ?? null,
+            bytes: bytes ?? null,
+            files: files ?? null,
+            filesUnread: null,
+          };
+      const rowFiles = held.files;
       const row = {
         name,
         source,
         enabled: enabled ?? true,
-        hash: (keep ? stored.hash : fileHash) ?? null,
-        bytes: (keep ? stored.bytes : bytes) ?? null,
+        hash: held.hash,
+        bytes: held.bytes,
         error: error ?? null,
-        files: (keep ? stored.files : files) ?? null,
+        filesHeld: rowFiles !== null,
+        filesUnread: held.filesUnread,
       };
-      const version = skillVersion(row.files) ?? null;
+      const version = skillVersion(rowFiles) ?? null;
       // What a source held and what its last fetch came to are that source's:
       // a row given another source has read neither from it yet.
       const carried = sourceColumnsOf(stored, source);
       const placement = placementOf({ projectId, areaId }, stored, "project");
-      db.insert(skills)
-        .values({ ...row, version, ...placement })
-        .onConflictDoUpdate({
-          target: skills.name,
-          set: {
-            ...carried,
-            source: row.source,
-            enabled: row.enabled,
-            hash: row.hash,
-            bytes: row.bytes,
-            error: row.error,
-            files: row.files,
-            version,
-            ...placement,
-          },
-        })
-        .run();
+      db.transaction((tx) => {
+        tx.insert(skills)
+          .values({ ...row, version, ...placement })
+          .onConflictDoUpdate({
+            target: skills.name,
+            set: {
+              ...carried,
+              source: row.source,
+              enabled: row.enabled,
+              hash: row.hash,
+              bytes: row.bytes,
+              error: row.error,
+              filesHeld: row.filesHeld,
+              filesUnread: row.filesUnread,
+              version,
+              ...placement,
+            },
+          })
+          .run();
+        if (!keep) {
+          putSkillFiles(tx, name, rowFiles);
+        }
+      });
       return skillMeta({
         ...carried,
         ...row,
@@ -1386,7 +1660,8 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           hash: null,
           bytes: null,
           error: null,
-          files: null,
+          filesHeld: false,
+          filesUnread: null,
         };
         db.insert(skills)
           .values({ ...row, ...placement })
@@ -1406,13 +1681,12 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         .from(skills)
         .where(eq(skills.name, name))
         .get();
-      if (stored?.hash && stored.files) {
-        recordFleetSkill({
-          name,
-          skillSource: stored.source,
-          files: stored.files,
-          source: "fleet",
-        });
+      if (stored?.hash) {
+        keepVersion(
+          stored,
+          stored.hash,
+          stored.filesHeld ? skillFilesOf(db, name) : null
+        );
       }
     },
     recordFleetSkill,
@@ -1437,7 +1711,15 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         .from(fleetSkillHistory)
         .where(eq(fleetSkillHistory.id, id))
         .get();
-      return row && { ...row, createdAt: row.createdAt.toISOString() };
+      if (!row) {
+        return;
+      }
+      const { filesUnread, ...version } = row;
+      return {
+        ...version,
+        createdAt: row.createdAt.toISOString(),
+        files: filesUnread === null ? versionFilesOf(db, id) : null,
+      };
     },
     listFleetAgents: () =>
       db

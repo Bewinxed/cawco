@@ -10644,6 +10644,16 @@
               }
             }
           },
+          "409": {
+            "description": "postApiFleetSkillsRestore 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetSkillsRestore409"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiFleetSkillsRestore 422",
             "content": {
@@ -42262,7 +42272,7 @@
                 "type": "string"
               },
               "platforms": {
-                "description": "The machine platforms it can run on, by the name each machine reports in\nits capabilities (`MachineCapabilities.platform`, Node's\n`process.platform`: \"darwin\", \"linux\", \"win32\"). A machine of another\nplatform is never sent it, so it is neither installed nor probed there.\nAbsent: every machine.",
+                "description": "The machine platforms it can run on, by the name each machine's\nplatform goes by ({@link machinePlatform}, Node's `process.platform`:\n\"darwin\", \"linux\", \"win32\"). A machine of another\nplatform is never sent it, so it is neither installed nor probed there.\nAbsent: every machine.",
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/ToolPlatform"
@@ -42448,6 +42458,7 @@
         ]
       },
       "FleetRefreshOutcome": {
+        "description": "What a fetch of a row that already had files came to ({@link FleetRefresh.outcome}).",
         "type": "string",
         "enum": [
           "failed",
@@ -131677,6 +131688,42 @@
             "type": "number",
             "enum": [
               404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiFleetSkillsRestore409": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "skill-version-unread"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              409
             ]
           },
           "title": {
