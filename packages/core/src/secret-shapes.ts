@@ -10,6 +10,8 @@
  * default scrubber denylist (sentry-python `scrubber.py` DEFAULT_DENYLIST,
  * "stolen from relay"), less its bare `auth` and `session`, which name ordinary
  * fields (`author`, `session_id`) far more often than they carry a credential.
+ * Plurals are named here too, all but `tokens`, a count (`max_tokens`) far
+ * more often than a credential.
  */
 const SECRET_NAMES = new Set([
   "password",
@@ -20,37 +22,52 @@ const SECRET_NAMES = new Set([
   "token",
   "credential",
   "credentials",
+  "secrets",
+  "passwords",
   "cookie",
+  "cookies",
   "authorization",
   "bearer",
   "csrf",
   "xsrf",
   "apikey",
   "privatekey",
+  "apikeys",
+  "privatekeys",
   "csrftoken",
   "phpsessid",
 ]);
 
-/** A name's segments, in lower case: camelCase, snake_case, kebab-case and UPPER_CASE split alike (`OAuth2Token` reads `o`, `auth`, `2`, `token`). */
+/** A name's segments, in lower case: camelCase, snake_case, kebab-case and UPPER_CASE split alike, the last capital of a run starting the word after it (`OAuth2Token` reads `o`, `auth`, `2`, `token`; `APIKey` reads `api`, `key`). */
 const segmentsOf = (name: string): string[] =>
   (name.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/gu) ?? []).map((segment) =>
     segment.toLowerCase()
+  );
+
+/** The same name split at every change of case alone, so a run of capitals keeps its last one (`AUTHtoken` reads `auth`, `token`). */
+const caseRunsOf = (name: string): string[] =>
+  (name.match(/[A-Z]+|[a-z]+|\d+/gu) ?? []).map((segment) =>
+    segment.toLowerCase()
+  );
+
+/** Whether one reading of a name has a credential name as a segment, or as two side by side read together. */
+const namesSecret = (segments: string[]): boolean =>
+  segments.some(
+    (segment, at) =>
+      SECRET_NAMES.has(segment) ||
+      SECRET_NAMES.has(`${segment}${segments[at + 1] ?? ""}`)
   );
 
 /**
  * A field whose name says it carries a credential: one of its segments, or
  * two side by side read together (`api` + `key`, `private` + `key`), is a
  * credential name. A name that only contains one (`author`, `max_tokens`,
- * `tokenizer`) is not.
+ * `tokenizer`) is not. A capital run before a lower-case word reads two
+ * ways, `APIKey` as `api` + `key` and `AUTHtoken` as `auth` + `token`, and
+ * the name is a credential's when either reading says so.
  */
-export const isSecretName = (name: string): boolean => {
-  const segments = segmentsOf(name);
-  return segments.some(
-    (segment, at) =>
-      SECRET_NAMES.has(segment) ||
-      SECRET_NAMES.has(`${segment}${segments[at + 1] ?? ""}`)
-  );
-};
+export const isSecretName = (name: string): boolean =>
+  namesSecret(segmentsOf(name)) || namesSecret(caseRunsOf(name));
 
 /** Read anywhere in a config name's letters run together, beside {@link SECRET_NAMES}: `X-Auth`, `SESSION`, `passwort`. */
 const CONFIG_SECRET_FRAGMENTS = ["auth", "session", "passw"];
