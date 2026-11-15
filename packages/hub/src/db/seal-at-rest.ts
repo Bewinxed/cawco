@@ -25,15 +25,68 @@ const SECRET_COLUMNS = [
   {
     table: "fleet_mcp_oauth",
     key: "name",
-    columns: ["client", "tokens", "token_client", "pending"],
+    columns: [
+      "client",
+      "tokens",
+      "token_client",
+      "pending_verifier",
+      "pending_unread",
+    ],
   },
   { table: "mcp_servers", key: "name", columns: ["config"] },
-  { table: "connections", key: "id", columns: ["sealed"] },
+  { table: "connections", key: "id", columns: ["sealed_unread"] },
+  {
+    table: "connection_secrets",
+    key: "connection_id",
+    columns: [
+      "key",
+      "tokens",
+      "client",
+      "verifier",
+      "app_private_key",
+      "app_client_secret",
+      "app_webhook_secret",
+      "device_code",
+    ],
+  },
 ] as const;
+
+/**
+ * Says once, at the start whose key is new (secret-box.ts `made`: no key
+ * file was there), how many of the values sealed before do not open with
+ * it, and where the key file goes back: each reads as no secret meanwhile,
+ * every connection asks to be signed in again, and values 0420 kept as not
+ * read are read again at the next start once it is back
+ * (sealed-facts-unread.ts).
+ */
+const sayFreshKey = (marked: readonly string[]): void => {
+  if (marked.length === 0) {
+    return;
+  }
+  const box = hubSecrets();
+  if (!box.made) {
+    return;
+  }
+  const unopened = marked.filter((value) => {
+    try {
+      box.open(value);
+      return false;
+    } catch {
+      return true;
+    }
+  }).length;
+  if (unopened > 0) {
+    console.warn(
+      `[secret-box] no key file was at ${box.path}, so this start made a new key, and ${unopened} value(s) sealed before it do not open with it: each reads as no secret, and every connection and fleet sign-in they held needs signing in again. Putting the old key file back at ${box.path} and starting the hub again opens them, not what was sealed since.`
+    );
+  }
+};
 
 /** Seals each plain secret in place, in one transaction; answers how many, by `table.column`. */
 export const sealAtRest = (sqlite: Database): Record<string, number> => {
   const sealed: Record<string, number> = {};
+  /** Every value sealed before this start, for {@link sayFreshKey}. */
+  const marked: string[] = [];
   // Immediate, as every transaction on the hub's file (db/index.ts `make`):
   // it reads, then writes, and a read that upgrades is refused at once while
   // another connection writes.
@@ -51,10 +104,12 @@ export const sealAtRest = (sqlite: Database): Record<string, number> => {
           );
           let count = 0;
           for (const row of rows) {
-            if (!isSealed(row.value)) {
-              update.run(hubSecrets().seal(row.value), row.id);
-              count += 1;
+            if (isSealed(row.value)) {
+              marked.push(row.value);
+              continue;
             }
+            update.run(hubSecrets().seal(row.value), row.id);
+            count += 1;
           }
           if (count > 0) {
             sealed[`${table}.${column}`] = count;
@@ -63,6 +118,7 @@ export const sealAtRest = (sqlite: Database): Record<string, number> => {
       }
     })
     .immediate();
+  sayFreshKey(marked);
   if (Object.keys(sealed).length > 0) {
     // An UPDATE leaves the old bytes in the file's freed space and in the
     // WAL until something writes over them: the plain values would still be

@@ -47,6 +47,7 @@ import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { logRelayPortsUnread } from "./relay-ports-unread";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { placeSealedFacts } from "./sealed-facts-unread";
 import { logSendOriginsUnread } from "./send-origins-unread";
 import { logPlansUnread } from "./session-plans-unread";
 import { logTrackerBaselinesUnread } from "./tracker-baselines-unread";
@@ -278,6 +279,17 @@ export const MIGRATION_STEPS: readonly Step[] = [
     },
   },
   {
+    name: "sealed-facts",
+    before: "0420_connection_sealed_dropped",
+    at: "migrator",
+    run: (client) => {
+      // What each connection held and each sign-in under way, opened with
+      // the hub's key and placed in 0419's columns, each secret sealed alone,
+      // before 0420 drops the sealed values (sealed-facts-unread.ts).
+      placeSealedFacts(client, "migration");
+    },
+  },
+  {
     name: "seal-at-rest",
     after: "latest",
     at: "open",
@@ -292,6 +304,21 @@ export const MIGRATION_STEPS: readonly Step[] = [
               .join(", ")}`
           : "[seal-at-rest] every secret is sealed already"
       );
+    },
+  },
+  {
+    name: "sealed-facts-read-again",
+    after: "latest",
+    at: "open",
+    run: (client) => {
+      // What 0420 kept as not read, read again with the hub's key as it is
+      // now, each placed as 0420 would have when it reads
+      // (sealed-facts-unread.ts): a key file put back opens them again.
+      client
+        .transaction(() => {
+          placeSealedFacts(client, "unread");
+        })
+        .immediate();
     },
   },
   {

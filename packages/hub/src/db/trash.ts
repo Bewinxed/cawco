@@ -5,6 +5,7 @@ import {
   configTrash,
   connectionAreas,
   connectionProjects,
+  connectionSecrets,
   connections,
   delegateTypeConnections,
   delegateTypeDenyTools,
@@ -166,6 +167,11 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
   memoryDoc: (key) => docParts([key]),
   connection: (key) => [
     part("connections", eq(connections.name, key)),
+    // Its secrets come back with it, sealed as they were.
+    part(
+      "connection_secrets",
+      sql`${connectionSecrets.connectionId} in (select ${connections.id} from ${connections} where ${eq(connections.name, key)})`
+    ),
     part(
       "connection_projects",
       sql`${connectionProjects.connectionId} in (select ${connections.id} from ${connections} where ${eq(connections.name, key)})`

@@ -33,8 +33,15 @@ export interface SecretBox {
    * is, and no use's key tells anything of another's or of the hub's own.
    */
   readonly derive: (label: string) => Buffer;
+  /**
+   * Whether this process made the key, finding no key file: then no value
+   * sealed before it opens (db/seal-at-rest.ts says so once, at start).
+   */
+  readonly made: boolean;
   /** The plain text `sealed` was made from; throws when it was not sealed under this key. */
   readonly open: (sealed: string) => string;
+  /** The key file. */
+  readonly path: string;
   /** `plain`, sealed under the hub's key: what a row stores. */
   readonly seal: (plain: string) => string;
 }
@@ -44,7 +51,8 @@ export interface SecretBox {
  * none. A file of another size, or one others may read, is refused: a key
  * someone else could have written or read seals nothing.
  */
-const loadKey = (path: string): Buffer => {
+const loadKey = (path: string): { key: Buffer; made: boolean } => {
+  let made = false;
   try {
     // Whole or not at all: a key cut short by a crash would refuse every
     // start after it (the size check below), and seal nothing meanwhile.
@@ -52,6 +60,7 @@ const loadKey = (path: string): Buffer => {
       exclusive: true,
       mode: 0o600,
     });
+    made = true;
     console.info(`[secret-box] made the hub's secret key at ${path}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
@@ -72,7 +81,7 @@ const loadKey = (path: string): Buffer => {
       `The hub's secret key ${path} holds ${key.length} bytes, not ${KEY_BYTES}.`
     );
   }
-  return key;
+  return { key, made };
 };
 
 /** Whether a stored value is one the hub sealed (it may still not open, under another key). */
@@ -87,8 +96,10 @@ const makeSecretBox = (
     renameSync(first, path);
     console.info(`[secret-box] the hub's secret key is now ${path}`);
   }
-  const key = loadKey(path);
+  const { key, made } = loadKey(path);
   return {
+    made,
+    path,
     derive: (label) =>
       Buffer.from(hkdfSync("sha256", key, Buffer.alloc(0), label, KEY_BYTES)),
     seal: (plain) => {

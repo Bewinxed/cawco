@@ -2179,6 +2179,181 @@
       ]
     }
   },
+  "connection_secrets.client": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "redirect_uris": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "x-code": "refine"
+            }
+          },
+          "token_endpoint_auth_method": {
+            "type": "string"
+          },
+          "grant_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "response_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "client_uri": {
+            "type": "string",
+            "format": "uri",
+            "x-code": "refine"
+          },
+          "logo_uri": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "x-code": "refine"
+              },
+              {
+                "type": "string",
+                "const": "",
+                "x-code": "transform"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string"
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tos_uri": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "x-code": "refine"
+              },
+              {
+                "type": "string",
+                "const": "",
+                "x-code": "transform"
+              }
+            ]
+          },
+          "policy_uri": {
+            "type": "string"
+          },
+          "jwks_uri": {
+            "type": "string",
+            "format": "uri",
+            "x-code": "refine"
+          },
+          "jwks": {},
+          "software_id": {
+            "type": "string"
+          },
+          "software_version": {
+            "type": "string"
+          },
+          "software_statement": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "client_id_issued_at": {
+            "type": "number"
+          },
+          "client_secret_expires_at": {
+            "type": "number"
+          },
+          "issuer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "redirect_uris",
+          "client_id"
+        ]
+      },
+      {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "client_id_issued_at": {
+            "type": "number"
+          },
+          "client_secret_expires_at": {
+            "type": "number"
+          },
+          "issuer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id"
+        ]
+      }
+    ]
+  },
+  "connection_secrets.tokens": {
+    "type": "object",
+    "properties": {
+      "access_token": {
+        "type": "string"
+      },
+      "id_token": {
+        "type": "string"
+      },
+      "token_type": {
+        "type": "string"
+      },
+      "expires_in": {
+        "type": "number",
+        "x-code": "coerce"
+      },
+      "scope": {
+        "type": "string"
+      },
+      "refresh_token": {
+        "type": "string"
+      },
+      "issuer": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "access_token",
+      "token_type"
+    ]
+  },
+  "connections.app_service": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear"
+    ]
+  },
   "connections.args": {
     "type": "array",
     "items": {
@@ -2609,293 +2784,6 @@
     "required": [
       "authorizationServerUrl"
     ]
-  },
-  "connections.sealed": {
-    "type": "object",
-    "properties": {
-      "app": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "appId": {
-                "type": "string"
-              },
-              "clientId": {
-                "type": "string"
-              },
-              "clientSecret": {
-                "type": "string"
-              },
-              "installationId": {
-                "type": "string"
-              },
-              "privateKey": {
-                "type": "string"
-              },
-              "service": {
-                "type": "string",
-                "const": "github"
-              },
-              "slug": {
-                "type": "string"
-              },
-              "webhookSecret": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "appId",
-              "privateKey",
-              "service"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "clientId": {
-                "type": "string"
-              },
-              "clientSecret": {
-                "type": "string"
-              },
-              "service": {
-                "type": "string",
-                "const": "linear"
-              }
-            },
-            "required": [
-              "clientId",
-              "clientSecret",
-              "service"
-            ]
-          }
-        ]
-      },
-      "client": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "redirect_uris": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "format": "uri",
-                  "x-code": "refine"
-                }
-              },
-              "token_endpoint_auth_method": {
-                "type": "string"
-              },
-              "grant_types": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "response_types": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "client_name": {
-                "type": "string"
-              },
-              "client_uri": {
-                "type": "string",
-                "format": "uri",
-                "x-code": "refine"
-              },
-              "logo_uri": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "format": "uri",
-                    "x-code": "refine"
-                  },
-                  {
-                    "type": "string",
-                    "const": "",
-                    "x-code": "transform"
-                  }
-                ]
-              },
-              "scope": {
-                "type": "string"
-              },
-              "contacts": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "tos_uri": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "format": "uri",
-                    "x-code": "refine"
-                  },
-                  {
-                    "type": "string",
-                    "const": "",
-                    "x-code": "transform"
-                  }
-                ]
-              },
-              "policy_uri": {
-                "type": "string"
-              },
-              "jwks_uri": {
-                "type": "string",
-                "format": "uri",
-                "x-code": "refine"
-              },
-              "jwks": {},
-              "software_id": {
-                "type": "string"
-              },
-              "software_version": {
-                "type": "string"
-              },
-              "software_statement": {
-                "type": "string"
-              },
-              "client_id": {
-                "type": "string"
-              },
-              "client_secret": {
-                "type": "string"
-              },
-              "client_id_issued_at": {
-                "type": "number"
-              },
-              "client_secret_expires_at": {
-                "type": "number"
-              },
-              "issuer": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "redirect_uris",
-              "client_id"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "client_id": {
-                "type": "string"
-              },
-              "client_secret": {
-                "type": "string"
-              },
-              "client_id_issued_at": {
-                "type": "number"
-              },
-              "client_secret_expires_at": {
-                "type": "number"
-              },
-              "issuer": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "client_id"
-            ]
-          }
-        ]
-      },
-      "device": {
-        "type": "object",
-        "properties": {
-          "deviceCode": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "number"
-          },
-          "interval": {
-            "type": "number"
-          },
-          "userCode": {
-            "type": "string"
-          },
-          "verificationUri": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "deviceCode",
-          "expiresAt",
-          "interval",
-          "userCode",
-          "verificationUri"
-        ]
-      },
-      "gh": {
-        "type": "object",
-        "properties": {
-          "host": {
-            "type": "string"
-          },
-          "login": {
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "host",
-          "login",
-          "machineId"
-        ]
-      },
-      "key": {
-        "type": "string"
-      },
-      "org": {
-        "type": "string"
-      },
-      "tokens": {
-        "type": "object",
-        "properties": {
-          "access_token": {
-            "type": "string"
-          },
-          "id_token": {
-            "type": "string"
-          },
-          "token_type": {
-            "type": "string"
-          },
-          "expires_in": {
-            "type": "number",
-            "x-code": "coerce"
-          },
-          "scope": {
-            "type": "string"
-          },
-          "refresh_token": {
-            "type": "string"
-          },
-          "issuer": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "access_token",
-          "token_type"
-        ]
-      },
-      "verifier": {
-        "type": "string"
-      }
-    }
   },
   "connections.state": {
     "type": "string",
@@ -5668,152 +5556,11 @@
       }
     ]
   },
-  "fleet_mcp_oauth.pending": {
-    "type": "object",
-    "properties": {
-      "client": {
-        "type": "object",
-        "properties": {
-          "redirect_uris": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uri",
-              "x-code": "refine"
-            }
-          },
-          "token_endpoint_auth_method": {
-            "type": "string"
-          },
-          "grant_types": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "response_types": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "client_name": {
-            "type": "string"
-          },
-          "client_uri": {
-            "type": "string",
-            "format": "uri",
-            "x-code": "refine"
-          },
-          "logo_uri": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uri",
-                "x-code": "refine"
-              },
-              {
-                "type": "string",
-                "const": "",
-                "x-code": "transform"
-              }
-            ]
-          },
-          "scope": {
-            "type": "string"
-          },
-          "contacts": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "tos_uri": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uri",
-                "x-code": "refine"
-              },
-              {
-                "type": "string",
-                "const": "",
-                "x-code": "transform"
-              }
-            ]
-          },
-          "policy_uri": {
-            "type": "string"
-          },
-          "jwks_uri": {
-            "type": "string",
-            "format": "uri",
-            "x-code": "refine"
-          },
-          "jwks": {},
-          "software_id": {
-            "type": "string"
-          },
-          "software_version": {
-            "type": "string"
-          },
-          "software_statement": {
-            "type": "string"
-          },
-          "client_id": {
-            "type": "string"
-          },
-          "client_secret": {
-            "type": "string"
-          },
-          "client_id_issued_at": {
-            "type": "number"
-          },
-          "client_secret_expires_at": {
-            "type": "number"
-          },
-          "issuer": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "redirect_uris",
-          "client_id"
-        ]
-      },
-      "redirectUri": {
-        "type": "string"
-      },
-      "verifier": {
-        "type": "string"
-      },
-      "state": {
-        "type": "string"
-      },
-      "expiresAt": {
-        "type": "number"
-      },
-      "access": {
-        "anyOf": [
-          {
-            "type": "string",
-            "enum": [
-              "read",
-              "write"
-            ]
-          },
-          {
-            "type": "null"
-          }
-        ]
-      }
-    },
-    "required": [
-      "client",
-      "redirectUri",
-      "verifier",
-      "state",
-      "expiresAt"
+  "fleet_mcp_oauth.pending_access": {
+    "type": "string",
+    "enum": [
+      "read",
+      "write"
     ]
   },
   "fleet_mcp_oauth.resource": {

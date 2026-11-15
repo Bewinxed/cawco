@@ -33,6 +33,7 @@ import type { OAuthDiscoveryState as OAuthDiscoveryStateType } from "@modelconte
 import type {
   AuthorizationServerMetadata as AuthorizationServerMetadataType,
   OAuthClientInformationFull as OAuthClientInformationFullType,
+  OAuthClientInformationMixed as OAuthClientInformationMixedType,
   OAuthProtectedResourceMetadata as OAuthProtectedResourceMetadataType,
   OAuthTokens as OAuthTokensType,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
@@ -53,7 +54,6 @@ import type {
   AttemptAsk as AttemptAskType,
   CacheTtl as CacheTtlType,
   CommentDirection as CommentDirectionType,
-  ConnectionSecret as ConnectionSecretType,
   ContinueRequest as ContinueRequestType,
   DelegateRequestKind as DelegateRequestKindType,
   DesignCheckState as DesignCheckStateType,
@@ -252,96 +252,6 @@ const CommentDirectionShape = declared(
 export const CommentDirectionSchema: z.ZodType<CommentDirectionType> =
   CommentDirectionShape;
 export type CommentDirectionOutput = z.output<typeof CommentDirectionShape>;
-
-const ConnectionAppSecretShape = declared(
-  z.union([
-    z.object({
-      appId: z.string(),
-      clientId: z.string().optional(),
-      clientSecret: z.string().optional(),
-      installationId: z.string().optional(),
-      privateKey: z.string(),
-      service: z.literal("github"),
-      slug: z.string().optional(),
-      webhookSecret: z.string().optional(),
-    }),
-    z.object({
-      clientId: z.string(),
-      clientSecret: z.string(),
-      service: z.literal("linear"),
-    }),
-  ]),
-  "ConnectionAppSecret",
-  "packages/hub/src/db/stored-types.ts"
-);
-export type ConnectionAppSecretOutput = z.output<
-  typeof ConnectionAppSecretShape
->;
-
-const OAuthClientInformationShape = declared(
-  OAuthClientInformationPublished,
-  "OAuthClientInformation",
-  "@modelcontextprotocol/sdk/shared/auth"
-);
-export type OAuthClientInformationOutput = z.output<
-  typeof OAuthClientInformationShape
->;
-
-const OAuthClientInformationFullShape = declared(
-  OAuthClientInformationFullPublished,
-  "OAuthClientInformationFull",
-  "@modelcontextprotocol/sdk/shared/auth"
-);
-export const OAuthClientInformationFullSchema: z.ZodType<OAuthClientInformationFullType> =
-  OAuthClientInformationFullShape;
-export type OAuthClientInformationFullOutput = z.output<
-  typeof OAuthClientInformationFullShape
->;
-
-const OAuthClientInformationMixedShape = declared(
-  z.union([OAuthClientInformationFullShape, OAuthClientInformationShape]),
-  "OAuthClientInformationMixed",
-  "@modelcontextprotocol/sdk/shared/auth"
-);
-export type OAuthClientInformationMixedOutput = z.output<
-  typeof OAuthClientInformationMixedShape
->;
-
-const OAuthTokensShape = declared(
-  OAuthTokensPublished,
-  "OAuthTokens",
-  "@modelcontextprotocol/sdk/shared/auth"
-);
-export const OAuthTokensSchema: z.ZodType<OAuthTokensType> = OAuthTokensShape;
-export type OAuthTokensOutput = z.output<typeof OAuthTokensShape>;
-
-const ConnectionSecretShape = declared(
-  z.object({
-    app: ConnectionAppSecretShape.optional(),
-    client: OAuthClientInformationMixedShape.optional(),
-    device: z
-      .object({
-        deviceCode: z.string(),
-        expiresAt: z.number(),
-        interval: z.number(),
-        userCode: z.string(),
-        verificationUri: z.string(),
-      })
-      .optional(),
-    gh: z
-      .object({ host: z.string(), login: z.string(), machineId: z.string() })
-      .optional(),
-    key: z.string().optional(),
-    org: z.string().optional(),
-    tokens: OAuthTokensShape.optional(),
-    verifier: z.string().optional(),
-  }),
-  "ConnectionSecret",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const ConnectionSecretSchema: z.ZodType<ConnectionSecretType> =
-  ConnectionSecretShape;
-export type ConnectionSecretOutput = z.output<typeof ConnectionSecretShape>;
 
 const ContinueRequestShape = declared(
   z.object({
@@ -589,6 +499,37 @@ export const MoveStateShape = declared(
 );
 export type MoveStateOutput = z.output<typeof MoveStateShape>;
 
+const OAuthClientInformationFullShape = declared(
+  OAuthClientInformationFullPublished,
+  "OAuthClientInformationFull",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
+export const OAuthClientInformationFullSchema: z.ZodType<OAuthClientInformationFullType> =
+  OAuthClientInformationFullShape;
+export type OAuthClientInformationFullOutput = z.output<
+  typeof OAuthClientInformationFullShape
+>;
+
+const OAuthClientInformationShape = declared(
+  OAuthClientInformationPublished,
+  "OAuthClientInformation",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
+export type OAuthClientInformationOutput = z.output<
+  typeof OAuthClientInformationShape
+>;
+
+const OAuthClientInformationMixedShape = declared(
+  z.union([OAuthClientInformationFullShape, OAuthClientInformationShape]),
+  "OAuthClientInformationMixed",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
+export const OAuthClientInformationMixedSchema: z.ZodType<OAuthClientInformationMixedType> =
+  OAuthClientInformationMixedShape;
+export type OAuthClientInformationMixedOutput = z.output<
+  typeof OAuthClientInformationMixedShape
+>;
+
 const OAuthProtectedResourceMetadataShape = declared(
   OAuthProtectedResourceMetadataPublished,
   "OAuthProtectedResourceMetadata",
@@ -621,6 +562,14 @@ export const OAuthDiscoveryStateSchema: z.ZodType<OAuthDiscoveryStateType> =
 export type OAuthDiscoveryStateOutput = z.output<
   typeof OAuthDiscoveryStateShape
 >;
+
+const OAuthTokensShape = declared(
+  OAuthTokensPublished,
+  "OAuthTokens",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
+export const OAuthTokensSchema: z.ZodType<OAuthTokensType> = OAuthTokensShape;
+export type OAuthTokensOutput = z.output<typeof OAuthTokensShape>;
 
 const OriginShape = declared(
   z.enum(["you", "event"]),

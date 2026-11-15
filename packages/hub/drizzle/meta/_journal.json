@@ -2878,6 +2878,20 @@
       "when": 1794742457978,
       "tag": "0418_session_plan_rows",
       "breakpoints": true
+    },
+    {
+      "idx": 419,
+      "version": "6",
+      "when": 1794744994165,
+      "tag": "0419_connection_secret_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 420,
+      "version": "6",
+      "when": 1794745003338,
+      "tag": "0420_connection_sealed_dropped",
+      "breakpoints": true
     }
   ]
 }

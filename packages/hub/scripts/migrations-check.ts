@@ -28,7 +28,9 @@
  * database before landing. Its hub's `secrets.key` is copied beside the copy,
  * so its sealed values open as they do on that hub. Its hub opens no port
  * and dials nothing (hub-in-process.ts), so it runs beside the live hub on
- * the live hub's own machine and network and leaves both alone.
+ * the live hub's own machine and network and leaves both alone. A fixture
+ * is checked with the fixtures' key beside it (hub-in-process.ts
+ * `writeFixtureKey`), the one its values were sealed under.
  */
 import { Database } from "bun:sqlite";
 import {
@@ -63,7 +65,7 @@ import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
 import type { OwnedOp, OwnedRow } from "../src/db/owned-rows";
 import { type OwnerKind, ownerOf } from "../src/db/owner-columns";
 import { PROGRAM_FILE } from "../src/decision-program";
-import { hubInProcess } from "./hub-in-process";
+import { hubInProcess, writeFixtureKey } from "./hub-in-process";
 import { baseRefOf } from "./openapi-inputs";
 import { type Baseline, newestNightly } from "./shipped";
 import { storedRows, storedRowsReport } from "./stored-rows";
@@ -481,6 +483,124 @@ const identityCases = async (
     `case A: ${older.tag} unapplied behind ${journal.at(-1)?.tag}: applied, recorded, every declared table and column there`
   );
   return said;
+};
+
+/** A database opened as the hub opens it, in a process of its own whose hub key is the one beside `path` (secret-box.ts reads it beside CAWCO_DB_PATH, set before the hub's modules load). */
+const openAsHubAlone = (path: string): void => {
+  const run = Bun.spawnSync(
+    [process.execPath, import.meta.path, "--open-as-hub", path],
+    {
+      cwd: HUB,
+      env: {
+        ...process.env,
+        CAWCO_DB_PATH: path,
+        CAWCO_NO_MDNS: "1",
+        HOME: join(dirname(path), "home"),
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    }
+  );
+  if (run.exitCode !== 0) {
+    throw new Error(
+      `the hub did not open ${path}: ${run.stderr.toString().slice(-600)}`
+    );
+  }
+};
+
+/** Each live connection's and sign-in's stored value in `column`, by its row, of the database at `path`. */
+const sealedValues = (
+  path: string,
+  connections: string,
+  pending: string
+): Map<string, string> => {
+  const sqlite = new Database(path, { readwrite: true });
+  const rows = sqlite
+    .query<{ key: string; value: string }, []>(
+      `SELECT 'connection ' || id AS key, ${connections} AS value FROM connections WHERE ${connections} IS NOT NULL UNION ALL SELECT 'sign-in ' || name, ${pending} FROM fleet_mcp_oauth WHERE ${pending} IS NOT NULL`
+    )
+    .all();
+  sqlite.close();
+  return new Map(rows.map((row) => [row.key, row.value]));
+};
+
+/**
+ * KEY ABSENT, THEN RESTORED, on a scratch copy of the fixture before 0420
+ * (db/sealed-facts-unread.ts): opened as the hub opens it with no key file
+ * beside it, every sealed connection and sign-in under way is kept as
+ * stored, byte for byte, in `sealed_unread` or `pending_unread`, none
+ * deleted, and the hub opens; opened again with the fixtures' key put back,
+ * the start's read again places exactly what reads with that key, as 0420
+ * places it with the key there from the start. One line.
+ */
+const keyCase = async (): Promise<string> => {
+  const dir = join(scratch, "case-key");
+  mkdirSync(join(dir, "home"), { recursive: true });
+  const path = join(dir, "hub.db");
+  await Bun.write(
+    path,
+    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
+  );
+  const probe = new Database(path, { readwrite: true });
+  const holds =
+    probe
+      .query<{ there: number }, []>(
+        "SELECT (SELECT count(*) FROM pragma_table_info('connections') WHERE name = 'sealed') + (SELECT count(*) FROM pragma_table_info('fleet_mcp_oauth') WHERE name = 'pending') + (SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'config_trash') AS there"
+      )
+      .get()?.there === 3;
+  probe.close();
+  if (!holds) {
+    return `case key absent, then restored: the ${FIXTURE_NAME} fixture's schema is before connections' sealed values, so nothing is sealed to keep; the lists fixture runs it`;
+  }
+  const { hubSecrets, isSealed } = await import("../src/secret-box");
+  const { sealedFactsKept } = await import("../src/db/sealed-facts-unread");
+  const stored = sealedValues(path, "sealed", "pending");
+  const sealed = [...stored].filter(([, value]) => isSealed(value));
+  // What 0420 places with the fixtures' key there from the start: the key
+  // this process's hub holds (writeFixtureKey, beside its database).
+  const before = new Database(path, { readwrite: true });
+  const reads = sealedFactsKept(before, hubSecrets, "migration");
+  before.close();
+  const readsWhole = new Set(
+    [
+      ...reads.connections.flatMap((one) =>
+        one.trash === undefined && one.reading.kind === "placed"
+          ? [`connection ${one.id}`]
+          : []
+      ),
+      ...reads.pending.flatMap((one) =>
+        one.trash === undefined && one.reading.kind === "placed"
+          ? [`sign-in ${one.id}`]
+          : []
+      ),
+    ].filter((key) => isSealed(stored.get(key) ?? ""))
+  );
+  openAsHubAlone(path);
+  const kept = sealedValues(path, "sealed_unread", "pending_unread");
+  const lost = sealed.filter(([key, value]) => kept.get(key) !== value);
+  if (lost.length > 0) {
+    throw new Error(
+      `case key absent: ${lost.map(([key]) => key).join(", ")} not kept as stored with no key`
+    );
+  }
+  rmSync(join(dir, "secrets.key"), { force: true });
+  writeFixtureKey(dir);
+  openAsHubAlone(path);
+  const still = sealedValues(path, "sealed_unread", "pending_unread");
+  const placed = sealed.filter(([key]) => !still.has(key)).map(([key]) => key);
+  const wrong = [
+    ...placed.filter((key) => !readsWhole.has(key)),
+    ...[...readsWhole].filter((key) => still.has(key)),
+  ];
+  if (wrong.length > 0) {
+    throw new Error(
+      `case key restored: ${wrong.join(", ")} placed otherwise than with the key there from the start`
+    );
+  }
+  const of = (keys: string[], kind: string) =>
+    keys.filter((key) => key.startsWith(kind)).length;
+  const sealedKeys = sealed.map(([key]) => key);
+  return `case key absent, then restored: ${sealed.length} sealed value(s) (${of(sealedKeys, "connection")} connection(s), ${of(sealedKeys, "sign-in")} sign-in(s)) kept as stored with no key, none deleted or rewritten, the hub opened; with the fixtures' key back, ${of(placed, "connection")} connection(s) and ${of(placed, "sign-in")} sign-in(s) placed at the next start, ${sealed.length - placed.length} still not read, as with the key there from the start`;
 };
 
 /**
@@ -915,6 +1035,17 @@ const misplacedSteps = async (
   return problems;
 };
 
+const opening = process.argv.indexOf("--open-as-hub");
+if (opening !== -1) {
+  // {@link openAsHubAlone}'s own process: the database opened, nothing else.
+  try {
+    await openAsHub(process.argv[opening + 1] ?? "");
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  process.exit(0);
+}
+
 try {
   const { entries } = (await Bun.file(
     join(HUB, "drizzle/meta/_journal.json")
@@ -979,6 +1110,8 @@ try {
       dbPath,
       Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
     );
+    // The key the fixture's hub sealed its values under, beside it.
+    writeFixtureKey(scratch);
   }
   const before = read(dbPath);
   // A move runs on this database when its migration was pending before the
@@ -1140,6 +1273,9 @@ try {
     throw new Error(unowned.join("\n"));
   }
   const cases = await identityCases(dbPath, journal);
+  if (!GIVEN) {
+    cases.push(await keyCase());
+  }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(

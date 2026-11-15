@@ -1,4 +1,21 @@
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+/**
+ * The fixtures' hub key (secret-box.ts, `secrets.key`): 32 bytes made from
+ * a fixed phrase, a key for made-up values only. fixture-db.ts writes it
+ * beside the database it seeds, so every value the fixture's hub seals is
+ * sealed under it; migrations-check.ts writes it beside the fixture it
+ * unpacks, so the hub started there opens them as that hub did.
+ */
+export const writeFixtureKey = (dir: string): void => {
+  writeFileSync(
+    join(dir, "secrets.key"),
+    createHash("sha256").update("cawco fixture hub key").digest(),
+    { mode: 0o600 }
+  );
+};
 
 /**
  * A hub built in this process on a database file of the caller's: its
