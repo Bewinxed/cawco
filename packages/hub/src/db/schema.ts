@@ -2079,9 +2079,12 @@ export const queuedWorkItems = sqliteTable(
      * A request that was kept and did not read as a `QueuedRequest` when the
      * column gained its schema (migration 0405), as it was stored, `request`
      * null beside it. The delegate is held: it never starts, its parent is
-     * told why, and it waits in the tray until its parent withdraws it.
+     * told why once (`held_told_at`), and it waits in the tray until its
+     * parent withdraws it.
      */
     requestUnread: text("request_unread"),
+    /** When a held one's parent was told it is held (work-items.ts `startQueued`); null: not yet, or not held. */
+    heldToldAt: timestamp("held_told_at"),
     /** The project of the task it starts (`task.projectId`); null for no task. */
     projectId: projectColumn("project_id").references(() => projects.id, {
       onDelete: "cascade",

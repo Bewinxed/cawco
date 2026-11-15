@@ -1361,9 +1361,10 @@ export interface WorkItemSummary {
    * While it waits to start: the files it owns, which a live item owns too
    * (`src/theme/**`), and the pause of the machine it starts on ("obelisk is
    * paused until 00:57"), when that is what it waits for; null once it has
-   * started.
+   * started. `unread`: held, never started, its kept call as stored, which
+   * does not read as a delegate call (hub queued_work_items.request_unread).
    */
-  queued: { owns: string[]; paused: string | null } | null;
+  queued: { owns: string[]; paused: string | null; unread?: string } | null;
   /** The later item of the same tray the reader said took over its work; null otherwise. */
   replacedBy: string | null;
   /**
