@@ -1022,10 +1022,12 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
     accountId: string
   ): boolean => {
-    const last = ctx.db.atLimit
-      .events([row.id])
-      .findLast((one) => one.move.kind === "moved")?.move;
-    if (last?.kind === "moved" && last.asked) {
+    // A line that does not read could be a person's move there: it stays.
+    const last = ctx.db.atLimit.latestEvent(row.id, "moved");
+    if (
+      last &&
+      (last.move === null || (last.move.kind === "moved" && last.move.asked))
+    ) {
       return true;
     }
     const project = row.projectId ? ctx.db.project(row.projectId) : undefined;

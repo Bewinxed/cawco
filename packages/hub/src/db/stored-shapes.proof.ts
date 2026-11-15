@@ -19,6 +19,7 @@ import type {
   OpenIdProviderDiscoveryMetadata as OpenIdProviderDiscoveryMetadataType,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type {
+  AccountMoveBodyOutput,
   AgentAuthOutput,
   AgentStatusOutput,
   ArtifactChangeByOutput,
@@ -42,7 +43,6 @@ import type {
   InstallsRecordOutput,
   InstanceKindOutput,
   InstanceTitleSourceOutput,
-  ItemBlockOutput,
   KeepAliveStoppedOutput,
   LandingPhaseOutput,
   LfsOfferAnswerOutput,
@@ -87,10 +87,10 @@ import type {
   WorkBudgetOutput,
   WorkItemSubmissionOutput,
   WorkOriginOutput,
-  WorkspaceFromOutput,
   WorkspaceStateOutput,
 } from "./stored-shapes";
 import type {
+  AccountMoveBody as AccountMoveBodyType,
   AgentAuth as AgentAuthType,
   AgentStatus as AgentStatusType,
   ArtifactChangeBy as ArtifactChangeByType,
@@ -113,7 +113,6 @@ import type {
   InstallsRecord as InstallsRecordType,
   InstanceKind as InstanceKindType,
   InstanceTitleSource as InstanceTitleSourceType,
-  ItemBlock as ItemBlockType,
   KeepAliveStopped as KeepAliveStoppedType,
   LandingPhase as LandingPhaseType,
   LfsOfferAnswer as LfsOfferAnswerType,
@@ -149,7 +148,6 @@ import type {
   WorkBudget as WorkBudgetType,
   WorkItemSubmission as WorkItemSubmissionType,
   WorkOrigin as WorkOriginType,
-  WorkspaceFrom as WorkspaceFromType,
   WorkspaceState as WorkspaceStateType,
 } from "./stored-types";
 
@@ -175,6 +173,7 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
+    Same<AccountMoveBodyOutput, AccountMoveBodyType>,
     Same<AgentAuthOutput, AgentAuthType>,
     Same<AgentStatusOutput, AgentStatusType>,
     Same<ArtifactChangeByOutput, ArtifactChangeByType>,
@@ -207,7 +206,6 @@ prove<
     Same<InstallsRecordOutput, InstallsRecordType>,
     Same<InstanceKindOutput, InstanceKindType>,
     Same<InstanceTitleSourceOutput, InstanceTitleSourceType>,
-    Same<ItemBlockOutput, ItemBlockType>,
     Same<KeepAliveStoppedOutput, KeepAliveStoppedType>,
     Same<LandingPhaseOutput, LandingPhaseType>,
     Same<LfsOfferAnswerOutput, LfsOfferAnswerType>,
@@ -249,7 +247,6 @@ prove<
     Same<TrimOfferAnswerOutput, TrimOfferAnswerType>,
     Same<WorkItemSubmissionOutput, WorkItemSubmissionType>,
     Same<WorkOriginOutput, WorkOriginType>,
-    Same<WorkspaceFromOutput, WorkspaceFromType>,
     Same<WorkspaceStateOutput, WorkspaceStateType>,
   ]
 >();

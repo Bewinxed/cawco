@@ -37,6 +37,7 @@ import {
 } from "./schema";
 import type {
   GatePass,
+  ItemBlock,
   QueuedRequest,
   WorkLanding,
   WorkspaceState,
@@ -150,6 +151,29 @@ export const projectWorkDb = (db: BunSQLiteDatabase): ProjectWorkDb => ({
 export type WorkItemRow = typeof workItems.$inferSelect;
 
 /**
+ * Whether an item is blocked ({@link itemBlockOf}): by a block that reads,
+ * or by one that did not read as blocks became columns (schema.ts
+ * `workItems.blockedUnread`), which holds it blocked all the same.
+ */
+export const isBlocked = (
+  item: Pick<WorkItemRow, "blockedKind" | "blockedUnread">
+): boolean => item.blockedKind !== null || item.blockedUnread !== null;
+
+/** An item's block as its columns hold it; null when it has none that reads. */
+export const itemBlockOf = (
+  item: Pick<WorkItemRow, "blockedKind" | "blockedName" | "blockedSince">
+): ItemBlock | null =>
+  item.blockedKind !== null &&
+  item.blockedName !== null &&
+  item.blockedSince !== null
+    ? {
+        kind: item.blockedKind,
+        name: item.blockedName,
+        since: item.blockedSince.getTime(),
+      }
+    : null;
+
+/**
  * Whether any of an item's work landed: its landing recorded the commit
  * pushed, or its landing is there and did not read as landings became
  * columns (schema.ts `workItems.landedUnread`), which holds it landed so it
@@ -181,7 +205,10 @@ export type WorkItemChange = Partial<
     | "replacedBy"
     | "landingSince"
     | "landingPhase"
-    | "blocked"
+    | "blockedKind"
+    | "blockedName"
+    | "blockedSince"
+    | "blockedUnread"
     | "lastTurnAt"
     | "submission"
     | "waitUntil"
@@ -271,6 +298,8 @@ export interface WorkRowsDb {
   ) => WorkspaceRow[];
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
+  /** The live work items that are blocked ({@link isBlocked}), oldest first. */
+  readonly blockedWorkItems: () => WorkItemRow[];
   /**
    * Work item `itemId` moves from session `from` to session `to`, a
    * continuation of it: the item and `to`'s row name each other, and
@@ -404,7 +433,9 @@ export interface WorkRowsDb {
         | "boundaryPid"
         | "branch"
         | "carry"
-        | "cutFrom"
+        | "cutFromCommit"
+        | "cutFromLanded"
+        | "cutFromWorkspace"
         | "head"
         | "heldAt"
         | "holding"
@@ -433,7 +464,7 @@ export interface WorkRowsDb {
   ) => (typeof workspaceCreates.$inferSelect)[];
   /** The outputs every item of a workspace declared, each once. */
   readonly workspaceOutputs: (workspaceId: string) => string[];
-  /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFrom`), in any state. */
+  /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFromWorkspace`), in any state. */
   readonly workspacesCutFrom: (workspaceId: string) => WorkspaceRow[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
@@ -668,6 +699,21 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
         .select()
         .from(workItems)
         .where(inArray(workItems.state, ["starting", "running"]))
+        .orderBy(workItems.createdAt)
+        .all(),
+    blockedWorkItems: () =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(
+            or(
+              isNotNull(workItems.blockedKind),
+              isNotNull(workItems.blockedUnread)
+            ),
+            inArray(workItems.state, ["starting", "running"])
+          )
+        )
         .orderBy(workItems.createdAt)
         .all(),
     groupWorkItems: (parentInstanceId, group) =>
@@ -988,9 +1034,7 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
       db
         .select()
         .from(workspaces)
-        .where(
-          sql`json_extract(${workspaces.cutFrom}, '$.workspace') = ${workspaceId}`
-        )
+        .where(eq(workspaces.cutFromWorkspace, workspaceId))
         .all(),
     updateWorkspace: (id, change) =>
       db

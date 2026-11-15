@@ -78,6 +78,7 @@ import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import { isProjectConversation, type ProjectEvent } from "./caw";
 import type { DbShape } from "./db";
+import { isBlocked } from "./db/project-work";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
 import { defineTool, sentence } from "./mcp-tool";
@@ -1088,7 +1089,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       const item = row?.workItemId
         ? deps.db.workItem(row.workItemId)
         : undefined;
-      if (item?.blocked) {
+      if (item && isBlocked(item)) {
         return;
       }
       dropNotice(id);

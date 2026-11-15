@@ -101,12 +101,20 @@ export const foldDb = (core: DbCore): FoldDb => {
     const ids = members.map((member) => member.id);
     const gone = formers.map((member) => member.id);
     const continued = tx
-      .select()
+      .select({
+        id: limitEvents.id,
+        instanceId: limitEvents.instanceId,
+        at: limitEvents.at,
+      })
       .from(limitEvents)
-      .where(inArray(limitEvents.instanceId, ids))
+      .where(
+        and(
+          inArray(limitEvents.instanceId, ids),
+          eq(limitEvents.kind, "continued")
+        )
+      )
       .orderBy(asc(limitEvents.at))
-      .all()
-      .filter((event) => event.move.kind === "continued");
+      .all();
     const opened = new Map<string, string>();
     for (const member of members) {
       const first = continued.find((event) => event.instanceId === member.id);

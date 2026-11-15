@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_MOVE_KINDS,
   ACCOUNT_SETUP_STEPS,
   type AccountProvider,
   PROJECT_AT_LIMIT,
@@ -167,6 +168,7 @@ import { hubSecrets, openOrNull } from "../secret-box";
 import { storedEnum, storedJson } from "../stored-json";
 import { machineColumn, projectColumn, sessionColumn } from "./owner-columns";
 import {
+  AccountMoveBodySchema,
   AgentAuthSchema,
   AgentStatusSchema,
   ArtifactChangeBySchema,
@@ -186,7 +188,6 @@ import {
   InboundViaSchema,
   InstanceKindSchema,
   InstanceTitleSourceSchema,
-  ItemBlockSchema,
   KeepAliveStoppedSchema,
   LandingPhaseSchema,
   LfsOfferAnswerSchema,
@@ -222,10 +223,9 @@ import {
   TrimOfferAnswerSchema,
   WorkItemSubmissionSchema,
   WorkOriginSchema,
-  WorkspaceFromSchema,
   WorkspaceStateSchema,
 } from "./stored-shapes";
-import type { SessionLineKind } from "./stored-types";
+import type { ItemBlock, SessionLineKind } from "./stored-types";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 /** A time column a row's insert stamps with now, unless given one. */
@@ -966,6 +966,13 @@ export type PlaceKind = "checkout" | "hub";
  */
 export const PLACE_KINDS = everyOf<PlaceKind>()(["checkout", "hub"]);
 
+/** What a blocked work item is missing ({@link ItemBlock} `kind`). */
+const ITEM_BLOCK_KINDS = everyOf<ItemBlock["kind"]>()([
+  "type",
+  "machine",
+  "account",
+]);
+
 /** {@link PLACE_KINDS} as a column's set, typed by its name, which the API's schema reads. */
 const PlaceKindSchema: z.ZodType<PlaceKind> = z.enum(PLACE_KINDS);
 
@@ -1599,118 +1606,142 @@ export const workspaceCreates = sqliteTable("workspace_creates", {
  * stopping or discarding a session never removes it; archiving does, which
  * the hub does itself once the work lands (stored-types.ts `WorkspaceState`).
  */
-export const workspaces = sqliteTable("workspaces", {
-  id: text("id").primaryKey(),
-  machineId: machineColumn("machine_id").notNull(),
-  /** The folder the workspace was made from: a repository's root, or any folder (agent layer.ts). */
-  repoRoot: text("repo_root").$type<MachinePath>().notNull(),
-  /**
-   * Where every work item of the workspace runs: the folder itself, seen
-   * through the workspace's own view of it (Linux), or its clone (macOS, and
-   * every workspace cut before layers).
-   */
-  path: text("path").$type<MachinePath>().notNull(),
-  /** `ws/<id8>` in a repository; empty for a folder. */
-  branch: text("branch").notNull(),
-  /**
-   * What it was made from: a repository's root, which lands by git, or any
-   * other folder, which lands by its change set (core `WorkspaceKind`).
-   * Every workspace made before folders was a repository's.
-   */
-  kind: storedEnum(WorkspaceKindSchema)("kind").notNull().default("repo"),
-  /**
-   * The repository's default branch the clone was cut from, which its work
-   * lands on. Every workspace cut before this was recorded was cut from
-   * `origin/main`, which is what the default says of those rows.
-   */
-  base: text("base").notNull().default("main"),
-  /**
-   * The boundary's anchor (Linux) or runner (macOS), as the machine last
-   * named it to the hub: when the workspace was made, and as each follow-up
-   * started. Null once archived.
-   */
-  boundaryPid: integer("boundary_pid"),
-  state: storedEnum(WorkspaceStateSchema)("state").notNull().default("active"),
-  /**
-   * The workspace's scratch dir on its machine, its commands' `TMPDIR`, as
-   * the machine named it when the workspace was cut. Null for a workspace
-   * cut before this was recorded.
-   */
-  tmp: text("tmp"),
-  createdByInstanceId: sessionColumn("created_by_instance_id").notNull(),
-  /**
-   * The workspace whose landing gate step this one runs on a machine other
-   * than that one's (the iOS build on a Mac): a gate workspace, cut there the
-   * first time one of its items' gates needs the machine, and archived with
-   * it. Null for a delegate's.
-   */
-  checksFor: text("checks_for"),
-  /**
-   * The place whose sheets' stage runs in this workspace: a stage clone, cut
-   * by its machine from the checkout a session with no workspace works in
-   * (agent stage-clone.ts) and filed on its word (core `StageCloneFrame`).
-   * It has no work items; it settles once that stage sleeps
-   * (workspaces.ts `settle`), and the next sheet cuts it again. Null for a
-   * delegate's.
-   */
-  stageFor: text("stage_for"),
-  /**
-   * A host-scope delegate's (work-items.ts `startHost`): no clone and no
-   * boundary. `path` (and `repoRoot`) is the folder on the machine its
-   * session runs in, on the host, with the machine's own network, processes
-   * and the agent user's groups. Nothing is cut, landed, held or archived
-   * for it: no machine call names its folder, its row is where its items
-   * ran. Its scratch dir is its sessions' `TMPDIR` all the same (agent
-   * host-scratch.ts), settled once nothing of it is attached (workspaces.ts
-   * `settleHost`). Never listed among a machine's active or live workspaces.
-   */
-  host: integer("host", { mode: "boolean" }).notNull().default(false),
-  /**
-   * What its clone held that is nowhere else when it was filed `held`, as
-   * its machine read it once its boundary was closed; null in any other
-   * state.
-   */
-  holding: storedJson(WorkspaceHoldingSchema)(
-    "holding"
-  ).$type<WorkspaceHolding>(),
-  /** When {@link workspaces.holding} was read. */
-  heldAt: timestamp("held_at"),
-  /**
-   * The commit its clone's HEAD was on when it retired, on `origin`'s branch
-   * that held it then, as its machine read it right before deleting the
-   * clone (agent workspace.ts `headOnOrigin`): a retired workspace is cut
-   * again there for its delegate to go on, and one with none is not cut
-   * again (workspaces.ts `recuttable`). One whose item landed none retires
-   * with its commits in a carry: its head names that carry, and where its
-   * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
-   * it retires.
-   */
-  head: storedJson(WorkspaceCutSchema)("head").$type<WorkspaceCut>(),
-  /**
-   * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
-   * workspaces.ts `recut`; rebased as it landed, landing-run.ts `landOnBase`)
-   * while no message has been handed to a session of it since: the next one opens
-   * with the hub's line naming the move and the install to run (core
-   * injected.ts `withMovedLine`), and clears it. Null otherwise. Kept on the
-   * row, so a hub restart between the move and that message still says it.
-   */
-  movedUntold:
-    storedJson(CheckoutMoveSchema)("moved_untold").$type<CheckoutMove>(),
-  /**
-   * The carry its machine wrote as it went: a discard's, its parent or the
-   * person letting its unlanded work go, which is never cut again; or its
-   * retirement's, its items landing none, which a cut again restores
-   * (`head.carry`).
-   */
-  carry: text("carry"),
-  /**
-   * The workspace a `delegate` call's `from` cut this one from, and the
-   * commit its clone started at (workspaces.ts `cutFrom`); null for one cut
-   * from its repository.
-   */
-  cutFrom: storedJson(WorkspaceFromSchema)("cut_from"),
-  createdAt: stampedNow("created_at"),
-});
+export const workspaces = sqliteTable(
+  "workspaces",
+  {
+    id: text("id").primaryKey(),
+    machineId: machineColumn("machine_id").notNull(),
+    /** The folder the workspace was made from: a repository's root, or any folder (agent layer.ts). */
+    repoRoot: text("repo_root").$type<MachinePath>().notNull(),
+    /**
+     * Where every work item of the workspace runs: the folder itself, seen
+     * through the workspace's own view of it (Linux), or its clone (macOS, and
+     * every workspace cut before layers).
+     */
+    path: text("path").$type<MachinePath>().notNull(),
+    /** `ws/<id8>` in a repository; empty for a folder. */
+    branch: text("branch").notNull(),
+    /**
+     * What it was made from: a repository's root, which lands by git, or any
+     * other folder, which lands by its change set (core `WorkspaceKind`).
+     * Every workspace made before folders was a repository's.
+     */
+    kind: storedEnum(WorkspaceKindSchema)("kind").notNull().default("repo"),
+    /**
+     * The repository's default branch the clone was cut from, which its work
+     * lands on. Every workspace cut before this was recorded was cut from
+     * `origin/main`, which is what the default says of those rows.
+     */
+    base: text("base").notNull().default("main"),
+    /**
+     * The boundary's anchor (Linux) or runner (macOS), as the machine last
+     * named it to the hub: when the workspace was made, and as each follow-up
+     * started. Null once archived.
+     */
+    boundaryPid: integer("boundary_pid"),
+    state: storedEnum(WorkspaceStateSchema)("state")
+      .notNull()
+      .default("active"),
+    /**
+     * The workspace's scratch dir on its machine, its commands' `TMPDIR`, as
+     * the machine named it when the workspace was cut. Null for a workspace
+     * cut before this was recorded.
+     */
+    tmp: text("tmp"),
+    createdByInstanceId: sessionColumn("created_by_instance_id").notNull(),
+    /**
+     * The workspace whose landing gate step this one runs on a machine other
+     * than that one's (the iOS build on a Mac): a gate workspace, cut there the
+     * first time one of its items' gates needs the machine, and archived with
+     * it. Null for a delegate's.
+     */
+    checksFor: text("checks_for"),
+    /**
+     * The place whose sheets' stage runs in this workspace: a stage clone, cut
+     * by its machine from the checkout a session with no workspace works in
+     * (agent stage-clone.ts) and filed on its word (core `StageCloneFrame`).
+     * It has no work items; it settles once that stage sleeps
+     * (workspaces.ts `settle`), and the next sheet cuts it again. Null for a
+     * delegate's.
+     */
+    stageFor: text("stage_for"),
+    /**
+     * A host-scope delegate's (work-items.ts `startHost`): no clone and no
+     * boundary. `path` (and `repoRoot`) is the folder on the machine its
+     * session runs in, on the host, with the machine's own network, processes
+     * and the agent user's groups. Nothing is cut, landed, held or archived
+     * for it: no machine call names its folder, its row is where its items
+     * ran. Its scratch dir is its sessions' `TMPDIR` all the same (agent
+     * host-scratch.ts), settled once nothing of it is attached (workspaces.ts
+     * `settleHost`). Never listed among a machine's active or live workspaces.
+     */
+    host: integer("host", { mode: "boolean" }).notNull().default(false),
+    /**
+     * What its clone held that is nowhere else when it was filed `held`, as
+     * its machine read it once its boundary was closed; null in any other
+     * state.
+     */
+    holding: storedJson(WorkspaceHoldingSchema)(
+      "holding"
+    ).$type<WorkspaceHolding>(),
+    /** When {@link workspaces.holding} was read. */
+    heldAt: timestamp("held_at"),
+    /**
+     * The commit its clone's HEAD was on when it retired, on `origin`'s branch
+     * that held it then, as its machine read it right before deleting the
+     * clone (agent workspace.ts `headOnOrigin`): a retired workspace is cut
+     * again there for its delegate to go on, and one with none is not cut
+     * again (workspaces.ts `recuttable`). One whose item landed none retires
+     * with its commits in a carry: its head names that carry, and where its
+     * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
+     * it retires.
+     */
+    head: storedJson(WorkspaceCutSchema)("head").$type<WorkspaceCut>(),
+    /**
+     * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
+     * workspaces.ts `recut`; rebased as it landed, landing-run.ts `landOnBase`)
+     * while no message has been handed to a session of it since: the next one opens
+     * with the hub's line naming the move and the install to run (core
+     * injected.ts `withMovedLine`), and clears it. Null otherwise. Kept on the
+     * row, so a hub restart between the move and that message still says it.
+     */
+    movedUntold:
+      storedJson(CheckoutMoveSchema)("moved_untold").$type<CheckoutMove>(),
+    /**
+     * The carry its machine wrote as it went: a discard's, its parent or the
+     * person letting its unlanded work go, which is never cut again; or its
+     * retirement's, its items landing none, which a cut again restores
+     * (`head.carry`).
+     */
+    carry: text("carry"),
+    /**
+     * The workspace a `delegate` call's `from` cut this one from
+     * (workspaces.ts `cutFrom`): its takers are found by it. Null, with
+     * {@link workspaces.cutFromCommit} and {@link workspaces.cutFromLanded},
+     * for one cut from its repository.
+     */
+    cutFromWorkspace: text("cut_from_workspace"),
+    /** That workspace's HEAD as this clone took it. */
+    cutFromCommit: text("cut_from_commit"),
+    /**
+     * Whether this workspace's landing put every patch of that commit's work
+     * on the base branch (landing-run.ts `vouchLanded`): then the source holds
+     * none of it as its own, and an archive is told so (core
+     * `WorkspaceArchive.landed`).
+     */
+    cutFromLanded: integer("cut_from_landed", { mode: "boolean" }),
+    /**
+     * Where it was cut from as it was stored, when that was there and did not
+     * read whole as it became columns (migration 0411): not JSON, not an
+     * object, or a field that is not its type. Nothing of it is placed: no
+     * source finds it among its takers, so none counts its commit as landed
+     * by it and the source stays held with its work as its own.
+     */
+    cutFromUnread: text("cut_from_unread"),
+    createdAt: stampedNow("created_at"),
+  },
+  (table) => [index("workspaces_cut_from").on(table.cutFromWorkspace)]
+);
 
 /** A work item's life. Only `starting` and `running` take messages. */
 export type WorkItemState = import("@cawco/core/work-items").WorkItemState;
@@ -1855,11 +1886,26 @@ export const workItems = sqliteTable(
     lastTurnAt: timestamp("last_turn_at"),
     /**
      * Its session cannot be started again: its delegate type, its machine or
-     * its account is missing ({@link ItemBlock}). Live and blocked, never
-     * failed for it: what it is sent waits at the hub, and it shows in Needs
-     * you until the missing thing is back. Null otherwise.
+     * its account is missing ({@link ItemBlock}), and which. Live and
+     * blocked, never failed for it: what it is sent waits at the hub, and it
+     * shows in Needs you until the missing thing is back. Null otherwise,
+     * with {@link workItems.blockedName} and {@link workItems.blockedSince}.
      */
-    blocked: storedJson(ItemBlockSchema)("blocked"),
+    blockedKind: storedEnum(z.enum(ITEM_BLOCK_KINDS))("blocked_kind"),
+    /** The missing thing as a person names it: the type's name, the machine's, the account's. */
+    blockedName: text("blocked_name"),
+    /** When the hub found it missing. */
+    blockedSince: timestamp("blocked_since"),
+    /**
+     * Its block as it was stored, when it was there and did not read whole
+     * as it became columns (migration 0412): not JSON, not an object, or a
+     * field that is not its type. Nothing of it is placed, and the item is
+     * blocked all the same: what it is sent waits at the hub, and its
+     * session is not started again, until the sweep finds nothing it needs
+     * missing (work-items.ts `unblockReady`) or a start finds what is
+     * missing now and blocks it on that (`blockIfMissing`).
+     */
+    blockedUnread: text("blocked_unread"),
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),
@@ -2024,6 +2070,12 @@ export const workItems = sqliteTable(
     index("work_items_parent").on(table.parentInstanceId, table.state),
     index("work_items_task").on(table.projectId, table.taskId),
     index("work_items_landed_gate_tree").on(table.landedGateTree),
+    // The sweep's blocked items (work-items.ts `unblockReady`).
+    index("work_items_blocked")
+      .on(table.state)
+      .where(
+        sql`${table.blockedKind} IS NOT NULL OR ${table.blockedUnread} IS NOT NULL`
+      ),
   ]
 );
 
@@ -2237,6 +2289,17 @@ export const delegateEvents = sqliteTable(
   ]
 );
 
+/**
+ * A field of a send's origin (`body`'s `origin`), when the body is JSON and
+ * the field is text; null otherwise. The JSON functions sit inside a CASE
+ * that proved the body JSON: a body that is not reads as no origin, never
+ * an error on every read of its row.
+ */
+const originOf = (field: "from" | "kind" | "name") =>
+  sql.raw(
+    `CASE WHEN json_valid(body) THEN CASE WHEN json_type(body, '$.origin.${field}') = 'text' THEN json_extract(body, '$.origin.${field}') END END`
+  );
+
 export const sentMessages = sqliteTable(
   "sent_messages",
   {
@@ -2317,10 +2380,33 @@ export const sentMessages = sqliteTable(
      * this was overtaken by a later hand-off and is not owed again.
      */
     delivery: text("delivery"),
+    /**
+     * Who sent it (core `NeutralOrigin` `kind`: the person, a peer
+     * session, the hub itself), read out of {@link sentMessages.body} by
+     * SQLite as the row is read, so a session's sends are found by it with
+     * the body unread. Null when the body names none, or one whose kind is
+     * not text: a send from no one, never the person's or a peer's.
+     */
+    originKind: text("origin_kind").generatedAlwaysAs(originOf("kind"), {
+      mode: "virtual",
+    }),
+    /** Its origin's `name` (a peer's, or the hub's own line, as `keepalive`), as {@link sentMessages.originKind} is read. */
+    originName: text("origin_name").generatedAlwaysAs(originOf("name"), {
+      mode: "virtual",
+    }),
+    /** A peer's session as it signed the send (`from`), as {@link sentMessages.originKind} is read. */
+    originFrom: text("origin_from").generatedAlwaysAs(originOf("from"), {
+      mode: "virtual",
+    }),
   },
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),
     index("sent_messages_state").on(table.instanceId, table.state),
+    index("sent_messages_origin").on(
+      table.instanceId,
+      table.originKind,
+      table.acceptedAt
+    ),
   ]
 );
 
@@ -3229,8 +3315,22 @@ export const limitCompactions = sqliteTable("limit_compactions", {
    * filing's `session_lines` id (kind `context`).
    */
   lineId: text("line_id").notNull(),
-  /** The move's line as written, which each stage restates; null for a filing at the threshold. */
-  move: storedJson(AccountMoveSchema)("move"),
+  /**
+   * The move's line as written, which each stage restates, its kind in
+   * {@link limitCompactions.moveKind}; null for a filing at the threshold,
+   * and beside {@link limitCompactions.moveUnread}.
+   */
+  move: storedJson(AccountMoveBodySchema)("move"),
+  /** What the move's line says the hub did (core `AccountMove` `kind`); null with {@link limitCompactions.move}. */
+  moveKind: storedEnum(z.enum(ACCOUNT_MOVE_KINDS))("move_kind"),
+  /**
+   * The move's line as it was stored, when it was there and its kind did
+   * not read as kinds became a column (migration 0410): not JSON, not an
+   * object, or a kind that is not one of a line's. Nothing of it is placed,
+   * and the plan reads as none: it drives no move and holds nothing back
+   * (db at-limit.ts `toCompaction`). A put of the session's plan clears it.
+   */
+  moveUnread: text("move_unread"),
   /** The reading a filing at the threshold fired at; null for a move's. */
   fill: storedJson(ContextFillSchema)("fill"),
   /**
@@ -3307,9 +3407,26 @@ export const limitEvents = sqliteTable(
     id: text("id").primaryKey(),
     instanceId: sessionColumn("instance_id").notNull(),
     at: timestamp("at").notNull(),
-    move: storedJson(AccountMoveSchema)("move").notNull(),
+    /**
+     * What the line says the hub did (core `AccountMove` `kind`), found by
+     * it in SQL; null only beside {@link limitEvents.moveUnread}.
+     */
+    kind: storedEnum(z.enum(ACCOUNT_MOVE_KINDS))("kind"),
+    /** The rest of the line, put back with its kind by the row mapper (db at-limit.ts); null with {@link limitEvents.kind}. */
+    body: storedJson(AccountMoveBodySchema)("body"),
+    /**
+     * The line as it was stored, when its kind did not read as kinds became
+     * a column (migration 0410): not JSON, not an object, or a kind that is
+     * not one of a line's. Nothing of it is placed: it is in no transcript,
+     * and a read of a session's newest line that meets it reads a line it
+     * cannot say (db at-limit.ts `LimitLine`), which drives no move. The
+     * line said again under its id clears it.
+     */
+    moveUnread: text("move_unread"),
   },
-  (table) => [index("limit_events_instance_idx").on(table.instanceId)]
+  (table) => [
+    index("limit_events_instance_kind").on(table.instanceId, table.kind),
+  ]
 );
 
 /**

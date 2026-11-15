@@ -126,6 +126,8 @@ import type { HandedReceiver } from "./artifacts/shapes";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
 import {
+  isBlocked,
+  itemBlockOf,
   landedWork,
   type QueuedCall,
   type QueuedWorkItemRow,
@@ -2322,19 +2324,22 @@ export const createWorkItems = ({
     }
     const missing = missingFor(row);
     if (!missing) {
-      if (item.blocked) {
+      if (isBlocked(item)) {
         unblock(item);
       }
       return;
     }
-    if (
-      item.blocked?.kind === missing.kind &&
-      item.blocked.name === missing.name
-    ) {
-      return item.blocked;
+    const stands = itemBlockOf(item);
+    if (stands?.kind === missing.kind && stands.name === missing.name) {
+      return stands;
     }
     const block: ItemBlock = { ...missing, since: Date.now() };
-    update(item.id, { blocked: block });
+    update(item.id, {
+      blockedKind: block.kind,
+      blockedName: block.name,
+      blockedSince: new Date(block.since),
+      blockedUnread: null,
+    });
     console.log(`[work-items] ${item.id} is blocked: ${blockWords(block)}`);
     // It stands until the block clears, whatever you write to the item
     // (fleet-watch.ts `humanSend`).
@@ -2344,7 +2349,12 @@ export const createWorkItems = ({
 
   /** `item`'s block is over: its row says so, and what waited for it goes. */
   const unblock = (item: WorkItemRow): void => {
-    update(item.id, { blocked: null });
+    update(item.id, {
+      blockedKind: null,
+      blockedName: null,
+      blockedSince: null,
+      blockedUnread: null,
+    });
     untellYou(item.instanceId);
     console.log(
       `[work-items] ${item.id}: no longer blocked; what it was sent goes now`
@@ -2358,10 +2368,7 @@ export const createWorkItems = ({
    * block.
    */
   const unblockReady = (): void => {
-    for (const item of db.liveWorkItems()) {
-      if (!item.blocked) {
-        continue;
-      }
+    for (const item of db.blockedWorkItems()) {
       const [row] = db.getInstancesByIds([item.instanceId]);
       if (row && !missingFor(row)) {
         unblock(item);
@@ -6051,7 +6058,7 @@ export const createWorkItems = ({
     blockedFor(instanceId: string): boolean {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      return !!item?.blocked && LIVE.has(item.state);
+      return !!item && isBlocked(item) && LIVE.has(item.state);
     },
 
     /**

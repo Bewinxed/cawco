@@ -84,6 +84,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0405_queued_request_schemas",
     why: "a kept ask that does not read whole as an AttemptAsk moves, as stored, to asked_unread with asked null; the attempt is held, never started, and no row is deleted",
   },
+  {
+    column: "limit_compactions.move",
+    migration: "0410_limit_line_kinds",
+    why: "a plan's move loses its kind to move_kind, the rest of the line kept; one whose kind does not read moves, as stored, to move_unread with move null, and the plan reads as none",
+  },
 ];
 
 type Schema = Record<string, unknown>;

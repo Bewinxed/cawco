@@ -402,23 +402,6 @@ export type AttemptAsk = Pick<
 >;
 
 /**
- * Where a workspace cut `from` another started ({@link workspaces.cutFrom}):
- * that workspace, and its HEAD then, which this one's clone took.
- */
-export interface WorkspaceFrom {
-  /** The source's HEAD as this clone took it. */
-  commit: string;
-  /**
-   * Whether this workspace's landing put every patch of that commit's work
-   * on the base branch (landing-run.ts `vouchLanded`): then the source holds
-   * none of it as its own, and an archive is told so (core
-   * `WorkspaceArchive.landed`).
-   */
-  landed: boolean;
-  workspace: string;
-}
-
-/**
  * What a live work item's session cannot be started again without, found
  * missing as the hub would start it (a wake, a restart's resume): its
  * delegate type, its machine, or the account it runs on ({@link workItems}
@@ -534,6 +517,18 @@ export type ContinuationAsker =
       stopped: false | "limit" | "signin";
       to: string;
     };
+
+/**
+ * A limit line as the hub keeps it (`limit_events.body`,
+ * `limit_compactions.move`): an {@link AccountMove} without its `kind`,
+ * which is a column of its own (`kind`, `move_kind`) the row mapper puts
+ * back (db at-limit.ts).
+ */
+export type AccountMoveBody = AccountMove extends infer Line
+  ? Line extends AccountMove
+    ? Omit<Line, "kind">
+    : never
+  : never;
 
 /** One must-fix finding of a design check, tied to an element (design-verify.ts). */
 export interface DesignFinding {

@@ -393,8 +393,8 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .where(
           and(
             eq(sentMessages.instanceId, to),
-            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'peer'`,
-            sql`json_extract(${sentMessages.body}, '$.origin.from') = ${from}`
+            eq(sentMessages.originKind, "peer"),
+            eq(sentMessages.originFrom, from)
           )
         )
         .orderBy(desc(sentMessages.acceptedAt))
@@ -413,7 +413,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
             eq(sentMessages.instanceId, id),
             inArray(sentMessages.state, ["pending", "read"]),
             eq(sentMessages.mode, "turn"),
-            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'human'`
+            eq(sentMessages.originKind, "human")
           )
         )
         .orderBy(desc(sentMessages.acceptedAt))
@@ -448,7 +448,7 @@ export const sendsDb = (core: DbCore): SendsDb => {
         .where(
           and(
             eq(sentMessages.instanceId, id),
-            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'human'`
+            eq(sentMessages.originKind, "human")
           )
         )
         .orderBy(desc(sentMessages.acceptedAt))
