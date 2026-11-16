@@ -11,6 +11,7 @@ import { inStartingSet, piToolsFor } from "@cawco/core/delegate-types";
 import { CONTROL_REFRESH_CAWCO_TOOLS } from "@cawco/core/harness";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
+import { isRecord } from "@cawco/core/is-record";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
 import type {
@@ -42,7 +43,7 @@ import {
   readPolicy,
   type Verdict,
 } from "@cawco/core/workspace-judge";
-import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
+import type { Usage } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -268,7 +269,7 @@ const sessionBash = (
   shells: PiShells
 ): ToolDefinition => {
   const local = createLocalBashOperations();
-  return createBashToolDefinition(cwd, {
+  const bash = createBashToolDefinition(cwd, {
     spawnHook: (context) => ({
       ...context,
       env: sessionEnvironment(context.env),
@@ -281,7 +282,11 @@ const sessionBash = (
           : local.exec
       ),
     },
-  }) as unknown as ToolDefinition;
+  });
+  // pi's own way to pass a typed tool where any tool goes ("Use this when
+  // assigning a tool to a variable or passing it through arrays such as
+  // `customTools`", extensions/types.d.ts `defineTool`).
+  return defineTool(bash);
 };
 
 /**
@@ -295,17 +300,14 @@ const sessionBash = (
  * pi resolves anything: `find` runs `fd` on the host without its
  * operations, so arguments are the one place all six can be judged.
  */
-const boundedFileTools = (cwd: string, boundary: Boundary): ToolDefinition[] =>
-  [
-    createReadToolDefinition(cwd),
-    createWriteToolDefinition(cwd),
-    createEditToolDefinition(cwd),
-    createLsToolDefinition(cwd),
-    createFindToolDefinition(cwd),
-    createGrepToolDefinition(cwd),
-  ].map((tool) => {
-    const definition = tool as unknown as ToolDefinition;
-    return {
+const boundedFileTools = (
+  cwd: string,
+  boundary: Boundary
+): ToolDefinition[] => {
+  const judged = <P extends ToolDefinition["parameters"], D, S>(
+    definition: ToolDefinition<P, D, S>
+  ) =>
+    defineTool<P, D, S>({
       ...definition,
       execute: (id, params, signal, onUpdate, ctx) => {
         let verdict: Verdict;
@@ -327,8 +329,16 @@ const boundedFileTools = (cwd: string, boundary: Boundary): ToolDefinition[] =>
         }
         return definition.execute(id, params, signal, onUpdate, ctx);
       },
-    } as ToolDefinition;
-  });
+    });
+  return [
+    judged(createReadToolDefinition(cwd)),
+    judged(createWriteToolDefinition(cwd)),
+    judged(createEditToolDefinition(cwd)),
+    judged(createLsToolDefinition(cwd)),
+    judged(createFindToolDefinition(cwd)),
+    judged(createGrepToolDefinition(cwd)),
+  ];
+};
 
 const piHandoffTools = async (
   instanceId: string,
@@ -339,7 +349,7 @@ const piHandoffTools = async (
       name: tool.name,
       label: tool.name,
       description: tool.description,
-      parameters: tool.inputSchema as never,
+      parameters: tool.inputSchema,
       // pi's own id for the call: the key the hub runs a delegate, a
       // handoff or a page under once (hub call-keys.ts).
       execute: async (id, params) =>
@@ -423,12 +433,15 @@ const piMcpExtension = (set: StartingSet | undefined): ExtensionFactory => {
   });
   return (pi) =>
     mcp(
-      Object.assign(Object.create(pi) as ExtensionAPI, {
+      // pi's API is a plain object of closures over its extension
+      // (extensions/loader.js `createExtensionAPI`), so a copy holds what it holds.
+      {
+        ...pi,
         getMcpServers: () =>
           pi
             .getMcpServers()
             .filter((server) => set.servers.includes(server.name)),
-      })
+      }
     );
 };
 
@@ -697,9 +710,9 @@ class FleetHooks {
         // pi takes a call's new input mutated in place ("To modify
         // arguments, mutate `event.input` in place", types.d.ts).
         if (verdict.updatedInput) {
-          const input = event.input as Record<string, unknown>;
+          const { input } = event;
           for (const key of Object.keys(input)) {
-            delete input[key];
+            Reflect.deleteProperty(input, key);
           }
           Object.assign(
             input,
@@ -1022,10 +1035,10 @@ class PiSession implements HarnessSession {
   }
 
   #leaf(): { uuid: string; timestamp: string } {
-    const entry = this.#session.sessionManager.getLeafEntry() as {
-      id: string;
-      timestamp: string;
-    };
+    const entry = this.#session.sessionManager.getLeafEntry();
+    if (!entry) {
+      throw new Error("The pi session has stored no entry yet.");
+    }
     return { uuid: entry.id, timestamp: entry.timestamp };
   }
 
@@ -1037,13 +1050,12 @@ class PiSession implements HarnessSession {
    */
   #contextTokens(): number | undefined {
     for (const message of [...this.#session.messages].reverse()) {
-      const { role, usage } = message as {
-        role?: string;
-        usage?: { cacheRead: number; cacheWrite: number; input: number };
-      };
-      const sent = usage ? usage.input + usage.cacheRead + usage.cacheWrite : 0;
-      if (role === "assistant" && sent > 0) {
-        return sent;
+      if (message.role === "assistant") {
+        const { usage } = message;
+        const sent = usage.input + usage.cacheRead + usage.cacheWrite;
+        if (sent > 0) {
+          return sent;
+        }
       }
     }
     return undefined;
@@ -1118,21 +1130,16 @@ class PiSession implements HarnessSession {
     switch (event.type) {
       case "message_start": {
         const read =
-          (event.message as { role?: string }).role === "user"
-            ? this.#unread.shift()
-            : undefined;
+          event.message.role === "user" ? this.#unread.shift() : undefined;
         if (read) {
           this.#reading = read;
         }
         break;
       }
       case "message_end": {
-        const { role, content } = event.message as {
-          role?: string;
-          content?: unknown;
-        };
+        const { message } = event;
         const sent = this.#reading;
-        if (sent && role === "user") {
+        if (sent && message.role === "user") {
           this.#reading = undefined;
           // pi appends after notifying listeners, in the same synchronous run.
           queueMicrotask(() =>
@@ -1141,21 +1148,20 @@ class PiSession implements HarnessSession {
               subtype: MESSAGES_READ,
               read: [sent],
               storedAs: {
-                [sent]: this.#session.sessionManager.getLeafId() as string,
+                [sent]: this.#leaf().uuid,
               },
               session_id: this.sessionId ?? undefined,
             })
           );
         }
-        if (role === "assistant") {
-          const answer = event.message as AssistantMessage;
+        if (message.role === "assistant") {
           this.#spent(
-            `${answer.provider}/${answer.model}`,
-            answer.usage,
-            answer.timestamp
+            `${message.provider}/${message.model}`,
+            message.usage,
+            message.timestamp
           );
           queueMicrotask(() => {
-            const blocks = toBlocks(content);
+            const blocks = toBlocks(message.content);
             if (blocks.length) {
               this.#ctx.frame({
                 type: "assistant",
@@ -1168,15 +1174,13 @@ class PiSession implements HarnessSession {
         break;
       }
       case "message_update": {
-        const ae = (
-          event as { assistantMessageEvent?: { type?: string; delta?: string } }
-        ).assistantMessageEvent;
-        if (ae?.type === "text_delta") {
+        const ae = event.assistantMessageEvent;
+        if (ae.type === "text_delta") {
           this.#ctx.frame({
             type: "stream_event",
             event: {
               type: "content_block_delta",
-              delta: { type: "text_delta", text: ae.delta ?? "" },
+              delta: { type: "text_delta", text: ae.delta },
             },
           });
           this.#setBusy(true);
@@ -1223,18 +1227,16 @@ class PiSession implements HarnessSession {
         break;
       }
       case "tool_execution_end": {
-        const { toolCallId, result, isError } = event as unknown as {
-          toolCallId: string;
-          result: {
-            content?: unknown;
-            details?: Record<string, unknown>;
-          } | null;
-          isError: boolean;
-        };
-        const content = Array.isArray(result) ? "" : contentOf(result?.content);
-        const details = result?.details;
+        const { toolCallId, isError } = event;
+        // pi-agent-core types a tool's result `any` (types.d.ts AgentEvent
+        // `tool_execution_end`): read as what it may be.
+        const result: unknown = event.result;
+        const content = isRecord(result) ? contentOf(result.content) : "";
+        const details = isRecord(result) ? result.details : undefined;
         const structuredContent =
-          details && Object.keys(details).length > 0 ? details : undefined;
+          isRecord(details) && Object.keys(details).length > 0
+            ? details
+            : undefined;
         this.#ctx.frame({
           type: "user",
           message: {
@@ -1253,16 +1255,15 @@ class PiSession implements HarnessSession {
         break;
       }
       case "agent_end": {
-        if ((event as { willRetry?: boolean }).willRetry === true) {
+        if (event.willRetry) {
           break;
         }
         this.#setBusy(false);
-        const errors =
-          (
-            event as { messages?: { errorMessage?: string }[] }
-          ).messages?.flatMap((message) =>
-            message.errorMessage ? [message.errorMessage] : []
-          ) ?? [];
+        const errors = event.messages.flatMap((message) =>
+          message.role === "assistant" && message.errorMessage
+            ? [message.errorMessage]
+            : []
+        );
         const failed = errors.length > 0;
         // A failed turn whose last answer was a 429 ended on its account's
         // limit (core `atProviderLimit`), whatever its error's words say.
@@ -1394,7 +1395,7 @@ class PiSession implements HarnessSession {
     const streaming = this.#session.isStreaming;
     this.#session
       .prompt(withPastedText(text, extras.attachments ?? []), {
-        images: images as never,
+        images,
         ...(streaming ? { streamingBehavior: "steer" as const } : {}),
       })
       .then(() => {
@@ -1565,12 +1566,13 @@ class PiSession implements HarnessSession {
       case CONTROL_SUPPORTED_COMMANDS:
         return [] satisfies SupportedCommands;
       case CONTROL_CONTEXT_USAGE: {
-        const last = [...this.#session.messages]
+        // The last message that carries a usage: an answer's, or a tool
+        // result's own (pi-ai types.d.ts `ToolResultMessage.usage`).
+        const [total = 0] = [...this.#session.messages]
           .reverse()
-          .find((m) => (m as { usage?: unknown }).usage);
-        const usage = (last as { usage?: { totalTokens?: number } } | undefined)
-          ?.usage;
-        const total = usage?.totalTokens ?? 0;
+          .flatMap((m) =>
+            "usage" in m && m.usage ? [m.usage.totalTokens] : []
+          );
         // The model's window in pi-ai's catalog is what a request may send:
         // its input limit where that is below the context (gpt-5.5: 272000,
         // providers/data/openai.json).

@@ -96,6 +96,10 @@ const zoomTo = (api: ExcalidrawImperativeAPI, next: number) => {
   const sceneY = y / state.zoom.value - state.scrollY;
   api.updateScene({
     appState: {
+      // Library gap: Excalidraw brands a zoom it has bounded (types.d.ts
+      // `NormalizedZoomValue`), and its package entry exports no maker of
+      // one (`getNormalizedZoom` sits in a subpath its `exports` give types
+      // alone): `value` is held to its bounds above.
       zoom: { value: value as NormalizedZoomValue },
       scrollX: x / value - sceneX,
       scrollY: y / value - sceneY,

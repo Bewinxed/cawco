@@ -2,6 +2,7 @@
 import { createInterface } from "node:readline";
 import { readCall } from "@cawco/core/control-args";
 import type { Control } from "@cawco/core/control-table";
+import type { PiHostState } from "@cawco/core/harness/pi-host-state";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
 import type { HarnessContext, HarnessSession } from "../harness";
@@ -14,7 +15,6 @@ import {
   PI_HOST_COMMAND,
   type PiHostCommand,
   type PiHostEvent,
-  type PiHostState,
 } from "./pi-sessiond";
 
 // SDK/extension diagnostics must never enter the sequenced protocol stream.

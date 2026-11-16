@@ -414,12 +414,14 @@ const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
  * its own secret files copied (workspace.ts `copyOwnSecrets`), its boundary
  * started. Its projects install as its stage first needs them
  * ({@link installStage}). A cut that fails is cut again whole at the next
- * use, and says why.
+ * use, and says why. `made` names the clone on the log: a place's stage
+ * clone, or a pin ({@link cutPin}).
  */
 const cut = async (
   boundary: WorkspaceRef,
   repo: string,
-  place: WorkspaceRef
+  place: WorkspaceRef,
+  made: "stage clone" | "pin"
 ): Promise<Kept> => {
   const state = workspaceStateDir(boundary.id);
   // A cut that never finished, one of an earlier form or of another repository: nothing of it runs on.
@@ -456,7 +458,7 @@ const cut = async (
     await ensureBoundary(boundary);
     await keep(boundary.id, kept);
     console.info(
-      `[stage] ${place.id}: its stage clone ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), in ${((Date.now() - started) / 1000).toFixed(1)}s`
+      `[stage] ${place.id}: its ${made} ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), in ${((Date.now() - started) / 1000).toFixed(1)}s`
     );
     return kept;
   } catch (error) {
@@ -529,7 +531,7 @@ export const stageCloneOf = (
       await step(boundary, whole);
     } else {
       copied.delete(id);
-      await cut(boundary, repo, place);
+      await cut(boundary, repo, place, "stage clone");
     }
     stageClone({
       kind: "stage-clone",
@@ -822,7 +824,7 @@ export const cutPin = (from: WorkspaceRef, pin: string): Promise<StageClone> =>
     const sub = repo ? relative(repo, real) : "";
     try {
       if (repo) {
-        await cut(boundary, repo, from);
+        await cut(boundary, repo, from, "pin");
       } else {
         await copyCut(boundary, real);
       }

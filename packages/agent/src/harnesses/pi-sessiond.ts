@@ -6,6 +6,10 @@ import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import type { Control } from "@cawco/core/control-table";
 import { BOUNDARY_RELAUNCH, GATEWAY_RELAUNCH } from "@cawco/core/harness";
+import {
+  type PiHostState,
+  piHostState,
+} from "@cawco/core/harness/pi-host-state";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
@@ -65,30 +69,6 @@ export type PiHostCommand =
   | { type: "control"; id: string; method: string; args: unknown[] }
   | { type: "snapshot"; id: string }
   | { type: "stop"; id: string };
-
-export interface PiHostState {
-  /**
-   * The shell commands a send moved to the background that still run, by
-   * task id (pi-runtime `PiShells`): stopping the host ends them. Absent from
-   * a host started before hosts reported them.
-   */
-  background?: string[];
-  busy: boolean;
-  /**
-   * The gate form the host's file tools were started on, for a workspace
-   * session; absent on a host started before hosts recorded one, whose file
-   * tools may be unjudged.
-   */
-  gateForm?: string;
-  /**
-   * The MCP gateway port the host reaches CawCo's tools on, as its agent
-   * named it at its start (`CAWCO_MCP_PORT`, {@link spawnPi}); absent on a
-   * host started before hosts said it ({@link hostGateway}).
-   */
-  gatewayPort?: number;
-  held: string[];
-  sessionId: string | null;
-}
 
 /**
  * The MCP gateway port a host reaches CawCo's tools on. One started before
@@ -277,7 +257,8 @@ class PiRemoteSession implements HarnessSession {
   constructor(
     client: SessiondClient,
     ctx: HarnessContext,
-    pid: number,
+    /** Its host as its keeper lists it: its pid, and the keeper's boot epoch its seqs count in. */
+    host: { epoch: string; pid: number },
     afterSeq: number,
     recoveryHead = 0
   ) {
@@ -285,8 +266,9 @@ class PiRemoteSession implements HarnessSession {
     this.#ctx = ctx;
     this.#ready = false;
     this.#busy = false;
+    const { epoch, pid } = host;
     this.#pid = pid;
-    this.#epoch = procEpoch(client.epoch as string, pid);
+    this.#epoch = procEpoch(epoch, pid);
     this.#seq = afterSeq;
     this.#recoveryHead = recoveryHead;
     client.subscribe(
@@ -329,7 +311,7 @@ class PiRemoteSession implements HarnessSession {
               } else {
                 // Apply in socket order, before a later busy delta can arrive.
                 if (pending?.snapshot) {
-                  this.applyState(event.value as PiHostState);
+                  this.applyState(piHostState(event.value));
                 }
                 pending?.resolve(event.value);
               }
@@ -602,6 +584,7 @@ export async function spawnPi(
     typeof __CAWCO_RELEASE__ === "boolean" ? "pi-host.js" : "pi-host.ts"
   );
   await piKeepers.replaceElsewhere(procIdFor("pi", ctx.instanceId), client);
+  const hubUrl = readEnv(CAWCO_ENV.hubUrl);
   // In a Linux view of its folder, the host runs inside it (layer.ts).
   await client.spawnProc(
     procIdFor("pi", ctx.instanceId),
@@ -614,9 +597,7 @@ export async function spawnPi(
       // told this agent's port: the keeper's own environment may name another.
       env: {
         [CAWCO_ENV.mcpPort]: String(mcpGatewayPort()),
-        ...(process.env[CAWCO_ENV.hubUrl]
-          ? { [CAWCO_ENV.hubUrl]: process.env[CAWCO_ENV.hubUrl] as string }
-          : {}),
+        ...(hubUrl ? { [CAWCO_ENV.hubUrl]: hubUrl } : {}),
         // Its shells' git reaches the hub's remote as this session (git-credential.ts).
         ...sessionGitEnv(),
         // Its container runtimes through its own doors (session-containers.ts).
@@ -633,13 +614,19 @@ export async function spawnPi(
       },
     })
   );
-  const proc = (await client.list()).procs.find(
+  const listed = await client.list();
+  const proc = listed.procs.find(
     (one) => one.procId === procIdFor("pi", ctx.instanceId)
   );
   if (!proc?.alive) {
     throw new Error("pi host did not start");
   }
-  const session = new PiRemoteSession(client, ctx, proc.pid, 0);
+  const session = new PiRemoteSession(
+    client,
+    ctx,
+    { epoch: listed.epoch, pid: proc.pid },
+    0
+  );
   const form = ctx.boundary ? gateForm("pi") : undefined;
   const door = await piBrowserDoor(ctx);
   await session.write({
@@ -681,7 +668,7 @@ export async function piSnapshot(instanceId: string): Promise<PiHostState> {
         if (event.error) {
           reject(saidFailure({ ...event, error: event.error }));
         } else {
-          resolve(event.value as PiHostState);
+          resolve(piHostState(event.value));
         }
       },
       exit: () => {
@@ -712,11 +699,11 @@ export async function adoptPi(
   const session = new PiRemoteSession(
     proc.client,
     ctx,
-    proc.pid,
+    proc,
     options.afterSeq ?? options.head,
     options.head
   );
-  const state = (await session.request({ type: "snapshot" })) as PiHostState;
+  const state = piHostState(await session.request({ type: "snapshot" }));
   ctx.frame({
     type: "system",
     subtype: MESSAGES_HELD,

@@ -8,6 +8,7 @@
  */
 
 import { hostname } from "node:os";
+import { isGone } from "@cawco/core/absent";
 import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
@@ -42,7 +43,6 @@ import { makeFolder } from "@cawco/core/folders";
 import type {
   AsleepFrame,
   CatalogMovedFrame,
-  ControlResultFrame,
   FramePayload,
   HarnessFailed,
   HarnessUnanswered,
@@ -73,6 +73,7 @@ import {
 } from "@cawco/core/harness/traits";
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
+import { isRecord } from "@cawco/core/is-record";
 import { inFlight } from "@cawco/core/loop-watch";
 import type { InboundRefusal } from "@cawco/core/machine-inbound";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -312,6 +313,12 @@ interface Claimed {
  * A main-thread message's shell calls, kept in `running` by tool use until
  * their results; answers whether one started.
  */
+/** Why a stop ended a wait, in the words its `abort` was handed. */
+const stopReason = (signal: AbortSignal): string => {
+  const reason: unknown = signal.reason;
+  return reason instanceof Error ? reason.message : String(reason);
+};
+
 const shellCallsOf = (
   message: NeutralMessage,
   running: Map<string, string>
@@ -326,8 +333,10 @@ const shellCallsOf = (
   let started = false;
   for (const block of message.message.content) {
     const command =
-      block.type === "tool_use" && SHELL_TOOLS.has(block.name)
-        ? (block.input as { command?: unknown } | undefined)?.command
+      block.type === "tool_use" &&
+      SHELL_TOOLS.has(block.name) &&
+      isRecord(block.input)
+        ? block.input.command
         : undefined;
     if (block.type === "tool_use" && typeof command === "string") {
       running.set(block.id, command);
@@ -1238,7 +1247,7 @@ export class SessionSupervisor {
   #sinkTo: FrameSink = () => false;
   readonly #answering: FrameSink = (frame) => {
     if (frame.kind === "control_result") {
-      keepAnswer(frame as ControlResultFrame);
+      keepAnswer(frame);
     }
     return this.#sinkTo(frame);
   };
@@ -1968,12 +1977,12 @@ export class SessionSupervisor {
         this.#inTurn(instanceId)
       ) {
         if (wait.signal.aborted) {
-          return { stopped: String((wait.signal.reason as Error).message) };
+          return { stopped: stopReason(wait.signal) };
         }
         await Bun.sleep(TURN_END_LOOK_MS);
       }
       if (wait.signal.aborted) {
-        return { stopped: String((wait.signal.reason as Error).message) };
+        return { stopped: stopReason(wait.signal) };
       }
       console.info(
         turnWords.turnEnded(instanceId, Math.round((Date.now() - since) / 1000))
@@ -4721,10 +4730,7 @@ export class SessionSupervisor {
         // `ENOENT:` prefix.
         error: message,
         refusal: {
-          kind:
-            (error as NodeJS.ErrnoException).code === "ENOENT"
-              ? "missing"
-              : "unknown",
+          kind: isGone(error) ? "missing" : "unknown",
           message,
         },
       });

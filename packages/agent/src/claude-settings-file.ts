@@ -24,6 +24,7 @@
  * log and skips its step, which runs again at its next turn. And a file
  * whose content would not change is not written at all.
  */
+import { isRecord } from "@cawco/core/is-record";
 import { toolWords } from "@cawco/core/words/tools";
 import { readJsonOnDisk, writeOnDisk } from "./json-on-disk";
 
@@ -59,8 +60,8 @@ export const readSettingsFile = async (path: string): Promise<SettingsFile> => {
   if (value === undefined) {
     return { state: "read", settings: {} };
   }
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? { state: "read", settings: value as Record<string, unknown> }
+  return isRecord(value)
+    ? { state: "read", settings: value }
     : { state: "unread", why: toolWords.settingsNotAnObject };
 };
 

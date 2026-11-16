@@ -60,6 +60,7 @@ import {
   hookProblem,
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
+import { isRecord } from "@cawco/core/is-record";
 import {
   accountIds,
   claudeHomeJson,
@@ -1743,12 +1744,8 @@ const enabledForUser = async (
   if (read.state === "unread") {
     return { unread: read.why };
   }
-  const { enabledPlugins } = read.settings as { enabledPlugins?: unknown };
-  return (
-    typeof enabledPlugins === "object" &&
-    enabledPlugins !== null &&
-    (enabledPlugins as Record<string, unknown>)[id] === true
-  );
+  const { enabledPlugins } = read.settings;
+  return isRecord(enabledPlugins) && enabledPlugins[id] === true;
 };
 
 /**
@@ -2807,6 +2804,16 @@ const SettingsJsonSchema = z.looseObject({
 type SettingsJson = z.infer<typeof SettingsJsonSchema>;
 
 /**
+ * Whether `settings` is in the shape {@link SettingsJsonSchema} reads,
+ * checked as it stands: the object itself is kept, so its keys keep the
+ * order they were written in, which the compare before a write reads
+ * (claude-settings-file.ts `writeSettingsFile`).
+ */
+const isSettingsJson = (
+  settings: Record<string, unknown>
+): settings is SettingsJson => SettingsJsonSchema.safeParse(settings).success;
+
+/**
  * A Claude Code settings file as the fleet reads it: read
  * (claude-settings-file.ts; `{}` when nothing is there), its object as it
  * stands (so an unchanged one compares equal and is not written), or there
@@ -2823,13 +2830,14 @@ const readSettingsJson = async (path: string): Promise<FleetSettings> => {
     return file;
   }
   const settings = settingsOf(file);
+  if (isSettingsJson(settings)) {
+    return { state: "read", file, settings };
+  }
   const parsed = SettingsJsonSchema.safeParse(settings);
-  return parsed.success
-    ? { state: "read", file, settings: settings as SettingsJson }
-    : {
-        state: "unread",
-        why: `its hooks aren't the shape Claude Code writes (${parsed.error.issues[0]?.message ?? "no reason given"})`,
-      };
+  return {
+    state: "unread",
+    why: `its hooks aren't the shape Claude Code writes (${parsed.error?.issues[0]?.message ?? "no reason given"})`,
+  };
 };
 
 /**

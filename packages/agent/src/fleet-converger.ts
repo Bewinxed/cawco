@@ -33,12 +33,14 @@ import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
 import type { FleetReportFrame } from "@cawco/core/frames";
 import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { isRecord } from "@cawco/core/is-record";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
 import {
   CONTROL_FLEET_SETTINGS,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
 } from "@cawco/core/session/controls";
+import { FleetMcpTakeAnswerSchema } from "@cawco/core/stored-shapes";
 import { recordAgentState } from "./agent-state";
 import { rearmMoved, recheckNarrowed } from "./boundary/looks";
 import { buildKey } from "./build";
@@ -136,15 +138,21 @@ export class FleetConverger {
 
   constructor(host: FleetHost) {
     this.#host = host;
+    this.#fleetReportOwed = false;
+    this.#reconverge = false;
+    this.#convergeOwed = false;
+    this.#passing = false;
   }
 
   /** The fleet MCP heal passes, one session after another ({@link healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
   #fleetQueue: Promise<unknown> = Promise.resolve();
-  // These flags are widened with `as boolean`: biome's noUnnecessaryConditions reads `= false` as always false, and noInferrableTypes refuses `: boolean = false`.
+  // These flags are declared `boolean` and set in the constructor: biome's
+  // noUnnecessaryConditions reads `= false` as always false, and
+  // noInferrableTypes refuses `: boolean = false`.
   /** A fleet report the hub is owed and not yet read ({@link reportFleet}). */
-  #fleetReportOwed = false as boolean;
+  #fleetReportOwed: boolean;
   /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
   readonly #desired = new FleetDesired();
   /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
@@ -154,11 +162,11 @@ export class FleetConverger {
   /** The items deltas moved or took away since the last converge began. */
   readonly #convergeIds = new Set<string>();
   /** A person's Sync: the next converge takes every item, changed or not. */
-  #reconverge = false as boolean;
+  #reconverge: boolean;
   /** A converge is queued and not yet begun: a delta meanwhile joins it ({@link convergeSoon}). */
-  #convergeOwed = false as boolean;
+  #convergeOwed: boolean;
   /** A converge pass runs now: a delta that moved nothing is converged once it ends. */
-  #passing = false as boolean;
+  #passing: boolean;
   /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
   #harnessFailures = new Map<HarnessKind, string>();
   /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
@@ -583,7 +591,7 @@ export class FleetConverger {
       const holding = this.#desired.config();
       places = await placesNow(holding.projects);
       const placed = placedConfig(holding, places);
-      const report = await this.#syncFleet(placed, "syncFleet", moves.parts);
+      const report = await this.#syncFleet(placed, moves.parts);
       if (PLACE_FILE_PARTS.some((part) => moves.parts.has(part))) {
         await keepOnlyPlaceSets(placed.places);
       }
@@ -667,7 +675,7 @@ export class FleetConverger {
       if (!(await isMachineAgent())) {
         return;
       }
-      this.#sendReport(await this.#syncFleet(undefined, "fleetStatus"), null);
+      this.#sendReport(await this.#syncFleet(undefined), null);
     }).catch((error: unknown) =>
       warn(`the fleet report was not read again: ${errorText(error)}`)
     );
@@ -819,10 +827,11 @@ export class FleetConverger {
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
+    /** The fleet to converge onto: a sync; none, a status read. */
     incoming: PlacedFleetConfig | undefined,
-    which: "syncFleet" | "fleetStatus",
     parts: ReadonlySet<FleetPart> = new Set(FLEET_PARTS)
   ): Promise<FleetSyncReport> {
+    const which = incoming ? "syncFleet" : "fleetStatus";
     const servers = incoming !== undefined && parts.has("mcp");
     // The daemon's connection names a hub reachable from this machine.
     if (servers) {
@@ -870,7 +879,8 @@ export class FleetConverger {
     type State = import("@cawco/core/fleet").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
     const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};
-    const mcpHarnesses = new Set(
+    // Read by the harness kinds a report's rows are keyed by, as strings.
+    const mcpHarnesses: ReadonlySet<string> = new Set(
       harnesses()
         .filter((adapter) => adapter.capabilities.mcpStatus)
         .map((adapter) => adapter.kind)
@@ -929,17 +939,15 @@ export class FleetConverger {
     const settled = await Promise.all(
       harnesses()
         .filter((adapter) =>
-          which === "syncFleet" ? adapter.syncFleet : adapter.fleetStatus
+          incoming ? adapter.syncFleet : adapter.fleetStatus
         )
         .map(async (adapter) => {
           try {
             const report =
-              which === "syncFleet"
+              incoming && config
                 ? // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
                   await adapter.syncFleet!(
-                    (adapter.capabilities.mcpStatus
-                      ? config
-                      : incoming) as PlacedFleetConfig,
+                    adapter.capabilities.mcpStatus ? config : incoming,
                     parts
                   )
                 : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
@@ -1043,11 +1051,11 @@ export class FleetConverger {
       );
     }
     for (const [kind, report] of Object.entries(mcpByHarness)) {
-      if (!mcpHarnesses.has(kind as HarnessKind)) {
+      if (!mcpHarnesses.has(kind)) {
         continue;
       }
       for (const [name, state] of this.#mcpLauncherStates) {
-        report[name] = withoutValues({ [name]: state })[name] as State;
+        report[name] = withoutValues({ [name]: state })[name];
       }
     }
     for (const name of names) {
@@ -1056,7 +1064,7 @@ export class FleetConverger {
       );
       const worst = worstFleetState(
         readings
-          .filter((reading) => mcpHarnesses.has(reading.kind as HarnessKind))
+          .filter((reading) => mcpHarnesses.has(reading.kind))
           .map((reading) => reading.item)
       );
       mcp[name] = {
@@ -1123,14 +1131,16 @@ export class FleetConverger {
 
   /** A fleet MCP change's or heal's answer with each server's secret values cut from its words. */
   #takenWithoutSecrets(result: unknown): unknown {
-    const { servers } = (result ?? {}) as Partial<FleetMcpTakeAnswer>;
-    if (!Array.isArray(servers)) {
+    // An answer with no servers names none; one whose servers are not in
+    // their shape is refused, never passed on with its secrets in it.
+    if (!(isRecord(result) && "servers" in result)) {
       return result;
     }
+    const taken: FleetMcpTakeAnswer = FleetMcpTakeAnswerSchema.parse(result);
     const byName = this.#mcpSecrets();
     return {
-      ...(result as object),
-      servers: servers.map((server) => {
+      ...taken,
+      servers: taken.servers.map((server) => {
         const secrets = byName.get(server.name) ?? [];
         return {
           ...server,
@@ -1145,7 +1155,7 @@ export class FleetConverger {
 
   /** The machine's fleet report, read in turn with every converge (`fleetStatus`). */
   status(): Promise<FleetSyncReport> {
-    return this.#fleetTurn(() => this.#syncFleet(undefined, "fleetStatus"));
+    return this.#fleetTurn(() => this.#syncFleet(undefined));
   }
 
   /** A harness CLI was installed here: the next converge takes every item, as each harness already here did. */

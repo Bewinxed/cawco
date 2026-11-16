@@ -28,13 +28,13 @@ import {
   RENDER_STATE_PARAM,
   REPORT_PATH,
   type RenderAsk,
-  type ReportAnswer,
   type SectionPlan,
   type SectionUndrawn,
   STAGE_RENDER_MS,
   type StageRendered,
   sectionPlansOf,
 } from "@cawco/core/stage";
+import { ReportAnswerSchema } from "@cawco/core/stored-shapes";
 import { stageRenderWords as words } from "@cawco/core/words/stage-render";
 import type { Socket, TCPSocketListener } from "bun";
 import type { Page } from "playwright-core";
@@ -303,8 +303,9 @@ export async function renderCanvas(
       );
     }
     // The host's problems ride with it for the daemon's read (`ensureStage`); a draw answers the report.
-    const { errors: _errors, ...report } =
-      (await answer.json()) as ReportAnswer;
+    const { errors: _errors, ...report } = ReportAnswerSchema.parse(
+      await answer.json()
+    );
     if (!ask.png) {
       return { report, undrawn, ...unread };
     }

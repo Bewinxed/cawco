@@ -9,7 +9,6 @@
 
 import {
   array,
-  type GenericSchema,
   type InferOutput,
   literal,
   looseObject,
@@ -17,18 +16,10 @@ import {
   number,
   optional,
   record,
-  safeParse,
   string,
   union,
 } from "valibot";
-
-/** `schema`'s reading of a value: its output, or undefined when the value is not one. */
-const readerOf =
-  <S extends GenericSchema>(schema: S) =>
-  (value: unknown): InferOutput<S> | undefined => {
-    const read = safeParse(schema, value);
-    return read.success ? read.output : undefined;
-  };
+import { readerOf } from "./reader-of";
 
 /**
  * One line of a Claude Code transcript as the chain walk links it: its

@@ -133,8 +133,8 @@ async function show(pages: HTMLElement): Promise<void> {
   const near = new IntersectionObserver(
     (seen) => {
       for (const one of seen) {
-        if (one.isIntersecting) {
-          drawPage(pdfjs, one.target as HTMLElement);
+        if (one.isIntersecting && one.target instanceof HTMLElement) {
+          drawPage(pdfjs, one.target);
         }
       }
     },

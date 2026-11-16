@@ -603,6 +603,8 @@ export const fitScene = (api: ExcalidrawImperativeAPI): void => {
   );
   api.updateScene({
     appState: {
+      // Library gap: Excalidraw's branded zoom, held to its bounds above (as
+      // rail.tsx `zoomTo`).
       zoom: { value: zoom as AppState["zoom"]["value"] },
       scrollX: width / (2 * zoom) - box.cx,
       scrollY: height / (2 * zoom) - box.cy,
@@ -1445,6 +1447,12 @@ const fromSkeletons = async (
       wrappedText(
         freeEnds(
           convertToExcalidrawElements(
+            // The agent's skeletons, checked for a type and an id alone
+            // (hub artifacts/tools.ts `skeleton`, {@link isSkeleton}): the
+            // rest of each is Excalidraw's to read, whose
+            // `ExcalidrawElementSkeleton` asks fields (`x`, `y`) an agent's
+            // skeleton may leave out. A parse of the whole would refuse
+            // skeletons the canvas takes today.
             skeletonsOf as ExcalidrawElementSkeleton[],
             { regenerateIds: false }
           ),

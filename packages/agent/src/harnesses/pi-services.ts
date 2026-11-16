@@ -16,6 +16,14 @@ import type { HarnessCapabilities, HarnessReport } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { isEffortLevel } from "@cawco/core/harness/kinds";
 import {
+  type PiMessage,
+  type PiShellEnd,
+  piBlockOf,
+  piEntryOf,
+  piLineOf,
+  piShellEndOf,
+} from "@cawco/core/harness/pi-wire";
+import {
   piAgentDir,
   piMemoryFile,
   piSkillsDir,
@@ -35,6 +43,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
+import { unhandled } from "@cawco/core/unhandled";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import {
   type LocatedRecord,
@@ -42,11 +51,7 @@ import {
   type TranscriptRecord,
   typeFilter,
 } from "@cawco/jsonl-parser";
-import type {
-  ImageContent,
-  Model,
-  TextContent,
-} from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import {
   type AgentSessionServices,
   CURRENT_SESSION_VERSION,
@@ -119,53 +124,41 @@ export const BACKGROUND_SHELL = "cawco-background-shell";
 export const LOADED_SKILL = "cawco-skill";
 
 /** The `details` of a {@link BACKGROUND_SHELL} notice: its `task_notification` frame's fields. */
-export interface BackgroundShellEnd {
-  status: "completed" | "failed";
-  summary: string;
-  taskId: string;
-}
+export type BackgroundShellEnd = PiShellEnd;
 
-/** A stored message as {@link backgroundShellEntries} reads it. */
-interface BackgroundShellMessage {
-  customType?: string;
+/** A {@link BACKGROUND_SHELL} notice's end, read off its stored `details`; none for any other custom message. */
+const shellEndOf = (entry: {
+  customType: string;
   details?: unknown;
-  role?: string;
-}
+}): BackgroundShellEnd | undefined =>
+  entry.customType === BACKGROUND_SHELL
+    ? piShellEndOf(entry.details)
+    : undefined;
 
-/** A stored message, as the `task_notification` row it is when it is a {@link BACKGROUND_SHELL} notice; none else. */
+/** A stored {@link BACKGROUND_SHELL} notice, as the `task_notification` row the live stream drew for it. */
 const backgroundShellEntries = (
   sessionKey: string,
   entry: { id: string; timestamp: string },
-  message: BackgroundShellMessage
-): SessionMessage[] => {
-  const end = message.details as BackgroundShellEnd | undefined;
-  if (
-    message.role !== "custom" ||
-    message.customType !== BACKGROUND_SHELL ||
-    !end
-  ) {
-    return [];
-  }
-  return [
-    {
+  end: BackgroundShellEnd
+): SessionMessage[] => [
+  {
+    type: "system",
+    uuid: entry.id,
+    session_id: sessionKey,
+    message: {
       type: "system",
+      subtype: "task_notification",
       uuid: entry.id,
       session_id: sessionKey,
-      message: {
-        type: "system",
-        subtype: "task_notification",
-        uuid: entry.id,
-        session_id: sessionKey,
-        task_id: end.taskId,
-        status: end.status,
-        summary: end.summary,
-      },
-      parent_tool_use_id: null,
-      parent_agent_id: null,
-      timestamp: entry.timestamp,
+      task_id: end.taskId,
+      status: end.status,
+      summary: end.summary,
     },
-  ];
-};
+    parent_tool_use_id: null,
+    parent_agent_id: null,
+    timestamp: entry.timestamp,
+  },
+];
 
 export const compactBoundaryId = (compaction: string): string =>
   `${compaction}:boundary`;
@@ -248,7 +241,7 @@ export const textOf = (content: unknown): string => {
     return content
       .map((block) =>
         typeof block === "object" && block !== null && "text" in block
-          ? String((block as { text: unknown }).text)
+          ? String(block.text)
           : ""
       )
       .filter(Boolean)
@@ -258,28 +251,42 @@ export const textOf = (content: unknown): string => {
 };
 
 export const contentOf = (content: unknown): string | NeutralContentBlock[] => {
-  if (!(
-    Array.isArray(content) && content.some((block) => block.type === "image")
-  )) {
+  const blocks = Array.isArray(content)
+    ? content.flatMap((block: unknown) => {
+        const read = piBlockOf(block);
+        return read ? [read] : [];
+      })
+    : [];
+  if (!blocks.some((block) => block.type === "image")) {
     return textOf(content);
   }
-  return (content as (TextContent | ImageContent)[]).map((block) =>
-    block.type === "image"
-      ? {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: block.mimeType,
-            data: block.data,
+  return blocks.flatMap((block): NeutralContentBlock[] => {
+    switch (block.type) {
+      case "image":
+        return [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: block.mimeType,
+              data: block.data,
+            },
           },
-        }
-      : { type: "text", text: block.text }
-  );
+        ];
+      case "text":
+        return [{ type: "text", text: block.text }];
+      // An answer's own blocks: a user's or a tool's content holds none.
+      case "thinking":
+      case "toolCall":
+        return [];
+      default:
+        return unhandled("block", block);
+    }
+  });
 };
 
-// biome-ignore lint/suspicious/noExplicitAny: pi's model configuration varies across providers; only id is read
-const modelIdOf = (model: Model<any>): string =>
-  String((model as { id?: unknown }).id ?? "");
+/** What CawCo reads of a pi model to name it: its provider and its id. */
+type PiModelName = Pick<Model<Api>, "id" | "provider">;
 
 /**
  * How CawCo names a pi model: `provider/id`, pi's own `--model` grammar. A
@@ -287,9 +294,8 @@ const modelIdOf = (model: Model<any>): string =>
  * (`gpt-5.5` from `openai-codex` and from a proxy), and only the provider says
  * which account, if any, a session runs on.
  */
-// biome-ignore lint/suspicious/noExplicitAny: pi's model configuration varies across providers; only provider and id are read
-export const piModelValue = (model: Model<any>): string =>
-  `${model.provider}/${modelIdOf(model)}`;
+export const piModelValue = (model: PiModelName): string =>
+  `${model.provider}/${model.id}`;
 
 /**
  * The model a CawCo model value names, by pi's own resolver
@@ -299,8 +305,7 @@ export const piModelValue = (model: Model<any>): string =>
 export const resolvePiModel = async (
   runtime: ModelRuntime,
   value: string
-  // biome-ignore lint/suspicious/noExplicitAny: pi's model configuration varies across providers
-): Promise<Model<any>> => {
+): Promise<Model<Api>> => {
   const resolved = resolveCliModel({ cliModel: value, modelRuntime: runtime });
   const { model } = resolved;
   if (!model) {
@@ -311,8 +316,7 @@ export const resolvePiModel = async (
   const available = await runtime.getAvailable();
   if (
     !available.some(
-      (one) =>
-        one.provider === model.provider && modelIdOf(one) === modelIdOf(model)
+      (one) => one.provider === model.provider && one.id === model.id
     )
   ) {
     throw new Error(
@@ -332,7 +336,7 @@ const modelNames = async (): Promise<Record<string, string>> => {
   const available = await modelRuntime.getAvailable();
   const names: Record<string, string> = {};
   for (const model of available) {
-    const bare = modelIdOf(model);
+    const bare = model.id;
     if (bare in names) {
       continue;
     }
@@ -380,15 +384,14 @@ export const modelCatalog = async (
   const available = await (runtime ?? modelRuntime).getAvailable();
   const rows: ModelInfo[] = available.map((model) => ({
     value: piModelValue(model),
-    displayName: String((model as { name?: unknown }).name ?? modelIdOf(model)),
+    displayName: model.name,
     contextWindow: model.contextWindow,
   }));
   const id = settingsManager.getDefaultModel();
   const provider = settingsManager.getDefaultProvider();
   const resolved = id
     ? available.find(
-        (model) =>
-          modelIdOf(model) === id && (!provider || model.provider === provider)
+        (model) => model.id === id && (!provider || model.provider === provider)
       )
     : undefined;
   const row = resolved
@@ -405,19 +408,12 @@ export function toBlocks(content: unknown): NeutralAssistantBlock[] {
   }
   const blocks: NeutralAssistantBlock[] = [];
   for (const block of content) {
-    const b = block as {
-      type?: string;
-      text?: string;
-      thinking?: string;
-      id?: string;
-      name?: string;
-      arguments?: Record<string, unknown>;
-    };
-    if (b.type === "text" && b.text) {
+    const b = piBlockOf(block);
+    if (b?.type === "text" && b.text) {
       blocks.push({ type: "text", text: b.text });
-    } else if (b.type === "thinking" && b.thinking) {
+    } else if (b?.type === "thinking" && b.thinking) {
       blocks.push({ type: "thinking", thinking: b.thinking });
-    } else if (b.type === "toolCall" && b.id && b.name) {
+    } else if (b?.type === "toolCall" && b.id && b.name) {
       blocks.push({
         type: "tool_use",
         id: b.id,
@@ -453,14 +449,11 @@ const failedTurn = (
 const assistantEntries = (
   sessionKey: string,
   entry: { id: string; timestamp: string },
-  message: { content?: unknown },
+  message: PiMessage,
   next: string | undefined
 ): SessionMessage[] => {
   const blocks = toBlocks(message.content);
-  const { errorMessage, stopReason } = message as {
-    errorMessage?: string;
-    stopReason?: string;
-  };
+  const { errorMessage, stopReason } = message;
   // A stored failed attempt isn't the turn's result during a retry gap.
   const retried =
     next === "assistant" || (next === undefined && piOpenTurns.has(sessionKey));
@@ -514,54 +507,55 @@ interface PiNode {
 
 /** One stored line as the index keeps it. */
 const piNodeOf = (located: LocatedRecord): PiNode => {
-  const entry = located.record as unknown as {
-    details?: unknown;
-    firstKeptEntryId?: string;
-    id?: string;
-    message?: {
-      content?: unknown;
-      customType?: string;
-      details?: unknown;
-      errorMessage?: string;
-      role?: string;
-      toolCallId?: string;
-    };
-    parentId?: string | null;
-    type: string;
-    version?: number;
-  };
+  const place = { offset: located.offset, byteLength: located.byteLength };
+  const line = piLineOf(located.record);
+  // A line not in the shape pi writes its entries in: no path holds it.
+  if (!line) {
+    return { id: "", parentId: null, type: located.record.type, ...place };
+  }
   const node: PiNode = {
-    id: entry.id ?? "",
-    parentId: entry.parentId ?? null,
-    type: entry.type,
-    offset: located.offset,
-    byteLength: located.byteLength,
+    id: line.id ?? "",
+    parentId: line.parentId ?? null,
+    type: line.type,
+    ...place,
   };
-  if (entry.type === "session") {
-    node.version = entry.version ?? 1;
-  }
-  if (entry.type === "compaction" && entry.firstKeptEntryId) {
-    node.firstKept = entry.firstKeptEntryId;
-  }
-  const message = entry.type === "message" ? entry.message : undefined;
-  if (!message) {
+  const entry = piEntryOf(located.record);
+  // Any other line (a model change, a label): its place alone.
+  if (!entry) {
     return node;
   }
-  node.role = message.role;
-  Object.assign(node, messageFacts(message));
+  switch (entry.type) {
+    case "session":
+      node.version = entry.version ?? 1;
+      break;
+    case "compaction":
+      if (entry.firstKeptEntryId) {
+        node.firstKept = entry.firstKeptEntryId;
+      }
+      break;
+    case "message":
+      node.role = entry.message.role;
+      Object.assign(node, messageFacts(entry.message));
+      break;
+    case "custom_message": {
+      const end = shellEndOf(entry);
+      if (end) {
+        node.shell = true;
+        node.ids = [`task:${end.taskId}`];
+      }
+      break;
+    }
+    default:
+      unhandled("entry", entry);
+  }
   return node;
 };
 
 /** A stored pi message's facts, as its node keeps them ({@link PiNode}). */
-const messageFacts = (message: {
-  content?: unknown;
-  customType?: string;
-  details?: unknown;
-  errorMessage?: string;
-  role?: string;
-  toolCallId?: string;
-}): Pick<PiNode, "blocks" | "error" | "ids" | "opens" | "shell"> => {
-  switch (message.role ?? "") {
+const messageFacts = (
+  message: PiMessage
+): Pick<PiNode, "blocks" | "error" | "ids" | "opens"> => {
+  switch (message.role) {
     case "user":
       return textOf(contentOf(message.content)).trim() ? { opens: true } : {};
     case "assistant": {
@@ -577,20 +571,13 @@ const messageFacts = (message: {
     }
     case "toolResult":
       return message.toolCallId ? { ids: [message.toolCallId] } : {};
-    case "custom":
-      return message.customType === BACKGROUND_SHELL && message.details
-        ? {
-            shell: true,
-            ids: [`task:${(message.details as BackgroundShellEnd).taskId}`],
-          }
-        : {};
     default:
       return {};
   }
 };
 
 /** Every pi session file's line index. */
-const piIndexes = new LineIndexes<PiNode>(() => true, piNodeOf);
+const piIndexes = new LineIndexes<PiNode, PiPlan>(() => true, piNodeOf);
 
 /**
  * A session file laid out for reading: its entries in file order
@@ -632,7 +619,7 @@ async function piPlanOf(path: string, cwd: string): Promise<PiPlan> {
     SessionManager.open(path, undefined, cwd);
     index = await piIndexes.get(path);
   }
-  const built = index.memo.get("plan") as PiPlan | undefined;
+  const built = index.memo.get("plan");
   if (built) {
     return built;
   }
@@ -656,17 +643,6 @@ async function piPlanOf(path: string, cwd: string): Promise<PiPlan> {
   return plan;
 }
 
-/** A stored pi entry, as reading one back types it. */
-interface StoredPiEntry {
-  firstKeptEntryId: string;
-  id: string;
-  message?: { role?: string; content?: unknown };
-  summary: string;
-  timestamp: string;
-  tokensBefore: number;
-  type: string;
-}
-
 /**
  * The first transcript entry a stored message at `index` of `nodes` makes,
  * as {@link messageEntries} makes it, read off its node: its own id, or a
@@ -679,10 +655,13 @@ const firstMade = (
   sessionKey: string
 ): string | undefined => {
   const node = nodes[index];
+  if (node?.shell) {
+    return node.id;
+  }
   if (node?.type !== "message") {
     return;
   }
-  if (node.role === "user" || node.role === "toolResult" || node.shell) {
+  if (node.role === "user" || node.role === "toolResult") {
     return node.id;
   }
   if (node.role !== "assistant") {
@@ -699,8 +678,8 @@ const firstMade = (
 /** The transcript entries one stored message makes; `next` the role of the message after it. */
 const messageEntries = (
   sessionKey: string,
-  entry: StoredPiEntry,
-  message: { role?: string; content?: unknown },
+  entry: { id: string; timestamp: string },
+  message: PiMessage,
   next: string | undefined
 ): SessionMessage[] => {
   const entries: SessionMessage[] = [];
@@ -717,7 +696,6 @@ const messageEntries = (
   } else if (message.role === "assistant") {
     entries.push(...assistantEntries(sessionKey, entry, message, next));
   } else if (message.role === "toolResult") {
-    const tool = message as { toolCallId?: string; isError?: boolean };
     entries.push({
       type: "user",
       uuid: entry.id,
@@ -727,9 +705,9 @@ const messageEntries = (
         content: [
           {
             type: "tool_result",
-            tool_use_id: tool.toolCallId ?? "",
+            tool_use_id: message.toolCallId ?? "",
             content: contentOf(message.content),
-            is_error: tool.isError,
+            is_error: message.isError,
           },
         ],
       },
@@ -738,13 +716,6 @@ const messageEntries = (
       timestamp: entry.timestamp,
     });
   }
-  entries.push(
-    ...backgroundShellEntries(
-      sessionKey,
-      entry,
-      message as BackgroundShellMessage
-    )
-  );
   return entries;
 };
 
@@ -772,7 +743,7 @@ async function piEntriesAt(
   const entries: SessionMessage[] = [];
   read.forEach((record, offset) => {
     const index = from + offset;
-    const entry = record as unknown as StoredPiEntry | undefined;
+    const entry = piEntryOf(record);
     // A compaction, where it happened — where the live stream drew it
     // (pi-runtime). Its boundary carries what pi stores of it: how full the
     // context was, not what triggered it. What the model still holds from
@@ -786,9 +757,18 @@ async function piEntriesAt(
       entries.push(...compactionEntries(sessionKey, entry, keptFrom));
       return;
     }
-    const message = entry?.type === "message" ? entry.message : undefined;
-    if (entry && message) {
-      entries.push(...messageEntries(sessionKey, entry, message, roles[index]));
+    if (entry?.type === "message") {
+      entries.push(
+        ...messageEntries(sessionKey, entry, entry.message, roles[index])
+      );
+    }
+    // A moved shell command's end, which pi stores as a custom message
+    // ({@link BACKGROUND_SHELL}).
+    if (entry?.type === "custom_message") {
+      const end = shellEndOf(entry);
+      if (end) {
+        entries.push(...backgroundShellEntries(sessionKey, entry, end));
+      }
     }
   });
   return entries;
@@ -844,7 +824,7 @@ export async function piSessionPath(
   const dir = SessionManager.create(cwd).getSessionDir();
   // Nothing there is no session; a folder that couldn't be read fails with
   // why, never answered as a conversation that was never stored.
-  const names = await readdir(dir).catch(unlessGone([] as string[]));
+  const names = await readdir(dir).catch(unlessGone<string[]>([]));
   const name = names.find(
     (one) => one.endsWith(".jsonl") && one.includes(sessionKey)
   );
@@ -876,7 +856,7 @@ const piFleetMcp = async (
   const report: Record<string, FleetItemState> = { ...signedOut };
   const taken: Record<string, McpServerConfig> = {};
   for (const name of read) {
-    const entry = piMcpEntry(servers[name] as FleetMcpConfig);
+    const entry = piMcpEntry(servers[name]);
     if ("skipped" in entry) {
       report[name] = { state: "unsupported", detail: entry.skipped };
     } else {
@@ -938,12 +918,8 @@ const PI_PROMPT_TYPES = typeFilter("message");
  * `getMessageActivityTime`: the message's own `timestamp`, else the entry's).
  */
 function piPromptAt(record: TranscriptRecord): number | undefined {
-  const entry = record as {
-    message?: { role?: unknown; timestamp?: unknown };
-    timestamp?: unknown;
-    type?: unknown;
-  };
-  if (entry.type !== "message" || entry.message?.role !== "user") {
+  const entry = piEntryOf(record);
+  if (entry?.type !== "message" || entry.message.role !== "user") {
     return;
   }
   return timeOf(entry.message.timestamp) ?? timeOf(entry.timestamp);
@@ -1054,7 +1030,7 @@ export class PiProfile {
         !modelId ||
         modelId === "default" ||
         (model !== undefined &&
-          modelIdOf(model) === defaultId &&
+          model.id === defaultId &&
           model.provider === defaultProvider)
       ) {
         this.#setCredential(credential);
@@ -1305,11 +1281,12 @@ export class PiProfile {
     parts: ReadonlySet<FleetPart>
   ): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
+    const skillStates: Record<string, FleetItemState> = {};
     const report: FleetSyncReport = {
       mcp: {},
       marketplaces: {},
       plugins: {},
-      skills: {},
+      skills: skillStates,
       // CawCo's inline extension runs the fleet's hooks from the harness
       // set (pi-runtime.ts `FleetHooks`); what it cannot run is said
       // unsupported here.
@@ -1330,7 +1307,7 @@ export class PiProfile {
           PI_SKILLS,
           config.skills,
           sidecar.skills,
-          report.skills as NonNullable<FleetSyncReport["skills"]>
+          skillStates
         )
       : sidecar.skills;
     const memory = parts.has("memory")
@@ -1359,11 +1336,12 @@ export class PiProfile {
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
     const places = await placeSets();
+    const skillStates: Record<string, FleetItemState> = {};
     const report: FleetSyncReport = {
       mcp: {},
       marketplaces: {},
       plugins: {},
-      skills: {},
+      skills: skillStates,
       hooks: hookStatesInSet("pi", await readFleetHarnessSet(), places),
       at: Date.now(),
     };
@@ -1379,7 +1357,7 @@ export class PiProfile {
       } else if (drift) {
         state = { state: "failed", cause: "drifted", detail: drift };
       }
-      (report.skills as NonNullable<FleetSyncReport["skills"]>)[name] = state;
+      skillStates[name] = state;
     }
     if (sidecar.memory !== undefined) {
       report.memory = await memoryState(PI_MEMORY, sidecar.memory);

@@ -42,6 +42,7 @@ import {
   type TakeoverInput,
   type TakeoverLayout,
 } from "@cawco/core/browser";
+import { isRecord } from "@cawco/core/is-record";
 import { z } from "zod";
 import { CdpCalls, DevtoolsVersion } from "./cdp-calls";
 
@@ -726,8 +727,8 @@ export class CdpTakeover {
     extend: boolean
   ): Promise<void> {
     const tree = await this.#link.call("Page.getFrameTree", {}, page);
-    const frameId = (tree.frameTree as { frame?: { id?: unknown } } | undefined)
-      ?.frame?.id;
+    const frame = isRecord(tree.frameTree) ? tree.frameTree.frame : undefined;
+    const frameId = isRecord(frame) ? frame.id : undefined;
     if (typeof frameId !== "string") {
       return;
     }
@@ -928,11 +929,19 @@ export class CdpTakeover {
         page
       )
       .catch((): Json => ({}));
-    const box = (read.result as { value?: unknown } | undefined)?.value;
+    const box = isRecord(read.result) ? read.result.value : undefined;
     if (!(Array.isArray(box) && box.length === 4)) {
       return;
     }
-    const [x, y, width, height] = box as number[];
+    const [x, y, width, height]: unknown[] = box;
+    if (
+      typeof x !== "number" ||
+      typeof y !== "number" ||
+      typeof width !== "number" ||
+      typeof height !== "number"
+    ) {
+      return;
+    }
     const focus: TakeoverFocus = { t: "focus", x, y, width, height };
     const said = JSON.stringify(focus);
     for (const viewer of this.#viewers) {
@@ -954,18 +963,15 @@ export class CdpTakeover {
   }
 
   #attached(message: Message): void {
-    const params = (message.params ?? {}) as {
-      sessionId?: unknown;
-      targetInfo?: { targetId?: unknown; type?: unknown };
-      waitingForDebugger?: unknown;
-    };
+    const params = message.params ?? {};
+    const info = isRecord(params.targetInfo) ? params.targetInfo : {};
     const session = params.sessionId;
-    const targetId = params.targetInfo?.targetId;
+    const { targetId } = info;
     if (typeof session !== "string" || typeof targetId !== "string") {
       return;
     }
     const waiting = params.waitingForDebugger === true;
-    const type = params.targetInfo?.type;
+    const { type } = info;
     // A page opened while the person holds the browser (agents are cut
     // off): shown from now on. A page open before is no business of the
     // take-over's, the taken one aside, which has its session already.

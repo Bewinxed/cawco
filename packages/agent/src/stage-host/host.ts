@@ -108,6 +108,11 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
+import type { OwnAnswer, OwnCode } from "@cawco/core/stage-own";
+import {
+  PostedReportSchema,
+  SheetWriteSchema,
+} from "@cawco/core/stored-shapes";
 import { lastLines } from "@cawco/core/words/helpers";
 import { transformCode } from "@code-inspector/core";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
@@ -1031,12 +1036,14 @@ const SVELTE_PROPS = `export function reactive(value) {
 /** The project's Svelte compiling the props holder as a runes module, as vite-plugin-svelte compiles a `.svelte.js` file. */
 async function svelteProps(): Promise<string> {
   const { href } = projectPackage("svelte", "./compiler");
-  const compiler = (await import(href)) as {
+  // The project's own Svelte, at a path known only now: TypeScript types
+  // what a run-time path imports as any, so it is read as what is used of it.
+  const compiler: {
     compileModule: (
       source: string,
       options: { dev: boolean; filename: string; generate: "client" }
     ) => { js: { code: string } };
-  };
+  } = await import(href);
   return compiler.compileModule(SVELTE_PROPS, {
     dev: true,
     filename: "cawco-props.svelte.js",
@@ -1274,11 +1281,11 @@ const frameId = (frame: FrameRender): string =>
  * a phone looking never drops what a desk saw from the map's counts.
  */
 async function keepReport(body: unknown): Promise<void> {
-  const report = body as Partial<PostedReport> | null;
-  keepUnloaded(report?.unloaded ?? [], report?.sections ?? []);
-  keepDrawing(report?.sections ?? [], report?.drawing ?? []);
-  for (const drawn of report?.sections ?? []) {
-    if (typeof drawn?.file === "string" && storyFile(drawn.file)) {
+  const report: PostedReport = PostedReportSchema.parse(body);
+  keepUnloaded(report.unloaded, report.sections);
+  keepDrawing(report.sections, report.drawing);
+  for (const drawn of report.sections) {
+    if (storyFile(drawn.file)) {
       const section: SectionRender = {
         ...drawn,
         hash: await contentHash(drawn.file),
@@ -1294,10 +1301,9 @@ async function keepReport(body: unknown): Promise<void> {
             )
           : null;
       reports.set(section.file, {
-        at:
-          typeof report?.at === "string" ? report.at : new Date().toISOString(),
-        by: report?.by === "stage" ? "stage" : "panel",
-        errors: (report?.page?.errors ?? []).map(sourced),
+        at: report.at,
+        by: report.by,
+        errors: report.page.errors.map(sourced),
         section: {
           ...section,
           frames: section.frames.map((frame) => {
@@ -2324,14 +2330,15 @@ async function formatted(
     ? projectPackage("prettier")
     : null;
   if (prettier) {
-    const api = (await import(prettier.href)) as {
+    // The project's own Prettier, at a path known only now (as Svelte's, {@link svelteProps}).
+    const api: {
       version: string;
       format: (code: string, options: object) => Promise<string>;
       resolveConfig: (
         file: string,
         options: { editorconfig: boolean }
       ) => Promise<object | null>;
-    };
+    } = await import(prettier.href);
     const config = await api.resolveConfig(abs, { editorconfig: true });
     return {
       by: `prettier ${api.version}`,
@@ -2938,7 +2945,7 @@ async function serveStage(
   }
   if (path === WRITE_PATH && req.method === "POST") {
     await bodyOf(req)
-      .then((body) => written(body as SheetWrite))
+      .then((body) => written(SheetWriteSchema.parse(body)))
       .then(
         (done) => json(res, 200, done),
         (error) => refusedWith(res, error)
@@ -3755,14 +3762,6 @@ interface OwnSet {
   urls: string[];
 }
 
-/** A private module's code as a story's runner evaluates it ({@link runnerCode}), or the error Vite's transform of it threw. */
-type OwnCode = { code: string; etag: string; map: unknown } | { error: string };
-
-/** A states file's own set with its private modules' code, as the canvas page asks for it at {@link OWN_PATH}. */
-interface OwnAnswer extends Omit<OwnSet, "files"> {
-  modules: Record<string, OwnCode>;
-}
-
 /** Each states file's own set, kept until a file is edited, created or deleted (the plugin's `hotUpdate`): an edit may add or drop an import. */
 const ownKept = new Map<string, Promise<OwnSet>>();
 
@@ -4051,7 +4050,8 @@ const onPort = (got: number | undefined, name: string): number => {
  * Vite's own caches stay in {@link CACHE_DIR}.
  */
 async function startVite(): Promise<Started> {
-  const vite = (await import(projectPackage("vite").href)) as Vite;
+  // The project's own Vite (as Svelte's, {@link svelteProps}).
+  const vite: Vite = await import(projectPackage("vite").href);
   const configFile = CONFIGS.map((name) => resolve(root, name)).find(
     existsSync
   );
@@ -4108,7 +4108,8 @@ async function startAstro(): Promise<Started> {
   // A stage reports nothing anywhere: no telemetry from a boundary.
   process.env.ASTRO_TELEMETRY_DISABLED = "1";
   const { href, version } = projectPackage("astro");
-  const astro = (await import(href)) as Astro;
+  // The project's own Astro (as Svelte's, {@link svelteProps}).
+  const astro: Astro = await import(href);
   const started = await astro.dev({
     root,
     cacheDir: CACHE_DIR,
@@ -4141,7 +4142,8 @@ async function startAstro(): Promise<Started> {
  */
 async function startNuxt(): Promise<Started> {
   const { href, version } = projectPackage("nuxt", "./kit");
-  const nuxtKit = (await import(href)) as NuxtKit;
+  // The project's own Nuxt Kit (as Svelte's, {@link svelteProps}).
+  const nuxtKit: NuxtKit = await import(href);
   let http: Server | undefined;
   const cawcoNuxtModule = nuxtKit.defineNuxtModule({
     meta: { name: "cawco:stage" },

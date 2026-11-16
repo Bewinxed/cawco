@@ -361,6 +361,12 @@ export class SearchProcess<R extends SearchRole> {
         id,
         op,
         arg,
+        // Platform gap: the answer crosses the process boundary over Bun's
+        // IPC, which hands it on as `any` (read as `unknown`, `SearchSaid`),
+        // and the asks of every op wait by id, whose op TypeScript cannot
+        // correlate with the answer (microsoft/TypeScript#30581). The
+        // process answers id `id` with op `op`'s own answer (host.ts
+        // `SearchOps`).
         resolve: resolve as (value: unknown) => void,
         reject,
         done: () => {
@@ -390,6 +396,7 @@ export class SearchProcess<R extends SearchRole> {
       this.#work.set(ask.id, {
         ask,
         sent: running.ready,
+        // Platform gap: as {@link SearchProcess.read}'s.
         resolve: resolve as (value: unknown) => void,
         reject,
         ...(tell ? { tell } : {}),
