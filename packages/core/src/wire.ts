@@ -43,6 +43,7 @@ import {
   surrogateSafeEnd,
   textPieces,
 } from "./json-stream";
+import { isRecord } from "./is-record";
 
 /**
  * Characters of a message's JSON per part. Our choice: one deflated part costs
@@ -139,22 +140,19 @@ const BULK: Lane = { urgent: false, session: undefined };
  * did not answer within 10 s").
  */
 const laneOf = (message: unknown, chars: number): Lane => {
-  if (typeof message !== "object" || message === null) {
+  if (!isRecord(message)) {
     return BULK;
   }
-  const { instanceId, payload, type, verb } = message as {
-    instanceId?: unknown;
-    payload?: { kind?: unknown } | null;
-    type?: unknown;
-    verb?: unknown;
-  };
+  const { instanceId, payload, type, verb } = message;
   const session = typeof instanceId === "string" ? instanceId : undefined;
   const urgent =
     chars < WIRE_PART_CHARS &&
     (type === "heartbeat" ||
       verb === "control" ||
       verb === "heartbeat" ||
-      (verb === "frames" && payload?.kind === "control_result"));
+      (verb === "frames" &&
+        isRecord(payload) &&
+        payload.kind === "control_result"));
   return { urgent, session };
 };
 

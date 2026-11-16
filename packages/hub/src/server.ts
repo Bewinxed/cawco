@@ -5560,10 +5560,7 @@ export const createServer = (
 
   /** A dashboard message's kind, as the loop's watch names it: its type, verb or kind. */
   const frameKind = (message: unknown): string => {
-    const raw =
-      typeof message === "object" && message !== null
-        ? (message as Record<string, unknown>)
-        : {};
+    const raw = isRecord(message) ? message : {};
     return (
       [raw.type, raw.verb, raw.kind]
         .filter((part): part is string => typeof part === "string")
@@ -13183,11 +13180,7 @@ export const createServer = (
           }
           // Answered at once: a tab that hears nothing within its deadline
           // calls the socket dead and opens another.
-          if (
-            typeof message === "object" &&
-            message !== null &&
-            (message as { type?: unknown }).type === "heartbeat"
-          ) {
+          if (isRecord(message) && message.type === "heartbeat") {
             sendToClient(ws, { type: "heartbeat" } satisfies StreamHeartbeat);
             return;
           }

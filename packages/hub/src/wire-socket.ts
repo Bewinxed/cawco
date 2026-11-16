@@ -32,6 +32,7 @@
  * session's frames resume (server.ts `registerAck`).
  */
 
+import { isRecord } from "@cawco/core/is-record";
 import type { FramePayload } from "@cawco/core/frames";
 import type { HubEnvelope } from "@cawco/core/protocol";
 import {
@@ -260,7 +261,7 @@ export const receiveFrame = (
     return;
   }
   line.received += 1;
-  const text = (frame as { text?: unknown } | null)?.text;
+  const text = isRecord(frame) ? frame.text : undefined;
   line.inbox.push(typeof text === "string" ? text.length : 0, () => {
     let message: unknown;
     try {

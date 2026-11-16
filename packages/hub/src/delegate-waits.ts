@@ -57,20 +57,9 @@ import type { AskAnswer, AskRecord } from "@cawco/core/asks";
 import type {
   InstanceRow,
 } from "@cawco/core/protocol";
-import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
-import { delegateWaitWords } from "@cawco/core/words/delegates";
-import { z } from "zod";
 
-/** The payload fields of the asks the hub raises and settles itself: only the person answers them. */
-const PERSON_ONLY_READ = z
-  .object({
-    browserAsk: z.unknown(),
-    connectAsk: z.unknown(),
-    designProposal: z.unknown(),
-    memoryProposal: z.unknown(),
-    move: z.unknown(),
-  })
-  .partial();
+import { delegateWaitWords } from "@cawco/core/words/delegates";
+
 
 /** What a notice tells of its ask, by which its send is named: each is told once. */
 export type NoticeMark =
@@ -129,38 +118,19 @@ export interface DelegateWaitsDeps {
   readonly title: (row: InstanceRow) => string;
 }
 
-/** What a wait reads of an ask's payload: its permission request's fields, each as its type. */
-const ASK_READ = PermissionRequestFrameSchema.pick({
-  browserAsk: true,
-  connectAsk: true,
-  originInstanceId: true,
-  presentation: true,
-  requestKind: true,
-  routedTo: true,
-  toolName: true,
-}).partial();
-
-/**
- * What a wait reads of `ask`'s payload, parsed as its permission request's
- * fields: a payload that is not one reads as one that says none of them,
- * as an ask with no payload did.
- */
-const payloadOf = (ask: ArrivingAsk): z.output<typeof ASK_READ> => {
-  const read = ASK_READ.safeParse(ask.payload ?? {});
-  return read.success ? read.data : {};
-};
-
 /** Whether `ask`'s payload holds a field only the person answers: an ask the hub raised and settles itself. */
-const personsAsk = (ask: ArrivingAsk): boolean => {
-  const read = PERSON_ONLY_READ.safeParse(ask.payload);
-  return (
-    read.success && Object.values(read.data).some((one) => one !== undefined)
-  );
-};
+const personsAsk = ({ payload }: ArrivingAsk): boolean =>
+  [
+    payload.browserAsk,
+    payload.connectAsk,
+    payload.designProposal,
+    payload.memoryProposal,
+    payload.move,
+  ].some((one) => one !== undefined);
 
 /** What the ask asks, in one line, as every surface says it. */
 export const askWhat = (ask: ArrivingAsk): string => {
-  const payload = payloadOf(ask);
+  const { payload } = ask;
   return (
     payload.presentation?.summary?.trim() ||
     payload.browserAsk?.reason ||
@@ -185,7 +155,7 @@ const byOf = (answer: AskAnswer | undefined): string => {
 export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
   /** The session that made the ask: its own row, or the one it names as its origin. */
   const askerOf = (ask: ArrivingAsk): InstanceRow | undefined => {
-    const payload = payloadOf(ask);
+    const { payload } = ask;
     return deps.instance(payload.originInstanceId ?? ask.instanceId ?? "");
   };
 
@@ -243,7 +213,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       return withdrawnHow(end.closed);
     }
     const { answer } = end;
-    const { browserAsk, connectAsk, requestKind } = payloadOf(ask);
+    const { browserAsk, connectAsk, requestKind } = ask.payload;
     // A take-over and a sign-in settle their asks with no answer of their own.
     if (browserAsk && !answer) {
       return delegateWaitWords.tookOver;
@@ -314,7 +284,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
         }
         return;
       }
-      const browser = payloadOf(ask).browserAsk;
+      const browser = ask.payload.browserAsk;
       const said = browser
         ? delegateWaitWords.browserHeld(name, browser.origin, browser.reason)
         : delegateWaitWords.held(name, askWhat(ask));
@@ -359,12 +329,12 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const title = deps.title(pair.asker);
       // A take-over takes the ask off every screen; its call waits on.
       const taken =
-        end.kind === "answered" && !answer && !!payloadOf(ask).browserAsk;
+        end.kind === "answered" && !answer && !!ask.payload.browserAsk;
       // The person's: one only they answer, or one handed to the parent
       // that went to them (its routing taken off). The sessions above were
       // told it waits, and hear it end.
       const persons =
-        waits.personOnly(ask) || payloadOf(ask).routedTo !== "parent";
+        waits.personOnly(ask) || ask.payload.routedTo !== "parent";
       tellUp(
         pair,
         {

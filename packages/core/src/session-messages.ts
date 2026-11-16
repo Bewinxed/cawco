@@ -1026,6 +1026,13 @@ export interface NeutralSystemMessage {
   last_tool_name?: string;
   // leak_found ({@link import("./harness").LEAK_FOUND}) — what was found leaking
   leak?: import("./harness").LeakFound;
+  // permission_denied — the tool the SDK denied without asking, the
+  // component that decided (`decision_reason_type`) and its reason, or the
+  // SDK's own words
+  decision_reason?: string;
+  decision_reason_type?: string;
+  message?: string;
+  tool_name?: string;
   // mcp_not_connected ({@link MCP_NOT_CONNECTED}) — the server that did not connect
   mcp_server?: string;
   mcp_servers?: { name: string; status: string }[];
