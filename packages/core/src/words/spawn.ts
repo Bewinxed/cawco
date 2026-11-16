@@ -96,7 +96,7 @@ export const spawnWords = {
    * (hub server.ts `settleMode`): the harness and the machine by name.
    */
   /** A start named a permission mode CawCo has no word for at all. */
-  modeUnknown: (mode: string) => `"${mode}" is no permission mode CawCo knows.`,
+  modeUnknown: (mode: string) => `"${mode}" is not a permission mode.`,
   modeUnchosen: (harness: string, machine: string) =>
     `A permission mode must be chosen for the ${harness} session on ${machine}, and none was. Choose one, then start it again. Nothing was started.`,
   /**

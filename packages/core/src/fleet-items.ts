@@ -11,20 +11,27 @@
  * the machine already holds (hub fleet-sync.ts `force`), and the same
  * content forced is not a change of content.
  */
+
+import { z } from "zod";
 import type {
-  FleetMarketplace,
-  FleetMcpServer,
   FleetMemory,
   FleetMemoryDoc,
-  FleetPlacedMemoryDoc,
-  FleetPlugin,
-  FleetPluginPayload,
   FleetProjectRows,
-  FleetSkillPayload,
   MachineFleetConfig,
 } from "./fleet";
 import type { FleetHarnessConfig } from "./harness-config";
-import type { FleetHook } from "./hooks";
+import {
+  FleetHarnessConfigSchema,
+  FleetHookSchema,
+  FleetMarketplaceSchema,
+  FleetMcpServerSchema,
+  FleetMemoryDocSchema,
+  FleetMemorySchema,
+  FleetPlacedMemoryDocSchema,
+  FleetPluginPayloadSchema,
+  FleetPluginSchema,
+  FleetSkillPayloadSchema,
+} from "./stored-shapes";
 import { unhandled } from "./unhandled";
 
 /**
@@ -243,6 +250,45 @@ const rowsOf = (
   return config.projects[projectId];
 };
 
+/**
+ * Each item kind's content, parsed as its type and keeping every key the
+ * type does not declare (`force`, which a machine sets on a forced item, and
+ * any a newer hub sends): what the harnesses converge is the item as held.
+ */
+const ITEMS = {
+  policy: z.looseObject({ deniedTools: z.array(z.string()) }),
+  hubOnly: z.array(z.string()),
+  mcp: FleetMcpServerSchema.loose(),
+  skill: FleetSkillPayloadSchema.loose(),
+  marketplace: FleetMarketplaceSchema.loose(),
+  plugin: FleetPluginSchema.loose(),
+  pluginPayload: FleetPluginPayloadSchema.loose(),
+  memory: FleetMemorySchema.omit({ docs: true }).loose(),
+  memoryDoc: FleetMemoryDocSchema.loose(),
+  hook: FleetHookSchema.loose(),
+  harnessConfig: FleetHarnessConfigSchema.loose(),
+  projectCheckout: z.looseObject({ path: z.string() }),
+  placedMemoryDoc: FleetPlacedMemoryDocSchema.loose(),
+};
+
+/**
+ * Item `id`'s content as `schema`'s type. One that is not is thrown, naming
+ * it: a converge of the rest would take away what the item holds.
+ */
+const itemAs = <S extends z.ZodType>(
+  id: string,
+  schema: S,
+  value: unknown
+): z.output<S> => {
+  const read = schema.safeParse(value);
+  if (!read.success) {
+    throw new Error(
+      `fleet item ${id} is not its kind's content: ${z.prettifyError(read.error)}`
+    );
+  }
+  return read.data;
+};
+
 /** The config whole again, from the items a machine holds. */
 export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
   const config: MachineFleetConfig = {
@@ -265,58 +311,59 @@ export const fleetConfigOf = (items: FleetItems): MachineFleetConfig => {
     const projectId = projectItemOf(id)?.projectId ?? "";
     switch (kind) {
       case "policy":
-        config.deniedTools = (value as { deniedTools: string[] }).deniedTools;
+        config.deniedTools = itemAs(id, ITEMS.policy, value).deniedTools;
         break;
       case "hubOnly":
-        config.hubOnlyMarketplaces = value as string[];
+        config.hubOnlyMarketplaces = itemAs(id, ITEMS.hubOnly, value);
         break;
       case "mcp":
-        config.mcp.push(value as FleetMcpServer);
+        config.mcp.push(itemAs(id, ITEMS.mcp, value));
         break;
       case "skill":
-        config.skills.push(value as FleetSkillPayload);
+        config.skills.push(itemAs(id, ITEMS.skill, value));
         break;
       case "marketplace":
-        config.marketplaces.push(value as FleetMarketplace);
+        config.marketplaces.push(itemAs(id, ITEMS.marketplace, value));
         break;
       case "plugin":
-        config.plugins.push(value as FleetPlugin);
+        config.plugins.push(itemAs(id, ITEMS.plugin, value));
         break;
       case "pluginPayload":
-        config.pluginPayloads.push(value as FleetPluginPayload);
+        config.pluginPayloads.push(itemAs(id, ITEMS.pluginPayload, value));
         break;
       case "memory":
-        main = value as Omit<FleetMemory, "docs">;
+        main = itemAs(id, ITEMS.memory, value);
         break;
       case "memoryDoc":
-        docs.push(value as FleetMemoryDoc);
+        docs.push(itemAs(id, ITEMS.memoryDoc, value));
         break;
       case "hook":
-        config.hooks.push(value as FleetHook);
+        config.hooks.push(itemAs(id, ITEMS.hook, value));
         break;
       case "harnessConfig":
-        config.harnessConfig.push(value as FleetHarnessConfig);
+        config.harnessConfig.push(itemAs(id, ITEMS.harnessConfig, value));
         break;
       case "projectCheckout":
-        rowsOf(config, projectId).checkouts[projectItemOf(id)?.key ?? ""] = (
-          value as { path: string }
-        ).path;
+        rowsOf(config, projectId).checkouts[projectItemOf(id)?.key ?? ""] =
+          itemAs(id, ITEMS.projectCheckout, value).path;
         break;
       case "projectSkill":
-        rowsOf(config, projectId).skills.push(value as FleetSkillPayload);
+        rowsOf(config, projectId).skills.push(itemAs(id, ITEMS.skill, value));
         break;
       case "projectMcp":
-        rowsOf(config, projectId).mcp.push(value as FleetMcpServer);
+        rowsOf(config, projectId).mcp.push(itemAs(id, ITEMS.mcp, value));
         break;
       case "projectMemory":
-        rowsOf(config, projectId).memory.push(value as FleetPlacedMemoryDoc);
+        rowsOf(config, projectId).memory.push(
+          itemAs(id, ITEMS.placedMemoryDoc, value)
+        );
         break;
       case "projectHook":
-        rowsOf(config, projectId).hooks.push(value as FleetHook);
+        rowsOf(config, projectId).hooks.push(itemAs(id, ITEMS.hook, value));
         break;
       case "projectHarnessConfig":
         rowsOf(config, projectId).harnessConfig.push(
-          value as FleetHarnessConfig
+          itemAs(id, ITEMS.harnessConfig, value)
         );
         break;
       default:

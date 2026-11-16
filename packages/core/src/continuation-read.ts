@@ -132,6 +132,7 @@ type ToolUse = Extract<NeutralContentBlock, { type: "tool_use" }>;
 type ToolResult = Extract<NeutralContentBlock, { type: "tool_result" }>;
 
 const messageOf = (entry: SessionMessage): StoredMessage =>
+  // Left a cast: a full parse of every transcript entry's content blocks risks emptying continuation summaries.
   entry.message as StoredMessage;
 
 /**

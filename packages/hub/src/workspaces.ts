@@ -52,7 +52,11 @@ import {
 } from "./db/project-work";
 import { soon } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
-import { thrownAgain } from "./machine-answers";
+import {
+  MALFORMED_REPLY,
+  MachineProblem,
+  thrownAgain,
+} from "./machine-answers";
 import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
@@ -743,9 +747,14 @@ export const createWorkspaces = ({
       [{ id: workspace.id, read: true }],
       { files: [] }
     ).then((read) => {
+      // A listing where bytes were asked is not its reply: the machine's
+      // malformed answer, as every call answers one (machine-answers.ts).
       if ("listed" in read) {
-        throw new Error(
-          `${machineName(db, workspace.machineId)} answered a read of ${workspace.id}'s outputs with their listing`
+        throw new MachineProblem(
+          problem(502, {
+            code: MALFORMED_REPLY,
+            detail: `${machineName(db, workspace.machineId)} answered a read of ${workspace.id}'s outputs with their listing`,
+          })
         );
       }
       return read;
