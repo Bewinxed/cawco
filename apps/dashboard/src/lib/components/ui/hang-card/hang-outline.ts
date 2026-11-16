@@ -4,6 +4,13 @@
  * silhouette (motion/hang-shape) as one path with one stroke, and the same
  * shape's cast below the shelf.
  *
+ * - Its layer: `--layer-hang-outline`, over the hang layer the card stands
+ *   in (`--layer-hang`) and under every floating surface (`--layer-float`).
+ *   At the card's own z-index it lost to a list opened from the card by
+ *   mount order: the list's portal mounts with the card's content, before
+ *   the card's attachment appends this svg, so the later svg painted the
+ *   card's edge and cast across the list.
+ *
  * - The stroke: 1px, on the outline `HALF` in from the silhouette's edge, so
  *   it lies wholly inside it and covers whole device px at every scale
  *   (`vector-effect: non-scaling-stroke`). Its ink is the tab's rim at the
@@ -32,16 +39,18 @@ export interface OutlineLayer {
 /** How many layers have been made: each one's defs are named apart. */
 let made = 0;
 
-/** The outline layer of the card `card`, stacked just over it. */
-export function outlineLayer(card: HTMLElement): OutlineLayer {
+/** The outline layer of a tab's hung card, on its own layer over the hang layer. */
+export function outlineLayer(): OutlineLayer {
   made += 1;
   const id = `hang-outline-${made}`;
   const svg = document.createElementNS(NS, "svg");
-  // Over the page, just over the card, never in the way of a press; the
-  // hang's edge, and the cast's two inks, in the tokens'.
+  // Over the page and the card (the hang layer's), under every floating
+  // surface, a list opened from the card included, whichever was mounted
+  // first; never in the way of a press; the hang's edge, and the cast's two
+  // inks, in the tokens'.
   svg.setAttribute(
     "class",
-    "pointer-events-none fixed inset-0 size-full overflow-visible"
+    "pointer-events-none fixed inset-0 z-(--layer-hang-outline) size-full overflow-visible"
   );
   svg.setAttribute("data-slot", "hang-outline");
   svg.setAttribute("aria-hidden", "true");
@@ -65,12 +74,6 @@ export function outlineLayer(card: HTMLElement): OutlineLayer {
   if (!(gradient && rimStop instanceof SVGElement && under && cast && line)) {
     throw new Error("The hang outline's markup is missing a part.");
   }
-  // Just over the card: at its stack (its own z-index, or its floating
-  // wrapper's), later in the page, so over it.
-  const stacks = [card, card.parentElement ?? card]
-    .map((el) => Number.parseInt(getComputedStyle(el).zIndex, 10))
-    .filter(Number.isFinite);
-  svg.style.zIndex = stacks.length > 0 ? String(Math.max(...stacks)) : "";
   svg.style.display = "none";
   document.body.append(svg);
   return {

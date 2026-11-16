@@ -97,10 +97,9 @@
    * The card hangs from its folder tab (HangCard `tab`, hang-card-tab-frame),
    * as PaneTabs hangs it, at the bench's width: the desk's 416px card, or
    * a phone's margin to margin. Its popovers and tooltips portal to the
-   * page's body, as the app's do: the card's outline (HangCard's outline
-   * layer, hang-outline) stands there on the floating layer, so a list
-   * portaled anywhere under it, the frame's own layer once, drew under the
-   * card's foot.
+   * page's body, as the app's do, on the floating layer: the card's outline
+   * (HangCard's outline layer, hang-outline) stands there too, on its own
+   * layer under them, so a list opened from the card stands over its foot.
    */
   import { type Account, CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import type { AccountHue } from "@cawco/core/accounts/kinds";

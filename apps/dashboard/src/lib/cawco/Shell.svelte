@@ -1892,10 +1892,12 @@
        as the shell above, its height the window's (`--shell-h`). Not inside
        the shell itself: a container is a stacking context, so a held toast
        or a sheet on the page's own layers would stand over a card there;
-       here they stand on the floating layer as portaled cards did, at the
-       window's origin, so their place is the window's. -->
+       here they stand on the hang layer, over those and under every
+       floating surface, so a list opened from a card stands over it and over
+       the session card's outline (hang-outline), at the window's origin, so
+       their place is the window's. -->
   <div
-    class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--layer-float)"
+    class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--layer-hang)"
     data-hang-layer={hangLayerOf.id}
   >
     <GlassCard />

@@ -483,7 +483,7 @@
   }
 
   const hung = (node: HTMLElement) => {
-    const layer = tab ? outlineLayer(node) : null;
+    const layer = tab ? outlineLayer() : null;
     /** A tab's hang drawn `p` of the way out: its surface cut to the silhouette, the outline drawn over both. */
     const grow = (p: number) => {
       const shape = layer ? shapeOf(node) : null;

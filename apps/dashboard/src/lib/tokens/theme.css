@@ -1274,6 +1274,10 @@
   --layer-bench: 100;
   /* The toast layer while the burger's sheet is open: under the sheet's scrim, so a toast waits dimmed and never paints over the open navigation. */
   --layer-toast-held: 110;
+  /* The hang layer (hang-layer, the Shell's): the hanging cards that stand in it, the glass's (Caw's panel, the machines, Jump, Files) and the session card hung from its tab. Over every page layer and a held toast, under the floating surfaces, so a list, menu or tooltip opened from a card stands over it whatever mounted first. */
+  --layer-hang: 114;
+  /* A tab's hung card's outline and cast (hang-outline), drawn on the body over the card it traces: over the hang layer, under every floating surface, so the card's edge never crosses a list opened from it. */
+  --layer-hang-outline: 117;
   /* Every floating surface: the kit's popover, menu, submenu, select, tooltip, dialog, sheet, drawer and their scrims, the details and lead cards, a hover panel, Files' floating panel, the lightbox. They belong in the browser's top layer; bits-ui portals them to the body instead, so they share this one role and the one opened last stands over the one it opened from. */
   --layer-float: 120;
   /* A copy in flight between two places on the page (queued words to the field, a chip to its card, a preview closing into its row): over everything it crosses, floating surfaces included. */
