@@ -30,7 +30,6 @@ import {
   withMovedLine,
   withReminder,
 } from "@cawco/core/injected";
-import { invariant } from "@cawco/core/invariant";
 import { isRecord } from "@cawco/core/is-record";
 import { planWaitsOf } from "@cawco/core/plan";
 import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
@@ -2610,8 +2609,12 @@ export const createSends = (ctx: SendsContext) => {
         ? NO_WORK_HOLD
         : workHoldOf(instanceId, machineId, message.origin, "every-hold");
     const agent = refused ? undefined : ctx.registry.agent(machineId);
+    const keptForItsSession = kept || held || finishing || blocked;
+    const keptInHub = keptForItsSession || paused;
     // Held for a machine inside its window, never failed there (core
-    // handover.ts `send`).
+    // handover.ts `send`). Kept for its machine alone, it waits only on a
+    // deadline ({@link waitsWithDeadline}); else it fails as a send to an
+    // absent machine does.
     const away =
       !(refused || agent || keepAlive) &&
       ctx
@@ -2619,9 +2622,8 @@ export const createSends = (ctx: SendsContext) => {
         .some(
           (command) =>
             command.kind === "send-verdict" && command.verdict === "hold"
-        );
-    const keptForItsSession = kept || held || finishing || blocked;
-    const keptInHub = keptForItsSession || paused;
+        ) &&
+      (keptInHub || waitsWithDeadline(machineId, message.uuid));
     const accepted = Boolean(agent) || away || keptInHub;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
@@ -2659,11 +2661,6 @@ export const createSends = (ctx: SendsContext) => {
     if (agent && !owed) {
       toldMove(envelope);
       ctx.sendToMachine(agent, presenced(envelope));
-    }
-    // Kept for its machine alone, not for its session, an interrupt's hold
-    // or its item's finish.
-    if (owed && !agent && !keptForItsSession) {
-      owedForMachine(machineId, message.uuid);
     }
     // Built after the send has gone: the machine is handed the image bytes,
     // the record a reference to them.
@@ -3192,17 +3189,9 @@ export const createSends = (ctx: SendsContext) => {
     ctx.sendToMachine(agent, presenced(envelope));
   };
 
-  /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
-  const failOwedAway = (machineId: string): void => {
-    // What a paused machine was owed waits for the pause's end, its agent
-    // away or not: the end hands it over once the agent is back.
-    if (ctx.machinePause.until(machineId) !== undefined) {
-      return;
-    }
-    for (const send of ctx.db.owedSends({ machineId })) {
-      if (!waitsOnMachine(send)) {
-        continue;
-      }
+  /** Sends kept for `machineId`, failed as any send to an absent machine is: on its row, with its retry. */
+  const failAway = (machineId: string, sends: SentMessageRow[]): void => {
+    for (const send of sends) {
       if (ctx.db.takeOwedSend(send.uuid)) {
         failSend(send, machineAwayWords(machineId), {
           kind: "machine-away",
@@ -3210,16 +3199,32 @@ export const createSends = (ctx: SendsContext) => {
         });
       }
     }
+  };
+
+  /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
+  const failOwedAway = (machineId: string): void => {
+    // What a paused machine was owed waits for the pause's end, its agent
+    // away or not: the end hands it over once the agent is back.
+    if (ctx.machinePause.until(machineId) !== undefined) {
+      return;
+    }
+    failAway(machineId, ctx.db.owedSends({ machineId }).filter(waitsOnMachine));
     // Law `owed-send-machine-has-deadline`, at the window's end: the machine
     // reads offline with no deadline now, so nothing kept for it waits on it.
+    // Broken (one kept for it as those failed), it is logged and filed, and
+    // what still waits ends as those did, failed on its row with its retry.
     const left = ctx.db.owedSends({ machineId }).filter(waitsOnMachine);
-    ctx.laws.holds(
-      left.length === 0,
-      "owed-send-machine-has-deadline",
-      () =>
-        `Machine ${machineId} reads offline with no deadline, and ${left.length} send(s) kept for it still wait on it: ${left.map((send) => send.uuid).join(", ")}.`,
-      () => ({ machine: machineId })
-    );
+    if (
+      !ctx.laws.holds(
+        left.length === 0,
+        "owed-send-machine-has-deadline",
+        () =>
+          `Machine ${machineId} reads offline with no deadline, and ${left.length} send(s) kept for it still wait on it: ${left.map((send) => send.uuid).join(", ")}.`,
+        () => ({ machine: machineId })
+      )
+    ) {
+      failAway(machineId, left);
+    }
   };
 
   /**
@@ -3243,7 +3248,9 @@ export const createSends = (ctx: SendsContext) => {
    * kept for its machine ({@link deliverToSession}): that machine reads
    * paused, or reconnecting with its window's deadline ahead
    * ({@link reconnectingFor}), never offline with no deadline, which nothing
-   * would ever end. Broken, the send fails as a request: it is not kept.
+   * would ever end. Broken, it is logged and filed, and the send is not
+   * kept for the machine: it fails on its row as a send to an absent
+   * machine does, kept there with its retry.
    *
    * Born red, once: dad89261b^ with this check laid on, a hub just started
    * (its grace for every machine) and a machine last heard an hour ago; a
@@ -3254,16 +3261,14 @@ export const createSends = (ctx: SendsContext) => {
    * `reconnectingFor` read the machine's last word. This tree, the same
    * run: "send red-send to red-e queued: hub", no law.
    */
-  const owedForMachine = (machineId: string, uuid: string): void =>
-    ctx.laws.raise(() =>
-      invariant(
-        ctx.machinePause.until(machineId) !== undefined ||
-          ctx.reconnectingFor(machineId) > 0,
-        "owed-send-machine-has-deadline",
-        () =>
-          `Send ${uuid} was about to be kept for machine ${machineId}, which reads offline with no deadline: no socket, no reconnecting window ahead, no pause.`,
-        () => ({ send: uuid, machine: machineId })
-      )
+  const waitsWithDeadline = (machineId: string, uuid: string): boolean =>
+    ctx.laws.holds(
+      ctx.machinePause.until(machineId) !== undefined ||
+        ctx.reconnectingFor(machineId) > 0,
+      "owed-send-machine-has-deadline",
+      () =>
+        `Send ${uuid} was about to be kept for machine ${machineId}, which reads offline with no deadline: no socket, no reconnecting window ahead, no pause.`,
+      () => ({ send: uuid, machine: machineId })
     );
 
   return {

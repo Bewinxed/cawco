@@ -75,6 +75,12 @@ export interface StreamHubShape {
     message: PlanSnapshot | PlanDelta
   ) => void;
   /**
+   * Tells every socket following a session that its stream cannot go on from
+   * what they hold (`stream.reset`, as a resume the ring cannot replay is
+   * told): each reads the newest page again and follows from there.
+   */
+  readonly resetFollowers: (sessionId: string) => void;
+  /**
    * Stamps a relayed frame with the session's next `seq`, files it in the ring
    * and fans it out to that session's followers. Called for EVERY relayed
    * frame, subscribed or not: the sequence is the session's canonical order,

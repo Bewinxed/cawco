@@ -119,9 +119,10 @@ export interface TranscriptPorts {
   /** This hub's run, the numbering {@link head} counts in (`TranscriptPage.hubRun`). */
   readonly hubRun: string;
   /**
-   * The hub's laws (laws.ts): a law broken while a frame folds fails that
-   * frame (`hold`), while a stored transcript is built fails that read
-   * (`raise`); either way it is logged by name and raised on every dashboard.
+   * The hub's laws (laws.ts): a law broken while a frame folds drops what
+   * is built ({@link TranscriptPorts.reset}), and while a stored transcript
+   * is built fails that read (`raise`); either way it is logged by name and
+   * filed for an agent.
    */
   readonly laws: {
     readonly hold: <T>(read: () => T) => T | undefined;
@@ -141,6 +142,8 @@ export interface TranscriptPorts {
     instanceId: string,
     cursor: HistoryCursor
   ) => Promise<OlderRead>;
+  /** Tells the session's followers their stream cannot go on from what they hold: each reads the newest page again (`stream.reset`). */
+  readonly reset: (instanceId: string) => void;
   /** One frame onto the session's Ledger stream. */
   readonly sequence: (instanceId: string, frame: SessionStreamFrame) => void;
   /**
@@ -320,6 +323,31 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     } satisfies TranscriptStreamFrame);
   };
 
+  /**
+   * What `work` folds into `entry`, as events. A law broken in it (laws.ts)
+   * leaves what is built half folded, and an update its followers never
+   * hear of: what is built is dropped, and each follower is told its stream
+   * cannot go on (`stream.reset`), as when the ring cannot replay a gap. It
+   * reads the newest page again, which builds the transcript afresh from
+   * its machine; a build that breaks the law again fails that read, which
+   * the pane says as it says any read that failed, and reads again later.
+   */
+  const folded = (
+    instanceId: string,
+    entry: Entry,
+    work: () => TranscriptEvent[]
+  ): TranscriptEvent[] => {
+    const events = ports.laws.hold(work);
+    if (events !== undefined) {
+      return events;
+    }
+    if (entries.get(instanceId) === entry) {
+      entries.delete(instanceId);
+    }
+    ports.reset(instanceId);
+    return [];
+  };
+
   /** One held or live payload into a built transcript; a line's anchor kept where it lands. */
   const fold = (
     instanceId: string,
@@ -371,7 +399,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         if ("fault" in read) {
           emit(
             instanceId,
-            ports.laws.hold(() => replayHeld(instanceId, entry)) ?? []
+            folded(instanceId, entry, () => replayHeld(instanceId, entry))
           );
           return read;
         }
@@ -492,7 +520,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     }
     emit(
       instanceId,
-      ports.laws.hold(() => fold(instanceId, entry, payload)) ?? []
+      folded(instanceId, entry, () => fold(instanceId, entry, payload))
     );
   };
 

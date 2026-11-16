@@ -7231,12 +7231,10 @@ export const createServer = (
   // Seeded from the board as the hub boots: every dashboard connects after
   // this and is handed a snapshot at least this fresh, so the first publish
   // sends what moved rather than all of it.
-  laws.hold(() => {
-    for (const row of boardRows()) {
-      publishedRows.set(row.id, JSON.stringify(row));
-      publishedOverlays.set(row.id, overlayOf(row));
-    }
-  });
+  for (const row of boardRows()) {
+    publishedRows.set(row.id, JSON.stringify(row));
+    publishedOverlays.set(row.id, overlayOf(row));
+  }
   boardMoved.clear();
   const publishedExtras = boardExtras();
   const publishedAgents = new Map(
@@ -7834,6 +7832,7 @@ export const createServer = (
     build: (machineId) =>
       db.listAgents().find((agent) => agent.machineId === machineId)?.build
         ?.commit,
+    reset: (instanceId) => streams.resetFollowers(instanceId),
     sequence: (instanceId, frame) => {
       streams.sequence(instanceId, frame);
     },
@@ -10912,7 +10911,7 @@ export const createServer = (
     // What `GET /api/instances` and `GET /api/agents` answer, without the
     // hub calling itself over HTTP for them.
     fleet: {
-      instances: () => laws.raise(boardRows),
+      instances: boardRows,
       machines: () => withPresence(db.listAgents()),
       ...sessionReads(db, (rows) =>
         withSessionPresence(rows).map((row) => {
@@ -12056,7 +12055,7 @@ export const createServer = (
     machinePauseRoutes(ctx),
     agentControlRoutes(ctx),
     new Elysia().get("/api/instances", () =>
-      laws.raise(boardRows).map((row) => ({ ...row, ...instanceTimes(row) }))
+      boardRows().map((row) => ({ ...row, ...instanceTimes(row) }))
     ),
     pulseRoutes(ctx),
     followupStateRoutes(ctx),

@@ -31,7 +31,6 @@ export const instanceTitleRoutes = ({
   firstTurnOf,
   forgetMoveRefusal,
   handMoveRefusal,
-  laws,
   moveByHand,
   nameFromFirstTurn,
   owedCarries,
@@ -48,7 +47,6 @@ export const instanceTitleRoutes = ({
   | "firstTurnOf"
   | "forgetMoveRefusal"
   | "handMoveRefusal"
-  | "laws"
   | "moveByHand"
   | "nameFromFirstTurn"
   | "owedCarries"
@@ -138,7 +136,7 @@ export const instanceTitleRoutes = ({
         contextSizeCalls({ db, reportedContextOf }).contextSize(params.id)
       )
       // Recent's stored transcripts, as the hub keeps them (stored-recent.ts).
-      .get("/api/stored", () => laws.raise(storedRecent.now))
+      .get("/api/stored", () => storedRecent.now())
       // What each tab's id names, as the dashboard asks of the tabs it kept
       // from an earlier visit and of an address before it reads them: the
       // session it is read by (itself, a former id's session, a harness key's

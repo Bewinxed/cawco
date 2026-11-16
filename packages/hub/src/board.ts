@@ -1,6 +1,5 @@
 import type { FrameEnvelope, HubEnvelope } from "@cawco/core/envelopes";
 import type { FramePayload } from "@cawco/core/frames";
-import { invariant } from "@cawco/core/invariant";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import { personsOwn } from "@cawco/core/protocol";
 import { WIRE_PROTOCOL } from "@cawco/core/stream";
@@ -343,18 +342,19 @@ export const createBoard = (ctx: BoardContext) => {
     // Law `running-session-machine-connected` (core invariant.ts), paired
     // with the overlay above: checked on the rows as they leave for a reader,
     // after every overlay laid on them, so no later one serves a stored
-    // `running` as now. A row that breaks it fails the board's frame or
-    // request (laws.ts).
-    for (const row of board) {
-      invariant(
+    // `running` as now. A row that breaks it is left out, logged and filed
+    // (laws.ts), and every other row goes: one bad row never costs a reader
+    // the board, and a dashboard is never left connecting while the hub
+    // answers.
+    return board.filter((row) =>
+      ctx.laws.holds(
         row.status !== "running" || ctx.registry.agent(row.machineId),
         "running-session-machine-connected",
         () =>
           `Session ${row.id} was about to be served running on machine ${row.machineId}, which holds no socket at the hub.`,
         () => ({ session: row.id, machine: row.machineId })
-      );
-    }
-    return board;
+      )
+    );
   };
   // Each listed row comes with the sessions it nests under, and one whose
   // chain names a session the hub no longer has is not listed at all
@@ -467,35 +467,28 @@ export const createBoard = (ctx: BoardContext) => {
 
   /**
    * A dashboard's first frames, as its socket opens: the board, before it is
-   * asked for, so the rail fills before the REST snapshot lands. A law broken
-   * on the board fails this snapshot (laws.ts), and this dashboard is sent
-   * no board; a snapshot that went is followed by an update about to
-   * restart the hub, when one is. Then the fleet's browsers, whole, to
+   * asked for, so the rail fills before the REST snapshot lands, followed by
+   * an update about to restart the hub, when one is, and Recent's stored
+   * transcripts. Then the fleet's browsers, whole, to
    * a page on this wire: a browser view paints from them and follows each
    * `browser_list` frame after, never polling. Then each passkey QR still in
    * time, which the take-over view draws over its stream.
    */
   const greetDashboard = (ws: ClientSocket, older: boolean): void => {
-    const board = ctx.laws.hold(() => instancesFrame(""));
-    if (board) {
-      ctx.sendToClient(ws, board);
-      for (const payload of ctx.owedAfterBoard()) {
-        ctx.sendToClient(ws, {
-          verb: "frames",
-          machineId: "hub",
-          payload,
-        } satisfies HubEnvelope<"frames">);
-      }
-      // Then Recent's stored transcripts, whole (stored-recent.ts).
-      const stored = ctx.laws.hold(ctx.storedRecent.now);
-      if (stored) {
-        ctx.sendToClient(ws, {
-          verb: "frames",
-          machineId: "hub",
-          payload: { kind: "stored", stored },
-        } satisfies HubEnvelope<"frames">);
-      }
+    ctx.sendToClient(ws, instancesFrame(""));
+    for (const payload of ctx.owedAfterBoard()) {
+      ctx.sendToClient(ws, {
+        verb: "frames",
+        machineId: "hub",
+        payload,
+      } satisfies HubEnvelope<"frames">);
     }
+    // Then Recent's stored transcripts, whole (stored-recent.ts).
+    ctx.sendToClient(ws, {
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "stored", stored: ctx.storedRecent.now() },
+    } satisfies HubEnvelope<"frames">);
     if (!older) {
       ctx.sendToClient(ws, {
         verb: "frames",
@@ -551,15 +544,11 @@ export const createBoard = (ctx: BoardContext) => {
   };
 
   const publishInstanceDelta = (machineId: string): void => {
-    // A law broken on the board fails this publish (laws.ts): what moved
-    // stays owed to the next one.
-    const rows = ctx.laws.hold(boardRows);
+    const rows = boardRows();
     // A row, a machine or a preview may have moved: an artifact's tab hears
     // what moved of its own session, before the board's own early return.
     ctx.artifactSessions.refresh();
-    if (rows) {
-      publishBoardDelta(machineId, rows);
-    }
+    publishBoardDelta(machineId, rows);
   };
 
   /** The board's rows, `rows`, sent as what moved since the last publish. */

@@ -875,6 +875,19 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       }
     },
     followerCount: (sessionId) => followers.get(sessionId)?.size ?? 0,
+    resetFollowers: (sessionId) => {
+      const reset: StreamReset = {
+        type: "stream.reset",
+        sessionId,
+        nextSeq: ringOf(sessionId).head + 1,
+      };
+      for (const socketId of followers.get(sessionId) ?? []) {
+        const follower = sockets.get(socketId);
+        if (follower) {
+          deliver(follower.socket, reset);
+        }
+      }
+    },
     sweepStale,
   };
 };

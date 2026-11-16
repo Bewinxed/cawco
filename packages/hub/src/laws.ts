@@ -1,10 +1,12 @@
 /**
  * THE HUB'S END OF A BROKEN LAW (core invariant.ts). A law the hub catches
- * broken fails the frame or the request it was found in, is logged by name
- * (`[law] …`), and goes to agents as a defect task (law-tasks.ts). It never
- * reaches the person's screen as a law: what he was doing fails in its own
- * place, in plain words, as any failure does. The hub itself carries on,
- * because one hub is the operator's only view of the fleet.
+ * broken is logged by name (`[law] …`) and goes to agents as a defect task
+ * (law-tasks.ts). What it was found in goes no further: a board row is left
+ * out, a send fails on its row, a transcript is read again, a request fails
+ * in plain words (server.ts `onError`). It never reaches the person's screen
+ * as a law: what he was doing fails in its own place, as any failure does.
+ * The hub itself carries on, because one hub is the operator's only view of
+ * the fleet.
  */
 import {
   type InvariantBroken,
@@ -13,6 +15,28 @@ import {
   type Law,
   type LawAbout,
 } from "@cawco/core/invariant";
+import { hubFailureWords } from "@cawco/core/words/hub-failure";
+import { HTTPError, problem } from "elysia";
+
+/**
+ * A law broken answering a request, as the request fails: Elysia's own
+ * thrown problem (as machine-answers.ts `MachineProblem` is), a 500 in plain
+ * words, the same in a dev hub as in the shipped one. The law's own words
+ * went to the log and its task; they are never the answer.
+ */
+class LawProblem extends HTTPError {
+  readonly type = "about:blank";
+  constructor(message: string, options: { cause: InvariantBroken }) {
+    super(message, options);
+    this.name = "LawProblem";
+  }
+  override value() {
+    return problem(500, {
+      code: "hub-fault",
+      detail: hubFailureWords.lawBroken,
+    });
+  }
+}
 
 export function createLaws() {
   /** Who takes each break once the hub's tasks exist ({@link fileWith}). */
@@ -76,17 +100,18 @@ export function createLaws() {
     },
     /**
      * `read`'s answer, for a request: a law broken inside it is logged and
-     * filed, and thrown on, so the request fails with the law's name and
-     * the facts.
+     * filed, and thrown on as a {@link LawProblem}, so the request fails in
+     * plain words. Anything else it throws is thrown on as it is.
      */
     raise: <T>(read: () => T): T => {
       try {
         return read();
       } catch (error) {
-        if (isInvariantBroken(error)) {
-          caught(error);
+        if (!isInvariantBroken(error)) {
+          throw error;
         }
-        throw error;
+        caught(error);
+        throw new LawProblem(hubFailureWords.lawBroken, { cause: error });
       }
     },
   };

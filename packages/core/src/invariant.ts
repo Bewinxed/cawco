@@ -14,11 +14,13 @@
  *   it has just proven wrong. A law whose broken state is one workspace's
  *   alone is repaired in that workspace instead, and never reaches here
  *   (`live-workspace-judge-answers`).
- * - The hub throws: the frame or the request fails, the law is logged by
- *   name, and it opens a defect task for agents in the project whose
- *   repository is CawCo's own (hub laws.ts, law-tasks.ts). One hub is the
- *   operator's only view, so a broken law never takes the board down, and
- *   it never reaches the person's screen: he does not fix the code.
+ * - The hub throws: the law is logged by name and opens a defect task for
+ *   agents in the project whose repository is CawCo's own (hub laws.ts,
+ *   law-tasks.ts), and what it was found in goes no further: a board row
+ *   left out, a send failed on its row, a transcript read again, a request
+ *   failed in plain words. One hub is the operator's only view, so a broken
+ *   law never takes the board down, and it never reaches the person's
+ *   screen: he does not fix the code.
  */
 
 /**

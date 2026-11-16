@@ -19,6 +19,14 @@ export const hubFailureWords = {
    */
   unreadRequest: "The hub couldn't read the request this page sent",
   /**
+   * A system law the hub broke answering (core invariant.ts): it stopped
+   * before acting on what it found, logged it, and filed it for an agent to
+   * fix (hub law-tasks.ts). The law's own words are for agents, never this
+   * answer. No stop, and no status: the reader adds it.
+   */
+  lawBroken:
+    "The hub stopped on a fault in its own code before changing anything, and logged it for a fix",
+  /**
    * The hub's 422 for a request carrying fields its route doesn't take
    * (hub unknown-fields.ts): each named by its dotted path, `on` the part
    * of the request it came in (body, query). Never dropped quietly: a
