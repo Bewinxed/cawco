@@ -85,7 +85,8 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
-import type { AnyProblem } from "./refusal";
+import type { ProblemsOf } from "./refusal";
+import type { Tasks } from "./tasks";
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -330,7 +331,9 @@ export interface FindDeps {
   /** A project's stages by name, each with its kind, as its stages.md reads (tasks.ts `stages`); the folder's problem when it does not read. */
   stageKinds: (
     projectId: string
-  ) => Promise<Map<string, StageKind> | AnyProblem>;
+  ) => Promise<
+    Map<string, StageKind> | ProblemsOf<ReturnType<Tasks["stages"]>>
+  >;
   /**
    * The projects' tasks waiting in a stage of yours, read as the board reads
    * them, and a sentence for each project whose tasks could not be read.

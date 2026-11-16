@@ -5,8 +5,7 @@ import type { Kind } from "@cawco/core/decides";
 import { ANY_TYPE, parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { LONG_CALLS } from "@cawco/core/long-calls";
-import type { MachinePath } from "@cawco/core/machine-path";
-import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -42,8 +41,8 @@ import {
   type HandoffDeps,
   handoffActions,
   type ItemEnd,
-  type SendDelivery,
 } from "./delegation-actions";
+import type { DelegationSends } from "./delegation-sends";
 import {
   handoffInstructions,
   handoffTools,
@@ -392,27 +391,16 @@ export function createDelegationMcp(options: {
   ) => Promise<AnyProblem | undefined>;
   /** The project holding folder `cwd` on `machineId` (server.ts `projectAtFolder`): what a session's start_session names. */
   projectAt: (machineId: string, cwd: string) => string | undefined;
-  /** A session's start_session, held until the session is in place; answers its settled folder (delegation-actions `spawn`). */
-  spawn: (
-    envelope: Parameters<HandoffDeps["spawn"]>[0],
-    actor: InstanceRow
-  ) => Promise<MachinePath | AnyProblem>;
+  /** A session's start_session, held until the session is in place; answers its settled folder (delegation-sends.ts `spawn`). */
+  spawn: DelegationSends["spawn"];
   /**
    * Hands a session's send to the hub's one send path now, and answers what
    * became of it (`handoff` words its reply from this); a send that does not
-   * go answers the hub's problem.
+   * go answers the hub's problem (delegation-sends.ts `deliver`).
    */
-  deliver: (
-    envelope: Envelope<SendPayload>,
-    actor: InstanceRow
-  ) => Promise<SendDelivery | AnyProblem>;
-  /** A session's send with inputs, written and sent in one step (delegation-actions `handOff`). */
-  handOff: (
-    target: string,
-    inputs: unknown[],
-    compose: Parameters<HandoffDeps["handOff"]>[2],
-    actor: InstanceRow
-  ) => Promise<SendDelivery | AnyProblem>;
+  deliver: DelegationSends["deliver"];
+  /** A session's send with inputs, written and sent in one step (delegation-sends.ts `handOff`). */
+  handOff: DelegationSends["handOff"];
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   /** Whether `token` is a session credential the hub holds (by its hash). */
   knownCredential: (token: string) => boolean;

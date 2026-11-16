@@ -12,7 +12,12 @@
  */
 import { programLibraryOf } from "@cawco/core/inline-blocks";
 import { PROGRAM_FILE } from "./decision-program";
-import type { AnyProblem } from "./refusal";
+import type {
+  changeFolderFiles,
+  folderFileNames,
+  readFolderFile,
+} from "./project-folder";
+import type { ProblemsOf } from "./refusal";
 import { hubActor } from "./tasks";
 
 /** A decision page's folder in a project's folder. */
@@ -66,23 +71,25 @@ const KEPT_BLOCKS_MOVED = "kept_blocks_moved";
 
 export interface KeptBlocksDeps {
   readonly dataMigrated: (name: string) => boolean;
-  /** The folders directly under `dir` in a project's folder; none when it isn't there. */
+  /** The folders directly under `dir` in a project's folder; none when it isn't there (project-folder.ts `folderFileNames`). */
   readonly folders: (
     projectId: string,
     dir: string
-  ) => Promise<string[] | AnyProblem>;
+  ) => Promise<string[] | ProblemsOf<ReturnType<typeof folderFileNames>>>;
   readonly markDataMigrated: (name: string) => void;
   readonly move: (
     projectId: string,
     change: { writes: { content: string; path: string }[]; deletes: string[] },
     options: { author: { name: string }; message: string }
-  ) => Promise<AnyProblem | undefined>;
+  ) => Promise<ProblemsOf<ReturnType<typeof changeFolderFiles>> | undefined>;
   readonly projectIds: () => string[];
-  /** A file of a project's folder; undefined when it isn't there. */
+  /** A file of a project's folder; undefined when it isn't there (project-folder.ts `readFolderFile`). */
   readonly read: (
     projectId: string,
     path: string
-  ) => Promise<string | undefined | AnyProblem>;
+  ) => Promise<
+    string | undefined | ProblemsOf<ReturnType<typeof readFolderFile>>
+  >;
 }
 
 /** One project's blocks filed under `decisions/`, as the move that takes each to `artifacts/`; the folder's refusal of a read. */

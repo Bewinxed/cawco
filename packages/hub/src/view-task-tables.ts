@@ -9,7 +9,12 @@
  * (`data_migrations`): a view written after it means the general Table.
  */
 
-import type { AnyProblem } from "./refusal";
+import type {
+  changeFolderFiles,
+  folderFilePaths,
+  readFolderFile,
+} from "./project-folder";
+import type { ProblemsOf } from "./refusal";
 import { hubActor } from "./tasks";
 
 /** The pass's name in `data_migrations`. */
@@ -45,18 +50,18 @@ export interface ViewTaskTablesDeps {
   readonly listViews: (
     projectId: string,
     dir: string
-  ) => Promise<string[] | AnyProblem>;
+  ) => Promise<string[] | ProblemsOf<ReturnType<typeof folderFilePaths>>>;
   readonly markDataMigrated: (name: string) => void;
   readonly projectIds: () => string[];
   readonly read: (
     projectId: string,
     path: string
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<string | ProblemsOf<ReturnType<typeof readFolderFile>>>;
   readonly write: (
     projectId: string,
     writes: { content: string; path: string }[],
     options: { author: { name: string }; message: string }
-  ) => Promise<AnyProblem | undefined>;
+  ) => Promise<ProblemsOf<ReturnType<typeof changeFolderFiles>> | undefined>;
 }
 
 /** One project's views with their task tables renamed, as the files to write; none when it has none; the folder's refusal of a read. */

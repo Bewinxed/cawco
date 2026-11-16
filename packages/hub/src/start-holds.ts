@@ -7,6 +7,23 @@ import type { HubTimer } from "./lifetime";
 import { UNREAD } from "./sends";
 import { blockWords } from "./work-items";
 
+/**
+ * A start the hub's own work asked of a machine that is connected but takes
+ * no start now (`startHold`: paused by its owner, installing an update, or
+ * on a build older than its hub's). Not the machine away: a
+ * continuation waits for the hold to end (`flushOwedStarts`), never for a
+ * register that is not coming.
+ */
+export class StartsHeld extends Error {
+  readonly machineId: string;
+  /** `words`: the hold, in `startHold`'s words. */
+  constructor(machineId: string, words: string) {
+    super(words);
+    this.name = "StartsHeld";
+    this.machineId = machineId;
+  }
+}
+
 /** Each machine's paced launches: when the last went, those waiting their turn (each kept on its row, `db.oweSpawn`), and the timer that sends the next. */
 interface Pacing {
   last: number;
@@ -124,7 +141,7 @@ export const createStartHolds = (
    * asked, and binds it when it goes ({@link flushOwedStarts}). Either way
    * its credential and account are the hub's as of its start
    * (`grantLaunch`). A dashboard's start (`sendDashboardStart`)
-   * and a continuation's ({@link spawnFromHub}) meet the same hold.
+   * and a continuation's (spawns.ts `spawnFromHub`) meet the same hold.
    */
   const sendSpawn = (
     agent: ReturnType<typeof ctx.registry.agent>,

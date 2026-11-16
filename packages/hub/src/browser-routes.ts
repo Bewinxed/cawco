@@ -52,7 +52,7 @@ import type { ServerWebSocket } from "bun";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
-import { answered } from "./browsers";
+import { answered } from "./browser-answered";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";

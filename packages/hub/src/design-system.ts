@@ -84,7 +84,8 @@ import {
   YOU,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-import type { AnyProblem } from "./refusal";
+import type { AnyProblem, ProblemsOf } from "./refusal";
+import type { Tasks } from "./tasks";
 import { isLive } from "./work-item-state";
 import { isHostFolder } from "./workspaces";
 
@@ -1408,12 +1409,12 @@ export const createDesignSystem = (deps: {
   designTask: (
     projectId: string,
     taskId: string
-  ) => Promise<boolean | AnyProblem>;
+  ) => Promise<boolean | ProblemsOf<ReturnType<Tasks["get"]>>>;
   /** Whether a task is open: neither done nor dropped; the problem of a task that cannot be read. */
   taskOpen: (
     projectId: string,
     taskId: string
-  ) => Promise<boolean | AnyProblem>;
+  ) => Promise<boolean | ProblemsOf<ReturnType<Tasks["get"]>>>;
   /**
    * The boundary a command in workspace `workspaceId` runs inside, as every
    * hub-run command's (work-items.ts `workspaceRef`): its own, or none for a

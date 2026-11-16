@@ -54,7 +54,7 @@ import type {
   Presence,
 } from "@cawco/core/handover";
 import type { HarnessReport } from "@cawco/core/harness";
-import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type {
   FleetHarnessConfig,
   HarnessConfigKind,
@@ -77,7 +77,6 @@ import type {
   SessionAddress,
   SessionCustody,
   SessionEndIntent,
-  SessionOrigin,
   SessionPulse,
   SpawnPayload,
   TabNamed,
@@ -133,8 +132,6 @@ import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { SentMessageRow } from "./db/sends";
 import type {
-  ContinuationSource,
-  InstanceKind,
   LimitCompactionStage,
   StoredSendRefusal,
 } from "./db/stored-types";
@@ -197,7 +194,7 @@ import type { createCaps } from "./project-caps";
 import type { ProjectDelegateTypes } from "./project-delegate-types";
 import type { projectDelete } from "./project-delete";
 import type { createProjectEdits } from "./project-edit";
-import type { ProjectAsk, ProjectMade } from "./project-making";
+import type { CreateOrJoinProject } from "./project-making";
 import type { MergeDeps } from "./project-merge";
 import type { createProjectOffers } from "./project-offers";
 import type { createProjectOut, placeAddedOf } from "./project-out";
@@ -207,7 +204,6 @@ import type { ProjectTrash } from "./project-trash";
 import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
 import type { ForecastRead } from "./rebalance";
-import type { AnyProblem } from "./refusal";
 import type { RegistryShape } from "./registry";
 import type { createRelayJourney } from "./relay-journey";
 import type { createRoutines, Routines } from "./routines";
@@ -481,8 +477,8 @@ export interface ClosureContext {
   continuationNow: (instanceId: string) => string;
   continuationRefusal: SessionCallsDeps["continuationRefusal"];
   continuationTable: () => ContinuationJob[];
-  /** project-joining.ts `createOrJoinProject`, plain-typed: typing it from there closes project-joining → hub-context → closure-context → project-joining. */
-  createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade | AnyProblem>;
+  /** project-joining.ts `createOrJoinProject`, typed from project-making.ts, the leaf it is declared with. */
+  createOrJoinProject: CreateOrJoinProject;
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   cutTurn: (instanceId: string, cause: string) => void;
@@ -1248,23 +1244,6 @@ export interface ClosureContext {
   skillChoices: Map<string, string[]>;
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
   socketAddress: (ws: AuthSocket) => string | null;
-  spawnFromHub: (
-    machineId: string,
-    asked: NamedSpawn,
-    kind: InstanceKind,
-    origin: SessionOrigin,
-    fallbackMode?: string,
-    workItemId?: string,
-    continues?: Pick<
-      InstanceRow,
-      | "delegateType"
-      | "delegateTypeProject"
-      | "harness"
-      | "mayStart"
-      | "role"
-      | "startingSet"
-    >
-  ) => Promise<AnyProblem | undefined>;
   speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
@@ -1348,14 +1327,6 @@ export interface ClosureContext {
   ) => Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>>;
   streamRelay: ReturnType<typeof createStreamRelay>;
   streams: StreamHubShape;
-  summariserRun: (
-    source: ContinuationSource & { machineId: string },
-    summarizer: { harness: HarnessKind; model?: string; account?: string },
-    prompt: string,
-    id: string,
-    cancelled: () => boolean,
-    mode: PermissionMode
-  ) => Promise<string | AnyProblem>;
   summarisers: Set<string>;
   summarizerOf: (row: { accountId?: string | null }) => {
     harness: HarnessKind;

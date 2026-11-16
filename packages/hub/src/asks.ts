@@ -91,7 +91,10 @@ import { tool as mcpTool, sentence } from "./mcp-tool";
 import { uuidOf } from "./named-uuid";
 import type { AnswerFrom } from "./pending";
 import { askEnvelope } from "./pending";
-import type { AnyProblem } from "./refusal";
+import type { ProjectSettings } from "./project-settings";
+import type { ProblemsOf } from "./refusal";
+import type { Relay } from "./relay";
+import type { DiscardProblem } from "./workspace-discards";
 
 /** The session tools asks give, by name: what a call is routed by (delegation-mcp.ts). */
 export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
@@ -137,6 +140,12 @@ const questionResult = (
 
 /** The mode that approves every ask for its session (core `PermissionMode`). */
 const FULL_SEND: PermissionMode = "fullSend";
+
+/** Why an approved run the hub makes by a path of its own did not run ({@link AsksDeps.run}). */
+export type ApprovedRunProblem =
+  | DiscardProblem
+  | ProblemsOf<ReturnType<ProjectSettings["runApproved"]>>
+  | ProblemsOf<ReturnType<Relay["runApproved"]>>;
 
 /**
  * Why a write is refused before anyone is asked: an `admin_*_write` with no
@@ -190,12 +199,18 @@ export interface AsksDeps {
    * (its origin's `line`, core harness.ts); what the agent read stays.
    */
   readonly reline: (uuid: string, line: string) => void;
-  /** Runs an approved call as the hub for the session that asked; answers what the tool said. */
+  /**
+   * Runs an approved call as the hub for the session that asked; answers
+   * what the tool said, or the problem of a run the hub makes by a path of
+   * its own: a relay's opening (relay.ts `runApproved`), a project setting
+   * (project-settings.ts `runApproved`) or a discard (artifact-events.ts
+   * `discarded`).
+   */
   readonly run: (
     name: string,
     input: Record<string, unknown>,
     asker: InstanceRow
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<string | ApprovedRunProblem>;
   /**
    * Takes an ask off every screen (pending.ts `resolve`): answered, with who
    * answered, or withdrawn, with why.

@@ -35,12 +35,8 @@ import {
   CALLS_MAX_DAYS,
   type CapabilityCallsReport,
 } from "./capability-calls";
-import type { DesignFinding, DesignPick } from "./db/stored-types";
-import {
-  DESIGN_WRITE_FILES,
-  type DesignFileIn,
-  type DesignWritten,
-} from "./design-system";
+import { type createDesignSystem, DESIGN_WRITE_FILES } from "./design-system";
+import type { createDesignVerify } from "./design-verify";
 import {
   FIND_TOOL,
   type FindTool,
@@ -55,7 +51,6 @@ import {
   machinesUpdatedWords,
 } from "./presenters/hub";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
-import type { AnyProblem } from "./refusal";
 import type { agentUpdate } from "./routes/agent-control";
 import { TRIM_PROPOSE } from "./unused-trim";
 
@@ -79,13 +74,6 @@ export const HUB_TOOLS: ReadonlySet<string> = new Set([
   "calls_by_role",
   TRIM_PROPOSE,
 ]);
-
-/** A verifier's verdict as `design_verdict` takes it. */
-export interface DesignVerdict {
-  findings: DesignFinding[];
-  pick?: DesignPick;
-  summary: string;
-}
 
 /**
  * The newest build installed on `machines`, each answering for itself: what
@@ -132,21 +120,9 @@ export interface HubToolsDeps {
   /** The newest CawCo build, looked for and told to every machine (binary-updates.ts `check`). */
   checkBuild: ReturnType<typeof createBinaryUpdates>["check"];
   /** A design check's verdict from its verifier (design-verify.ts `verdict`). */
-  designVerdict: (
-    actor: InstanceRow,
-    verdict: DesignVerdict
-  ) => Promise<{ finished: string; recorded: string } | AnyProblem>;
+  designVerdict: ReturnType<typeof createDesignVerify>["verdict"];
   /** Writes the caller's project's design system, or proposes the change (design-system.ts `write`). */
-  designWrite: (
-    actor: InstanceRow,
-    files: DesignFileIn[],
-    why: string | undefined,
-    toolUseId: string | undefined
-  ) => Promise<
-    | DesignWritten
-    | { files: string[]; proposal: string; waiting: string }
-    | AnyProblem
-  >;
+  designWrite: ReturnType<typeof createDesignSystem>["write"];
   /** One `find` call for the calling session (find-tool.ts `call`). */
   find: FindCall;
   /** The machines registered now: an install naming none goes to each. */

@@ -89,11 +89,11 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
-import type { LeadHomeProblem } from "./caw-problems";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { Origin, StoredSendRefusal } from "./db/stored-types";
 import { boardTitle } from "./labels";
+import type { createLeadHome } from "./lead-home";
 import { awayProblem } from "./machine-answers";
 import { defineTool, type McpTool, sentence } from "./mcp-tool";
 import {
@@ -121,7 +121,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import type { ProjectStops } from "./project-stops";
-import type { AnyProblem } from "./refusal";
+import type { AnyProblem, ProblemsOf } from "./refusal";
 import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
@@ -133,7 +133,13 @@ import {
 } from "./setup";
 import type { SpawnProblem } from "./spawn-problems";
 import { readStages } from "./stages";
-import { MODE, stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
+import {
+  MODE,
+  stagesFileOf,
+  type TaskEvent,
+  type Tasks,
+  type TaskView,
+} from "./tasks";
 import type { Views } from "./views";
 import { budgetOf } from "./work-limits";
 import type { WorkPlace } from "./work-place";
@@ -558,11 +564,7 @@ export interface CawDeps {
    * a folder of its own on another machine that is online; undefined while
    * no machine is.
    */
-  readonly leadHome: (
-    projectId: string
-  ) => Promise<
-    { machineId: string; cwd: string } | LeadHomeProblem | undefined
-  >;
+  readonly leadHome: ReturnType<typeof createLeadHome>;
   /** The machines online now, and the name CawCo shows a machine by. */
   readonly machines: {
     name: (machineId: string) => string;
@@ -619,11 +621,14 @@ export interface CawDeps {
     ) => Omit<CawRunning, "kind" | "taskId" | "taskTitle">[];
     stop: ProjectStops["stop"];
   };
-  /** A task as its project's files have it, or the problem of its read. */
+  /** A task as its project's files have it, or the problem of its read (tasks.ts `get`). */
   readonly task: (
     projectId: string,
     id: string
-  ) => Promise<Pick<TaskView, "id" | "kind" | "stage" | "title"> | AnyProblem>;
+  ) => Promise<
+    | Pick<TaskView, "id" | "kind" | "stage" | "title">
+    | ProblemsOf<ReturnType<Tasks["get"]>>
+  >;
   /**
    * A session's turn ended (routines.ts `turnEnded`): the conversation runs
    * whose wake it read and that it gave no result fail, `why` when it is

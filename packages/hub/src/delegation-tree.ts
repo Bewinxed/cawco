@@ -17,7 +17,8 @@ import type { WorkItemRow } from "./db/project-work";
 import { byHandle } from "./handles";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
-import type { AnyProblem } from "./refusal";
+import type { Plans } from "./plans";
+import type { ProblemsOf } from "./refusal";
 import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
 import { isHubParent } from "./work-item-state";
 import type { PersonWait, QueuedDelegate } from "./work-items";
@@ -199,10 +200,14 @@ export interface DelegationTreeDeps {
   ) => Promise<{ pages: TranscriptPage[] } | { fault: string }>;
   /** What the session itself waits on the person for now (server.ts `personWaitOf`); undefined when nothing. */
   personWait: (instanceId: string) => PersonWait | undefined;
-  /** The session's plan progress, when it has steps (plans.ts); or its refusal. */
+  /** The session's plan progress, when it has steps; or the problem of its read (plans.ts `read`). */
   plan: (
     instanceId: string
-  ) => Promise<{ done: number; total: number } | undefined | AnyProblem>;
+  ) => Promise<
+    | { done: number; total: number }
+    | undefined
+    | ProblemsOf<ReturnType<Plans["read"]>>
+  >;
   /** The delegates `caller` may withdraw, still queued (work-items `queuedOf`). */
   queued: (caller: string) => QueuedDelegate[];
   /** The session stopped at its account's limit, in words (at-limit.ts `stall`); undefined while it runs. */

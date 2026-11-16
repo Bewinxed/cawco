@@ -194,8 +194,8 @@ import {
   YOU,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
+import type { EnsureCurator } from "./routine-schedule";
 import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
@@ -1728,8 +1728,8 @@ export interface MemoryDeps {
    * routines are made after this module.
    */
   readonly curator: () => {
-    /** routines.ts `ensureCurator`, plain-typed: typing it from there closes memory → routines → memory. */
-    ensure: (projectId: string) => AnyProblem | undefined;
+    /** routines.ts `ensureCurator`, by the type it is declared with (routine-schedule.ts). */
+    ensure: EnsureCurator;
     inboxPassed: (projectId: string) => void;
   };
   readonly db: Pick<

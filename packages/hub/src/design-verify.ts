@@ -73,7 +73,6 @@ import type {
 } from "./db/stored-types";
 import { designShaped } from "./design-offers";
 import { designOnBase, ownLandings, type Run } from "./design-system";
-import type { DesignVerdict } from "./hub-tools";
 import { hubActor, type Tasks } from "./tasks";
 import { isLive, type Parent, verifierParent } from "./work-item-state";
 import type {
@@ -137,6 +136,13 @@ const RESTORE = (head: string, branch: string): string =>
     'if [ -f "$p" ] && git apply -R --check --binary "$p" 2>/dev/null; then git apply -R --binary "$p"; fi',
     `git checkout --quiet ${shellQuote(branch)}`,
   ].join("\n");
+
+/** A verifier's verdict as `design_verdict` takes it. */
+export interface DesignVerdict {
+  findings: DesignFinding[];
+  pick?: DesignPick;
+  summary: string;
+}
 
 export interface DesignVerifyDeps {
   /** A hub artifact a result names: its kind and name, and a page's HTML. */

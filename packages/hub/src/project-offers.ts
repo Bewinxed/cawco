@@ -39,9 +39,10 @@ import type { ProjectOfferRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
+import type { Plans } from "./plans";
 import type { CreateOrJoinProject } from "./project-making";
 import { normaliseRemote } from "./projects";
-import type { AnyProblem } from "./refusal";
+import type { ProblemsOf } from "./refusal";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
@@ -66,10 +67,12 @@ export interface ProjectOffersDeps {
   moved: (machineIds: string[]) => void;
   online: (machineId: string) => boolean;
   /**
-   * The session's plan steps as its plan panel reads them (plans.ts):
-   * CawCo's list; or its refusal.
+   * The session's plan steps as its plan panel reads them: CawCo's list;
+   * or the problem of its read (plans.ts `read`).
    */
-  planSteps: (instanceId: string) => Promise<PlanStep[] | AnyProblem>;
+  planSteps: (
+    instanceId: string
+  ) => Promise<PlanStep[] | ProblemsOf<ReturnType<Plans["read"]>>>;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
   run: (

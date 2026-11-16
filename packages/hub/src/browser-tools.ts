@@ -29,9 +29,10 @@ import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";
+import type { answered } from "./browser-answered";
 import { defineTool } from "./mcp-tool";
 import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
-import type { AnyProblem } from "./refusal";
+import type { ProblemsOf } from "./refusal";
 
 /** The session tools browsers give, by name: what a call is routed by (delegation-mcp.ts). */
 export const BROWSER_TOOLS: ReadonlySet<string> = new Set(["browser_ask"]);
@@ -100,7 +101,7 @@ export interface BrowserAsksDeps {
     key: BrowserKey,
     machineId: string,
     origin: string
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<string | ProblemsOf<ReturnType<typeof answered<string>>>>;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
   readonly park: (envelope: Envelope) => void;
   /** Takes an answered ask off the pending ledger. */
@@ -128,7 +129,9 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       actor: InstanceRow,
       input: { origin: string; reason: string },
       toolUseId?: string
-    ): Promise<BrowserAskAnswer | AnyProblem> {
+    ): Promise<
+      BrowserAskAnswer | ProblemsOf<ReturnType<BrowserAsksDeps["pageOf"]>>
+    > {
       refuseSecondAsk(waiting, actor.id, "browser");
       const { key, machineId, artifactId } = deps.browserFor(actor);
       // Pinned before the person hears of it: an ask about a page the agent
@@ -146,7 +149,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
         origin: input.origin,
         reason: input.reason,
       };
-      const answered = new Promise<BrowserAskAnswer>((resolve, reject) => {
+      const answer = new Promise<BrowserAskAnswer>((resolve, reject) => {
         waiting.set(requestId, {
           ask,
           instanceId: actor.id,
@@ -165,7 +168,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       console.log(
         `[browser] ${actor.id} asks the person to take over ${key} on ${input.origin} (${requestId})`
       );
-      return await answered;
+      return await answer;
     },
 
     /** The open ask `requestId` and the page it is pinned to, while its call waits (taken or not). */

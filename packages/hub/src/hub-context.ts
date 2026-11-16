@@ -22,6 +22,7 @@ import type { createArtifactPages } from "./artifact-pages";
 import type { createAskRouting } from "./ask-routing";
 import type { ClosureContext } from "./closure-context";
 import type { createCompaction } from "./compaction";
+import type { createContextReads } from "./context-reads";
 import type { createContinuations } from "./continuations";
 import type { createCutTurns } from "./cut-turns";
 import type { createLaunches } from "./launches";
@@ -32,6 +33,7 @@ import type { createMachineCommands } from "./machine-commands";
 import type { createRelayControl } from "./relay-control";
 import type { createSends } from "./sends";
 import type { createSessionNotes } from "./session-notes";
+import type { createSpawns } from "./spawns";
 import type { createStartHolds } from "./start-holds";
 
 export interface HubContext
@@ -63,6 +65,7 @@ export interface HubContext
       | "observeCompaction"
       | "recoverCompaction"
     >,
+    Pick<ReturnType<typeof createContextReads>, "summariserRun">,
     Pick<
       ReturnType<typeof createContinuations>,
       "advanceContinuation" | "continuationsWhole" | "machineFor"
@@ -119,6 +122,7 @@ export interface HubContext
       ReturnType<typeof createSessionNotes>,
       "endLeak" | "tellContainers" | "tellLeak"
     >,
+    Pick<ReturnType<typeof createSpawns>, "spawnFromHub">,
     Pick<
       ReturnType<typeof createStartHolds>,
       "flushOwedStarts" | "sendSpawn"

@@ -26,9 +26,9 @@ import { secondsOf } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { ElysiaStatus, problem } from "elysia";
 import { machineAccount } from "./accounts";
+import type { ClosureContext } from "./closure-context";
 import { finishedAnswer } from "./continuation-words";
 import type { ContinuationSource } from "./db/stored-types";
-import type { HubContext } from "./hub-context";
 import type { SessionLocation } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import {
@@ -37,10 +37,11 @@ import {
   type Unanswered,
 } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import type { createSpawns } from "./spawns";
 import { unreachable } from "./unreachable";
 
 export type ContextReadsContext = Pick<
-  HubContext,
+  ClosureContext,
   | "awayError"
   | "db"
   | "locateSession"
@@ -53,11 +54,11 @@ export type ContextReadsContext = Pick<
   | "sendFromHub"
   | "sessionName"
   | "silentWords"
-  | "spawnFromHub"
   | "summarisers"
   | "turnWaiters"
   | "unansweredError"
->;
+> &
+  Pick<ReturnType<typeof createSpawns>, "spawnFromHub">;
 
 export const createContextReads = (ctx: ContextReadsContext) => {
   /**

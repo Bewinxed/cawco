@@ -139,6 +139,7 @@ import { handle } from "./presenters/words";
 import type { Push } from "./push";
 import {
   cronOf,
+  type EnsureCurator,
   EVENT_SLOT,
   INBOX_SLOT,
   nextRunsOf,
@@ -2473,7 +2474,7 @@ export const createRoutines = ({
    * Makes the project's memory curator routine when it has none (its first
    * inbox note): daily, kept, made by the hub, with no test run.
    */
-  const ensureCurator = (projectId: string) => {
+  const ensureCurator: EnsureCurator = (projectId) => {
     if (curatorOf(projectId)) {
       return;
     }

@@ -8,6 +8,7 @@
 import { DAY_MS } from "@cawco/core/time";
 import { Cron, DateTime, Option, Result } from "effect";
 import { ElysiaStatus, problem } from "elysia";
+import type { ProblemsOf } from "./refusal";
 
 /**
  * A run an inbound event started (ingress.ts): its slot is `event:<event
@@ -17,6 +18,16 @@ export const EVENT_SLOT = "event:";
 
 /** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */
 export const INBOX_SLOT = "inbox:";
+
+/**
+ * Makes a project's memory curator routine when it has none (routines.ts
+ * `ensureCurator`, declared with this): nothing, or the problem of its
+ * schedule ({@link cronOf}). Said here, below both, so memory.ts types its
+ * dep from it without importing routines.ts, which imports memory.ts.
+ */
+export type EnsureCurator = (
+  projectId: string
+) => ProblemsOf<ReturnType<typeof cronOf>> | undefined;
 
 /** A schedule, parsed; refused with Effect's own words when it does not parse. */
 const parsedCache = new Map<string, Cron.Cron>();

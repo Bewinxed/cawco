@@ -21,7 +21,6 @@ import { secondsOf } from "@cawco/core/time";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
-import { StartsHeld } from "./continuations";
 import type { DbShape } from "./db/index";
 import type { InstanceKind } from "./db/stored-types";
 import { handleId, isHandle } from "./handles";
@@ -45,7 +44,7 @@ import { kindBurn, readForecast } from "./rebalance";
 import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
 import type { SpawnProblem } from "./spawn-problems";
-import type { createStartHolds } from "./start-holds";
+import { type createStartHolds, StartsHeld } from "./start-holds";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
 

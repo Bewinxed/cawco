@@ -19373,36 +19373,6 @@
               }
             }
           },
-          "401": {
-            "description": "postApiProjects 401",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects401"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjects 403",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects403"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjects 404",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects404"
-                }
-              }
-            }
-          },
           "409": {
             "description": "postApiProjects 409",
             "content": {
@@ -19413,82 +19383,12 @@
               }
             }
           },
-          "410": {
-            "description": "postApiProjects 410",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects410"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "postApiProjects 413",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects413"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "postApiProjects 415",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects415"
-                }
-              }
-            }
-          },
           "422": {
             "description": "postApiProjects 422",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjects422"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "postApiProjects 500",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects500"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjects 502",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects502"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "postApiProjects 503",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects503"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "postApiProjects 504",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjects504"
                 }
               }
             }
@@ -155412,7 +155312,11 @@
                 "type": "string"
               },
               "status": {
-                "$ref": "#/components/schemas/ProblemStatus"
+                "enum": [
+                  400,
+                  409
+                ],
+                "type": "number"
               },
               "title": {
                 "type": "string"
@@ -155429,105 +155333,6 @@
               "type"
             ]
           }
-        ]
-      },
-      "postApiProjects401": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects403": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects404": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiProjects409": {
@@ -155546,106 +155351,11 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects410": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
             "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects413": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects415": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+              400,
+              409
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -155664,39 +155374,6 @@
       },
       "postApiProjects422": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "project-not-made"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "$ref": "#/components/schemas/ProblemStatus"
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -155793,138 +155470,6 @@
               "type"
             ]
           }
-        ]
-      },
-      "postApiProjects500": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects503": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiProjects504": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "project-not-made"
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiProjectsByIdCawConversation404": {
@@ -171675,6 +171220,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "caw-home-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "design-clone-unread"
                 ]
               },
@@ -181924,6 +181505,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "caw-home-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "design-clone-unread"
                 ]
               },
@@ -190242,6 +189859,42 @@
       },
       "postApiProjectsByIdTasksByTaskIdRetry502": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "caw-home-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
           {
             "type": "object",
             "properties": {

@@ -58,7 +58,6 @@ import type { PublicInstanceRow } from "./db/instances";
 import type { WorkItemRow } from "./db/project-work";
 import type { SentMessageRow } from "./db/sends";
 import type { SendHold, StoredSendRefusal } from "./db/stored-types";
-import type { SendDelivery } from "./delegation-actions";
 import type { Unstored } from "./hub-shapes";
 import { isKeepAlive } from "./keep-alive";
 import { sessionLabel } from "./labels";
@@ -68,6 +67,27 @@ import { externalizeImages, mediaNameOf } from "./media";
 import { talksWithPerson } from "./roles";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
+
+/** What the hub did with a send, as `handoff` tells its sender. */
+export interface SendDelivery {
+  /** The session was mid-turn when the send reached it. */
+  busy: boolean;
+  /**
+   * Its workspace had retired, and was cut again in the step that wrote the
+   * send's inputs and sent it (work-items.ts `handOff`).
+   */
+  cut?: true;
+  /** Queued at the hub, and why; absent when the session has it. */
+  hold?: SendHold;
+  /** With `hold: "paused"`: "Omars-MacBook-Pro is paused until 00:57". */
+  pause?: string;
+  /**
+   * It had no process, and the send started one (core `relaunchOf`): on its
+   * conversation (`resume`), or fresh under its id because it never began
+   * one (`fresh`). Absent when it had a process or the send is held.
+   */
+  woke?: "fresh" | "resume";
+}
 
 /** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
 export const LIMIT_ORIGIN = "limit";

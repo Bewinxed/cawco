@@ -341,21 +341,17 @@ import {
 import { takesNoInput } from "./artifacts/taker";
 import { AskCard, createAskPresenter } from "./ask-presentation";
 import { createAskRouting } from "./ask-routing";
-import { createAsks } from "./asks";
+import { type ApprovedRunProblem, createAsks } from "./asks";
 import { createAtLimit } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
+import { answered as browserAnswered } from "./browser-answered";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
-import {
-  BROWSER_CALL_MS,
-  answered as browserAnswered,
-  browserRoutes,
-  createBrowsers,
-} from "./browsers";
+import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
 import { TEMPLATE_SKILLS } from "./bundled-skills";
 import { createCallKeys } from "./call-keys";
 import { capabilityCalls } from "./capability-calls";
@@ -425,6 +421,7 @@ import type { DelegateResult } from "./delegate-result";
 import { delegateTypesRoutes } from "./delegate-types";
 import { createDelegateWaits, type NoticeMark } from "./delegate-waits";
 import { createDelegationMcp } from "./delegation-mcp";
+import { createDelegationSends } from "./delegation-sends";
 import { createDelegationTree, treeSessions } from "./delegation-tree";
 import {
   BUILD_TITLE,
@@ -759,7 +756,6 @@ import { isHubParent, isLive } from "./work-item-state";
 import {
   blockWords,
   createWorkItems,
-  mayStartRefusal,
   type PersonWait,
   type WorkItemRequest,
 } from "./work-items";
@@ -2594,7 +2590,7 @@ export const createServer = (
     (
       input: Record<string, unknown>,
       asker: InstanceRow
-    ) => Promise<string | AnyProblem>
+    ) => Promise<string | ApprovedRunProblem>
   > = {
     // A relay's opening asks as an admin write does (relay.ts).
     relay_create: async (input) => {
@@ -10799,17 +10795,13 @@ export const createServer = (
   });
   // A relayed tool call sent again under its key is answered, not run again.
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
-  /** The row of the session whose tool call this is, read fresh: its permission may have changed mid-call; the problem when the hub has none. */
-  const delegationCaller = (actor: InstanceRow) => {
-    const [requester] = db.getInstancesByIds([actor.id]);
-    if (!requester) {
-      return problem(400, {
-        code: "delegation-caller-unknown",
-        detail: "Unknown calling CawCo instanceId",
-      });
-    }
-    return requester;
-  };
+  // A session's sends and starts through its tools (delegation-sends.ts).
+  const delegationSends = createDelegationSends({
+    db,
+    handOff: workItems.handOff,
+    sessionSend,
+    spawnSession,
+  });
   const ruleRowsOf = createRuleRows(db);
 
   /** A kind's rows, as its read route answers them. */
@@ -11206,68 +11198,17 @@ export const createServer = (
         "pi tool refresh"
       );
     },
-    deliver: (envelope, actor) => {
-      const requester = delegationCaller(actor);
-      return Promise.resolve(
-        requester instanceof ElysiaStatus
-          ? requester
-          : sessionSend(envelope, requester)
-      );
-    },
-    // A handoff with inputs: written and sent in one step of the
-    // receiver's workspace's turn (work-items.ts `handOff`).
-    handOff: async (target, inputs, compose, actor) => {
-      const requester = delegationCaller(actor);
-      if (requester instanceof ElysiaStatus) {
-        return requester;
-      }
-      return await workItems.handOff(target, requester.id, inputs, (landed) => {
-        const sent = sessionSend(compose(landed), requester);
-        return sent instanceof ElysiaStatus
-          ? sent
-          : { ...sent, ...(landed.cut ? { cut: true as const } : {}) };
-      });
-    },
+    deliver: delegationSends.deliver,
+    handOff: delegationSends.handOff,
     projectAt: projectAtFolder,
-    // A session's start_session: the caller's own machine unless it named
-    // one, refused to a leaf (one that may not start any type), held until
-    // in place.
-    spawn: async (envelope, actor) => {
-      const requester = delegationCaller(actor);
-      if (requester instanceof ElysiaStatus) {
-        return requester;
-      }
-      const refused = mayStartRefusal(requester, null);
-      if (refused) {
-        return problem(403, {
-          code: "work-item-may-not-start",
-          detail: refused,
-        });
-      }
-      const { fallbackPermissionMode, ...asked } = envelope.payload;
-      // The agent's check, nested under the agent whatever its call named.
-      const { parentToolUseId } = peekParent(asked);
-      const payload: SpawnPayload = {
-        ...asked,
-        parent: {
-          instanceId: requester.id,
-          ...(parentToolUseId ? { toolUseId: parentToolUseId } : {}),
-        },
-      };
-      return await spawnSession(
-        envelope.machineId || requester.machineId,
-        payload,
-        "check",
-        fallbackPermissionMode
-      );
-    },
+    spawn: delegationSends.spawn,
     // One in-process dispatcher in place of six relay routes: the caller,
     // then the verb, then the target's ownership and retirement, each
     // checked in that order before the answer or the control goes.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
       // on an envelope. Recheck the row in case its permission changed mid-call.
-      const requester = delegationCaller(actor);
+      const requester = delegationSends.caller(actor);
       if (requester instanceof ElysiaStatus) {
         return requester;
       }

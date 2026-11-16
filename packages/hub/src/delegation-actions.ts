@@ -54,6 +54,7 @@ import type {
   WorkItemSubmission,
 } from "./db/stored-types";
 import type { DelegateResult } from "./delegate-result";
+import type { DelegationSends } from "./delegation-sends";
 import type {
   DelegateList,
   DelegateListQuery,
@@ -64,7 +65,8 @@ import { byId, handleId, isHandle, mentioned } from "./handles";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
-import type { AnyProblem, ProblemsOf } from "./refusal";
+import type { ProblemsOf } from "./refusal";
+import type { SendDelivery } from "./sends";
 import type { SessionCalls } from "./session-calls";
 import {
   activeAt,
@@ -639,27 +641,6 @@ function resolve(peers: Peer[], target: string): Peer {
   throw ambiguous(target, candidates);
 }
 
-/** What the hub did with a send, as `handoff` tells its sender. */
-export interface SendDelivery {
-  /** The session was mid-turn when the send reached it. */
-  busy: boolean;
-  /**
-   * Its workspace had retired, and was cut again in the step that wrote the
-   * send's inputs and sent it (work-items.ts `handOff`).
-   */
-  cut?: true;
-  /** Queued at the hub, and why; absent when the session has it. */
-  hold?: SendHold;
-  /** With `hold: "paused"`: "Omars-MacBook-Pro is paused until 00:57". */
-  pause?: string;
-  /**
-   * It had no process, and the send started one (core `relaunchOf`): on its
-   * conversation (`resume`), or fresh under its id because it never began
-   * one (`fresh`). Absent when it had a process or the send is held.
-   */
-  woke?: "fresh" | "resume";
-}
-
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   blocked:
@@ -741,7 +722,7 @@ export interface HandoffDeps {
    */
   readonly deliver: (
     envelope: Envelope<SendPayload>
-  ) => Promise<SendDelivery | AnyProblem>;
+  ) => ReturnType<DelegationSends["deliver"]>;
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
   /** The board and the machines, read in the hub's own process. */
@@ -769,7 +750,7 @@ export interface HandoffDeps {
     target: string,
     inputs: unknown[],
     compose: (landed: HandoffInputs) => Envelope<SendPayload>
-  ) => Promise<SendDelivery | AnyProblem>;
+  ) => ReturnType<DelegationSends["handOff"]>;
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
@@ -813,10 +794,8 @@ export interface HandoffDeps {
    * settled it. A start that does not go answers the hub's problem.
    */
   readonly spawn: (
-    envelope: Envelope<
-      SpawnPayload & { fallbackPermissionMode?: PermissionMode }
-    >
-  ) => Promise<MachinePath | AnyProblem>;
+    envelope: Parameters<DelegationSends["spawn"]>[0]
+  ) => ReturnType<DelegationSends["spawn"]>;
   /**
    * Told what this call started (a delegate, a queued delegate, a session),
    * so the hub stops it if the call's harness cuts the call (call-cuts.ts).
@@ -860,7 +839,8 @@ export interface HandoffActions {
         targetInstanceId: string;
         text: string;
       }
-    | AnyProblem
+    | ProblemsOf<ReturnType<SessionCalls["continueFrom"]>>
+    | ProblemsOf<ReturnType<SessionCalls["continuationOutcome"]>>
   >;
   /**
    * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
@@ -959,10 +939,16 @@ export interface HandoffActions {
   readonly forgePost: (ask: {
     repo?: string;
     write: ForgeWrite;
-  }) => Promise<string | AnyProblem>;
+  }) => ReturnType<SessionCalls["forgePost"]>;
   readonly generateImage: (
     request: ImageGenerationRequest
-  ) => Promise<GeneratedImage | AnyProblem>;
+  ) => Promise<
+    | GeneratedImage
+    | ProblemsOf<ReturnType<SessionCalls["generateImage"]>>
+    | ReturnType<
+        typeof problem<504, { code: "image-hub-unanswered"; detail: string }>
+      >
+  >;
   /**
    * Sends `message` to another session; `inputs` (hub handed-input.ts)
    * are written first into the target's inputs folder (its work item's
@@ -974,10 +960,15 @@ export interface HandoffActions {
     target: string,
     message: string,
     inputs?: unknown[]
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<
+    | string
+    | ProblemsOf<ReturnType<typeof checkCold>>
+    | ProblemsOf<ReturnType<HandoffDeps["deliver"]>>
+    | ProblemsOf<ReturnType<HandoffDeps["handOff"]>>
+  >;
   interruptDelegate: (target: string) => string;
   readonly listDelegateTypes: () => Promise<
-    { types: DelegateType[] } | AnyProblem
+    ReturnType<SessionCalls["delegateTypes"]>
   >;
   /** The fleet's sessions as `list_sessions` asks for them (session-list.ts). */
   listSessions: (query: SessionListQuery) => Promise<SessionList>;
@@ -989,7 +980,11 @@ export interface HandoffActions {
     machine: string,
     minutes?: number,
     resume?: boolean
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<
+    | string
+    | ProblemsOf<ReturnType<SessionCalls["pauseMachine"]>>
+    | ProblemsOf<ReturnType<SessionCalls["resumeMachine"]>>
+  >;
   /**
    * Summarises another session with the chosen summariser through the hub's
    * own continuation: a new session starts seeded with the summary and that
@@ -1003,11 +998,13 @@ export interface HandoffActions {
   readonly openItems: (
     cursor?: string,
     format?: "concise" | "detailed"
-  ) => Promise<string | AnyProblem>;
+  ) => Promise<string | ProblemsOf<ReturnType<SessionCalls["openItems"]>>>;
   /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
   sendToUser: (message: string, attachments?: string[]) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
-  readonly setTitle: (title: string) => Promise<string | AnyProblem>;
+  readonly setTitle: (
+    title: string
+  ) => Promise<ReturnType<SessionCalls["setTitle"]>>;
   /** `show_image`: what the transcript says it shows; throws when the session may not show it (shown-files.ts). */
   readonly showImage: (path: string) => string;
   startSession: (
@@ -1029,8 +1026,19 @@ export interface HandoffActions {
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
       machine?: string;
     }
-  ) => Promise<HandoffResult | AnyProblem>;
-  stopDelegate: (target: string) => Promise<string | AnyProblem>;
+  ) => Promise<
+    | HandoffResult
+    | ProblemsOf<ReturnType<SessionCalls["delegateTypes"]>>
+    | ProblemsOf<ReturnType<typeof resolveSpawnType>>
+    | ProblemsOf<ReturnType<HandoffDeps["spawn"]>>
+  >;
+  stopDelegate: (
+    target: string
+  ) => Promise<
+    | string
+    | ProblemsOf<ReturnType<WorkItemCalls["withdrawQueued"]>>
+    | ProblemsOf<ReturnType<WorkItemCalls["stop"]>>
+  >;
   readonly waitItem: (
     minutes: number,
     reason: string

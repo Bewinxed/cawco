@@ -29,6 +29,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { CONTINUATION_ASKER_UNREAD } from "@cawco/core/words/relaunch";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
+import type { createContextReads } from "./context-reads";
 import {
   asksOpening,
   gitSection,
@@ -51,6 +52,8 @@ import { filingPrompt } from "./open-items";
 import { askEnvelope } from "./pending";
 import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
+import type { createSpawns } from "./spawns";
+import { StartsHeld } from "./start-holds";
 import { received } from "./stored-json";
 import { unreachable } from "./unreachable";
 import { unwatchedMode } from "./unwatched-mode";
@@ -87,23 +90,6 @@ const askerOf = (row: Pick<ContinuationRow, "askedBy">): ContinuationAsker => {
   }
   return row.askedBy;
 };
-
-/**
- * A start the hub's own work asked of a machine that is connected but takes
- * no start now (start-holds.ts `startHold`: paused by its owner, installing an
- * update, or on a build older than its hub's). Not the machine away: a
- * continuation waits for the hold to end (`flushOwedStarts`), never for a
- * register that is not coming.
- */
-export class StartsHeld extends Error {
-  readonly machineId: string;
-  /** `words`: the hold, in `startHold`'s words. */
-  constructor(machineId: string, words: string) {
-    super(words);
-    this.name = "StartsHeld";
-    this.machineId = machineId;
-  }
-}
 
 export type ContinuationsContext = Pick<
   ClosureContext,
@@ -142,9 +128,7 @@ export type ContinuationsContext = Pick<
   | "sessionName"
   | "sessionStartOf"
   | "silentWords"
-  | "spawnFromHub"
   | "storedAnswer"
-  | "summariserRun"
   | "summarizerOf"
   | "summaryMoveFailed"
   | "transcripts"
@@ -153,7 +137,9 @@ export type ContinuationsContext = Pick<
   | "unlocatedWords"
   | "workItems"
 > &
-  Pick<ReturnType<typeof createSends>, "deliverSend">;
+  Pick<ReturnType<typeof createContextReads>, "summariserRun"> &
+  Pick<ReturnType<typeof createSends>, "deliverSend"> &
+  Pick<ReturnType<typeof createSpawns>, "spawnFromHub">;
 
 export const createContinuations = (ctx: ContinuationsContext) => {
   const readContinuationOf = async (

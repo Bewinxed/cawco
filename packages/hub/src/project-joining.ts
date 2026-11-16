@@ -1,14 +1,12 @@
-import { posix } from "node:path";
 import { detach } from "@cawco/core/detach";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { projectWords } from "@cawco/core/words/project";
 import { ElysiaStatus, problem } from "elysia";
-import type { LeadHomeProblem } from "./caw-problems";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { HubContext } from "./hub-context";
-import { onAccountMachines } from "./placement";
-import { listFolder, projectRoot } from "./project-folder";
+import { createLeadHome } from "./lead-home";
+import { projectRoot } from "./project-folder";
 import type {
   CreateOrJoinProject,
   ProjectAsk,
@@ -37,61 +35,8 @@ export type ProjectJoiningContext = Pick<
 >;
 
 export const createProjectJoining = (ctx: ProjectJoiningContext) => {
-  /** Caw's own folder for a project, under a machine's home ({@link leadHome}). */
-  const cawHome = (projectId: string): string =>
-    posix.join(".cawco", "caw", projectId);
-
-  /**
-   * Where a project's Caw starts before any checkout of it is online (D2):
-   * its folder on the hub, on the hub's machine, when that machine runs an
-   * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
-   * online. Undefined while no machine is. Among the machines where the
-   * project's account is signed in, when any is (placement.ts
-   * `onAccountMachines`). The folder's problem for the hub's folder, and a
-   * machine that does not say where its home is.
-   */
-  const leadHome = async (
-    projectId: string
-  ): Promise<
-    { machineId: string; cwd: string } | LeadHomeProblem | undefined
-  > => {
-    const machines = onAccountMachines(
-      ctx.onlineMachines().map((id) => ({ machineId: id })),
-      ctx.db.project(projectId)?.inEffect.account.value,
-      ctx.db.accounts.signins()
-    ).map((one) => one.machineId);
-    const own = await ctx.ownMachineId;
-    const hubMachine = machines.find((id) => id === own);
-    if (hubMachine) {
-      // Made and committed on first use, as every read of it does.
-      const made = await listFolder(projectId);
-      if (made instanceof ElysiaStatus) {
-        return made;
-      }
-      const cwd = projectRoot(projectId);
-      return cwd instanceof ElysiaStatus ? cwd : { machineId: hubMachine, cwd };
-    }
-    const [machineId] = machines;
-    if (!machineId) {
-      return;
-    }
-    // The machine's home, so the session's row names a real path; the spawn
-    // makes the folder (the agent's `#workdir`).
-    const home = await ctx.runOnMachine(
-      machineId,
-      "/",
-      'printf %s "$HOME"',
-      15_000
-    );
-    const path = home.stdout.trim();
-    if (home.exitCode !== 0 || !path.startsWith("/")) {
-      return problem(502, {
-        code: "caw-home-unsaid",
-        detail: `${ctx.machineName(machineId)} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`,
-      });
-    }
-    return { machineId, cwd: posix.join(path, cawHome(projectId)) };
-  };
+  /** Where a project's Caw starts before any checkout of it is online (lead-home.ts). */
+  const leadHome = createLeadHome(ctx);
 
   /**
    * Where a project's work runs now (work-place.ts): one rule for a task's
