@@ -55,10 +55,7 @@ import {
   moveSize,
   type NamedMoveRequest,
 } from "@cawco/core/move";
-import type {
-  HubEnvelope,
-  SpawnPayload,
-} from "@cawco/core/protocol";
+import type { HubEnvelope, SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";

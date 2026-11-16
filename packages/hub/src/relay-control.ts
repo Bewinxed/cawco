@@ -3,9 +3,7 @@ import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
 import { detach } from "@cawco/core/detach";
 import { INSPECT_CONFIG } from "@cawco/core/fleet";
-import type {
-  ArrivingAsk,
-} from "@cawco/core/frames";
+import type { ArrivingAsk } from "@cawco/core/frames";
 import { isEffortLevel } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type {
@@ -408,7 +406,10 @@ export const createRelayControl = (ctx: RelayControlContext) => {
    * that asked it: denied in words saying it could not be shown and why, so
    * its turn goes on instead of waiting on a question nobody was shown.
    */
-  const withdrawUnshown = async (ask: ArrivingAsk, why: string): Promise<void> => {
+  const withdrawUnshown = async (
+    ask: ArrivingAsk,
+    why: string
+  ): Promise<void> => {
     const requestId = ask.requestId ?? "";
     const { toolName, input } = ask.payload;
     const question = questionsOf(toolName, input) !== null;

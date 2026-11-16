@@ -157,9 +157,7 @@ export const userTurnText = (message: unknown): string | undefined => {
  * harness's `readTranscriptWindow`), so an answer that holds no `entries`
  * list is no read of the store, and is never taken as an empty conversation.
  */
-const transcriptWindowOf = (
-  answer: unknown
-): TranscriptWindow | undefined => {
+const transcriptWindowOf = (answer: unknown): TranscriptWindow | undefined => {
   if (!isRecord(answer)) {
     return;
   }

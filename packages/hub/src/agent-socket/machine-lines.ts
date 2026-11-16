@@ -1,10 +1,6 @@
 /** Lines a machine says about a session, read before the ingest ledger. */
 
-import {
-  CUSTODY_HELD,
-  LEAK_ENDED,
-  LEAK_FOUND,
-} from "@cawco/core/harness";
+import { CUSTODY_HELD, LEAK_ENDED, LEAK_FOUND } from "@cawco/core/harness";
 import { FRAMES_LOST, STREAM_SO_FAR } from "@cawco/core/session-messages";
 import { HOUR_MS } from "@cawco/core/time";
 import { custodyLine } from "../history";
@@ -69,11 +65,7 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
       frame.message.type === "system" &&
       frame.message.subtype === LEAK_FOUND
     ) {
-      ctx.tellLeak(
-        message.machineId,
-        instanceId,
-        frame.message
-      );
+      ctx.tellLeak(message.machineId, instanceId, frame.message);
       return "stop";
     }
     return "continue";
@@ -85,11 +77,7 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
       frame.message.type === "system" &&
       frame.message.subtype === LEAK_ENDED
     ) {
-      ctx.endLeak(
-        message.machineId,
-        instanceId,
-        frame.message
-      );
+      ctx.endLeak(message.machineId, instanceId, frame.message);
       return "stop";
     }
     return "continue";

@@ -126,9 +126,8 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         );
   };
   /** The texts and files a stored send carried (`SendPayload.attachments`). */
-  const attachmentsOf = (
-    whole: HubEnvelope<"send"> | null
-  ): SendAttachment[] => whole?.payload.attachments ?? [];
+  const attachmentsOf = (whole: HubEnvelope<"send"> | null): SendAttachment[] =>
+    whole?.payload.attachments ?? [];
   /**
    * Withdraws each of the session's unread artifact events `same` names
    * (by its words), in order: the words, pictures, texts and files of each

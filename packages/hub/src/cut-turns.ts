@@ -2,10 +2,7 @@ import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
-import type {
-  ArrivingAsk,
-  AsleepFrame,
-} from "@cawco/core/frames";
+import type { ArrivingAsk, AsleepFrame } from "@cawco/core/frames";
 import {
   CLI_OUTDATED,
   FRESH_START,
@@ -13,10 +10,7 @@ import {
   ROOM_HELD,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type {
-  HubEnvelope,
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { HubEnvelope, InstanceRow } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
@@ -441,10 +435,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   /** Keeps the questions `asks` put to the person, which go with their process unanswered. */
   const noteWithdrawn = (asks: readonly ArrivingAsk[]): void => {
     for (const ask of asks) {
-      if (
-        !ask.instanceId ||
-        ask.payload.toolName !== ASK_USER_QUESTION
-      ) {
+      if (!ask.instanceId || ask.payload.toolName !== ASK_USER_QUESTION) {
         continue;
       }
       const read = ASKED_QUESTIONS.safeParse(ask.payload);

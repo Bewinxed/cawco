@@ -1,12 +1,7 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
-import type {
-  ArrivingAsk,
-  ParkedAsk,
-} from "@cawco/core/frames";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { ParkedAskShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
@@ -207,7 +202,8 @@ const ownedAsks = (db: DbShape): ArrivingAsk[] => {
  * stamped beside its declared keys is left out, and one that is not a
  * permission request throws, so it is never parked or broadcast.
  */
-const taken = (envelope: ArrivingAsk): ParkedAsk => ParkedAskShape.parse(envelope);
+const taken = (envelope: ArrivingAsk): ParkedAsk =>
+  ParkedAskShape.parse(envelope);
 
 /** A session process's ask as it arrives, before the hub stamps its `presentation`: that field is the hub's to write. */
 const ArrivingAskShape = ParkedAskShape.extend({

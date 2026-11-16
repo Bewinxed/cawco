@@ -2540,10 +2540,7 @@ export const createServer = (
         if (envelope.payload.browserAsk) {
           artifactSessions.refresh(envelope.instanceId);
         }
-        if (
-          !existed &&
-          envelope.payload.routedTo !== "parent"
-        ) {
+        if (!existed && envelope.payload.routedTo !== "parent") {
           push.onAsk(envelope);
         }
       }
@@ -3037,11 +3034,7 @@ export const createServer = (
     push.onSettled(parked.requestId);
     // The person's wait is over, its mark with it; but a browser taken over
     // leaves every screen while its call waits on, until it is handed back.
-    if (!(
-      outcome === "answered" &&
-      !answer &&
-      parked.payload.browserAsk
-    )) {
+    if (!(outcome === "answered" && !answer && parked.payload.browserAsk)) {
       db.askPushes.drop(parked.requestId);
     }
     // Over on every device: its push taken down.
@@ -3071,9 +3064,7 @@ export const createServer = (
         outcome,
         ...(answer ? { answer } : {}),
         // An ask no screen was shown: the transcript's only word of it.
-        ...(why
-          ? { reason: why, toolName: parked.payload.toolName }
-          : {}),
+        ...(why ? { reason: why, toolName: parked.payload.toolName } : {}),
       },
     });
   });
@@ -5654,7 +5645,8 @@ export const createServer = (
   const carriesCustody = (message: MachineEnvelope): boolean =>
     message.verb === "register" ||
     (message.verb === "frames" && message.payload.kind === "session_address") ||
-    (message.verb === "heartbeat" && message.payload.sessionAddresses.length > 0);
+    (message.verb === "heartbeat" &&
+      message.payload.sessionAddresses.length > 0);
   /**
    * A failed request's answer, `ok: false` with `reason`: to the hub's own
    * wait on `requestId`, its dashboard command, and the socket that asked;
@@ -11458,7 +11450,10 @@ export const createServer = (
    * dashboard told it is up under its id now. True when the start named a
    * former id.
    */
-  const resumeFormer = (ws: ClientSocket, message: ClientEnvelope<"spawn">): boolean => {
+  const resumeFormer = (
+    ws: ClientSocket,
+    message: ClientEnvelope<"spawn">
+  ): boolean => {
     const named = message.instanceId;
     const now = named ? db.instanceIdOf(named) : undefined;
     if (!(named && now) || now === named) {
@@ -12399,10 +12394,7 @@ export const createServer = (
    * waits on that server's start, join the machine's catalog. How many it
    * dated.
    */
-  const beatDated = (
-    machineId: string,
-    agentFrame: HeartbeatReads
-  ): number => {
+  const beatDated = (machineId: string, agentFrame: HeartbeatReads): number => {
     const { resumableAt: served } = agentFrame;
     if (served) {
       const kept = keptOn.get(machineId) ?? new Set();
@@ -12488,9 +12480,8 @@ export const createServer = (
     }
     // A bucket of a harness this build does not scan (a newer agent's) is
     // left out, as `usage_buckets.harness` holds only the harnesses it reads.
-    const scanned = (buckets ?? []).filter(
-      (bucket): bucket is UsageBucket =>
-        USAGE_HARNESSES.some((harness) => harness === bucket.harness)
+    const scanned = (buckets ?? []).filter((bucket): bucket is UsageBucket =>
+      USAGE_HARNESSES.some((harness) => harness === bucket.harness)
     );
     if (scanned.length < (buckets?.length ?? 0)) {
       console.warn(

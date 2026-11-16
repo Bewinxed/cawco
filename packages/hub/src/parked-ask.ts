@@ -1,7 +1,5 @@
 import type { ArrivingAsk } from "@cawco/core/frames";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 
 /**
  * `actor`'s call to `toolName` as an ask parked for the person: its

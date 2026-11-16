@@ -9,9 +9,7 @@ import {
   delegateWaitNotice,
   reportMarker,
 } from "@cawco/core/injected";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -330,8 +328,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
    * ({@link deliverDelegateAsk}). Undefined for an ask not routed.
    */
   const routedRecipient = (parked: ArrivingAsk): string | undefined => {
-    return parked.payload.routedTo === "parent" &&
-      parked.requestId
+    return parked.payload.routedTo === "parent" && parked.requestId
       ? ctx.db.delegateAsk(parked.requestId)?.parentInstanceId
       : undefined;
   };

@@ -2529,9 +2529,7 @@ export const createSends = (ctx: SendsContext) => {
    * with the person (roles.ts `talksWithPerson`: a work item asks its
    * parent, never the person) carries no presence.
    */
-  const presenced = (
-    envelope: HubEnvelope<"send">
-  ): HubEnvelope<"send"> => {
+  const presenced = (envelope: HubEnvelope<"send">): HubEnvelope<"send"> => {
     const { instanceId, message } = envelope.payload;
     if (isKeepAlive(message)) {
       return envelope;
@@ -2960,10 +2958,7 @@ export const createSends = (ctx: SendsContext) => {
    * send path ({@link deliverSend}), and what became of it. A send that
    * failed is refused with why.
    */
-  const sessionSend = (
-    asked: HubEnvelope<"send">,
-    requester: InstanceRow
-  ) => {
+  const sessionSend = (asked: HubEnvelope<"send">, requester: InstanceRow) => {
     const envelope = byIdNow(asked);
     const { payload } = envelope;
     const malformed = normalizeRelayMessage(payload);

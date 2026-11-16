@@ -77,10 +77,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type {
-  ArrivingAsk,
-  PermissionRequestFrame,
-} from "@cawco/core/frames";
+import type { ArrivingAsk, PermissionRequestFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
 import { type Install, installName } from "@cawco/core/install";
@@ -92,9 +89,7 @@ import {
   MEMORY_PROPOSAL_TOOL,
   PROJECT_SETTINGS_TOOL,
 } from "@cawco/core/permission-presentation";
-import type {
-  InstanceRow,
-} from "@cawco/core/protocol";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { TurnWakes } from "@cawco/core/session-messages";
 import { PermissionRequestFrameSchema } from "@cawco/core/stored-shapes";
