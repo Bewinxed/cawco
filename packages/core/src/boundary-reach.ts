@@ -9,6 +9,7 @@
  */
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import { errnoCode } from "./absent";
 
 /**
  * The address space no workspace dials by a name that resolves into it: the
@@ -45,7 +46,7 @@ const GUARDED = [
 
 const refused = new BlockList();
 for (const range of [...DENIED_RESOLVED_ADDRESSES, ...GUARDED]) {
-  const [network, prefix] = range.split("/") as [string, string];
+  const [network, prefix] = range.split("/");
   refused.addSubnet(
     network,
     Number(prefix),
@@ -97,7 +98,7 @@ export const workspaceReach = async (
       ? [host]
       : (await lookup(host, { all: true })).map((one) => one.address);
   } catch (error) {
-    return `${origin}'s host does not resolve (${(error as NodeJS.ErrnoException).code ?? String(error)}), so no browser in a workspace reaches it`;
+    return `${origin}'s host does not resolve (${errnoCode(error) ?? String(error)}), so no browser in a workspace reaches it`;
   }
   const open = addresses.filter((address) => !workspaceRefuses(address, own));
   return open.length > 0

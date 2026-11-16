@@ -30,7 +30,6 @@ import {
   type ModelInfo,
 } from "./harness/kinds";
 import { traitsOf } from "./harness/traits";
-import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { decidesWords } from "./words/decides";
 import { spawnWords } from "./words/spawn";
@@ -259,8 +258,7 @@ const modelListed = (
   if (id === "default" || modelNameIn(rows, id) !== null) {
     return true;
   }
-  const takes = UNLISTED_TAKEN[harness];
-  return takes ? takes(id, rows) : unhandled("harness", harness as never);
+  return UNLISTED_TAKEN[harness](id, rows);
 };
 
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
