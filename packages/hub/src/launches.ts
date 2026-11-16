@@ -32,6 +32,7 @@ import type { StoredSendRefusal } from "./db/stored-types";
 import type { AccountUse, SettledSpawn } from "./hub-shapes";
 import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { makesRoutines } from "./roles";
+import { pickedModel } from "./start-models";
 
 /** A frame of a session's that may name its settings: a control's answer, or a line of its own. */
 const SETTINGS_FRAME = z.object({
@@ -93,6 +94,7 @@ export type LaunchesContext = Pick<
   | "hubAsks"
   | "identities"
   | "launchAccount"
+  | "launchModel"
   | "launchRefusal"
   | "machineName"
   | "modelRefusal"
@@ -508,6 +510,33 @@ export const createLaunches = (ctx: LaunchesContext) => {
   /** The boundary a session's every spawn carries: its work item's workspace; none for any other session. */
   const sessionWorkspace = (row: InstanceRow): WorkspaceRef | undefined =>
     ctx.workItems.workspaceOf(row);
+  /**
+   * The model a launch runs on: the hub's, never one its harness picks. The
+   * one picked with a move owed to it (`stored`, the row as that move
+   * leaves it), else the one it was sent, else its row's (`read`). A row
+   * that names none (a session started before every start named its model)
+   * is named one now, on the account it runs on, and keeps it
+   * ({@link ClosureContext.launchModel}); why none can be, when none can.
+   * None for a reattach, which launches nothing: its process runs on what
+   * it runs on.
+   */
+  const launchModelOf = (
+    payload: SpawnPayload,
+    read: InstanceRow,
+    stored: InstanceRow
+  ): { model?: string } | { refusal: string } => {
+    const named =
+      (stored.model && stored.model !== read.model
+        ? stored.model
+        : undefined) ??
+      pickedModel(payload.model) ??
+      pickedModel(read.model);
+    if (named) {
+      return { model: named };
+    }
+    return payload.reattachOnly ? {} : ctx.launchModel(read.machineId, stored);
+  };
+
   const bounded = (payload: SpawnPayload, knownRow?: InstanceRow) => {
     const {
       scratchWorktree: _callerWorktree,
@@ -529,10 +558,15 @@ export const createLaunches = (ctx: LaunchesContext) => {
     // process as it runs.
     const stored = payload.reattachOnly ? read : ctx.takeOwedMove(read);
     const row = knownRow ?? stored;
-    const launching =
-      stored.model && stored.model !== read.model
-        ? { ...asked, model: stored.model }
-        : asked;
+    const model = launchModelOf(payload, read, stored);
+    // No account can take a model it lists: a launch with no account.
+    if ("refusal" in model) {
+      return problem(409, {
+        code: "launch-account-unavailable",
+        detail: model.refusal,
+      });
+    }
+    const launching = { ...asked, ...model };
     // The row's harness, on every launch it sends: its conversation is that
     // harness's ({@link enforceRowSessionKey} refused any other).
     const { harness } = read;

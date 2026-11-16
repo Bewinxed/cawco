@@ -117,7 +117,8 @@ async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
         instanceId: id,
         cwd: "/tmp",
         harness: "claude",
-        model: "default",
+        // A full Claude model id, admitted on any listing: a start names its model.
+        model: "claude-sonnet-5",
       },
     })
   );

@@ -1,12 +1,20 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AccountProvider } from "@cawco/core/accounts";
+import {
+  type Account,
+  type AccountProvider,
+  accountNameAmong,
+  accountProvidersOf,
+  CLAUDE_PROVIDER,
+  modelScope,
+} from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ClientSpawn, HubEnvelope } from "@cawco/core/envelopes";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
+import { type ModelListing, modelListingOn } from "@cawco/core/model-names";
 import type {
   InstanceRow,
   NamedSpawn,
@@ -19,6 +27,7 @@ import { resumedKey } from "@cawco/core/protocol";
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
@@ -36,6 +45,7 @@ import {
   accountFacts,
   place as placeAccount,
   projectAccountOf,
+  standings,
   unreportedHarnessRefusal,
 } from "./placement";
 import { projectOfHubFolder, projectRoot } from "./project-folder";
@@ -45,6 +55,14 @@ import type { createSends } from "./sends";
 import { UNREAD } from "./sends";
 import type { SpawnProblem } from "./spawn-problems";
 import { type createStartHolds, StartsHeld } from "./start-holds";
+import {
+  noModelRuns,
+  nothingListed,
+  type OwnDefault,
+  type ProviderStandings,
+  pickedModel,
+  startCandidates,
+} from "./start-models";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
 
@@ -105,6 +123,12 @@ export const enforceRowSessionKey = (
   }
   return undefined;
 };
+
+/** Where a start goes: the account it runs on (none: no CawCo account), and the model it runs, which its harness is handed. */
+export interface Started {
+  accountId?: string;
+  model: string;
+}
 
 /** Why a start that names no harness is refused. */
 const HARNESS_UNNAMED = `A start names the harness it runs on (${HARNESSES.join(", ")}).`;
@@ -187,23 +211,27 @@ export type SpawnsContext = Pick<
   | "forkedFromOf"
   | "harnessReportOf"
   | "heldClaim"
+  | "homeLoginMoveOf"
   | "inFlightRefusal"
   | "keptOn"
+  | "knownProviders"
   | "launchAccount"
   | "launchClaims"
   | "locations"
   | "machineFault"
   | "machineName"
+  | "modelListing"
   | "openInstance"
   | "owedMoves"
   | "owedOn"
   | "pending"
-  | "piDefaultFor"
+  | "ownDefaultOf"
   | "projectTypes"
   | "publishInstances"
   | "readAgent"
   | "refusedHarness"
   | "registry"
+  | "resolvedModel"
   | "sendAnswerable"
   | "sessionName"
   | "ownMachineIdRead"
@@ -540,9 +568,19 @@ export const createSpawns = (ctx: SpawnsContext) => {
       payload.harness,
       payload.model
     );
-    if (!provider) {
-      return undefined;
-    }
+    return provider
+      ? providerInput(provider, machineId, payload, task, fork)
+      : undefined;
+  };
+
+  /** {@link placementInput} for the accounts of `provider`, signed in on `machineId` or not. */
+  const providerInput = (
+    provider: AccountProvider,
+    machineId: string,
+    payload: NamedSpawn,
+    task: { accounts?: string[] | null; projectId?: string | null },
+    fork: { accountId: string | null } | undefined
+  ): PlacementInput => {
     const asks = spawnAsks(payload, task);
     const routing = ctx.db.accounts.routing(provider);
     const now = Date.now();
@@ -661,16 +699,17 @@ export const createSpawns = (ctx: SpawnsContext) => {
     payload: SpawnPayload,
     placed: { accountId?: string }
   ): { accountId?: string } => {
+    const on = placed.accountId ? { accountId: placed.accountId } : {};
     if (
       !(traitsOf(payload.harness).accountDir && payload.resume) ||
       payload.resume.fork ||
       !placed.accountId
     ) {
-      return placed;
+      return on;
     }
     const held = accountHeld(payload);
     if (held?.accountId === placed.accountId) {
-      return placed;
+      return on;
     }
     ctx.launchClaims.set(payload.instanceId, {
       accountId: placed.accountId,
@@ -680,17 +719,24 @@ export const createSpawns = (ctx: SpawnsContext) => {
   };
 
   /**
-   * The account a session about to open runs on: its row's, when it has one
-   * (an account is for the session's whole life); a resumed conversation's
-   * stays where its transcript is; a fork takes its origin's; anything else
-   * is placed. `task`: the project and task of its work item, whose
-   * allow-lists it keeps to. A refusal is a sentence for whoever asked.
+   * The account a session about to open runs on, and the model it runs: its
+   * row's account, when it has one (an account is for the session's whole
+   * life); a resumed conversation's stays where its transcript is; a fork
+   * takes its origin's; anything else is placed. Its model is the one it
+   * picked, else the one its row or the conversation it resumes ran on,
+   * else the one the hub names for it ({@link modelFor}): the harness is
+   * handed it, and never runs on a default of its own. `task`: the project
+   * and task of its work item, whose allow-lists it keeps to. `own`: what
+   * its harness's machine said it would run on by itself, where that was
+   * asked (pi, server.ts `ownDefaultOf`). A refusal is a sentence for
+   * whoever asked.
    */
   const placeSpawn = (
     machineId: string,
     payload: NamedSpawn,
-    task: { projectId?: string | null; taskId?: string | null } = {}
-  ): { accountId?: string } | { refusal: string; status?: 404 | 409 } => {
+    task: { projectId?: string | null; taskId?: string | null } = {},
+    own?: OwnDefault
+  ): Started | { refusal: string; status?: 404 | 409 } => {
     // Checked here, in the same synchronous step as the row's write that
     // follows: a project deleted after it was picked refuses the start.
     if (payload.projectId && !ctx.db.project(payload.projectId)) {
@@ -718,25 +764,365 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (refused) {
       return { refusal: refused };
     }
-    // Held, resumed, forked or placed: an account with no sign-in on the
-    // machine has no dir there to run in, so the start is refused.
-    const runsOn = (chosen: {
-      accountId?: string;
-    }): { accountId?: string } | { refusal: string } => {
-      const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
-      const refusal = ctx.accountStartRefusal(
-        machineId,
-        { accountId: chosen.accountId, harness: payload.harness },
-        row ? ctx.sessionName(row) : payload.title || "this session"
-      );
-      return refusal ? { refusal } : chosen;
-    };
     const held = accountHeld(payload);
-    if (held) {
-      return runsOn(held);
+    const model = pickedModel(payload.model) ?? conversationModel(payload);
+    if (!model) {
+      return modelFor(machineId, payload, task, own, held, runsOn);
     }
-    const placed = placedNew(machineId, payload, task);
-    return "refusal" in placed ? placed : runsOn(placed);
+    const asked = { ...payload, model };
+    if (held) {
+      return withModel(runsOn(machineId, asked, held), model);
+    }
+    const placed = placedNew(machineId, asked, task);
+    return "refusal" in placed
+      ? placed
+      : withModel(runsOn(machineId, asked, placed), model);
+  };
+
+  /** `chosen` with the model it runs on, or its refusal as it is. */
+  const withModel = <T extends object>(
+    chosen: T | { refusal: string },
+    model: string
+  ): (T & { model: string }) | { refusal: string } =>
+    "refusal" in chosen ? chosen : { ...chosen, model };
+
+  /**
+   * `chosen` when the session can run on it on `machineId`: held, resumed,
+   * forked or placed, an account with no sign-in on the machine has no dir
+   * there to run in, so the start is refused. This claims the account a
+   * row with none is placed on ({@link ClosureContext.accountStartRefusal}).
+   */
+  const runsOn = (
+    machineId: string,
+    payload: NamedSpawn,
+    chosen: { accountId?: string }
+  ): { accountId?: string } | { refusal: string } => {
+    const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
+    const refusal = ctx.accountStartRefusal(
+      machineId,
+      {
+        accountId: chosen.accountId,
+        harness: payload.harness,
+        model: payload.model,
+      },
+      row ? ctx.sessionName(row) : payload.title || "this session"
+    );
+    return refusal ? { refusal } : chosen;
+  };
+
+  /**
+   * The model a start that picked none goes on running when it goes on from
+   * a conversation: its own row's (a start again of a session), else the
+   * row of the conversation it resumes or forks. Undefined for a new one,
+   * and for a row that never named one.
+   */
+  const conversationModel = (payload: NamedSpawn): string | undefined => {
+    const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
+    const own = pickedModel(row?.model);
+    if (own || !payload.resume) {
+      return own;
+    }
+    return pickedModel(
+      ctx.db.instanceBySessionId(payload.resume.sessionKey)?.model
+    );
+  };
+
+  /**
+   * The model a start that picked none runs on, named by the hub before it
+   * spawns (start-models.ts): of the models its harness lists on
+   * `machineId` in its order ({@link startCandidates}: its own default
+   * first, then the picker's order), the first an account can take now.
+   * For a session an account holds (`held`), the first that account runs.
+   * Any other is placed as a picked model is ({@link placedNew}), so a
+   * model whose account is benched, past its reserve or at its limit is
+   * passed over, as is one that runs on no CawCo account. `runs`: whether
+   * the session can run on what was chosen ({@link runsOn}); absent, it is
+   * only asked of placement, nothing claimed. None: why, naming each
+   * account ({@link noModelRuns}).
+   */
+  const modelFor = (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null },
+    own: OwnDefault | undefined,
+    held: { accountId?: string } | undefined,
+    runs?: typeof runsOn
+  ): Started | { refusal: string; status?: 404 | 409 } => {
+    const listing = listingFor(machineId, payload);
+    const order = startCandidates(listing, own);
+    if (order.models.length === 0) {
+      return {
+        refusal: nothingListed(
+          payload.harness,
+          ctx.machineName(machineId),
+          listing
+        ),
+      };
+    }
+    const heldOn = held?.accountId
+      ? ctx.db.accounts.get(held.accountId)
+      : undefined;
+    const found =
+      held && heldOn
+        ? heldModel(machineId, payload, order.models, heldOn, held, runs)
+        : placedModel(machineId, payload, task, order, runs);
+    if (!("refusal" in found)) {
+      console.info(
+        spawnWords.startModel.namedLine(
+          payload.instanceId,
+          found.model,
+          found.model === order.own
+            ? spawnWords.startModel.ownDefault
+            : spawnWords.startModel.nextListed(order.own)
+        )
+      );
+    }
+    return found;
+  };
+
+  /**
+   * The models a start's harness lists on `machineId` (server.ts
+   * `modelListing`). A Claude start on the machine's own login while it
+   * moves into CawCo ({@link ClosureContext.startsOnHomeLogin}) runs on the
+   * account it moves into, so that account's catalog is what it lists.
+   */
+  const listingFor = (machineId: string, payload: NamedSpawn): ModelListing => {
+    const move = ctx.startsOnHomeLogin(machineId, payload)
+      ? ctx.homeLoginMoveOf(machineId, payload)
+      : undefined;
+    if (!move) {
+      return ctx.modelListing(machineId, payload.harness);
+    }
+    const catalog = ctx.db.accounts
+      .catalogs()
+      .find((one) => one.accountId === move.accountId);
+    return modelListingOn(payload.harness, {
+      catalogs: catalog ? [catalog.models] : [],
+    });
+  };
+
+  /** The providers whose accounts `model` of `payload`'s harness bills to on `machineId` (core `accountProvidersOf`). */
+  const providersOf = (
+    machineId: string,
+    harness: HarnessKind,
+    model: string
+  ): AccountProvider[] =>
+    accountProvidersOf(
+      harness,
+      ctx.resolvedModel(machineId, harness, model) ?? model
+    );
+
+  /**
+   * {@link modelFor} for a session `account` holds: the first of `models`
+   * that account runs, if the session can run on it there.
+   */
+  const heldModel = (
+    machineId: string,
+    payload: NamedSpawn,
+    models: readonly string[],
+    account: Account,
+    held: { accountId?: string },
+    runs: typeof runsOn | undefined
+  ): Started | { refusal: string } => {
+    const { harness } = payload;
+    const model = models.find((one) =>
+      providersOf(machineId, harness, one).includes(account.provider)
+    );
+    if (!model) {
+      const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
+      return {
+        refusal: spawnWords.startModel.heldUnlisted(
+          row ? ctx.sessionName(row) : payload.title || "this session",
+          accountNameAmong(account, ctx.db.accounts.list()),
+          accountsWords.harnesses[harness],
+          ctx.machineName(machineId)
+        ),
+      };
+    }
+    const chosen = runs ? runs(machineId, { ...payload, model }, held) : held;
+    return "refusal" in chosen ? chosen : { ...chosen, model };
+  };
+
+  /**
+   * {@link modelFor} for a session no account holds: each model in
+   * `order` placed as a picked one is ({@link placedNew}), the first that
+   * places and runs. Placement reads a model by its provider and its scope
+   * alone, so each pair is placed once, however many models share it.
+   */
+  const placedModel = (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null },
+    order: { models: string[]; own: string | null },
+    runs: typeof runsOn | undefined
+  ): Started | { refusal: string; status?: 409 } => {
+    const placedBy = new Map<string, ReturnType<typeof placedNew>>();
+    const refusals = new Map<AccountProvider, string[]>();
+    const refusedBy = (provider: AccountProvider, refusal: string): void => {
+      refusals.set(provider, [
+        ...new Set([...(refusals.get(provider) ?? []), refusal]),
+      ]);
+    };
+    for (const model of order.models) {
+      const provider = ctx.accountProviderFor(
+        machineId,
+        payload.harness,
+        model
+      );
+      if (!provider) {
+        continue;
+      }
+      const asked = { ...payload, model };
+      const key = `${provider}\u0000${modelScope(model) ?? ""}`;
+      const placed = placedBy.get(key) ?? placedNew(machineId, asked, task);
+      placedBy.set(key, placed);
+      if ("refusal" in placed && placed.status) {
+        return placed;
+      }
+      const chosen =
+        "refusal" in placed || !runs ? placed : runs(machineId, asked, placed);
+      if (!("refusal" in chosen)) {
+        return { ...chosen, model };
+      }
+      refusedBy(provider, chosen.refusal);
+    }
+    return {
+      refusal: whyNoModelRuns(machineId, payload, task, order, refusals),
+    };
+  };
+
+  /**
+   * {@link noModelRuns} for a start of `payload` on `machineId` that no
+   * model in `order` runs for: the models whose providers hold no account
+   * in CawCo, and each provider's accounts as placement reads them, its
+   * project's and task's lists among them. `refusals`: placement's words
+   * by provider, said where its accounts' standings say nothing (a fork, an
+   * account the start named).
+   */
+  const whyNoModelRuns = (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null },
+    order: { models: string[]; own: string | null },
+    refusals: ReadonlyMap<AccountProvider, string[]>
+  ): string => {
+    const { harness } = payload;
+    const accounts = ctx.db.accounts.list();
+    const allowed = taskAccounts(
+      payload.projectId ?? task.projectId,
+      task.taskId
+    );
+    const lists = {
+      projectId: task.projectId,
+      accounts: "unread" in allowed ? null : allowed.accounts,
+    };
+    /** Each provider with an account, and the first model of it tried: its standings are read for that model's scope. */
+    const providers = new Map<AccountProvider, string>();
+    let ownUnaccounted = false;
+    let more = 0;
+    for (const model of order.models) {
+      const held = providersOf(machineId, harness, model).filter((provider) =>
+        accounts.some((one) => one.provider === provider)
+      );
+      if (held.length === 0) {
+        if (model === order.own) {
+          ownUnaccounted = true;
+        } else {
+          more += 1;
+        }
+        continue;
+      }
+      for (const provider of held) {
+        if (!providers.has(provider)) {
+          providers.set(provider, model);
+        }
+      }
+    }
+    const standingsOf = ([provider, model]: [
+      AccountProvider,
+      string,
+    ]): ProviderStandings => {
+      const read = standings(
+        providerInput(
+          provider,
+          machineId,
+          { ...payload, model },
+          lists,
+          undefined
+        )
+      );
+      return {
+        provider: providerName(provider),
+        accounts: read,
+        refusals: read.every((one) => one.standing.kind === "room")
+          ? (refusals.get(provider) ?? [])
+          : [],
+      };
+    };
+    return noModelRuns(
+      harness,
+      ctx.machineName(machineId),
+      { own: ownUnaccounted ? order.own : null, more },
+      [...providers].map(standingsOf),
+      Date.now()
+    );
+  };
+
+  /** A provider as a sentence names it: "Claude", or the name its harnesses list it by. */
+  const providerName = (id: AccountProvider): string =>
+    id === CLAUDE_PROVIDER
+      ? "Claude"
+      : (ctx.knownProviders().find((one) => one.id === id)?.name ?? id);
+
+  /**
+   * The model a launch of `row` names when its row names none (a session
+   * started before every start named one), as a start that picked none is
+   * named ({@link modelFor}): on the account its launch runs on when it has
+   * one, else as placement finds one. Its row names it from here on, so the
+   * account its launch is granted is that model's. A refusal when none can.
+   */
+  const launchModel = (
+    machineId: string,
+    row: InstanceRow
+  ): { model: string } | { refusal: string } => {
+    const held = row.accountId ? { accountId: row.accountId } : undefined;
+    const item = row.workItemId ? ctx.db.workItem(row.workItemId) : undefined;
+    const found = modelFor(
+      machineId,
+      {
+        instanceId: row.id,
+        cwd: row.cwd,
+        harness: row.harness,
+        ...(row.projectId ? { projectId: row.projectId } : {}),
+        ...ctx.typeSettingsOf(row),
+      },
+      { projectId: row.projectId, taskId: item?.taskId },
+      undefined,
+      held
+    );
+    if ("refusal" in found) {
+      return found;
+    }
+    ctx.db.patchInstance(row.id, { model: found.model });
+    return { model: found.model };
+  };
+
+  /**
+   * The model a start would run on, as {@link placeSpawn} names it, asked
+   * and nothing claimed: what the placement explain query shows.
+   */
+  const startModelOf = (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null },
+    own: OwnDefault | undefined
+  ): { model: string } | { refusal: string; status?: 404 | 409 } => {
+    const model = pickedModel(payload.model) ?? conversationModel(payload);
+    if (model) {
+      return { model };
+    }
+    const found = modelFor(machineId, payload, task, own, accountHeld(payload));
+    return "refusal" in found ? found : { model: found.model };
   };
 
   /**
@@ -804,10 +1190,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
 
   /**
    * A start as the placement explain query describes it, for placement to
-   * read, with pi's `default` named as its machine answers it in `cwd`; or
-   * why there is none: a 400 for a harness CawCo does not run, or the
-   * machine's own problem when it could not say pi's default (silent, or
-   * its failure).
+   * read, with what its harness would run on by itself where its machine is
+   * asked (pi, in `cwd`: {@link ClosureContext.ownDefaultOf}); or why there
+   * is none: a 400 for a harness CawCo does not run, or the machine's own
+   * problem when it could not say pi's default (silent, or its failure).
    */
   const askedStart = async (query: {
     account?: string;
@@ -827,17 +1213,18 @@ export const createSpawns = (ctx: SpawnsContext) => {
       });
     }
     const { projectId } = query;
-    const asked = await ctx.piDefaultFor(query.machineId, {
+    const asked: NamedSpawn = {
       instanceId: "",
       cwd: query.cwd ?? "",
       harness,
-      model: query.model,
+      ...(query.model ? { model: query.model } : {}),
       projectId,
       account: query.account,
       ...(query.type ? { delegateType: { name: query.type, projectId } } : {}),
       ...(query.kind === "delegates" ? { spawnedBy: { instanceId: "" } } : {}),
-    });
-    return asked;
+    };
+    const own = await ctx.ownDefaultOf(query.machineId, asked);
+    return own instanceof ElysiaStatus ? own : { asked, own };
   };
 
   /**
@@ -847,9 +1234,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
   const placedOrProblem = (
     machineId: string,
     payload: NamedSpawn,
-    task?: { projectId?: string | null; taskId?: string | null }
+    task?: { projectId?: string | null; taskId?: string | null },
+    own?: OwnDefault
   ) => {
-    const placed = placeSpawn(machineId, payload, task);
+    const placed = placeSpawn(machineId, payload, task, own);
     if ("refusal" in placed) {
       switch (placed.status) {
         case 404:
@@ -899,7 +1287,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
         {
           accountId: placed.accountId ?? null,
           harness: session.harness,
-          model: session.model,
+          model: placed.model,
           projectId: session.projectId,
         },
         session.title || "this session",
@@ -994,25 +1382,28 @@ export const createSpawns = (ctx: SpawnsContext) => {
   };
 
   /**
-   * The account a spawn opens on: `placedAhead`, when a work item's session
-   * was placed before its workspace was cut ({@link placeItem}), so it is
-   * placed once; otherwise placed now, keeping to the allow-lists of work
-   * item `workItemId`'s project and task.
+   * The account a spawn opens on and the model it runs: `placedAhead`, when
+   * a work item's session was placed before its workspace was cut
+   * ({@link placeItem}), so it is placed once; otherwise placed now, keeping
+   * to the allow-lists of work item `workItemId`'s project and task.
    */
   const spawnPlacement = (
     machineId: string,
     payload: NamedSpawn,
     workItemId: string | undefined,
-    placedAhead: { accountId?: string } | undefined
+    placedAhead: Started | undefined,
+    own: OwnDefault | undefined
   ) => {
     if (placedAhead) {
       return placedAhead;
     }
     const item = workItemId ? ctx.db.workItem(workItemId) : undefined;
-    return placedOrProblem(machineId, payload, {
-      projectId: item?.projectId,
-      taskId: item?.taskId,
-    });
+    return placedOrProblem(
+      machineId,
+      payload,
+      { projectId: item?.projectId, taskId: item?.taskId },
+      own
+    );
   };
 
   /**
@@ -1102,7 +1493,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     asked: NamedSpawn,
     workItemId: string | undefined,
     fallbackMode: string | null | undefined,
-    placedAhead: { accountId?: string } | undefined
+    placedAhead: Started | undefined,
+    own?: OwnDefault
   ) => {
     const refused = startRefusal(machineId, Boolean(asked.requestId));
     if (refused) {
@@ -1127,7 +1519,13 @@ export const createSpawns = (ctx: SpawnsContext) => {
         settled.payload.cwd
       ),
     };
-    const placed = spawnPlacement(machineId, payload, workItemId, placedAhead);
+    const placed = spawnPlacement(
+      machineId,
+      payload,
+      workItemId,
+      placedAhead,
+      own
+    );
     if (placed instanceof ElysiaStatus) {
       return placed;
     }
@@ -1141,7 +1539,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
       });
     }
     return {
-      payload,
+      // On the model placement named: the harness is handed it.
+      payload: { ...payload, model: placed.model },
       permissionMode: settled.permissionMode,
       placed,
       startingSet: begins.startingSet,
@@ -1217,7 +1616,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     by: SessionOrigin,
     workItemId?: string,
     fallbackMode?: string | null,
-    placedAhead?: { accountId?: string }
+    placedAhead?: Started
   ) => {
     const cleared = clearedToStart(
       machineId,
@@ -1243,21 +1642,23 @@ export const createSpawns = (ctx: SpawnsContext) => {
     by: SessionOrigin,
     fallbackMode?: string
   ) => {
-    const payload = await ctx.piDefaultFor(machineId, asked);
-    if (payload instanceof ElysiaStatus) {
-      return payload;
+    const own = await ctx.ownDefaultOf(machineId, asked);
+    if (own instanceof ElysiaStatus) {
+      return own;
     }
     // Cleared before it waits on anything: what stops a start is said here.
     const cleared = clearedToStart(
       machineId,
-      payload,
+      asked,
       undefined,
       fallbackMode,
-      undefined
+      undefined,
+      own
     );
     if (cleared instanceof ElysiaStatus) {
       return cleared;
     }
+    const { payload } = cleared;
     const { requestId } = payload;
     // Sent in the step that starts the wait: nothing it answers is read before.
     const sent = sendCleared(machineId, cleared, by, undefined);
@@ -1438,18 +1839,18 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (held) {
       throw new StartsHeld(machineId, held.words);
     }
-    const named = await ctx.piDefaultFor(machineId, asked);
-    if (named instanceof ElysiaStatus) {
-      throw new MachineProblem(named);
+    const own = await ctx.ownDefaultOf(machineId, asked);
+    if (own instanceof ElysiaStatus) {
+      throw new MachineProblem(own);
     }
-    const settled = settleSpawn(machineId, named, fallbackMode);
+    const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
       throw new Error(settled.refusal);
     }
     // Its machine is handed the project its row opens in, as every revive
     // hands it the row's (`revivePayloadOf`).
     const carried = carriedFrom(continues, settled.payload.harness);
-    const payload = {
+    const projected = {
       ...settled.payload,
       ...carried.spawn,
       projectId: projectOfStart(
@@ -1459,10 +1860,12 @@ export const createSpawns = (ctx: SpawnsContext) => {
         settled.payload.cwd
       ),
     };
-    const placed = placedOrProblem(machineId, payload);
+    const placed = placedOrProblem(machineId, projected, undefined, own);
     if (placed instanceof ElysiaStatus) {
       return placed;
     }
+    // On the model placement named: the harness is handed it.
+    const payload = { ...projected, model: placed.model };
     const requestId = crypto.randomUUID();
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
@@ -1590,6 +1993,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
     owedTargets,
     openedAccount,
     placeSpawn,
+    launchModel,
+    startModelOf,
     askedStart,
     placeItem,
     nextLaunchOn,

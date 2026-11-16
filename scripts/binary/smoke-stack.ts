@@ -539,10 +539,10 @@ try {
         instanceId: sessionId,
         cwd: home,
         harness: "claude",
-        // The test harness runs a held process whatever the model; the
-        // harness's default is one the hub admits on any listing (core
-        // model-names.ts `modelAdmitted`).
-        model: "default",
+        // The test harness runs a held process whatever the model; a full
+        // Claude model id is one the hub admits on any listing (core
+        // model-names.ts `modelAdmitted`), and a start names its model.
+        model: "claude-sonnet-5",
         title: "Binary test",
       },
     })

@@ -7,6 +7,7 @@
  */
 
 import type { OfferedMode } from "../harness/kinds";
+import { configurePage } from "./configure";
 
 /** The mode chip's name, before the mode it names. */
 const PERMISSION_MODE = "Permission mode:";
@@ -69,10 +70,99 @@ export const spawnWords = {
       model: string,
       why: string | undefined
     ) =>
-      `${harness} on ${machine} hasn't listed its models yet, so nothing starts on ${model} there.${why ? ` ${why}` : ""} Start on its default model, or once its models are listed.`,
+      `${harness} on ${machine} hasn't listed its models yet, so nothing starts on ${model} there.${why ? ` ${why}` : ""} Start it again once its models are listed.`,
     /** Added when the model asked for is a harness's name. */
     harnessNamed: (model: string) =>
       `${model} is a harness, not a model. Choose it as the harness.`,
+  },
+  /**
+   * A start that picks no model (none, or `default`), as the hub names its
+   * model before anything spawns (hub start-models.ts): the harness's own
+   * default when an account can take it, else the next model the harness
+   * lists that one can. With none, the start is refused in these words: the
+   * harness, each account and why it can't take the start, and what would
+   * let it.
+   */
+  startModel: {
+    /** Why one account can't take the start now, after its name and "is". */
+    signedOut: (machine: string) => `signed out on ${machine}`,
+    notAllowed: (by: "project" | "task") =>
+      `left out by the ${by}'s account list`,
+    benched: "benched",
+    pastReserve: (percent: number) => `past its ${percent}% reserve`,
+    atLimit: "at its limit",
+    /** At its limit, with its extra usage off for `reason` (Claude Code's words: "out of credits"). */
+    noCredit: (reason: string) =>
+      `at its limit, with its extra usage off (${reason})`,
+    /** A moment ahead: "in 5d 19h (19:30)". */
+    at: (span: string, clock: string) => `in ${span} (${clock})`,
+    /** When it takes sessions again: "back in 5d 19h (19:30)". */
+    back: (at: string) => `back ${at}`,
+    /** One account and why: "bewinxed@gmail.com is benched, back in 5d 19h (19:30)". */
+    account: (name: string, why: string, back: string | null) =>
+      `${name} is ${why}${back ? `, ${back}` : ""}`,
+    /** One provider's accounts: "ChatGPT: bewinxed@gmail.com is benched, back in 5d 19h (19:30)." */
+    provider: (provider: string, accounts: readonly string[]) =>
+      `${provider}: ${accounts.join("; ")}.`,
+    /**
+     * The models it lists that run on no CawCo account: its own default
+     * (`own`) when that is one, and how many `more`. Only a pick starts one,
+     * from the machine's own store.
+     */
+    unaccounted: (own: string | null, more: number) => {
+      const others = `${more} ${more === 1 ? "model" : "models"}`;
+      if (own === null) {
+        return `${others} it lists ${more === 1 ? "runs" : "run"} on no CawCo account, so only a pick starts ${more === 1 ? "it" : "one"}.`;
+      }
+      return more === 0
+        ? `Its own default, ${own}, runs on no CawCo account, so only a pick starts it.`
+        : `Its own default, ${own}, and ${more} more ${more === 1 ? "model" : "models"} run on no CawCo account, so only a pick starts one.`;
+    },
+    /** No model the harness lists there can start now. `first`: when the soonest account is back ("in 5d 19h (19:30)"). */
+    refused: (
+      harness: string,
+      machine: string,
+      reasons: readonly string[],
+      first: string | null
+    ) =>
+      [
+        `No ${harness} model on ${machine} can start now: none was picked, and no account can take one it lists.`,
+        ...reasons,
+        `Pick a model, sign in another account in ${configurePage("accounts")}${first ? `, or start it again ${first}` : ""}. Nothing was started.`,
+      ].join(" "),
+    /** The harness there has not listed its models yet (`why`, the machine's words), so none can be named. */
+    unread: (harness: string, machine: string, why: string | undefined) =>
+      `${harness} on ${machine} hasn't listed its models yet, so a start that picks none has none to run.${why ? ` ${why}` : ""} Pick a model, or start it again once its models are listed. Nothing was started.`,
+    /** The harness there lists no models, and names no default of its own. */
+    noneListed: (harness: string, machine: string) =>
+      `${harness} on ${machine} lists no models, so a start that picks none has none to run. Sign an account in to it in ${configurePage("accounts")}. Nothing was started.`,
+    /**
+     * A session that stays on its account (`account`), whose start picked
+     * no model, where the harness lists none that account runs.
+     */
+    heldUnlisted: (
+      session: string,
+      account: string,
+      harness: string,
+      machine: string
+    ) =>
+      `${session} runs on ${account}, and ${harness} on ${machine} lists no model that account runs. Pick a model for it, then start it again. Nothing was started.`,
+    /**
+     * A launch that reached a machine naming no model, refused there before
+     * its harness starts (agent session.ts): the hub names every launch's
+     * model, and a harness never runs on a default of its own.
+     */
+    unnamedAtMachine:
+      "This launch names no model, and a harness here never picks its own: the hub names every launch's model. Nothing was started.",
+    /** The hub's line as it names the model a start picked none of. */
+    namedLine: (instanceId: string, model: string, why: string) =>
+      `[hub] ${instanceId} starts on ${model}: ${why}`,
+    /** Why that model, in the line: the harness's own default, or the first after it an account can take. */
+    ownDefault: "its harness's own default",
+    nextListed: (own: string | null) =>
+      own
+        ? `the first model its harness lists that an account can take, since no account can take its own default ${own}`
+        : "the first model its harness lists that an account can take",
   },
   /** Between a session and the account its launch places it on, in the line the hub logs of it. */
   launchesOn: "launches on",

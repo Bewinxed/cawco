@@ -358,7 +358,7 @@ for (const kind of HARNESSES) {
           memory: null,
         });
       }
-      // The hub reads a newly signed-in account's model catalog once; the test's sessions start on Claude Code's default, admitted on an empty list.
+      // The hub reads a newly signed-in account's model catalog once; the test's sessions name a full model id, which the hub admits on an empty list.
       if (method === CONTROL_PROBE_ACCOUNT && kind === "claude") {
         return Promise.resolve({ models: [] });
       }

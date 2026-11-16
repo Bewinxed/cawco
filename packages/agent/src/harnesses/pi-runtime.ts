@@ -1787,10 +1787,11 @@ export async function startPiHost(
   // (`hasConfiguredAuth`, read off the runtime's availability snapshot), so
   // the snapshot is taken before the session is made.
   await runtime.getAvailable();
-  const model =
-    spec.model && spec.model !== "default"
-      ? await resolvePiModel(runtime, spec.model)
-      : undefined;
+  // The hub names every launch's model (hub start-models.ts); a reattach
+  // names none, and its session runs on what it runs on.
+  const model = spec.model
+    ? await resolvePiModel(runtime, spec.model)
+    : undefined;
   const denied = piToolsFor(spec.denyTools ?? []).tools;
   const { session } = await createAgentSession({
     cwd: ctx.cwd,

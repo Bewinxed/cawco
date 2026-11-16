@@ -163,6 +163,7 @@ import {
 } from "@cawco/core/words/harness-lines";
 import { lastLines } from "@cawco/core/words/helpers";
 import { processLimitSentence } from "@cawco/core/words/sessiond";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
 import {
@@ -2640,6 +2641,11 @@ export class SessionSupervisor {
       throw new Error(
         "A start names the harness it runs on; this one named none."
       );
+    }
+    // A launch runs on the model the hub named (hub start-models.ts); a
+    // reattach launches nothing, and its process runs on what it runs on.
+    if (!(payload.reattachOnly || payload.model)) {
+      throw new Error(spawnWords.startModel.unnamedAtMachine);
     }
     const adapter = adapterFor(kind);
     if (payload.resume && !payload.resume.fork) {

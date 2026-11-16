@@ -238,7 +238,11 @@ export interface SpawnPayload {
   mayStart?: MayStart;
   /**
    * Which model answers, from the session's first turn. Hoisted for the same
-   * reason as `permissionMode`. Absent leaves the choice to the harness.
+   * reason as `permissionMode`. A client's start that leaves it out (or
+   * names `default`) is named one by the hub before it spawns (hub
+   * start-models.ts): every launch the hub sends a machine names its model,
+   * and a machine refuses one that does not. A reattach launches nothing,
+   * and needs none.
    */
   model?: string;
   /** Harness-specific spawn options, passed through verbatim. */

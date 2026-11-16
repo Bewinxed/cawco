@@ -1269,6 +1269,70 @@ export const accountRows = (
     });
 };
 
+/**
+ * Why an account of a start's provider can't take it now, as placement
+ * reads it ({@link place}): not signed in on its machine, left out by the
+ * project's or task's list, or without room (benched, past its reserve, at
+ * its limit, with Claude Code's words when its extra usage is off), with
+ * when it is back where a reading says. `room`: it can take it.
+ */
+export type Standing =
+  | { kind: "signed-out" }
+  | { kind: "not-allowed"; by: "project" | "task" }
+  | {
+      kind: "benched" | "past-reserve" | "at-limit";
+      backAt: number | null;
+      /** Why its extra usage is off, in Claude Code's words; null when on, or unsaid. */
+      creditOff: string | null;
+      reservePct: number | null;
+    }
+  | { kind: "room" };
+
+/** Each of `asked`'s accounts with its {@link Standing}, in the accounts' order. */
+export const standings = (
+  asked: PlacementInput
+): { account: Account; name: string; standing: Standing }[] => {
+  const input = ofProvider(asked);
+  const usage = new Usage(input);
+  const { signedIn, allowed } = eligible(input);
+  const listed = (list: string[] | null | undefined, id: string) =>
+    !list || list.includes(id);
+  const standingOf = (account: Account): Standing => {
+    if (!signedIn.includes(account)) {
+      return { kind: "signed-out" };
+    }
+    if (!allowed.includes(account)) {
+      return {
+        kind: "not-allowed",
+        by: listed(input.projectAccounts, account.id) ? "task" : "project",
+      };
+    }
+    if (usage.room(account)) {
+      return { kind: "room" };
+    }
+    let kind: "benched" | "past-reserve" | "at-limit" = "at-limit";
+    if (usage.benched(account.id)) {
+      kind = "benched";
+    } else if (usage.pastReserve(account)) {
+      kind = "past-reserve";
+    }
+    const overage = input.readings.find(
+      (one) => one.accountId === account.id
+    )?.overage;
+    return {
+      kind,
+      backAt: usage.backAt(account) ?? null,
+      creditOff: overage?.disabledReason ?? null,
+      reservePct: account.reservePct,
+    };
+  };
+  return byOrder(input.accounts).map((account) => ({
+    account,
+    name: usage.name(account),
+    standing: standingOf(account),
+  }));
+};
+
 export const place = (asked: PlacementInput): Placement => {
   const input = ofProvider(asked);
   const byId = new Map(input.accounts.map((account) => [account.id, account]));

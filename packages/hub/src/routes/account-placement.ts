@@ -45,6 +45,7 @@ export const accountPlacementRoutes = ({
   placementInput,
   refusedHarness,
   resolvedModel,
+  startModelOf,
   taskAccounts,
 }: Pick<
   HubContext,
@@ -55,6 +56,7 @@ export const accountPlacementRoutes = ({
   | "placementInput"
   | "refusedHarness"
   | "resolvedModel"
+  | "startModelOf"
   | "taskAccounts"
 >) => {
   /**
@@ -232,14 +234,26 @@ export const accountPlacementRoutes = ({
           }),
         },
         async ({ query }) => {
-          const asked = await askedStart(query);
-          if (asked instanceof ElysiaStatus) {
-            return asked;
+          const started = await askedStart(query);
+          if (started instanceof ElysiaStatus) {
+            return started;
           }
-          const allowed = allowedOrProblem(query, asked.harness);
+          const allowed = allowedOrProblem(query, started.asked.harness);
           if (allowed instanceof ElysiaStatus) {
             return allowed;
           }
+          // The model its start would run on: the one it picked, else the
+          // one the hub names for it (spawns.ts `placeSpawn`).
+          const named = startModelOf(
+            query.machineId,
+            started.asked,
+            { projectId: query.projectId, taskId: query.taskId },
+            started.own
+          );
+          if ("refusal" in named) {
+            return problem(400, { code: "not-placed", detail: named.refusal });
+          }
+          const asked = { ...started.asked, model: named.model };
           const input = placementInput(
             query.machineId,
             asked,
@@ -251,22 +265,20 @@ export const accountPlacementRoutes = ({
                 }
               : undefined
           );
-          // pi's `default` (asked in the directory above) or a bare id, as
-          // the session would start on it: the screen names the session's
-          // provider by it.
+          // The model named, or a bare id as pi resolves it, as the session
+          // would start on it: the screen names the session's provider by it.
           const resolved =
-            resolvedModel(query.machineId, query.harness, asked.model) ?? null;
+            resolvedModel(query.machineId, query.harness, asked.model) ??
+            asked.model;
           if (!input) {
-            const named =
-              resolved && resolved !== query.model
-                ? `${query.model ?? "default"} (${resolved})`
-                : query.model;
+            const said =
+              resolved === asked.model
+                ? asked.model
+                : `${asked.model} (${resolved})`;
             return {
               accountId: null,
               strategy: "none",
-              why: named
-                ? `${named} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`
-                : `A ${query.harness} session with no model named runs from the machine's own ${query.harness} store.`,
+              why: `${said} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`,
               model: resolved,
             } satisfies PlacementPreview;
           }

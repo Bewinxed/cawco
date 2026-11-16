@@ -1532,6 +1532,8 @@ export const createServer = (
     sessionIdle: () => sessionIdle,
     sessionStartOf: () => sessionStartOf,
     spawnFromHub: () => spawnFromHub,
+    launchModel: () => launchModel,
+    startModelOf: () => startModelOf,
     startingSetOf: () => startingSetOf,
     projectAtFolder: () => projectAtFolder,
     sendsPending: () => sendsPending,
@@ -1635,7 +1637,7 @@ export const createServer = (
     refuseMove: () => refuseMove,
     moveRefusalOf: () => moveRefusalOf,
     forgetMoveRefusal: () => forgetMoveRefusal,
-    piDefaultFor: () => piDefaultFor,
+    ownDefaultOf: () => ownDefaultOf,
     refusedHarness: () => refusedHarness,
     sendSpawn: () => sendSpawn,
     settleMode: () => settleMode,
@@ -1666,6 +1668,7 @@ export const createServer = (
     toolsMayHaveChanged: () => toolsMayHaveChangedPort.now(),
     launchRefusal: () => launchRefusal,
     modelRefusal: () => modelRefusal,
+    modelListing: () => modelListing,
     noteFreshStart: () => noteFreshStart,
     processEvent: () => processEvent,
     processGeneration: () => processGeneration,
@@ -1982,6 +1985,7 @@ export const createServer = (
     carryTestFor,
     delegateSpawned,
     issueSpawn,
+    launchModel,
     launchRefusal,
     locateSession,
     nextLaunchOn,
@@ -1994,6 +1998,7 @@ export const createServer = (
     sendFromHub,
     spawnFromHub,
     spawnSession,
+    startModelOf,
     projectAtFolder,
     tabNamed,
     taskAccounts,
@@ -3606,9 +3611,9 @@ export const createServer = (
   /**
    * A pi session's model as pi itself resolves it on `machineId`: a bare id
    * becomes `provider/id` by the machine's report of pi's own resolution
-   * ({@link HarnessReport.modelNames}). `default` depends on the session's
-   * directory and is named before placement ({@link piDefaultFor}). Any other
-   * harness's, and a name pi does not resolve, as it is.
+   * ({@link HarnessReport.modelNames}). A start that picks none is named a
+   * model before placement (spawns.ts `placeSpawn`). Any other harness's,
+   * and a name pi does not resolve, as it is.
    */
   const resolvedModel = (
     machineId: string,
@@ -3625,17 +3630,18 @@ export const createServer = (
     return harnessReportOf(machineId, bare)?.modelNames?.[model] ?? model;
   };
   /**
-   * A new pi session that names no model (or `default`) starts on the model
-   * pi picks in its directory, asked of its machine, which merges pi's global
-   * settings with `<cwd>/.pi/settings.json` as pi does: the payload names
-   * that model from here, so placement and the session agree on it. When pi
-   * would pick among the machine's own providers, or the session is resumed,
-   * or is not pi's, the payload is as it was. A machine that cannot say
-   * refuses the start: silent, or its failure (502 spawn-default-unnamed).
+   * What a new pi session that picks no model (or `default`) would run on by
+   * itself in its directory, asked of its machine, which merges pi's global
+   * settings with `<cwd>/.pi/settings.json` as pi does: the first model the
+   * hub tries for it (start-models.ts `startCandidates`), `model` null when
+   * pi would pick among the machine's own providers. Undefined when nothing
+   * is asked: a picked model, a resumed session, any harness's but pi's,
+   * whose own default its listing names. A machine that cannot say refuses
+   * the start: silent, or its failure (502 spawn-default-unnamed).
    */
-  const piDefaultFor = async (machineId: string, payload: NamedSpawn) => {
+  const ownDefaultOf = async (machineId: string, payload: NamedSpawn) => {
     if (!asksPiDefault(payload)) {
-      return payload;
+      return;
     }
     const answer = await readAgent(
       machineId,
@@ -3647,7 +3653,7 @@ export const createServer = (
     switch (answer.kind) {
       case "unanswered":
         if (answer.reason === "dead") {
-          return payload;
+          return;
         }
         return silentProblem(
           `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${secondsOf(answer.after)} s. Nothing was started.`
@@ -3659,8 +3665,7 @@ export const createServer = (
             detail: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
           });
         }
-        const model = answer.value.result;
-        return model ? { ...payload, model } : payload;
+        return { model: answer.value.result || null };
       }
       default:
         throw unreachable(answer);
@@ -11812,11 +11817,12 @@ export const createServer = (
   const startFromDashboard = (
     ws: ClientSocket,
     message: ClientEnvelope<"spawn">,
-    asked: Awaited<ReturnType<typeof piDefaultFor>>
+    asked: NamedSpawn,
+    own: Awaited<ReturnType<typeof ownDefaultOf>>
   ): void => {
-    if (asked instanceof ElysiaStatus) {
-      console.warn(spawnWords.refusedLine(asked.response.detail));
-      sendToClient(ws, failure(message, asked.response.detail));
+    if (own instanceof ElysiaStatus) {
+      console.warn(spawnWords.refusedLine(own.response.detail));
+      sendToClient(ws, failure(message, own.response.detail));
       return;
     }
     // A session the hub has a row for is started again (a relaunch, a
@@ -11834,14 +11840,15 @@ export const createServer = (
       sendToClient(ws, failure(message, launched.refusal));
       return;
     }
-    const { payload } = launched;
     const placed = message.instanceId
-      ? placeSpawn(message.machineId, {
-          ...payload,
-          instanceId: message.instanceId,
-        })
-      : {};
-    if ("refusal" in placed) {
+      ? placeSpawn(
+          message.machineId,
+          { ...launched.payload, instanceId: message.instanceId },
+          {},
+          own
+        )
+      : undefined;
+    if (placed && "refusal" in placed) {
       console.warn(spawnWords.refusedLine(placed.refusal));
       sendToClient(ws, failure(message, placed.refusal));
       return;
@@ -11849,6 +11856,7 @@ export const createServer = (
     // A machine inside its reconnect window takes the start on its register
     // ({@link startHold}); only one with no link and no window is offline.
     if (!(
+      placed &&
       message.instanceId &&
       (registry.agent(message.machineId) ||
         machinePresence(message.machineId).kind === "reconnecting")
@@ -11859,6 +11867,8 @@ export const createServer = (
       );
       return;
     }
+    // On the model placement named: the harness is handed it.
+    const payload = { ...launched.payload, model: placed.model };
     const begins = dashboardBegins(ws, message, before, payload);
     if (!begins) {
       return;
@@ -12831,9 +12841,9 @@ export const createServer = (
       sendToClient(ws, failure(message, why));
       return;
     }
-    // A spawn that names no model runs on its harness's own default
-    // (Claude Code's, for its account): "no model picked" is the
-    // field's absence, never an empty string. Its permission mode is
+    // A spawn that names no model runs on the one placement names for it
+    // (spawns.ts `placeSpawn`): "no model picked" is the field's
+    // absence, never an empty string. Its permission mode is
     // the one rule's (`settleMode`): one the person chose for a
     // harness with modes, refused when omitted, and none for one
     // that has none.
@@ -12848,15 +12858,15 @@ export const createServer = (
       ...(named ? { model: named } : {}),
       ...(known?.mayStart ? { mayStart: known.mayStart } : {}),
     };
-    // pi's `default` is first named by what pi picks in the
-    // session's directory, which its machine answers; every other
-    // start goes on in this same step.
+    // pi's own pick in the session's directory, which its machine
+    // answers, is the first model a start that picks none is tried on;
+    // every other start goes on in this same step.
     if (asksPiDefault(spawning)) {
-      piDefaultFor(message.machineId, spawning)
-        .then((asked) => startFromDashboard(ws, message, asked))
+      ownDefaultOf(message.machineId, spawning)
+        .then((own) => startFromDashboard(ws, message, spawning, own))
         .catch((error: unknown) => dashboardThrew(ws, message, error));
     } else {
-      startFromDashboard(ws, message, spawning);
+      startFromDashboard(ws, message, spawning, undefined);
     }
   };
 

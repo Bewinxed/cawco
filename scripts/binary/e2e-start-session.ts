@@ -41,7 +41,12 @@ socket.send(
     verb: "spawn",
     machineId,
     instanceId,
-    payload: { instanceId, cwd: "/tmp", harness: "claude", model: "default" },
+    payload: {
+      instanceId,
+      cwd: "/tmp",
+      harness: "claude",
+      model: "claude-sonnet-5",
+    },
   })
 );
 await Bun.sleep(1500);
