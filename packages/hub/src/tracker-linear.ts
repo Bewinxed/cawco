@@ -215,20 +215,20 @@ const restOf = async <N>(
   return nodes;
 };
 
-const TYPES: ReadonlySet<string> = new Set<StateType>([
+const TYPES: readonly StateType[] = [
   "triage",
   "backlog",
   "unstarted",
   "started",
   "completed",
   "canceled",
-]);
+];
 
 const stateOf = (raw: RawIssue["state"]): IssueState => ({
   token: raw.id,
   name: raw.name,
   // A category Linear adds later reads as started: open, never closed.
-  type: TYPES.has(raw.type) ? (raw.type as StateType) : "started",
+  type: TYPES.find((type) => type === raw.type) ?? "started",
 });
 
 /**
@@ -285,7 +285,7 @@ const linearProblem = (
   const parsed =
     error instanceof LinearError
       ? error
-      : parseLinearError(error as Parameters<typeof parseLinearError>[0]);
+      : parseLinearError(error instanceof Error ? error : undefined);
   const said = cutShort(parsed.errors?.[0]?.message ?? parsed.message, 300);
   switch (parsed.type) {
     case LinearErrorType.AuthenticationError:
@@ -452,7 +452,8 @@ export const linearAdapter = (
         detail: `Linear has no label ${missing.map((name) => `“${name}”`).join(", ")} for ${teamName}; add it in Linear, or take it off the task.`,
       });
     }
-    return names.map((name) => byName.get(name.toLowerCase()) as string);
+    // Every name has its id: a missing one was refused above.
+    return names.flatMap((name) => byName.get(name.toLowerCase()) ?? []);
   };
 
   /** A list since the cursor, newest change first, page by page to its last page. */
@@ -480,7 +481,7 @@ export const linearAdapter = (
       if (data instanceof ElysiaStatus) {
         return data;
       }
-      const listed = data[field] as Page<Raw>;
+      const listed: Page<Raw> = data[field];
       for (const raw of listed.nodes) {
         newest = Math.max(newest, stamp(raw));
         const full = await fill(raw);

@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { errnoCode } from "@cawco/core/absent";
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
@@ -384,6 +385,11 @@ const isArtifact = (
   socket: ServerWebSocket<ListenerSocket>
 ): socket is ServerWebSocket<ArtifactSocket> => "artifactId" in socket.data;
 
+/** A preview's socket (core `previewWebSocket` serves it): one whose data names no artifact. */
+const isPreview = (
+  socket: ServerWebSocket<ListenerSocket>
+): socket is ServerWebSocket<PreviewSocket> => !("artifactId" in socket.data);
+
 /** What a listener needs of the hub to serve a session's previews and artifacts. */
 export interface PreviewListenerDeps {
   /** The artifact whose row points at artifact origin `key` now (schema.ts `artifacts.origin`); undefined for any other origin, or one no row points at. */
@@ -582,8 +588,8 @@ const PING_RELAY_MS = 5000;
 const USE_WRITE_MS = MINUTE_MS;
 /** A thrown fetch's short name for the pane: its code (`ECONNRESET`), else its kind. */
 const codeOf = (error: unknown): string => {
-  const { code } = (error ?? {}) as { code?: unknown };
-  if (typeof code === "string") {
+  const code = errnoCode(error);
+  if (code !== undefined) {
     return code;
   }
   return error instanceof Error ? error.name : String(error);
@@ -1162,7 +1168,6 @@ export function createPreviewListeners(
     after: (ms: number, run: () => void) => void;
   }
 ) {
-  const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
   /** Every listener of the hub's, and what is known of each. */
   const listeners = createListenerTable();
   /**
@@ -1183,27 +1188,40 @@ export function createPreviewListeners(
       listeners.watch(key, by);
     }
   };
+  // Each socket is an artifact's or a preview's ({@link isArtifact},
+  // {@link isPreview}): Bun's handler is invariant in its data, so each
+  // side's handler is handed the socket its own guard narrowed.
   const websocket: WebSocketHandler<ListenerSocket> = {
     open: (socket) => {
       viewed(socket, 1);
-      return isArtifact(socket)
-        ? deps.socket.open(socket)
-        : proxy.open?.(socket);
+      if (isArtifact(socket)) {
+        return deps.socket.open(socket);
+      }
+      if (isPreview(socket)) {
+        return previewWebSocket.open?.(socket);
+      }
     },
-    message: (socket, message) =>
-      isArtifact(socket)
-        ? deps.socket.message(socket, message)
-        : proxy.message(socket, message),
+    message: (socket, message) => {
+      if (isArtifact(socket)) {
+        return deps.socket.message(socket, message);
+      }
+      if (isPreview(socket)) {
+        return previewWebSocket.message(socket, message);
+      }
+    },
     drain: (socket) => {
-      if (!isArtifact(socket)) {
-        proxy.drain?.(socket);
+      if (isPreview(socket)) {
+        previewWebSocket.drain?.(socket);
       }
     },
     close: (socket, code, reason) => {
       viewed(socket, -1);
-      return isArtifact(socket)
-        ? deps.socket.close(socket, code)
-        : proxy.close?.(socket, code, reason);
+      if (isArtifact(socket)) {
+        return deps.socket.close(socket, code);
+      }
+      if (isPreview(socket)) {
+        return previewWebSocket.close?.(socket, code, reason);
+      }
     },
   };
   const error = (thrown: Error) => {

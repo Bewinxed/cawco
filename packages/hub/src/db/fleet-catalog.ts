@@ -376,23 +376,26 @@ const storedHookOf = (
   return event ? hookOf({ ...row, event }) : undefined;
 };
 
+/** A harness config row in the shape both ends of the fleet share. */
+const harnessConfigFrom = (
+  row: typeof fleetHarnessConfig.$inferSelect
+): FleetHarnessConfig => ({
+  kind: row.kind,
+  name: row.name,
+  enabled: row.enabled,
+  ...(row.settings ? { settings: row.settings } : {}),
+  ...(row.module ? { module: row.module } : {}),
+  ...(row.package ? { package: row.package } : {}),
+  ...bindingOf(row, "project"),
+});
+
 /** A stored harness config row in the shape both ends of the fleet share; none for settings the hub's key does not open. */
 const harnessConfigOf = (
   row: typeof fleetHarnessConfig.$inferSelect
 ): FleetHarnessConfig[] =>
   row.kind === "claudeSettings" && !row.settings
     ? []
-    : [
-        {
-          kind: row.kind,
-          name: row.name,
-          enabled: row.enabled,
-          ...(row.settings ? { settings: row.settings } : {}),
-          ...(row.module ? { module: row.module } : {}),
-          ...(row.package ? { package: row.package } : {}),
-          ...bindingOf(row, "project"),
-        },
-      ];
+    : [harnessConfigFrom(row)];
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -841,7 +844,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
    */
   const pruneHistory = (
     table: AnySQLiteTable,
-    id: AnySQLiteColumn,
+    id: AnySQLiteColumn<{ data: number; notNull: true }>,
     of: SQL
   ): void => {
     const keep = db
@@ -851,7 +854,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
       .orderBy(desc(id))
       .limit(HISTORY_LIMIT)
       .all()
-      .map((row) => row.id as number);
+      .map((row) => row.id);
     db.delete(table)
       .where(and(of, notInArray(id, keep)))
       .run();
@@ -1798,10 +1801,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           },
         })
         .run();
-      return harnessConfigOf({
-        ...values,
-        createdAt: values.updatedAt,
-      })[0] as FleetHarnessConfig;
+      return harnessConfigFrom({ ...values, createdAt: values.updatedAt });
     },
     getFleetHook: (id) => {
       const row = db

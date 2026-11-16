@@ -31,7 +31,7 @@
  */
 
 import { typeAt } from "@cawco/core/stored-types";
-import { getTableName, is, type Table } from "drizzle-orm";
+import { getTableName, is } from "drizzle-orm";
 import {
   customType,
   getTableConfig,
@@ -108,7 +108,7 @@ export const primaryKeyOf = (table: SQLiteTable): SQLiteColumn[] => {
 /** Where a column is, by its table's and its own SQL names. */
 const placeOf = (column: unknown): { table: string; column: string } =>
   is(column, SQLiteColumn)
-    ? { table: getTableName(column.table as Table), column: column.name }
+    ? { table: getTableName(column.table), column: column.name }
     : { table: "(unknown table)", column: "(unknown column)" };
 
 /** What zod says is wrong; with `held`, a closed set's text, the value it holds first, which zod's words for a set leave out. */
@@ -378,7 +378,7 @@ const rowOf = (column: unknown, raw: string): string | undefined => {
   if (!(rowNamer && is(column, SQLiteColumn))) {
     return;
   }
-  const table = column.table as SQLiteTable;
+  const { table } = column;
   try {
     return rowNamer(table, primaryKeyOf(table), column, raw);
   } catch (error) {

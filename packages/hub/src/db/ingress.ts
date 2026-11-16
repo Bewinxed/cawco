@@ -25,6 +25,7 @@ import {
   githubPollers,
   inboundEvents,
 } from "./schema";
+import { GitHubResourceSchema } from "./stored-shapes";
 import type { GitHubResource } from "./stored-types";
 
 export type InboundEventRow = typeof inboundEvents.$inferSelect;
@@ -407,13 +408,15 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
             .run();
         }
         for (const [repo, ofRepo] of Object.entries(cursors ?? {})) {
-          for (const [resource, cursor] of Object.entries(ofRepo)) {
-            if (cursor) {
+          for (const [key, cursor] of Object.entries(ofRepo)) {
+            // `Object.entries` names its keys `string` (microsoft/TypeScript#12253).
+            const resource = GitHubResourceSchema.safeParse(key);
+            if (cursor && resource.success) {
               tx.insert(githubPollCursors)
                 .values({
                   projectId,
                   repo,
-                  resource: resource as GitHubResource,
+                  resource: resource.data,
                   ...cursor,
                 })
                 .onConflictDoUpdate({

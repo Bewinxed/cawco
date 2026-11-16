@@ -1347,11 +1347,15 @@ export const createTrackers = (deps: TrackersDeps) => {
       { ...remote, state: issue.state.token, ...placed },
       new Date(task.createdAt)
     );
-    const back = Object.fromEntries(
-      FIELDS.filter((field) => !sameField(remote[field], fields[field])).map(
-        (field) => [field, remote[field]]
-      )
-    ) as TaskPatch;
+    const back: TaskPatch = {
+      ...(sameField(remote.title, fields.title) ? {} : { title: remote.title }),
+      ...(sameField(remote.description, fields.description)
+        ? {}
+        : { description: remote.description }),
+      ...(sameField(remote.labels, fields.labels)
+        ? {}
+        : { labels: remote.labels }),
+    };
     const written = await own(sync.projectId, task.id, async () => {
       const named = await tasks.setIssue(
         sync.projectId,

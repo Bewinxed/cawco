@@ -26,19 +26,21 @@ export const sourceKeyOf = (at: {
   source: MachineSource;
 }): SourceKey => {
   const { machineId, source } = at;
-  if ("dir" in source) {
-    return JSON.stringify([machineId, "dir", source.dir]) as SourceKey;
-  }
-  return JSON.stringify([
-    machineId,
-    "port",
-    source.port,
-    source.workspace ?? null,
-    source.stage?.dir ?? null,
-    source.stage?.file ?? null,
-    source.serve?.command ?? null,
-    source.serve?.cwd ?? null,
-  ]) as SourceKey;
+  const tuple =
+    "dir" in source
+      ? [machineId, "dir", source.dir]
+      : [
+          machineId,
+          "port",
+          source.port,
+          source.workspace ?? null,
+          source.stage?.dir ?? null,
+          source.stage?.file ?? null,
+          source.serve?.command ?? null,
+          source.serve?.cwd ?? null,
+        ];
+  // Cast kept, the brand's one mint: TypeScript makes a branded string only by assertion (https://github.com/microsoft/TypeScript/issues/202).
+  return JSON.stringify(tuple) as SourceKey;
 };
 
 /** The machine a {@link SourceKey} names: its tuple's first part. */

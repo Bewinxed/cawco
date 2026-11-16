@@ -198,10 +198,10 @@ class Outgoing {
     this.session = lane.session;
   }
 
-  /** The next frame to send; the same one again until it is {@link taken}. */
-  next(): string {
+  /** The next frame to send, cut; the same one again until it is {@link taken}. */
+  next(): Cut {
     if (this.#cut) {
-      return this.#cut.frame;
+      return this.#cut;
     }
     const state = this.#state;
     // A message sent whole is written whole: a peer one build behind reads
@@ -229,7 +229,7 @@ class Outgoing {
         done: true,
         carried: this.#buffer.length,
       };
-      return this.#buffer;
+      return this.#cut;
     }
     if (!state.id) {
       nextId += 1;
@@ -243,12 +243,11 @@ class Outgoing {
       text: this.#buffer.slice(0, end),
     };
     this.#cut = { frame: JSON.stringify(part), rest, done, carried: end };
-    return this.#cut.frame;
+    return this.#cut;
   }
 
-  /** The socket took the frame {@link next} gave; whether the message is all sent. */
-  taken(): boolean {
-    const cut = this.#cut as Cut;
+  /** The socket took `cut`, the frame {@link next} gave; whether the message is all sent. */
+  taken(cut: Cut): boolean {
     this.#buffer = cut.rest;
     this.#seq += 1;
     this.#cut = undefined;
@@ -259,19 +258,18 @@ class Outgoing {
   }
 }
 
-const isPart = (frame: unknown): frame is WirePart => {
-  const part = (frame as { part?: unknown } | null)?.part as
-    WirePart["part"] | undefined;
-  return (
-    typeof frame === "object" &&
-    frame !== null &&
-    typeof part === "object" &&
-    part !== null &&
-    typeof part.id === "string" &&
-    typeof part.seq === "number" &&
-    typeof (frame as { text?: unknown }).text === "string"
-  );
-};
+const isPart = (frame: unknown): frame is WirePart =>
+  typeof frame === "object" &&
+  frame !== null &&
+  "part" in frame &&
+  "text" in frame &&
+  typeof frame.text === "string" &&
+  typeof frame.part === "object" &&
+  frame.part !== null &&
+  "id" in frame.part &&
+  "seq" in frame.part &&
+  typeof frame.part.id === "string" &&
+  typeof frame.part.seq === "number";
 
 /** A part frame that does not continue the message its id began, or one past the size limit. */
 export class WireError extends Error {}
@@ -391,10 +389,7 @@ export class Inbox {
 
   #pump(): void {
     while (this.#head < this.#queue.length && this.#spent < INBOX_TURN_CHARS) {
-      const step = this.#queue[this.#head] as {
-        run: () => void;
-        weight: number;
-      };
+      const step = this.#queue[this.#head];
       this.#head += 1;
       this.#spend(step.weight);
       step.run();
@@ -759,8 +754,9 @@ export class Outbox {
         this.#wait();
         return;
       }
-      const outgoing = lane.items[lane.head] as Outgoing;
-      const frame = outgoing.next();
+      const outgoing = lane.items[lane.head];
+      const cut = outgoing.next();
+      const { frame } = cut;
       const outcome = this.#to.write(frame);
       if (outcome === "dropped") {
         this.#wait();
@@ -768,7 +764,7 @@ export class Outbox {
       }
       this.#stall.progressAt = Date.now();
       const before = outgoing.owed;
-      const done = outgoing.taken();
+      const done = outgoing.taken(cut);
       this.#owed -= before - outgoing.owed;
       turn += frame.length;
       if (done) {

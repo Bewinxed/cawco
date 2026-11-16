@@ -88,35 +88,67 @@ const isPort = (value: unknown): value is number =>
   value > 0 &&
   value < 65_536;
 
+/** `value`'s members when each is a string, else null. */
+const stringsOf = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const strings: string[] = [];
+  for (const one of value) {
+    if (typeof one !== "string") {
+      return null;
+    }
+    strings.push(one);
+  }
+  return strings;
+};
+
+/** `value` as {@link HubPreviewOrigins}'s `domain`: null in port mode, undefined when it is neither. */
+const domainOf = (value: unknown): HubPreviewOrigins["domain"] | undefined => {
+  if (value === null) {
+    return null;
+  }
+  return typeof value === "object" &&
+    "name" in value &&
+    "port" in value &&
+    typeof value.name === "string" &&
+    value.name.length > 0 &&
+    isPort(value.port)
+    ? { name: nameOf(value.name), port: value.port }
+    : undefined;
+};
+
 /** `value` as {@link HubPreviewOrigins}, or null when it is none (a file from another build, or torn). */
 export const hubPreviewOriginsOf = (
   value: unknown
 ): HubPreviewOrigins | null => {
-  if (typeof value !== "object" || value === null) {
+  if (!(
+    typeof value === "object" &&
+    value !== null &&
+    "names" in value &&
+    "ports" in value &&
+    "domain" in value
+  )) {
     return null;
   }
-  const { names, ports, domain } = value as Record<string, unknown>;
-  const range = ports as Record<string, unknown> | null | undefined;
-  const front = domain as Record<string, unknown> | null | undefined;
+  const { ports } = value;
+  const names = stringsOf(value.names);
+  const domain = domainOf(value.domain);
   if (!(
-    Array.isArray(names) &&
-    names.every((one) => typeof one === "string") &&
-    range &&
-    isPort(range.first) &&
-    isPort(range.last) &&
-    (front === null ||
-      (front !== undefined &&
-        typeof front.name === "string" &&
-        front.name.length > 0 &&
-        isPort(front.port)))
+    names &&
+    domain !== undefined &&
+    typeof ports === "object" &&
+    ports !== null &&
+    "first" in ports &&
+    "last" in ports &&
+    isPort(ports.first) &&
+    isPort(ports.last)
   )) {
     return null;
   }
   return {
-    names: (names as string[]).map(nameOf),
-    ports: { first: range.first, last: range.last },
-    domain: front
-      ? { name: nameOf(front.name as string), port: front.port as number }
-      : null,
+    names: names.map(nameOf),
+    ports: { first: ports.first, last: ports.last },
+    domain,
   };
 };

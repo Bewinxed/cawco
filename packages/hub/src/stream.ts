@@ -650,10 +650,14 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       sessionId: raw.sessionId,
       // A malformed resume is NOT a fresh join: `undefined` would silently
       // start the client from now and lose whatever it thought it had, so it
-      // is passed through as-is and answered with a reset.
+      // is passed on as no seq at all (NaN), which no ring replays, and
+      // answered with a reset.
       ...(raw.afterSeq === undefined
         ? {}
-        : { afterSeq: raw.afterSeq as number }),
+        : {
+            afterSeq:
+              typeof raw.afterSeq === "number" ? raw.afterSeq : Number.NaN,
+          }),
     });
   };
 

@@ -276,7 +276,8 @@ const spendTicket = (
     ? null
     : opened(ticket, "session", SessionTicketBodySchema);
   const body = person ?? session;
-  if (!body) {
+  const spender = person ? { deviceId: person.d } : session && { session };
+  if (!(body && spender)) {
     return { refused: "forged" };
   }
   if (body.e <= now || body.i < STARTED_AT) {
@@ -291,9 +292,7 @@ const spendTicket = (
     return { refused: "spent" };
   }
   spent.set(body.n, body.e);
-  return person
-    ? { deviceId: person.d }
-    : { session: body as SessionTicketBody };
+  return spender;
 };
 
 /** The lock, as a listener holds it: where its pass is set, where passes are kept, and which sessions still run. */

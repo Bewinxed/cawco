@@ -13,6 +13,7 @@
  */
 import { readdirSync, rmSync, unlinkSync, watch } from "node:fs";
 import { dirname, join } from "node:path";
+import { isGone } from "@cawco/core/absent";
 import {
   PAIRING_OFF_ANSWER,
   PAIRING_OFF_REQUEST,
@@ -28,7 +29,7 @@ const taken = (path: string): boolean => {
     unlinkSync(path);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isGone(error)) {
       return false;
     }
     throw error;

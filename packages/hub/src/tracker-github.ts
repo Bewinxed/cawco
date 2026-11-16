@@ -30,10 +30,25 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import type { ExternalActor } from "@cawco/core/external-items";
+import { isRecord } from "@cawco/core/is-record";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import { cutShort } from "@cawco/core/words/helpers";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus, problem } from "elysia";
+import {
+  array,
+  type GenericSchema,
+  type InferOutput,
+  nullish,
+  number as numeric,
+  object,
+  optional,
+  safeParse,
+  string,
+  union,
+  unknown,
+} from "valibot";
+import { messageOf, refusalOf } from "./octokit-answer";
 import {
   type Issue,
   type IssueComment,
@@ -98,29 +113,33 @@ const VOUCHED: ReadonlySet<string> = new Set([
 ]);
 
 /** What an issue's raw answer is read for. */
-interface RawIssue {
-  author_association?: string;
-  body?: string | null;
-  created_at: string;
-  html_url: string;
-  labels?: (string | { name?: string | null })[];
-  node_id?: string;
-  number: number;
-  pull_request?: unknown;
-  state: string;
-  state_reason?: string | null;
-  title: string;
-  updated_at: string;
-  user?: RawUser | null;
-}
-
 /** Someone as GitHub's REST answers name them. */
-interface RawUser {
-  avatar_url?: string | null;
-  html_url?: string | null;
-  login?: string | null;
-  type?: string | null;
-}
+const RawUserSchema = object({
+  avatar_url: nullish(string()),
+  html_url: nullish(string()),
+  login: nullish(string()),
+  type: nullish(string()),
+});
+type RawUser = InferOutput<typeof RawUserSchema>;
+
+const RawIssueSchema = object({
+  author_association: optional(string()),
+  body: nullish(string()),
+  created_at: string(),
+  html_url: string(),
+  labels: optional(
+    array(union([string(), object({ name: nullish(string()) })]))
+  ),
+  node_id: optional(string()),
+  number: numeric(),
+  pull_request: optional(unknown()),
+  state: string(),
+  state_reason: nullish(string()),
+  title: string(),
+  updated_at: string(),
+  user: nullish(RawUserSchema),
+});
+type RawIssue = InferOutput<typeof RawIssueSchema>;
 
 /** Someone GitHub names, as an external item carries them; null when it names no one. */
 export const githubActorOf = (
@@ -150,16 +169,17 @@ const openerOf = (raw: RawIssue): Issue["opener"] => {
   return { name, unvouched: unvouchedOf(name, raw.author_association) };
 };
 
-interface RawComment {
-  author_association?: string;
-  body?: string | null;
-  created_at: string;
-  html_url?: string;
-  id: number;
-  issue_url: string;
-  updated_at?: string;
-  user?: RawUser | null;
-}
+const RawCommentSchema = object({
+  author_association: optional(string()),
+  body: nullish(string()),
+  created_at: string(),
+  html_url: optional(string()),
+  id: numeric(),
+  issue_url: string(),
+  updated_at: optional(string()),
+  user: nullish(RawUserSchema),
+});
+type RawComment = InferOutput<typeof RawCommentSchema>;
 
 const stateOf = (raw: RawIssue): IssueState => {
   if (raw.state !== "closed") {
@@ -171,28 +191,31 @@ const stateOf = (raw: RawIssue): IssueState => {
   return raw.state_reason === "duplicate" ? DUPLICATE : COMPLETED;
 };
 
+/** An issue GitHub answered as the sync reads it. */
+const issueFrom = (raw: RawIssue): Issue => ({
+  id: raw.node_id ?? "",
+  key: String(raw.number),
+  number: raw.number,
+  author: githubActorOf(raw.user),
+  ref: `#${raw.number}`,
+  url: raw.html_url,
+  title: raw.title,
+  description: (raw.body ?? "").replaceAll("\r\n", "\n").trim(),
+  labels: labelSet(
+    (raw.labels ?? []).map((label) =>
+      typeof label === "string" ? label : (label.name ?? "")
+    )
+  ),
+  state: stateOf(raw),
+  opener: openerOf(raw),
+  createdAt: Date.parse(raw.created_at),
+  updatedAt: Date.parse(raw.updated_at),
+});
+
 /** An issue as the sync reads it; null for a pull request. */
 const issueOf = (raw: RawIssue): Issue | null =>
   raw.pull_request === undefined || raw.pull_request === null
-    ? {
-        id: raw.node_id ?? "",
-        key: String(raw.number),
-        number: raw.number,
-        author: githubActorOf(raw.user),
-        ref: `#${raw.number}`,
-        url: raw.html_url,
-        title: raw.title,
-        description: (raw.body ?? "").replaceAll("\r\n", "\n").trim(),
-        labels: labelSet(
-          (raw.labels ?? []).map((label) =>
-            typeof label === "string" ? label : (label.name ?? "")
-          )
-        ),
-        state: stateOf(raw),
-        opener: openerOf(raw),
-        createdAt: Date.parse(raw.created_at),
-        updatedAt: Date.parse(raw.updated_at),
-      }
+    ? issueFrom(raw)
     : null;
 
 /** A comment as the sync reads it; null for one on no issue it can name. */
@@ -226,21 +249,21 @@ const commentOf = (raw: RawComment): IssueComment | null => {
 /** An error's HTTP status and headers, as Octokit's RequestError carries them. */
 export const answerOf = (
   error: unknown
-): { headers: Record<string, string>; said: string; status?: number } => {
-  const failed = error as {
-    message?: string;
-    response?: {
-      data?: { message?: unknown };
-      headers?: Record<string, string>;
-    };
-    status?: number;
-  };
-  const data = failed.response?.data?.message;
+): {
+  headers: Readonly<Record<string, unknown>>;
+  said: string;
+  status?: number;
+} => {
+  const refused = refusalOf(error);
+  const failed = isRecord(error) ? error : {};
   return {
-    status: failed.status,
-    headers: failed.response?.headers ?? {},
+    status:
+      refused?.status ??
+      (typeof failed.status === "number" ? failed.status : undefined),
+    headers: refused?.headers ?? {},
     said: cutShort(
-      typeof data === "string" ? data : (failed.message ?? ""),
+      (refused && messageOf(refused.data)) ??
+        (typeof failed.message === "string" ? failed.message : ""),
       300
     ),
   };
@@ -249,7 +272,7 @@ export const answerOf = (
 /** GitHub's rate limit on an answer, as when the next request may go; null when it holds nothing back. */
 const rateLimited = (
   status: number,
-  headers: Record<string, string>
+  headers: Readonly<Record<string, unknown>>
 ): number | null => {
   const retry = Number(headers["retry-after"]);
   const limited =
@@ -293,7 +316,7 @@ export const githubProblem = (
     const needs = headers["x-accepted-github-permissions"];
     return problem(400, {
       code: "tracker-scope",
-      detail: `GitHub refused to ${what} on ${repo}: ${said}.${needs ? ` The connection needs ${needs.replaceAll("=", ": ")} on ${repo} (X-Accepted-GitHub-Permissions: ${needs}).` : ""}`,
+      detail: `GitHub refused to ${what} on ${repo}: ${said}.${typeof needs === "string" && needs ? ` The connection needs ${needs.replaceAll("=", ": ")} on ${repo} (X-Accepted-GitHub-Permissions: ${needs}).` : ""}`,
     });
   }
   // GitHub answers a request it will not let this connection see the same
@@ -348,7 +371,7 @@ export const partsOf = (
       detail: `“${repo}” is not a repository like owner/name.`,
     });
   }
-  return { owner: found[1] as string, repo: found[2] as string };
+  return { owner: found[1], repo: found[2] };
 };
 
 /** GitHub's state and reason for a state the sync puts an issue in. */
@@ -430,6 +453,7 @@ export const githubAdapter = (
     what: string,
     route: ListRoute,
     cursor: ListCursor,
+    shape: GenericSchema<unknown, Raw>,
     read: (raw: Raw) => T | null,
     stamp: (raw: Raw) => number,
     idOf: (raw: Raw) => number | string
@@ -444,8 +468,14 @@ export const githubAdapter = (
     }
     const raws: Raw[] = [];
     const seen = new Set<number | string>();
-    const take = (items: unknown[]) => {
-      for (const raw of items as Raw[]) {
+    /** A page's items as `shape` reads them; one it does not read is left out. */
+    const readAll = (items: unknown[]): Raw[] =>
+      items.flatMap((item) => {
+        const one = safeParse(shape, item);
+        return one.success ? [one.output] : [];
+      });
+    const take = (items: Raw[]) => {
+      for (const raw of items) {
         const id = idOf(raw);
         if (!seen.has(id)) {
           seen.add(id);
@@ -453,11 +483,14 @@ export const githubAdapter = (
         }
       }
     };
-    take(first.raws);
-    let current = first.raws;
+    // A page is full by what GitHub sent, read or not: a short one is the last.
+    let full = first.raws.length === PER_PAGE;
+    let current = readAll(first.raws);
+    take(current);
     let page = 1;
-    while (current.length === PER_PAGE) {
-      const stampAt = new Date(stamp(current.at(-1) as Raw)).toISOString();
+    let last = current.at(-1);
+    while (full && last !== undefined) {
+      const stampAt = new Date(stamp(last)).toISOString();
       if (stampAt === since) {
         page += 1;
       } else {
@@ -468,8 +501,11 @@ export const githubAdapter = (
       if (next instanceof ElysiaStatus) {
         return next;
       }
-      current = next.kind === "page" ? next.raws : [];
+      const sent = next.kind === "page" ? next.raws : [];
+      full = sent.length === PER_PAGE;
+      current = readAll(sent);
       take(current);
+      last = current.at(-1);
     }
     return {
       kind: "read",
@@ -504,7 +540,7 @@ export const githubAdapter = (
           return data.repository_url
             .toLowerCase()
             .endsWith(`/${repo.toLowerCase()}`)
-            ? issueOf(data as RawIssue)
+            ? issueOf(data)
             : null;
         } catch (error) {
           const { status } = answerOf(error);
@@ -538,7 +574,7 @@ export const githubAdapter = (
         );
         // A new issue is open; a task filed already closed closes it.
         if (draft.state.token === OPEN.token) {
-          return issueOf(data as RawIssue) as Issue;
+          return issueFrom(data);
         }
         const closed = await octokit.request(
           "PATCH /repos/{owner}/{repo}/issues/{issue_number}",
@@ -549,7 +585,7 @@ export const githubAdapter = (
             request: { signal },
           }
         );
-        return issueOf(closed.data as RawIssue) as Issue;
+        return issueFrom(closed.data);
       }),
 
     update: (issue, patch: IssuePatch) =>
@@ -568,7 +604,7 @@ export const githubAdapter = (
             request: { signal },
           }
         );
-        return issueOf(data as RawIssue) as Issue;
+        return issueFrom(data);
       }),
 
     changed: (cursor) =>
@@ -576,6 +612,7 @@ export const githubAdapter = (
         "list the issues",
         ISSUES_ROUTE,
         cursor,
+        RawIssueSchema,
         issueOf,
         (raw) => Date.parse(raw.updated_at),
         (raw) => raw.number
@@ -586,6 +623,7 @@ export const githubAdapter = (
         "list the issues' comments",
         COMMENTS_ROUTE,
         cursor,
+        RawCommentSchema,
         commentOf,
         (raw) => Date.parse(raw.updated_at ?? raw.created_at),
         (raw) => raw.id

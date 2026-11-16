@@ -1,7 +1,22 @@
+import {
+  array,
+  type InferOutput,
+  number,
+  object,
+  optional,
+  record,
+  safeParse,
+  string,
+  unknown,
+} from "valibot";
+import { isRecord } from "../is-record";
 import type { ModelTurnUsage } from "../session-messages";
 import { DAY_MS, HOUR_MS } from "../time";
 import snapshot from "./pricing-snapshot.json";
 import type { UsageTokens } from "./types";
+
+/** The bundled snapshot ({@link filterModelsDev}'s output, `bun run pricing`). */
+const SNAPSHOT: PricingSnapshot = snapshot;
 
 /**
  * Cost basis for one model on one provider, in USD per token. models.dev
@@ -232,7 +247,7 @@ function loadRates(json: PricingSnapshot): void {
   }
 }
 
-loadFromSnapshot(snapshot as PricingSnapshot);
+loadFromSnapshot(SNAPSHOT);
 
 /**
  * Model ids a pricing lookup could not resolve. A miss prices at 0 and records
@@ -447,7 +462,7 @@ export async function refreshPricing(): Promise<number> {
   }
   loadFromSnapshot({
     models: {
-      ...(snapshot as PricingSnapshot).models,
+      ...SNAPSHOT.models,
       ...filtered.models,
     },
   });
@@ -455,17 +470,39 @@ export async function refreshPricing(): Promise<number> {
 }
 
 /** One models.dev `cost` (or one of its `tiers`), per million tokens. */
-interface ModelsDevCost {
-  cache_read?: number;
-  cache_write?: number;
-  cache_write_1h?: number;
-  input?: number;
-  output?: number;
-}
-
-type ModelsDevTier = ModelsDevCost & {
-  tier?: { size?: number; type?: string };
+const MODELS_DEV_COST = {
+  cache_read: optional(number()),
+  cache_write: optional(number()),
+  cache_write_1h: optional(number()),
+  input: optional(number()),
+  output: optional(number()),
 };
+const ModelsDevCostSchema = object(MODELS_DEV_COST);
+type ModelsDevCost = InferOutput<typeof ModelsDevCostSchema>;
+
+/** One of a models.dev cost's `tiers`: its rates, and what it is a tier of. */
+const ModelsDevTierSchema = object({
+  ...MODELS_DEV_COST,
+  tier: optional(
+    object({ size: optional(number()), type: optional(string()) })
+  ),
+});
+type ModelsDevTier = InferOutput<typeof ModelsDevTierSchema>;
+
+/** One model of a models.dev catalog, as far as pricing reads it. */
+const ModelsDevModelSchema = object({
+  cost: optional(
+    object({
+      ...MODELS_DEV_COST,
+      tiers: optional(array(ModelsDevTierSchema)),
+    })
+  ),
+});
+
+/** One provider's models.dev catalog: its models, each read on its own. */
+const ModelsDevCatalogSchema = object({
+  models: optional(record(string(), unknown())),
+});
 
 /** A models.dev cost as snapshot rates; undefined without input and output prices. */
 const ratesOf = (cost: ModelsDevCost): SnapshotRates | undefined => {
@@ -515,20 +552,22 @@ const contextTiers = (
  * `skippedTiers`.
  */
 export function filterModelsDev(raw: unknown): PricingSnapshot {
-  interface Provider {
-    models?: Record<
-      string,
-      { cost?: ModelsDevCost & { tiers?: ModelsDevTier[] } }
-    >;
-  }
   const models: Record<string, SnapshotModel> = {};
   const skippedTiers: string[] = [];
   for (const provider of CATALOGS) {
-    const catalog = (raw as Record<string, Provider>)[provider];
-    if (!catalog?.models) {
+    const catalog = safeParse(
+      ModelsDevCatalogSchema,
+      isRecord(raw) ? raw[provider] : undefined
+    );
+    if (!(catalog.success && catalog.output.models)) {
       continue;
     }
-    for (const [id, { cost }] of Object.entries(catalog.models)) {
+    for (const [id, model] of Object.entries(catalog.output.models)) {
+      const read = safeParse(ModelsDevModelSchema, model);
+      if (!read.success) {
+        continue;
+      }
+      const { cost } = read.output;
       const entry: SnapshotModel | undefined = cost && ratesOf(cost);
       if (!entry) {
         continue;

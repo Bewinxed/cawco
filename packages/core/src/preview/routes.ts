@@ -100,8 +100,9 @@ export const PERSONS_INPUT = [
 export const personsInput = (event: Event): boolean =>
   event.isTrusted &&
   (event.type !== "pointermove" ||
-    (event as PointerEvent).movementX !== 0 ||
-    (event as PointerEvent).movementY !== 0);
+    !("movementX" in event && "movementY" in event) ||
+    event.movementX !== 0 ||
+    event.movementY !== 0);
 
 /**
  * A previewed page's overlay to its host: the person's hand is on the page.

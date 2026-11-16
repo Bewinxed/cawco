@@ -139,10 +139,14 @@ const keyed = (
   if (row.projectId) {
     return { key: projectOrigin(row.projectId), port: row.port };
   }
-  return {
-    key: row.origin ? artifactOrigin(row.origin) : (row.instanceId as string),
-    port: row.port,
-  };
+  if (row.origin) {
+    return { key: artifactOrigin(row.origin), port: row.port };
+  }
+  if (row.instanceId) {
+    return { key: row.instanceId, port: row.port };
+  }
+  // The table's check `preview_ports_one_owner` holds one owner on every row.
+  throw new Error(`preview port ${row.port} has no owner`);
 };
 
 export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({

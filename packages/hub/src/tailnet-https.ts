@@ -37,6 +37,7 @@
  * nothing of Tailscale's.
  */
 import { hostname, userInfo } from "node:os";
+import { errnoCode } from "@cawco/core/absent";
 import { detach } from "@cawco/core/detach";
 import type {
   TailnetHttps,
@@ -181,8 +182,7 @@ const pairOf = (stdout: string): Pair | null => {
 };
 
 /** Whether a bind failed because another listener holds the address and port. */
-const held = (thrown: unknown): boolean =>
-  (thrown as { code?: unknown }).code === "EADDRINUSE";
+const held = (thrown: unknown): boolean => errnoCode(thrown) === "EADDRINUSE";
 
 export interface TailnetHttpsDeps {
   /** The CLI's path; `tailscale` on PATH unless named (funnel.ts's own). */
@@ -361,6 +361,12 @@ export const createTailnetHttps = ({
       tls: at.pair,
     });
     const opened: Held = { secure, doors: [] };
+    // A TCP listener on loopback: Bun names no port only for a Unix socket.
+    const tlsPort = secure.port;
+    if (tlsPort === undefined) {
+      stoppedHeld(opened, true);
+      throw new Error("the tailnet's TLS listener opened on no port");
+    }
     for (const ip of at.ips) {
       try {
         opened.doors.push(
@@ -368,7 +374,7 @@ export const createTailnetHttps = ({
             hostname: ip,
             name: at.name,
             port: beside.port,
-            tlsPort: secure.port as number,
+            tlsPort,
           })
         );
       } catch (thrown) {

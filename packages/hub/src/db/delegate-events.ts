@@ -26,17 +26,53 @@ type DelegateAskEvent = Extract<DelegateEvent, { kind: "ask" }>;
 const delegateEventOf = ({
   resultId,
   completedAt,
+  kind,
+  payload,
   ...row
-}: typeof delegateEvents.$inferSelect): DelegateEvent =>
-  ({
-    ...row,
-    payload: {
-      ...row.payload,
-      ...(resultId === null ? {} : { resultId }),
-      ...(completedAt === null ? {} : { completedAt }),
-    },
-    createdAt: row.createdAt.toISOString(),
-  }) as DelegateEvent;
+}: typeof delegateEvents.$inferSelect): DelegateEvent => {
+  const base = { ...row, createdAt: row.createdAt.toISOString() };
+  // Each kind's payload is told by the field only it carries: a report's
+  // body, an answer's behavior; an ask carries neither.
+  if (kind === "report" && "body" in payload) {
+    return {
+      ...base,
+      kind,
+      payload: {
+        ...payload,
+        ...(resultId === null ? {} : { resultId }),
+        ...(completedAt === null ? {} : { completedAt }),
+      },
+    };
+  }
+  if (kind === "answer" && "behavior" in payload) {
+    return { ...base, kind, payload };
+  }
+  if (kind === "ask" && !("body" in payload || "behavior" in payload)) {
+    return { ...base, kind, payload };
+  }
+  throw new Error(
+    `delegate event ${row.id} is a ${kind} whose payload is another kind's`
+  );
+};
+
+/** `payload` apart from a report's turn identity, which is its own columns. */
+const turnApart = (
+  payload: DelegateEventPayload
+): {
+  completedAt: string | null;
+  payload: DelegateEventPayload;
+  resultId: string | null;
+} => {
+  if (!("body" in payload)) {
+    return { payload, resultId: null, completedAt: null };
+  }
+  const { resultId, completedAt, ...rest } = payload;
+  return {
+    payload: rest,
+    resultId: resultId ?? null,
+    completedAt: completedAt ?? null,
+  };
+};
 
 export interface DelegateEventsDb {
   /** Claims one harness completion before any turn-end side effect. */
@@ -94,24 +130,14 @@ export const delegateEventsDb = (core: DbCore): DelegateEventsDb => {
 
   return {
     // A report's turn identity is its columns, which the turn queries join on.
-    recordDelegateEvent: ({ payload, ...event }) => {
-      const { resultId, completedAt, ...rest } = payload as {
-        completedAt?: string;
-        resultId?: string;
-      };
-      return delegateEventOf(
+    recordDelegateEvent: ({ payload, ...event }) =>
+      delegateEventOf(
         db
           .insert(delegateEvents)
-          .values({
-            ...event,
-            payload: rest as DelegateEventPayload,
-            resultId: resultId ?? null,
-            completedAt: completedAt ?? null,
-          })
+          .values({ ...event, ...turnApart(payload) })
           .returning()
           .get()
-      );
-    },
+      ),
     claimCompletedTurn: (instanceId, resultId, completedAt, recovered) => {
       const receivedAt = recovered ? undefined : new Date().toISOString();
       // Each report's identity, its body left unread.
@@ -159,8 +185,9 @@ export const delegateEventsDb = (core: DbCore): DelegateEventsDb => {
         .all();
       return inserted.length > 0 && !exact && !unkeyed;
     },
-    recordedTurns: (instanceId) =>
-      db
+    recordedTurns: (instanceId) => {
+      // An aggregate with no grouping answers one row, always.
+      const [turns] = db
         .select({
           hasTurns: sql<boolean>`count(*) > 0`.mapWith(Boolean),
           lastTurnAt: sql<
@@ -181,11 +208,9 @@ export const delegateEventsDb = (core: DbCore): DelegateEventsDb => {
           )
         )
         .where(eq(completedTurns.instanceId, instanceId))
-        .get() as {
-        hasTurns: boolean;
-        lastTurnAt: string | null;
-        unbounded: boolean;
-      },
+        .all();
+      return turns;
+    },
     delegateAsk: (requestId) => {
       const row = db
         .select()

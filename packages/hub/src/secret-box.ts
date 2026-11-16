@@ -17,6 +17,7 @@ import {
 } from "node:crypto";
 import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { errnoCode } from "@cawco/core/absent";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
 
@@ -63,7 +64,7 @@ const loadKey = (path: string): { key: Buffer; made: boolean } => {
     made = true;
     console.info(`[secret-box] made the hub's secret key at ${path}`);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (errnoCode(error) !== "EEXIST") {
       throw error;
     }
   }

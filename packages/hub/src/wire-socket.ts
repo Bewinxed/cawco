@@ -87,6 +87,7 @@ interface Line {
  * a route's callbacks are given leaves it out; this is the one place it is read.
  */
 const rawOf = (socket: HubSocket): RawSocket =>
+  // Cast kept, Elysia 2.0.0-rc.4 (newest) gap: the route context omits `raw`, and `ElysiaWS.raw`'s type omits Bun's `getBufferedAmount`; no upstream issue exists (searched elysiajs/elysia).
   (socket as unknown as { raw: RawSocket }).raw;
 
 const lines = new Map<string, Line>();

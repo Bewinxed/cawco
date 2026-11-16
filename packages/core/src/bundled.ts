@@ -8,13 +8,18 @@
  * naming the bundle and each message with its file, line and column.
  */
 
+import { isRecord } from "./is-record";
+
 /** One bundler message in words, with its place in the source when it has one. */
 const logSaid = (log: unknown): string => {
-  const one = log as Partial<BuildMessage>;
-  const at = one.position
-    ? `${one.position.file}:${one.position.line}:${one.position.column}: `
+  if (!isRecord(log)) {
+    return String(log);
+  }
+  const { position, message } = log;
+  const at = isRecord(position)
+    ? `${String(position.file)}:${String(position.line)}:${String(position.column)}: `
     : "";
-  return `${at}${one.message ?? String(log)}`;
+  return `${at}${typeof message === "string" ? message : String(log)}`;
 };
 
 /** `what`'s bundle built from `config`; a failure throws "<what>'s build failed: <file>:<line>:<column>: <message>; …". */

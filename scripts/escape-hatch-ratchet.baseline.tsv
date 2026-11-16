@@ -1,6 +1,4 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
-as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
-as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	{ credentials?: { store?: { constructor?: unknown } }; }	packages/agent/src/harnesses/pi-accounts.ts	1
@@ -10,7 +8,6 @@ as-unknown-as	{ fragment: Node; instance: { content: Node } | null; }	apps/dashb
 as-unknown-as	{ getSettings: () => Promise<{ applied?: { effort?: EffortLevel | null }	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ getTaskOutput?: (taskId: string) => Promise<{ output: string }>; }	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ instance: { content: Node } | null }	apps/dashboard/scripts/outro-reads-check.ts	1
-as-unknown-as	{ raw: RawSocket }	packages/hub/src/browser-routes.ts	1
 as-unknown-as	{ raw: RawSocket }	packages/hub/src/wire-socket.ts	1
 as-unknown-as	{ request: (request: { subtype: "cancel_async_message"; message_uuid: st	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	{ rive: typeof import("@rive-app/canvas"); }	apps/dashboard/scripts/tab-icon-art.ts	1
@@ -25,7 +22,6 @@ as-unknown-as	Libc	packages/core/src/flock.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
-as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
@@ -44,7 +40,6 @@ as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
 as-unknown-as	typeof RTCPeerConnection	apps/dashboard/src/routes/dev/browser-panel/+page.svelte	1
 as-unknown-as	typeof WebSocket	packages/preview/src/overlay/doc-worker.ts	1
-as-unknown-as	WebSocketHandler<ListenerSocket>	packages/hub/src/preview.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/connect/installs.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte	1

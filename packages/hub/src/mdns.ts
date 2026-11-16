@@ -205,7 +205,7 @@ const follow = async (
   try {
     saying = await move(port, addresses);
   } catch (error) {
-    saying = `[hub] mDNS waits: ${(error as Error).message}`;
+    saying = `[hub] mDNS waits: ${error instanceof Error ? error.message : String(error)}`;
   }
   if (saying && saying !== said) {
     console.log(saying);

@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { errnoCode } from "@cawco/core/absent";
 import type { Deleted } from "@cawco/core/fleet";
 import { and, eq, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -334,7 +335,7 @@ const TAKEN = new Set([
  */
 const coded = (error: unknown, codes: ReadonlySet<string>): boolean => {
   for (let at: unknown = error; at instanceof Error; at = at.cause) {
-    if (codes.has((at as Error & { code?: string }).code ?? "")) {
+    if (codes.has(errnoCode(at) ?? "")) {
       return true;
     }
   }

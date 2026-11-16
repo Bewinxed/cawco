@@ -894,14 +894,22 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
           monthUsd: cawMonth,
         },
         others: { todayUsd: others?.today ?? 0, monthUsd: others?.month ?? 0 },
-        items: items.map((item) => ({
-          taskId: item.taskId as string,
-          title: item.title,
-          type: item.type,
-          state: item.state,
-          usd: item.usd,
-          at: (item.endedAt ?? item.createdAt).getTime(),
-        })),
+        // The query took only rows with a task (`isNotNull`), which its
+        // row type does not say.
+        items: items.flatMap(({ taskId, ...item }) =>
+          taskId === null
+            ? []
+            : [
+                {
+                  taskId,
+                  title: item.title,
+                  type: item.type,
+                  state: item.state,
+                  usd: item.usd,
+                  at: (item.endedAt ?? item.createdAt).getTime(),
+                },
+              ]
+        ),
       };
     },
     projectNotes: {
