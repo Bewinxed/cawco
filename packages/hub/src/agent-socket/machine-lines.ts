@@ -4,13 +4,12 @@ import {
   CUSTODY_HELD,
   LEAK_ENDED,
   LEAK_FOUND,
-  type LeakFound,
 } from "@cawco/core/harness";
 import { FRAMES_LOST, STREAM_SO_FAR } from "@cawco/core/session-messages";
 import { HOUR_MS } from "@cawco/core/time";
 import { custodyLine } from "../history";
 import type { HubContext } from "../hub-context";
-import type { TranscriptPayload } from "../transcripts";
+
 import { onSessionFrame } from "./frame-run";
 import {
   custodyReason,
@@ -54,11 +53,9 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
         reason: note,
       });
       ctx.publishInstances(message.machineId);
-      message.payload = {
-        ...frame,
-        message: custodyLine(row, note),
-      };
-      ctx.transcripts.ingest(row.id, message.payload as TranscriptPayload);
+      const said = { ...frame, message: custodyLine(row, note) };
+      message.payload = said;
+      ctx.transcripts.ingest(row.id, said);
       return "stop";
     }
     return "continue";
@@ -75,11 +72,7 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
       ctx.tellLeak(
         message.machineId,
         instanceId,
-        frame.message as {
-          uuid?: unknown;
-          content?: unknown;
-          leak?: LeakFound;
-        }
+        frame.message
       );
       return "stop";
     }
@@ -95,7 +88,7 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
       ctx.endLeak(
         message.machineId,
         instanceId,
-        frame.message as { uuid?: unknown }
+        frame.message
       );
       return "stop";
     }
@@ -137,7 +130,7 @@ export const machineLineStagesOf = (ctx: MachineLinesContext) => {
     ) {
       const [row] = ctx.db.getInstancesByIds([instanceId]);
       if (row?.machineId === message.machineId) {
-        ctx.transcripts.ingest(row.id, frame as TranscriptPayload);
+        ctx.transcripts.ingest(row.id, frame);
       }
       return "stop";
     }

@@ -17,11 +17,15 @@ const cumulative = (
   raw: Record<string, Partial<ClaudeModelUsage>>
 ): Record<string, ClaudeModelUsage> =>
   Object.fromEntries(
-    Object.entries(raw).map(([model, usage]) => [
+    Object.entries(raw).map(([model, usage]): [string, ClaudeModelUsage] => [
       model,
-      Object.fromEntries(
-        FIELDS.map((field) => [field, usage[field] ?? 0])
-      ) as unknown as ClaudeModelUsage,
+      {
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
+        cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
+        costUSD: usage.costUSD ?? 0,
+      },
     ])
   );
 
@@ -87,9 +91,7 @@ export const turnUsageOf = (
     at: new Date(at),
     ...tokens,
   });
-  const { modelUsage } = result as NeutralResultMessage & {
-    modelUsage?: Record<string, Partial<ClaudeModelUsage>>;
-  };
+  const { modelUsage } = result;
   if (modelUsage) {
     const now = cumulative(modelUsage);
     const seen = session.modelUsageSeen;

@@ -198,7 +198,7 @@ const endsPartials = (payload: Held): boolean => {
   if (payload.kind !== "frame") {
     return false;
   }
-  const message = payload.message as NeutralMessage;
+  const message = payload.message;
   switch (message.type) {
     case "assistant":
       return !message.parent_tool_use_id;
@@ -343,7 +343,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     return payload.kind === "send"
       ? entry.builder.applyRecord(payload.record)
       : entry.builder.applyFrame(
-          payload.message as NeutralMessage,
+          payload.message,
           payload.harness
         );
   };
@@ -442,7 +442,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     const settled = held.findLastIndex(endsPartials);
     return held.flatMap((payload, index) => {
       if (payload.kind === "frame") {
-        const message = payload.message as NeutralMessage;
+        const message = payload.message;
         if (
           partial(message) ? index < settled : entry.builder.seen(message.uuid)
         ) {

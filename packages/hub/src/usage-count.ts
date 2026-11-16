@@ -1,3 +1,4 @@
+import { isRecord } from "@cawco/core/is-record";
 import { existsSync, statSync } from "node:fs";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { listClaudeFiles } from "@cawco/core/paths/claude";
@@ -162,15 +163,19 @@ function usesInBlocks(blocks: unknown, reading: Reading): CapabilityUse[] {
     return [];
   }
   const uses: CapabilityUse[] = [];
-  for (const block of blocks as {
-    type?: string;
-    name?: string;
-    input?: Record<string, unknown>;
-  }[]) {
-    if (block.type !== "tool_use" || typeof block.name !== "string") {
+  for (const block of blocks) {
+    if (
+      !isRecord(block) ||
+      block.type !== "tool_use" ||
+      typeof block.name !== "string"
+    ) {
       continue;
     }
-    const skill = skillOf(block.name, block.input ?? {}, reading.harness);
+    const skill = skillOf(
+      block.name,
+      isRecord(block.input) ? block.input : {},
+      reading.harness
+    );
     if (skill) {
       uses.push({ kind: "skill", name: skill });
       continue;
@@ -271,22 +276,17 @@ export class UsageCounter {
   }
 
   observe(instanceId: string, message: NeutralMessage): void {
-    const frame = message as {
-      type: string;
-      subtype?: string;
-      skills?: string[];
-      message?: { content?: unknown };
-    };
+    const frame = message;
     if (frame.type === "system" && frame.subtype === "init") {
       this.#skills.set(instanceId, new Set(frame.skills ?? []));
       return;
     }
     let uses: CapabilityUse[] = [];
     if (frame.type === "assistant") {
-      uses = usesInBlocks(frame.message?.content, this.#reading(instanceId));
+      uses = usesInBlocks(frame.message.content, this.#reading(instanceId));
     } else if (frame.type === "user") {
       const skill = turnSkill(
-        frame.message?.content,
+        frame.message.content,
         this.#skills.get(instanceId) ?? new Set(),
         this.#reading(instanceId).harness
       );

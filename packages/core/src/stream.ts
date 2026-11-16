@@ -15,6 +15,7 @@
  * together, so there is no older dialect to negotiate.
  */
 
+import { isRecord } from "./is-record";
 import type { PlanDelta, PlanFollow, PlanResync, PlanSnapshot } from "./plan";
 import type { HubPreviewOrigins } from "./preview/hub-previews";
 import type { DeliveryMark, IngestMark } from "./protocol";
@@ -707,9 +708,7 @@ export interface RegisterAckPayload {
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined;
+  isRecord(value) ? value : undefined;
 
 /**
  * A frame's provenance, read from either the envelope or its payload.

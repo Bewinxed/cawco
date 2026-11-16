@@ -13,7 +13,7 @@ import type {
   InstanceRow,
 } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
-import type { SentMessage } from "@cawco/core/session-messages";
+
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { ElysiaStatus } from "elysia";
@@ -189,11 +189,11 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       // reached a process: no process's end fails it. It waits for a person
       // or its parent.
       const [row] = ctx.db.getInstancesByIds([instanceId]);
-      const keptAtRest = (send: SentMessageRow): boolean =>
-        !!(send.owedHeld && row) &&
+      const keptAtRest = ({ owedHeld, body }: SentMessageRow): boolean =>
+        !!(owedHeld && row && body.origin) &&
         !ctx.startsTurnIn(
           { ...row, status: "stopped" },
-          send.body as SentMessage
+          { origin: body.origin, shouldQuery: body.shouldQuery }
         );
       if (keep === "none") {
         ctx.settlePending(

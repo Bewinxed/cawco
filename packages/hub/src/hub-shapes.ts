@@ -76,7 +76,7 @@ export type Located =
  * one-or-two-sentence `headline` from `finish_item`.
  */
 export interface ReportTold {
-  completion?: { resultId: string; completedAt?: string };
+  completion?: { resultId?: string; completedAt?: string };
   headline?: string;
   notice?: boolean;
   /** The folder paths its finish copied its outputs to. */
