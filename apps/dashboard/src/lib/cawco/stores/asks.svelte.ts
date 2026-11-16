@@ -13,6 +13,7 @@ import {
 import type { FramePayload } from "@cawco/core/frames";
 import type { Envelope } from "@cawco/core/protocol";
 import type { PermissionResult } from "@cawco/core/session-messages";
+import { PERMISSION_DENIED } from "@cawco/core/words/permission-lines";
 import { sessionActivity } from "../activity";
 import { type FrameOf, takeFrame } from "../hub/frames";
 import { routedToParent } from "../transcript/present";
@@ -216,7 +217,7 @@ export function permissionAnswer(
   if (answer === "deny") {
     return {
       behavior: "deny",
-      message: request.browserAsk ? "" : "User denied permission",
+      message: request.browserAsk ? "" : PERMISSION_DENIED,
     };
   }
   return {

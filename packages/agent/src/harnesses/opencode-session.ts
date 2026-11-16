@@ -90,6 +90,7 @@ import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { configurePage } from "@cawco/core/words/configure";
+import { PERMISSION_DENIED } from "@cawco/core/words/permission-lines";
 import {
   mcpNotConnectedLine,
   SERVER_STOPPED_MID_TURN,
@@ -2293,15 +2294,20 @@ export class OpencodeSession implements HarnessSession {
     if (this.#settleForm(requestId, result, "answered")) {
       return;
     }
-    let decision: PermissionReplyInput["decision"];
+    let reply: Pick<PermissionReplyInput, "decision" | "message">;
     if (result.behavior === "deny") {
-      decision = "reject";
+      // A Deny carries words, the person's or the product's, so the call
+      // fails with them and the turn goes on, as on Claude Code.
+      reply = {
+        decision: "reject",
+        message: result.message.trim() || PERMISSION_DENIED,
+      };
     } else if (result.remember) {
-      decision = "always";
+      reply = { decision: "always" };
     } else {
-      decision = "once";
+      reply = { decision: "once" };
     }
-    this.#replyPermission(requestId, { decision }, { outcome: "answered" });
+    this.#replyPermission(requestId, reply, { outcome: "answered" });
   }
 
   /**
