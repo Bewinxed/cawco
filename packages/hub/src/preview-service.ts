@@ -18,9 +18,9 @@ import {
   loadedOnce,
   type MachineRow,
   type PreviewReach,
-  type PreviewUnloaded,
   servedByMachine,
 } from "./preview";
+import type { PreviewUnloaded } from "./preview-stops";
 
 /** What a machine's agent answered a control call. */
 interface Answered {

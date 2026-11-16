@@ -186,7 +186,7 @@ import type { createOpenItems } from "./open-items";
 import type { createPasskeyRelay } from "./passkey-relay";
 import type { AnswerFrom, PendingShape } from "./pending";
 import type { PlacementInput, TaskAccounts } from "./placement";
-import type { PlanChanges } from "./plan-changes";
+import type { PlanChangeCalls } from "./plan-change-calls";
 import type { createPlans } from "./plans";
 import type { createPreviewListeners, PreviewTarget } from "./preview";
 import type { createPreviewService } from "./preview-service";
@@ -215,8 +215,8 @@ import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { createStoredRecent } from "./stored-recent";
-import type { ControlResultFrame, StreamHubShape } from "./stream";
 import type { createStreamRelay } from "./stream-relay";
+import type { ControlResultFrame, StreamHubShape } from "./stream-shape";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
@@ -937,7 +937,7 @@ export interface ClosureContext {
     task: { accounts?: string[] | null; projectId?: string | null },
     fork: { accountId: string | null } | undefined
   ) => PlacementInput | undefined;
-  planChanges: PlanChanges | undefined;
+  planChanges: PlanChangeCalls | undefined;
   plans: ReturnType<typeof createPlans>;
   pluginRow: (row: FleetPlugin) => FleetPlugin;
   prepareContinuation: SessionCallsDeps["prepareContinuation"];

@@ -59,12 +59,11 @@ import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { serveCanvas } from "./artifacts/canvas";
+import type { artifactPictures, artifactSend } from "./artifacts/page-posts";
 import {
   ARTIFACT_PATH,
   type ArtifactSocket,
   type artifactPicture,
-  type artifactPictures,
-  type artifactSend,
   type artifactSocket,
 } from "./artifacts/sync";
 import {
@@ -99,7 +98,7 @@ import {
 } from "./preview-paths";
 import { createPreviewPorts } from "./preview-ports";
 import { createStaleAddresses } from "./preview-stale";
-import type { PreviewStop } from "./preview-stops";
+import type { PreviewStop, PreviewUnloaded } from "./preview-stops";
 import { folderPath } from "./project-folder";
 
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
@@ -239,13 +238,6 @@ const withKeyedOverlay = (answer: Response): Promise<Response> | Response =>
 export type PreviewReach =
   | { ok: true; upstream: Upstream }
   | { ok: false; down: PreviewDown; error: string; stop: PreviewStop };
-
-/** A preview's page that did not load ({@link loadedOnce}): the hop that failed, the machine's words for it, and what stopped it. */
-export interface PreviewUnloaded {
-  failure: PreviewDown;
-  stop: PreviewStop;
-  why: string | null;
-}
 
 /** The status a preview's own down page answers with for each stop ({@link stopProblem}'s, a closed one's 404). */
 const STOP_STATUS: Record<PreviewStop["kind"], number> = {
@@ -480,7 +472,7 @@ export interface PreviewListenerDeps {
   upstream: (row: MachineRow) => Upstream | undefined;
 }
 
-/** The page's own Send as the listener answers it: JSON text in, the send's typed answer (artifacts/sync.ts `artifactSend`) as JSON or a problem. */
+/** The page's own Send as the listener answers it: JSON text in, the send's typed answer (artifacts/page-posts.ts `artifactSend`) as JSON or a problem. */
 const sendAnswer = async (
   request: Request,
   instanceId: string,

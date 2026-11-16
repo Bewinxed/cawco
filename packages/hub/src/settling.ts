@@ -56,8 +56,14 @@ import type { Caw } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable } from "./decides-file";
+import type { HandoffActions } from "./delegation-actions";
 import { sessionLabel } from "./labels";
-import type { CardsRouted, Settler, Signing } from "./settling-answers";
+import type {
+  CardsRouted,
+  Decided,
+  Settler,
+  Signing,
+} from "./settling-answers";
 
 import {
   SESSION_TITLE_MAX,
@@ -78,12 +84,12 @@ export interface SettlingDeps {
   readonly db: DecidesDb;
   /** The fleet delegate type `name`. */
   readonly delegateType: (name: string) => DelegateType | undefined;
-  /** Hands `message` to session `to` as `from` would: the one handoff path (delegation-actions.ts), its words or why it did not go. */
+  /** Hands `message` to session `to` as `from` would: the one handoff path (delegation-actions.ts `handoff`), its words or why it did not go. */
   readonly handoff: (
     from: InstanceRow,
     to: string,
     message: string
-  ) => Promise<string | AnyProblem>;
+  ) => ReturnType<HandoffActions["handoff"]>;
   /** A harness's name: "Claude Code". */
   readonly harnessName: (harness: string) => string;
   /** Whether `harness` runs on a machine that is online now. */
@@ -123,17 +129,6 @@ export interface SettlingDeps {
   ) => ReturnType<Caw["tell"]>;
   /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `cacheWarmNow`). */
   readonly warm: (id: string) => boolean;
-}
-
-/** A member's answer, as its push says it. */
-export interface Decided {
-  artifactId: string;
-  card: string;
-  label: string;
-  member: string;
-  projectId: string | null;
-  question: string;
-  why: string;
 }
 
 /** Where a card's member stands, or why it can't be reached. */

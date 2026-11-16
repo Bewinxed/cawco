@@ -30,7 +30,11 @@ import {
   type StagesTemplate,
 } from "@cawco/core/views";
 import type { setupWords } from "@cawco/core/words/onboarding";
+import { ElysiaStatus } from "elysia";
+import type { Areas } from "./areas";
+import type { createProjectEdits } from "./project-edit";
 import { templateStages } from "./stages";
+import { type Tasks, YOU_ACTOR } from "./tasks";
 import { templateTypes } from "./template-types";
 
 /** The `account` card's option for the fleet's routing: no account of the project's own. */
@@ -205,6 +209,56 @@ export interface SetupPicks {
   /** The shipped template applied: its files, its starter skills, the project's template. */
   shape?: OfferedTemplate;
 }
+
+/** What a setup page's picks are applied through: the person's own edits. */
+export interface SetupPicksDeps {
+  /** A shipped template applied to the project (tasks.ts `applyTemplate`). */
+  readonly applyTemplate: Tasks["applyTemplate"];
+  /** The project's name and account (project-edit.ts `edit`). */
+  readonly edit: ReturnType<typeof createProjectEdits>["edit"];
+  /** The area a project is placed in (areas.ts `place`). */
+  readonly place: Areas["place"];
+}
+
+/**
+ * A setup page's picks applied as the person's own edits: its name, shape,
+ * area (before the account, which an account of its own is then set over)
+ * and account. A pick that cannot be applied is the problem the send
+ * answers: the picks after it are not applied.
+ */
+export const createSetupPicksApply =
+  (deps: SetupPicksDeps) => async (projectId: string, picks: SetupPicks) => {
+    if (picks.name !== undefined) {
+      const named = await deps.edit(projectId, { name: picks.name });
+      if (named instanceof ElysiaStatus) {
+        return named;
+      }
+    }
+    if (picks.shape !== undefined) {
+      const shaped = await deps.applyTemplate(
+        projectId,
+        picks.shape,
+        YOU_ACTOR
+      );
+      if (shaped instanceof ElysiaStatus) {
+        return shaped;
+      }
+    }
+    if (picks.area !== undefined) {
+      const placed = await deps.place(projectId, picks.area);
+      if (placed instanceof ElysiaStatus) {
+        return placed;
+      }
+    }
+    if (picks.account !== undefined) {
+      const moved = await deps.edit(projectId, {
+        account: picks.account,
+      });
+      if (moved instanceof ElysiaStatus) {
+        return moved;
+      }
+    }
+  };
 
 const nameOf = (state: Record<string, ChoiceEntry>): string | undefined => {
   const entry: ChoiceEntry | undefined = state.name;

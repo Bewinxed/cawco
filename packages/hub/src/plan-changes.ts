@@ -22,7 +22,7 @@
  *   followed by a new session in the same project and place, opening on the
  *   change, the old session's plan and its records (open-items.ts): the
  *   hub's account of where it stood, since its transcript may be what is
- *   gone ({@link PlanChangesDeps.goOnFrom}).
+ *   gone (`goOnFrom`).
  *
  * The person's words go into every message verbatim, step by step.
  */
@@ -42,6 +42,8 @@ import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { createOpenItems } from "./open-items";
+import type { PlanChangeCalls } from "./plan-change-calls";
 import {
   changeLine,
   type Plans,
@@ -52,6 +54,7 @@ import {
   type WrittenStep,
 } from "./plans";
 import type { AnyProblem } from "./refusal";
+import type { createSpawns } from "./spawns";
 
 /** What became of a message to a session about its plan's changes. */
 export type PlanTold =
@@ -75,15 +78,13 @@ export interface PlanChangesDeps {
     | "untoldPlanChanges"
     | "untoldPlanReceivers"
     | "workItem"
+    | "workspacesNamed"
   >;
-  /**
-   * A new session in `row`'s project and place, opening on `opening` and the
-   * old session's records, its plan copied: the one that goes on from a
-   * session that cannot. Its id; the problem of a read of the old session's
-   * records that failed, else throws why it could not start.
-   */
-  goOnFrom: (row: InstanceRow, opening: string) => Promise<string | AnyProblem>;
   lifetime: HubLifetimeShape;
+  /** The name the fleet shows a machine by. */
+  machineName: (machineId: string) => string;
+  /** A session's records, as the session going on from it reads them first (open-items.ts `read`). */
+  openItems: Pick<ReturnType<typeof createOpenItems>, "read">;
   plans: Plans;
   /**
    * Whether the send under this uuid was never read: still pending, or
@@ -92,6 +93,10 @@ export interface PlanChangesDeps {
    * first), so a pending one counts: it can no longer be read.
    */
   sendUnread: (uuid: string) => boolean;
+  /** A session as the fleet names it. */
+  sessionName: (row: InstanceRow) => string;
+  /** Starts the session that goes on, as the hub's own starts are (spawns.ts `spawnFromHub`). */
+  spawnFromHub: ReturnType<typeof createSpawns>["spawnFromHub"];
   /** The person's words to a session, through the one send path (`PLAN_ORIGIN`). */
   tell: (instanceId: string, text: string) => PlanTold;
   /** The person's words to a project's conversation (caw.ts `tell`, by you): undefined once it has them, else why not. */
@@ -110,6 +115,81 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   const queues = new Map<string, Promise<unknown>>();
 
   const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
+
+  /** `opening` and `row`'s records (open-items.ts), the session going on from it reads first; the problem of a read that fails. */
+  const goOnOpening = async (row: InstanceRow, opening: string) => {
+    const open = await deps.openItems.read(row.id);
+    if (open instanceof ElysiaStatus) {
+      return open;
+    }
+    return `${opening}\n\n${open}`;
+  };
+
+  /** The folder a session goes on in from `row`: its own, or its project's checkout on its machine once its workspace is archived. */
+  const goOnCwd = (row: InstanceRow) => {
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+    return workspace?.state === "archived"
+      ? db
+          .project(row.projectId ?? "")
+          ?.places.find(
+            (place) =>
+              place.kind === "checkout" && place.machineId === row.machineId
+          )?.path
+      : row.cwd;
+  };
+
+  /**
+   * The session that goes on from one that cannot: in its project, on its
+   * machine, in its folder (its project's checkout there when its workspace
+   * is gone), on its harness and model, under its parent; its plan copied,
+   * opening on `opening` and the old session's records. Its id; the problem
+   * of its start or of a read of the old session's records, else throws why
+   * it could not start.
+   */
+  const goOnFrom = async (row: InstanceRow, opening: string) => {
+    const cwd = goOnCwd(row);
+    if (!cwd) {
+      throw new Error(
+        `its workspace is gone, and its project has no checkout on ${deps.machineName(row.machineId)}`
+      );
+    }
+    const instanceId = crypto.randomUUID();
+    const spawned = await deps.spawnFromHub(
+      row.machineId,
+      {
+        instanceId,
+        cwd,
+        harness: row.harness,
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.projectId ? { projectId: row.projectId } : {}),
+        ...(row.parentInstanceId
+          ? { parent: { instanceId: row.parentInstanceId } }
+          : {}),
+        title: `${deps.sessionName(row)} (continued)`,
+        spawnedBy: { instanceId: row.id },
+      },
+      "mainline",
+      // It goes on with the row's work, as whoever started that.
+      row.origin ?? "person",
+      row.permissionMode ?? undefined,
+      undefined,
+      row
+    );
+    if (spawned instanceof ElysiaStatus) {
+      return spawned;
+    }
+    plans.copySteps(row.id, instanceId);
+    const opened = await goOnOpening(row, opening);
+    if (typeof opened !== "string") {
+      return opened;
+    }
+    const told = deps.tell(instanceId, opened);
+    if (told.kind !== "taken") {
+      throw new Error(told.reason);
+    }
+    return instanceId;
+  };
 
   /**
    * Who hears a change to `row`'s plan: a task attempt's, the project's Caw;
@@ -198,7 +278,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         undelivered: `${reason}, and no new session started: ${why}`,
       });
     try {
-      const next = await deps.goOnFrom(
+      const next = await goOnFrom(
         ended,
         `${named(ended)} cannot go on (${reason}), so this session goes on from it.\n\n${text}`
       );
@@ -254,7 +334,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /**
    * Tells `key`'s receiver every change it is owed, in one message: a
    * session through the one send path, Caw by his wake. A session that
-   * cannot go on is followed by a new one ({@link PlanChangesDeps.goOnFrom});
+   * cannot go on is followed by a new one (`goOnFrom`);
    * a refusal is kept on each change, in its words.
    */
   const deliver = (key: string): Promise<void> =>
@@ -441,7 +521,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         }
       }
     },
-  };
+  } satisfies PlanChangeCalls & { [member: string]: unknown };
 };
 
 export type PlanChanges = ReturnType<typeof createPlanChanges>;

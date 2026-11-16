@@ -103,11 +103,8 @@ import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { decidesTable } from "./decides-file";
-import {
-  type DispatchChange,
-  type Dispatcher,
-  dispatchProblem,
-} from "./dispatch";
+import { type Dispatcher, dispatchProblem } from "./dispatch";
+import type { DispatchChange } from "./dispatch-shapes";
 import { boardTitle } from "./labels";
 import { defineTool, sentence } from "./mcp-tool";
 import type { createProjectEdits } from "./project-edit";

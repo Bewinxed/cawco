@@ -25,3 +25,14 @@ export type SettleProblem =
 
 /** What settling.ts `settler` answers: how it signs, or why it may not. The folder's refusal when the table does not read off it. */
 export type Settler = Signing | SettleProblem | FolderProblem;
+
+/** A member's answer, as its push says it. */
+export interface Decided {
+  artifactId: string;
+  card: string;
+  label: string;
+  member: string;
+  projectId: string | null;
+  question: string;
+  why: string;
+}

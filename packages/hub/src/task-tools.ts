@@ -30,7 +30,7 @@ import { BUILD_TITLE, type DesignOffers } from "./design-offers";
 import type { Dispatcher } from "./dispatch";
 import type { JevTasks } from "./jev-tasks";
 import { tool } from "./mcp-tool";
-import type { PlanChanges } from "./plan-changes";
+import type { PlanChangeCalls } from "./plan-change-calls";
 import type { WrittenStep } from "./plans";
 import {
   attemptStartWords,
@@ -108,7 +108,7 @@ export interface TaskToolContext {
    * `written`), answering what it is owed of the person's changes; without
    * it the session scope refuses.
    */
-  writePlan?: PlanChanges["written"];
+  writePlan?: PlanChangeCalls["written"];
 }
 
 /**

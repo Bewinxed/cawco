@@ -14295,16 +14295,6 @@
               }
             }
           },
-          "401": {
-            "description": "postApiInstancesByIdArtifactsByArtifactSend 401",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend401"
-                }
-              }
-            }
-          },
           "403": {
             "description": "postApiInstancesByIdArtifactsByArtifactSend 403",
             "content": {
@@ -14331,16 +14321,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend409"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "postApiInstancesByIdArtifactsByArtifactSend 410",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend410"
                 }
               }
             }
@@ -51849,6 +51829,91 @@
           "pending"
         ]
       },
+      "PostApiInstancesByIdArtifactsByArtifactSend403Code": {
+        "type": "string",
+        "enum": [
+          "ambiguous",
+          "artifact-ask-again-gone",
+          "artifact-ask-again-no-session",
+          "artifact-comment-heard",
+          "artifact-comment-undelivered",
+          "artifact-comments-on-their-way",
+          "artifact-others",
+          "artifact-session-unknown",
+          "artifact-unknown",
+          "artifact-unnamed",
+          "at-limit-needs-account",
+          "caw-home-unsaid",
+          "caw-no-machine",
+          "caw-off",
+          "caw-project-unknown",
+          "caw-send-not-taken",
+          "caw-spend-capped",
+          "caw-start-undone",
+          "dispatch-project-unknown",
+          "dispatch-runs-on-unknown",
+          "dispatch-settings-unfit",
+          "folder-area-id-unfit",
+          "folder-change-none",
+          "folder-change-twice",
+          "folder-delete-folder",
+          "folder-file-binary",
+          "folder-file-missing",
+          "folder-file-too-large",
+          "folder-file-unnamed",
+          "folder-forgotten",
+          "folder-git-failed",
+          "folder-git-missing",
+          "folder-git-unanswered",
+          "folder-link-in-git",
+          "folder-link-outside",
+          "folder-listed-file",
+          "folder-message-missing",
+          "folder-message-too-long",
+          "folder-path-absolute",
+          "folder-path-backslash",
+          "folder-path-control",
+          "folder-path-in-git",
+          "folder-path-outside",
+          "folder-path-through-link",
+          "folder-path-too-long",
+          "folder-place-taken",
+          "folder-project-id-unfit",
+          "folder-read-folder",
+          "folder-write-none",
+          "folder-write-onto-folder",
+          "folder-write-too-large",
+          "folder-write-under-file",
+          "folder-write-unfit",
+          "give-url-alone-connection",
+          "large-files-live-https",
+          "large-files-live-url",
+          "launch-account-unavailable",
+          "lfs-refused",
+          "machine-away",
+          "machine-silent",
+          "name-needed",
+          "name-one-line",
+          "name-too-long",
+          "no-account",
+          "no-area",
+          "no-project",
+          "not-allowed",
+          "spawn-default-unnamed",
+          "spawn-not-placed",
+          "spawn-not-settled",
+          "spawn-payload-unnamed",
+          "spawn-project-deleted",
+          "spawn-session-key-held",
+          "spawn-start-failed",
+          "spawn-task-accounts-unread",
+          "starting-set-unread",
+          "task-id-unfit",
+          "task-link-unread",
+          "task-project-unknown",
+          "work-lands-none-them"
+        ]
+      },
       "PostApiToolsByIdUpdateAll200Why": {
         "type": "string",
         "enum": [
@@ -52173,25 +52238,6 @@
           "expiresAt",
           "ticket"
         ]
-      },
-      "ProblemStatus": {
-        "description": "Every status the hub answers a problem with: a refusal's, never a 2xx. A\nproblem passed on is said again at one of these, never at `number`:\nElysia keys a status it only knows as `number` `default`, which Eden's\nclient reads as a possible answer (a 2xx, or an empty body), where one of\nthese is its refusal.",
-        "enum": [
-          400,
-          401,
-          403,
-          404,
-          409,
-          410,
-          413,
-          415,
-          422,
-          500,
-          502,
-          503,
-          504
-        ],
-        "type": "number"
       },
       "ProjectAtLimit": {
         "type": "string",
@@ -137799,6 +137845,88 @@
             "type": "object",
             "properties": {
               "code": {
+                "enum": [
+                  "ambiguous",
+                  "artifact-ask-again-gone",
+                  "artifact-ask-again-no-session",
+                  "artifact-comment-heard",
+                  "artifact-comment-undelivered",
+                  "artifact-comments-on-their-way",
+                  "artifact-others",
+                  "artifact-session-unknown",
+                  "artifact-unknown",
+                  "artifact-unnamed",
+                  "at-limit-needs-account",
+                  "caw-home-unsaid",
+                  "caw-no-machine",
+                  "caw-off",
+                  "caw-project-unknown",
+                  "caw-send-not-taken",
+                  "caw-spend-capped",
+                  "caw-start-undone",
+                  "dispatch-project-unknown",
+                  "dispatch-runs-on-unknown",
+                  "dispatch-settings-unfit",
+                  "folder-area-id-unfit",
+                  "folder-change-none",
+                  "folder-change-twice",
+                  "folder-delete-folder",
+                  "folder-file-binary",
+                  "folder-file-missing",
+                  "folder-file-too-large",
+                  "folder-file-unnamed",
+                  "folder-forgotten",
+                  "folder-git-failed",
+                  "folder-git-missing",
+                  "folder-git-unanswered",
+                  "folder-link-in-git",
+                  "folder-link-outside",
+                  "folder-listed-file",
+                  "folder-message-missing",
+                  "folder-message-too-long",
+                  "folder-path-absolute",
+                  "folder-path-backslash",
+                  "folder-path-control",
+                  "folder-path-in-git",
+                  "folder-path-outside",
+                  "folder-path-through-link",
+                  "folder-path-too-long",
+                  "folder-place-taken",
+                  "folder-project-id-unfit",
+                  "folder-read-folder",
+                  "folder-write-none",
+                  "folder-write-onto-folder",
+                  "folder-write-too-large",
+                  "folder-write-under-file",
+                  "folder-write-unfit",
+                  "give-url-alone-connection",
+                  "large-files-live-https",
+                  "large-files-live-url",
+                  "launch-account-unavailable",
+                  "lfs-refused",
+                  "machine-away",
+                  "machine-silent",
+                  "name-needed",
+                  "name-one-line",
+                  "name-too-long",
+                  "no-account",
+                  "no-area",
+                  "no-project",
+                  "not-allowed",
+                  "spawn-default-unnamed",
+                  "spawn-not-placed",
+                  "spawn-not-settled",
+                  "spawn-payload-unnamed",
+                  "spawn-project-deleted",
+                  "spawn-session-key-held",
+                  "spawn-start-failed",
+                  "spawn-task-accounts-unread",
+                  "starting-set-unread",
+                  "task-id-unfit",
+                  "task-link-unread",
+                  "task-project-unknown",
+                  "work-lands-none-them"
+                ],
                 "type": "string"
               },
               "detail": {
@@ -137808,7 +137936,20 @@
                 "type": "string"
               },
               "status": {
-                "$ref": "#/components/schemas/ProblemStatus"
+                "enum": [
+                  400,
+                  403,
+                  404,
+                  409,
+                  413,
+                  415,
+                  422,
+                  500,
+                  502,
+                  503,
+                  504
+                ],
+                "type": "number"
               },
               "title": {
                 "type": "string"
@@ -137827,41 +137968,11 @@
           }
         ]
       },
-      "postApiInstancesByIdArtifactsByArtifactSend401": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiInstancesByIdArtifactsByArtifactSend403": {
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -137870,7 +137981,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -137929,6 +138053,88 @@
             "type": "object",
             "properties": {
               "code": {
+                "enum": [
+                  "ambiguous",
+                  "artifact-ask-again-gone",
+                  "artifact-ask-again-no-session",
+                  "artifact-comment-heard",
+                  "artifact-comment-undelivered",
+                  "artifact-comments-on-their-way",
+                  "artifact-others",
+                  "artifact-session-unknown",
+                  "artifact-unknown",
+                  "artifact-unnamed",
+                  "at-limit-needs-account",
+                  "caw-home-unsaid",
+                  "caw-no-machine",
+                  "caw-off",
+                  "caw-project-unknown",
+                  "caw-send-not-taken",
+                  "caw-spend-capped",
+                  "caw-start-undone",
+                  "dispatch-project-unknown",
+                  "dispatch-runs-on-unknown",
+                  "dispatch-settings-unfit",
+                  "folder-area-id-unfit",
+                  "folder-change-none",
+                  "folder-change-twice",
+                  "folder-delete-folder",
+                  "folder-file-binary",
+                  "folder-file-missing",
+                  "folder-file-too-large",
+                  "folder-file-unnamed",
+                  "folder-forgotten",
+                  "folder-git-failed",
+                  "folder-git-missing",
+                  "folder-git-unanswered",
+                  "folder-link-in-git",
+                  "folder-link-outside",
+                  "folder-listed-file",
+                  "folder-message-missing",
+                  "folder-message-too-long",
+                  "folder-path-absolute",
+                  "folder-path-backslash",
+                  "folder-path-control",
+                  "folder-path-in-git",
+                  "folder-path-outside",
+                  "folder-path-through-link",
+                  "folder-path-too-long",
+                  "folder-place-taken",
+                  "folder-project-id-unfit",
+                  "folder-read-folder",
+                  "folder-write-none",
+                  "folder-write-onto-folder",
+                  "folder-write-too-large",
+                  "folder-write-under-file",
+                  "folder-write-unfit",
+                  "give-url-alone-connection",
+                  "large-files-live-https",
+                  "large-files-live-url",
+                  "launch-account-unavailable",
+                  "lfs-refused",
+                  "machine-away",
+                  "machine-silent",
+                  "name-needed",
+                  "name-one-line",
+                  "name-too-long",
+                  "no-account",
+                  "no-area",
+                  "no-project",
+                  "not-allowed",
+                  "spawn-default-unnamed",
+                  "spawn-not-placed",
+                  "spawn-not-settled",
+                  "spawn-payload-unnamed",
+                  "spawn-project-deleted",
+                  "spawn-session-key-held",
+                  "spawn-start-failed",
+                  "spawn-task-accounts-unread",
+                  "starting-set-unread",
+                  "task-id-unfit",
+                  "task-link-unread",
+                  "task-project-unknown",
+                  "work-lands-none-them"
+                ],
                 "type": "string"
               },
               "detail": {
@@ -137938,7 +138144,20 @@
                 "type": "string"
               },
               "status": {
-                "$ref": "#/components/schemas/ProblemStatus"
+                "enum": [
+                  400,
+                  403,
+                  404,
+                  409,
+                  413,
+                  415,
+                  422,
+                  500,
+                  502,
+                  503,
+                  504
+                ],
+                "type": "number"
               },
               "title": {
                 "type": "string"
@@ -137961,7 +138180,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -137970,37 +138189,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiInstancesByIdArtifactsByArtifactSend410": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -138059,6 +138261,88 @@
             "type": "object",
             "properties": {
               "code": {
+                "enum": [
+                  "ambiguous",
+                  "artifact-ask-again-gone",
+                  "artifact-ask-again-no-session",
+                  "artifact-comment-heard",
+                  "artifact-comment-undelivered",
+                  "artifact-comments-on-their-way",
+                  "artifact-others",
+                  "artifact-session-unknown",
+                  "artifact-unknown",
+                  "artifact-unnamed",
+                  "at-limit-needs-account",
+                  "caw-home-unsaid",
+                  "caw-no-machine",
+                  "caw-off",
+                  "caw-project-unknown",
+                  "caw-send-not-taken",
+                  "caw-spend-capped",
+                  "caw-start-undone",
+                  "dispatch-project-unknown",
+                  "dispatch-runs-on-unknown",
+                  "dispatch-settings-unfit",
+                  "folder-area-id-unfit",
+                  "folder-change-none",
+                  "folder-change-twice",
+                  "folder-delete-folder",
+                  "folder-file-binary",
+                  "folder-file-missing",
+                  "folder-file-too-large",
+                  "folder-file-unnamed",
+                  "folder-forgotten",
+                  "folder-git-failed",
+                  "folder-git-missing",
+                  "folder-git-unanswered",
+                  "folder-link-in-git",
+                  "folder-link-outside",
+                  "folder-listed-file",
+                  "folder-message-missing",
+                  "folder-message-too-long",
+                  "folder-path-absolute",
+                  "folder-path-backslash",
+                  "folder-path-control",
+                  "folder-path-in-git",
+                  "folder-path-outside",
+                  "folder-path-through-link",
+                  "folder-path-too-long",
+                  "folder-place-taken",
+                  "folder-project-id-unfit",
+                  "folder-read-folder",
+                  "folder-write-none",
+                  "folder-write-onto-folder",
+                  "folder-write-too-large",
+                  "folder-write-under-file",
+                  "folder-write-unfit",
+                  "give-url-alone-connection",
+                  "large-files-live-https",
+                  "large-files-live-url",
+                  "launch-account-unavailable",
+                  "lfs-refused",
+                  "machine-away",
+                  "machine-silent",
+                  "name-needed",
+                  "name-one-line",
+                  "name-too-long",
+                  "no-account",
+                  "no-area",
+                  "no-project",
+                  "not-allowed",
+                  "spawn-default-unnamed",
+                  "spawn-not-placed",
+                  "spawn-not-settled",
+                  "spawn-payload-unnamed",
+                  "spawn-project-deleted",
+                  "spawn-session-key-held",
+                  "spawn-start-failed",
+                  "spawn-task-accounts-unread",
+                  "starting-set-unread",
+                  "task-id-unfit",
+                  "task-link-unread",
+                  "task-project-unknown",
+                  "work-lands-none-them"
+                ],
                 "type": "string"
               },
               "detail": {
@@ -138068,7 +138352,20 @@
                 "type": "string"
               },
               "status": {
-                "$ref": "#/components/schemas/ProblemStatus"
+                "enum": [
+                  400,
+                  403,
+                  404,
+                  409,
+                  413,
+                  415,
+                  422,
+                  500,
+                  502,
+                  503,
+                  504
+                ],
+                "type": "number"
               },
               "title": {
                 "type": "string"
@@ -138091,7 +138388,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -138100,7 +138397,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -138255,6 +138565,88 @@
             "type": "object",
             "properties": {
               "code": {
+                "enum": [
+                  "ambiguous",
+                  "artifact-ask-again-gone",
+                  "artifact-ask-again-no-session",
+                  "artifact-comment-heard",
+                  "artifact-comment-undelivered",
+                  "artifact-comments-on-their-way",
+                  "artifact-others",
+                  "artifact-session-unknown",
+                  "artifact-unknown",
+                  "artifact-unnamed",
+                  "at-limit-needs-account",
+                  "caw-home-unsaid",
+                  "caw-no-machine",
+                  "caw-off",
+                  "caw-project-unknown",
+                  "caw-send-not-taken",
+                  "caw-spend-capped",
+                  "caw-start-undone",
+                  "dispatch-project-unknown",
+                  "dispatch-runs-on-unknown",
+                  "dispatch-settings-unfit",
+                  "folder-area-id-unfit",
+                  "folder-change-none",
+                  "folder-change-twice",
+                  "folder-delete-folder",
+                  "folder-file-binary",
+                  "folder-file-missing",
+                  "folder-file-too-large",
+                  "folder-file-unnamed",
+                  "folder-forgotten",
+                  "folder-git-failed",
+                  "folder-git-missing",
+                  "folder-git-unanswered",
+                  "folder-link-in-git",
+                  "folder-link-outside",
+                  "folder-listed-file",
+                  "folder-message-missing",
+                  "folder-message-too-long",
+                  "folder-path-absolute",
+                  "folder-path-backslash",
+                  "folder-path-control",
+                  "folder-path-in-git",
+                  "folder-path-outside",
+                  "folder-path-through-link",
+                  "folder-path-too-long",
+                  "folder-place-taken",
+                  "folder-project-id-unfit",
+                  "folder-read-folder",
+                  "folder-write-none",
+                  "folder-write-onto-folder",
+                  "folder-write-too-large",
+                  "folder-write-under-file",
+                  "folder-write-unfit",
+                  "give-url-alone-connection",
+                  "large-files-live-https",
+                  "large-files-live-url",
+                  "launch-account-unavailable",
+                  "lfs-refused",
+                  "machine-away",
+                  "machine-silent",
+                  "name-needed",
+                  "name-one-line",
+                  "name-too-long",
+                  "no-account",
+                  "no-area",
+                  "no-project",
+                  "not-allowed",
+                  "spawn-default-unnamed",
+                  "spawn-not-placed",
+                  "spawn-not-settled",
+                  "spawn-payload-unnamed",
+                  "spawn-project-deleted",
+                  "spawn-session-key-held",
+                  "spawn-start-failed",
+                  "spawn-task-accounts-unread",
+                  "starting-set-unread",
+                  "task-id-unfit",
+                  "task-link-unread",
+                  "task-project-unknown",
+                  "work-lands-none-them"
+                ],
                 "type": "string"
               },
               "detail": {
@@ -138264,7 +138656,20 @@
                 "type": "string"
               },
               "status": {
-                "$ref": "#/components/schemas/ProblemStatus"
+                "enum": [
+                  400,
+                  403,
+                  404,
+                  409,
+                  413,
+                  415,
+                  422,
+                  500,
+                  502,
+                  503,
+                  504
+                ],
+                "type": "number"
               },
               "title": {
                 "type": "string"
@@ -138287,7 +138692,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -138296,7 +138701,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -138317,7 +138735,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -138326,7 +138744,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -138347,7 +138778,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -138356,7 +138787,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -138377,7 +138821,7 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
           },
           "detail": {
             "type": "string"
@@ -138386,7 +138830,20 @@
             "type": "string"
           },
           "status": {
-            "$ref": "#/components/schemas/ProblemStatus"
+            "enum": [
+              400,
+              403,
+              404,
+              409,
+              413,
+              415,
+              422,
+              500,
+              502,
+              503,
+              504
+            ],
+            "type": "number"
           },
           "title": {
             "type": "string"
@@ -156424,7 +156881,151 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "ambiguous"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "at-limit-needs-account"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "decision-page-name-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "dispatch-runs-on-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "dispatch-settings-unfit"
                 ]
               },
               "detail": {
@@ -157072,6 +157673,438 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "give-url-alone-connection"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "large-files-live-https"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "large-files-live-url"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "lfs-refused"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "name-needed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "name-one-line"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "name-too-long"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "no-account"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "not-allowed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-not-placed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-not-settled"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-payload-unnamed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "task-id-unfit"
                 ]
               },
@@ -157142,7 +158175,10 @@
             "type": "object",
             "properties": {
               "code": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "work-lands-none-them"
+                ]
               },
               "detail": {
                 "type": "string"
@@ -157325,6 +158361,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "dispatch-project-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-file-missing"
                 ]
               },
@@ -157397,7 +158469,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "task-project-unknown"
+                  "no-area"
                 ]
               },
               "detail": {
@@ -157431,7 +158503,82 @@
             "type": "object",
             "properties": {
               "code": {
+                "type": "string",
+                "enum": [
+                  "no-project"
+                ]
+              },
+              "detail": {
                 "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-project-deleted"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "task-project-unknown"
+                ]
               },
               "detail": {
                 "type": "string"
@@ -157936,7 +159083,118 @@
             "type": "object",
             "properties": {
               "code": {
+                "type": "string",
+                "enum": [
+                  "launch-account-unavailable"
+                ]
+              },
+              "detail": {
                 "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-session-key-held"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "spawn-task-accounts-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "starting-set-unread"
+                ]
               },
               "detail": {
                 "type": "string"
@@ -158040,113 +159298,43 @@
               "title",
               "type"
             ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  413
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
           }
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend415": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-file-binary"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  415
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-file-binary"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  415
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              415
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend422": {
@@ -158318,113 +159506,43 @@
               "title",
               "type"
             ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
           }
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend500": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-git-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  500
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-git-failed"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  500
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              500
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend502": {
@@ -158616,39 +159734,6 @@
               "title",
               "type"
             ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
           }
         ]
       },
@@ -158698,39 +159783,6 @@
                 "enum": [
                   "machine-silent"
                 ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
               },
               "detail": {
                 "type": "string"

@@ -3,33 +3,53 @@
  * the caller's row read fresh, then the hub's one send path (sends.ts
  * `sessionSend`), the one step that writes a send's inputs and sends it
  * (work-items.ts `handOff`), or a start held until the session is in place
- * (spawns.ts `spawnSession`). delegation-mcp.ts and delegation-actions.ts
- * type their deps from these.
+ * (spawns.ts `spawnSession`); and what it carries out on its delegates
+ * (`forward`): a send, an interrupt, or an answer to a delegate's ask.
+ * delegation-mcp.ts and delegation-actions.ts type their deps from these.
  */
 
+import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { PermissionMode } from "@cawco/core/harness/kinds";
 import type {
+  ControlPayload,
   Envelope,
   InstanceRow,
   SendPayload,
   SpawnPayload,
 } from "@cawco/core/protocol";
+import { CONTROL_INTERRUPT } from "@cawco/core/session/controls";
+import type { PermissionResult } from "@cawco/core/session-messages";
+import { turnCutWords } from "@cawco/core/words/cuts";
+import { delegateWaitWords } from "@cawco/core/words/delegates";
 import { ElysiaStatus, problem } from "elysia";
+import type { ClosureContext } from "./closure-context";
 import type { DbShape } from "./db";
+import type { createDelegateWaits } from "./delegate-waits";
+import { sessionLabel } from "./labels";
+import { awayProblem } from "./machine-answers";
+import { answerPermission } from "./pending";
+import { type createRelayControl, peekAnswer } from "./relay-control";
 import type { createSends } from "./sends";
 import { type createSpawns, peekParent } from "./spawns";
-import {
-  type HandoffInputs,
-  mayStartRefusal,
-  type WorkItems,
-} from "./work-items";
+import { type HandoffInputs, mayStartRefusal } from "./work-items";
 
-export interface DelegationSendsDeps {
-  db: Pick<DbShape, "getInstancesByIds">;
-  handOff: WorkItems["handOff"];
+export type DelegationSendsDeps = Pick<
+  ClosureContext,
+  | "cutTurn"
+  | "machineFault"
+  | "noteInterrupt"
+  | "pending"
+  | "registry"
+  | "sendToMachine"
+  | "sessionName"
+  | "workItems"
+> & {
+  db: Pick<DbShape, "asks" | "getInstancesByIds" | "instanceIdOf">;
+  delegateWaits: Pick<ReturnType<typeof createDelegateWaits>, "personOnly">;
+  saidInterrupt: ReturnType<typeof createRelayControl>["saidInterrupt"];
   sessionSend: ReturnType<typeof createSends>["sessionSend"];
   spawnSession: ReturnType<typeof createSpawns>["spawnSession"];
-}
+};
 
 export const createDelegationSends = (deps: DelegationSendsDeps) => {
   /** The row of the session whose tool call this is, read fresh: its permission may have changed mid-call; the problem when the hub has none. */
@@ -42,6 +62,135 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
       });
     }
     return requester;
+  };
+
+  /**
+   * The delegate `instanceId` names, which `requester` may control: its
+   * parent, or its project's conversation (a co-parent of every work item of
+   * the project, which may answer, steer and stop it); refused when it is
+   * neither's, or retired.
+   */
+  const delegateControlled = (
+    instanceId: string | undefined,
+    requester: InstanceRow
+  ) => {
+    // A delegate named by a former id is acted on by its id now.
+    const row = instanceId
+      ? deps.db.getInstancesByIds([deps.db.instanceIdOf(instanceId)])[0]
+      : undefined;
+    if (!(
+      row &&
+      (row.parentInstanceId === requester.id ||
+        deps.workItems.ledBy(row.id, requester.id))
+    )) {
+      return problem(403, {
+        code: "delegation-control-not-yours",
+        detail:
+          "you can only control your own delegates, or the work items of the project whose conversation you are",
+      });
+    }
+    const retired = deps.workItems.refusal(row, {
+      kind: "peer",
+      fromSession: requester.id,
+    });
+    if (retired) {
+      return problem(409, {
+        code: "delegation-control-retired",
+        detail: retired.reason,
+      });
+    }
+    return row;
+  };
+
+  /**
+   * A delegate's ask answered by `requester`, its parent or its project's
+   * conversation: a question the hub owns (asks.ts) is its asker's parent's
+   * to answer too, and a permit is, as the prompt it was kept from was; an
+   * ask the hub raised and settles itself (an approval, a browser or connect
+   * ask, a move, a proposal) only the person answers (delegate-waits.ts
+   * `personOnly`). The answer's problem goes on in its status and code,
+   * said for the delegate the target named.
+   */
+  const answerForDelegate = async (
+    row: InstanceRow,
+    requester: InstanceRow,
+    control: ControlPayload
+  ) => {
+    const result = control.args?.[1] as PermissionResult;
+    const answer = peekAnswer(control);
+    if (!answer) {
+      throw new Error("A permission answer names no request.");
+    }
+    const owned = deps.db.asks.get(answer.requestId);
+    const parked = deps.pending.get(answer.requestId);
+    if (parked && deps.delegateWaits.personOnly(parked)) {
+      return problem(403, {
+        code: "delegation-ask-person-only",
+        detail: delegateWaitWords.refused,
+      });
+    }
+    if (owned && owned.instanceId !== row.id) {
+      return problem(403, {
+        code: "delegation-ask-not-theirs",
+        detail: "That ask isn't this delegate's.",
+      });
+    }
+    // Its refusal says which delegate the target named: an ask that is
+    // no longer pending reads the same for every session otherwise.
+    const said = (why: string) =>
+      `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${why}`;
+    const answered = await answerPermission(
+      deps.pending,
+      row.id,
+      answer.requestId,
+      result,
+      { via: "session", name: deps.sessionName(requester) }
+    ).catch((error: unknown) => {
+      throw new Error(
+        said(error instanceof Error ? error.message : String(error)),
+        { cause: error }
+      );
+    });
+    if (answered) {
+      return problem(answered.status, {
+        code: answered.response.code,
+        detail: said(answered.response.detail),
+      });
+    }
+  };
+
+  /**
+   * A control `requester` sends its delegate `row` on its machine, from
+   * `requester`; an interrupt is noted and cuts the turn it lands in, said
+   * as that session's.
+   */
+  const controlDelegate = (
+    envelope: Envelope,
+    row: InstanceRow,
+    requester: InstanceRow,
+    control: ControlPayload
+  ) => {
+    const agent = deps.registry.agent(row.machineId);
+    if (!agent) {
+      return awayProblem(
+        row.machineId,
+        deps.machineFault(row.machineId, "offline")
+      );
+    }
+    deps.sendToMachine(agent, {
+      ...envelope,
+      instanceId: row.id,
+      machineId: row.machineId,
+      payload: { ...control, instanceId: row.id, from: requester.id },
+    });
+    if (control.method === CONTROL_INTERRUPT) {
+      deps.saidInterrupt(row.id, `by session ${requester.id}`);
+      deps.noteInterrupt(row.id);
+      deps.cutTurn(
+        row.id,
+        turnCutWords.interruptFrom(`“${deps.sessionName(requester)}”`)
+      );
+    }
   };
 
   return {
@@ -74,12 +223,17 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
       if (requester instanceof ElysiaStatus) {
         return requester;
       }
-      return await deps.handOff(target, requester.id, inputs, (landed) => {
-        const sent = deps.sessionSend(compose(landed), requester);
-        return sent instanceof ElysiaStatus
-          ? sent
-          : { ...sent, ...(landed.cut ? { cut: true as const } : {}) };
-      });
+      return await deps.workItems.handOff(
+        target,
+        requester.id,
+        inputs,
+        (landed) => {
+          const sent = deps.sessionSend(compose(landed), requester);
+          return sent instanceof ElysiaStatus
+            ? sent
+            : { ...sent, ...(landed.cut ? { cut: true as const } : {}) };
+        }
+      );
     },
 
     /**
@@ -120,6 +274,43 @@ export const createDelegationSends = (deps: DelegationSendsDeps) => {
         "check",
         fallbackPermissionMode
       );
+    },
+
+    /**
+     * Carries out what a call emitted, as session `actor`: a send through
+     * the one send path, or a control on a delegate it may control (an
+     * interrupt, or an answer to its ask), each checked in that order before
+     * the answer or the control goes; the hub's problem when it may not.
+     */
+    forward: async (envelope: Envelope, actor: InstanceRow) => {
+      // The MCP resolver supplies the caller separately, never from provenance
+      // on an envelope. Recheck the row in case its permission changed mid-call.
+      const requester = caller(actor);
+      if (requester instanceof ElysiaStatus) {
+        return requester;
+      }
+      if (envelope.verb === "send") {
+        const sent = deps.sessionSend(
+          envelope as Envelope<SendPayload>,
+          requester
+        );
+        return sent instanceof ElysiaStatus ? sent : undefined;
+      }
+      const control = envelope.payload as ControlPayload;
+      if (!(
+        envelope.verb === "control" &&
+        (control.method === CONTROL_INTERRUPT ||
+          control.method === RESOLVE_PERMISSION)
+      )) {
+        throw new Error(`Unsupported delegation operation ${envelope.verb}`);
+      }
+      const row = delegateControlled(envelope.instanceId, requester);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
+      return control.method === RESOLVE_PERMISSION
+        ? await answerForDelegate(row, requester, control)
+        : controlDelegate(envelope, row, requester, control);
     },
   };
 };

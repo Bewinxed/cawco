@@ -1,3 +1,4 @@
+import type { PreviewDown } from "@cawco/core/preview/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { problem } from "elysia";
 import { awayProblem, silentProblem } from "./machine-answers";
@@ -46,9 +47,14 @@ export const stopProblem = <Code extends string>(
   }
 };
 
-/** What the hub's own origin for a frame answers when it serves none: its listeners' problem (preview.ts `embed` and `address`, each its port's open), or the artifact gone. */
+/** Why a preview origin's listener did not open (preview.ts `address`, `embed` and `local`): its port's open refused (preview-ports.ts `open`). */
+export type ListenerProblem = ProblemsOf<
+  ReturnType<ReturnType<typeof createPreviewPorts>["open"]>
+>;
+
+/** What the hub's own origin for a frame answers when it serves none: its listener's problem ({@link ListenerProblem}), or the artifact gone. */
 type OriginProblem =
-  | ProblemsOf<ReturnType<ReturnType<typeof createPreviewPorts>["open"]>>
+  | ListenerProblem
   | ReturnType<
       typeof problem<409, { code: "preview-artifact-gone"; detail: string }>
     >;
@@ -70,3 +76,10 @@ export const openProblem = <Code extends string>(
   code: Code,
   detail: string
 ) => (stop.kind === "origin" ? stop.problem : stopProblem(stop, code, detail));
+
+/** A preview's page that did not load (preview.ts `loadedOnce`): the hop that failed, the machine's words for it, and what stopped it. */
+export interface PreviewUnloaded {
+  failure: PreviewDown;
+  stop: PreviewStop;
+  why: string | null;
+}

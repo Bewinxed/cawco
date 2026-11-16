@@ -28,7 +28,7 @@ import { projectAccountWords } from "@cawco/core/words/project-account";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
-import type { Dispatcher } from "./dispatch";
+import type { DispatchConfigure } from "./dispatch-shapes";
 
 /** As long as a name `POST /api/projects` takes. */
 const PROJECT_NAME_LIMIT = 200;
@@ -134,7 +134,7 @@ export interface ProjectEditsDeps {
   readonly lands: (
     projectId: string,
     lands: LandsMode
-  ) => ReturnType<Dispatcher["configure"]>;
+  ) => ReturnType<DispatchConfigure>;
   /** Why a connection cannot sign in to a declared LFS endpoint; none when it can (connections.ts `lfsProblem`). */
   readonly lfsProblem: (connection: string) => string | undefined;
   /** Every dashboard and the app read the projects again. */

@@ -232,7 +232,7 @@ export const createMarks = (ctx: MarksContext) => {
    * sheet's saves and compile errors go on the same delivery, pushed back
    * to {@link MARKS_QUIET_MS}. Neither waits past {@link MARKS_LONGEST_MS}
    * from the burst's first. The page posts its pictures of the marks it
-   * just made beside the doc (sync.ts `artifactPictures`); they wait for the
+   * just made beside the doc (page-posts.ts `artifactPictures`); they wait for the
    * delivery on disk, beside the artifact's own files ({@link held}), so a
    * hub restart between the marking and the delivery keeps them.
    */

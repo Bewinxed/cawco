@@ -3,6 +3,7 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { PlanStep } from "@cawco/core/plan";
+import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasSpec,
@@ -20,16 +21,19 @@ import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
 import type { Caw } from "../caw";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
-import type { DecisionLinks } from "../decision-problems";
+import type { DecisionLinks, DecisionProblem } from "../decision-problems";
 import type { ArtifactNamed } from "../decision-program";
 import type { HubLifetimeShape } from "../lifetime";
 import type { AwayProblem, SilentProblem } from "../machine-answers";
 import type { PageBuilt, PageFolderProblem } from "../page-problems";
-import type { PreviewListeners, PreviewUnloaded } from "../preview";
-import type { OpenStop } from "../preview-stops";
+import type {
+  ListenerProblem,
+  OpenStop,
+  PreviewUnloaded,
+} from "../preview-stops";
 import type { ProblemsOf } from "../refusal";
 import type { CardsRouted, Settler } from "../settling-answers";
-import type { SentPage } from "../setup";
+import type { createSetupPicksApply, SentPage } from "../setup";
 import type { StateAsk } from "./component";
 import type { ArtifactDocs } from "./docs";
 import type {
@@ -43,11 +47,6 @@ import type {
   PageHearer,
   StageAt,
 } from "./shapes";
-
-/** A problem of each status of `Status` alone, its code and words as the wiring says them. */
-type PerStatus<Status extends number> = Status extends number
-  ? ReturnType<typeof problem<Status, { code: string; detail: string }>>
-  : never;
 
 /** A machine call of the hub's own wiring that no machine answered: away, or not in time. */
 type Unanswered = AwayProblem | SilentProblem;
@@ -67,8 +66,7 @@ type StageRefused =
 type OriginRefused =
   | ReturnType<typeof problem<404, { code: "browse-unheld"; detail: string }>>
   | ReturnType<typeof problem<409, { code: "browse-unserved"; detail: string }>>
-  | Exclude<ReturnType<PreviewListeners["address"]>, { port: number }>
-  | Exclude<ReturnType<PreviewListeners["embed"]>, { port: number }>;
+  | ListenerProblem;
 
 /** Why session `instance`'s own browser opens no artifact (preview-browse.ts `browseAt`): its origin refused, or no pass named. */
 export type BrowseProblem =
@@ -361,10 +359,10 @@ export interface ArtifactServiceDeps {
    */
   pinAsked: (artifactId: string, text: string) => void;
   /**
-   * Session `instanceId`'s preview origin (preview.ts), its listener started
+   * Session `instanceId`'s preview origin (preview.ts `address`), its listener started
    * when it has none; refused when every port is taken.
    */
-  previewAddress: PreviewListeners["address"];
+  previewAddress: (instanceId: string) => PreviewAddress | ListenerProblem;
   /**
    * A session closed one of artifact `artifactId`'s questions to the person
    * (taken or withdrawn): every screen listing a session's questions reads
@@ -429,22 +427,23 @@ export interface ArtifactServiceDeps {
           { code: "artifact-screen-unopened"; detail: string }
         >
       >
-    | Exclude<ReturnType<PreviewListeners["local"]>, string>
+    | ListenerProblem
   >;
   /**
-   * What a send applies before the session hears it (setup.ts
-   * `setupPicksOf`): the page as it stands ({@link SentPage}); the problem
-   * of a pick that cannot be applied or a record that cannot be written is
-   * answered and nothing is sent. The statuses are those of the project's
-   * edits, areas, template and decisions, which this file cannot name across
-   * the import cycle.
+   * What a send applies before the session hears it: a project's decision
+   * page decided (decisions.ts `decide`), or a setup page's picks applied
+   * (setup.ts `createSetupPicksApply`) from the page as it stands
+   * ({@link SentPage}); the problem of a record that cannot be written or a
+   * pick that cannot be applied is answered and nothing is sent.
    */
   sending: (
     to: PageHearer,
     artifact: ArtifactRow,
     page: SentPage
   ) => Promise<
-    PerStatus<400 | 404 | 409 | 413 | 415 | 422 | 500 | 503 | 504> | undefined
+    | DecisionProblem
+    | ProblemsOf<ReturnType<ReturnType<typeof createSetupPicksApply>>>
+    | undefined
   >;
   /**
    * A workspace preview's server (agent stage.ts `ensureServed`), started or
