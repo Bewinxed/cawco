@@ -5521,6 +5521,13 @@ export const artifacts = sqliteTable(
     /** A workspace preview's: the command the workspace's stage runs and keeps up on the port, and its folder from the clone's root. */
     sourceServeCommand: text("source_serve_command"),
     sourceServeCwd: text("source_serve_cwd"),
+    /**
+     * A sheet's, a workspace preview's or a folder preview's: the pin the
+     * person is served it from (core `PreviewSource.pin`), the copy its
+     * machine cut as its author handed this version up. Null for a page and
+     * for a port on a machine's host.
+     */
+    sourcePin: text("source_pin"),
     /** Moved by each new HTML; mirrored in the doc's `meta.revision`. */
     revision: integer("revision").notNull().default(1),
     /** Moved by every update the doc takes, from anyone: `artifact_read`'s `since` cursor. */

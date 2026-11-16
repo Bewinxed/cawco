@@ -393,12 +393,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    as nothing is refused 403 `decides-member-runs-nothing`, and one whose
  *    row doesn't read 409 `decides-member-unread`. A page built for 77 reads
  *    a member as one shape and does not know the codes, so it reloads first.
+ * 80: a sheet, a served preview and a folder preview are served to the
+ *    person from the version their author handed up (`PreviewSource.pin`),
+ *    cut as it is handed up; a create or a show that hands one up is
+ *    refused when its machine can't cut it (502 `artifact-pin-uncut`, or
+ *    the stage's own refusal). A page built for 79 does not know these
+ *    refusals, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 79;
+export const WIRE_PROTOCOL = 80;
 
 /**
  * What a session's stream carries: the changes each frame made to its

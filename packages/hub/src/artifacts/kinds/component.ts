@@ -24,7 +24,6 @@ import { openProblem } from "../../preview-stops";
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
-  drawingUnseen,
   drawsHeld,
   errorsSaid,
   movesSaid,
@@ -38,7 +37,7 @@ import {
   weightSaid,
 } from "../component";
 import { stillThere } from "../facts";
-import { sheetOf } from "../served";
+import { onPinOf, sheetOf } from "../served";
 import type {
   ArtifactInput,
   ArtifactRead,
@@ -64,23 +63,22 @@ const storyOfOp = (op: StoryOp): string | null => {
   return "move" in op ? op.move : null;
 };
 
-/** How long a canvas just shown waits for the panel's page to draw it, and how often it looks. Ours: the page posts within a second of loading. */
-const PANEL_DRAW_MS = 4000;
-
-const PANEL_DRAW_POLL_MS = 500;
-
 /** What ComponentKind reads of the artifact service ({@link KindContext}). */
 export type ComponentKindContext = Pick<
   KindContext,
   | "askedOf"
+  | "cutVersion"
   | "db"
   | "deps"
   | "discard"
   | "docs"
   | "handOver"
+  | "heldId"
+  | "holdNext"
   | "inPanel"
   | "marked"
   | "openedOf"
+  | "openNextFirst"
   | "read"
   | "relistOf"
   | "stampMeta"
@@ -88,8 +86,18 @@ export type ComponentKindContext = Pick<
 
 /** A component canvas: a states file's stories drawn live on its machine's stage, the draws and the sheet the hub keeps of them in the doc, and a read that waits for what a browser drew. */
 export const createComponentKind = (ctx: ComponentKindContext) => {
-  const { db, deps, discard, docs, handOver, inPanel, relistOf, stampMeta } =
-    ctx;
+  const {
+    cutVersion,
+    db,
+    deps,
+    discard,
+    docs,
+    handOver,
+    holdNext,
+    inPanel,
+    relistOf,
+    stampMeta,
+  } = ctx;
 
   /**
    * A component artifact's page hash: its canvas address's (core
@@ -219,13 +227,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     };
   };
   /**
-   * A read that couldn't reach the canvas's stage, kept in its doc (core
-   * `StageUnreached`) for the panel and the agent's read alike: the hop that
-   * failed, by the hub's refusal (a workspace gone or on no machine, a
-   * machine not connected or not answering, else the way to the stage), its
-   * words, and since the first such read.
+   * An author's read that couldn't reach its workspace's stage (core
+   * `StageUnreached`): the hop that failed, by the hub's refusal (a
+   * workspace gone or on no machine, a machine not connected or not
+   * answering, else the way to the stage), and its words. Said to the
+   * author alone: the person's panel is served the pinned version, whose
+   * own load says what it meets.
    */
-  const unreachedWritten = (row: ArtifactRow, error: unknown) => {
+  const unreachedOf = (error: unknown): StageUnreached => {
     const status = error instanceof ElysiaStatus ? error.status : null;
     let down: StageUnreached["down"] = "reach";
     if (status === 409) {
@@ -239,18 +248,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     } else if (error instanceof Error) {
       why = error.message;
     }
-    docs.transact(row.id, "hub", (doc) => {
-      const meta = docMeta(doc);
-      const had = meta.get("unreached");
-      meta.set("unreached", {
-        down,
-        why,
-        since: had?.since ?? new Date().toISOString(),
-      } satisfies StageUnreached);
-    });
-    if (inPanel(row)) {
-      relistOf(row);
-    }
+    return { down, why, since: new Date().toISOString() };
   };
   /** One write as the session reads of it: where, and what. */
   const saveSection = (change: SheetChange, edit: SheetWritten): string => {
@@ -278,10 +276,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   /**
    * A write to sheet `row`'s story file by the stage of the workspace it was
    * made in: one story's args, or a story added, duplicated, removed or
-   * moved. The sheet's doc keeps the sheet as it reads after; the person's
-   * write is owed to the sheet's owner on the marks' channel, since it
-   * changed a file in that workspace. A write is its owner's read when
-   * `ownersRead`.
+   * moved. The person's is made in the version he is served (its pin,
+   * core `PreviewSource.pin`), so his view shows it, and copied to the
+   * workspace; the agent's in the workspace alone, handed up by the update
+   * that made it (service.ts `sheetUpdate`). The sheet's doc keeps the sheet
+   * as it reads after; the person's write is owed to the sheet's owner on
+   * the marks' channel, since it changed a file in that workspace. A write
+   * is its owner's read when `ownersRead`.
    */
   const writeSheet = async (
     row: ArtifactRow,
@@ -298,7 +299,9 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
     const file = join(sheet.dir, sheet.file);
     const edit = await deps.stageWrite(
-      { workspace: sheet.workspace },
+      by === "person" && sheet.pin !== undefined
+        ? { workspace: sheet.workspace, pin: sheet.pin }
+        : { workspace: sheet.workspace },
       "args" in change
         ? { file, args: change.args }
         : { file, story: change.story }
@@ -327,14 +330,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   /**
    * The agent's write as `artifact_update` answers it (component canvas
    * §4): the file, the lines written, the formatter that shaped them, the
-   * story with its args after, and its frames once a browser drew them again
-   * (a panel's page redraws within a second), else `unseen`.
+   * story with its args after, and its frames as its stage draws them now:
+   * the daemon's own draw of the workspace when no browser has drawn them
+   * since the write ({@link drawnReport}), else `unseen`.
    */
   const componentWritten = async (
     row: ArtifactRow,
     change: SheetChange,
     written: ArtifactRead
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the story the write named, then its frames as the panel redraws them, bounded by a short wait
   ) => {
     const name = "args" in change ? change.args.story : storyOfOp(change.story);
     const story = written.sheet?.stories.find((one) => one.name === name);
@@ -342,23 +345,23 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     let frames: ComponentWritten["render"] = "unseen";
     if (sheet && name && !("story" in change && "remove" in change.story)) {
       const at: StageAt = { workspace: sheet.workspace };
-      const deadline = Date.now() + PANEL_DRAW_MS;
-      for (;;) {
-        const staged = await deps.stage(at, sheet.files[0], sheet.files);
-        if (staged instanceof ElysiaStatus) {
-          return staged;
-        }
-        const report = drawnHeld(row, staged.opened.report);
-        if (!unseen(report, name)) {
-          frames = renderSaid(report).frames.filter(
-            (one) => one.story === name
-          );
-          break;
-        }
-        if (Date.now() > deadline) {
-          break;
-        }
-        await Bun.sleep(PANEL_DRAW_POLL_MS);
+      const staged = await deps.stage(at, sheet.files[0], sheet.files);
+      if (staged instanceof ElysiaStatus) {
+        return staged;
+      }
+      const drawn = await drawnReport(
+        at,
+        sheet.files,
+        sheet.spec,
+        staged.opened,
+        name
+      );
+      if (drawn instanceof ElysiaStatus) {
+        return drawn;
+      }
+      const report = drawnHeld(row, drawn.report);
+      if (!unseen(report, name)) {
+        frames = renderSaid(report).frames.filter((one) => one.story === name);
       }
     }
     const said: ComponentWritten = {
@@ -371,9 +374,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return said;
   };
   /**
-   * The report of a canvas just shown or written: the panel's, once its page
-   * has drawn (it posts within a second of loading), else the daemon's own
-   * draw in the machine's Chromium. A canvas is never answered `unseen` when
+   * The report of a canvas just written or handed up, as its workspace's
+   * stage has it: the daemon's own draw in the machine's Chromium when no
+   * browser has drawn it there (the person's panel draws the version it is
+   * served, on its pin's stage). A canvas is never answered `unseen` when
    * a browser could have drawn it.
    */
   const drawnReport = async (
@@ -381,54 +385,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     files: string[],
     spec: CanvasSpec,
     opened: StageOpened,
-    shownNow: boolean,
     story?: string
   ) => {
-    let { report } = opened;
-    const deadline = Date.now() + PANEL_DRAW_MS;
-    while (
-      shownNow &&
-      (unseen(report, story) || drawingUnseen(report).length > 0) &&
-      Date.now() < deadline
-    ) {
-      await Bun.sleep(PANEL_DRAW_POLL_MS);
-      const staged = await deps.stage(at, files[0], files);
-      if (staged instanceof ElysiaStatus) {
-        return staged;
-      }
-      ({ report } = staged.opened);
-    }
     const drawn: Pick<StageRendered, "report" | "undrawn" | "plansUnread"> = {
-      report,
+      report: opened.report,
       undrawn: [],
     };
-    return unseen(report, story)
+    return unseen(opened.report, story)
       ? await deps.stageRender(at, { files, spec })
       : drawn;
-  };
-  /**
-   * `report` once the browser drawing its unseen sections has posted them,
-   * within {@link PANEL_DRAW_MS}: a read right after the person acts, while
-   * his panel's report stands aside for his act, answers the whole draw, or
-   * says what is still drawing (component.ts `renderSaid`).
-   */
-  const drawnOut = async (
-    row: ArtifactRow,
-    at: StageAt,
-    files: string[],
-    report: RenderReport
-  ) => {
-    let now = report;
-    const deadline = Date.now() + PANEL_DRAW_MS;
-    while (drawingUnseen(now).length > 0 && Date.now() < deadline) {
-      await Bun.sleep(PANEL_DRAW_POLL_MS);
-      const staged = await deps.stage(at, files[0], files);
-      if (staged instanceof ElysiaStatus) {
-        return staged;
-      }
-      now = drawnHeld(row, staged.opened.report);
-    }
-    return now;
   };
   /** What a component canvas's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
   const sheetAsked = (input: ArtifactInput) => {
@@ -447,12 +412,66 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return said instanceof ElysiaStatus ? said : { asked, said };
   };
   /**
+   * A component canvas's row placed in its owner's panel: the one of that
+   * name made again where it stands, on the pin it is served from (cut
+   * again by the create, versions.ts `cutVersion`), or its next version
+   * when its maker re-creates one its parent opened (versions.ts
+   * `holdNext`), or a new one.
+   */
+  const placeSheet = (
+    { owner, maker }: Making,
+    name: string,
+    said: Pick<ArtifactRow, "ask" | "does" | "title">,
+    at: { machineId: string; source: PreviewSource }
+  ) => {
+    const now = new Date();
+    const before = db.byName(owner.id, "component", name);
+    const holding = before ? holdNext(maker, before) : null;
+    const target = holding?.next ?? before;
+    if (target) {
+      db.resource(target.id, {
+        machineId: at.machineId,
+        source: onPinOf(at.source, target),
+      });
+    }
+    const placed = target
+      ? stillThere(
+          db.update(target.id, {
+            madeBy: maker.id,
+            ...said,
+            revision: target.revision + 1,
+            updatedAt: now,
+          }),
+          target.id
+        )
+      : db.create({
+          id: crypto.randomUUID(),
+          instanceId: owner.id,
+          madeBy: maker.id,
+          heldFor: null,
+          projectId: owner.projectId ?? null,
+          kind: "component",
+          name,
+          ...said,
+          ...at,
+          revision: 1,
+          seq: 0,
+          deliveredSeq: 0,
+          readSeq: 0,
+          openedRevision: null,
+          createdAt: now,
+          updatedAt: now,
+          shownAt: null,
+        });
+    return { before, holding, target, placed };
+  };
+  /**
    * Makes a component canvas in `owner`'s panel (or opens the one of that
    * name) on the stage of its maker's workspace, shows it, and answers what
    * a browser drew of it: the panel's draw, else the daemon's.
    */
   const createSheet = async (making: Making, input: ArtifactInput) => {
-    const { owner, maker } = making;
+    const { maker } = making;
     const sheetAsk = sheetAsked(input);
     if (sheetAsk instanceof ElysiaStatus) {
       return sheetAsk;
@@ -473,44 +492,28 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       workspace,
       stage: { dir: opened.dir, file: opened.file },
     };
-    const now = new Date();
-    const before = db.byName(owner.id, "component", input.name);
-    if (before) {
-      db.resource(before.id, { machineId, source });
+    // An owner's own create of one its maker's next version is held for opens that first (versions.ts `openNextFirst`).
+    const unopened = await ctx.openNextFirst(making, "component", input.name);
+    if (unopened) {
+      return unopened;
     }
-    const row = before
-      ? stillThere(
-          db.update(before.id, {
-            madeBy: maker.id,
-            ...said,
-            revision: before.revision + 1,
-            updatedAt: now,
-          }),
-          before.id
-        )
-      : db.create({
-          id: crypto.randomUUID(),
-          instanceId: owner.id,
-          madeBy: maker.id,
-          heldFor: null,
-          projectId: owner.projectId ?? null,
-          kind: "component",
-          name: input.name,
-          ...said,
-          machineId,
-          source,
-          revision: 1,
-          seq: 0,
-          deliveredSeq: 0,
-          readSeq: 0,
-          openedRevision: null,
-          createdAt: now,
-          updatedAt: now,
-          shownAt: null,
-        });
+    const { before, holding, target, placed } = placeSheet(
+      making,
+      input.name,
+      said,
+      { machineId, source }
+    );
+    // The version handed up: its workspace's files as they are now, cut as its pin (core `PreviewSource.pin`).
+    const row = await cutVersion(placed);
+    if (row instanceof ElysiaStatus) {
+      if (!target || holding?.fresh) {
+        discard(placed);
+      }
+      return row;
+    }
     stampMeta(row, null);
     writeStage(row, opened.state, opened.sheet);
-    const shown = await handOver(making, before, row);
+    const shown = await handOver(making, before, row, undefined, holding);
     if (!(shown.started || before)) {
       discard(row);
       return openProblem(shown.stop, "artifact-sheet-unshown", shown.why);
@@ -520,20 +523,20 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       { workspace },
       owned?.files ?? asked,
       spec,
-      opened,
-      ctx.openedOf(shown).opened
+      opened
     );
     if (drawn instanceof ElysiaStatus) {
       return drawn;
     }
     const { undrawn, plansUnread } = drawn;
     const report = drawnHeld(row, drawn.report);
+    const named = ctx.heldId(row);
     const made: Created = {
-      id: row.id,
+      ...named,
       kind: row.kind,
       name: row.name,
       title: row.title,
-      route: routeOf(row.id),
+      route: routeOf(named.id),
       ...ctx.openedOf(shown),
       stage: { ...sheetState(row, opened.state), errors: [] },
       render: {
@@ -547,28 +550,25 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return made;
   };
   /**
-   * Sheet `row`'s stage opened on the workspace it was made in, its state
-   * written; undefined, said on the doc ({@link unreachedWritten}), when
-   * the read can't reach it.
+   * Sheet `row`'s stage opened on the workspace it was made in: the author's
+   * working copy as it is now, never the version the person is served (its
+   * pin, whose stage's frames are its doc's); why it can't be reached when
+   * it can't.
    */
   const stageRead = async (
-    row: ArtifactRow,
     sheet: NonNullable<ReturnType<typeof sheetOf>>
-  ) => {
+  ): Promise<{ opened: StageOpened } | { unreached: StageUnreached }> => {
     try {
       const staged = await deps.stage(
         { workspace: sheet.workspace },
         sheet.files[0],
         sheet.files
       );
-      if (staged instanceof ElysiaStatus) {
-        unreachedWritten(row, staged);
-        return;
-      }
-      writeStage(row, staged.opened.state, staged.opened.sheet);
-      return staged.opened;
+      return staged instanceof ElysiaStatus
+        ? { unreached: unreachedOf(staged) }
+        : { opened: staged.opened };
     } catch (error) {
-      unreachedWritten(row, error);
+      return { unreached: unreachedOf(error) };
     }
   };
   /**
@@ -577,11 +577,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
    * moves, its stories with the interactions they reach, the person's dials
    * and tuned motion; on asking, one story's args and code, one frame's
    * computed-style delta, a fresh draw on the daemon, a picture. Read
-   * afresh on the workspace it was made in: a use that keeps the stage
-   * awake. Its stage and each section's problem are the doc's (`meta.stage`),
-   * as the panel reads them; a stage the read can't reach is the doc's last
-   * stage with `unreached` beside it (`meta.unreached`: why, since when),
-   * never a stale `live` alone. Its owner's read when `ownersRead`.
+   * afresh on the workspace it was made in, as its author works on it now: a
+   * use that keeps the stage awake. Its stage, each section's problem and
+   * its stories are that read's; a stage the read can't reach is said as
+   * `unreached` (why), never a stale `live`. The person's panel is served
+   * the version last handed up (core `PreviewSource.pin`). Its owner's read
+   * when `ownersRead`.
    */
   const readSheet = async (
     row: ArtifactRow,
@@ -591,7 +592,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a canvas's read joins its stage, its report, the person's picks and each optional ask in one answer
   ) => {
     const sheet = sheetOf(row);
-    const opened = sheet ? await stageRead(row, sheet) : undefined;
+    const reached = sheet ? await stageRead(sheet) : undefined;
+    const opened = reached && "opened" in reached ? reached.opened : undefined;
     let report = opened?.report;
     let undrawn: SectionUndrawn[] = [];
     let plansUnread: true | undefined;
@@ -623,18 +625,11 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       if (report) {
         report = drawnHeld(row, report);
       }
-      if (report && !(ask.render || ask.png)) {
-        const out = await drawnOut(row, at, sheet.files, report);
-        if (out instanceof ElysiaStatus) {
-          return out;
-        }
-        report = out;
-      }
     }
-    const meta = docMeta(docs.doc(row.id));
-    const stage = meta.get("stage");
-    const unreached = meta.get("unreached");
-    const sheetNow = meta.get("sheet");
+    const stage = opened ? sheetState(row, opened.state) : undefined;
+    const unreached =
+      reached && "unreached" in reached ? reached.unreached : undefined;
+    const sheetNow = opened?.sheet;
     const base = ctx.read(row, since, ownersRead);
     const { dials, tuned, layout: _layout, ...picks } = base.state;
     const story = ask.story

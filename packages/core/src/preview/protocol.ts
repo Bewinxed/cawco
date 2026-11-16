@@ -31,8 +31,26 @@ export type PreviewSource =
       serve?: { command: string; cwd: string };
       /** The workspace whose dev server it is: it runs in that workspace's own network. */
       workspace?: string;
+      /**
+       * The version the person is served: the id of a clone of `workspace`
+       * cut on its machine at its HEAD with its uncommitted changes when its
+       * author handed this version up (its `artifact_create`, its
+       * `artifact_update`, its own `artifact_show`), and changed only by the
+       * next hand-up, never by an edit to the workspace's files (agent
+       * stage-clone.ts `pinClone`). Its own stage or server answers the
+       * artifact's preview origin, in its own network; what the author reads
+       * (`artifact_read`, its renders) is the workspace as it is now.
+       * Absent for a port on a machine's host, whose server is the
+       * session's own.
+       */
+      pin?: string;
     }
-  | { dir: string; path?: string }
+  | {
+      dir: string;
+      path?: string;
+      /** The version the person is served: the id of a copy of `dir` made on its machine when its author handed this version up, served in its place (agent stage-clone.ts `pinFolder`). */
+      pin?: string;
+    }
   | { page: string };
 
 /** Every reason a preview's page can say it can't be drawn ({@link PreviewDown}). */

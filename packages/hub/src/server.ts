@@ -202,10 +202,12 @@ import {
   STAGE_ENSURE,
   STAGE_IDLE_MS,
   STAGE_INSTALL_MS,
+  STAGE_PIN,
+  STAGE_PIN_MS,
   STAGE_READY_MS,
   STAGE_RENDER,
   STAGE_SERVE,
-  STAGE_UNSERVE,
+  STAGE_UNPIN,
   STAGE_WARM,
   STAGE_WRITE,
   type StageFrame,
@@ -4650,7 +4652,7 @@ export const createServer = (
    * daemon ends says nothing more (agent stage.ts `stopOne`), so the hub
    * forgets it itself: a machine's own as it registers, which states each
    * stage again (agent stage.ts `tellStages`); a workspace's as it leaves
-   * `active`; a server's as the hub stops it (`unserve`).
+   * `active`; a pin's as the hub lets it go (`unpin`).
    */
   const workspaceStages = new Map<
     string,
@@ -5014,6 +5016,11 @@ export const createServer = (
       const staged = await onStage(at, STAGE_WRITE, write);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
+    // The version of a sheet or a served preview an author hands up, cut on its workspace's machine.
+    pin: async (at, pin) => {
+      const staged = await onStage(at, STAGE_PIN, pin);
+      return staged instanceof ElysiaStatus ? staged : undefined;
+    },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
     warmStage: async (at, warm) => {
       const staged = await onStage(at, STAGE_WARM, warm);
@@ -5110,12 +5117,12 @@ export const createServer = (
           ),
       };
     },
-    // A workspace preview's server, run and kept up on the workspace's machine.
-    serve: async (machineId, workspace, serve) => {
+    // A workspace preview's server, run and kept up on the workspace's machine, in the pin of the version the person is served.
+    serve: async (machineId, workspace, serve, pin) => {
       const asked = await callAgent(
         machineId,
         STAGE_SERVE,
-        [workspace, serve],
+        [workspace, serve, pin],
         // Its project installed first when its lockfile moved (agent stage-install.ts).
         STAGE_READY_MS + STAGE_INSTALL_MS + 15_000
       );
@@ -5175,12 +5182,44 @@ export const createServer = (
       }
       return answer.result;
     },
-    unserve: (machineId, workspace, port) => {
-      // Ended, the server says nothing more: it holds its clone no more.
-      workspaceStages.get(workspace)?.ports.delete(port);
+    // A folder's version an author hands up, copied on the folder's machine.
+    pinFolder: async (machineId, dir, pin) => {
+      const asked = await callAgent(
+        machineId,
+        STAGE_PIN,
+        [null, pin, dir],
+        STAGE_PIN_MS
+      );
+      switch (asked.kind) {
+        case "unanswered":
+          return asked.reason === "dead"
+            ? awayProblem(
+                machineId,
+                "The folder's machine isn't connected to the hub, so this version of it can't be kept."
+              )
+            : silentProblem(
+                `The folder's machine didn't answer within ${secondsOf(asked.after)}s, so this version of it may not be kept.`
+              );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      return asked.value.ok
+        ? undefined
+        : problem(502, {
+            code: "artifact-pin-uncut",
+            detail:
+              asked.value.error ??
+              "This version of the folder couldn't be kept.",
+          });
+    },
+    unpin: (machineId, pin) => {
+      // Its stages end with it and say nothing more: forgotten here now.
+      workspaceStages.delete(pin);
       detach(
-        callAgent(machineId, STAGE_UNSERVE, [workspace, port], BUSY_TIMEOUT_MS),
-        "preview server stop"
+        callAgent(machineId, STAGE_UNPIN, [pin], BUSY_TIMEOUT_MS),
+        "pin let go"
       );
     },
   });
@@ -5563,6 +5602,7 @@ export const createServer = (
     for (const { origin } of gone) {
       previewService.end(origin);
     }
+    artifacts.letGoPins(gone);
   });
   // Every move of an artifact's source moves the upstream of the origin it
   // stands on, and the panels showing it hear its source again.

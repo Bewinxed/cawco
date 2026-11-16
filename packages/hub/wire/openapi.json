@@ -52430,6 +52430,10 @@
                   },
                   "path": {
                     "type": "string"
+                  },
+                  "pin": {
+                    "description": "The version the person is served: the id of a copy of `dir` made on its machine when its author handed this version up, served in its place (agent stage-clone.ts `pinFolder`).",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -52451,6 +52455,10 @@
                 "type": "object",
                 "properties": {
                   "path": {
+                    "type": "string"
+                  },
+                  "pin": {
+                    "description": "The version the person is served: the id of a clone of `workspace`\ncut on its machine at its HEAD with its uncommitted changes when its\nauthor handed this version up (its `artifact_create`, its\n`artifact_update`, its own `artifact_show`), and changed only by the\nnext hand-up, never by an edit to the workspace's files (agent\nstage-clone.ts `pinClone`). Its own stage or server answers the\nartifact's preview origin, in its own network; what the author reads\n(`artifact_read`, its renders) is the workspace as it is now.\nAbsent for a port on a machine's host, whose server is the\nsession's own.",
                     "type": "string"
                   },
                   "port": {
@@ -137219,6 +137227,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "artifact-pin-uncut"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "artifact-preview-unstarted"
                 ]
               },
@@ -143017,6 +143061,78 @@
               "title",
               "type"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "stage-workspace-gone"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "stage-workspace-unplaced"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
         ]
       },
@@ -143517,39 +143633,115 @@
         ]
       },
       "postApiInstancesByIdArtifactsByArtifactShow502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "artifact-show-unstarted"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-pin-uncut"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-show-unstarted"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "stage-said-no"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
           }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiInstancesByIdArtifactsByArtifactShow503": {

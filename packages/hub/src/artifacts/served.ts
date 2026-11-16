@@ -5,6 +5,7 @@
  */
 
 import { join } from "node:path";
+import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { type CanvasSpec, canvasOf } from "@cawco/core/stage";
 import type { ArtifactRow } from "../db/artifacts";
 
@@ -20,16 +21,49 @@ export interface ServedOwed {
   why: "handed" | "looked" | "waits";
 }
 
-/** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
+/** A workspace preview's server (core `ServeSpec`): its workspace, its port, and the pin it runs in (core `PreviewSource.pin`); null for any other artifact. */
 export const servedOf = (
   row: Pick<ArtifactRow, "kind" | "source">
-): { port: number; workspace: string } | null =>
+): { pin?: string; port: number; workspace: string } | null =>
   row.kind === "preview" &&
   "port" in row.source &&
   row.source.serve &&
   row.source.workspace
-    ? { port: row.source.port, workspace: row.source.workspace }
+    ? {
+        port: row.source.port,
+        workspace: row.source.workspace,
+        ...(row.source.pin === undefined ? {} : { pin: row.source.pin }),
+      }
     : null;
+
+/** The pin a machine serves `source` to the person from (core `PreviewSource.pin`); none for a page or a host's port. */
+export const servedPin = (source: PreviewSource): string | undefined =>
+  "page" in source ? undefined : source.pin;
+
+/** `source` served from the pin `standing` is served from, when it is: a source made again where it stands keeps its pin, cut again from it (versions.ts `cutVersion`). */
+export const onPinOf = (
+  source: PreviewSource,
+  standing: { source: PreviewSource }
+): PreviewSource => {
+  const pin = servedPin(standing.source);
+  return pin === undefined ? source : pinnedAt(source, pin);
+};
+
+/**
+ * `source` served from pin `pin`, a source a machine pins (a sheet, a
+ * workspace preview, a folder); as it is for any other (a page, a host's
+ * port, whose server is the session's own).
+ */
+export const pinnedAt = (source: PreviewSource, pin: string): PreviewSource => {
+  if ("dir" in source) {
+    return { ...source, pin };
+  }
+  return "port" in source &&
+    source.workspace !== undefined &&
+    (source.stage !== undefined || source.serve !== undefined)
+    ? { ...source, pin }
+    : source;
+};
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
 export const sheetOf = (
@@ -39,6 +73,8 @@ export const sheetOf = (
   file: string;
   /** Every states file of the canvas, from the clone's root: a section each. */
   files: string[];
+  /** The pin the person is served it from (core `PreviewSource.pin`). */
+  pin?: string;
   spec: CanvasSpec;
   workspace: string;
 } | null => {
@@ -58,6 +94,7 @@ export const sheetOf = (
       join(stage.dir, one)
     ),
     spec,
+    ...(row.source.pin === undefined ? {} : { pin: row.source.pin }),
     workspace: row.source.workspace,
   };
 };

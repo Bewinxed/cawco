@@ -357,11 +357,30 @@ export interface ArtifactServiceDeps {
     | ReturnType<typeof problem<502, { code: "picture-none"; detail: string }>>
   >;
   /**
+   * The version of a sheet or a served preview its author hands up (core
+   * `PreviewSource.pin`), cut on the machine of the workspace or place `at`
+   * names: pin `pin`'s clone of it, cut or brought in step with it once
+   * (agent stage.ts `pinTreeOf`). Refused saying why it can't.
+   */
+  pin: (at: StageAt, pin: string) => Promise<StageRefused | undefined>;
+  /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
    * person something (`comment_reply`'s `asks`): its push, grouped per
    * artifact (push.ts `pinAsked`).
    */
   pinAsked: (artifactId: string, text: string) => void;
+  /** The version of folder `dir` on machine `machineId` its author hands up: pin `pin`'s copy of it made again (agent stage.ts `pinFolderOf`). Refused saying why it can't. */
+  pinFolder: (
+    machineId: string,
+    dir: string,
+    pin: string
+  ) => Promise<
+    | Unanswered
+    | ReturnType<
+        typeof problem<502, { code: "artifact-pin-uncut"; detail: string }>
+      >
+    | undefined
+  >;
   /**
    * Session `instanceId`'s preview origin (preview.ts `address`), its listener started
    * when it has none; refused when every port is taken.
@@ -459,7 +478,9 @@ export interface ArtifactServiceDeps {
   serve: (
     machineId: string,
     workspace: string,
-    serve: ServeSpec
+    serve: ServeSpec,
+    /** The pin of the version the person is served (core `PreviewSource.pin`), whose server it is. */
+    pin: string | undefined
   ) => Promise<
     | StageState
     | Unanswered
@@ -542,8 +563,8 @@ export interface ArtifactServiceDeps {
    * writer's ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
-  /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
-  unserve: (machineId: string, workspace: string, port: number) => void;
+  /** Pin `pin` on machine `machineId` let go: no artifact is served from it any more (agent stage.ts `unpin`). Never throws. */
+  unpin: (machineId: string, pin: string) => void;
   /**
    * A component canvas drawn by its workspace's daemon in the machine's own
    * Chromium (agent stage.ts `renderStage`): the stage's report once every
