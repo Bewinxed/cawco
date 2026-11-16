@@ -8,8 +8,11 @@
  * no surface ever reads an empty title, and nothing falls back at runtime.
  */
 import { ARTIFACT_TITLE_LIMIT } from "@cawco/core/artifact-kinds";
+import { markerTag, readMarkerTag } from "@cawco/core/injected";
+import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import type { ArtifactRow } from "./db/artifacts";
 import { ARTIFACT_TITLES } from "./db/migration-names";
+import { rewriteSendText } from "./db/tag-markers";
 import { readKept } from "./decision-program";
 
 /** Where a row's title came from. */
@@ -99,3 +102,24 @@ export const titleUntitledOnce = (
 /** The counts as the hub's log and the migrations check say them. */
 export const titlesSaid = (counts: Record<TitleSource, number>): string =>
   `${counts.page + counts.ask + counts.name} untitled artifact(s) titled: ${counts.page} from their decision page's title, ${counts.ask} from their ask, ${counts.name} from their name`;
+
+/**
+ * The once-step over the stored sends that gives each artifact notice sent
+ * before titles were kept (its tag has no `title`, core injected.ts
+ * `markerTag`) its artifact's title, so its transcript line names it: the
+ * title its row holds now (after {@link titleUntitledOnce}), or, with the row
+ * gone, the notice's name spelled as words. Run through db
+ * `migrateSendsOnce` (`NOTICE_TITLES`); only the tag changes.
+ */
+export const titledStoredNotice =
+  (titleOf: (id: string) => string | undefined) =>
+  (body: NeutralUserMessage): NeutralUserMessage | null =>
+    rewriteSendText(body, (text) => {
+      const tag = readMarkerTag(text);
+      if (!tag?.kind.startsWith("artifact-") || tag.fields.title) {
+        return null;
+      }
+      const { id = "", name = "" } = tag.fields;
+      const title = titleOf(id) || nameAsWords(name);
+      return `${markerTag(tag.kind, { ...tag.fields, title })}${tag.rest}`;
+    });

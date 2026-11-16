@@ -317,7 +317,11 @@ import { createAreas } from "./areas";
 import { createArtifactEvents } from "./artifact-events";
 import { createArtifactPages } from "./artifact-pages";
 import { createArtifactSessions } from "./artifact-session";
-import { titlesSaid, titleUntitledOnce } from "./artifact-titles";
+import {
+  titledStoredNotice,
+  titlesSaid,
+  titleUntitledOnce,
+} from "./artifact-titles";
 import { boardOf } from "./artifacts/access";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
@@ -388,6 +392,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import type { ContinuationRow } from "./db/continuations";
 import { accountReportOf } from "./db/machines";
 import {
+  NOTICE_TITLES,
   SHEET_NOTICES,
   SPLIT_CONTINUATIONS,
   TAG_MARKERS,
@@ -5254,6 +5259,16 @@ export const createServer = (
   });
   if (titled !== null) {
     console.info(`[hub] ${titlesSaid(titled)}`);
+  }
+  // Then the notices sent before titles were kept take their artifact's title once.
+  const noticesTitled = db.migrateSendsOnce(
+    NOTICE_TITLES,
+    titledStoredNotice((id) => db.artifacts.get(id)?.title)
+  );
+  if (noticesTitled !== null) {
+    console.info(
+      `[hub] ${noticesTitled} stored artifact notice(s) given their artifact's title`
+    );
   }
   /**
    * A project's page lives as long as its source in the project's folder:

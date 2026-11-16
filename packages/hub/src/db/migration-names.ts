@@ -18,6 +18,8 @@ export const SETTLED_NAMES = "settled_member_names";
 export const PICKED_TAKEN_BACK = "picked_cards_taken_back";
 /** artifact-titles.ts `titleUntitledOnce`. */
 export const ARTIFACT_TITLES = "artifact_titles";
+/** server.ts, through db `migrateSendsOnce`: artifact-titles.ts `titledStoredNotice`. */
+export const NOTICE_TITLES = "artifact_notice_titles";
 /** db `versionStoredOnce`, at the hub's boot. */
 export const SKILL_PLUGIN_VERSIONS = "skill_plugin_versions";
 /** db `sshMachines.claim`. */
