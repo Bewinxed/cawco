@@ -9,6 +9,7 @@ import type {
   AccountBench,
   AccountCatalog,
   AccountCatalogFault,
+  AccountCredit,
   AccountKind,
   AccountProvider,
   AccountReading,
@@ -64,6 +65,8 @@ export interface AccountsView {
   /** Why accounts with no catalog have none: their last probe's fault. */
   catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
+  /** Accounts a provider refused for want of credit, by the model provider (hub credit.ts). */
+  credit: AccountCredit[];
   /** Sign-ins started on a machine and not finished: the link or code each showed. */
   pending: PendingAccountSignin[];
   /** Each account's freshest reading: its windows, plan and extra usage. */

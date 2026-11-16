@@ -2,6 +2,7 @@ import {
   type Account,
   type AccountBench,
   type AccountCatalog,
+  type AccountCredit,
   type AccountIdentity,
   type AccountKind,
   type AccountOverage,
@@ -27,6 +28,7 @@ import type { DbCore } from "./core";
 import {
   accountBench,
   accountCatalogs,
+  accountCredit,
   accountLeaves,
   accountModelEfforts,
   accountReadings,
@@ -106,6 +108,12 @@ export interface AccountsDb {
   ) => Account | undefined;
   readonly catalogs: () => AccountCatalog[];
   /**
+   * Ends the account's out-of-credit marks: one provider's (a turn on it
+   * succeeded), or every one (signed in again, a top-up acknowledged). The
+   * providers that were marked.
+   */
+  readonly clearCredit: (accountId: string, provider?: string) => string[];
+  /**
    * A turn on the account ended at `at` with no report: Claude Code reports
    * whenever a window moves, so its windows still stand then. Moves the
    * reading's time on (never back); nothing for an account with no windows.
@@ -124,6 +132,8 @@ export interface AccountsDb {
     /** Made by a setup still under way: the step it stands at. */
     setupStep?: AccountSetupStep;
   }) => Account;
+  /** Every account a provider refused for want of credit (core `AccountCredit`). */
+  readonly credit: () => AccountCredit[];
   /** The leave of `accountId` from `machineId` is over: its store there is signed out. */
   readonly dropLeave: (accountId: string, machineId: string) => void;
   readonly get: (id: string) => Account | undefined;
@@ -150,6 +160,8 @@ export interface AccountsDb {
    */
   readonly liftBench: (accountId: string) => string[];
   readonly list: () => Account[];
+  /** Marks the account out of credit for `provider`'s models, from `since`; a mark already held keeps its first moment and takes the new words. */
+  readonly markOutOfCredit: (credit: AccountCredit) => void;
   /** The sessions still running from a moved credential, by instance id → machine id. */
   readonly movedFrom: () => Map<string, string>;
   /** The credentials moving now. */
@@ -1162,6 +1174,43 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           scope: row.scope === "" ? null : row.scope,
           until: row.until.getTime(),
         })),
+    credit: () =>
+      db
+        .select()
+        .from(accountCredit)
+        .all()
+        .map((row) => ({
+          accountId: row.accountId,
+          provider: row.provider,
+          reason: row.reason,
+          since: row.since.getTime(),
+        })),
+    clearCredit: (accountId, provider) =>
+      db
+        .delete(accountCredit)
+        .where(
+          provider === undefined
+            ? eq(accountCredit.accountId, accountId)
+            : and(
+                eq(accountCredit.accountId, accountId),
+                eq(accountCredit.provider, provider)
+              )
+        )
+        .returning()
+        .all()
+        .map((row) => row.provider),
+    markOutOfCredit: ({ accountId, provider, reason, since }) => {
+      if (!get(accountId)) {
+        return;
+      }
+      db.insert(accountCredit)
+        .values({ accountId, provider, reason, since: new Date(since) })
+        .onConflictDoUpdate({
+          target: [accountCredit.accountId, accountCredit.provider],
+          set: { reason },
+        })
+        .run();
+    },
     liftBench: (accountId) => {
       const now = Date.now();
       return db

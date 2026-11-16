@@ -1,13 +1,21 @@
 /** The frames inside a turn and its end: asks, pulses, naming, retries, the end, and what observes it. */
 
-import { CLAUDE_PROVIDER, LIMITED_PROVIDERS } from "@cawco/core/accounts";
+import {
+  CLAUDE_PROVIDER,
+  LIMITED_PROVIDERS,
+  outOfCredit,
+} from "@cawco/core/accounts";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { detach } from "@cawco/core/detach";
 import type { ArrivingAsk } from "@cawco/core/frames";
 import { asLastErrorKind } from "@cawco/core/relaunch";
-import { PROVIDER_RETRY } from "@cawco/core/session-messages";
+import {
+  type NeutralMessage,
+  PROVIDER_RETRY,
+} from "@cawco/core/session-messages";
 import { unreadAskWords } from "@cawco/core/words/ask-lines";
 import { briefingsObserve } from "../briefings";
+import { noteCreditAnswered, noteOutOfCredit } from "../credit";
 import type { HubContext } from "../hub-context";
 import { outlivesSession, unreadFields } from "../pending";
 import { type FrameAnswer, type FrameRun, onSessionFrame } from "./frame-run";
@@ -47,6 +55,7 @@ export type TurnFlowContext = TurnEndedContext &
     | "processFailed"
     | "processGeneration"
     | "providerRetries"
+    | "publishUsage"
     | "pulses"
     | "push"
     | "ruleEngine"
@@ -356,6 +365,54 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
     return "continue";
   });
 
+  /** A credit refusal's words: its result's errors, or the text Claude Code answered in the model's place. */
+  const creditWords = (neutral: NeutralMessage): string => {
+    if (neutral.type === "result") {
+      return neutral.errors?.join(" ") || neutral.subtype;
+    }
+    if (neutral.type === "assistant") {
+      return (
+        neutral.message.content
+          .flatMap((block) => (block.type === "text" ? [block.text] : []))
+          .join(" ")
+          .trim() ||
+        (neutral.error ?? "")
+      );
+    }
+    return "";
+  };
+
+  /**
+   * What a session's frame says of its account's credit (credit.ts): a
+   * pi or OpenCode turn its provider refused for want of credit, as its
+   * harness typed the refusal it ended on, or Claude Code's answer in its
+   * place (`billing_error`), marks the account out of credit for the
+   * session's model's provider; a turn that ends answered ends the mark.
+   */
+  const noteCredit = (instanceId: string, neutral: NeutralMessage): void => {
+    const refused =
+      (neutral.type === "result" &&
+        neutral.is_error &&
+        neutral.outOfCredit === true) ||
+      (neutral.type === "assistant" &&
+        neutral.error !== undefined &&
+        outOfCredit({ type: neutral.error }));
+    const answered = neutral.type === "result" && !neutral.is_error;
+    if (!(refused || answered)) {
+      return;
+    }
+    const [row] = ctx.db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    const moved = answered
+      ? noteCreditAnswered(ctx.db, row)
+      : noteOutOfCredit(ctx.db, row, creditWords(neutral));
+    if (moved) {
+      ctx.publishUsage(row.machineId);
+    }
+  };
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
   const turnEnded = (run: FrameRun): FrameAnswer => {
     const { message, agentFrame } = run;
@@ -388,6 +445,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
           ctx.limitRefused.add(message.instanceId);
         }
       }
+      noteCredit(message.instanceId, neutral);
       // Every tool call the session's model makes, at the top of
       // its turn or inside one (a Code Mode program's, a
       // subagent's): work of its own ends a declared wait at rest.

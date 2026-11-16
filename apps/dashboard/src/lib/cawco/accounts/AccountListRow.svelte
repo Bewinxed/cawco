@@ -14,9 +14,10 @@
    * parked (The Work Outlives Its Surface Rule): its second line says the
    * step it stands at, and the row opens the setup there again.
    *
-   * An account Claude Code refused account-wide carries Check again under
-   * its refusal, in the name's column and outside the link: the hub's check
-   * runs now, the button working while it does. Answered, the button goes
+   * An account Claude Code refused account-wide, or one a provider refused
+   * for want of credit, carries Check again under its problem, in the
+   * name's column and outside the link: the hub's check runs now (for
+   * credit, it acknowledges a top-up), the button working while it does. Answered, the button goes
    * with the answer and the refusal as the accounts are read again; refused
    * again, or with no verdict, a meta line under it says so until the next
    * press.
@@ -32,18 +33,11 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import {
-    hueVar,
-    nameOf,
-    problemOf,
-    refusedAccountWideAt,
-  } from "./model.svelte";
+  import { checkableAt, hueVar, nameOf, problemOf } from "./model.svelte";
 
   let { account }: { account: Account } = $props();
 
-  const refusedAt = $derived(
-    account.setupStep ? null : refusedAccountWideAt(account)
-  );
+  const refusedAt = $derived(account.setupStep ? null : checkableAt(account));
   /**
    * The refusal a check here brought back (its `refusedAt`): the button and
    * its line leave with the answer, before the accounts' read that removes

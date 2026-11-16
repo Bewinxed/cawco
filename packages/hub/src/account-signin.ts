@@ -9,6 +9,7 @@ import type {
   MachineProviderLists,
   ProviderInfo,
   ProviderSigninResult,
+  SigninState,
 } from "@cawco/core/accounts";
 import {
   ACCOUNT_KINDS,
@@ -43,6 +44,7 @@ import type {
   HomeCredentialFound,
   SigninFinished,
 } from "./closure-context";
+import { creditRenewed } from "./credit";
 import type { LoginMove } from "./db/accounts";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import {
@@ -53,6 +55,9 @@ import {
   type Unanswered,
 } from "./machine-answers";
 import { unreachable } from "./unreachable";
+
+/** Why an account's credit marks end as it signs in (credit.ts `creditRenewed`). */
+const SIGNED_IN_AGAIN = "it was signed in again through CawCo";
 
 export type AccountSigninContext = Pick<
   ClosureContext,
@@ -73,6 +78,23 @@ export type AccountSigninContext = Pick<
 >;
 
 export const createAccountSignin = (ctx: AccountSigninContext) => {
+  /**
+   * A sign-in through CawCo kept as it came out on `machineId`: no longer a
+   * login that was moved, and, signed in, out of none of the credit marks
+   * it held (credit.ts `creditRenewed`); every screen hears it.
+   */
+  const keepSignin = (
+    accountId: string,
+    machineId: string,
+    state: SigninState
+  ): void => {
+    ctx.db.accounts.putSignin({ accountId, machineId, state, moved: null });
+    if (state === "signed-in") {
+      creditRenewed(ctx.db, accountId, SIGNED_IN_AGAIN);
+    }
+    ctx.publishUsage(machineId);
+  };
+
   const undoRemovedSignin = async (
     account: Account,
     machineId: string
@@ -491,13 +513,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     console.log(
       `[accounts] A new sign-in on ${ctx.machineName(machineId)} is ${identity.email}, which this hub already has as ${existingName}, so the two are one account there: ${joined.outcome === "kept" ? `${existingName}'s login on ${ctx.machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${existingName}'s on ${ctx.machineName(machineId)} from now on`}.`
     );
-    ctx.db.accounts.putSignin({
-      accountId: existing.id,
-      machineId,
-      state: "signed-in",
-      moved: null,
-    });
-    ctx.publishUsage(machineId);
+    keepSignin(existing.id, machineId, "signed-in");
     return {
       accountId: existing.id,
       note: `Signed in as ${identity.email}, which is already an account here; it's that account now.`,
@@ -579,13 +595,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       keepProbe(ctx.db, account.id, result.probe);
     }
     // Signed in here through CawCo: no longer the login that was moved.
-    ctx.db.accounts.putSignin({
-      accountId: account.id,
-      machineId,
-      state: result.state,
-      moved: null,
-    });
-    ctx.publishUsage(machineId);
+    keepSignin(account.id, machineId, result.state);
     return result;
   };
 
@@ -617,13 +627,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
     }
     if (result.state === "signed-in" || result.state === "mismatch") {
       // Signed in here through CawCo: no longer the credential that was moved.
-      ctx.db.accounts.putSignin({
-        accountId: account.id,
-        machineId,
-        state: result.state,
-        moved: null,
-      });
-      ctx.publishUsage(machineId);
+      keepSignin(account.id, machineId, result.state);
     }
     return result;
   };

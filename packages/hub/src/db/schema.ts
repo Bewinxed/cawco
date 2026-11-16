@@ -3369,6 +3369,25 @@ export const accountModelEfforts = sqliteTable(
 );
 
 /**
+ * Accounts a provider refused for want of credit (core `AccountCredit`), by
+ * the model provider the refusal was for: a model the hub picks for a start
+ * that picked none keeps off them until a turn on that provider succeeds,
+ * the account is signed in again, or a person acknowledges a top-up.
+ */
+export const accountCredit = sqliteTable(
+  "account_credit",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    reason: text("reason").notNull(),
+    since: timestamp("since").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.provider] })]
+);
+
+/**
  * Accounts out of placement until their window resets: one of their sessions'
  * Claude Code said a window refused it. Hub-wide, so every machine sees it.
  * `scope` is the model scope ("Opus") the window limits; "" is every model.

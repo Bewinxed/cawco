@@ -1,7 +1,12 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
 
 import { readFile } from "node:fs/promises";
-import { atProviderLimit } from "@cawco/core/accounts";
+import {
+  atProviderLimit,
+  outOfCredit,
+  type ProviderRefusal,
+  providerErrorCode,
+} from "@cawco/core/accounts";
 import type { BrowserDoor } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { isControlOf } from "@cawco/core/control-args";
@@ -942,10 +947,12 @@ const loaderSources = async (
  * `globalThis.fetch`"). An answer pi refuses passes through it too: pi-ai's
  * OpenAI client throws on a 429 before pi's `onResponse`, so its
  * `after_provider_response` is never heard for one, and its error message
- * keeps the status only in words.
+ * keeps the status only in words. An error answer's body is read for the
+ * provider's own error code too (core `providerErrorCode`): OpenAI's
+ * no-credit answer is a 429 that only its code tells from a rate limit.
  */
 class ProviderAnswers {
-  #status: number | undefined;
+  #answer: ProviderRefusal = {};
 
   readonly fetch: typeof globalThis.fetch = Object.assign(
     async (
@@ -953,7 +960,18 @@ class ProviderAnswers {
       init?: Parameters<typeof globalThis.fetch>[1]
     ): Promise<Response> => {
       const response = await globalThis.fetch(input, init);
-      this.#status = response.status;
+      const code = response.ok
+        ? undefined
+        : providerErrorCode(
+            await response
+              .clone()
+              .text()
+              .catch(() => undefined)
+          );
+      this.#answer = {
+        status: response.status,
+        ...(code === undefined ? {} : { code }),
+      };
       return response;
     },
     { preconnect: globalThis.fetch.preconnect }
@@ -970,11 +988,11 @@ class ProviderAnswers {
       stream(model, context, { ...options, fetch: this.fetch });
   }
 
-  /** The status of the turn's last answer, cleared for the next turn's. */
-  take(): number | undefined {
-    const status = this.#status;
-    this.#status = undefined;
-    return status;
+  /** The turn's last answer, its status and error code, cleared for the next turn's. */
+  take(): ProviderRefusal {
+    const answer = this.#answer;
+    this.#answer = {};
+    return answer;
   }
 }
 
@@ -1265,9 +1283,10 @@ class PiSession implements HarnessSession {
             : []
         );
         const failed = errors.length > 0;
-        // A failed turn whose last answer was a 429 ended on its account's
-        // limit (core `atProviderLimit`), whatever its error's words say.
-        const status = this.#answers.take();
+        // A failed turn whose last answer was a 402, or a 429 that names no
+        // credit, ended for want of credit or on its account's limit (core
+        // `outOfCredit`, `atProviderLimit`), whatever its error's words say.
+        const answer = this.#answers.take();
         const leaf = this.#leaf();
         const context = this.#contextTokens();
         const turnUsage = usageByModel(this.#turnUsage);
@@ -1280,7 +1299,8 @@ class PiSession implements HarnessSession {
           is_error: failed,
           turnUsage,
           ...(failed ? { errors } : {}),
-          ...(failed && atProviderLimit({ status }) ? { atLimit: true } : {}),
+          ...(failed && atProviderLimit(answer) ? { atLimit: true } : {}),
+          ...(failed && outOfCredit(answer) ? { outOfCredit: true } : {}),
           ...(context === undefined ? {} : { contextTokens: context }),
           ...this.#compactsAt(),
         });

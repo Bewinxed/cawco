@@ -31,6 +31,7 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import type { ClosureContext } from "./closure-context";
+import { creditMarksFor, creditProviderOf } from "./credit";
 import type { DbShape } from "./db/index";
 import type { InstanceKind } from "./db/stored-types";
 import { handleId, isHandle } from "./handles";
@@ -56,6 +57,7 @@ import { UNREAD } from "./sends";
 import type { SpawnProblem } from "./spawn-problems";
 import { type createStartHolds, StartsHeld } from "./start-holds";
 import {
+  creditWhy,
   noModelRuns,
   nothingListed,
   type OwnDefault,
@@ -925,9 +927,32 @@ export const createSpawns = (ctx: SpawnsContext) => {
     runs: typeof runsOn | undefined
   ): Started | { refusal: string } => {
     const { harness } = payload;
-    const model = models.find((one) =>
+    const opened = models.filter((one) =>
       providersOf(machineId, harness, one).includes(account.provider)
     );
+    const marks = ctx.db.accounts
+      .credit()
+      .filter((one) => one.accountId === account.id);
+    const markOf = (one: string) =>
+      creditMarksFor(
+        marks,
+        harness,
+        ctx.resolvedModel(machineId, harness, one)
+      )[0];
+    const model = opened.find((one) => markOf(one) === undefined);
+    const [spent] = opened.flatMap((one) => markOf(one) ?? []);
+    if (!model && spent) {
+      const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
+      return {
+        refusal: spawnWords.startModel.heldOutOfCredit(
+          row ? ctx.sessionName(row) : payload.title || "this session",
+          accountNameAmong(account, ctx.db.accounts.list()),
+          creditWhy(spent, Date.now()),
+          accountsWords.harnesses[harness],
+          ctx.machineName(machineId)
+        ),
+      };
+    }
     if (!model) {
       const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
       return {
@@ -973,8 +998,16 @@ export const createSpawns = (ctx: SpawnsContext) => {
         continue;
       }
       const asked = { ...payload, model };
-      const key = `${provider}\u0000${modelScope(model) ?? ""}`;
-      const placed = placedBy.get(key) ?? placedNew(machineId, asked, task);
+      const key = [
+        provider,
+        modelScope(model) ?? "",
+        creditProviderOf(
+          payload.harness,
+          ctx.resolvedModel(machineId, payload.harness, model)
+        ) ?? "",
+      ].join("\u0000");
+      const placed =
+        placedBy.get(key) ?? placedNew(machineId, asked, task, true);
       placedBy.set(key, placed);
       if ("refusal" in placed && placed.status) {
         return placed;
@@ -1042,15 +1075,11 @@ export const createSpawns = (ctx: SpawnsContext) => {
       AccountProvider,
       string,
     ]): ProviderStandings => {
-      const read = standings(
-        providerInput(
-          provider,
-          machineId,
-          { ...payload, model },
-          lists,
-          undefined
-        )
-      );
+      const asked = { ...payload, model };
+      const read = standings({
+        ...providerInput(provider, machineId, asked, lists, undefined),
+        outOfCredit: creditOf(machineId, asked),
+      });
       return {
         provider: providerName(provider),
         accounts: read,
@@ -1134,7 +1163,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
   const placedNew = (
     machineId: string,
     payload: NamedSpawn,
-    task: { projectId?: string | null; taskId?: string | null }
+    task: { projectId?: string | null; taskId?: string | null },
+    keepOffCredit = false
   ): { accountId?: string } | { refusal: string; status?: 409 } => {
     const allowed = taskAccounts(
       payload.projectId ?? task.projectId,
@@ -1165,8 +1195,22 @@ export const createSpawns = (ctx: SpawnsContext) => {
           }
         : {};
     }
-    return placedStart(machineId, payload, input);
+    return placedStart(
+      machineId,
+      payload,
+      keepOffCredit
+        ? { ...input, outOfCredit: creditOf(machineId, payload) }
+        : input
+    );
   };
+
+  /** The credit marks a start of `payload` keeps off when the hub picks its model (credit.ts). */
+  const creditOf = (machineId: string, payload: NamedSpawn) =>
+    creditMarksFor(
+      ctx.db.accounts.credit(),
+      payload.harness,
+      ctx.resolvedModel(machineId, payload.harness, payload.model)
+    );
 
   /**
    * The account a start goes on, by placement, or none: on the machine's own

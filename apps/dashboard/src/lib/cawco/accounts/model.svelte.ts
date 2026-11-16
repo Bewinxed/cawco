@@ -9,6 +9,7 @@
 import {
   ACCOUNT_RULES,
   type Account,
+  type AccountCredit,
   type AccountProvider,
   type AccountSignin,
   accountNameAmong,
@@ -24,7 +25,9 @@ import {
 import type { AccountHue, PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
+import { clockWords, dayWords } from "@cawco/core/words/account-lines";
 import { accountsWords as words } from "@cawco/core/words/accounts";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { accountsStore } from "../stores/accounts.svelte";
 import { boardStore } from "../stores/board.svelte";
 
@@ -165,7 +168,7 @@ export function groupsOf(): ProviderGroup[] {
  * when none holds it out: what the hub's check (Check again) can bring back.
  * A refusal written again reads a newer time.
  */
-export function refusedAccountWideAt(account: Account): number | null {
+function refusedAccountWideAt(account: Account): number | null {
   const times = (accountsStore.accounts?.signins ?? [])
     .filter(
       (one) =>
@@ -175,6 +178,37 @@ export function refusedAccountWideAt(account: Account): number | null {
     )
     .map((one) => one.checkedAt);
   return times.length > 0 ? Math.max(...times) : null;
+}
+
+/**
+ * The newest mark of a provider refusing the account for want of credit
+ * (hub credit.ts), or none: a model the hub picks keeps off it until a turn
+ * on that provider is answered, it signs in again, or Check again
+ * acknowledges a top-up.
+ */
+function creditOutOf(account: Account): AccountCredit | null {
+  const marks = (accountsStore.accounts?.credit ?? []).filter(
+    (one) => one.accountId === account.id
+  );
+  return marks.reduce<AccountCredit | null>(
+    (newest, one) => (newest && newest.since >= one.since ? newest : one),
+    null
+  );
+}
+
+/**
+ * What Check again under the account's row answers, as the moment it was
+ * written, or null when nothing does: an account-wide refusal it checks
+ * again ({@link refusedAccountWideAt}), or a credit mark it acknowledges a
+ * top-up of ({@link creditOutOf}). A newer one reads a newer time.
+ */
+export function checkableAt(account: Account): number | null {
+  const refused = refusedAccountWideAt(account);
+  const credit = creditOutOf(account)?.since ?? null;
+  if (refused === null || credit === null) {
+    return refused ?? credit;
+  }
+  return Math.max(refused, credit);
 }
 
 /** Where the account stands on a machine; signed out when the hub has no row. */
@@ -214,6 +248,13 @@ export function problemOf(account: Account): string | null {
     const refused = signins.find((one) => one.reason)?.reason;
     return refused ?? words.problem.nowhere;
   }
+  const credit = creditOutOf(account);
+  if (credit) {
+    return spawnWords.startModel.creditProblem(
+      credit.provider,
+      sinceWords(credit.since)
+    );
+  }
   const missing = online.filter(
     (machine) =>
       signinState(signins, account.id, machine.machineId) !== "signed-in"
@@ -223,6 +264,13 @@ export function problemOf(account: Account): string | null {
   }
   return words.problem.missingOn(machineName(missing[0]), missing.length - 1);
 }
+
+/** When a mark began, as its words say it: its clock time today, else its day and time. */
+const sinceWords = (at: number): string =>
+  spawnWords.startModel.since(
+    dayWords(at) === dayWords(Date.now()) ? null : dayWords(at),
+    clockWords(at)
+  );
 
 /** A store a login moved from, by the harness that kept it. */
 const STORE_WORDS: Record<HomeStore, string> = words.harnesses;
