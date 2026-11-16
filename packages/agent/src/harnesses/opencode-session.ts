@@ -97,6 +97,7 @@ import {
 import type {
   FormInfo,
   ModelInfo as OpencodeModel,
+  PermissionReplyInput,
   PermissionRequest,
   SessionMessageAssistant,
   SessionMessageInfo,
@@ -2120,7 +2121,11 @@ export class OpencodeSession implements HarnessSession {
       autoAllows(this.#permissionMode, "tool") ||
       (this.#permissionMode === "acceptEdits" && asked.action === "edit")
     ) {
-      this.#replyPermission(asked.id, "once");
+      this.#replyPermission(
+        asked.id,
+        { decision: "once" },
+        { outcome: "answered" }
+      );
       return;
     }
     this.#ctx.permission({
@@ -2246,28 +2251,49 @@ export class OpencodeSession implements HarnessSession {
       console.log(
         `[opencode] ${this.instanceId}: its open ask ${requestId} approved by Full Send as the session entered it`
       );
-      this.#replyPermission(requestId, "once", FULL_SEND_ANSWER);
+      this.#replyPermission(
+        requestId,
+        { decision: "once" },
+        { outcome: "answered", answer: FULL_SEND_ANSWER }
+      );
     }
   }
 
-  /** OpenCode's reply carries no words for a tool ask; a withdrawn gate is rejected as a denied one is. */
+  /**
+   * An ask the hub could not show anyone, taken back with `message`, the
+   * words it says why in: a form is cancelled with them, and a tool ask is
+   * rejected with them. OpenCode fails the gated call with a reply's
+   * message as its feedback and the turn goes on, where a reject with none
+   * ends the step (OpenCode's own source, anomalyco/opencode v2.3.0, its
+   * core package's permission module, `reply`: `CorrectedError` with the
+   * message, `DeclinedError` without);
+   * Claude Code's withdraw is a deny with the same words. The agent records
+   * it withdrawn (session.ts), never answered.
+   */
   withdrawPermission(requestId: string, message: string): void {
-    this.resolvePermission(requestId, { behavior: "deny", message });
+    if (this.#resolvedGates.has(requestId)) {
+      return;
+    }
+    if (
+      this.#settleForm(requestId, { behavior: "deny", message }, "withdrawn")
+    ) {
+      return;
+    }
+    this.#replyPermission(
+      requestId,
+      { decision: "reject", message },
+      { outcome: "withdrawn" }
+    );
   }
 
   resolvePermission(requestId: string, result: PermissionResult): void {
     if (this.#resolvedGates.has(requestId)) {
       return;
     }
-    const asked = this.#questions.get(requestId);
-    if (asked) {
-      this.#resolvedGates.add(requestId);
-      this.#questions.delete(requestId);
-      this.#ctx.permissionResolved?.(requestId);
-      detach(this.#replyForm(requestId, asked, result), "replyForm");
+    if (this.#settleForm(requestId, result, "answered")) {
       return;
     }
-    let decision: "once" | "always" | "reject";
+    let decision: PermissionReplyInput["decision"];
     if (result.behavior === "deny") {
       decision = "reject";
     } else if (result.remember) {
@@ -2275,29 +2301,57 @@ export class OpencodeSession implements HarnessSession {
     } else {
       decision = "once";
     }
-    this.#replyPermission(requestId, decision);
+    this.#replyPermission(requestId, { decision }, { outcome: "answered" });
   }
 
   /**
-   * The one answer path for a tool permission — the auto-allow and Full
-   * Send's answer to an open ask ({@link #answerOpen}, `answer`) share it.
+   * Settles `requestId` when it is a form, with `result`, and says whether it
+   * was one. An answered form is said answered here; a withdrawn one is said
+   * by the agent that took it back.
+   */
+  #settleForm(
+    requestId: string,
+    result: PermissionResult,
+    outcome: "answered" | "withdrawn"
+  ): boolean {
+    const asked = this.#questions.get(requestId);
+    if (!asked) {
+      return false;
+    }
+    this.#resolvedGates.add(requestId);
+    this.#questions.delete(requestId);
+    if (outcome === "answered") {
+      this.#ctx.permissionResolved?.(requestId);
+    }
+    detach(this.#replyForm(requestId, asked, result), "replyForm");
+    return true;
+  }
+
+  /**
+   * The one reply path for a tool permission — an answer, the auto-allow,
+   * Full Send's answer to an open ask ({@link #answerOpen}, `answer`) and a
+   * withdrawal share it. An answer is said answered here; a withdrawal is
+   * said by the agent that took it back.
    */
   #replyPermission(
     requestId: string,
-    decision: "once" | "always" | "reject",
-    answer?: AskAnswer
+    reply: Pick<PermissionReplyInput, "decision" | "message">,
+    settled:
+      { outcome: "answered"; answer?: AskAnswer } | { outcome: "withdrawn" }
   ): void {
     if (this.#resolvedGates.has(requestId)) {
       return;
     }
     this.#resolvedGates.add(requestId);
-    this.#ctx.permissionResolved?.(requestId, "answered", answer);
+    if (settled.outcome === "answered") {
+      this.#ctx.permissionResolved?.(requestId, "answered", settled.answer);
+    }
     const sessionID = this.#opencodeSessionId();
     detach(
       withRestartHold("write", `permission:${requestId}`, () =>
         askOpencode((options) =>
           this.#client.permission.reply(
-            { sessionID, requestID: requestId, decision },
+            { sessionID, requestID: requestId, ...reply },
             options
           )
         )
