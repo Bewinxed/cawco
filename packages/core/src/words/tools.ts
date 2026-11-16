@@ -243,6 +243,16 @@ export const toolWords = {
   signinFailed: (name: string, code: number, said: string) =>
     `${name} stopped without signing in. That link is spent.${screenOf(said, code)}`,
 
+  /**
+   * Under the ledgers, one line per machine that reported harnesses this
+   * hub cannot run (core `AgentRow.unknownHarnesses`), by the machine's
+   * own names for them: the machine's name, then these words, then
+   * {@link toolWords.unknownHarnessesTail}. The machine's name and the
+   * names give way to the line's room; the tail stays whole.
+   */
+  unknownHarnesses: (names: string[]) => `also reports ${listed(names)}`,
+  unknownHarnessesTail: ", which this hub can't run",
+
   // ── A tool's own sign-in, on its ledger (ToolMatrix, tool-signin.svelte.ts) ─
   /** The column's head. */
   signinHead: "Sign-in",

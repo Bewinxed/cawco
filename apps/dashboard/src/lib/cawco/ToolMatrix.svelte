@@ -85,6 +85,11 @@
   const STACKED =
     "flex items-center gap-space-2 @max-phone/table:flex-col @max-phone/table:items-end @max-phone/table:gap-space-1";
 
+  /** Machines that reported a harness this hub cannot run. */
+  const unknownOn = $derived(
+    machines.filter((machine) => (machine.unknownHarnesses?.length ?? 0) > 0)
+  );
+
   let written = $state<Record<string, ToolPolicy>>({});
   const policyOf = (spec: ToolSpec): ToolPolicy =>
     written[spec.id] ?? policyFor(policies, spec.id);
@@ -838,6 +843,34 @@
           </MachineLedger>
         </section>
       {/each}
+      {#if unknownOn.length > 0}
+        <!-- Harnesses a machine reported that this hub cannot run (core
+             AgentRow.unknownHarnesses): one quiet line per machine, under
+             the ledgers of the ones it can. -->
+        <div
+          class="flex min-w-0 flex-col gap-space-1 contain-inline-size"
+          data-unknown-harnesses
+        >
+          {#each unknownOn as machine (machine.machineId)}
+            {@const where = machineLabel(machine.hostname)}
+            {@const names = toolWords.unknownHarnesses(
+              machine.unknownHarnesses ?? []
+            )}
+            <!-- The machine's name and the names give way to the room, the
+                 machine's never past half the line; why they are here
+                 stays whole. -->
+            <p
+              class="flex min-w-0 type-meta whitespace-nowrap text-ink-muted"
+              title="{where} {names}{toolWords.unknownHarnessesTail}"
+            >
+              <span class="max-w-1/2 truncate">{where}</span><span
+                class="overflow-hidden text-ellipsis whitespace-pre"
+                >{` ${names}`}</span
+              ><span class="shrink-0">{toolWords.unknownHarnessesTail}</span>
+            </p>
+          {/each}
+        </div>
+      {/if}
     </div>
   </NsPopoverGroup>
 {/if}
