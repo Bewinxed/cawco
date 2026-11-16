@@ -6,7 +6,6 @@ export { default as Lazy } from "./context-menu-lazy.svelte";
 export { default as PendingItem } from "./context-menu-pending-item.svelte";
 
 export { default as RadioGroup } from "./context-menu-radio-group.svelte";
-export { default as RadioItem } from "./context-menu-radio-item.svelte";
 export { default as Separator } from "./context-menu-separator.svelte";
 export { default as Shortcut } from "./context-menu-shortcut.svelte";
 export { default as Sub } from "./context-menu-sub.svelte";

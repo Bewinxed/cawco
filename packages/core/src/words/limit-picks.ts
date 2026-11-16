@@ -31,12 +31,12 @@ export const limitPickWords = {
       ? clockWords(at)
       : `${new Date(at).toLocaleDateString("en-GB", { weekday: "short" })} ${clockWords(at)}`,
   /**
-   * The limit could not be checked: its machine is away. The cause leads,
-   * as it is why Move anyway stands there at once: "tower offline · at its
-   * limit until 15:40".
+   * The limit could not be checked again (no machine read it; the row's
+   * tooltip says why, in the hub's words). It leads, as it is why Move
+   * anyway stands there at once: "Couldn't check · at its limit until 15:40".
    */
-  machineAway: (until: string, host: string): string =>
-    `${host} offline · at its limit until ${until}`,
+  unchecked: (until: string): string =>
+    `Couldn't check · at its limit until ${until}`,
   /** The force past a limit, on an account's row. */
   moveAnyway: "Move anyway",
   /** The force past a limit, on a model's row. */

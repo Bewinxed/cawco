@@ -213,7 +213,9 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * Why a `row` that lands on `accountId` (null: on none) can't run `model`
    * there: the account is another provider's than the model, its catalog
    * doesn't list it (a machine's own list, for a harness whose catalog is
-   * the machine's), or it is at its limit for it. Undefined when it can.
+   * the machine's). Undefined when it can. A limit stored for it never
+   * refuses: a pick on it warns, asks the provider again, and may go anyway
+   * (the dashboard's accounts/limit-checks).
    */
   const landingRefusal = (
     row: StoredRow,
@@ -236,10 +238,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       to && traitsOf(row.harness).modelCatalog === "account"
         ? unlistedOn(row, to.id, toName, model)
         : ctx.modelRefusal(row.machineId, row.harness, model);
-    if (unlisted) {
-      return unlisted.replace(SENTENCE_STOP, "");
-    }
-    return to ? atLimitFor(to.id, toName, model) : undefined;
+    return unlisted?.replace(SENTENCE_STOP, "");
   };
 
   /**
@@ -273,25 +272,6 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
             .filter((value) => value !== "default")
         )
       : owedMoveWords.pickRefused.unread(toName, model, listing.why);
-  };
-
-  /** Why `accountId` (`toName`) can't take `model` now: it is at its limit for it until then. */
-  const atLimitFor = (
-    accountId: string,
-    toName: string,
-    model: string
-  ): string | undefined => {
-    const now = Date.now();
-    const resets = refusedUntil(
-      ctx.db.accounts.bench(now),
-      ctx.db.accounts.readings().find((one) => one.accountId === accountId),
-      accountId,
-      model,
-      now
-    );
-    return resets === null
-      ? undefined
-      : owedMoveWords.pickRefused.atLimit(toName, model, clockWords(resets));
   };
 
   /** A provider's name, as a person reads it: "Claude", or its catalog's name. */

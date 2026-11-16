@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { AccountProvider } from "@cawco/core/accounts";
-  import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import {
@@ -19,19 +18,16 @@
    * moving to (`shownAccount`), as the session's row does; another pick replaces it,
    * and the account it runs on calls it off. Only while this tab's ask is on
    * its way to the hub does it take no picks. Each row is a PickRow: its
-   * room, or the limit it is at, checked again before a pick on it goes.
+   * room, or the limit it is at, checked again before a pick on it goes
+   * (AccountPickRows).
    */
 
-  import PickList from "../pick/PickList.svelte";
-  import PickRow from "../pick/PickRow.svelte";
   import NsPopover from "../spawn/NsPopover.svelte";
   import { accountsStore } from "../stores/accounts.svelte";
-  import { usageStore } from "../stores/usage.svelte";
   import type { MeterState } from "../usage";
   import UsageRing from "../usage/UsageRing.svelte";
-  import { forcePast, pickPastLimit } from "./limit-checks.svelte";
+  import AccountPickRows from "./AccountPickRows.svelte";
   import { hueVar, nameOf } from "./model.svelte";
-  import { limitRowOf, roomOf } from "./room";
   import {
     type AccountHolder,
     asking,
@@ -72,8 +68,7 @@
     /**
      * The account's room for the model the session runs, drawn on the
      * chip: the share of its binding window used, its state, its name
-     * ("5-hour") and when it resets. Absent where the card puts it
-     * elsewhere.
+     * ("5-hour") and when it resets. Absent with no reading.
      */
     quota?: {
       detail: string;
@@ -91,14 +86,6 @@
   );
 
   let open = $state(false);
-  /** The clock the rows' limits are read against, a minute at a time. */
-  let now = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 60_000);
-    return () => clearInterval(timer);
-  });
   const accounts = $derived(
     none && !instance.accountId
       ? signedInHere(instance, none.provider)
@@ -136,10 +123,18 @@
   {/if}
   <span data-slot="chip-label" data-account-chip>{name}</span>
   <!-- The account's room for the model the session runs, with the account
-       it belongs to. -->
+       it belongs to: the ring and its figure one unit, a word space (0.25em,
+       Figtree's) apart inside it, and a word space beyond the chip's gap off
+       the name, so it reads as the name's figure and not a word of it. -->
   {#if quota}
-    <UsageRing share={100 - quota.used} state={quota.state} />
-    <span class="flex-none text-ink-muted tabular-nums">{quotaWords}</span>
+    <span
+      class="mark-line ms-word inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
+      data-box
+      data-slot="quota"
+    >
+      <UsageRing share={100 - quota.used} state={quota.state} />
+      <span>{quotaWords}</span>
+    </span>
   {/if}
 {/snippet}
 
@@ -166,55 +161,8 @@
       {/snippet}
       <!-- The pick is the checked row from the moment it is made: the
            account it is moving to, as the chip shows it, never the one it
-           is leaving. A row at its limit is checked again before its pick
-           goes (limit-checks.svelte.ts). -->
-      <PickList label="Account">
-        {#each accounts as account (account.id)}
-          {@const key = `account:${account.id}`}
-          {@const limit = limitRowOf(
-            key,
-            account.provider === CLAUDE_PROVIDER
-              ? roomOf(usageStore.claudeLimits[account.id], null, now)
-              : null,
-            now
-          )}
-          <PickRow
-            checking={limit.checking}
-            detail={limit.detail}
-            force={limit.held
-              ? {
-                  action: limitPickWords.moveAnyway,
-                  onforce: () => forcePast(key, () => pick(account.id)),
-                }
-              : undefined}
-            full={account.label && account.email
-              ? `${account.email}\n${limit.detail}`
-              : limit.detail}
-            limited={limit.limited}
-            name={nameOf(account)}
-            onpick={() => {
-              if (limit.limited) {
-                detach(
-                  pickPastLimit(key, account.id, null, () => pick(account.id)),
-                  "pickPastLimit"
-                );
-              } else {
-                pick(account.id);
-              }
-            }}
-            picked={account.id === shown?.id}
-          >
-            {#snippet lead()}
-              <span
-                aria-hidden="true"
-                class="size-space-2 rounded-pill bg-(--c)"
-                data-box
-                style:--c={hueVar(account.hue)}
-              ></span>
-            {/snippet}
-          </PickRow>
-        {/each}
-      </PickList>
+           is leaving. -->
+      <AccountPickRows {accounts} picked={shown?.id ?? null} {pick} />
     </NsPopover>
   {:else}
     <!-- Nothing to pick: one account of its provider here, an ask on its

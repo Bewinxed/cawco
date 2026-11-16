@@ -16,17 +16,26 @@
    * anyway) stands before the trailing slot in the grant look (DESIGN.md: a
    * choice wider than what was asked is never made more inviting). A row
    * that can't be picked at all is disabled, its second line saying why.
+   *
+   * In a context menu's PickList (pick-host.ts) the option is a radio item
+   * of the menu's own and the force a menu item, so the menu's keys reach
+   * both. A pick goes as the menu's (the menu closes, the group takes the
+   * value), except a pick `onpick` holds (a row at its limit, being checked
+   * again): the menu stays open on the row, its live dot, then its force.
    */
+  import { ContextMenu, mergeProps } from "bits-ui";
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { glideHere } from "#lib/components/ui/tooltip/glide.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconCheck } from "#lib/icons.js";
+  import { pickHost } from "./pick-host";
 
   let {
     lead,
     name,
+    value,
     detail,
     full,
     limited = false,
@@ -40,6 +49,8 @@
     /** The lead slot's mark: the account's dot, the model's maker. */
     lead: Snippet;
     name: string;
+    /** What a menu's radio group takes for it (pick-host.ts `menu`); its name where none is given. */
+    value?: string;
     /** The second line. */
     detail: string;
     /** The tooltip's words under the name: the whole of what the row shortens. */
@@ -59,6 +70,17 @@
   } = $props();
 
   const glide = glideHere();
+  const hostNow = pickHost();
+  const inMenu = $derived(hostNow() === "menu");
+  /** A pick in a menu: `onpick` runs, and a row at its limit holds the menu open on it. */
+  const select = (event: Event): void => {
+    onpick();
+    if (limited) {
+      event.preventDefault();
+    }
+  };
+  const OPTION =
+    "group col-span-full row-start-1 grid grid-cols-subgrid items-center rounded-sm border-none bg-transparent px-0 py-space-2 text-start text-ink-strong select-none press-tint transition-control aria-disabled:cursor-not-allowed";
   /**
    * The row's columns: its inset, the lead slot, the gap to the text, the
    * text, the force's room, the trailing slot, its inset. The insets are
@@ -68,6 +90,44 @@
   const ROW_COLS =
     "var(--spacing-space-3) var(--spacing-icon-md) var(--spacing-space-3) minmax(0, 1fr) auto var(--spacing-icon-md) var(--spacing-space-3)";
 </script>
+
+{#snippet inside()}
+  <span
+    data-slot="lead"
+    aria-hidden="true"
+    class="col-start-2 grid size-icon-md place-items-center group-aria-disabled:opacity-50"
+    >{@render lead()}</span
+  >
+  <span
+    data-slot="text"
+    class="col-start-4 grid min-w-0 grid-cols-1 pe-space-2"
+  >
+    <span
+      data-slot="name"
+      class="min-w-0 truncate type-label text-ink-strong group-aria-disabled:opacity-50 group-data-limited:text-ink-muted"
+      ><bdi>{name}</bdi></span
+    >
+    <span
+      data-slot="detail"
+      class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
+      data-mono={mono || undefined}>{detail}</span
+    >
+  </span>
+  <span
+    data-slot="trail"
+    class="col-start-6 grid size-icon-md place-items-center"
+    data-box
+  >
+    {#if checking}
+      <LiveDot size="row" />
+    {:else}
+      <IconCheck
+        aria-hidden="true"
+        class="size-icon-md text-selected-icon opacity-0 group-aria-checked:opacity-100 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
+      />
+    {/if}
+  </span>
+{/snippet}
 
 <!-- One grid for the row. The option spans it on a subgrid, so the force
      standing over its fifth column moves no other column off the edges
@@ -79,59 +139,57 @@
 >
   <Tip {glide} label={full} side="right" title={name}>
     {#snippet children(tip)}
-      <button
-        {...tip}
-        data-slot="option"
-        aria-busy={checking || undefined}
-        aria-disabled={disabled || undefined}
-        aria-selected={picked}
-        class="group col-span-full row-start-1 grid grid-cols-subgrid items-center rounded-sm border-none bg-transparent px-0 py-space-2 text-start text-ink-strong select-none press-tint transition-control aria-disabled:cursor-not-allowed"
-        data-limited={limited || undefined}
-        data-pick-row
-        {disabled}
-        onclick={onpick}
-        role="option"
-        type="button"
-      >
-        <span
-          data-slot="lead"
-          aria-hidden="true"
-          class="col-start-2 grid size-icon-md place-items-center group-aria-disabled:opacity-50"
-          >{@render lead()}</span
+      {#if inMenu}
+        <ContextMenu.RadioItem
+          {disabled}
+          onSelect={select}
+          value={value ?? name}
         >
-        <span
-          data-slot="text"
-          class="col-start-4 grid min-w-0 grid-cols-1 pe-space-2"
+          {#snippet child({ props })}
+            <div
+              {...mergeProps(tip, props)}
+              data-slot="option"
+              aria-busy={checking || undefined}
+              class={OPTION}
+              data-limited={limited || undefined}
+              data-menu-item
+            >
+              {@render inside()}
+            </div>
+          {/snippet}
+        </ContextMenu.RadioItem>
+      {:else}
+        <button
+          {...tip}
+          data-slot="option"
+          aria-busy={checking || undefined}
+          aria-disabled={disabled || undefined}
+          aria-selected={picked}
+          class={OPTION}
+          data-limited={limited || undefined}
+          data-pick-row
+          {disabled}
+          onclick={onpick}
+          role="option"
+          type="button"
         >
-          <span
-            data-slot="name"
-            class="min-w-0 truncate type-label text-ink-strong group-aria-disabled:opacity-50 group-data-limited:text-ink-muted"
-            ><bdi>{name}</bdi></span
-          >
-          <span
-            data-slot="detail"
-            class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
-            data-mono={mono || undefined}>{detail}</span
-          >
-        </span>
-        <span
-          data-slot="trail"
-          class="col-start-6 grid size-icon-md place-items-center"
-          data-box
-        >
-          {#if checking}
-            <LiveDot size="row" />
-          {:else}
-            <IconCheck
-              aria-hidden="true"
-              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
-            />
-          {/if}
-        </span>
-      </button>
+          {@render inside()}
+        </button>
+      {/if}
     {/snippet}
   </Tip>
-  {#if force}
+  {#if force && inMenu}
+    <ContextMenu.Item onSelect={force.onforce}>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          class="relative col-start-5 row-start-1 me-space-2"
+          size="xs"
+          variant="grant">{force.action}</Button
+        >
+      {/snippet}
+    </ContextMenu.Item>
+  {:else if force}
     <Button
       class="relative col-start-5 row-start-1 me-space-2"
       onclick={force.onforce}

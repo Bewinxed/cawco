@@ -17,6 +17,7 @@ import type {
   AccountSigninResult,
   PendingAccountSignin,
   PlacementPreview,
+  ProviderAccountReading,
   ProviderChoice,
   ProviderRouting,
   ProviderSigninChallenge,
@@ -273,6 +274,20 @@ export const awaitDeviceSignin = (
     // A signed-out answer is the Claude login's: the code did not take.
     throw new Error(accountsWords.signin.refused);
   });
+
+/**
+ * Reads an account's windows now from its provider's usage endpoint, on a
+ * machine it is signed in on: the reading, or why none was read in the
+ * hub's words. A refusal of the ask itself (no such account) is thrown in
+ * the hub's words. The read is the account's at once, and its `usage`
+ * frame reads the accounts again.
+ */
+export const readUsageNow = (
+  id: string
+): Promise<
+  | { kind: "read"; machineId: string; reading: ProviderAccountReading }
+  | { kind: "unread"; why: string }
+> => hubData(hub.api.accounts({ id })["usage-read"].post());
 
 /**
  * Checks now whether Claude Code still refuses an account it refused

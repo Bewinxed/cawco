@@ -1,11 +1,14 @@
 <script lang="ts">
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { Popover } from "bits-ui";
+  import type { Snippet } from "svelte";
   /**
    * The session card (HangCard `details`, `tab`) in a frame of its own (its
    * states file's): hung open from the chosen folder tab of a session strip,
    * placed by the strip's own rule (hang-place `placeUnder`), with stand-in
-   * rows where SessionDetails stands, so no store is read. The frame is the
+   * rows where SessionDetails stands, so no store is read; or, given
+   * `children`, the card a bench draws in it (the real SessionDetails on
+   * its bench's stores, accounts/limit-picker-bench). The frame is the
    * card's hang layer (hang-layer): a `shell` container of the width asked
    * for, its height said as `--shell-h`, the card portaled into it as the
    * app portals it into the Shell's. Its form is the frame's: the desk's
@@ -27,7 +30,8 @@
     width,
     height,
     tabs,
-    rows,
+    rows = [],
+    children,
   }: {
     /** The frame's width, px: the shell container's. */
     width: number;
@@ -35,8 +39,10 @@
     height: number;
     /** The strip's tabs, the first one chosen; the card hangs from it. */
     tabs: string[];
-    /** The card's rows, each a line of words. */
-    rows: string[];
+    /** The card's stand-in rows, each a line of words. */
+    rows?: string[];
+    /** The card itself, in place of the rows. */
+    children?: Snippet;
   } = $props();
 
   const layerId = $props.id();
@@ -127,11 +133,15 @@
           trapFocus={false}
           bind:joined
         >
-          <div class="flex w-full flex-col p-space-3">
-            {#each rows as row (row)}
-              <p class="py-space-2 type-label text-ink-strong">{row}</p>
-            {/each}
-          </div>
+          {#if children}
+            {@render children()}
+          {:else}
+            <div class="flex w-full flex-col p-space-3">
+              {#each rows as row (row)}
+                <p class="py-space-2 type-label text-ink-strong">{row}</p>
+              {/each}
+            </div>
+          {/if}
         </HangCard>
       </Popover.Portal>
     </Popover.Root>

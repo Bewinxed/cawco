@@ -50,7 +50,8 @@
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { forcePast, pickPastLimit } from "../accounts/limit-checks.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { type LimitRow, limitRowOf, roomOf } from "../accounts/room";
+  import { type LimitRow, limitRowOf } from "../accounts/room";
+  import { roomOf } from "../accounts/room-of";
   import {
     accountFault,
     movingTo,
@@ -85,11 +86,10 @@
   import { relaunchSession } from "../stores/turns.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
+  import ContextMeter, {
+    type ContextReading,
+  } from "../usage/ContextMeter.svelte";
   import { fmt } from "../usage/rings";
-  import StatMeter, { STAT_COLS } from "../usage/StatMeter.svelte";
-  import { statsPlace } from "../usage/stats-place";
-  import UsageFigure from "../usage/UsageFigure.svelte";
-  import UsageRing from "../usage/UsageRing.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
 
@@ -127,6 +127,7 @@
   } = $props();
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
   let metaEl = $state<HTMLElement>();
+  let contextEl = $state<HTMLElement>();
   let statsEl = $state<HTMLElement>();
   /** The harness mark arrives from the side the card moved toward. */
   function harnessIn(_node: Element): TransitionConfig {
@@ -401,8 +402,8 @@
     // Custody: the agent restarted under a running turn and holds the session
     // until that turn hands it back; the SDK cannot be asked until then.
     return error.includes("(custody)")
-      ? "Unavailable until this turn ends"
-      : `Couldn't read: ${error}`;
+      ? sessionStatWords.contextHeld
+      : sessionStatWords.contextRefused(error);
   });
   /** When a session that can no longer answer was last read. */
   const readAt = $derived(
@@ -418,23 +419,33 @@
       ? Math.min(100, Math.round((stats.totalTokens / stats.maxTokens) * 100))
       : null
   );
-  /** Where the card puts the context and the account's limit while the owner picks (usage/stats-place). */
-  const placeNow = statsPlace();
-  const place = $derived(placeNow());
-  /** This conversation's room in its model's window (its context), with its exact numbers; null until read. */
-  const room = $derived(
-    percent !== null && stats.totalTokens !== null && stats.maxTokens !== null
-      ? {
-          used: percent,
-          detail: sessionStatWords.contextTokens(
-            tokens(stats.totalTokens),
-            tokens(stats.maxTokens),
-            readAt
-          ),
-        }
-      : null
-  );
-  const contextShown = $derived(room !== null || reading || !!refusal);
+  /**
+   * This conversation's room in its model's window (its context), with its
+   * exact numbers; else that it is being read, or why it wasn't; null with
+   * none of these.
+   */
+  const contextRead = $derived.by((): ContextReading | null => {
+    if (
+      percent !== null &&
+      stats.totalTokens !== null &&
+      stats.maxTokens !== null
+    ) {
+      return {
+        kind: "read",
+        used: percent,
+        state: fillState(percent),
+        detail: sessionStatWords.contextTokens(
+          tokens(stats.totalTokens),
+          tokens(stats.maxTokens),
+          readAt
+        ),
+      };
+    }
+    if (reading) {
+      return { kind: "reading" };
+    }
+    return refusal ? { kind: "refused", why: refusal } : null;
+  });
   /**
    * The account's room for the model the session runs: the window that
    * binds first, its share left, and when it resets; null with no reading.
@@ -526,7 +537,7 @@
       if (reduceMotion.current) {
         return;
       }
-      for (const el of [metaEl, statsEl]) {
+      for (const el of [metaEl, contextEl, statsEl]) {
         el?.animate(
           [
             {
@@ -842,14 +853,6 @@
   <span data-slot="chip-label"
     >{shownModel ? modelLabel(shownModel, harness) : "Model not reported"}</span
   >
-  <!-- The conversation's room in this model's window, on the model's chip
-       (`place` "chips"). -->
-  {#if place === "chips" && room}
-    <UsageRing share={room.used} state={fillState(room.used)} />
-    <span class="flex-none text-ink-muted tabular-nums"
-      >{sessionStatWords.share(room.used)}</span
-    >
-  {/if}
 {/snippet}
 
 <!-- A changing figure in the stats strip. -->
@@ -982,7 +985,10 @@
       </div>
       <p
         data-slot="meta"
-        class="m-0 flex flex-wrap items-center gap-space-2 px-space-5 pt-0 pb-space-3 text-size-meta font-normal leading-body text-ink-muted"
+        class={[
+          "m-0 flex flex-wrap items-center gap-space-2 px-space-5 pt-0 text-size-meta font-normal leading-body text-ink-muted",
+          contextRead ? "pb-0" : "pb-space-3",
+        ]}
         bind:this={metaEl}
       >
         <SessionStatus {sessionId} />
@@ -1011,18 +1017,15 @@
           <span aria-hidden="true">·</span>
           <span data-slot="clean">{spawnWords.context.mark}</span>
         {/if}
-        <!-- The conversation's room in its model's window, with what the
-             conversation is (`place` "owners"). -->
-        {#if place === "owners" && room}
-          <span aria-hidden="true">·</span>
-          <UsageFigure
-            detail={room.detail}
-            state={fillState(room.used)}
-            used={room.used}
-            words={sessionStatWords.context(room.used)}
-          />
-        {/if}
       </p>
+      <!-- The conversation's context, under what the conversation is, on
+           the head's text column: the head's in-group step (space-1, as
+           title to meta) above it, the head's foot (space-3) under it. -->
+      {#if contextRead}
+        <div class="px-space-5 pt-space-1 pb-space-3" bind:this={contextEl}>
+          <ContextMeter reading={contextRead} />
+        </div>
+      {/if}
       <!-- A copy pressed in the head that the browser refused, under it. -->
       <RowFault
         again={() => (copyFault ? copy(copyFault.what, copyFault.text) : null)}
@@ -1171,7 +1174,7 @@
           {#if row?.accountId}
             <AccountSwitch
               instance={row}
-              quota={place === "strip" ? null : quota}
+              {quota}
               readonly={!accountOpen}
               size="compact"
             />
@@ -1240,48 +1243,21 @@
       </div>
     {/if}
   </div>
-  <!-- The conversation's own stats: its context (where the figures stand
-       in the strip, `place`), and its MCP servers. The account's limit is
-       no stat of the conversation: it stands with the account (its chip, or
-       its list's rows), never beside the context. -->
-  {#if (place === "strip" && contextShown) || session?.mcp}
+  <!-- The conversation's MCP servers. Its context is the meter under the
+       head; the account's limit is no stat of the conversation, and stands
+       on its account chip. -->
+  {#if session?.mcp}
     <div
       data-slot="stats"
-      class="grid flex-none grid-cols-(--stat-cols) items-center gap-x-space-3 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
+      class="flex flex-none items-center border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
       bind:this={statsEl}
-      style:--stat-cols={STAT_COLS}
       {@attach morph()}
     >
-      {#if place === "strip"}
-        {#if room}
-          <StatMeter
-            detail={room.detail}
-            elapsed={null}
-            figure={sessionStatWords.share(room.used)}
-            label="Context"
-            state={fillState(room.used)}
-            used={room.used}
-          />
-        {:else if reading}
-          <span
-            class="col-span-full mark-line inline-flex items-center gap-space-2"
-            ><LiveDot /><span>Reading…</span></span
-          >
-        {:else if refusal}
-          <span
-            data-slot="refusal"
-            class="col-span-full min-w-0 wrap-anywhere"
-            title={refusal}>{refusal}</span
-          >
-        {/if}
-      {/if}
-      {#if session?.mcp}
-        <a
-          data-slot="tools"
-          class="col-span-full inline-flex items-center text-ink-strong hover:text-ink-strong"
-          href="/config/mcp">{@render figure(`${session.mcp.length} MCP`)}</a
-        >
-      {/if}
+      <a
+        data-slot="tools"
+        class="inline-flex items-center text-ink-strong hover:text-ink-strong"
+        href="/config/mcp">{@render figure(`${session.mcp.length} MCP`)}</a
+      >
     </div>
   {/if}
   <!-- The action row (SessionFooter's): right-aligned, 8px apart, on the

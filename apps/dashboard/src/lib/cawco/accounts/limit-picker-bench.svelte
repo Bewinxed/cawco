@@ -17,10 +17,16 @@
    *   its routes) and its row then owes it, as the hub's row frame says;
    * - a limit's check is answered at its seam (`answerLimitChecksWith`)
    *   after a second, by the `check` dial: gone (the reading then has room),
-   *   still there, or its machine offline.
+   *   still there, or not read (no machine read it, in the hub's words);
+   * - the session's pulse says it is working (`takePulseFrame`), as the
+   *   daemon's does inside a turn, so its status and a move's wait for the
+   *   turn agree.
    *
-   * The card's popovers and tooltips portal into a layer inside the frame
-   * (bits-ui `BitsConfig` `defaultPortalTo`, as DialsRoot does), so the
+   * The card hangs from its folder tab (HangCard `tab`, hang-card-tab-frame),
+   * as PaneTabs hangs it, at the bench's width: the desk's 416px card, or
+   * a phone's margin to margin. Its popovers and tooltips portal into a
+   * layer over the frame (bits-ui `BitsConfig` `defaultPortalTo`, as
+   * DialsRoot does), so the
    * stage frames them. The layer contains its layout (`contain: layout`):
    * the surfaces bits-ui places `fixed` are placed in it, never in the
    * stage's own canvas, a size container whose layout containment made
@@ -42,15 +48,16 @@
   import { BitsConfig } from "bits-ui";
   import { onDestroy, untrack } from "svelte";
   import { z } from "zod";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { benchClaudeReport } from "../bench-reports";
+  import HangCardTabFrame from "../hang-frames/hang-card-tab-frame.svelte";
   import { standSocket } from "../hub/socket.svelte";
   import { accountsState } from "../stores/accounts.svelte";
   import { adoptRows, holdMachines } from "../stores/board.svelte";
   import { streamHost, streamState } from "../stores/ledger.svelte";
-  import { session } from "../stores/sessions.svelte";
+  import { session, takePulseFrame } from "../stores/sessions.svelte";
   import { adoptUsageLimits } from "../stores/usage.svelte";
   import { handleStreamMessage } from "../stream";
-  import { provideStatsPlace, type StatsPlace } from "../usage/stats-place";
   import SessionDetails from "../workspace/SessionDetails.svelte";
   import {
     answerLimitChecksWith,
@@ -63,18 +70,15 @@
     reading,
     check,
     pending,
-    place = "owners",
     room = "lists",
     again = 0,
   }: {
     /** How old the stored limit readings are: fresh says no age, stale says it. */
     reading: "fresh" | "stale";
-    /** What the provider answers a check: the limit has gone, it holds, or the machine is offline. */
-    check: "cleared" | "still" | "offline";
+    /** What a check finds: the limit has gone, it holds, or nothing read it. */
+    check: "cleared" | "still" | "unread";
     /** A move to Research ops already waits for the turn to end. */
     pending: boolean;
-    /** Where the card puts the context and the account's limit, while the owner picks one (usage/stats-place). */
-    place?: StatsPlace;
     /** The frame's height: room for the open lists, or the card alone. */
     room?: "lists" | "card";
     /** Start over: each press seeds the stores again. */
@@ -309,6 +313,19 @@
         []
       )
     );
+    // Inside a turn, as the daemon's pulse says it.
+    takePulseFrame({
+      kind: "pulse",
+      instanceId: ID,
+      pulse: {
+        activity: "working",
+        at: Date.now(),
+        busy: true,
+        currentTool: null,
+        instanceId: ID,
+        runningSubagents: 0,
+      },
+    });
   }
 
   /** The hub's word that a command `commandId` took. */
@@ -379,26 +396,31 @@
 
   // A limit's check, answered after a second as the `check` dial says.
   const CHECK_MS = 1000;
-  answerLimitChecksWith(
-    (accountId) =>
-      new Promise<LimitAnswer>((answer) => {
-        setTimeout(() => {
-          if (check === "cleared") {
-            adoptUsageLimits(readings(MINUTE_MS, [accountId]));
-            answer({ kind: "cleared" });
-          } else {
-            answer(
-              check === "offline"
-                ? { kind: "unasked", host: MACHINE }
-                : { kind: "still" }
-            );
-          }
-        }, CHECK_MS);
-      })
+  onDestroy(
+    answerLimitChecksWith(
+      (accountId) =>
+        new Promise<LimitAnswer>((answer) => {
+          setTimeout(() => {
+            if (check === "cleared") {
+              adoptUsageLimits(readings(MINUTE_MS, [accountId]));
+              answer({ kind: "cleared" });
+            } else if (check === "unread") {
+              const named =
+                ACCOUNTS.find((one) => one.id === accountId)?.email ??
+                accountId;
+              answer({
+                kind: "unread",
+                why: `${named}'s usage was not read: ${MACHINE} didn't answer within 10 s`,
+              });
+            } else {
+              answer({ kind: "still" });
+            }
+          }, CHECK_MS);
+        })
+    )
   );
 
   /** Seeds again when any of `_dials` changes: each is read here, so the effect follows it. */
-  provideStatsPlace(() => place);
   seed();
   // The app's own follower of moves (start.ts starts it): an ask settles as
   // its row owes the move, and the row says it.
@@ -409,24 +431,37 @@
 
   /** The portal's target: the popovers and tooltips draw inside the frame. */
   let layer = $state<HTMLElement>();
+  /** The bench's width: the frame's, so the card takes the desk's or the phone's form. */
+  let width = $state(0);
+  /** The frame's height: room for the open lists, or the card alone. */
+  const FRAME_H = { lists: 860, card: 640 } as const;
 </script>
 
 <div
-  class="relative min-h-200 bg-surface-recess p-space-3 data-card:min-h-0 desk:p-space-8"
-  data-card={room === "card" || undefined}
+  class="relative bg-surface-recess"
+  {@attach frameSize(
+    (node) => node.clientWidth,
+    (next) => {
+      width = next;
+    }
+  )}
 >
   <BitsConfig defaultPortalTo={layer}>
-    <div
-      class="mx-auto w-full max-w-104 overflow-clip rounded-lg border border-border-control bg-surface-raised shadow-md desk:mx-0"
-    >
-      <SessionDetails
-        dir={1}
-        href={`/session/${ID}`}
-        onclose={() => undefined}
-        sessionId={ID}
-        title={TITLE}
-      />
-    </div>
+    {#if width > 0}
+      <HangCardTabFrame
+        height={FRAME_H[room]}
+        tabs={[TITLE, "Release notes"]}
+        {width}
+      >
+        <SessionDetails
+          dir={1}
+          href={`/session/${ID}`}
+          onclose={() => undefined}
+          sessionId={ID}
+          title={TITLE}
+        />
+      </HangCardTabFrame>
+    {/if}
   </BitsConfig>
   <div
     bind:this={layer}

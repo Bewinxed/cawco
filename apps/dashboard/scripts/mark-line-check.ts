@@ -133,7 +133,7 @@ const RULE = /([^{}]*)\{([^{}]*)\}/gu;
 const BOXES = new Set(["Badge"]);
 /** Components that draw a mark: icons, glyphs, avatars, rings, dots. */
 const MARK_COMPONENT =
-  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/u;
+  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|Sprite|TaskRing|UsageRing|ProviderLogo|Glyph|action\.icon|\w*(?:Mark|Face|Glyph|Avatar|Dot))$/u;
 /** Elements the kit and its rows use as a mark's cell. A button's icon slot
     is an `.icon-swap`; a keycap is a Kbd that says `data-box`. */
 const MARK_CLASS =
@@ -142,7 +142,7 @@ const MARK_CLASS =
 const LEFT_ALONE_CLASS = /^(?:rail-cell|icon-swap|mark-cell)$/u;
 /** Components whose root is an svg, which the recipe leaves alone. */
 const SVG_COMPONENT =
-  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|TaskRing|ProviderLogo|Glyph|Check|action\.icon)$/u;
+  /^(?:Icon[A-Z]\w*|LiveIcon|Spinner|TaskRing|UsageRing|ProviderLogo|Glyph|Check|action\.icon)$/u;
 /** Components that say data-box on their own root (a mark line of their own). */
 const BOX_COMPONENT = /^(?:AccountName)$/u;
 /** Components that draw only the child they are given. */

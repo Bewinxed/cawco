@@ -88,6 +88,7 @@ export const accountRoutes = ({
   livePendingSignins,
   machineName,
   processMayRun,
+  readAccountUsageNow,
   rebalanceNotices,
   removalOf,
   removeWithSessions,
@@ -104,6 +105,7 @@ export const accountRoutes = ({
   | "livePendingSignins"
   | "machineName"
   | "processMayRun"
+  | "readAccountUsageNow"
   | "rebalanceNotices"
   | "removalOf"
   | "removeWithSessions"
@@ -192,6 +194,21 @@ export const accountRoutes = ({
         );
       }
     )
+    // The account's windows read now from its provider's usage endpoint, on
+    // a connected machine it is signed in on, as a pick of an account or a
+    // model at its limit asks before it goes (dashboard limit-checks). The
+    // reading is the account's at once, and every screen hears it. `unread`
+    // says why none was read, in words; a stored limit is never refused on.
+    .post("/api/accounts/:id/usage-read", async ({ params }) => {
+      const account = accountOf(params.id);
+      if (!account) {
+        return problem(404, {
+          code: "no-account",
+          detail: `There is no account ${params.id}.`,
+        });
+      }
+      return await readAccountUsageNow(account.id);
+    })
     // What removing the account does with the sessions on it, for its
     // confirm to say: how many move to another account, how many have
     // none to go to.

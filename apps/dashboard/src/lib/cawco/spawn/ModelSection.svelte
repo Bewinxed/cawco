@@ -517,7 +517,13 @@
           onforce: () => onforce(entry.id),
         }
       : undefined}
-    full={`${entry.id}${vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}${reason || limit ? `\n${detail}` : ""}`}
+    full={[
+      `${entry.id}${vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}`,
+      reason || limit ? detail : null,
+      limit?.why,
+    ]
+      .filter(Boolean)
+      .join("\n")}
     limited={Boolean(limit?.limited)}
     mono={!(reason || limit)}
     name={entry.name}

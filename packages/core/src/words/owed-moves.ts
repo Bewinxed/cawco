@@ -79,8 +79,5 @@ export const owedMoveWords = {
     /** The account's catalog was never read, so the model can't be checked against it. */
     unread: (to: string, model: string, why: string | undefined): string =>
       `${to}'s models haven't been read${why ? ` (${why})` : ""}, so ${model} can't be checked against the account this session is moving to`,
-    /** The account is at its limit for the model. */
-    atLimit: (to: string, model: string, until: string): string =>
-      `${to}, the account this session is moving to, is at its limit for ${model} until ${until}`,
   },
 };

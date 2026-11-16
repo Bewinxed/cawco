@@ -2,22 +2,27 @@
  * A pick on a row CawCo believes is at its limit (accounts/room.ts): the
  * limit is asked of the provider again before the pick goes. While it is
  * asked the row shows its live dot; the limit gone, the pick goes as any
- * other (the reading the hub then sends says the room); the limit still there, or the
- * provider not reachable, the row holds the pick and offers the force past
- * it (Move anyway, Pick anyway). A stored limit never refuses a pick.
+ * other (the reading the hub then sends says the room); the limit still
+ * there, or nothing could read it, the row holds the pick and offers the
+ * force past it (Move anyway, Pick anyway). A stored limit never refuses a
+ * pick, here or at the hub (limit-moves `landingRefusal`).
  *
- * What answers is the hub's, set by `answerLimitChecksWith`: the hub has no
- * live check yet, so until one answers every limit reads as not checkable
- * and the force stands at once.
+ * The hub answers: it reads the account's windows now from its provider's
+ * usage endpoint, on a machine it is signed in on (`POST
+ * /api/accounts/:id/usage-read`, hub account-probes `readAccountUsageNow`),
+ * and the room in that reading for the model picked says whether the limit
+ * stands. A bench answers in its place (`answerLimitChecksWith`).
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { readUsageNow } from "../stores/accounts.svelte";
+import { roomOf } from "./room-of";
 
 /** What a check of a limit found. */
 export type LimitAnswer =
   | { kind: "cleared" }
   | { kind: "still" }
-  /** The provider could not be asked; `host`: the machine holding the account is offline. */
-  | { kind: "unasked"; host?: string };
+  /** Nothing read the account's windows: `why`, in the hub's words. */
+  | { kind: "unread"; why: string };
 
 /** Asks the provider about `accountId`'s limit, for `model` or the account itself (null). */
 export type LimitAsker = (
@@ -25,14 +30,31 @@ export type LimitAsker = (
   model: string | null
 ) => Promise<LimitAnswer>;
 
-/** No live check is built on the hub yet: nothing can be asked. */
-const unasked: LimitAsker = () => Promise.resolve({ kind: "unasked" });
+/** The hub's read of the account now, and the room it has for `model` in it. */
+const askHub: LimitAsker = async (accountId, model) => {
+  const answer = await readUsageNow(accountId);
+  if (answer.kind === "unread") {
+    return answer;
+  }
+  const { reading } = answer;
+  const room = roomOf(
+    { fetchedAt: reading.readAt, stale: false, windows: reading.windows },
+    model,
+    Date.now()
+  );
+  return room?.kind === "limit" ? { kind: "still" } : { kind: "cleared" };
+};
 
-let asker: LimitAsker = unasked;
+let asker: LimitAsker = askHub;
 
-/** What answers each check from now on: the hub's live check, once it has one. */
-export const answerLimitChecksWith = (next: LimitAsker): void => {
+/** What answers each check from now on: a bench's stand-in for the hub. Returns its release: the hub answers again. */
+export const answerLimitChecksWith = (next: LimitAsker): (() => void) => {
   asker = next;
+  return () => {
+    if (asker === next) {
+      asker = askHub;
+    }
+  };
 };
 
 /** Rows being checked now, by key. */
@@ -72,9 +94,12 @@ export async function pickPastLimit(
   }
   held.delete(key);
   checking.add(key);
-  const answer = await asker(accountId, model).catch((): LimitAnswer => ({
-    kind: "unasked",
-  }));
+  const answer = await asker(accountId, model).catch(
+    (error: unknown): LimitAnswer => ({
+      kind: "unread",
+      why: error instanceof Error ? error.message : String(error),
+    })
+  );
   checking.delete(key);
   if (answer.kind === "cleared") {
     go();

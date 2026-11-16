@@ -935,6 +935,14 @@
   --spacing-icon-sm: 12px;
   --spacing-icon-md: 16px;
   --spacing-icon-lg: 20px;
+  /* Lengths read off the line's own face (Figtree: OS/2 and glyph bounds), in its em, so a mark set among words scales with them. A glyph at its text's size: the em square, as SF Symbols are set (usage/UsageRing). */
+  --spacing-glyph: 1em;
+  /* A word space: Figtree's space advance, the gap inside a mark and its figure (the account chip's ring and "38% left"). */
+  --spacing-word: 0.25em;
+  /* From the x-height's middle (0.25em up, where a mark line centres a box) to the digits' (0.35em, half Figtree's 0.70em cap height): a mark beside a figure lifted to stand at its digits' middle. */
+  --spacing-cap-lift: 0.1em;
+  /* One x-height of the line's face (Figtree's 0.5em): a meter's track among words (usage/ContextMeter), level with their lowercase. */
+  --spacing-x-height: 1ex;
   /* The reader's row mark: 17×17 with an 11px glyph, centred in the 18px speaker cell. */
   --row-mark: 17px;
   --row-mark-glyph: 11px;

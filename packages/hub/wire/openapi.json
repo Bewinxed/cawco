@@ -1386,6 +1386,53 @@
         }
       }
     },
+    "/api/accounts/{id}/usage-read": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAccountsByIdUsageRead",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdUsageRead 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdUsageRead200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdUsageRead 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdUsageRead404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdUsageRead 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdUsageRead422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/actions": {
       "get": {
         "parameters": [
@@ -53253,6 +53300,36 @@
           "by",
           "page",
           "view"
+        ]
+      },
+      "ProviderAccountReading": {
+        "description": "One reading of an account's windows on a machine, made by its agent from\nthe provider's own usage endpoint with the account's credential: Claude's\n`api/oauth/usage`, ChatGPT's `wham/usage`, OpenCode Go's\n`zen/go/v1/usage`. Every 5 minutes while signed in, after each turn on it,\nand when the hub asks for one account now. `error` says why the last read\nfailed (a 401: the reading held is the last good one, from `readAt`).",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "readAt": {
+            "description": "When the windows were read, epoch ms.",
+            "type": "number"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LimitWindow"
+            }
+          }
+        },
+        "required": [
+          "accountId",
+          "readAt",
+          "windows"
         ]
       },
       "ProviderChoice": {
@@ -123058,6 +123135,122 @@
         ]
       },
       "postApiAccountsByIdRefusalCheck422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdUsageRead200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "read"
+                ]
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "reading": {
+                "$ref": "#/components/schemas/ProviderAccountReading"
+              }
+            },
+            "required": [
+              "kind",
+              "machineId",
+              "reading"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unread"
+                ]
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "why"
+            ]
+          }
+        ]
+      },
+      "postApiAccountsByIdUsageRead404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-account"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiAccountsByIdUsageRead422": {
         "type": "object",
         "properties": {
           "code": {
