@@ -181,6 +181,8 @@ export default {
         "scripts/release.ts",
         // scripts/ship.sh
         "scripts/republish.ts",
+        // scripts/ship.sh
+        "scripts/release/hub-host.ts",
         // scripts/release-setup.sh
         "scripts/release-setup.ts",
         // scripts/release.ts
