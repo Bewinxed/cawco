@@ -64,6 +64,7 @@ import type {
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import type { MachineFault } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { ModelListing } from "@cawco/core/model-names";
 import type { HubPreviewOrigins } from "@cawco/core/preview/hub-previews";
 import type {
   AgentRow,
@@ -226,6 +227,7 @@ import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
+import type { OwnDefault } from "./start-models";
 import type { createStoredRecent } from "./stored-recent";
 import type { createStreamRelay } from "./stream-relay";
 import type { StreamHubShape } from "./stream-shape";
@@ -381,11 +383,14 @@ export interface ClosureContext {
     projectId?: string;
     type?: string;
   }) => Promise<
-    | NamedSpawn
+    | { asked: NamedSpawn; own: OwnDefault | undefined }
     | ReturnType<
         typeof problem<400, { code: "placement-refused"; detail: string }>
       >
-    | Exclude<Awaited<ReturnType<ClosureContext["piDefaultFor"]>>, NamedSpawn>
+    | Exclude<
+        Awaited<ReturnType<ClosureContext["ownDefaultOf"]>>,
+        OwnDefault | undefined
+      >
   >;
   askerOf: (request: Request) => string;
   askersOf: (row: InstanceRow | undefined) => string[];
@@ -753,6 +758,16 @@ export interface ClosureContext {
     }
   >;
   launchInFlight: (instanceId: string) => boolean;
+  /**
+   * The model a launch of `row` names when its row names none (a session
+   * started before every start named its model), named as a start that
+   * picked none is (spawns.ts `modelFor`) and kept on its row; or why none
+   * can be.
+   */
+  launchModel: (
+    machineId: string,
+    row: InstanceRow
+  ) => { model: string } | { refusal: string };
   launchRefusal: (instanceId: string) => string | undefined;
   launchStarted: (instanceId: string, why: string) => void;
   laws: ReturnType<typeof createLaws>;
@@ -795,6 +810,8 @@ export interface ClosureContext {
   mcpReady: Promise<unknown>;
   memoryWatch: ReturnType<typeof createTurnWatch>;
   merging: MergeDeps;
+  /** What `harness` lists on `machineId` (core `modelListingOn`). */
+  modelListing: (machineId: string, harness: HarnessKind) => ModelListing;
   modelRefusal: (
     machineId: string,
     harness: HarnessKind,
@@ -911,6 +928,22 @@ export interface ClosureContext {
     accountId: string,
     why: MoveOffWhy
   ) => boolean;
+  /**
+   * What a start's harness would run on by itself, asked of its machine
+   * where that depends on the start's directory (pi, server.ts); undefined
+   * where nothing is asked.
+   */
+  ownDefaultOf: (
+    machineId: string,
+    payload: NamedSpawn
+  ) => Promise<
+    | OwnDefault
+    | undefined
+    | SilentProblem
+    | ReturnType<
+        typeof problem<502, { code: "spawn-default-unnamed"; detail: string }>
+      >
+  >;
   ownMachineId: Promise<string>;
   ownMachineIdRead: string | undefined;
   ownsPermission: (parked: ArrivingAsk) => boolean;
@@ -939,16 +972,6 @@ export interface ClosureContext {
     row: StoredRow,
     model: string
   ) => "carried" | { refusal: string } | undefined;
-  piDefaultFor: (
-    machineId: string,
-    payload: NamedSpawn
-  ) => Promise<
-    | NamedSpawn
-    | SilentProblem
-    | ReturnType<
-        typeof problem<502, { code: "spawn-default-unnamed"; detail: string }>
-      >
-  >;
   placedOn: (machineId: string, accountId: string) => boolean;
   placementInput: (
     machineId: string,

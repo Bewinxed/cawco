@@ -57966,7 +57966,7 @@
             }
           },
           "model": {
-            "description": "Which model answers, from the session's first turn. Hoisted for the same\nreason as `permissionMode`. Absent leaves the choice to the harness.",
+            "description": "Which model answers, from the session's first turn. Hoisted for the same\nreason as `permissionMode`. A client's start that leaves it out (or\nnames `default`) is named one by the hub before it spawns (hub\nstart-models.ts): every launch the hub sends a machine names its model,\nand a machine refuses one that does not. A reattach launches nothing,\nand needs none.",
             "type": "string"
           },
           "options": {
@@ -77070,6 +77070,7 @@
           }
         },
         "required": [
+          "model",
           "strategy",
           "why"
         ]

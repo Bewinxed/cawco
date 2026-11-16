@@ -818,15 +818,15 @@ interface WorkItemDeps extends Pick<
    * Sends a spawn and records its row under the work item. `fallbackMode` is
    * the mode it runs in when its harness has modes; the hub's one rule
    * settles it (none at all for a harness without modes). `placed`: the
-   * account {@link placeAhead} put it on, which it opens on without being placed
-   * again; absent, it is placed now.
+   * account {@link placeAhead} put it on and the model it named, which it
+   * opens on without being placed again; absent, it is placed now.
    */
   readonly spawn: (
     machineId: string,
     payload: NamedSpawn,
     workItemId: string,
     fallbackMode: PermissionMode,
-    placed?: { accountId?: string }
+    placed?: { accountId?: string; model: string }
   ) =>
     | undefined
     | ReturnType<
@@ -1016,6 +1016,8 @@ type PlacementProblem =
 export interface ItemPlacement {
   accountId?: string;
   launchesOn?: string;
+  /** The model placement named for it (spawns.ts `placeSpawn`), which its spawn runs. */
+  model: string;
 }
 
 /**
@@ -4353,7 +4355,12 @@ export const createWorkItems = ({
         // Its parent caused it: Full Send only when the parent is in it now,
         // read off its row as it stands after the workspace was cut.
         unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
-        ahead && { accountId: ahead.placement.accountId }
+        ahead && {
+          ...(ahead.placement.accountId
+            ? { accountId: ahead.placement.accountId }
+            : {}),
+          model: ahead.placement.model,
+        }
       );
       if (spawned instanceof ElysiaStatus) {
         notStarted(spawned.response.detail);

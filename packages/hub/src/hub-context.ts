@@ -123,7 +123,7 @@ export interface HubContext
       ReturnType<typeof createSessionNotes>,
       "endLeak" | "tellContainers" | "tellLeak"
     >,
-    Pick<ReturnType<typeof createSpawns>, "spawnFromHub">,
+    Pick<ReturnType<typeof createSpawns>, "spawnFromHub" | "startModelOf">,
     Pick<
       ReturnType<typeof createStartHolds>,
       "flushOwedStarts" | "sendSpawn"
