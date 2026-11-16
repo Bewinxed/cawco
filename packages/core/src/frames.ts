@@ -421,7 +421,7 @@ export interface PermissionRequestFrame {
 export interface ParkedAsk {
   instanceId?: string;
   machineId: string;
-  payload: PermissionRequestFrame;
+  payload: ParkedRequest;
   requestId?: string;
   verb: Verb;
 }
@@ -447,10 +447,15 @@ export interface ArrivingAsk extends Omit<ParkedAsk, "payload"> {
     Partial<Pick<PermissionRequestFrame, "presentation" | "raisedAt">>;
 }
 
+/** A parked ask's permission request, and what an ask the hub raised itself carries beside it ({@link HubAskFields}). */
+interface ParkedRequest extends PermissionRequestFrame, HubAskFields {}
+
 /**
- * What an ask the hub raises itself carries beside its frame as it arrives:
- * read as it is presented, and left out of the ask once parked
- * ({@link ParkedAsk} declares none of it).
+ * What an ask the hub raises itself carries beside its frame: read as it is
+ * presented, and kept with it once parked, for whatever reads the ask again
+ * (a move's settling at the hub's start, a delegate's wait on it). An ask
+ * parked before the ask kept them reads as a plain one: none of them is
+ * guessed for it.
  */
 interface HubAskFields {
   /** A design-system proposal's id (hub design-system.ts). */
