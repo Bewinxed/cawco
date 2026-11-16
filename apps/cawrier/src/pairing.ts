@@ -8,9 +8,9 @@
  * its alarm wipes it and gives the seat back (as do removing the device in
  * CawCo, through `/v1/unenroll`, and APNs saying the device is gone). Apple's
  * notifications move the subscription's end without the phone enrolling
- * again ({@link Pairing.entitled}): a lapse stops delivery, and a renewal, a
- * billing recovery or a resubscription resumes it. A refund or a revocation
- * wipes the pairing ({@link Pairing.revoked}).
+ * again ({@link Pairing.entitled}): a lapse, a refund or a revocation stops
+ * delivery, and a renewal, a billing recovery, a resubscription or a reversed
+ * refund resumes it.
  */
 import { DurableObject } from "cloudflare:workers";
 import { DAY_MS } from "@cawco/core/time";
@@ -91,18 +91,30 @@ const same = (a: string, b: string): boolean => {
 };
 
 export class Pairing extends DurableObject<Env> {
-  /** A table made before `entitled_until` was a column takes it as the object loads. */
+  /**
+   * The schema is brought up to date as the object loads, before it serves
+   * anything: Cloudflare's "Initialize storage and run migrations in the
+   * constructor" with `blockConcurrencyWhile()`
+   * (developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/).
+   * The migration reads the table's columns rather than a schema version:
+   * every wipe's `deleteAll()` drops any version record with the table, and
+   * the table comes back whole ({@link TABLE}), so the columns are the one
+   * record that cannot disagree with the table.
+   */
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const { sql } = ctx.storage;
-    sql.exec(TABLE);
-    const names = sql
-      .exec<{ name: string }>("PRAGMA table_info(enrolment)")
-      .toArray()
-      .map(({ name }) => name);
-    if (!names.includes("entitled_until")) {
-      sql.exec(ENTITLED_UNTIL);
-    }
+    ctx.blockConcurrencyWhile(() => {
+      const { sql } = ctx.storage;
+      sql.exec(TABLE);
+      const names = sql
+        .exec<{ name: string }>("PRAGMA table_info(enrolment)")
+        .toArray()
+        .map(({ name }) => name);
+      if (!names.includes("entitled_until")) {
+        sql.exec(ENTITLED_UNTIL);
+      }
+      return Promise.resolve();
+    });
   }
 
   /** The table, made again after a wipe (deleteAll drops it). */
@@ -224,15 +236,6 @@ export class Pairing extends DurableObject<Env> {
     if (this.held()?.seat === seat) {
       this.sql.exec("UPDATE enrolment SET entitled_until = ?", until);
     }
-  }
-
-  /** Apple refunded or revoked the subscription behind `seat`: the pairing goes now, unless it has since enrolled under another seat. */
-  async revoked(seat: string): Promise<void> {
-    await this.ctx.blockConcurrencyWhile(async () => {
-      if (this.held()?.seat === seat) {
-        await this.wipe();
-      }
-    });
   }
 
   override async alarm(): Promise<void> {

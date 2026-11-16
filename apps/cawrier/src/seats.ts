@@ -3,9 +3,9 @@
  * the subscription's environment and original transaction id, holding one
  * row per kept pairing and what Apple last said of the subscription. A
  * pairing takes a seat when it enrolls under the subscription and gives it
- * back when it is wiped (its alarm, APNs saying the device is gone, removal
- * in CawCo, or a refund or revocation). A pairing whose subscription has
- * lapsed keeps its seat and delivers nothing until Apple says it is entitled
+ * back when it is wiped (its alarm, APNs saying the device is gone, or removal
+ * in CawCo). A pairing whose subscription is not entitled (lapsed, refunded,
+ * revoked) keeps its seat and delivers nothing until Apple says it is entitled
  * again. Its own storage, not KV: the free plan allows KV 1,000 writes a day.
  *
  * What Apple last said ({@link Entitlement}) comes from a phone's transaction
@@ -39,14 +39,9 @@ export type Taken =
   | { readonly kind: "full" }
   | { readonly kind: "ended" };
 
-/**
- * The subscription's end as it now stands, the pairings that hold its seats,
- * and whether the word just given is the one that stands (false when Apple
- * signed what the seat holds later).
- */
+/** The subscription's end as it now stands, and the pairings that hold its seats. */
 export interface Settled {
   readonly pairings: string[];
-  readonly stands: boolean;
   readonly until: number;
 }
 
@@ -123,17 +118,15 @@ export class Seats extends DurableObject<Env> {
   /**
    * Apple's notification about the subscription: kept when Apple signed it
    * no earlier than what is held. Answers the end that stands and the
-   * pairings that hold seats, for the caller to move to that end (or wipe,
-   * on a refund that stands). Every call answers every pairing, so a retry
-   * after a failed move still reaches it.
+   * pairings that hold seats, for the caller to move to that end. Every call
+   * answers every pairing, so a retry after a failed move still reaches it.
    */
   settle(word: Entitlement): Settled {
-    const standing = this.record(word);
-    const { until } = standing;
+    const { until } = this.record(word);
     const pairings = this.sql
       .exec<{ pairing: string }>("SELECT pairing FROM seat")
       .toArray()
       .map(({ pairing }) => pairing);
-    return { until, pairings, stands: standing === word };
+    return { until, pairings };
   }
 }

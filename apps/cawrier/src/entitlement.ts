@@ -22,8 +22,9 @@
  * A pairing whose subscription is not entitled is kept and delivers nothing
  * ({@link delivers}), so a later word that it is entitled again (a late
  * renewal, a billing recovery, a resubscription) resumes push with nothing
- * for the person to do. A refund or a revocation ends the purchase itself:
- * its pairings are wiped ({@link Decision}'s `revoked`).
+ * for the person to do. A refund or a revocation is such a lapse too: a
+ * reversed refund or regained Family Sharing access resumes push the same
+ * way.
  */
 import type {
   JWSRenewalInfoDecodedPayload,
@@ -130,13 +131,8 @@ export interface Notice {
   readonly transaction: JWSTransactionDecodedPayload | undefined;
 }
 
-/** `revoked`: Apple refunded or revoked the subscription, so its pairings are wiped rather than kept. */
 export type Decision =
-  | {
-      readonly kind: "entitlement";
-      readonly entitlement: Entitlement;
-      readonly revoked: boolean;
-    }
+  | { readonly kind: "entitlement"; readonly entitlement: Entitlement }
   | { readonly kind: "leave"; readonly reason: string };
 
 /**
@@ -162,10 +158,9 @@ export const notificationEntitlement = (
   if (!(status !== undefined && renewalInfo)) {
     return { kind: "leave", reason: "no subscription status" };
   }
-  const endsAt = (until: number, revoked = false): Decision => ({
+  const endsAt = (until: number): Decision => ({
     kind: "entitlement",
     entitlement: { signedAt, until },
-    revoked,
   });
   // Active: entitled until the current period renews or expires. The
   // notification's transaction may be an earlier period's (a refund or a
@@ -206,10 +201,13 @@ export const notificationEntitlement = (
   }
   // Revoked: "The App Store refunded the transaction or revoked it from
   // Family Sharing" (developer.apple.com/documentation/appstoreserverapi/status;
-  // notificationtype, REFUND and REVOKE). Ended as of the notification, and
-  // the purchase with it: its pairings are wiped.
+  // notificationtype, REFUND and REVOKE). Ended as of the notification; its
+  // pairings are kept, since Apple can reverse it: "If your app revoked
+  // content or services as a result of the related refund, it needs to
+  // reinstate them" (notificationtype, REFUND_REVERSED), and a family member
+  // can regain access (SUBSCRIBED, RESUBSCRIBE).
   if (status === STATUS.revoked) {
-    return endsAt(signedAt, true);
+    return endsAt(signedAt);
   }
   return { kind: "leave", reason: `unknown status ${status}` };
 };

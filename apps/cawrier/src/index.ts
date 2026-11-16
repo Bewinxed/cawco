@@ -330,9 +330,9 @@ type Verified = Extract<Notification, { ok: true }>;
  * What the notification says of the subscription's entitlement
  * (entitlement.ts), kept under its seat when Apple signed it no earlier than
  * what the seat holds; then every pairing on the seat moves to the end that
- * stands: an entitled end makes each deliver, a lapsed one keeps each silent,
- * and a refund or revocation that stands wipes each (each gives its seat back
- * as it goes, so a retry finds the rest).
+ * stands: an entitled end makes each deliver, and one that has passed (a
+ * lapse, a refund, a revocation) keeps each silent. Every pairing is moved
+ * on every call, so a retry finds any a failed call missed.
  */
 const settled = async (env: Env, notice: Verified): Promise<string> => {
   const decision = notificationEntitlement(notice, proProducts(env));
@@ -344,19 +344,14 @@ const settled = async (env: Env, notice: Verified): Promise<string> => {
     return "left: no original transaction id";
   }
   const seat = `${notice.environment}:${original}`;
-  const { until, pairings, stands } = await seats(env, seat).settle(
+  const { until, pairings } = await seats(env, seat).settle(
     decision.entitlement
   );
-  const wipe = decision.revoked && stands;
   await Promise.all(
-    pairings.map((id) => {
-      const stub = env.PAIRING.get(env.PAIRING.idFromString(id));
-      return wipe ? stub.revoked(seat) : stub.entitled(seat, until);
-    })
+    pairings.map((id) =>
+      env.PAIRING.get(env.PAIRING.idFromString(id)).entitled(seat, until)
+    )
   );
-  if (wipe) {
-    return `revoked, ${pairings.length} pairing(s) wiped`;
-  }
   const state =
     until > Date.now()
       ? `entitled until ${new Date(until).toISOString()}`
