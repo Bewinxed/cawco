@@ -20,6 +20,17 @@
  * `AskUserQuestion` answers without a second pass.
  */
 
+import {
+  type ClaudeLine,
+  type ClaudeRecord,
+  type CompactMetadata,
+  claudeLineOf,
+  claudeRecordOf,
+  compactMetadataOf,
+} from "@cawco/core/claude-lines";
+import { everyOf } from "@cawco/core/every-of";
+import { isRecord } from "@cawco/core/is-record";
+import { isOneOf } from "@cawco/core/one-of";
 import type {
   HarnessNote,
   NeutralSystemMessage,
@@ -31,7 +42,6 @@ import {
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import type { LocatedRecord, TranscriptRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
-import { z } from "zod";
 import { timeOf } from "./last-prompt.ts";
 import {
   idSpans,
@@ -81,40 +91,6 @@ export interface SDKSessionMessage {
 // Record types for chain walking
 // ---------------------------------------------------------------------------
 
-interface CompactMetadata {
-  preservedMessages?: {
-    anchorUuid: string;
-    uuids: string[];
-  };
-  preservedSegment?: {
-    anchorUuid: string;
-    headUuid: string;
-    tailUuid: string;
-  };
-  /** How full the context was when the compaction ran, in tokens. */
-  preTokens?: number;
-  trigger?: "manual" | "auto";
-}
-
-interface RawRecord {
-  compactMetadata?: CompactMetadata;
-  isMeta?: boolean;
-  isSidechain?: boolean;
-  message?: unknown;
-  parentUuid?: string | null;
-  sessionId?: string;
-  subtype?: string;
-  teamName?: string;
-  timestamp?: string;
-  toolUseResult?: unknown;
-  type: string;
-  uuid: string;
-  [key: string]: unknown;
-}
-
-/** A record read as one the chain walk reads ({@link RawRecord}): its type and its uuid, as strings. */
-const RawRecordSchema = z.looseObject({ type: z.string(), uuid: z.string() });
-
 /**
  * One line of a transcript as the line index keeps it: the fields the chain
  * walk reads, where the record lies in its file, and what the message it
@@ -152,8 +128,16 @@ interface ChainNode {
   /** A user record carrying a tool result. */
   toolResult?: true;
   type: string;
-  uuid: string;
+  /** Absent on a line no record hangs from (a `queue-operation`), which no chain holds. */
+  uuid?: string;
 }
+
+/** A line a record hangs from, which a chain can hold: one with a uuid. */
+type LinkedNode = ChainNode & { uuid: string };
+
+/** Whether `node` is a line a chain can hold ({@link LinkedNode}). */
+const isLinked = (node: ChainNode): node is LinkedNode =>
+  node.uuid !== undefined;
 
 /**
  * Types the SDK includes in its initial pass (before chain walking).
@@ -186,10 +170,10 @@ function isToolResultUser(r: ChainNode): boolean {
 }
 
 /** Build uuid→record map from parsed records, keeping only those with a uuid. */
-function buildUuidMap(records: ChainNode[]): Map<string, ChainNode> {
-  const m = new Map<string, ChainNode>();
+function buildUuidMap(records: ChainNode[]): Map<string, LinkedNode> {
+  const m = new Map<string, LinkedNode>();
   for (const r of records) {
-    if (typeof r.uuid === "string") {
+    if (isLinked(r)) {
       m.set(r.uuid, r);
     }
   }
@@ -202,10 +186,10 @@ function buildUuidMap(records: ChainNode[]): Map<string, ChainNode> {
  * held the loop 620 ms on a real 413 MB transcript of 50 compactions).
  */
 class Relinker {
-  readonly byUuid: Map<string, ChainNode>;
+  readonly byUuid: Map<string, LinkedNode>;
   readonly #children = new Map<string, Set<string>>();
 
-  constructor(byUuid: Map<string, ChainNode>) {
+  constructor(byUuid: Map<string, LinkedNode>) {
     this.byUuid = byUuid;
     for (const [uuid, r] of byUuid) {
       this.#link(uuid, r.parentUuid);
@@ -247,7 +231,7 @@ class Relinker {
  * Relink parentUuid chains around compact boundaries, exactly as the SDK does.
  * Mutates `byUuid` in place (replaces records with updated copies).
  */
-function relinkCompactBoundaries(byUuid: Map<string, ChainNode>): Set<string> {
+function relinkCompactBoundaries(byUuid: Map<string, LinkedNode>): Set<string> {
   const skippedAnchors = new Set<string>();
   const boundaries = [...byUuid.values()].filter(isCompactBoundary);
   if (boundaries.length === 0) {
@@ -313,8 +297,9 @@ function relinkSegment(
 function buildIndexMap(records: ChainNode[]): Map<string, number> {
   const m = new Map<string, number>();
   for (let i = 0; i < records.length; i += 1) {
-    if (records[i].uuid) {
-      m.set(records[i].uuid, i);
+    const { uuid } = records[i];
+    if (uuid) {
+      m.set(uuid, i);
     }
   }
   return m;
@@ -322,12 +307,12 @@ function buildIndexMap(records: ChainNode[]): Map<string, number> {
 
 /** From each leaf, find its first user/assistant ancestor. */
 function findTips(
-  leaves: ChainNode[],
-  byUuid: Map<string, ChainNode>
-): ChainNode[] {
-  const tips: ChainNode[] = [];
+  leaves: LinkedNode[],
+  byUuid: Map<string, LinkedNode>
+): LinkedNode[] {
+  const tips: LinkedNode[] = [];
   for (const leaf of leaves) {
-    let node: ChainNode | undefined = leaf;
+    let node: LinkedNode | undefined = leaf;
     const visited = new Set<string>();
     while (node) {
       if (visited.has(node.uuid)) {
@@ -349,9 +334,9 @@ function findTips(
  * chain in chronological order (oldest first), without orphan splicing.
  */
 function findActiveChain(
-  byUuid: Map<string, ChainNode>,
+  byUuid: Map<string, LinkedNode>,
   records: ChainNode[]
-): { chain: ChainNode[]; chainSet: Set<string> } {
+): { chain: LinkedNode[]; chainSet: Set<string> } {
   const indexMap = buildIndexMap(records);
 
   // Leaves: records whose uuid isn't any other record's parentUuid.
@@ -370,16 +355,16 @@ function findActiveChain(
 
   // Pick the best tip: prefer non-sidechain/non-meta/non-team, then latest.
   const good = tips.filter((r) => !(r.isSidechain || r.teamName || r.isMeta));
-  const latest = (arr: ChainNode[]) =>
+  const latest = (arr: LinkedNode[]) =>
     arr.reduce((a, b) =>
       (indexMap.get(b.uuid) ?? -1) > (indexMap.get(a.uuid) ?? -1) ? b : a
     );
   const best = good.length > 0 ? latest(good) : latest(tips);
 
   // Walk the chain back from best tip.
-  const chain: ChainNode[] = [];
+  const chain: LinkedNode[] = [];
   const chainSet = new Set<string>();
-  let node: ChainNode | undefined = byUuid.get(best.uuid);
+  let node: LinkedNode | undefined = byUuid.get(best.uuid);
   while (node) {
     if (chainSet.has(node.uuid)) {
       break;
@@ -402,10 +387,10 @@ function findActiveChain(
  * written twice in a real 413 MB session, whose walk stopped there 9,666
  * entries back of 47,076).
  */
-function firstWrites(records: readonly ChainNode[]): Map<string, ChainNode> {
-  const m = new Map<string, ChainNode>();
+function firstWrites(records: readonly ChainNode[]): Map<string, LinkedNode> {
+  const m = new Map<string, LinkedNode>();
   for (const r of records) {
-    if (typeof r.uuid === "string" && !m.has(r.uuid)) {
+    if (isLinked(r) && !m.has(r.uuid)) {
       m.set(r.uuid, r);
     }
   }
@@ -434,14 +419,14 @@ const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
  * wrote goes on from the row above it.
  */
 function withSetAside(
-  chain: ChainNode[],
-  original: Map<string, ChainNode>,
+  chain: LinkedNode[],
+  original: Map<string, LinkedNode>,
   records: readonly ChainNode[]
-): ChainNode[] {
+): LinkedNode[] {
   const [head] = chain;
-  const before: ChainNode[] = [];
+  const before: LinkedNode[] = [];
   const seen = new Set<string>();
-  const onFrom = (r: ChainNode): ChainNode | undefined => {
+  const onFrom = (r: LinkedNode): LinkedNode | undefined => {
     if (r.parentUuid) {
       return original.get(r.parentUuid);
     }
@@ -457,11 +442,11 @@ function withSetAside(
   // it (#55818 reads it so; so it is in all six such boundaries of a real
   // 413 MB session).
   let firstAt: Map<string, number> | undefined;
-  const rowAbove = (boundary: ChainNode): ChainNode | undefined => {
+  const rowAbove = (boundary: LinkedNode): LinkedNode | undefined => {
     if (!firstAt) {
       firstAt = new Map();
       for (const [i, r] of records.entries()) {
-        if (!firstAt.has(r.uuid)) {
+        if (isLinked(r) && !firstAt.has(r.uuid)) {
           firstAt.set(r.uuid, i);
         }
       }
@@ -495,17 +480,17 @@ function withSetAside(
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: mirrors the SDK's kEe orphan-splice logic which requires cross-referencing message ids, parent uuids, and chain membership
 function spliceOrphans(
-  chain: ChainNode[],
+  chain: LinkedNode[],
   chainSet: Set<string>,
-  byUuid: Map<string, ChainNode>
-): ChainNode[] {
+  byUuid: Map<string, LinkedNode>
+): LinkedNode[] {
   const chainAssistants = chain.filter((r) => r.type === "assistant");
   if (chainAssistants.length === 0) {
     return chain;
   }
 
   // Map message id → LAST chain assistant (the SDK's `o.set(m, f)` loop).
-  const msgIdToTarget = new Map<string, ChainNode>();
+  const msgIdToTarget = new Map<string, LinkedNode>();
   for (const a of chainAssistants) {
     const mid = assistantMessageId(a);
     if (mid) {
@@ -514,8 +499,8 @@ function spliceOrphans(
   }
 
   // Collect all records by message id, and tool_result users by parentUuid.
-  const byMsgId = new Map<string, ChainNode[]>();
-  const toolResultByParent = new Map<string, ChainNode[]>();
+  const byMsgId = new Map<string, LinkedNode[]>();
+  const toolResultByParent = new Map<string, LinkedNode[]>();
   for (const r of byUuid.values()) {
     const mid = assistantMessageId(r);
     if (mid) {
@@ -539,7 +524,7 @@ function spliceOrphans(
   // For each unique message id, collect orphans and attach to the LAST chain
   // assistant with that id — matching the SDK's kEe.
   const seenMids = new Set<string>();
-  const spliceMap = new Map<string, ChainNode[]>();
+  const spliceMap = new Map<string, LinkedNode[]>();
   let spliceTotal = 0;
   for (const a of chainAssistants) {
     const mid = assistantMessageId(a);
@@ -552,7 +537,7 @@ function spliceOrphans(
     const siblings = byMsgId.get(mid) ?? [a];
     const sameMsg = siblings.filter((r) => !chainSet.has(r.uuid));
 
-    const toolResults: ChainNode[] = [];
+    const toolResults: LinkedNode[] = [];
     for (const r of siblings) {
       const trs = toolResultByParent.get(r.uuid);
       if (trs) {
@@ -568,7 +553,7 @@ function spliceOrphans(
       continue;
     }
 
-    const byTs = (x: ChainNode, y: ChainNode) =>
+    const byTs = (x: LinkedNode, y: LinkedNode) =>
       (x.timestamp ?? "").localeCompare(y.timestamp ?? "");
     sameMsg.sort(byTs);
     toolResults.sort(byTs);
@@ -590,7 +575,7 @@ function spliceOrphans(
     return chain;
   }
 
-  const result: ChainNode[] = [];
+  const result: LinkedNode[] = [];
   for (const r of chain) {
     result.push(r);
     const extra = spliceMap.get(r.uuid);
@@ -626,7 +611,7 @@ function walkChainWindowed(
   records: ChainNode[],
   windowed: boolean,
   said = false
-): ChainNode[] {
+): LinkedNode[] {
   const steps = walkSteps(records, windowed, said);
   for (;;) {
     const step = steps.next();
@@ -648,7 +633,7 @@ const loopTurn = (): Promise<void> =>
 async function walkChainYielding(
   records: ChainNode[],
   said: boolean
-): Promise<ChainNode[]> {
+): Promise<LinkedNode[]> {
   const steps = walkSteps(records, false, said);
   for (;;) {
     const step = steps.next();
@@ -664,7 +649,7 @@ function* walkSteps(
   records: ChainNode[],
   windowed: boolean,
   said: boolean
-): Generator<void, ChainNode[]> {
+): Generator<void, LinkedNode[]> {
   const byUuid = buildUuidMap(records);
   const original = said ? firstWrites(records) : byUuid;
   yield;
@@ -684,7 +669,7 @@ function* walkSteps(
   }
   if (windowed) {
     // Drop everything up to and including the last skipped compact anchor.
-    const dropped: ChainNode[] = [];
+    const dropped: LinkedNode[] = [];
     let cut = -1;
     for (let i = 0; i < active.length; i += 1) {
       if (skippedAnchors.has(active[i].uuid)) {
@@ -816,7 +801,7 @@ export const withHarnessNote = <M extends { content?: unknown }>(
  * XML where the frame carries it plain, so it is unescaped to match.
  */
 function taskNotification(
-  r: RawRecord,
+  r: ClaudeRecord,
   block: string,
   timestamp: string
 ): SDKSessionMessage {
@@ -847,14 +832,6 @@ function taskNotification(
   };
 }
 
-interface QueuedCommand {
-  isMeta?: unknown;
-  prompt?: unknown;
-  source_uuid?: unknown;
-  timestamp?: unknown;
-  type?: unknown;
-}
-
 /**
  * A message that arrived while a turn was running, where the model read it.
  *
@@ -871,13 +848,14 @@ interface QueuedCommand {
  * command (`isMeta`, never shown) is not one. The prompt is a string, or
  * content blocks when images rode with it; any other shape is not one.
  */
-function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
+function absorbedMessage(r: ClaudeRecord): SDKSessionMessage | null {
   if (r.type !== "attachment" || r.isSidechain) {
     return null;
   }
-  const command = r.attachment as QueuedCommand | undefined;
+  const command = r.attachment;
   if (
-    command?.type !== "queued_command" ||
+    !isRecord(command) ||
+    command.type !== "queued_command" ||
     command.isMeta === true ||
     typeof command.timestamp !== "string" ||
     !(typeof command.prompt === "string" || Array.isArray(command.prompt))
@@ -948,12 +926,13 @@ const bareStderr = (hook: StoredHookError): string => {
  * carried for it (`hook_response`, claude.ts), under a place-holding id until
  * {@link keyHookFailures} names it by the prompt it precedes.
  */
-function hookFailure(r: RawRecord): SDKSessionMessage | null {
-  const hook = r.attachment as StoredHookError | undefined;
+function hookFailure(r: ClaudeRecord): SDKSessionMessage | null {
+  const hook = r.attachment;
   if (
     !(
-      hook?.type === "hook_non_blocking_error" ||
-      hook?.type === "hook_blocking_error"
+      isRecord(hook) &&
+      (hook.type === "hook_non_blocking_error" ||
+        hook.type === "hook_blocking_error")
     ) ||
     hook.hookEvent !== "SessionStart"
   ) {
@@ -973,7 +952,7 @@ function hookFailure(r: RawRecord): SDKSessionMessage | null {
 
 /** A system frame read back from record `r`, as the SDK's session message carries it. */
 function systemMessage(
-  r: RawRecord,
+  r: ClaudeRecord,
   frame: NeutralSystemMessage
 ): SDKSessionMessage {
   return {
@@ -981,7 +960,7 @@ function systemMessage(
     parent_agent_id: null,
     parent_tool_use_id: null,
     session_id: r.sessionId ?? "",
-    timestamp: typeof r.timestamp === "string" ? r.timestamp : "",
+    timestamp: r.timestamp ?? "",
     type: "system",
     uuid: r.uuid,
   };
@@ -995,15 +974,20 @@ function systemMessage(
 function keyHookFailures(messages: SDKSessionMessage[]): SDKSessionMessage[] {
   let run: SDKSessionMessage[] = [];
   for (const msg of messages) {
-    const frame = msg.message as { subtype?: unknown } | null;
-    if (msg.type === "system" && frame?.subtype === "hook_response") {
+    if (
+      msg.type === "system" &&
+      isRecord(msg.message) &&
+      msg.message.subtype === "hook_response"
+    ) {
       run.push(msg);
       continue;
     }
     if (msg.type === "user" && run.length > 0) {
       for (const [index, failure] of run.entries()) {
         failure.uuid = hookFailureId(msg.sourceUuid ?? msg.uuid, index);
-        (failure.message as NeutralSystemMessage).uuid = failure.uuid;
+        if (isRecord(failure.message)) {
+          failure.message.uuid = failure.uuid;
+        }
       }
       run = [];
     }
@@ -1018,18 +1002,25 @@ function keyHookFailures(messages: SDKSessionMessage[]): SDKSessionMessage[] {
  * chain a read walks back to — so a read that starts at a compaction starts
  * here, and its divider says what the live one said.
  */
-function compactBoundary(r: RawRecord): SDKSessionMessage | null {
+/** What starts a compaction, as a boundary's frame says it. */
+const COMPACT_TRIGGERS = everyOf<
+  NonNullable<NonNullable<NeutralSystemMessage["compact_metadata"]>["trigger"]>
+>()(["manual", "auto"]);
+
+function compactBoundary(r: ClaudeRecord): SDKSessionMessage | null {
   if (r.subtype !== "compact_boundary" || r.isSidechain) {
     return null;
   }
+  const metadata = compactMetadataOf(r.compactMetadata);
+  const trigger = metadata?.trigger;
   return systemMessage(r, {
     type: "system",
     subtype: "compact_boundary",
     uuid: r.uuid,
     session_id: r.sessionId ?? "",
     compact_metadata: {
-      trigger: r.compactMetadata?.trigger,
-      pre_tokens: r.compactMetadata?.preTokens,
+      trigger: isOneOf(COMPACT_TRIGGERS, trigger) ? trigger : undefined,
+      pre_tokens: metadata?.preTokens,
     },
   });
 }
@@ -1043,12 +1034,11 @@ function compactBoundary(r: RawRecord): SDKSessionMessage | null {
  * not the person's words, and leaves no row, as the skill's text leaves none.
  * A command the person typed is sent to be answered: unmarked, it still shows.
  */
-const quietCommand = (r: RawRecord): boolean => {
+const quietCommand = (r: ClaudeRecord): boolean => {
   if (r.type !== "user" || r.queueTranscriptOnly !== true) {
     return false;
   }
-  const content = (r.message as { content?: unknown } | null | undefined)
-    ?.content;
+  const content = isRecord(r.message) ? r.message.content : undefined;
   return (
     typeof content === "string" &&
     content.trimStart().startsWith("<command-message>")
@@ -1056,7 +1046,7 @@ const quietCommand = (r: RawRecord): boolean => {
 };
 
 /** Map a chain-walked record to the SDK's output shape. */
-function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
+function toSDKMessage(r: ClaudeRecord): SDKSessionMessage | null {
   if (r.type === "attachment") {
     return absorbedMessage(r) ?? hookFailure(r);
   }
@@ -1069,22 +1059,21 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.isMeta || r.isSidechain || r.teamName || quietCommand(r)) {
     return null;
   }
-  const timestamp = typeof r.timestamp === "string" ? r.timestamp : "";
-  const content = (r.message as { content?: unknown } | null | undefined)
-    ?.content;
+  const timestamp = r.timestamp ?? "";
+  const content = isRecord(r.message) ? r.message.content : undefined;
   if (r.type === "user" && isTaskNotification(content)) {
     return taskNotification(r, content, timestamp);
   }
   const msg: SDKSessionMessage = {
     message:
-      r.type === "user" && r.message && typeof r.message === "object"
-        ? withHarnessNote(r.message as { content?: unknown })
+      r.type === "user" && isRecord(r.message)
+        ? withHarnessNote(r.message)
         : (r.message ?? null),
     parent_agent_id: null,
     parent_tool_use_id: null,
     session_id: r.sessionId ?? "",
     timestamp,
-    type: r.type as "user" | "assistant",
+    type: r.type,
     uuid: r.uuid,
   };
   if (r.toolUseResult !== undefined) {
@@ -1118,7 +1107,7 @@ function joinedCounts(raw: readonly ChainNode[]): Map<string, number> {
       dequeued += 1;
       continue;
     }
-    if (r.type === "user" && dequeued > 1) {
+    if (r.type === "user" && dequeued > 1 && r.uuid !== undefined) {
       joined.set(r.uuid, dequeued);
     }
     dequeued = 0;
@@ -1139,13 +1128,7 @@ function joinedCounts(raw: readonly ChainNode[]): Map<string, number> {
  */
 function namedIds(msg: SDKSessionMessage): string[] {
   const ids: string[] = [];
-  const frame = msg.message as {
-    content?: unknown;
-    status?: unknown;
-    subtype?: unknown;
-    task_id?: unknown;
-    tool_use_id?: unknown;
-  } | null;
+  const frame = isRecord(msg.message) ? msg.message : undefined;
   if (msg.type === "system") {
     if (frame?.subtype === "task_notification") {
       if (typeof frame.tool_use_id === "string") {
@@ -1161,25 +1144,30 @@ function namedIds(msg: SDKSessionMessage): string[] {
   if (!Array.isArray(content)) {
     return ids;
   }
-  for (const block of content as {
-    id?: unknown;
-    tool_use_id?: unknown;
-    type?: unknown;
-  }[]) {
-    if (
-      msg.type === "assistant" &&
-      block.type === "tool_use" &&
-      typeof block.id === "string"
-    ) {
-      ids.push(block.id);
-    } else if (
-      block.type === "tool_result" &&
-      typeof block.tool_use_id === "string"
-    ) {
-      ids.push(block.tool_use_id);
+  for (const block of content) {
+    const id = blockId(msg.type, block);
+    if (id !== undefined) {
+      ids.push(id);
     }
   }
   return ids;
+}
+
+/** The tool call a content block of a `type` message makes (an assistant's) or answers. */
+function blockId(type: SDKSessionMessage["type"], block: unknown) {
+  if (!isRecord(block)) {
+    return;
+  }
+  if (
+    type === "assistant" &&
+    block.type === "tool_use" &&
+    typeof block.id === "string"
+  ) {
+    return block.id;
+  }
+  if (block.type === "tool_result" && typeof block.tool_use_id === "string") {
+    return block.tool_use_id;
+  }
 }
 
 /**
@@ -1205,7 +1193,7 @@ function opensTurn(msg: SDKSessionMessage): boolean {
  * (last-prompt.ts).
  */
 export function claudePromptAt(record: TranscriptRecord): number | undefined {
-  const r = RawRecordSchema.safeParse(record).data;
+  const r = claudeRecordOf(record);
   if (r?.type !== "user" || chainFields(r).toolResult) {
     return;
   }
@@ -1217,7 +1205,7 @@ export function claudePromptAt(record: TranscriptRecord): number | undefined {
 export const CLAUDE_PROMPT_TYPES = typeFilter("user");
 
 /** The fields of a record the chain walk reads ({@link ChainNode}). */
-function chainFields(r: RawRecord): Partial<ChainNode> {
+function chainFields(r: ClaudeLine): Partial<ChainNode> {
   const fields: Partial<ChainNode> = {};
   if (r.parentUuid !== undefined) {
     fields.parentUuid = r.parentUuid;
@@ -1234,8 +1222,9 @@ function chainFields(r: RawRecord): Partial<ChainNode> {
       fields[key] = value;
     }
   }
-  if (r.compactMetadata) {
-    fields.compactMetadata = r.compactMetadata;
+  const metadata = compactMetadataOf(r.compactMetadata);
+  if (metadata) {
+    fields.compactMetadata = metadata;
   }
   if (r.isSidechain) {
     fields.isSidechain = true;
@@ -1243,8 +1232,7 @@ function chainFields(r: RawRecord): Partial<ChainNode> {
   if (r.isMeta) {
     fields.isMeta = true;
   }
-  const message = r.message as
-    { content?: unknown; id?: unknown } | null | undefined;
+  const message = isRecord(r.message) ? r.message : undefined;
   if (r.type === "assistant" && typeof message?.id === "string") {
     fields.messageId = message.id;
   }
@@ -1252,10 +1240,7 @@ function chainFields(r: RawRecord): Partial<ChainNode> {
     r.type === "user" &&
     Array.isArray(message?.content) &&
     message.content.some(
-      (block) =>
-        typeof block === "object" &&
-        block !== null &&
-        (block as { type?: string }).type === "tool_result"
+      (block: unknown) => isRecord(block) && block.type === "tool_result"
     )
   ) {
     fields.toolResult = true;
@@ -1264,12 +1249,11 @@ function chainFields(r: RawRecord): Partial<ChainNode> {
 }
 
 /** What the message a record makes is, for cutting windows ({@link ChainNode.shows}). */
-function messageFacts(r: RawRecord): Partial<ChainNode> {
+function messageFacts(r: ClaudeRecord): Partial<ChainNode> {
   const msg = toSDKMessage(r);
   if (!msg) {
     return {};
   }
-  const frame = msg.message as { subtype?: unknown } | null;
   const ids = namedIds(msg);
   const opens = opensTurn(msg);
   if (opens) {
@@ -1277,7 +1261,9 @@ function messageFacts(r: RawRecord): Partial<ChainNode> {
   }
   return {
     shows:
-      msg.type === "system" && frame?.subtype === "hook_response"
+      msg.type === "system" &&
+      isRecord(msg.message) &&
+      msg.message.subtype === "hook_response"
         ? "hook"
         : msg.type,
     ...(opens ? { opens: true as const } : {}),
@@ -1288,16 +1274,25 @@ function messageFacts(r: RawRecord): Partial<ChainNode> {
 
 /** One scanned line as the index keeps it ({@link ChainNode}). */
 function nodeOf(located: LocatedRecord): ChainNode {
-  const r = located.record as unknown as RawRecord;
+  const place = { offset: located.offset, byteLength: located.byteLength };
+  const r = claudeLineOf(located.record);
+  // A line not in the shape Claude Code writes its records in: no chain
+  // holds it.
+  if (!r) {
+    return { type: located.record.type, ...place };
+  }
   return {
     type: r.type,
     uuid: r.uuid,
-    offset: located.offset,
-    byteLength: located.byteLength,
+    ...place,
     ...chainFields(r),
-    ...messageFacts(r),
+    ...(isRecordLine(r) ? messageFacts(r) : {}),
   };
 }
+
+/** Whether `line` is one a record hangs from: one with a uuid ({@link ClaudeRecord}). */
+const isRecordLine = (line: ClaudeLine): line is ClaudeRecord =>
+  line.uuid !== undefined;
 
 /** Every transcript's line index, as reads ask for them. */
 const indexes = new LineIndexes<ChainNode>(CHAIN_TYPES, nodeOf);
@@ -1323,7 +1318,7 @@ interface SaidPlan {
   /** The positions a window may start at, rising; 0 is always one. */
   cuts: number[];
   joined: Map<string, number>;
-  nodes: ChainNode[];
+  nodes: LinkedNode[];
 }
 
 async function saidPlan(all: readonly ChainNode[]): Promise<SaidPlan> {
@@ -1342,20 +1337,46 @@ async function saidPlan(all: readonly ChainNode[]): Promise<SaidPlan> {
   };
 }
 
-/** A memo on an index, rebuilt once the file changes under it; one that failed is built again by the next read. */
-const memo = <T>(
-  index: LineIndex<ChainNode>,
-  key: string,
-  build: () => Promise<T>
-): Promise<T> => {
-  const held = index.memo.get(key) as Promise<T> | undefined;
-  if (held) {
+/** One value derived from an index: built once; one that failed is built again by the next read. */
+class Memo<T> {
+  #held: Promise<T> | undefined;
+
+  of(build: () => Promise<T>): Promise<T> {
+    if (this.#held) {
+      return this.#held;
+    }
+    const built = build();
+    this.#held = built;
+    built.catch(() => this.#forget(built));
+    return built;
+  }
+
+  #forget(built: Promise<T>): void {
+    if (this.#held === built) {
+      this.#held = undefined;
+    }
+  }
+}
+
+/** What reads derive from one file's index, dropped with its `memo` once the file changes under it. */
+class Derived {
+  readonly chain = new Memo<LinkedNode[]>();
+  readonly joined = new Memo<Map<string, number>>();
+  readonly said = new Memo<SaidPlan>();
+}
+
+/** The key {@link Derived} is kept under in an index's `memo`. */
+const DERIVED = "claude";
+
+/** What reads have derived from `index` so far ({@link Derived}). */
+const derivedOf = (index: LineIndex<ChainNode>): Derived => {
+  const held = index.memo.get(DERIVED);
+  if (held instanceof Derived) {
     return held;
   }
-  const built = build();
-  index.memo.set(key, built);
-  built.catch(() => index.memo.delete(key));
-  return built;
+  const made = new Derived();
+  index.memo.set(DERIVED, made);
+  return made;
 };
 
 /**
@@ -1365,7 +1386,7 @@ const memo = <T>(
  * until that message.
  */
 function messagesOf(
-  records: readonly (RawRecord | undefined)[],
+  records: readonly (ClaudeRecord | undefined)[],
   joined: Map<string, number>,
   count = records.length
 ): SDKSessionMessage[] {
@@ -1388,7 +1409,7 @@ function messagesOf(
  */
 async function messagesAt(
   path: string,
-  nodes: readonly ChainNode[],
+  nodes: readonly LinkedNode[],
   joined: Map<string, number>,
   from: number,
   to: number
@@ -1406,9 +1427,9 @@ async function messagesAt(
       break;
     }
   }
-  const records = (await readSpans(path, nodes.slice(from, end))) as (
-    RawRecord | undefined
-  )[];
+  const records = (await readSpans(path, nodes.slice(from, end))).map(
+    (record) => claudeRecordOf(record)
+  );
   return messagesOf(records, joined, to - from);
 }
 // ---------------------------------------------------------------------------
@@ -1427,12 +1448,12 @@ async function messagesAt(
 export function readSessionChain(path: string): Promise<SDKSessionMessage[]> {
   return transcriptOrGone(async () => {
     const index = await indexes.get(path);
-    const nodes = await memo(index, "chain", async () =>
+    const nodes = await derivedOf(index).chain.of(async () =>
       (await walkChainYielding([...index.nodes], false)).filter(
         (node) => node.shows !== undefined
       )
     );
-    const joined = await memo(index, "joined", () =>
+    const joined = await derivedOf(index).joined.of(() =>
       Promise.resolve(joinedCounts(index.nodes))
     );
     return messagesAt(path, nodes, joined, 0, nodes.length);
@@ -1448,13 +1469,26 @@ export function readSessionWhole(path: string): Promise<SDKSessionMessage[]> {
   return transcriptOrGone(async () => {
     const index = await indexes.get(path);
     const shown = index.nodes.filter((node) => node.shows !== undefined);
-    const records = (await readSpans(path, shown)) as (RawRecord | undefined)[];
+    const records = (await readSpans(path, shown)).map((record) =>
+      claudeRecordOf(record)
+    );
     return records.flatMap((r) => {
       const msg = r ? toSDKMessage(r) : null;
       return msg ? [msg] : [];
     });
   }, []);
 }
+
+/** The records of `located` by uuid, each parsed ({@link claudeRecordOf}); a line no record hangs from is left out. */
+const recordsByUuid = (
+  located: readonly LocatedRecord[]
+): Map<string, ClaudeRecord> =>
+  new Map(
+    located.flatMap(({ record }) => {
+      const r = claudeRecordOf(record);
+      return r ? [[r.uuid, r] as const] : [];
+    })
+  );
 
 /** How far back the newest window reads before it takes the line index instead. Ours: 32 MiB. */
 const NEWEST_MAX_BYTES = 32 * 1024 * 1024;
@@ -1489,7 +1523,7 @@ export function readSaidWindow(
         }
       }
       const index = await indexes.get(path);
-      const plan = await memo(index, "said", () => saidPlan(index.nodes));
+      const plan = await derivedOf(index).said.of(() => saidPlan(index.nodes));
       const { at, cuts, joined, nodes } = plan;
       const { from, to } = windowRange(
         cuts,
@@ -1537,12 +1571,7 @@ async function newestWindow(
     const from = localCut(nodes, limit);
     if (from !== undefined || reader.complete) {
       const start = from ?? 0;
-      const byUuid = new Map(
-        reader.records.map((located) => [
-          (located.record as unknown as RawRecord).uuid,
-          located.record as unknown as RawRecord,
-        ])
-      );
+      const byUuid = recordsByUuid(reader.records);
       return {
         messages: messagesOf(
           nodes.slice(start).map((node) => byUuid.get(node.uuid)),
@@ -1646,12 +1675,7 @@ async function sessionEnd(
     await reader.more(target - reader.records.length);
     const raw = reader.records.map(nodeOf);
     const nodes = walkChainWindowed(raw, !reader.complete);
-    const byUuid = new Map(
-      reader.records.map((located) => [
-        (located.record as unknown as RawRecord).uuid,
-        located.record as unknown as RawRecord,
-      ])
-    );
+    const byUuid = recordsByUuid(reader.records);
     const messages = messagesOf(
       nodes.map((node) => byUuid.get(node.uuid)),
       joinedCounts(raw)
@@ -1664,6 +1688,10 @@ async function sessionEnd(
   }
 }
 
+/** A usage count as Claude Code wrote it, none when it wrote none. */
+const tokensOf = (count: unknown): number =>
+  typeof count === "number" ? count : 0;
+
 export async function readSessionContext(path: string) {
   let count = 8;
   let previous = -1;
@@ -1673,19 +1701,13 @@ export async function readSessionContext(path: string) {
       if (entry.type !== "assistant" || entry.error || entry.compactSummary) {
         continue;
       }
-      const { usage } = entry.message as {
-        usage?: {
-          input_tokens: number;
-          cache_read_input_tokens?: number;
-          cache_creation_input_tokens?: number;
-        };
-      };
-      if (usage && typeof usage.input_tokens === "number") {
+      const usage = isRecord(entry.message) ? entry.message.usage : undefined;
+      if (isRecord(usage) && typeof usage.input_tokens === "number") {
         return {
           tokens:
             usage.input_tokens +
-            (usage.cache_read_input_tokens ?? 0) +
-            (usage.cache_creation_input_tokens ?? 0),
+            tokensOf(usage.cache_read_input_tokens) +
+            tokensOf(usage.cache_creation_input_tokens),
           readAt: Date.now(),
         };
       }

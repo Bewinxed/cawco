@@ -64,6 +64,17 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import {
+  type CommandLifecycle,
+  claudeLineOf,
+  commandLifecycleOf,
+  questionAnnotationsOf,
+  questionAnswersOf,
+} from "@cawco/core/claude-lines";
+import {
+  type ClaudeCallerOptions,
+  claudeCallerOptionsOf,
+} from "@cawco/core/claude-options";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { isObject } from "@cawco/core/comments/model";
 import { isControlOf } from "@cawco/core/control-args";
@@ -97,12 +108,14 @@ import {
   SESSION_DIR_READ,
   SESSION_STOPPED,
 } from "@cawco/core/harness";
-import type {
-  EffortLevel,
-  OfferedMode,
-  PermissionMode,
+import {
+  type EffortLevel,
+  isEffortLevel,
+  type OfferedMode,
+  type PermissionMode,
 } from "@cawco/core/harness/kinds";
 import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
+import { isRecord } from "@cawco/core/is-record";
 import {
   accountConfigDir,
   accountIds,
@@ -153,9 +166,7 @@ import type {
   SentMessage,
   SessionMessage,
   StoredRun,
-  UserAnswers,
   UserQuestion,
-  UserQuestionAnswered,
   UserQuestionResult,
 } from "@cawco/core/session-messages";
 import {
@@ -418,27 +429,9 @@ const processEnded = async (
   );
 };
 
-/**
- * The CLI's word on one command it was sent: `command_uuid` is the uuid the
- * send carried, and `started` is the moment its prompt was consumed — the
- * turn it opens, or the tool boundary it is folded in at. It is written just
- * before what the model says about it. The SDK passes the line through without
- * typing it (0.3.280), so it is read by shape.
- */
-interface CommandLifecycle {
-  command_uuid: string;
-  session_id?: string;
-  state: "queued" | "started" | "completed" | "cancelled";
-  type: "command_lifecycle";
-}
-
-/** A hook failure as the CLI stores it in a transcript, read by shape. */
-interface StoredHookFailure {
-  command?: string;
-  hookEvent?: string;
-  stderr?: string;
-  type?: string;
-}
+/** A field read off a line as text: itself when it is a string, else nothing. */
+const textOf = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
 
 /** A hook's frame (`hook_started`, `hook_response`, sdk.d.ts), read by shape. */
 interface HookFrame {
@@ -453,6 +446,34 @@ interface HookFrame {
   subtype?: string;
   type: string;
 }
+
+/**
+ * A command's lifecycle line as the neutral frame it is: `queued` the
+ * {@link MESSAGES_HELD} frame, `started` the {@link MESSAGES_READ} frame,
+ * and no frame for any other state.
+ */
+const lifecycleFrame = (command: CommandLifecycle): NeutralMessage | null => {
+  const session = command.session_id ? { session_id: command.session_id } : {};
+  switch (command.state) {
+    case "queued":
+      return {
+        type: "system",
+        subtype: MESSAGES_HELD,
+        held: [command.command_uuid],
+        ...session,
+      };
+    case "started":
+      return {
+        type: "system",
+        subtype: MESSAGES_READ,
+        read: [command.command_uuid],
+        ...session,
+      };
+    default:
+      // `completed`, `cancelled`: nothing the hub needs.
+      return null;
+  }
+};
 
 /**
  * The neutral frame is the SDK frame re-tagged: same fields, plus the
@@ -470,55 +491,32 @@ const toNeutral = (
   sdk: SDKMessage,
   recovered = false
 ): NeutralMessage | null => {
-  if ((sdk as { type: string }).type === "command_lifecycle") {
-    const command = sdk as unknown as CommandLifecycle;
-    const session = command.session_id
-      ? { session_id: command.session_id }
-      : {};
-    switch (command.state) {
-      case "queued":
-        return {
-          type: "system",
-          subtype: MESSAGES_HELD,
-          held: [command.command_uuid],
-          ...session,
-        };
-      case "started":
-        return {
-          type: "system",
-          subtype: MESSAGES_READ,
-          read: [command.command_uuid],
-          ...session,
-        };
-      case "cancelled":
-      case "completed":
-        break;
-    }
-    return null;
+  // The CLI's word on one command it was sent: `command_uuid` is the uuid
+  // the send carried, and `started` is the moment its prompt was consumed —
+  // the turn it opens, or the tool boundary it is folded in at. It is
+  // written just before what the model says about it. The SDK passes the
+  // line through without typing it, so it is parsed here (core
+  // `commandLifecycleOf`).
+  const command = commandLifecycleOf(sdk);
+  if (command) {
+    return lifecycleFrame(command);
   }
   if (sdk.type === "result") {
     // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
     // under the harness-neutral `cache` shape the opencode adapter's result
     // frame also populates.
-    const { usage } = sdk as {
-      usage?: {
-        cache_creation_input_tokens?: number;
-        cache_read_input_tokens?: number;
-        cache_creation?: {
-          ephemeral_5m_input_tokens?: number;
-          ephemeral_1h_input_tokens?: number;
-        };
-      };
-    };
+    const { usage } = sdk;
     return {
       ...sdk,
       raw: sdk,
       ...(recovered
         ? { recovered: true }
         : {
+            // Written on the line though the SDK's type names no such field.
             timestamp:
-              (sdk as { timestamp?: string }).timestamp ??
-              new Date().toISOString(),
+              "timestamp" in sdk && typeof sdk.timestamp === "string"
+                ? sdk.timestamp
+                : new Date().toISOString(),
           }),
       ...(usage
         ? {
@@ -530,11 +528,20 @@ const toNeutral = (
             },
           }
         : {}),
-    } as unknown as NeutralMessage;
+    };
   }
   // A notice of the CLI's in the user's role is typed here, where its markup
   // is read once (claude-transcript.ts `harnessNoteOf`), as a stored read
   // types it.
+  //
+  // Re-tagged whole, the user, assistant, stream and system frames keep a
+  // cast: core's neutral types name less than Claude Code sends (an SDK user
+  // message's `MessageParam` takes every `ContentBlockParam` and the
+  // assistant role; an assistant message's
+  // `BetaContentBlock`s include server-tool blocks and type a tool call's
+  // `input` unknown; a stream event is any `BetaRawMessageStreamEvent`), and
+  // every field goes out as the CLI sent it. Not an SDK gap: typing them is
+  // a change to core's neutral types or to what goes on the wire.
   if (sdk.type === "user") {
     return {
       ...sdk,
@@ -558,7 +565,7 @@ const toNeutral = (
       uuid: sdk.uuid,
       session_id: sdk.session_id,
       raw: sdk,
-    } as unknown as NeutralMessage;
+    };
   }
   // `auth_status` is MCP server auth plumbing — surface it as a quiet system
   // message so the QUIET set silences it instead of the dashboard showing a
@@ -570,7 +577,7 @@ const toNeutral = (
       uuid: sdk.uuid,
       session_id: sdk.session_id,
       raw: sdk,
-    } as unknown as NeutralMessage;
+    };
   }
   return { type: "raw", harness: "claude", uuid: sdk.uuid, message: sdk };
 };
@@ -650,36 +657,24 @@ const withConfigMasked = (server: McpServerStatus) => {
 };
 
 function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
-  if (typeof raw !== "object" || raw === null) {
+  if (!isRecord(raw)) {
     return null;
   }
-  const { questions, answers, response, annotations } = raw as {
-    questions?: unknown;
-    answers?: unknown;
-    response?: unknown;
-    annotations?: unknown;
-  };
-  if (
-    typeof answers !== "object" ||
-    answers === null ||
-    Array.isArray(answers)
-  ) {
+  const answers = questionAnswersOf(raw.answers);
+  if (!answers) {
     return null;
   }
-  const normalized = normalizeQuestions(questions);
+  const normalized = normalizeQuestions(raw.questions);
   if (!normalized) {
     return null;
   }
+  const annotations = questionAnnotationsOf(raw.annotations);
   return {
     outcome: "answered",
     questions: normalized,
-    answers: answers as UserAnswers,
-    ...(typeof response === "string" ? { response } : {}),
-    ...(annotations &&
-    typeof annotations === "object" &&
-    !Array.isArray(annotations)
-      ? { annotations: annotations as UserQuestionAnswered["annotations"] }
-      : {}),
+    answers,
+    ...(typeof raw.response === "string" ? { response: raw.response } : {}),
+    ...(annotations ? { annotations } : {}),
   };
 }
 
@@ -688,32 +683,21 @@ function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
  * answered payload and by the tool's own input, which is all a dismissal has
  * left to say what was asked. `null` when the array is not questions at all.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates every field of a raw AskUserQuestion array shape before trusting any of it
 function normalizeQuestions(raw: unknown): UserQuestion[] | null {
   if (!Array.isArray(raw)) {
     return null;
   }
   const normalized: UserQuestion[] = [];
-  for (const question of raw) {
-    if (typeof question !== "object" || question === null) {
+  for (const q of raw) {
+    if (!isRecord(q)) {
       return null;
     }
-    const q = question as {
-      question?: unknown;
-      header?: unknown;
-      options?: unknown;
-      multiSelect?: unknown;
-    };
     if (typeof q.question !== "string" || !Array.isArray(q.options)) {
       return null;
     }
     const options: UserQuestion["options"] = [];
-    for (const option of q.options) {
-      if (typeof option !== "object" || option === null) {
-        continue;
-      }
-      const o = option as { label?: unknown; description?: unknown };
-      if (typeof o.label !== "string") {
+    for (const o of q.options) {
+      if (!isRecord(o) || typeof o.label !== "string") {
         continue;
       }
       options.push({
@@ -741,20 +725,18 @@ function attachQuestionResult(
   message: unknown,
   result: UserQuestionResult
 ): unknown {
-  if (typeof message !== "object" || message === null) {
+  if (!isRecord(message)) {
     return message;
   }
-  const { content } = message as { content?: unknown };
+  const { content } = message;
   if (!Array.isArray(content)) {
     return message;
   }
   return {
-    ...(message as object),
-    content: content.map((block) =>
-      block &&
-      typeof block === "object" &&
-      (block as { type?: string }).type === "tool_result"
-        ? { ...(block as object), questionResult: result }
+    ...message,
+    content: content.map((block: unknown) =>
+      isRecord(block) && block.type === "tool_result"
+        ? { ...block, questionResult: result }
         : block
     ),
   };
@@ -881,9 +863,11 @@ const NEWLINE = 10;
 const wholeLines = (bytes: Uint8Array, file: string): SessionStoreEntry[] => {
   const stats = newStats();
   const entries = Array.from(
-    parseRecords(completeLines(bytes), { stats }),
-    ({ record }) => record as unknown as SessionStoreEntry
-  );
+    parseRecords(completeLines(bytes), { stats })
+  ).flatMap(({ record }) => {
+    const line = claudeLineOf(record);
+    return line ? [line] : [];
+  });
   if (stats.invalid > 0) {
     console.warn(
       `[claude] ${file}: skipped ${stats.invalid} damaged record${stats.invalid === 1 ? "" : "s"} in ${stats.lines} lines`
@@ -1009,7 +993,7 @@ const startedBy = (
   entries: readonly SessionStoreEntry[] | null
 ): Pick<NeutralSessionInfo, "startedBy"> => {
   for (const entry of entries ?? []) {
-    const { entrypoint } = entry as { entrypoint?: unknown };
+    const { entrypoint } = entry;
     if (typeof entrypoint === "string") {
       return {
         startedBy: PERSON_ENTRYPOINTS.has(entrypoint) ? "person" : "program",
@@ -1116,6 +1100,9 @@ function withExtras(
       type: "image" as const,
       source: {
         type: "base64" as const,
+        // Cast: core's `SendPayload.images` carries any media type, and the
+        // SDK's image block takes four; a picture of another goes to the CLI
+        // as it was sent.
         media_type: mediaType as Base64Source["media_type"],
         data,
       },
@@ -1240,6 +1227,24 @@ const SHELL_TOOLS: ReadonlySet<string> = new Set([
   ...HARNESS_TOOLS.claude.powershell,
 ]);
 
+/** The command a shell tool's call runs, as its input names it; none for any other block. */
+const shellCommandOf = (block: {
+  type: string;
+  name?: string;
+  input?: unknown;
+}): string | undefined => {
+  if (
+    block.type !== "tool_use" ||
+    block.name === undefined ||
+    !SHELL_TOOLS.has(block.name) ||
+    !isRecord(block.input)
+  ) {
+    return undefined;
+  }
+  const { command } = block.input;
+  return typeof command === "string" ? command : undefined;
+};
+
 /** Where the CLI keeps its temp files: its `CLAUDE_CODE_TMPDIR`, else its temp dir. */
 const tempRootOf = (env: Record<string, string | undefined>): string =>
   env.CLAUDE_CODE_TMPDIR || env.TMPDIR || tmpdir();
@@ -1258,7 +1263,7 @@ const spooledOutput = async (
   taskId: string
 ): Promise<string> => {
   const user = join(root, `claude-${process.getuid?.() ?? 0}`);
-  const projects = await readdir(user).catch(() => [] as string[]);
+  const projects = await readdir(user).catch((): string[] => []);
   for (const project of projects) {
     const file = join(user, project, sessionId, "tasks", `${taskId}.output`);
     const said = await readFile(file, "utf8").catch(() => undefined);
@@ -1370,7 +1375,8 @@ const refuseDurableSchedule = async (
 ): Promise<SyncHookJSONOutput> => {
   const durable =
     input.hook_event_name === "PreToolUse" &&
-    (input.tool_input as { durable?: unknown } | null)?.durable === true;
+    isRecord(input.tool_input) &&
+    input.tool_input.durable === true;
   return durable
     ? {
         hookSpecificOutput: {
@@ -1467,18 +1473,17 @@ const adoptKeptWakeups = async (
  * `undefined` when the input is not a `Stop` hook's or carries no list.
  */
 const scheduledWakeups = (input: unknown): Wakeups | undefined => {
-  const { hook_event_name, session_crons } = (input ?? {}) as {
-    hook_event_name?: unknown;
-    session_crons?: unknown;
-  };
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  const { hook_event_name, session_crons } = input;
   if (!(hook_event_name === "Stop" && Array.isArray(session_crons))) {
     return undefined;
   }
   return {
     all: session_crons.length,
     once: session_crons.filter(
-      (cron: unknown) =>
-        (cron as { recurring?: unknown } | null)?.recurring !== true
+      (cron: unknown) => !(isRecord(cron) && cron.recurring === true)
     ).length,
   };
 };
@@ -1729,7 +1734,15 @@ const modeFrame = (
 ): message is Extract<SDKMessage, { subtype: "init" | "status" }> =>
   message.type === "system" &&
   (message.subtype === "init" || message.subtype === "status") &&
-  !(message as { parent_tool_use_id?: string | null }).parent_tool_use_id;
+  !subagentFrame(message);
+
+/**
+ * Whether an SDK frame is a subagent's: one that names the call it runs
+ * under (`parent_tool_use_id`), which the CLI writes on frames whose type
+ * does not declare it.
+ */
+const subagentFrame = (message: SDKMessage): boolean =>
+  "parent_tool_use_id" in message && !!message.parent_tool_use_id;
 
 /**
  * A workspace session's scratch as one of its working directories, so an MCP
@@ -1924,6 +1937,10 @@ const placedHookEntries = (
   const byEvent: FlagHooks = {};
   for (const hook of hooks) {
     const { type, ...fields } = guardedHandler(hook.handler, bounded);
+    // Cast: core's `HookHandler` is not the SDK's `Settings` hook (a command
+    // handler's `command` is optional there, an MCP tool handler names
+    // `mcp_server_name`/`tool_name` where the SDK names `server`/`tool`), and
+    // the handler goes into flag settings as core holds it.
     const handler = { ...fields, type } as FlagHookEntry["hooks"][number];
     const matcher = hook.matcher?.trim();
     byEvent[hook.event] = [
@@ -1960,8 +1977,10 @@ const sessionSettingsOptions = (
 ) => {
   const bounded = claudeBoundaryOptions(boundary);
   // A boundary's settings carry its `hooks`; no boundary, none.
-  const own =
-    (bounded as { settings?: { hooks?: FlagHooks } }).settings?.hooks ?? {};
+  const boundarySettings: { hooks?: FlagHooks } = {
+    ...("settings" in bounded ? bounded.settings : {}),
+  };
+  const own = boundarySettings.hooks ?? {};
   const hooks: FlagHooks = placedHookEntries(placed, boundary !== undefined);
   for (const [event, entries] of Object.entries(own)) {
     hooks[event] = [...(hooks[event] ?? []), ...entries];
@@ -1985,8 +2004,7 @@ const sessionSettingsOptions = (
 
 /** The `autoCompactWindow` of a session's flag settings ({@link SESSION_DEFAULTS}), when it is a count. */
 const settingsWindow = (settings: unknown): number | undefined => {
-  const window = (settings as { autoCompactWindow?: unknown } | undefined)
-    ?.autoCompactWindow;
+  const window = isRecord(settings) ? settings.autoCompactWindow : undefined;
   return typeof window === "number" ? window : undefined;
 };
 
@@ -1996,14 +2014,7 @@ const settingsWindow = (settings: unknown): number | undefined => {
  * here make the same connection.
  */
 const dialed = (config: unknown): string => {
-  const c = (config ?? {}) as {
-    type?: string;
-    url?: string;
-    headers?: Record<string, string>;
-    command?: string;
-    args?: string[];
-    env?: Record<string, string>;
-  };
+  const c = isRecord(config) ? config : {};
   return JSON.stringify(
     c.url === undefined
       ? { command: c.command, args: c.args ?? [], env: c.env ?? {} }
@@ -2039,13 +2050,13 @@ const planFleetMcp = (
   owned: ReadonlySet<string>
 ) => {
   const held = new Map(before.map((server) => [server.name, server]));
-  const dynamic = new Map(
+  const dynamic = new Map<string, McpServerConfig>(
     before.flatMap((server) =>
       owned.has(server.name) && configured[server.name]
         ? [[server.name, configured[server.name]] as const]
         : []
     )
-  ) as Map<string, McpServerConfig>;
+  );
   const leaving: Record<string, McpServerConfig> = {};
   const redial = new Set<string>();
   const kept = new Map<string, string>();
@@ -2091,9 +2102,24 @@ const fleetMcpStep = (
       // Not here, or `setMcpServers` holds it and drops it with the fleet.
       return { do: "hold", redial: false };
     }
-    return has.config
-      ? { do: "leave", config: has.config as McpServerConfig }
-      : { do: "keep", why: "its CLI reports no config to replace it with" };
+    const held = has.config;
+    if (!held) {
+      return {
+        do: "keep",
+        why: "its CLI reports no config to replace it with",
+      };
+    }
+    // An in-process server, or a claude.ai connector: no config
+    // `setMcpServers` takes.
+    return held.type === "sdk" || held.type === "claudeai-proxy"
+      ? {
+          do: "keep",
+          why:
+            held.type === "sdk"
+              ? "its CLI holds it as an in-process server"
+              : "its CLI holds it as a claude.ai connector",
+        }
+      : { do: "leave", config: held };
   }
   if (has?.status === "disabled") {
     return { do: "keep", why: "turned off in this session" };
@@ -2210,14 +2236,6 @@ const fleetMcpFor = async (
     : { servers, denied: [`mcp__${CHROME_DEVTOOLS}`] };
 };
 
-/** The caller's options a spawn carries, as a Claude session reads them. */
-interface CallerOptions {
-  disallowedTools?: string[];
-  env?: Record<string, string | undefined>;
-  mcpServers?: Record<string, McpServerConfig>;
-  [option: string]: unknown;
-}
-
 /**
  * What a session runs under, read from the spawn the hub sent for it: the
  * caller's options with its account's config dir in their env, its mode,
@@ -2239,7 +2257,7 @@ interface SessionSpec {
   /** Its scoped memory documents ({@link SpawnPayload.instructions}). */
   instructions: readonly SessionInstruction[];
   model: string | undefined;
-  options: CallerOptions;
+  options: ClaudeCallerOptions;
   permissionMode: OfferedMode | undefined;
   persistSession: boolean | undefined;
   resume: SpawnPayload["resume"];
@@ -2255,7 +2273,7 @@ const sessionSpecOf = (
   spec: SpawnPayload,
   account: string | undefined
 ): SessionSpec => {
-  const options = spec.options as CallerOptions | undefined;
+  const options = claudeCallerOptionsOf(spec.options);
   const clean = spec.clean === true;
   return {
     clean,
@@ -2347,9 +2365,7 @@ const launchSettings = (
   );
   return {
     options,
-    handed: launch.fleetMcp
-      ? (options.settings as Record<string, unknown>)
-      : undefined,
+    handed: launch.fleetMcp ? options.settings : undefined,
   };
 };
 
@@ -2402,19 +2418,11 @@ const folderLaunch = async (cwd: string, model: string | undefined) => {
 const sessionMcpServers = (
   instanceId: string,
   ctx: HarnessContext,
-  options: unknown,
+  options: ClaudeCallerOptions,
   fence: boolean,
   set: StartingSet | undefined
 ): Record<string, McpServerConfig> => ({
-  ...(fence
-    ? {}
-    : inStartingSet(
-        (
-          options as
-            { mcpServers?: Record<string, McpServerConfig> } | undefined
-        )?.mcpServers ?? {},
-        set
-      )),
+  ...(fence ? {} : inStartingSet(options.mcpServers ?? {}, set)),
   [MCP_SERVER_NAME]: delegationMcp(instanceId, ctx.sessionCredential),
 });
 
@@ -2441,16 +2449,14 @@ const CLAUDE_IN_CHROME = "claude-in-chrome";
  * whose starting set does not name the browser's server.
  */
 const sessionExtraArgs = (
-  options: unknown,
+  options: ClaudeCallerOptions | undefined,
   fence: boolean,
   set: StartingSet | undefined
 ): Record<string, string | null> => {
   if (fence || (set && !set.servers.includes(CLAUDE_IN_CHROME))) {
     return { "no-chrome": null };
   }
-  const callerArgs =
-    (options as { extraArgs?: Record<string, string | null> } | undefined)
-      ?.extraArgs ?? {};
+  const callerArgs = options?.extraArgs ?? {};
   return {
     ...("no-chrome" in callerArgs ? {} : { chrome: null }),
     ...callerArgs,
@@ -2748,11 +2754,7 @@ class ClaudeSession implements HarnessSession {
     this.#fence = fence;
     this.#startingSet = startingSet;
     this.#workdir = workdir;
-    const env = sessionEnv(
-      (options as { env?: Record<string, string | undefined> } | undefined)
-        ?.env,
-      ctx
-    );
+    const env = sessionEnv(options.env, ctx);
     this.#configDir = env.CLAUDE_CONFIG_DIR;
     this.#tempRoot = tempRootOf(env);
     this.#sessiond = sessiond;
@@ -2779,7 +2781,7 @@ class ClaudeSession implements HarnessSession {
       options: {
         forwardSubagentText: true,
         agentProgressSummaries: true,
-        ...(options as Record<string, unknown> | undefined),
+        ...options,
         pathToClaudeCodeExecutable: sessiond.executable,
         extraArgs,
         mcpServers,
@@ -2819,8 +2821,7 @@ class ClaudeSession implements HarnessSession {
         // the harness's own list and plan mode, which every session is denied.
         disallowedTools: [
           ...new Set([
-            ...((options as { disallowedTools?: string[] } | undefined)
-              ?.disallowedTools ?? []),
+            ...(options.disallowedTools ?? []),
             ...fleetDenyList,
             ...(denyTools ?? []),
           ]),
@@ -2850,8 +2851,7 @@ class ClaudeSession implements HarnessSession {
         ...(instructions.length > 0
           ? {
               systemPrompt: withInstructions(
-                (options as { systemPrompt?: SystemPrompt } | undefined)
-                  ?.systemPrompt,
+                options.systemPrompt,
                 instructions
               ),
             }
@@ -2870,8 +2870,7 @@ class ClaudeSession implements HarnessSession {
           // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
           // Bash calls (`sandboxOverride`) without ever reaching `canUseTool`.
           sandbox: {
-            ...((options as { sandbox?: Record<string, unknown> } | undefined)
-              ?.sandbox ?? {}),
+            ...(options.sandbox ?? {}),
             allowUnsandboxedCommands: true,
           },
         }),
@@ -2988,7 +2987,7 @@ class ClaudeSession implements HarnessSession {
           message: { role: "user", content: `/${skill}` },
           parent_tool_use_id: null,
           shouldQuery: false,
-        } as SDKUserMessage);
+        });
       }
     }
 
@@ -3084,15 +3083,16 @@ class ClaudeSession implements HarnessSession {
 
   async #readEffortNow(): Promise<void> {
     try {
-      const settings = await (
-        this.#handle as unknown as {
-          getSettings: () => Promise<{
-            applied?: { effort?: EffortLevel | null };
-          }>;
-        }
-      ).getSettings();
-      const effort = settings.applied?.effort;
-      if (effort === undefined) {
+      // A function of the `Query` at runtime that its type does not
+      // declare: looked up by name, and its answer read as it comes.
+      const read = fieldOf(this.#handle, "getSettings");
+      if (typeof read !== "function") {
+        throw new Error("its Query has no getSettings");
+      }
+      const settings: unknown = await read.call(this.#handle);
+      const applied = fieldOf(settings, "applied");
+      const effort = fieldOf(applied, "effort");
+      if (!(effort === null || isEffortLevel(effort))) {
         console.warn(
           `[claude] ${this.instanceId}: get_settings reported no applied.effort`
         );
@@ -3118,8 +3118,7 @@ class ClaudeSession implements HarnessSession {
           message.type === "system" &&
           message.subtype === "status" &&
           message.status === "requesting" &&
-          !(message as { parent_tool_use_id?: string | null })
-            .parent_tool_use_id
+          !subagentFrame(message)
         ) {
           this.#lastRequestAt = Date.now();
         }
@@ -3127,10 +3126,7 @@ class ClaudeSession implements HarnessSession {
           this.#answeredBy = message.message.model;
         }
         let started = false;
-        const lifecycle =
-          (message as { type: string }).type === "command_lifecycle"
-            ? (message as unknown as CommandLifecycle)
-            : undefined;
+        const lifecycle = commandLifecycleOf(message);
         // A quiet note's own lifecycle and its empty result: stored, read
         // with the next turn, and no turn of its own ({@link quietNote}).
         if (lifecycle && this.#notes.has(lifecycle.command_uuid)) {
@@ -3267,8 +3263,9 @@ class ClaudeSession implements HarnessSession {
         // records and the next spawn or adoption of this session restores.
         if (modeFrame(message) && message.permissionMode !== undefined) {
           this.#mode.observe(message.permissionMode);
-          (neutral as { permissionMode?: string }).permissionMode =
-            this.#mode.reported;
+          if (neutral.type === "system") {
+            neutral.permissionMode = this.#mode.reported;
+          }
         }
         // TODO(servedModel wiring): a spawn's own `model` can be an alias
         // ('sonnet') the SDK resolves to a dated id; `neutral.message.model`
@@ -3285,8 +3282,8 @@ class ClaudeSession implements HarnessSession {
           // Where Claude Code compacts it on its own: its model's window and
           // output, as this turn's usage of the model that answered it says,
           // the window capped at the one it was handed.
-          const usage = message.modelUsage as
-            Record<string, ModelUsage | undefined> | undefined;
+          const usage: Partial<Record<string, ModelUsage>> | undefined =
+            message.modelUsage;
           const served =
             usage?.[this.#answeredBy ?? ""] ?? usage?.[this.#startedOn ?? ""];
           const window = this.#envWindow ?? this.#settingsWindow;
@@ -3356,8 +3353,7 @@ class ClaudeSession implements HarnessSession {
    * failure is held, in the shape a history read gives it
    * (claude-transcript.ts), for the run's first prompt.
    */
-  #hookFailure(message: SDKMessage): boolean {
-    const hook = message as unknown as HookFrame;
+  #hookFailure(hook: SDKMessage): boolean {
     if (
       hook.type !== "system" ||
       !(hook.subtype === "hook_started" || hook.subtype === "hook_response")
@@ -3365,7 +3361,11 @@ class ClaudeSession implements HarnessSession {
       return false;
     }
     this.#watchBoundary(hook);
-    if (hook.outcome === "error" && hook.hook_name === "SessionStart:startup") {
+    if (
+      hook.subtype === "hook_response" &&
+      hook.outcome === "error" &&
+      hook.hook_name === "SessionStart:startup"
+    ) {
       this.#hookFailures.push({
         type: "system",
         subtype: "hook_response",
@@ -3408,13 +3408,8 @@ class ClaudeSession implements HarnessSession {
       } else if (block.type === "tool_result") {
         this.#calls.delete(block.tool_use_id);
       }
-      const command = (block as { input?: { command?: unknown } }).input
-        ?.command;
-      if (
-        block.type === "tool_use" &&
-        SHELL_TOOLS.has(block.name) &&
-        typeof command === "string"
-      ) {
+      const command = shellCommandOf(block);
+      if (block.type === "tool_use" && command !== undefined) {
         this.#commands.set(block.id, { command });
       } else if (block.type === "tool_result") {
         this.#commands.delete(block.tool_use_id);
@@ -3563,7 +3558,7 @@ class ClaudeSession implements HarnessSession {
       uuid: `session-stopped-${this.instanceId}-credential`,
       session_id: this.sessionId ?? "",
       content: CREDENTIAL_REFUSED_WORDS,
-    } as unknown as NeutralMessage);
+    });
     this.#refuse(new HeldProcessRefused(CREDENTIAL_REFUSED_WORDS));
   }
 
@@ -3672,16 +3667,18 @@ class ClaudeSession implements HarnessSession {
 
   /** One transcript line, whose records may be a hook's non-blocking failure. */
   #transcriptHookFailure(line: string): void {
-    for (const record of lineRecords(line)) {
-      const { attachment } = record as { attachment?: StoredHookFailure };
-      if (attachment?.type === "hook_non_blocking_error") {
+    for (const { attachment } of lineRecords(line)) {
+      if (
+        isRecord(attachment) &&
+        attachment.type === "hook_non_blocking_error"
+      ) {
         this.#watchBoundary({
           type: "system",
           subtype: "hook_response",
-          hook_event: attachment.hookEvent,
+          hook_event: textOf(attachment.hookEvent),
           outcome: "error",
-          stderr: attachment.stderr,
-          output: attachment.command,
+          stderr: textOf(attachment.stderr),
+          output: textOf(attachment.command),
         });
       }
     }
@@ -3698,7 +3695,7 @@ class ClaudeSession implements HarnessSession {
    * unstamped, which the ledger reads as "no mark".
    */
   #stamp(message: SDKMessage): void {
-    const { uuid } = message as { uuid?: unknown };
+    const uuid = "uuid" in message ? message.uuid : undefined;
     const ring = this.#sessiond;
     const seqs = this.#seqs;
     if (!ring || typeof uuid !== "string") {
@@ -3961,6 +3958,10 @@ class ClaudeSession implements HarnessSession {
         `[claude] ${this.instanceId}: send ${message.uuid} ${waits ? `waits for the running call's own end: ${waits}` : `reaches the turn now: ${[...this.#calls.values()].join(", ")} move aside for it`}`
       );
     }
+    // Cast: the send goes to the CLI as the neutral message it is, and core's
+    // `NeutralUserMessage` is not the SDK's `SDKUserMessage` (its `origin`
+    // kinds, its content blocks, an optional `parent_tool_use_id`, CawCo's
+    // own fields); typing it changes what the CLI is sent.
     const outgoing = withExtras(
       {
         ...(message as unknown as SDKUserMessage),
@@ -4285,11 +4286,16 @@ class ClaudeSession implements HarnessSession {
   }
 
   /** Whether the files name `name` as a fleet server the hub proxies, dialled on this machine's path to it. */
-  #proxied(configured: Record<string, McpServerConfig>, name: string): boolean {
+  #proxied(
+    configured: Partial<Record<string, McpServerConfig>>,
+    name: string
+  ): boolean {
+    const config = configured[name];
     return (
       !this.#launchMcp.has(name) &&
-      (configured[name] as { url?: string } | undefined)?.url ===
-        proxiedFleetMcpUrl(name)
+      config !== undefined &&
+      "url" in config &&
+      config.url === proxiedFleetMcpUrl(name)
     );
   }
 
@@ -4317,7 +4323,7 @@ class ClaudeSession implements HarnessSession {
       Object.values(place?.hooks ?? {}),
       launchedSettings(set, place),
       this.#startingSet
-    ).settings as Record<string, unknown>;
+    ).settings;
     const before = this.#flagSettings;
     const patch: Record<string, unknown> = Object.fromEntries(
       Object.entries(next).filter(
@@ -4333,6 +4339,10 @@ class ClaudeSession implements HarnessSession {
     if (Object.keys(patch).length === 0) {
       return { applied: [] };
     }
+    // SDK gap (0.3.325): `applyFlagSettings` takes keys of its closed
+    // `Settings` interface, while the request it sends
+    // (`SDKControlApplyFlagSettingsRequest.settings`) is any
+    // `Record<string, unknown>`, as the fleet's settings rows are.
     await this.#handle.applyFlagSettings(
       patch as Parameters<Query["applyFlagSettings"]>[0]
     );
@@ -4448,17 +4458,16 @@ class ClaudeSession implements HarnessSession {
     // 0.2.76: cancel_async_message drops a queued user message by UUID.
     // Query has no public typed method (0.3.296); use its own correlated
     // control request path. The CLI removes atomically with its dequeue.
-    const reply = await (
-      this.#handle as unknown as {
-        request: (request: {
-          subtype: "cancel_async_message";
-          message_uuid: string;
-        }) => Promise<
-          { response?: { cancelled?: boolean } } | null | undefined
-        >;
-      }
-    ).request({ subtype: "cancel_async_message", message_uuid: uuid });
-    if (reply?.response?.cancelled !== true) {
+    // Looked up by name, and its answer read as it comes.
+    const request = fieldOf(this.#handle, "request");
+    if (typeof request !== "function") {
+      throw new Error("its Query has no control request");
+    }
+    const reply: unknown = await request.call(this.#handle, {
+      subtype: "cancel_async_message",
+      message_uuid: uuid,
+    });
+    if (fieldOf(fieldOf(reply, "response"), "cancelled") !== true) {
       return "started";
     }
     this.#unread.delete(uuid);
@@ -4882,43 +4891,26 @@ const toInfo = (
   ...(info.createdAt === undefined ? {} : { createdAt: info.createdAt }),
 });
 
-const toEntry = (
-  entry:
-    import("@anthropic-ai/claude-agent-sdk").SessionMessage | SDKSessionMessage
-): SessionMessage => {
-  // Every stored line carries the ISO time the turn was written, and the SDK
-  // passes it through — but its `SessionMessage` type does not declare it, so
-  // reading it needs the widening. Our own `SDKSessionMessage` declares it
-  // directly — but read defensively either way.
-  const written = (entry as { timestamp?: unknown }).timestamp;
-  return {
-    type: entry.type,
-    uuid: entry.uuid,
-    session_id: entry.session_id,
-    // The SDK stores the *inner* message (its content blocks / text), which is
-    // exactly what the dashboard's folding layer reads off `message.content`.
-    message: entry.message,
-    parent_tool_use_id: entry.parent_tool_use_id,
-    parent_agent_id: entry.parent_agent_id,
-    // A fold's line has an id of its own; the send it carries is keyed by this.
-    ...((entry as SDKSessionMessage).sourceUuid
-      ? { sourceUuid: (entry as SDKSessionMessage).sourceUuid }
-      : {}),
-    ...(typeof written === "string" ? { timestamp: written } : {}),
-    ...((entry as { compactSummary?: true }).compactSummary
-      ? { compactSummary: true as const }
-      : {}),
-    ...((entry as SDKSessionMessage).error
-      ? { error: (entry as SDKSessionMessage).error }
-      : {}),
-    ...((entry as SDKSessionMessage).joined
-      ? { joined: (entry as SDKSessionMessage).joined }
-      : {}),
-    ...(entry.type === "assistant" && endsTurn(entry.message)
-      ? { turnEnd: true as const }
-      : {}),
-  };
-};
+const toEntry = (entry: SDKSessionMessage): SessionMessage => ({
+  type: entry.type,
+  uuid: entry.uuid,
+  session_id: entry.session_id,
+  // The SDK stores the *inner* message (its content blocks / text), which is
+  // exactly what the dashboard's folding layer reads off `message.content`.
+  message: entry.message,
+  parent_tool_use_id: entry.parent_tool_use_id,
+  parent_agent_id: entry.parent_agent_id,
+  // A fold's line has an id of its own; the send it carries is keyed by this.
+  ...(entry.sourceUuid ? { sourceUuid: entry.sourceUuid } : {}),
+  // Every stored line carries the ISO time the turn was written.
+  timestamp: entry.timestamp,
+  ...(entry.compactSummary ? { compactSummary: true as const } : {}),
+  ...(entry.error ? { error: entry.error } : {}),
+  ...(entry.joined ? { joined: entry.joined } : {}),
+  ...(entry.type === "assistant" && endsTurn(entry.message)
+    ? { turnEnd: true as const }
+    : {}),
+});
 
 /**
  * Stored messages as the hub reads them, each `AskUserQuestion` answer folded
@@ -4959,7 +4951,7 @@ const withQuestionResults = (
  * `stop_reason`, `null` while it is still being written.
  */
 const endsTurn = (message: unknown): boolean => {
-  const reason = (message as { stop_reason?: unknown } | null)?.stop_reason;
+  const reason = isRecord(message) ? message.stop_reason : undefined;
   return reason === "end_turn" || reason === "stop_sequence";
 };
 
@@ -5260,7 +5252,7 @@ class ClaudeHarness implements Harness<"claude"> {
       type: "system",
       subtype: SESSION_DIR_READ,
       account_id: place.accountId,
-    } as NeutralMessage);
+    });
     const fleetDenyList = await sessionFleetDenials();
     // What this process has scheduled is known from its start: nothing until
     // a turn of it ends and says otherwise. Kept, so an agent that attaches
@@ -5483,7 +5475,7 @@ class ClaudeHarness implements Harness<"claude"> {
         type: "system",
         subtype: "sessiond_stream_gap",
         text: `cawco: sessiond's replay window overflowed; this transcript resumes at line ${start + 1}`,
-      } as unknown as NeutralMessage);
+      });
     }
     // It runs under what its spawn says, read as a launch reads it
     // ({@link sessionSpecOf}): its mode goes in at construction, ahead of

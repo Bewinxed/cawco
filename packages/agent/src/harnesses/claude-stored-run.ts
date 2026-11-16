@@ -30,6 +30,7 @@ import {
   sameIdentity,
 } from "@cawco/core/accounts";
 import { isEffortLevel, PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { isRecord } from "@cawco/core/is-record";
 import {
   accountClaudeJson,
   claudeHomeJson,
@@ -98,13 +99,7 @@ const fromTranscript = async (
     const step = reader.records;
     reader.records = [];
     for (let at = step.length - 1; at >= 0; at -= 1) {
-      const record = step[at]?.record as
-        | {
-            type?: unknown;
-            permissionMode?: unknown;
-            message?: { model?: unknown };
-          }
-        | undefined;
+      const record = step[at]?.record;
       if (
         mode === undefined &&
         record?.type === "permission-mode" &&
@@ -112,7 +107,10 @@ const fromTranscript = async (
       ) {
         mode = record.permissionMode;
       }
-      const said = record?.type === "assistant" ? record.message?.model : null;
+      const said =
+        record?.type === "assistant" && isRecord(record.message)
+          ? record.message.model
+          : null;
       if (
         model === undefined &&
         typeof said === "string" &&
@@ -132,15 +130,8 @@ const fromTranscript = async (
 const signedInAt = async (
   path: string
 ): Promise<AccountIdentity | undefined> => {
-  const kept = (await settingsAt(path)) as
-    { oauthAccount?: unknown } | undefined;
-  const login = kept?.oauthAccount as
-    | {
-        emailAddress?: unknown;
-        organizationName?: unknown;
-        organizationUuid?: unknown;
-      }
-    | undefined;
+  const kept = await settingsAt(path);
+  const login = isRecord(kept?.oauthAccount) ? kept.oauthAccount : undefined;
   const text = (value: unknown): string | undefined =>
     typeof value === "string" && value !== "" ? value : undefined;
   return identityOf({
@@ -217,11 +208,7 @@ export async function claudeStoredRun(
     typeof value === "string" && CLAUDE_MODES.has(value) ? value : undefined;
 
   const said = await fromTranscript(file).catch(
-    () =>
-      ({}) as {
-        mode?: string;
-        model?: string;
-      }
+    (): { mode?: string; model?: string } => ({})
   );
   const saidMode = mode(said.mode);
   const model = said.model
