@@ -224,31 +224,72 @@ const HUB_SILENT_TRIALS = 3;
  */
 export type RollbackCause = "own" | "hub-silent" | "slept";
 
+/** The failure a machine's state records: the build, its order, and how many trials of it the hub's silence ended. */
+export type RecordedFailure = Pick<
+  BinaryUpdateState,
+  "failedSequence" | "failedVersion" | "hubSilentTrials"
+>;
+
 /**
- * What a rollback of `version` writes of it: failed, and how many trials of
- * it in a row the hub's silence ended. A trial lost to sleep counts toward
- * none: the build is taken up again as after a silent one, and the count
- * stays as it stood.
+ * What a rollback of `version` writes of it: failed, at its release
+ * `sequence` (the order the updater installs by; absent only when its signed
+ * manifest could not be read), and how many trials of it in a row the hub's
+ * silence ended. A trial lost to sleep counts toward none: the build is taken
+ * up again as after a silent one, and the count stays as it stood.
  */
 export function rolledBack(
-  before: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
-  version: string,
+  before: RecordedFailure,
+  failed: { sequence: number | undefined; version: string },
   cause: RollbackCause
-): Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials"> {
+): RecordedFailure {
+  const { version, sequence } = failed;
   if (cause === "own") {
-    return { failedVersion: version, hubSilentTrials: undefined };
+    return {
+      failedVersion: version,
+      failedSequence: sequence,
+      hubSilentTrials: undefined,
+    };
   }
   const earlier =
     before.failedVersion === version ? (before.hubSilentTrials ?? 0) : 0;
   return {
     failedVersion: version,
+    failedSequence: sequence,
     hubSilentTrials: cause === "slept" ? earlier : earlier + 1,
   };
 }
 
+/**
+ * What a confirmed install of the build at release `sequence` leaves of the
+ * recorded failure. A failure stands only while its build is newer than every
+ * build installed since, by release sequence, the order the updater installs
+ * by (cli binary-apply.ts refuses a build not above the running one): an
+ * update to a newer build that failed and rolled back, then a lower build
+ * installed (a change of channel), still says it. A confirmed install at or
+ * above the failed build's sequence (the failed build itself, retried and
+ * healthy, among them) ends it, as does any confirmed install when the
+ * failure's order is not known.
+ */
+export function failureAfterInstall(
+  state: RecordedFailure,
+  sequence: number
+): RecordedFailure {
+  return state.failedSequence !== undefined && state.failedSequence > sequence
+    ? {
+        failedVersion: state.failedVersion,
+        failedSequence: state.failedSequence,
+        hubSilentTrials: state.hubSilentTrials,
+      }
+    : {
+        failedVersion: undefined,
+        failedSequence: undefined,
+        hubSilentTrials: undefined,
+      };
+}
+
 /** Whether `version` failed and auto-update does not take it up again by itself ({@link HUB_SILENT_TRIALS}). */
 export const failedForGood = (
-  state: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
+  state: RecordedFailure,
   version: string
 ): boolean =>
   state.failedVersion === version &&
@@ -436,9 +477,15 @@ export interface BinaryUpdateState {
   download?: BinaryDownload;
   error?: string;
   /**
+   * The release sequence of `failedVersion`, the order the updater installs
+   * by; written with it, and absent when its signed manifest could not be read.
+   */
+  failedSequence?: number;
+  /**
    * The build that failed to come up and was rolled back (or whose trial
    * ended undecided). Not retried by itself, unless `hubSilentTrials` says
-   * its trials ended on the hub's silence ({@link failedForGood}).
+   * its trials ended on the hub's silence ({@link failedForGood}). Ends when
+   * a build at or above its sequence is confirmed ({@link failureAfterInstall}).
    */
   failedVersion?: string;
   /** Children a keeper the new build cannot speak to holds, while they are the reason for waiting (`waiting-sessions`). */

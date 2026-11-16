@@ -74,6 +74,8 @@ import {
 import {
   type BinaryUpdateState,
   failedForGood,
+  failureAfterInstall,
+  type RecordedFailure,
   type RollbackCause,
   rolledBack,
   UPDATE_TRIAL_MS,
@@ -400,9 +402,11 @@ async function endUndecided(
   tries: number,
   why: string
 ): Promise<void> {
+  const manifest = await readStaged(trial.version).catch(() => undefined);
   await writeState({
     phase: "failed",
     failedVersion: trial.version,
+    failedSequence: manifest?.sequence,
     hubSilentTrials: undefined,
     unconfirmedVersion: trial.version,
     heldChildren: undefined,
@@ -1223,11 +1227,18 @@ class TrialWatch {
 
 /**
  * The build stays: its landing and its keeper's outcome were written when it
- * answered ({@link settle}); it joins the install order, the trial ends, and
+ * answered ({@link settle}); a recorded failure it outlives ends (core
+ * `failureAfterInstall`); it joins the install order, the trial ends, and
  * the prune keeps it and the two installed before it (and on the hub's
  * machine, their archives), with every build a live process still runs from.
  */
 async function confirm(trial: TrialMarker): Promise<void> {
+  // Here and not when the state says installed: a trial of the failed build
+  // that rolls back again counts on the failure it had (core `rolledBack`).
+  const { sequence } = await readStaged(trial.version);
+  await writeState(
+    failureAfterInstall((await readUpdateState()) ?? {}, sequence)
+  );
   // In the install order before the trial goes: a helper that stops between
   // the two resumes the confirm and records it again, to the same order.
   await recordInstall(trial.version, trial.previous);
@@ -1315,7 +1326,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
   const cause = rollbackCause(trial);
   const failed = rolledBack(
     (await readUpdateState()) ?? {},
-    trial.version,
+    { version: trial.version, sequence: manifest?.sequence },
     cause
   );
   await writeState({
@@ -1345,7 +1356,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
 /** What a rollback the hub's silence decided says of the build's next try ({@link rolledBack}), and one a sleep lost that it slept; nothing for the build's own fault. */
 function rollbackWords(
   cause: RollbackCause,
-  failed: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
+  failed: RecordedFailure,
   trial: TrialMarker
 ): string | undefined {
   const { version } = trial;

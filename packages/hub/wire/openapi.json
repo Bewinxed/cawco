@@ -34729,8 +34729,12 @@
           "error": {
             "type": "string"
           },
+          "failedSequence": {
+            "description": "The release sequence of `failedVersion`, the order the updater installs\nby; written with it, and absent when its signed manifest could not be read.",
+            "type": "number"
+          },
           "failedVersion": {
-            "description": "The build that failed to come up and was rolled back (or whose trial\nended undecided). Not retried by itself, unless `hubSilentTrials` says\nits trials ended on the hub's silence ({@link failedForGood}).",
+            "description": "The build that failed to come up and was rolled back (or whose trial\nended undecided). Not retried by itself, unless `hubSilentTrials` says\nits trials ended on the hub's silence ({@link failedForGood}). Ends when\na build at or above its sequence is confirmed ({@link failureAfterInstall}).",
             "type": "string"
           },
           "heldChildren": {
