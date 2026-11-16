@@ -350,6 +350,7 @@ import {
   type ToolStatus,
 } from "./tools";
 import type { TranscriptWindow } from "./transcript-types";
+import { controlWords } from "./words/controls";
 import type {
   FolderRemoved,
   HostOutputs,
@@ -436,7 +437,10 @@ const CONTROLS = {
   [CONTROL_PI_DEFAULT_MODEL]: z.string().nullable(),
   // A lent access goes on to its borrower as the lender wrote it, once it is
   // one (control-args.ts `isLentAccess`).
-  [CONTROL_LEND_ACCOUNT]: z.custom<LentAccess>(isLentAccess, "a lent sign-in"),
+  [CONTROL_LEND_ACCOUNT]: z.custom<LentAccess>(
+    isLentAccess,
+    controlWords.meant.lentSignIn
+  ),
   [CONTROL_BORROW_ACCOUNT]: reply<HomeLoginMoved>(HomeLoginMovedSchema),
   [CONTROL_ACCOUNT_LENT]: UNREAD,
   [CONTROL_BEGIN_PROVIDER_LOGIN]: reply<ProviderSigninChallenge>(
@@ -645,7 +649,7 @@ const CONTROLS = {
   ),
   [CONTROL_MCP_STATUS]: z.custom<McpServerStatus[]>(
     isMcpServerStatuses,
-    "a session's MCP servers"
+    controlWords.meant.mcpServers
   ),
   [CONTROL_MCP_RECONNECT]: UNREAD,
   [CONTROL_MCP_TOGGLE]: UNREAD,
@@ -654,12 +658,12 @@ const CONTROLS = {
   [VERIFY_SESSION_CREDENTIAL]: UNREAD,
   [CONTROL_STORED_RUN]: z.custom<StoredRun>(
     isStoredRun,
-    "what a session ran with"
+    controlWords.meant.storedRun
   ),
   [CONTROL_RENAME_SESSION]: UNREAD,
   [CONTROL_TAG_SESSION]: UNREAD,
   [CONTROL_SPIN_OFF_HELD]: z
-    .custom<SpinOffHeld>(isSpinOffHeld, "what a discard would take")
+    .custom<SpinOffHeld>(isSpinOffHeld, controlWords.meant.discardHolds)
     .nullable(),
   [FLEET_STATUS]: UNREAD,
   [UNLOCK_KEYCHAIN]: reply<AuthState | undefined>(AuthStateShape.optional()),
@@ -686,7 +690,7 @@ export const CONTROL_REPLIES: {
 
 /** Each `fs` op the hub asks a machine (protocol.ts `FsPayload`), with its reply's schema. */
 const FS_OPS = {
-  list: z.custom<FsEntry[]>(isFsEntries, "a folder's listing"),
+  list: z.custom<FsEntry[]>(isFsEntries, controlWords.meant.folderListing),
   read: z.string(),
   write: UNREAD,
   media: FsMediaSchema,

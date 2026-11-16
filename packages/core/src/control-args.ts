@@ -186,7 +186,7 @@ const commit = pipe(text, regex(COMMIT, controlWords.notCommit));
 const WorkspaceCommit = object({ bundle: nullable(text), head: commit });
 const MoveSnapshotResult = storedAs(
   MoveSnapshotResultShape,
-  "a move's snapshot"
+  controlWords.meant.moveSnapshot
 );
 const ServeSpec = object({
   command: text,
@@ -321,7 +321,7 @@ const ARGS: {
   getTaskOutput: tuple([named]),
   resolvePermission: tuple([
     named,
-    storedAs(PermissionResultSchema, "a permission's answer"),
+    storedAs(PermissionResultSchema, controlWords.meant.permissionAnswer),
   ]),
   withdrawPermission: tuple([named, text]),
 
@@ -554,7 +554,7 @@ const ARGS: {
   // GitHub's sign-ins on a machine, and its forge writes.
   ghAccounts: tuple([]),
   ghToken: tuple([text, text]),
-  forgePost: tuple([storedAs(ForgeAskSchema, "a forge write")]),
+  forgePost: tuple([storedAs(ForgeAskSchema, controlWords.meant.forgeWrite)]),
 
   // Skills and harness settings read off a machine.
   inspectConfig: tuple([maybe(text)]),
@@ -587,7 +587,7 @@ const ARGS: {
     maybe(object({ commandId: optional(text), version: optional(text) })),
   ]),
   configureBinaryUpdates: tuple([
-    storedAs(BinaryUpdatePolicySchema, "an update policy"),
+    storedAs(BinaryUpdatePolicySchema, controlWords.meant.updatePolicy),
   ]),
   cancelBinaryUpdate: tuple([]),
   probeCapabilities: tuple([]),

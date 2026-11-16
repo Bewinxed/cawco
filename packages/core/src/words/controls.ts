@@ -16,6 +16,18 @@ export const controlWords = {
     `The machine answered ${call} with something that is not its answer (${fields}). Nothing it said was taken; ask again.`,
   /** An argument a stored type's schema did not read, by the fields it broke. */
   notStored: (what: string, fields: string) => `is not ${what} (${fields})`,
+  /** What an argument or an answer is meant to be, as a refusal of one that is not names it. */
+  meant: {
+    discardHolds: "what a discard would take",
+    folderListing: "a folder's listing",
+    forgeWrite: "a forge write",
+    lentSignIn: "a lent sign-in",
+    mcpServers: "a session's MCP servers",
+    moveSnapshot: "a move's snapshot",
+    permissionAnswer: "a permission's answer",
+    storedRun: "what a session ran with",
+    updatePolicy: "an update policy",
+  },
   /** A setting's control that names no setting: refused, so the session keeps the one it has. */
   noSetting: (setting: string) => `names no ${setting} to set`,
   empty: "is empty",
