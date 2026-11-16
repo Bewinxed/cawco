@@ -20,10 +20,14 @@
  * names a column through its table ({@link qualifiedChecks}). Once the hub has
  * started, no row names a row that is not there (`PRAGMA
  * foreign_key_check`): a hub that kept a port for a project no longer there
- * died at every start (nightly 4627). Every stored send on the artifact
- * origin reads as an artifact notice ({@link artifactNotices}): sends whose
- * tags named the kind `sheet` after migration 0255 renamed it were drawn as
- * the person's words (nightly 8128).
+ * died at every start (nightly 4627). Every stored marker reads as the
+ * transcript reads it ({@link storedMarkers}): each send stamped
+ * `[cawco:<kind>` by its kind's reader, each send on the artifact origin as
+ * an artifact notice, each context line a session keeps; sends whose tags
+ * named the kind `sheet` after migration 0255 renamed it were drawn as the
+ * person's words (nightly 8128). Both fixtures hold every kind of stored
+ * marker, in every shape a once-step still rewrites (fixture-db.ts
+ * `seedMarkers`).
  *
  * `--db <path>`: the same over a copy of that database instead (a live
  * hub's, or a copy of one), taken by `VACUUM INTO`; the given file is never
@@ -48,9 +52,19 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { parseAskAnswered } from "@cawco/core/asks";
 import { choiceEntryProblem } from "@cawco/core/choices";
 import { ARTIFACT_ORIGIN } from "@cawco/core/harness/kinds";
-import { parseArtifactNotice } from "@cawco/core/injected";
+import {
+  parseArtifactNotice,
+  parseDelegateAsk,
+  parseDelegateWaitNotice,
+  parseFleetWatchNudge,
+  parseForkNotice,
+  parseHandoffMarker,
+  parseReportMarker,
+  parseUndelivered,
+} from "@cawco/core/injected";
 import {
   type AppliedRow,
   appliedRows,
@@ -58,7 +72,11 @@ import {
   journalEntries,
   migrationState,
 } from "@cawco/core/migration-state";
-import { transcriptUserText } from "@cawco/core/transcript-rules";
+import { parseRuleMarker } from "@cawco/core/rules";
+import {
+  contextLineOf,
+  transcriptUserText,
+} from "@cawco/core/transcript-rules";
 import { getTableName, is } from "drizzle-orm";
 import {
   getTableConfig,
@@ -110,37 +128,139 @@ const docChoices = (
   return { checked, failures };
 };
 
+/** A stored marker of one kind read back as the transcript reads it; null when it is not read. */
+type MarkerReader = (text: string) => object | null;
+
+/** An artifact notice of one kind (core injected.ts `ARTIFACT_NOTICES`) read back; null when no notice reads it, or another kind's does. */
+const artifactNoticeOf =
+  (notice: string): MarkerReader =>
+  (text) => {
+    const read = parseArtifactNotice(text);
+    return read?.notice === notice ? read : null;
+  };
+
 /**
- * Every stored send on the artifact origin read as the transcript reads it
- * (core injected.ts `parseArtifactNotice`, through transcript-rules.ts
- * `sendRow`): how many, and each one no artifact notice reads, which a
- * transcript would draw as the person's words (the `artifact-notice-drawn`
- * law). A notice's tag names its artifact's kind, and the reader takes only
- * a kind in `ARTIFACT_KINDS`: a kind renamed or dropped there without a
- * once-step renaming it in the stored sends' tags (db/sheet-notices.ts did
- * it for `sheet`) fails here, on the fixtures and on the live database's
- * copy before a release.
+ * Every kind of marker CawCo stamps a stored send with (`[cawco:<kind> …]`,
+ * core injected.ts `markerTag`), and the reader the transcript reads it back
+ * by: core transcript-rules.ts `artifactNoticeBlock` and `injectedBlock`
+ * through `sentRow`, `cawcoRow` for an answered ask. A send stamped with a
+ * kind none of these is, or one its kind's reader refuses, is drawn as the
+ * person's words or a bare CawCo notice, never as the marker it is.
  */
-const artifactNotices = (
+const MARKER_READERS: ReadonlyMap<string, MarkerReader> = new Map([
+  ["artifact-responses", artifactNoticeOf("responses")],
+  ["artifact-comments", artifactNoticeOf("comments")],
+  ["artifact-errors", artifactNoticeOf("errors")],
+  ["artifact-saves", artifactNoticeOf("saves")],
+  ["artifact-handed", artifactNoticeOf("handed")],
+  ["handoff", parseHandoffMarker],
+  ["undelivered", parseUndelivered],
+  ["fleet-watch", parseFleetWatchNudge],
+  ["fork", parseForkNotice],
+  ["delegate-wait", parseDelegateWaitNotice],
+  ["report", parseReportMarker],
+  ["delegate-ask", parseDelegateAsk],
+  ["rule", parseRuleMarker],
+  ["ask-answered", parseAskAnswered],
+]);
+
+/** The kind a send's words are stamped with: its first line's `[cawco:<kind>`, read before any field is (jsonl-parser text.ts `CAWCO_TAG`). */
+const STAMP = /^\[cawco:([a-z-]+)[ \]]/u;
+
+/** The first line of a stored row, as a failure quotes it. */
+const quoted = (text: string): string =>
+  `"${text.split("\n")[0].slice(0, 200)}"`;
+
+/**
+ * Every stored marker read back as the transcript reads it: each send
+ * stamped `[cawco:<kind>` through its kind's reader ({@link
+ * MARKER_READERS}), each send on the artifact origin through
+ * `parseArtifactNotice` whatever it is stamped with (the
+ * `artifact-notice-drawn` law, transcript-rules.ts `sendRow`), and each
+ * context line a session keeps (`session_lines`, kind `context`) through
+ * `contextLineOf`, which draws none it does not read. How many of each,
+ * and each one no reader takes: a reader tightened, or a kind or field
+ * renamed, without a once-step over the stored rows (db/sheet-notices.ts
+ * did it for `sheet`) fails here, on the fixtures and on the live
+ * database's copy before a release.
+ */
+const storedMarkers = (
   dbPath: string
-): { checked: number; failures: string[] } => {
+): {
+  artifactOrigin: number;
+  contextLines: number;
+  failures: string[];
+  stamped: Map<string, number>;
+} => {
   const sqlite = new Database(dbPath, { readonly: true });
   const sends = sqlite
-    .query<{ instance: string; message: string; uuid: string }, [string]>(
-      "SELECT uuid, instance_id AS instance, json_extract(body, '$.message') AS message FROM sent_messages WHERE json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') = ?"
+    .query<
+      {
+        artifact: number;
+        instance: string;
+        message: string;
+        uuid: string;
+      },
+      [string]
+    >(
+      "SELECT uuid, instance_id AS instance, json_extract(body, '$.message') AS message, json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') IS ?1 AS artifact FROM sent_messages WHERE instr(body, '[cawco:') > 0 OR (json_extract(body, '$.origin.kind') = 'system' AND json_extract(body, '$.origin.name') IS ?1)"
     )
     .all(ARTIFACT_ORIGIN);
+  const lines = sqlite
+    .query<{ content: string; id: string; instance: string }, []>(
+      "SELECT instance_id AS instance, id, content FROM session_lines WHERE kind = 'context'"
+    )
+    .all();
   sqlite.close();
-  const failures = sends.flatMap(({ uuid, instance, message }) => {
+  const stamped = new Map([...MARKER_READERS.keys()].map((kind) => [kind, 0]));
+  let artifactOrigin = 0;
+  const failures: string[] = [];
+  for (const { uuid, instance, message, artifact } of sends) {
     const text = transcriptUserText(JSON.parse(message)) ?? "";
-    return parseArtifactNotice(text)
-      ? []
-      : [
-          `send ${uuid} to session ${instance}: "${text.split("\n")[0].slice(0, 200)}"`,
-        ];
-  });
-  return { checked: sends.length, failures };
+    const kind = STAMP.exec(text)?.[1];
+    const row = `send ${uuid} to session ${instance}`;
+    if (kind !== undefined) {
+      stamped.set(kind, (stamped.get(kind) ?? 0) + 1);
+      const reader = MARKER_READERS.get(kind);
+      if (!reader) {
+        failures.push(
+          `${row}, stamped ${kind}, a kind no reader takes: ${quoted(text)}`
+        );
+        continue;
+      }
+      if (reader(text) === null) {
+        failures.push(
+          `${row}, stamped ${kind}, which its reader does not read: ${quoted(text)}`
+        );
+        continue;
+      }
+    }
+    if (artifact) {
+      artifactOrigin += 1;
+      if (!parseArtifactNotice(text)) {
+        failures.push(
+          `${row}, on the artifact origin, which no artifact notice reads: ${quoted(text)}`
+        );
+      }
+    }
+  }
+  for (const { instance, id, content } of lines) {
+    if (contextLineOf(content) === null) {
+      failures.push(
+        `context line ${id} of session ${instance}, which contextLineOf does not read: ${quoted(content)}`
+      );
+    }
+  }
+  return { artifactOrigin, contextLines: lines.length, failures, stamped };
 };
+
+/** The counts {@link storedMarkers} read, as the check's line says them. */
+const markersSaid = ({
+  artifactOrigin,
+  contextLines,
+  stamped,
+}: ReturnType<typeof storedMarkers>): string =>
+  `stored markers read by their kind's reader: ${[...stamped].map(([kind, n]) => `${kind} ${n}`).join(", ")}; ${artifactOrigin} sends on the artifact origin read as artifact notices; ${contextLines} context lines read as one`;
 
 /**
  * The artifacts with no title before the hub starts (every one, on a
@@ -1859,13 +1979,13 @@ try {
       `Picks in page docs that are not a choice's shape: a pass over the docs is missing.\n${choices.failures.slice(0, 10).join("\n")}`
     );
   }
-  // Every send on the artifact origin reads as an artifact notice once the
-  // hub started (its once-steps over the stored sends ran): a notice no
-  // reader takes would be drawn as the person's words.
-  const notices = artifactNotices(dbPath);
-  if (notices.failures.length > 0) {
+  // Every stored marker reads as its kind once the hub started (its
+  // once-steps over the stored sends ran): a marker no reader takes would be
+  // drawn as the person's words or a bare notice, or not at all.
+  const markers = storedMarkers(dbPath);
+  if (markers.failures.length > 0) {
     throw new Error(
-      `${notices.failures.length} stored send${notices.failures.length === 1 ? "" : "s"} on the artifact origin that no artifact notice reads (core injected.ts \`parseArtifactNotice\`), so a transcript would draw each as the person's words: a kind renamed or dropped from ARTIFACT_KINDS (core artifact-kinds.ts) needs a once-step that renames it in the stored sends' tags, as db/sheet-notices.ts did for \`sheet\`.\n${notices.failures.slice(0, 10).join("\n")}`
+      `${markers.failures.length} stored marker${markers.failures.length === 1 ? "" : "s"} that the transcript's reader for their kind does not read (MARKER_READERS, core injected.ts \`parseArtifactNotice\` on the artifact origin, transcript-rules.ts \`contextLineOf\`), so a transcript would draw each as the person's words or a bare CawCo notice, or drop it: a reader tightened, or a marker's kind or fields renamed (a kind dropped from ARTIFACT_KINDS, core artifact-kinds.ts), needs a once-step that rewrites the stored rows (db \`migrateSendsOnce\`), as db/sheet-notices.ts did for \`sheet\`; a new kind of marker adds its reader to MARKER_READERS.\n${markers.failures.slice(0, 10).join("\n")}`
     );
   }
   // Every artifact made before titles took its title from the start's one
@@ -1907,7 +2027,7 @@ try {
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(`migrations:check: ${cases.join("; ")}; ${thawed.said}`);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored rows in ${shapes.columns} columns (${shapes.sets} of them closed sets of text) are their shape; ${choices.checked} picks in page docs are a choice's shape; ${notices.checked} sends on the artifact origin read as artifact notices; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : `${FIXTURE_NAME} fixture rows`}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored rows in ${shapes.columns} columns (${shapes.sets} of them closed sets of text) are their shape; ${choices.checked} picks in page docs are a choice's shape; ${markersSaid(markers)}; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });
