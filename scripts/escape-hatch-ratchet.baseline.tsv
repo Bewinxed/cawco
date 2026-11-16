@@ -18,10 +18,6 @@ as-unknown-as	{ routes: Route[] }	scripts/shell-bodies-check.ts	1
 as-unknown-as	{ toolCallId: string; result: { content?: unknown; details?: Record<stri	packages/agent/src/harnesses/pi-runtime.ts	1
 as-unknown-as	{ type?: string; path?: string }[]	packages/agent/src/harnesses/opencode.ts	1
 as-unknown-as	{ webkit?: { messageHandlers?: { cawco?: unknown } }; }	packages/preview/src/overlay/page.ts	1
-as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
-as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
-as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
-as-unknown-as	AbstractType< YEvent<AbstractType<unknown>> >	packages/hub/src/artifacts/docs.ts	2
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
