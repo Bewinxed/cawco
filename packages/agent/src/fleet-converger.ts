@@ -30,6 +30,7 @@ import { readingLines, shortDetail } from "@cawco/core/fleet-fault-reason";
 import type { FleetItemKind } from "@cawco/core/fleet-items";
 import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
 import type { FleetReportFrame } from "@cawco/core/frames";
+import { HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { Envelope } from "@cawco/core/protocol";
 import type { FleetMcpTakeAnswer } from "@cawco/core/session/controls";
@@ -793,7 +794,7 @@ export class FleetConverger {
       return {
         ...local,
         config: hostedEntry(
-          harnessMcpUrl(`/mcp/local/${encodeURIComponent(row.name)}`)
+          harnessMcpUrl(`${HOSTED_PREFIX}${encodeURIComponent(row.name)}`)
         ),
       };
     }

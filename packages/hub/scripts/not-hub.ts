@@ -45,7 +45,7 @@ export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
   {
     file: "packages/agent/src/mcp-gate.ts",
     pattern: "/mcp/gate/**",
-    why: "a workspace session's MCP gate, on the agent's own gateway port (mcp-gate.ts `GATE_PREFIX`)",
+    why: "a workspace session's MCP gate, on the agent's own gateway port (core gateway-paths.ts `GATE_PREFIX`)",
   },
   {
     file: "packages/agent/src/mcp-gate.ts",

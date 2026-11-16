@@ -19,6 +19,7 @@
  */
 // The compiler openapi.ts reads the hub with: the schema generator's own,
 // which has the classic parser API (the repository's TypeScript 7 does not).
+import { GATE_PREFIX, HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import { ts } from "typescript-json-schema";
 import { NOT_HUB } from "./not-hub";
 
@@ -189,12 +190,11 @@ const isLiteral = (
  * The agent's own local-URL helper (delegation.ts `harnessMcpUrl`) builds a
  * URL on this machine's gateway. The gateway relays most of what it is asked
  * to the hub (`/api/delegation/…`, `/mcp/cawco`, `/mcp/fleet/…`), and
- * answers the hosted MCP servers itself (mcp-oauth.ts `hostedRoutes`:
- * mcp-host.ts `HOSTED_PATH`, mcp-gate.ts `GATE_PATH`), which no hub route
- * ever answers.
+ * answers the hosted MCP servers itself (mcp-oauth.ts `hostedRoutes`, on
+ * core gateway-paths.ts's prefixes), which no hub route ever answers.
  */
 const LOCAL_URL_HELPER = "harnessMcpUrl";
-const GATEWAY_OWN = /^\/mcp\/(?:local|gate)\//u;
+const GATEWAY_OWN = [HOSTED_PREFIX, GATE_PREFIX];
 
 /** Whether `node` is an argument of a call to the local-URL helper. */
 const isLocalUrl = (node: ts.Node): boolean =>
@@ -424,7 +424,10 @@ const builtCalls = (
   }
   const local = isLocalUrl(node);
   return render(file, node, 0)
-    .filter((built) => !(local && GATEWAY_OWN.test(built)))
+    .filter(
+      (built) =>
+        !(local && GATEWAY_OWN.some((prefix) => built.startsWith(prefix)))
+    )
     .flatMap(hubPathsIn);
 };
 

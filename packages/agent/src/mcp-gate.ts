@@ -14,6 +14,7 @@
  */
 import { createHash } from "node:crypto";
 import type { FleetMcpConfig } from "@cawco/core/fleet";
+import { GATE_PREFIX } from "@cawco/core/gateway-paths";
 
 /** A workspace session's gate: the path its servers hang off, and the host key every call carries. */
 export interface McpGate {
@@ -23,11 +24,11 @@ export interface McpGate {
   readonly headers: Readonly<Record<string, string>>;
 }
 
-/** Where every gate's path begins on the gateway; OpenCode's plugin writes its gate URLs from it. */
-export const GATE_PREFIX = "/mcp/gate/";
-
 /** The gateway path a gate's server is dialled on: its gate id and its name. */
-export const GATE_PATH = /^\/mcp\/gate\/([^/]+)\/([^/]+)$/u;
+export const GATE_PATH = new RegExp(
+  `^${RegExp.escape(GATE_PREFIX)}([^/]+)/([^/]+)$`,
+  "u"
+);
 
 /** The gate path of gate `gateId`, server names after it. */
 export const gatePath = (gateId: string): string =>

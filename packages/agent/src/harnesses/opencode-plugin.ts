@@ -12,6 +12,7 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { GATE_PREFIX } from "@cawco/core/gateway-paths";
 import {
   fleetHarnessSetFile,
   fleetMcpSetFile,
@@ -33,7 +34,6 @@ import {
   OPEN_ITEMS_TOOL,
 } from "../delegation";
 import { readJsonOrLeave, writeJson } from "../json-file";
-import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
 import { MCP_CONNECT_MS } from "../mcp-status";
 import { CAWCO_PLUGIN_ID, SEND_NOW_METADATA } from "./opencode-client";
