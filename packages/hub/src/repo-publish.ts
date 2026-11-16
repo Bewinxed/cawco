@@ -25,8 +25,8 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
-import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { isRecord } from "@cawco/core/is-record";
+import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";

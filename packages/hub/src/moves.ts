@@ -22,11 +22,11 @@ import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { ControlName, ControlReply } from "@cawco/core/control-replies";
 import { detach } from "@cawco/core/detach";
-import { isRecord } from "@cawco/core/is-record";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import type { ArrivingAsk, ParkedAsk } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
+import { isRecord } from "@cawco/core/is-record";
 import {
   type MachinePath,
   MachinePathRefused,
@@ -57,8 +57,8 @@ import {
   moveSize,
   type NamedMoveRequest,
 } from "@cawco/core/move";
-import type { SpawnPayload } from "@cawco/core/protocol";
 import { isOneOf } from "@cawco/core/one-of";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { PermissionResult } from "@cawco/core/session-messages";
