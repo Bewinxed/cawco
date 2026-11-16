@@ -5,7 +5,7 @@ import type { NeutralMessage } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
-import { askJev, jevAccess } from "./jev";
+import { askJev, jevAccess, jevCost } from "./jev";
 import type { JevResult } from "./jev-types";
 
 /** A meaning rule answers inside the turn it judges, so it is asked briefly. */
@@ -24,7 +24,7 @@ const MEANING_TIMEOUT_MS = 10_000;
  * this fact, not from how the session describes its delegates.
  */
 
-/** A noul at or above this fires the rule. */
+/** A yes probability at or above this fires the rule. */
 export const MEANING_THRESHOLD = 0.8;
 
 /** Jev reads 32,000 tokens; the tail of the output is what gets judged. */
@@ -151,12 +151,12 @@ export class MeaningJudge {
       );
       return { kind: "answered", value: new Set() };
     }
-    const questions: Record<string, { type: "noul"; instructions: string }> =
+    const questions: Record<string, { type: "boolean"; instructions: string }> =
       Object.fromEntries(
         asked.map(({ rule, subject }) => [
           rule.id,
           {
-            type: "noul" as const,
+            type: "boolean" as const,
             instructions: `${rule.pattern} answered about ${subject}`,
           },
         ])
@@ -185,13 +185,13 @@ export class MeaningJudge {
     }
     const yes = new Set<string>();
     for (const { rule } of asked) {
-      const { noul } = result.answers[rule.id];
+      const { probability } = result.answers[rule.id];
       if (HUB_DEBUG) {
         console.debug(
-          `[meaning] ${instanceId}: rule ${rule.id} route=${access.route} noul=${noul} cost=$${result.usage.costUsd}`
+          `[meaning] ${instanceId}: rule ${rule.id} route=${access.route} probability=${probability} cost=${jevCost(result.usage)}`
         );
       }
-      if (noul >= MEANING_THRESHOLD) {
+      if (probability >= MEANING_THRESHOLD) {
         yes.add(rule.id);
       }
     }

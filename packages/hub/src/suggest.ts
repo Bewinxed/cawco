@@ -3,7 +3,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
-import { askJev, type JevAccess, jevUnanswered } from "./jev";
+import { askJev, type JevAccess, jevCost, jevUnanswered } from "./jev";
 import type { JevResult } from "./jev-types";
 import { mcpUsageName, usageScores } from "./usage-count";
 
@@ -16,7 +16,7 @@ const SUGGEST_TIMEOUT_MS = 10_000;
  * add to the prompt — the harness's tool set is never touched.
  */
 
-/** A noul at or above this is shown as a chip. Our own call, to be tuned. */
+/** A yes probability (kept as `noul`) at or above this is shown as a chip. Our own call, to be tuned. */
 const SUGGEST_THRESHOLD = 0.6;
 /** The most chips shown at once. Our own call, to be tuned. */
 const SUGGEST_MAX = 4;
@@ -95,7 +95,8 @@ function rankCandidates(
 }
 
 /**
- * One systemone call, one noul per ranked candidate. Structured instructions
+ * One Jev call, one yes/no per ranked candidate (its probability is the
+ * chip's `noul`). Structured instructions
  * keep the question in one field and the candidate in the others
  * (https://docs.typesafe.ai/api.md).
  */
@@ -111,14 +112,11 @@ export async function suggest(
   if (asked.length === 0) {
     return { suggestions: [] };
   }
-  const questions: Record<
-    string,
-    { type: "noul"; instructions: Record<string, unknown> }
-  > = Object.fromEntries(
+  const questions = Object.fromEntries(
     asked.map((candidate) => [
       candidate.id,
       {
-        type: "noul" as const,
+        type: "boolean" as const,
         instructions: {
           candidate: {
             kind: candidate.kind,
@@ -157,7 +155,7 @@ export async function suggest(
   }
   if (HUB_DEBUG) {
     console.debug(
-      `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=$${result.usage.costUsd}`
+      `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=${jevCost(result.usage)}`
     );
   }
   // One chip per capability: a name offered as both an MCP server and a skill
@@ -168,7 +166,7 @@ export async function suggest(
       .map((candidate) => ({
         id: candidate.id,
         name: candidate.name.toLowerCase(),
-        noul: result.answers[candidate.id].noul,
+        noul: result.answers[candidate.id].probability,
       }))
       .filter((entry) => entry.noul >= SUGGEST_THRESHOLD)
       .sort((a, b) => b.noul - a.noul)

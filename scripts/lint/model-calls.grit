@@ -29,9 +29,6 @@ language js
 //   a JSON body; @ai-sdk/openai 4.0.118 sends edits as multipart
 //   (openai-image-model.ts). The owner decided (2026-11-16) this provider
 //   stays hand-written as the one named exception.
-// - packages/hub/src/jev.ts: moves with the Jev AI-SDK branch.
-// - packages/hub/src/upstreams.ts: TYPESAFE_URL, the endpoint jev.ts posts
-//   to; moves with the Jev AI-SDK branch.
 or {
   or {
     `import $clause from $source` as $hit,
@@ -48,11 +45,7 @@ or {
   },
   or { JsStringLiteralExpression(), JsTemplateExpression() } as $literal where {
     $filename <: or { includes "packages/", includes "apps/dashboard/" },
-    $filename <: not or {
-      includes "packages/agent/src/image-providers/chatgpt.ts",
-      includes "packages/hub/src/jev.ts",
-      includes "packages/hub/src/upstreams.ts"
-    },
+    $filename <: not includes "packages/agent/src/image-providers/chatgpt.ts",
     $literal <: or {
       r"(?s).*https?://(?:api\.openai\.com|chatgpt\.com|api\.anthropic\.com|openrouter\.ai|generativelanguage\.googleapis\.com|[a-z0-9-]*aiplatform\.googleapis\.com|api\.typesafe\.ai|api\.mistral\.ai|api\.groq\.com|api\.together\.xyz|api\.deepseek\.com|api\.x\.ai|api\.cohere\.(?:com|ai)|api\.fireworks\.ai|api\.perplexity\.ai)[^\"'`\s]*(?:/chat/completions|/completions|/messages|/images|/responses|/systemone|/interactions|/embeddings|/audio/|:generateContent|:streamGenerateContent|:predict).*",
       r"(?s).*/codex/(?:images|responses)\b.*"

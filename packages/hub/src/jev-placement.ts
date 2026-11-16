@@ -9,7 +9,7 @@
  *   row's own rule decides, as the table writes it; nothing here calls any
  *   other model.
  * - **One line per call.** Every Jev call logs `[jev] <row> project=<id>
- *   route=<typesafe|openrouter> cost=$<usd>`; every Jev-off decision logs `[jev off]
+ *   route=<typesafe|openrouter> cost=$<usd>` (or `cost not known`); every Jev-off decision logs `[jev off]
  *   <row> project=<id>: <who decided, and what>`, so a log says who decided.
  * - **Jev on but failing says so** (§2): the call throws {@link JevFailed}
  *   with Jev's own words, and the caller does not hand the question to a
@@ -21,13 +21,12 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import { unhandled } from "@cawco/core/unhandled";
-import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import type {
-  JevChoiceAnswer,
-  JevQuestion,
-  JevResult,
-  JevText,
-} from "./jev-types";
+  Experimental_DecisionQuestion,
+  Experimental_DecisionState,
+} from "ai";
+import { askJev, type JevAccess, jevCost, jevUnanswered } from "./jev";
+import type { JevResult } from "./jev-types";
 import {
   PLACE_QUESTION,
   reasonRefusal,
@@ -81,12 +80,14 @@ export const tailOf = (text: string, max: number): string =>
  * questions over one state are evaluated in parallel), logged as one line.
  */
 export async function askRow<
-  const Questions extends Readonly<Record<string, JevQuestion>>,
+  const Questions extends Readonly<
+    Record<string, Experimental_DecisionQuestion>
+  >,
 >(
   rows: PlacementRow | PlacementRow[],
   projectId: string | null,
   access: JevAccess,
-  state: JevText,
+  state: Experimental_DecisionState,
   questions: Questions
 ): Promise<JevResult<Questions>> {
   const named = (Array.isArray(rows) ? rows : [rows])
@@ -108,7 +109,7 @@ export async function askRow<
   switch (asking.kind) {
     case "answered":
       console.log(
-        `[jev] ${named} project=${projectId ?? "none"} route=${access.route} questions=${Object.keys(questions).length} cost=$${asking.value.usage.costUsd}`
+        `[jev] ${named} project=${projectId ?? "none"} route=${access.route} questions=${Object.keys(questions).length} cost=${jevCost(asking.value.usage)}`
       );
       return asking.value;
     case "unanswered": {
@@ -134,12 +135,12 @@ export const offLine = (
 };
 
 /** The option a choice answer names, typed to its criteria's keys. */
-const picked = <Option extends string>(answer: JevChoiceAnswer<Option>) =>
+const picked = <Option extends string>(answer: { choice: Option }) =>
   answer.choice;
 
 // --- Attach or fresh (yes/no) ---------------------------------------------------
 
-/** A noul at or above this continues the last session. Our own call: the likelier of two. */
+/** A yes probability (kept as `noul`) at or above this continues the last session. Our own call: the likelier of two. */
 const ATTACH_THRESHOLD = 0.5;
 
 /**
@@ -176,7 +177,7 @@ export async function jevAttach(
     },
     {
       attach: {
-        type: "noul",
+        type: "boolean",
         instructions:
           "Does `message` build on what `session` already did (`last_work`) so closely that a fresh session, briefed with only the task and this message, would have to redo or re-read that work? `cache` says how its history would go on: warm, `session` itself takes `message`, cheaply; cold, its history is compressed into a summary that a new session in the same workspace continues from, so its whole transcript is never re-read.",
         criteria: {
@@ -187,8 +188,8 @@ export async function jevAttach(
       },
     }
   );
-  const { noul } = result.answers.attach;
-  return { attach: noul >= ATTACH_THRESHOLD, noul };
+  const { probability } = result.answers.attach;
+  return { attach: probability >= ATTACH_THRESHOLD, noul: probability };
 }
 
 /**
@@ -282,7 +283,7 @@ export async function jevDispatch(
   };
   const questions: Record<
     string,
-    { type: "score"; instructions: JevText; criteria: readonly JevText[] }
+    Extract<Experimental_DecisionQuestion, { type: "score" }>
   > = {};
   for (const task of asked) {
     questions[`${task.id}:ready`] = {
@@ -394,7 +395,7 @@ export async function jevTriage(
 
 // --- Duplicates (yes/no) ---------------------------------------------------------
 
-/** A noul at or above this marks a duplicate. Our own call: dropping a task needs confidence. */
+/** A yes probability (kept as `noul`) at or above this marks a duplicate. Our own call: dropping a task needs confidence. */
 const DUPLICATE_THRESHOLD = 0.8;
 /** The most open tasks a new one is compared with: the nearest by title words (jev-tasks.ts `openTasks`). */
 export const DUPLICATE_CANDIDATES_MAX = 30;
@@ -440,7 +441,7 @@ export async function jevDuplicate(
       asked.map((task) => [
         task.id,
         {
-          type: "noul" as const,
+          type: "boolean" as const,
           instructions: `Is \`new_task\` the same piece of work as \`open_tasks["${task.id}"]\`, so doing one does the other?`,
         },
       ])
@@ -448,7 +449,10 @@ export async function jevDuplicate(
   );
   const { answers } = result;
   const [best] = asked
-    .map((task) => ({ id: task.id, noul: answers[task.id]?.noul ?? 0 }))
+    .map((task) => ({
+      id: task.id,
+      noul: answers[task.id]?.probability ?? 0,
+    }))
     .sort((a, b) => b.noul - a.noul);
   return best && best.noul >= DUPLICATE_THRESHOLD ? best : undefined;
 }
@@ -562,7 +566,7 @@ export async function jevType(
 
 // --- Judged checks (yes/no ×N) ------------------------------------------------------
 
-/** A noul at or above this meets a criterion. Our own call, as a meaning rule fires. */
+/** A yes probability (kept as `noul`) at or above this meets a criterion. Our own call, as a meaning rule fires. */
 const JUDGED_THRESHOLD = 0.8;
 /**
  * The most of a landed attempt's diff the judge reads (dispatch.ts
@@ -611,7 +615,7 @@ export async function jevJudged(
       criteria.map((criterion, index) => [
         `c${index}`,
         {
-          type: "noul" as const,
+          type: "boolean" as const,
           instructions: {
             criterion: head(criterion, 500),
             question:
@@ -623,7 +627,7 @@ export async function jevJudged(
   );
   const { answers } = result;
   return criteria.map((criterion, index) => {
-    const noul = answers[`c${index}`]?.noul ?? 0;
+    const noul = answers[`c${index}`]?.probability ?? 0;
     return { criterion, noul, met: noul >= JUDGED_THRESHOLD };
   });
 }
@@ -640,10 +644,6 @@ const PHONE_ACTIONS = {
   caw: "Anything else: a question, or a request for the project's conversation.",
 } as const;
 export type PhoneAction = keyof typeof PHONE_ACTIONS;
-
-/** Whether `choice` is one of {@link PHONE_ACTIONS}. */
-const isPhoneAction = (choice: string): choice is PhoneAction =>
-  Object.hasOwn(PHONE_ACTIONS, choice);
 
 /** The most open tasks a phone request picks from when it names none. */
 const PHONE_TASKS_MAX = 50;
@@ -664,42 +664,6 @@ export async function jevPhone(
   }
 ): Promise<{ action: PhoneAction; stage?: string; task?: string }> {
   const tasks = options.tasks.slice(0, PHONE_TASKS_MAX);
-  const questions: Record<
-    string,
-    { type: "choice"; instructions: string; criteria: Record<string, string> }
-  > = {
-    action: {
-      type: "choice",
-      instructions: options.task
-        ? "What does `request` ask for, about `task`?"
-        : "What does `request` ask for?",
-      criteria: PHONE_ACTIONS,
-    },
-  };
-  if (options.stages.length > 0) {
-    questions.stage = {
-      type: "choice",
-      instructions: "If `request` moves a task, to which stage?",
-      criteria: Object.fromEntries(
-        options.stages.map((stage) => [
-          stage.name,
-          `${stage.name} (a ${stage.kind} stage)`,
-        ])
-      ),
-    };
-  }
-  if (!options.task && tasks.length > 0) {
-    questions.task = {
-      type: "choice",
-      instructions: "Which task is `request` about?",
-      criteria: Object.fromEntries(
-        tasks.map((task) => [
-          task.id,
-          `${head(task.title, 200)} (in ${task.stage})`,
-        ])
-      ),
-    };
-  }
   const result = await askRow(
     "phone",
     projectId,
@@ -708,18 +672,52 @@ export async function jevPhone(
       request: head(text, 2000),
       ...(options.task ? { task: options.task } : {}),
     },
-    questions
+    {
+      action: {
+        type: "choice",
+        instructions: options.task
+          ? "What does `request` ask for, about `task`?"
+          : "What does `request` ask for?",
+        criteria: PHONE_ACTIONS,
+      },
+      ...(options.stages.length > 0
+        ? {
+            stage: {
+              type: "choice" as const,
+              instructions: "If `request` moves a task, to which stage?",
+              criteria: Object.fromEntries(
+                options.stages.map((stage) => [
+                  stage.name,
+                  `${stage.name} (a ${stage.kind} stage)`,
+                ])
+              ),
+            },
+          }
+        : {}),
+      ...(!options.task && tasks.length > 0
+        ? {
+            task: {
+              type: "choice" as const,
+              instructions: "Which task is `request` about?",
+              criteria: Object.fromEntries(
+                tasks.map((task) => [
+                  task.id,
+                  `${head(task.title, 200)} (in ${task.stage})`,
+                ])
+              ),
+            },
+          }
+        : {}),
+    }
   );
   const { answers } = result;
-  if (!isPhoneAction(answers.action.choice)) {
-    throw new Error(
-      `Jev answered the phone request's action with "${answers.action.choice}", which is none of its options`
-    );
-  }
   return {
     action: answers.action.choice,
-    ...(answers.stage ? { stage: answers.stage.choice } : {}),
-    ...(answers.task ? { task: answers.task.choice } : {}),
+    // Each asked only when it has options: absent from the answers otherwise.
+    ...(answers.stage?.type === "choice"
+      ? { stage: answers.stage.choice }
+      : {}),
+    ...(answers.task?.type === "choice" ? { task: answers.task.choice } : {}),
   };
 }
 

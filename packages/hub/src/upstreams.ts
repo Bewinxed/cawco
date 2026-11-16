@@ -47,9 +47,6 @@ export const TOOL_RELEASES: Readonly<Record<string, string>> =
     )
   );
 
-/** TypeSafe's System One, which Jev's typesafe route posts to. */
-export const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";
-
 /** Quiet before a project's starters are written: 60 s with no other ask. */
 export const STARTERS_QUIET_MS = 60_000;
 

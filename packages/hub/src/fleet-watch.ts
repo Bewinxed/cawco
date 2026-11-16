@@ -79,7 +79,13 @@ import { z } from "zod";
 import { isProjectConversation, type ProjectEvent } from "./caw";
 import type { DbShape } from "./db";
 import { isBlocked } from "./db/project-work";
-import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
+import {
+  askJev,
+  type JevAccess,
+  jevAccess,
+  jevCost,
+  jevUnanswered,
+} from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
 import { defineTool, sentence } from "./mcp-tool";
 import { MEANING_THRESHOLD } from "./meaning";
@@ -544,7 +550,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       },
       {
         stuck: {
-          type: "noul",
+          type: "boolean",
           instructions:
             "Is the session in `transcript_slice` stuck, looping or off-task against `session_work`, rather than making progress on it? `signals` is what code noticed.",
         },
@@ -567,12 +573,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
             unhandled("read", asking);
         }
         const result = asking.value;
-        const { noul } = result.answers.stuck;
-        const yes = noul >= MEANING_THRESHOLD;
+        const { probability } = result.answers.stuck;
+        const yes = probability >= MEANING_THRESHOLD;
         log(
           row,
           row.id,
-          `Jev answered ${yes ? "yes" : "no"} (noul ${noul}, $${result.usage.costUsd})`
+          `Jev answered ${yes ? "yes" : "no"} (probability ${probability}, ${jevCost(result.usage)})`
         );
         if (watch.episode !== episode || episode.settled) {
           return;
