@@ -32,6 +32,7 @@
  *   page's row ("After: …", "Unlocks: …").
  */
 import type { ElementNode } from "@openuidev/lang-core";
+import { z } from "zod";
 import type { ChoiceEntry, SettledBy } from "./choices";
 import type { DecisionComponentName } from "./decisions-library";
 import { decidedByLine } from "./words/decides-lines";
@@ -172,6 +173,51 @@ export interface DecisionRecord {
 export const recordPath = (page: string): string =>
   `decisions/${page}/record.json`;
 
+/**
+ * A record as its file holds it. Loose objects: a key the hub wrote beside
+ * the record's own (its `askedSend`) is read back with it.
+ */
+const SETTLED = z.looseObject({
+  by: z.string(),
+  name: z.string(),
+  runs: z.string().nullable(),
+  session: z.string(),
+  sources: z.array(z.string()),
+  why: z.string(),
+}) satisfies z.ZodType<SettledBy>;
+
+const RECORD = z.looseObject({
+  askedOf: z.string().nullable(),
+  cards: z.array(
+    z.looseObject({
+      chosen: z.array(z.string()),
+      dials: z.array(z.tuple([z.string(), z.string()])),
+      id: z.string(),
+      mockup: z.string().nullable(),
+      note: z.string(),
+      options: z.array(
+        z.looseObject({
+          builds: z.string().optional(),
+          cost: z.string(),
+          id: z.string(),
+          keycap: z.number(),
+          label: z.string(),
+          line: z.string(),
+          recommended: z.boolean(),
+        }) satisfies z.ZodType<DecisionOption>
+      ),
+      question: z.string(),
+      settled: SETTLED.optional(),
+      still: z.string().nullable(),
+      tasks: z.array(z.string()),
+      why: z.string(),
+    }) satisfies z.ZodType<RecordCard>
+  ),
+  madeAt: z.string(),
+  name: z.string(),
+  title: z.string(),
+}) satisfies z.ZodType<DecisionRecord>;
+
 /** A record file's text read back: null when it does not read as a record (its name and its cards). */
 export const recordOf = (raw: string): DecisionRecord | null => {
   let parsed: unknown;
@@ -180,13 +226,8 @@ export const recordOf = (raw: string): DecisionRecord | null => {
   } catch {
     return null;
   }
-  const record = parsed as DecisionRecord | null;
-  return record &&
-    typeof record === "object" &&
-    Array.isArray(record.cards) &&
-    typeof record.name === "string"
-    ? record
-    : null;
+  const record = RECORD.safeParse(parsed);
+  return record.success ? record.data : null;
 };
 
 /** A page opened in the Decisions tab: its summary, its record and its last send. */
@@ -353,7 +394,8 @@ const SLUG_ENDS = /^-+|-+$/gu;
 const isElement = (value: unknown): value is ElementNode =>
   typeof value === "object" &&
   value !== null &&
-  (value as { type?: unknown }).type === "element";
+  "type" in value &&
+  value.type === "element";
 
 const text = (value: unknown): string =>
   typeof value === "string" ? value : "";

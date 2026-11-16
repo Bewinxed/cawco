@@ -66,13 +66,9 @@ export const MIRRORED_MAPS = [
   "seen",
 ] as const;
 
-export type MirroredMap = (typeof MIRRORED_MAPS)[number];
-
 /** Each mirrored map of `doc`, as plain data: what a page's mirror opens on. */
-export function mapsOf(
-  doc: MapDoc
-): Record<MirroredMap, Record<string, unknown>> {
+export function mapsOf(doc: MapDoc): Record<string, Record<string, unknown>> {
   return Object.fromEntries(
     MIRRORED_MAPS.map((name) => [name, doc.getMap(name).toJSON()])
-  ) as Record<MirroredMap, Record<string, unknown>>;
+  );
 }

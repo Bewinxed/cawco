@@ -68,7 +68,9 @@ const inFileLine = (anchor: PageAnchor): string[] => {
 export const pinStandsOn = (pin: Pin, url?: string): string[] => {
   const { anchor } = pin;
   if (!("selector" in anchor)) {
-    const named = (pin.elements as string[]).join(", ");
+    const named = pin.elements
+      .filter((element): element is string => typeof element === "string")
+      .join(", ");
     return [
       `## ${pin.number}. ${pin.kind} on the canvas's element ${anchor.element}`,
       ...(named ? [`- Under the ink: elements ${named}`] : []),

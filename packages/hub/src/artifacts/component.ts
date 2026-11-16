@@ -52,10 +52,15 @@ export function canvasProblem(input: CanvasInput): string | null {
     return `A canvas takes at most ${CANVAS_SPEC_LIMITS.dials} dials.`;
   }
   for (const dial of input.dials ?? []) {
-    const target = dial.target as { arg?: unknown; cssVar?: unknown };
+    const { target } = dial;
     const css =
-      typeof target.cssVar === "string" && target.cssVar.startsWith("--");
-    const arg = typeof target.arg === "string" && target.arg.length > 0;
+      "cssVar" in target &&
+      typeof target.cssVar === "string" &&
+      target.cssVar.startsWith("--");
+    const arg =
+      "arg" in target &&
+      typeof target.arg === "string" &&
+      target.arg.length > 0;
     if (css === arg) {
       return `Dial ${dial.name}'s target is one of { cssVar: "--radius" } (a CSS variable set on every frame) or { arg: "size" } (a story arg, re-rendered in place). Example: { name: "radius", kind: "number", min: 0, max: 24, unit: "px", target: { cssVar: "--radius" } }.`;
     }

@@ -237,16 +237,14 @@ export const heldNoteProblem = (value: unknown): string | null => {
   if (value === undefined) {
     return null;
   }
-  const note = value as { at?: unknown; text?: unknown } | null;
   if (!(
-    note &&
-    typeof note === "object" &&
-    typeof note.at === "string" &&
-    typeof note.text === "string"
+    isObject(value) &&
+    typeof value.at === "string" &&
+    typeof value.text === "string"
   )) {
     return "A held note is its time and its words, so nothing was sent.";
   }
-  return note.text.length > COMMENT_LIMITS.text
+  return value.text.length > COMMENT_LIMITS.text
     ? `A note holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so nothing was sent. Shorten it, then send again.`
     : null;
 };

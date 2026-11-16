@@ -102,24 +102,27 @@ const isChoiceId = (value: unknown, max: number): value is string =>
   typeof value === "string" && value.length <= max && CHOICE_ID.test(value);
 
 /**
- * Why `value` is not an entry an artifact's `state` may hold under `key`, or
+ * Why `entry` is not an entry an artifact's `state` may hold under `key`, or
  * null when it is: the bounds of {@link CHOICE_LIMITS}, checked by the pane
  * before it writes and by the hub before it keeps a write.
  */
 export const choiceEntryProblem = (
   key: string,
-  value: unknown
+  entry: unknown
 ): string | null => {
   if (!isChoiceId(key, CHOICE_LIMITS.id)) {
     return `A choice's id must be 1 to ${CHOICE_LIMITS.id} characters, with no control characters and no spaces at either end.`;
   }
-  const entry = value as Partial<ChoiceEntry> | null;
   if (
     entry === null ||
     typeof entry !== "object" ||
+    !("at" in entry) ||
     typeof entry.at !== "string" ||
+    !("pageHash" in entry) ||
     typeof entry.pageHash !== "string" ||
+    !("options" in entry) ||
     !Array.isArray(entry.options) ||
+    !("note" in entry) ||
     !(entry.note === null || typeof entry.note === "string") ||
     !("value" in entry)
   ) {
@@ -140,21 +143,34 @@ export const choiceEntryProblem = (
   if (JSON.stringify(entry.value ?? null).length > CHOICE_LIMITS.value) {
     return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
   }
-  return entry.settled === undefined ? null : settledProblem(entry.settled);
+  return "settled" in entry && entry.settled !== undefined
+    ? settledProblem(entry.settled)
+    : null;
 };
 
-/** Why `settled` is not a settled pick's record, or null when it is. */
-const settledProblem = (settled: unknown): string | null => {
-  const given = settled as Partial<SettledBy> | null;
+/** Whether `entry` is an entry an artifact's `state` may hold under `key` ({@link choiceEntryProblem} finds nothing wrong). */
+export const isChoiceEntry = (
+  key: string,
+  entry: unknown
+): entry is ChoiceEntry => choiceEntryProblem(key, entry) === null;
+
+/** Why `given` is not a settled pick's record, or null when it is. */
+const settledProblem = (given: unknown): string | null => {
   if (
     given === null ||
     typeof given !== "object" ||
+    !("by" in given) ||
     typeof given.by !== "string" ||
     !MEMBER_ID.test(given.by) ||
+    !("name" in given) ||
     typeof given.name !== "string" ||
+    !("runs" in given) ||
     !(given.runs === null || typeof given.runs === "string") ||
+    !("session" in given) ||
     typeof given.session !== "string" ||
+    !("why" in given) ||
     typeof given.why !== "string" ||
+    !("sources" in given) ||
     !Array.isArray(given.sources)
   ) {
     return "settled holds by (a member's id), name, runs, session, why and sources.";

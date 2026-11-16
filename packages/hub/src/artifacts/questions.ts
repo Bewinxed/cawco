@@ -127,7 +127,7 @@ const pinCard = (
 };
 
 /** A pin the agent replied to and then resolved: its answer, given on the thing it stands on. */
-const answeredPin = (pin: Pin): boolean =>
+const answeredPin = (pin: Pin): pin is Pin & { resolvedAt: string } =>
   !!pin.resolvedAt && pin.thread.some((entry) => entry.by === "agent");
 
 /** His first words on pin `pin`, the thread's opening entry. */
@@ -155,9 +155,7 @@ const cardAnswer = (
     return { by: "note", at: entry.at, said: note };
   }
   const pin = pins.find(answeredPin);
-  return pin
-    ? { by: "pin", at: pin.resolvedAt as string, said: opening(pin) }
-    : null;
+  return pin ? { by: "pin", at: pin.resolvedAt, said: opening(pin) } : null;
 };
 
 /** A judgement's answer: every value, pick or note he set on it, at the newest. */

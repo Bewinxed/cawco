@@ -69,7 +69,7 @@
  */
 
 import { CHOICE_LIMITS } from "../choices";
-import { type DocMap, type MapDoc, PIN_MAPS } from "../doc-maps";
+import { type MapDoc, PIN_MAPS } from "../doc-maps";
 import type { ArtifactChanges, ChangedItem, HeldNote } from "../doc-meta";
 import { getMeta, setMeta } from "../doc-meta";
 import { everyOf } from "../every-of";
@@ -357,16 +357,12 @@ const entryKey = (pin: string, entry: string): string => `${pin}:${entry}`;
 /** The pin an `entries` key belongs to. */
 const entryPin = (key: string): string => key.slice(0, key.indexOf(":"));
 
-export const headsOf = (doc: MapDoc) =>
-  doc.getMap("pins") as DocMap<StoredPinHead>;
-const placesOf = (doc: MapDoc) => doc.getMap("places") as DocMap<PinPlace>;
-const resolvesOf = (doc: MapDoc) =>
-  doc.getMap("resolves") as DocMap<PinResolve>;
-const looksOf = (doc: MapDoc) => doc.getMap("looks") as DocMap<string>;
-const deliveriesOf = (doc: MapDoc) =>
-  doc.getMap("deliveries") as DocMap<PinDelivery>;
-export const entriesOf = (doc: MapDoc) =>
-  doc.getMap("entries") as DocMap<ThreadEntry>;
+export const headsOf = (doc: MapDoc) => doc.getMap<StoredPinHead>("pins");
+const placesOf = (doc: MapDoc) => doc.getMap<PinPlace>("places");
+const resolvesOf = (doc: MapDoc) => doc.getMap<PinResolve>("resolves");
+const looksOf = (doc: MapDoc) => doc.getMap<string>("looks");
+const deliveriesOf = (doc: MapDoc) => doc.getMap<PinDelivery>("deliveries");
+export const entriesOf = (doc: MapDoc) => doc.getMap<ThreadEntry>("entries");
 
 /** Oldest first: by when it was said, then by id. */
 const byAt = (a: ThreadEntry, b: ThreadEntry) =>
@@ -559,8 +555,8 @@ export function stampHeard(
  * how many pins it converted.
  */
 export function splitWholePins(doc: MapDoc): number {
-  const whole = [...(doc.getMap("pins") as DocMap<Pin>).values()].filter(
-    (value) => Array.isArray((value as Partial<Pin>).thread)
+  const whole = [...doc.getMap<unknown>("pins").values()].filter(
+    (value): value is Pin => isObject(value) && Array.isArray(value.thread)
   );
   if (whole.length > 0) {
     doc.transact(() => {
@@ -678,7 +674,7 @@ export function keptActivity(lines: ActivityLine[]): ActivityLine[] {
 
 /** The doc's `activity`: each pin's change lines ({@link ActivityLine}), by pin id. */
 export const activityOf = (doc: MapDoc) =>
-  doc.getMap("activity") as DocMap<ActivityLine[]>;
+  doc.getMap<ActivityLine[]>("activity");
 
 /** The pins whose thread got an agent's answer after `since`, by id. */
 const answeredSince = (pins: Iterable<Pin>, since: string): Set<string> =>
@@ -858,7 +854,7 @@ export const CHANGES_LIMIT = 100;
  * revision, the anchors he has stepped onto or pressed, his Send marking
  * all of them. Written by the person, so it holds on every device.
  */
-export const seenOf = (doc: MapDoc) => doc.getMap("seen") as DocMap<string[]>;
+export const seenOf = (doc: MapDoc) => doc.getMap<string[]>("seen");
 
 /** The anchors of revision `revision`'s changes the person has looked at, written as seen. */
 export function seeChanges(
@@ -901,7 +897,8 @@ export const attachmentsProblem = (attachments: unknown): string | null => {
   }
   const whole = (one: unknown) =>
     isObject(one) &&
-    ATTACHMENT_KINDS.has(one.kind as string) &&
+    typeof one.kind === "string" &&
+    ATTACHMENT_KINDS.has(one.kind) &&
     typeof one.name === "string" &&
     one.name.length > 0 &&
     one.name.length <= COMMENT_LIMITS.attachmentName &&
@@ -1027,7 +1024,7 @@ export const newId = (): string => {
 };
 
 /** The doc's tombstones: each deleted pin's id, and when it was deleted. */
-export const goneOf = (doc: MapDoc) => doc.getMap("gone") as DocMap<string>;
+export const goneOf = (doc: MapDoc) => doc.getMap<string>("gone");
 
 /**
  * Pin `id` deleted from `doc`: its tombstone written ({@link goneOf}) and

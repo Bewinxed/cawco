@@ -32,9 +32,10 @@ import { injectOverlay } from "@cawco/preview/proxy";
 import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
+import { z } from "zod";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
 
-import { type ArtifactDocs, elementsOf } from "./docs";
+import { type ArtifactDocs, elementIdOf, elementsOf } from "./docs";
 
 /**
  * A canvas's host page, served by the hub as a page is: the page with the
@@ -74,14 +75,58 @@ export async function serveCanvas(
   );
 }
 
-/** The canvas's elements as their entries hold them, in scene order. */
+const AUTHOR = z.enum(["person", "agent"]);
+const BINDING = z.object({ elementId: z.string() }).nullable().optional();
+
+/**
+ * An entry of a canvas's `elements` as its map holds it (core
+ * `CanvasEntry`), the element loose: it keeps every field Excalidraw gave
+ * it, for the `.excalidraw` file.
+ */
+const CANVAS_ENTRY = z.looseObject({
+  at: z.string().optional(),
+  by: AUTHOR.optional(),
+  el: z.looseObject({
+    boundElements: z
+      .array(z.object({ id: z.string(), type: z.string() }))
+      .nullable()
+      .optional(),
+    containerId: z.string().nullable().optional(),
+    customData: z.record(z.string(), z.unknown()).nullable().optional(),
+    endBinding: BINDING,
+    groupIds: z.array(z.string()).optional(),
+    height: z.number(),
+    id: z.string(),
+    isDeleted: z.boolean().optional(),
+    points: z.array(z.tuple([z.number(), z.number()])).optional(),
+    startBinding: BINDING,
+    text: z.string().optional(),
+    type: z.string(),
+    width: z.number(),
+    x: z.number(),
+    y: z.number(),
+  }),
+  made: AUTHOR.optional(),
+  pos: z.string(),
+}) satisfies z.ZodType<CanvasEntry>;
+
+/** What a screen writes on a request it converted (core `CanvasRequestResult`). */
+const REQUEST_RESULT = z.union([
+  z.object({ ids: z.array(z.string()) }),
+  z.object({ error: z.string() }),
+]) satisfies z.ZodType<CanvasRequestResult>;
+
+/** The canvas's elements as their entries hold them, in scene order: an entry that does not read as one is left out. */
 export const canvasEntries = (
   docs: ArtifactDocs,
   artifactId: string
 ): CanvasEntry[] =>
   elementsOf(docs.doc(artifactId))
     .toArray()
-    .map((map) => map.toJSON() as CanvasEntry)
+    .flatMap((map) => {
+      const entry = CANVAS_ENTRY.safeParse(map.toJSON());
+      return entry.success ? [entry.data] : [];
+    })
     .sort((a, b) => {
       if (a.pos === b.pos) {
         return 0;
@@ -146,7 +191,12 @@ export const pictureOfWrite = async (
     return true;
   }
   const meta = docMeta(docs.doc(artifactId));
-  const wrote = Date.parse(meta.get("wroteAt") as string);
+  const wroteAt = meta.get("wroteAt");
+  // No write: the picture shows it ({@link pictureShowsWrite}).
+  if (!wroteAt) {
+    return true;
+  }
+  const wrote = Date.parse(wroteAt);
   const left = wrote + CANVAS_LIMITS.screenHoldMs - Date.now();
   if (left <= 0) {
     return false;
@@ -193,16 +243,16 @@ export const convertOnScreen = async (
   }
   const id = crypto.randomUUID();
   const doc = docs.doc(artifactId);
-  const requests = doc.getMap("requests") as YMap<YMap<unknown>>;
+  const requests = doc.getMap<YMap<unknown>>("requests");
+  // Integrated in place by the write below: the request the doc holds.
+  const request = new YMap<unknown>();
   docs.transact(artifactId, "agent", () => {
-    const request = new YMap<unknown>();
     request.set("id", id);
     request.set("kind", kind);
     request.set("payload", payload);
     request.set("at", new Date().toISOString());
     requests.set(id, request);
   });
-  const request = requests.get(id) as YMap<unknown>;
   let observer: (() => void) | undefined;
   try {
     const drawn = await readWithin(
@@ -210,10 +260,9 @@ export const convertOnScreen = async (
       () =>
         new Promise<CanvasRequestResult>((resolve) => {
           const answered = () => {
-            const value = request.get("result") as
-              CanvasRequestResult | undefined;
-            if (value) {
-              resolve(value);
+            const value = REQUEST_RESULT.safeParse(request.get("result"));
+            if (value.success) {
+              resolve(value.data);
             }
           };
           observer = answered;
@@ -261,18 +310,24 @@ export const deleteElements = (
   const elements = elementsOf(docs.doc(artifactId));
   const asked = new Set(ids);
   const present = new Set(
-    elements.toArray().map((map) => (map.get("el") as { id: string }).id)
+    elements.toArray().flatMap((map) => elementIdOf(map) ?? [])
   );
   const deleted: string[] = [];
   docs.transact(artifactId, "agent", () => {
     for (let index = elements.length - 1; index >= 0; index -= 1) {
-      const el = elements.get(index).get("el") as {
-        id: string;
-        containerId?: string | null;
-      };
-      if (asked.has(el.id) || (el.containerId && asked.has(el.containerId))) {
+      const el = elements.get(index).get("el");
+      if (!(typeof el === "object" && el !== null && "id" in el)) {
+        continue;
+      }
+      const { id } = el;
+      const containerId = "containerId" in el ? el.containerId : null;
+      if (
+        typeof id === "string" &&
+        (asked.has(id) ||
+          (typeof containerId === "string" && asked.has(containerId)))
+      ) {
         elements.delete(index, 1);
-        deleted.push(el.id);
+        deleted.push(id);
       }
     }
   });

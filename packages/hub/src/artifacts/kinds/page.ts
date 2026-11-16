@@ -1,6 +1,7 @@
 import {
   type ChoiceEntry,
   choiceEntryProblem,
+  isChoiceEntry,
   noteText,
 } from "@cawco/core/choices";
 import {
@@ -11,6 +12,7 @@ import {
   bindChanges,
   CHANGES_LIMIT,
   carryChanges,
+  isObject,
   keptActivity,
   readPins,
   seenOf,
@@ -38,7 +40,7 @@ import {
   type StatementChange,
 } from "../../decision-program";
 
-import { metaOf, stateOf } from "../facts";
+import { metaOf, stateOf, stillThere } from "../facts";
 import { testedKeys } from "../overwrite";
 import {
   cardChanges,
@@ -71,12 +73,13 @@ const answerOf = (
   if (!entry) {
     return { id, ...question, answer: "open" };
   }
+  const note = noteText(entry.note);
   const said = {
     at: entry.at,
     ...(current && entry.pageHash !== current
       ? { earlierRevision: true as const }
       : {}),
-    ...(noteText(entry.note) ? { note: noteText(entry.note) as string } : {}),
+    ...(note ? { note } : {}),
   };
   if (entry.options.length === 0) {
     // A note with no pick is still open; a pick taken back, cleared.
@@ -130,19 +133,21 @@ const patchedEntries = (
     if (JSON.stringify(value) === JSON.stringify(before[key])) {
       continue;
     }
-    const given = (value ?? {}) as Partial<ChoiceEntry>;
-    const entry: ChoiceEntry = {
+    const given = isObject(value) ? value : {};
+    const entry = {
       options: given.options ?? [],
-      note: noteText(given.note),
+      note:
+        typeof given.note === "string"
+          ? noteText(given.note)
+          : (given.note ?? null),
       value: given.value ?? null,
       pageHash: given.pageHash ?? before[key]?.pageHash ?? hash,
       at,
     };
-    const misfit = choiceEntryProblem(key, entry);
-    if (misfit) {
+    if (!isChoiceEntry(key, entry)) {
       return problem(422, {
         code: "artifact-patch-entry-unfit",
-        detail: `${misfit} Nothing was changed.`,
+        detail: `${choiceEntryProblem(key, entry)} Nothing was changed.`,
       });
     }
     next[key] = entry;
@@ -611,7 +616,7 @@ export const createPageKind = (ctx: PageKindContext) => {
       return page;
     }
     const { html } = page;
-    const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+    const moved = stillThere(db.update(row.id, nextRevision(row)), row.id);
     const was = store.revision(moved.id);
     writePage(moved.id, html);
     // Every page open on it hears the new revision in the doc and morphs
@@ -643,7 +648,7 @@ export const createPageKind = (ctx: PageKindContext) => {
     }
     const doc = docs.doc(row.id);
     const before = stateOf(doc);
-    const after = structuredClone(before) as Record<string, unknown>;
+    const after: Record<string, unknown> = structuredClone(before);
     const errors = applyPatch(after, change.patch);
     const program = programOf(row);
     const carded = program
@@ -694,7 +699,7 @@ export const createPageKind = (ctx: PageKindContext) => {
         state.delete(key);
       }
     });
-    return ctx.read(db.get(row.id) as ArtifactRow, undefined, ownersRead);
+    return ctx.read(stillThere(db.get(row.id), row.id), undefined, ownersRead);
   };
   /** Decision page `row`'s program `existing` revised as `merged`, built on the folder and machines its pictures were read from, its media checked against its holder's panel. */
   const revisionBuilt = async (
@@ -750,7 +755,7 @@ export const createPageKind = (ctx: PageKindContext) => {
     const kept = readKept(existing).cards;
     const before = new Set(kept.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
-    const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+    const moved = stillThere(db.update(row.id, nextRevision(row)), row.id);
     const was = store.revision(moved.id);
     writePage(moved.id, page.html, program);
     keepPictureSources(moved, program, { read: readOn });

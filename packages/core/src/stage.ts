@@ -244,10 +244,16 @@ export const storiesKey = (
 
 /** Whether `value` is a shape an embed could say: a height past 0 and a width past 0 or none, finite, within reason. Ours: 20,000 px. */
 export const isEmbedShape = (value: unknown): value is EmbedShape => {
-  const one = value as { h?: unknown; w?: unknown } | null;
   const px = (n: unknown) =>
     typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 20_000;
-  return !!one && px(one.h) && (one.w === null || px(one.w));
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "h" in value &&
+    px(value.h) &&
+    "w" in value &&
+    (value.w === null || px(value.w))
+  );
 };
 
 /**
@@ -774,6 +780,7 @@ const textsOf = (value: unknown): string[] | undefined =>
     : undefined;
 /** The keys of `value` that are present, each as it reads. */
 const present = <T extends object>(value: T): Partial<T> =>
+  // Cast kept: `Object.fromEntries` answers `{ [k: string]: V }`, never `T`'s keys (by design: https://github.com/microsoft/TypeScript/issues/35745).
   Object.fromEntries(
     Object.entries(value).filter(([, one]) => one !== undefined)
   ) as Partial<T>;

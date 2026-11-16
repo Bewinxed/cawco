@@ -162,7 +162,7 @@ import {
   specOf,
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
-import { createFacts, metaOf, stateOf } from "./facts";
+import { createFacts, metaOf, stateOf, stillThere } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind } from "./kinds/component";
 import { createPageKind, newestHash } from "./kinds/page";
@@ -388,8 +388,8 @@ const pageOf = (rows: ArtifactRow[], cursor: string | undefined) => {
         detail: artifactToolWords.notListCursor(cursor),
       });
     }
-    const at = Number.parseInt(parts[1] as string, 36);
-    const id = parts[2] as string;
+    const [, atText, id] = parts;
+    const at = Number.parseInt(atText, 36);
     const after = rows.findIndex(
       (row) =>
         row.createdAt.getTime() < at ||
@@ -669,7 +669,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** A project's page, the project's by its name and as long-lived as its source there (db/artifacts.ts `projectPage`). */
-  const isProjectPage = (row: ArtifactRow): boolean =>
+  const isProjectPage = (
+    row: ArtifactRow
+  ): row is ArtifactRow & { projectId: string } =>
     row.kind === "page" && row.projectId !== null && row.heldFor === null;
 
   /** Whether its session's panel shows `row` now. */
@@ -934,7 +936,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       shownAt: row.shownAt?.toISOString() ?? null,
-      ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
+      ...(isProjectPage(row) ? { project: row.projectId } : {}),
       promoted: getMeta(docs.doc(row.id), "promoted") ?? null,
       thumbnail: thumbnailOf(row),
     };
@@ -2048,7 +2050,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       }
     });
-    db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
+    db.update(row.id, { deliveredSeq: stillThere(db.get(row.id), row.id).seq });
     // What it answered leaves Needs you, and with it the writer's plan (core `planWaitsOf`).
     deps.needsMoved();
     return hearer;
@@ -2278,19 +2280,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     // here, it is this panel's, its doc and picks kept.
     const moved = found && found.instanceId !== owner.id;
     const before = moved
-      ? (db.update(found.id, { instanceId: owner.id }) as ArtifactRow)
+      ? stillThere(db.update(found.id, { instanceId: owner.id }), found.id)
       : found;
     const movedFrom = moved ? (found.instanceId ?? undefined) : undefined;
     if (before) {
       const holding = holdNext(maker, before);
       const target = holding?.next ?? before;
       db.resource(target.id, at);
-      const row = db.update(target.id, {
-        ...asked,
-        madeBy: maker.id,
-        revision: target.revision + 1,
-        updatedAt: now,
-      }) as ArtifactRow;
+      const row = stillThere(
+        db.update(target.id, {
+          ...asked,
+          madeBy: maker.id,
+          revision: target.revision + 1,
+          updatedAt: now,
+        }),
+        target.id
+      );
       // Made again where it stands: a held one is told once it is written (heldOver).
       if (!holding) {
         versionMoved(row);
@@ -2385,14 +2390,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     db.resource(row.id, { machineId: was.machineId, source: was.source });
-    const back = db.update(row.id, {
-      madeBy: was.madeBy,
-      ask: was.ask,
-      title: was.title,
-      does: was.does,
-      revision: was.revision,
-      updatedAt: was.updatedAt,
-    }) as ArtifactRow;
+    const back = stillThere(
+      db.update(row.id, {
+        madeBy: was.madeBy,
+        ask: was.ask,
+        title: was.title,
+        does: was.does,
+        revision: was.revision,
+        updatedAt: was.updatedAt,
+      }),
+      row.id
+    );
     if (!holding) {
       versionMoved(back);
     }
@@ -2580,7 +2588,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     const said = replaced.map((key) => {
-      const his = standing[key] as ChoiceEntry;
+      const his = standing[key];
       return artifactToolWords.answerSaid(key, {
         ...his,
         note: noteText(his.note),
@@ -4356,7 +4364,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const revisedOn = async (row: ArtifactRow) => {
         // A next version is made from its artifact whole (holdNext), so it holds a program.
-        const existing = programOf(row) as string;
+        const existing = programOf(row);
+        if (existing === undefined) {
+          throw new Error(`${row.name}'s next version holds no program.`);
+        }
         const merged = merging(existing, statements);
         // A program's refusal passes up as the revision's.
         if (merged instanceof ElysiaStatus) {
@@ -4602,10 +4613,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         machineId: row.machineId,
         source: { ...row.source, path: canvasPath(files, spec) },
       });
-      const next = db.update(row.id, {
-        revision: row.revision + 1,
-        updatedAt: new Date(),
-      }) as ArtifactRow;
+      const next = stillThere(
+        db.update(row.id, {
+          revision: row.revision + 1,
+          updatedAt: new Date(),
+        }),
+        row.id
+      );
       stampMeta(next, null);
       // An update of what the panel shows, not a show of it: a tab that
       // closed it stays closed (dashboard preview/closed-here.ts).
@@ -4916,7 +4930,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         });
       }
       // A canvas is always its session's: only a project's page outlives one.
-      const address = deps.previewAddress(row.instanceId as string);
+      if (row.instanceId === null) {
+        throw new Error(`Canvas ${row.name} is no session's.`);
+      }
+      const address = deps.previewAddress(row.instanceId);
       if (address instanceof ElysiaStatus) {
         return address;
       }
@@ -5148,19 +5165,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // A project's page is its source in the project's folder: both go, the
       // source first, so a refused commit leaves the page as it was.
       if (isProjectPage(row)) {
-        const refused = await deps.dropPage(
-          instance,
-          row.projectId as string,
-          row.name
-        );
+        const refused = await deps.dropPage(instance, row.projectId, row.name);
         if (refused) {
           return refused;
         }
       }
       discard(row);
       if (row.instanceId !== instance.id) {
-        if (writerShown) {
-          deps.close(row.instanceId as string);
+        if (writerShown && row.instanceId !== null) {
+          deps.close(row.instanceId);
         } else {
           relistOf(row);
         }
@@ -5287,8 +5300,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const artifacts = rows.flatMap((row) => {
         const doc = docs.doc(row.id);
         const groups = {
-          ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
-          ...(doc.getMap("ink").toJSON() as Record<string, InkGroup>),
+          ...Object.fromEntries(doc.getMap<InkGroup>("moved").entries()),
+          ...Object.fromEntries(doc.getMap<InkGroup>("ink").entries()),
         };
         const pins = pinsToTell(readPins(doc).values())
           .filter((pin) =>

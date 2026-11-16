@@ -22,7 +22,7 @@ import {
   screenJoined,
   stampWrote,
 } from "../canvas";
-import { stateOf } from "../facts";
+import { stateOf, stillThere } from "../facts";
 import { sceneChanges } from "../page-changes";
 import type {
   ArtifactInput,
@@ -117,10 +117,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
   const canvasFile = (id: string) => {
     const elements = canvasEntries(docs, id).map((entry) => entry.el);
     return {
-      file: excalidrawFile(
-        elements,
-        docs.doc(id).getMap("files").toJSON() as Record<string, unknown>
-      ),
+      file: excalidrawFile(elements, docs.doc(id).getMap("files").toJSON()),
       outline: canvasOutline(elements),
     };
   };
@@ -516,7 +513,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     const shown: Opened = ctx.openedOf(handed);
     // Its outline as it stands, read as the owner's read only when the owner made it.
     const { outline } = readCanvas(
-      db.get(row.id) as ArtifactRow,
+      stillThere(db.get(row.id), row.id),
       undefined,
       false,
       making.owner.id === making.maker.id
@@ -566,7 +563,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       const fresh = markSceneChanges(row, before);
       return {
         ...readCanvas(
-          db.get(row.id) as ArtifactRow,
+          stillThere(db.get(row.id), row.id),
           undefined,
           false,
           ownersRead
@@ -594,7 +591,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     const fresh = markSceneChanges(row, before);
     const read: ArtifactRead = {
       ...readCanvas(
-        db.get(row.id) as ArtifactRow,
+        stillThere(db.get(row.id), row.id),
         undefined,
         false,
         ownersRead

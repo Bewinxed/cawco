@@ -271,13 +271,15 @@ export type ClientMetaKey = {
   [K in DocMetaKey]: (typeof META_WRITERS)[K] extends "hub" ? never : K;
 }[DocMetaKey];
 
+/** Whether `key` is one the doc's `meta` keeps. */
+const isMetaKey = (key: string): key is DocMetaKey =>
+  Object.hasOwn(META_WRITERS, key);
+
 /** Who may write `key`, any string a client sent; undefined for a key the doc does not keep. */
 export const metaWriter = (
   key: string
 ): (typeof META_WRITERS)[DocMetaKey] | undefined =>
-  Object.hasOwn(META_WRITERS, key)
-    ? META_WRITERS[key as DocMetaKey]
-    : undefined;
+  isMetaKey(key) ? META_WRITERS[key] : undefined;
 
 /** A doc's `meta` map, its keys and values {@link DocMeta}'s. */
 export interface MetaMap {
@@ -294,6 +296,7 @@ export interface MetaMap {
 
 /** `doc`'s `meta` map: the one place a doc's map is named "meta". */
 export const docMeta = (doc: MapDoc): MetaMap =>
+  // Cast kept: a Yjs map holds one value type for every key (yjs#499, https://github.com/yjs/yjs/issues/499), so `getMap<T>` cannot say {@link DocMeta}'s value per key; this is the one place that says it.
   doc.getMap("meta") as unknown as MetaMap;
 
 /** `doc`'s `meta` value at `key`; undefined when it holds none. */

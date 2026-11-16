@@ -295,8 +295,8 @@ export const createMarks = (ctx: MarksContext) => {
         .filter((pin) => pinUnsent(pin) && pinReady(pin))
         .sort((a, b) => a.number - b.number),
       groups: {
-        ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
-        ...(doc.getMap("ink").toJSON() as Record<string, InkGroup>),
+        ...Object.fromEntries(doc.getMap<InkGroup>("moved").entries()),
+        ...Object.fromEntries(doc.getMap<InkGroup>("ink").entries()),
       },
     };
   };
@@ -322,9 +322,8 @@ export const createMarks = (ctx: MarksContext) => {
           stampHeard(live, now, pin, at);
         }
       }
-      const ink = live.getMap("ink");
-      const groups = ink.toJSON() as Record<string, InkGroup>;
-      for (const group of Object.values(groups)) {
+      const ink = live.getMap<InkGroup>("ink");
+      for (const group of [...ink.values()]) {
         const was = went.get(group.id);
         const unchanged =
           !!was &&
