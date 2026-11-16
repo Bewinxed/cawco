@@ -71,7 +71,7 @@ import {
   type KeeperHarnessKind,
   traitsOf,
 } from "@cawco/core/harness/traits";
-import { invariant, lawPolicy } from "@cawco/core/invariant";
+import { crashOnBrokenLaw, invariant } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
 import { endProcess } from "@cawco/core/listeners";
@@ -4053,7 +4053,7 @@ export const runDaemon = (rediscover = false): void => {
   setSectionMarker(syncSection);
   // A broken law crashes the agent (core invariant.ts): sessiond keeps the
   // sessions' processes across its restart.
-  lawPolicy("crash");
+  crashOnBrokenLaw((code) => process.exit(code));
   // The JDK every workspace's Maestro runs on, looked for once (core
   // workspace-needs.ts `hostJavaHome`).
   hostJavaHome();

@@ -25,7 +25,8 @@
 import { readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
-import { type BrowserDoor, browserGatePort } from "@cawco/core/browser";
+import type { BrowserDoor } from "@cawco/core/browser";
+import { browserGatePort } from "@cawco/core/env-ports";
 import { machineId } from "@cawco/core/machine-id";
 import {
   workspaceProjectFile,

@@ -12,7 +12,8 @@ import type {
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
 import { DENIED_RESOLVED_ADDRESSES } from "@cawco/core/boundary-reach";
-import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
+import { BROWSER_PORTS } from "@cawco/core/browser";
+import { browserGatePort } from "@cawco/core/env-ports";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { systemProgram } from "@cawco/core/workspace-needs";

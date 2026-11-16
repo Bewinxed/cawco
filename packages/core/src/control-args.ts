@@ -7,7 +7,6 @@
  * are not its own, are refused in words before anything runs.
  */
 
-import { DOC_AUTHORS } from "@cawco/jsonl-parser";
 import {
   array,
   boolean,
@@ -52,6 +51,7 @@ import type {
   ControlArgs,
   ControlName,
 } from "./control-table";
+import { TRANSCRIPT_AUTHORS } from "./find";
 import {
   HARNESSES,
   isEffortLevel,
@@ -238,7 +238,7 @@ const PreviewStarted = {
   instanceId: text,
   token: named,
 };
-const TranscriptAuthor = picklist(DOC_AUTHORS);
+const TranscriptAuthor = picklist(TRANSCRIPT_AUTHORS);
 const BrowserRelay = object({
   credential: text,
   reach: optional(object({ lan: texts, machineId: text, tailnet: texts })),

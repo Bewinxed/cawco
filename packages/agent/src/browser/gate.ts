@@ -55,8 +55,9 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import { type BrowserKey, browserGatePort } from "@cawco/core/browser";
+import type { BrowserKey } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
+import { browserGatePort } from "@cawco/core/env-ports";
 import { makeFolder } from "@cawco/core/folders";
 import { machineId } from "@cawco/core/machine-id";
 import {

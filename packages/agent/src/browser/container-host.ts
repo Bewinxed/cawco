@@ -44,8 +44,8 @@ import {
   browserSlug,
 } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { stunServer } from "@cawco/core/env-ports";
 import { machineId } from "@cawco/core/machine-id";
-import { stunServer } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
 import { z } from "zod";

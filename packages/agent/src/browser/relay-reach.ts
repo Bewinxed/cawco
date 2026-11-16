@@ -8,8 +8,8 @@
  * person. Both are turn-server's `getPublicIP`.
  */
 import { networkInterfaces } from "node:os";
+import { stunServer } from "@cawco/core/env-ports";
 import { isPublicAddress } from "@cawco/core/public-address";
-import { stunServer } from "@cawco/core/stream-relay";
 import { getPublicIP } from "turn-server";
 
 /** How long a STUN binding has to be answered. */

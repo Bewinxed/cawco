@@ -8,6 +8,7 @@
  */
 
 import type { DocAuthor } from "@cawco/jsonl-parser";
+import { everyOf } from "./every-of";
 import type { CawStatus } from "./project-conversation";
 import type { StageKind } from "./views";
 
@@ -15,6 +16,14 @@ import type { StageKind } from "./views";
 // own, so the wire schema keeps naming it `TranscriptAuthor`.
 /** Who a transcript's words are (the index's `author`): only `owner` is "said by me". */
 type TranscriptAuthor = Extract<DocAuthor, string>;
+
+/** Every {@link TranscriptAuthor}, as a search's `author` may name it (control-args.ts). */
+export const TRANSCRIPT_AUTHORS = everyOf<TranscriptAuthor>()([
+  "owner",
+  "agent",
+  "report",
+  "injected",
+]);
 
 /** What the hub asks each machine's transcript index (`searchTranscripts`). */
 export interface TranscriptQuery {

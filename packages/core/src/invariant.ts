@@ -7,7 +7,7 @@
  * (github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md),
  * "Assertions downgrade catastrophic correctness bugs into liveness bugs."
  *
- * What a broken law does is the process's own policy ({@link lawPolicy}):
+ * What a broken law does is the process's own policy ({@link crashOnBrokenLaw}):
  * - The agent and the judge crash. sessiond keeps the children across the
  *   agent's restart (ARCHITECTURE.md, the sessiond boundary), so the cost is
  *   a reconnect, and the alternative is an agent that keeps acting on a state
@@ -129,14 +129,19 @@ export const isInvariantBroken = (error: unknown): error is InvariantBroken =>
   error instanceof InvariantBroken;
 
 /**
- * What this process does with a broken law: `throw` (the hub's, and the
- * default) or `crash` (the agent's and the judge's, set once as each starts).
+ * How this process ends on a broken law, when it crashes on one (the
+ * agent's and the judge's, set once as each starts); none, it throws (the
+ * hub's, and the default).
  */
-let policy: "crash" | "throw" = "throw";
+let crash: ((code: number) => never) | undefined;
 
-/** Sets what a broken law does in this process ({@link policy}). */
-export const lawPolicy = (next: "crash" | "throw"): void => {
-  policy = next;
+/**
+ * This process crashes on a broken law, by `exit`, its own `process.exit`:
+ * named by the process, so this module, which a browser loads, reads no
+ * global a browser lacks (scripts/browser-core-check.ts).
+ */
+export const crashOnBrokenLaw = (exit: (code: number) => never): void => {
+  crash = exit;
 };
 
 /**
@@ -160,9 +165,9 @@ export function invariant(
     typeof words === "function" ? words() : words,
     about?.()
   );
-  if (policy === "crash") {
+  if (crash) {
     console.error(`[law] ${broken.message}`);
-    process.exit(70);
+    crash(70);
   }
   throw broken;
 }

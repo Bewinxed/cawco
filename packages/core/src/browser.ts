@@ -8,8 +8,6 @@
  * agent's ports, the daemon's {@link BrowserFrame} and the hub's commands.
  */
 
-import { CAWCO_ENV, readEnv } from "./cawco-env";
-
 /** Which browser: a project's, or the machine's for sessions outside any project. */
 export type BrowserKey = `project:${string}` | `machine:${string}`;
 
@@ -37,27 +35,10 @@ export type BrowserHostKind = "container" | "local";
 export const BROWSER_PORTS = { first: 14_070, last: 14_131 } as const;
 
 /** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
-const BROWSER_GATE_PORT = BROWSER_PORTS.first;
+export const BROWSER_GATE_PORT = BROWSER_PORTS.first;
 
 /** The local host's forward proxy (agent `browser/hub-proxy.ts`): the last port of the range, on 127.0.0.1 alone. */
 export const BROWSER_PROXY_PORT = BROWSER_PORTS.last;
-
-/**
- * The port this machine's agent serves its DevTools gate on:
- * `CAWCO_BROWSER_GATE_PORT`, else {@link BROWSER_GATE_PORT}. The agent's
- * listener and every door it writes read it here, so a second agent on one
- * host (a scratch fleet) runs its gate on a port of its own.
- */
-export const browserGatePort = (): number => {
-  const named = readEnv(CAWCO_ENV.browserGatePort);
-  const port = named === undefined ? BROWSER_GATE_PORT : Number(named);
-  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
-    throw new Error(
-      `${CAWCO_ENV.browserGatePort} must be a port number, not "${named}"`
-    );
-  }
-  return port;
-};
 
 /**
  * The screen of a project's browser on both hosts, and the size of the view

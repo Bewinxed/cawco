@@ -13,7 +13,6 @@
  */
 import { getDomain } from "tldts";
 import type { BrowserState } from "./browser";
-import { CAWCO_ENV, readEnv } from "./cawco-env";
 
 /**
  * The ports the relay takes: TURN's own, every one above 1024, so no machine
@@ -57,25 +56,6 @@ const RELAY_HELD: readonly (readonly number[])[] = [
 /** Whether `port` is one of the ports the stream relay may hold on its machine, on either transport. */
 export const isStreamRelayPort = (port: number): boolean =>
   RELAY_HELD.some((ports) => ports.includes(port));
-
-/**
- * The STUN server a machine asks for the public address its router maps it
- * to, at start and on each network change (agent capabilities.ts): one
- * server, Cloudflare's ("Cloudflare STUN Server: `stun.cloudflare.com:3478`",
- * developers.cloudflare.com/realtime/sfu/https-api/). A scratch fleet names
- * its own stand-in (`CAWCO_STUN_SERVER`).
- */
-const STUN_SERVER = "stun:stun.cloudflare.com:3478";
-
-/**
- * The STUN server this process names: a scratch fleet's stand-in where
- * `CAWCO_STUN_SERVER` names one, else {@link STUN_SERVER}. The one every reading of it goes
- * through: a machine's mapped address (agent relay-reach.ts), a browser's
- * own ICE servers (agent container-host.ts) and each viewer's (hub
- * browser-routes.ts), so all of them name the same server.
- */
-export const stunServer = (): string =>
-  readEnv(CAWCO_ENV.stunServer) ?? STUN_SERVER;
 
 // A container's states as the browser's are, and `stopped`.
 /** The relay as its machine runs it. */
