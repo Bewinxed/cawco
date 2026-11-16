@@ -123,3 +123,66 @@ export const OneMachine = {
     ],
   },
 };
+
+/** Every harness the machines report is one this hub runs, so nothing is said under the ledgers. */
+export const NoUnknownHarness = {
+  args: {
+    machines: [
+      fleetMachine(
+        "m-obelisk",
+        "obelisk-of-light",
+        "linux",
+        agyStatus("signed-in")
+      ),
+      fleetMachine("m-uwu", "uwucloud", "linux", agyStatus("signed-out")),
+    ],
+  },
+};
+
+/** obelisk-of-light reports goose, which this hub can't run. */
+export const OneUnknownHarness = {
+  args: {
+    machines: [
+      {
+        ...fleetMachine(
+          "m-obelisk",
+          "obelisk-of-light",
+          "linux",
+          agyStatus("signed-in")
+        ),
+        unknownHarnesses: ["goose"],
+      },
+      fleetMachine("m-uwu", "uwucloud", "linux", agyStatus("signed-out")),
+    ],
+  },
+};
+
+/** Two machines report harnesses this hub can't run, one of them three with long names. */
+export const ManyUnknownHarnesses = {
+  args: {
+    machines: [
+      {
+        ...fleetMachine(
+          "m-ledger",
+          "ledger-build-runner-eu-west-3.internal",
+          "linux",
+          agyStatus("signed-in")
+        ),
+        unknownHarnesses: [
+          "cursor-agent-headless-preview",
+          "gemini-cli-enterprise-workspace",
+          "amazon-q-developer-terminal",
+        ],
+      },
+      {
+        ...fleetMachine(
+          "m-omar",
+          "Omars-MacBook-Pro",
+          "darwin",
+          agyStatus("signed-out")
+        ),
+        unknownHarnesses: ["goose"],
+      },
+    ],
+  },
+};
