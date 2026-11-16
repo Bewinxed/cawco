@@ -45,19 +45,22 @@ const mermaid = t.String({
   maxLength: CANVAS_LIMITS.mermaid,
 });
 
-const operation = t.Object({
-  op: t.Union([
-    t.Literal("add"),
-    t.Literal("remove"),
-    t.Literal("replace"),
-    t.Literal("move"),
-    t.Literal("copy"),
-    t.Literal("test"),
-  ]),
-  path: t.String({ maxLength: 1000 }),
-  from: t.Optional(t.String({ maxLength: 1000 })),
-  value: t.Optional(t.Unknown()),
-});
+const pointer = t.String({ maxLength: 1000 });
+
+/** One RFC 6902 operation, as rfc6902's `Operation` takes it: `from` on a move or copy, `value` on an add, replace or test. */
+const operation = t.Union([
+  t.Object({
+    op: t.Union([t.Literal("add"), t.Literal("replace"), t.Literal("test")]),
+    path: pointer,
+    value: t.Unknown(),
+  }),
+  t.Object({ op: t.Literal("remove"), path: pointer }),
+  t.Object({
+    op: t.Union([t.Literal("move"), t.Literal("copy")]),
+    from: pointer,
+    path: pointer,
+  }),
+]);
 
 const storyName = t.String({ pattern: STORY_NAME.source });
 const argValues = t.Record(

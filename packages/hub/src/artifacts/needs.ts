@@ -64,6 +64,7 @@ import {
   type ArtifactStop,
   artifactStopHref,
   notNowId,
+  projectPageAt,
   setupLanding,
 } from "@cawco/core/artifact-needs";
 import type { CanvasAuthor } from "@cawco/core/canvas";
@@ -354,18 +355,30 @@ const stopOf = (
 };
 
 /**
- * Where its item opens: the session that holds it, at `stop`; a project's
- * setup page, which no panel opens (service `boardOf`), where it lands
- * (core `setupLanding`), at `stop`'s card when it names one.
+ * Where its item opens: a project's setup page, which no panel opens
+ * (service `boardOf`), where it lands (core `setupLanding`); the session
+ * that holds it, at `stop`; a project's page that outlived its session,
+ * in its project's Decisions tab (core `projectPageAt`). At `stop`'s card
+ * when it names one.
  */
 const hrefOf = (
   row: ArtifactRow,
   stop: ArtifactStop,
   setUp: boolean
-): string =>
-  row.projectId !== null && isSetupPage(row)
-    ? setupLanding(row.projectId, setUp, "card" in stop ? stop.card : null)
-    : artifactStopHref(String(row.instanceId), row.id, stop);
+): string => {
+  const card = "card" in stop ? stop.card : null;
+  if (row.projectId !== null && isSetupPage(row)) {
+    return setupLanding(row.projectId, setUp, card);
+  }
+  if (row.instanceId !== null) {
+    return artifactStopHref(row.instanceId, row.id, stop);
+  }
+  if (row.projectId !== null) {
+    return projectPageAt(row.projectId, row.name, card);
+  }
+  // Every artifact but a project's page goes with its session (db/schema.ts `artifacts.instanceId`).
+  throw new Error(`Artifact ${row.id} has neither a session nor a project.`);
+};
 
 /** Its pending state as its own list reads it (Files, the panel's menu): null when it asks nothing now. */
 export const pendingOf = (

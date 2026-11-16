@@ -292,12 +292,19 @@ export const artifactUpdate = {
     ...canvasFields,
     patch: z
       .array(
-        z.object({
-          op: z.enum(["add", "remove", "replace", "move", "copy", "test"]),
-          path: z.string().max(1000),
-          from: z.string().max(1000).optional(),
-          value: z.unknown().optional(),
-        })
+        z.union([
+          z.object({
+            op: z.enum(["add", "replace", "test"]),
+            path: z.string().max(1000),
+            value: z.unknown(),
+          }),
+          z.object({ op: z.literal("remove"), path: z.string().max(1000) }),
+          z.object({
+            op: z.enum(["move", "copy"]),
+            from: z.string().max(1000),
+            path: z.string().max(1000),
+          }),
+        ])
       )
       .min(1)
       .optional(),

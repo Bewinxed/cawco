@@ -175,9 +175,21 @@ export const artifactStopHref = (
 /** A project's setup page's name: its decision page `decisions/setup/` (hub setup.ts `isSetupPage`). */
 export const SETUP_PAGE = "setup";
 
+/**
+ * Project `projectId`'s page `page` in its Decisions tab, at `card` when one
+ * is named (`#<card>`): where a project's page lives, its session or none
+ * (the dashboard's ProjectPage reads `view`, `page` and the hash).
+ */
+export const projectPageAt = (
+  projectId: string,
+  page: string,
+  card: string | null
+): string =>
+  `/project/${encodeURIComponent(projectId)}?view=decisions&page=${encodeURIComponent(page)}${card ? `#${encodeURIComponent(card)}` : ""}`;
+
 /** Project `projectId`'s setup page in its Decisions tab, at `card` when one is named (`#<card>`). */
 export const setupPageAt = (projectId: string, card: string | null): string =>
-  `/project/${encodeURIComponent(projectId)}?view=decisions&page=${SETUP_PAGE}${card ? `#${encodeURIComponent(card)}` : ""}`;
+  projectPageAt(projectId, SETUP_PAGE, card);
 
 /**
  * Where a project's setup page lands, by every route that shows it (Caw's
