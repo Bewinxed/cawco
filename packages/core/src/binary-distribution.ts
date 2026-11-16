@@ -6,6 +6,7 @@ import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
 import { makeFolder } from "./folders";
 import { GitHubOctokit } from "./github-api";
+import { refusalWords } from "./hub-refusal";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import {
   type Answered,
@@ -438,20 +439,27 @@ export async function archiveFor(
 /** How long a machine waits before it asks again for an archive its hub is still fetching: the hub's 503 `Retry-After`. */
 export const ARCHIVE_ASK_AGAIN_S = 5;
 
-/** The hub's answer (503) to an ask of an archive it is still fetching from its release host: how far it is. */
+/**
+ * The member the hub's 503 problem carries beside its
+ * code and detail, for an archive it is still fetching from its release
+ * host: how far it is. At the body's top level, where every agent reads it.
+ */
 export interface ArchiveFetching {
   fetching: DownloadProgress;
 }
 
 /**
- * What a machine's updater makes of its hub's answer to an archive's ask before it is
- * read as a body: a 503 that says how far the hub's own fetch is
- * ({@link ArchiveFetching}) is a wait of the hub's `Retry-After`, said on
- * the way (`hubFetching`); a 416 or another 5xx is read as the download
- * reads it (start over, or retry); any other refusal (the hub's fetch
- * failed, 502; a build it does not offer, 404) is this attempt's failure,
- * said with the hub's own words. The agent's download reads every answer
- * through it (agent binary-update.ts), and so does ssh-forward-download.
+ * What a machine's updater makes of its hub's answer to an archive's ask
+ * before it is read as a body. A 503 with `Retry-After` is "not yet" (RFC
+ * 9110 §10.2.3: the service is expected back after that delay): a wait of
+ * that many seconds, outside the download's no-progress count, with the
+ * hub's progress said on the way (`hubFetching`) when its problem carries
+ * it ({@link ArchiveFetching}). The hub's fetch ends held or failed, so the
+ * wait ends too. A 416, or a 503 or above without `Retry-After`, is read as the download reads it
+ * (start over, or retry); any other refusal (the hub's fetch failed, 502; a
+ * build it does not offer, 404) is this attempt's failure, said with the
+ * problem's detail. The agent's download reads every answer through it
+ * (agent binary-update.ts `#download`).
  */
 export async function archiveAnswered(
   response: Response,
@@ -461,24 +469,27 @@ export async function archiveAnswered(
     return;
   }
   const text = await response.text().catch(() => "");
-  if (response.status === 503) {
-    const { fetching: progress } = ((): Partial<ArchiveFetching> => {
+  const again = Number(response.headers.get("retry-after"));
+  if (response.status === 503 && again > 0) {
+    const progress = ((): DownloadProgress | undefined => {
       try {
-        return ArchiveFetchingShape.partial().parse(JSON.parse(text));
+        return ArchiveFetchingShape.safeParse(JSON.parse(text)).data?.fetching;
       } catch {
-        return {};
+        return undefined;
       }
     })();
     if (progress) {
       hubFetching(progress);
-      const again = Number(response.headers.get("retry-after"));
-      return {
-        waitMs: (again > 0 ? again : ARCHIVE_ASK_AGAIN_S) * 1000,
-      };
     }
+    return { waitMs: again * 1000 };
   }
   if (response.status === 416 || response.status >= 503) {
     return;
   }
-  return { refuse: downloadWords.hubRefused(response.status, text) };
+  return {
+    refuse: downloadWords.hubRefused(
+      response.status,
+      refusalWords(text, response.status)
+    ),
+  };
 }

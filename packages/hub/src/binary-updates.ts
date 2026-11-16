@@ -54,6 +54,7 @@ import {
 } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
+import { downloadWords } from "@cawco/core/words/downloads";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { hidden } from "./hidden";
@@ -502,19 +503,31 @@ export function createBinaryUpdates(options: Options) {
             // Bun's own answer says it on a 416 too; Elysia's does not.
             set.headers["accept-ranges"] = "bytes";
             return Bun.file(archive.path);
-          case "fetching":
-            // Not yet: the machine waits and asks again, its own attempt
-            // standing, and says how far the hub is.
+          case "fetching": {
+            // Not yet: a 503 with `Retry-After` is the machine's wait, its
+            // own attempt standing (core binary-distribution.ts
+            // `archiveAnswered`), and the problem's `fetching` member says
+            // how far the hub is. The member sits at the body's top level,
+            // where every agent ever shipped reads it: 2026-11-16, nightly
+            // 8193, this answer's progress was a JSON string inside
+            // `detail`, no agent read it as a wait, and the hub's own
+            // machine and uwucloud each spent their five attempts in ten
+            // seconds and failed while the hub was 0.0 MB into its fetch.
+            const { fetching } = {
+              fetching: { received: archive.received, total: archive.total },
+            } satisfies ArchiveFetching;
             set.headers["retry-after"] = String(ARCHIVE_ASK_AGAIN_S);
             return problem(503, {
               code: "refused",
-              detail: JSON.stringify({
-                fetching: {
-                  received: archive.received,
-                  total: archive.total,
-                },
-              } satisfies ArchiveFetching),
+              detail: downloadWords.hubStillFetching(
+                params.archive,
+                fetching.received,
+                fetching.total,
+                ARCHIVE_ASK_AGAIN_S
+              ),
+              fetching,
             });
+          }
           case "failed":
             return problem(502, {
               code: "hub-could-not-fetch",
