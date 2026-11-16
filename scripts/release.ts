@@ -13,8 +13,9 @@
  * (SvelteKit's sync writes each route's `$types.d.ts` with a plain
  * writeFileSync on every run, kit 3.1.0 src/core/sync/write_types). The
  * checkout this runs from must be clean (this script and what it imports are
- * read from it), and the commit must be on origin/main; either refuses the
- * run before anything is built. Without --publish nothing is published,
+ * read from it), the commit must be on origin/main, and this host must be the
+ * hub's (live-database.ts `liveHubDatabase`); each refuses the run before
+ * anything is built. Without --publish nothing is published,
  * tagged or uploaded: the signed artifacts are left in --output.
  *
  * Everything runs at once that can: the steps are a graph (`releaseSteps`,
@@ -70,7 +71,7 @@ import { check } from "./release/steps/check";
 import { compile } from "./release/steps/compile";
 import { makeDraft } from "./release/steps/draft";
 import { infoBuild } from "./release/steps/info-build";
-import { liveDatabase } from "./release/steps/live-database";
+import { liveDatabase, liveHubDatabase } from "./release/steps/live-database";
 import { prepare } from "./release/steps/prepare";
 import { promoteStep } from "./release/steps/promote";
 import { runPublished } from "./release/steps/run";
@@ -416,6 +417,12 @@ if (channel === "nightly" && !(notesFile && isAbsolute(notesFile))) {
 const nightlyNotes = notesFile ? await readFile(notesFile, "utf8") : undefined;
 if (channel === "nightly" && !nightlyNotes?.trim()) {
   refuse("the nightly's end-user release notes are empty");
+}
+// The live database's check reads the hub the release will migrate, on its
+// own machine: a run anywhere else is refused before anything is built.
+const liveHub = await liveHubDatabase();
+if ("refused" in liveHub) {
+  refuse(liveHub.refused);
 }
 if (Bun.version !== PINNED_BUN) {
   refuse(

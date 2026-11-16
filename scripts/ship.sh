@@ -3,8 +3,8 @@
 # (the hub runs it after a landing whose finish_item says `ship`, as gate.md's `Ship:` line declares it):
 #
 #   bash scripts/ship.sh --commit SHA --notes FILE [--channel nightly|stable] [--tag vX.Y.Z]
-#       Checks the commit is on origin/main (refused, exit 2), then starts the release as a user unit of
-#       its own, `cawco-ship-<sha12>-<time>`, which outlives whoever asked
+#       Checks the commit is on origin/main and this host is the hub's (each refused, exit 2), then starts the
+#       release as a user unit of its own, `cawco-ship-<sha12>-<time>`, which outlives whoever asked
 #       (the release restarts the hub it is asked from), prints the unit's name and returns.
 #   bash scripts/ship.sh --run --commit SHA --notes FILE [--channel …] [--tag …]
 #       What that unit runs: a clean worktree of the commit, its frozen install, and from it
@@ -59,6 +59,9 @@ if ((run == 0)); then
   sha=$(git -C "$repo" rev-parse --verify "$commit^{commit}")
   git -C "$repo" merge-base --is-ancestor "$sha" origin/main ||
     { echo "$sha is not on origin/main." >&2; exit 2; }
+  # The release migrates the hub's database, read only on the hub's own machine: refused here, before a unit is
+  # started, on any other host (release/hub-host.ts; release.ts refuses the same run again).
+  bun "$here/release/hub-host.ts" || exit 2
   unit="cawco-ship-${sha:0:12}-$(date +%s)"
   # The notes are kept with the unit: whoever handed them over may remove theirs as soon as this returns.
   kept=
