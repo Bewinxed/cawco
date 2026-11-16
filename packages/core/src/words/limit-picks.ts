@@ -5,6 +5,9 @@
  * name only the fact.
  */
 
+import { DAY_MS } from "../time";
+import { clockWords } from "./account-lines";
+
 /** A reading's age, as the usage figures say a span ("3h 10m"). */
 type Age = string;
 
@@ -17,6 +20,16 @@ export const limitPickWords = {
     `At its limit until ${until}${age ? ` · checked ${age} ago` : ""}`,
   /** Room left in the window that runs out first: "62% left". */
   left: (percent: number): string => `${percent}% left`,
+  /** No reading of the account's windows has come yet. */
+  unread: "Not read yet",
+  /**
+   * When a limit resets, as its line names it: the clock within a day,
+   * "15:40"; past it, the weekday and the clock, "Thu 09:00".
+   */
+  resets: (at: number, now: number): string =>
+    at - now < DAY_MS
+      ? clockWords(at)
+      : `${new Date(at).toLocaleDateString("en-GB", { weekday: "short" })} ${clockWords(at)}`,
   /**
    * The limit could not be checked: its machine is away. The cause leads,
    * as it is why Move anyway stands there at once: "tower offline · at its

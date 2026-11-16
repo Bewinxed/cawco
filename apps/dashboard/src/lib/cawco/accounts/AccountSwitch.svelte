@@ -1,11 +1,14 @@
 <script lang="ts">
   import type { AccountProvider } from "@cawco/core/accounts";
+  import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
+  import { limitPickWords } from "@cawco/core/words/limit-picks";
   import {
     type ChipSize,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
-  import { IconChevronDown as Down, IconCheck } from "#lib/icons.js";
+  import { IconChevronDown as Down } from "#lib/icons.js";
+
   /**
    * A session card's account line: the account the session bills, as its dot
    * and name, and — when its machine has another account of its provider
@@ -15,18 +18,22 @@
    * While a move waits the chip and the list's check show the account it is
    * moving to (`shownAccount`), as the session's row does; another pick replaces it,
    * and the account it runs on calls it off. Only while this tab's ask is on
-   * its way to the hub does it take no picks.
+   * its way to the hub does it take no picks. Each row is a PickRow: its
+   * room, or the limit it is at, checked again before a pick on it goes.
    */
 
+  import PickList from "../pick/PickList.svelte";
+  import PickRow from "../pick/PickRow.svelte";
   import NsPopover from "../spawn/NsPopover.svelte";
   import { accountsStore } from "../stores/accounts.svelte";
-  import AccountName from "./AccountName.svelte";
+  import { usageStore } from "../stores/usage.svelte";
+  import { forcePast, pickPastLimit } from "./limit-checks.svelte";
   import { hueVar, nameOf } from "./model.svelte";
+  import { limitRowOf, roomOf } from "./room";
   import {
     type AccountHolder,
     asking,
     moveTo,
-    movingTo,
     shownAccount,
     signedInHere,
     switchable,
@@ -65,12 +72,19 @@
   );
 
   let open = $state(false);
+  /** The clock the rows' limits are read against, a minute at a time. */
+  let now = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 60_000);
+    return () => clearInterval(timer);
+  });
   const accounts = $derived(
     none && !instance.accountId
       ? signedInHere(instance, none.provider)
       : switchable(instance)
   );
-  const target = $derived(movingTo(instance));
   const shown = $derived.by(() => {
     const id = shownAccount(instance);
     return (
@@ -114,60 +128,66 @@
         open = value;
       }}
       {open}
-      rows="[data-account-option]"
+      rows="[data-pick-row]"
       triggerClass={chip}
       triggerData={{ "data-tool": true, "data-account-chip": true }}
-      width={320}
+      width={360}
     >
       {#snippet trigger()}
         {@render face()}
         <Down data-slot="chevron" />
       {/snippet}
-      <div
-        data-slot="list"
-        aria-label="Account"
-        class="flex flex-col p-space-2"
-        role="listbox"
-      >
+      <!-- The pick is the checked row from the moment it is made: the
+           account it is moving to, as the chip shows it, never the one it
+           is leaving. A row at its limit is checked again before its pick
+           goes (limit-checks.svelte.ts). -->
+      <PickList label="Account">
         {#each accounts as account (account.id)}
-          <!-- The pick is the selected option from the moment it is made:
-               the account it is moving to, as the chip shows it, never the
-               one it is leaving. -->
-          {@const picked = account.id === shown?.id}
-          {@const going = account.id === target}
-          <button
-            data-slot="option"
-            aria-selected={picked}
-            class="group press-tint transition-control mark-line select-none grid min-h-c-btn-h w-full grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg"
-            data-account-option={account.id}
-            disabled={going}
-            onclick={() => pick(account.id)}
-            role="option"
-            style:--option-cols={"var(--spacing-icon-md) minmax(0, 1fr) var(--spacing-icon-md)"}
-            type="button"
+          {@const key = `account:${account.id}`}
+          {@const limit = limitRowOf(
+            key,
+            account.provider === CLAUDE_PROVIDER
+              ? roomOf(usageStore.claudeLimits[account.id], null, now)
+              : null,
+            now
+          )}
+          <PickRow
+            checking={limit.checking}
+            detail={limit.detail}
+            force={limit.held
+              ? {
+                  action: limitPickWords.moveAnyway,
+                  onforce: () => forcePast(key, () => pick(account.id)),
+                }
+              : undefined}
+            full={account.label && account.email
+              ? `${account.email}\n${limit.detail}`
+              : limit.detail}
+            limited={limit.limited}
+            name={nameOf(account)}
+            onpick={() => {
+              if (limit.limited) {
+                detach(
+                  pickPastLimit(key, account.id, null, () => pick(account.id)),
+                  "pickPastLimit"
+                );
+              } else {
+                pick(account.id);
+              }
+            }}
+            picked={account.id === shown?.id}
           >
-            <span
-              data-account-switch-lead
-              data-slot="dot"
-              aria-hidden="true"
-              class="size-space-2 flex-none justify-self-center rounded-pill bg-(--c)"
-              data-box
-              style:--c={hueVar(account.hue)}
-            ></span>
-            {#if going}
+            {#snippet lead()}
               <span
-                class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
-                >Moving to {nameOf(account)}…</span
-              >
-            {:else}
-              <AccountName {account} row />
-            {/if}
-            <IconCheck
-              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
-            />
-          </button>
+                aria-hidden="true"
+                class="size-space-2 rounded-pill bg-(--c)"
+                data-box
+                style:--c={hueVar(account.hue)}
+              ></span>
+            {/snippet}
+          </PickRow>
         {/each}
-      </div>
+      </PickList>
     </NsPopover>
   {:else}
     <!-- Nothing to pick: one account of its provider here, an ask on its

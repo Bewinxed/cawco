@@ -1540,7 +1540,7 @@
     /* The row gap, so a snapped row's neighbour shows none of itself. */
     scroll-padding: var(--spacing-space-row);
   }
-  & [data-slot="row"] {
+  & [data-slot="pick-row"] {
     scroll-snap-align: start;
   }
 }

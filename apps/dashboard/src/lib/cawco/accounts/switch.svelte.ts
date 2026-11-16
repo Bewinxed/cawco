@@ -173,8 +173,8 @@ export function accountFault(instance: BoardRow): string | undefined {
 /**
  * A session stopped at its account's limit, as an error says it (DESIGN.md's
  * error formula): what happened and when it carries on, in the hub's words
- * (its row's `stalled`), then the way out while one is open, another
- * account signed in on its machine, which moves it now. Undefined while it
+ * (its row's `stalled`); with no other account signed in on its machine,
+ * then the way out (with one, the account picker above it is the way). Undefined while it
  * runs, or while a move it was given is on its way (that move says itself).
  */
 export function stopWords(instance: BoardRow): string | undefined {
@@ -182,8 +182,10 @@ export function stopWords(instance: BoardRow): string | undefined {
   if (!stalled || movingTo(instance) !== undefined) {
     return;
   }
+  // With another account here the picker right above says the way out;
+  // with none, the line names the one there is.
   return switchable(instance).length > 0
-    ? `${stalled.words}. Pick another account to move it now.`
+    ? `${stalled.words}.`
     : `${stalled.words}. Sign in another account on its machine to move it now.`;
 }
 
