@@ -1,3 +1,75 @@
+<script lang="ts" module>
+  import { z } from "zod";
+  import {
+    answerLimitChecksWith,
+    type LimitAnswer,
+    type LimitAsker,
+  } from "./limit-checks.svelte";
+
+  /** What one bench answers in the hub's place: a move asked at its route, and a limit's check. */
+  interface Stand {
+    check: LimitAsker;
+    move: (accountId: string) => void;
+  }
+
+  /**
+   * The benches mounted now, newest last. A canvas mounts one per frame,
+   * all on the same dials, and what stands in for the hub is the page's
+   * (its `fetch`, the check's seam), so it is put up once while any bench
+   * stands and the newest answers. Each bench putting up its own and
+   * taking it down as it went left the others on the real hub: a frame
+   * gone took the page's `fetch` back from the one still in use.
+   */
+  const stands: Stand[] = [];
+  let takeDown: (() => void) | null = null;
+  const MOVE = /\/api\/instances\/[^/]+\/account$/u;
+  /** What a move's request carries. */
+  const MoveBody = z.object({ accountId: z.string() });
+  const newest = (): Stand | undefined => stands.at(-1);
+
+  function putUp(): () => void {
+    const fetchWas = window.fetch;
+    window.fetch = new Proxy(fetchWas, {
+      apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const bench = newest();
+        if (!(
+          bench &&
+          MOVE.test(new URL(url, location.href).pathname) &&
+          init?.method === "POST"
+        )) {
+          return fetchWas(input, init);
+        }
+        bench.move(MoveBody.parse(JSON.parse(String(init.body))).accountId);
+        return Promise.resolve(Response.json({ ok: true }));
+      },
+    });
+    const release = answerLimitChecksWith((accountId, model) => {
+      const bench = newest();
+      return bench
+        ? bench.check(accountId, model)
+        : Promise.resolve({ kind: "still" });
+    });
+    return () => {
+      window.fetch = fetchWas;
+      release();
+    };
+  }
+
+  /** `one` answers in the hub's place until its release, while it is the newest bench. */
+  function standIn(one: Stand): () => void {
+    stands.push(one);
+    takeDown ??= putUp();
+    return () => {
+      stands.splice(stands.indexOf(one), 1);
+      if (stands.length === 0) {
+        takeDown?.();
+        takeDown = null;
+      }
+    };
+  }
+</script>
+
 <script lang="ts">
   /**
    * The session card to use (LimitPicker.stories `Live`): the real
@@ -32,7 +104,9 @@
    * stage's own canvas, a size container whose layout containment made
    * them part of its scrollable overflow, so an open popover grew the page
    * and its scrollbar shifted the card. Its overflow is clipped, inside a
-   * frame tall enough for every list.
+   * frame tall enough for every list. It stands on the floating layer, as
+   * the app's popovers stand over a hung card: the card is on it too
+   * (HangCard), and the list opened from it had drawn under its foot.
    */
   import { type Account, CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import type { AccountHue } from "@cawco/core/accounts/kinds";
@@ -47,7 +121,6 @@
   import type { ClaudeLimits, LimitWindow } from "@cawco/core/usage/types";
   import { BitsConfig } from "bits-ui";
   import { onDestroy, untrack } from "svelte";
-  import { z } from "zod";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { benchClaudeReport } from "../bench-reports";
   import HangCardTabFrame from "../hang-frames/hang-card-tab-frame.svelte";
@@ -59,11 +132,7 @@
   import { adoptUsageLimits } from "../stores/usage.svelte";
   import { handleStreamMessage } from "../stream";
   import SessionDetails from "../workspace/SessionDetails.svelte";
-  import {
-    answerLimitChecksWith,
-    forgetLimitChecks,
-    type LimitAnswer,
-  } from "./limit-checks.svelte";
+  import { forgetLimitChecks } from "./limit-checks.svelte";
   import { startSwitch } from "./switch.svelte";
 
   let {
@@ -380,36 +449,17 @@
     },
   });
 
-  // A move, answered at its route: its row owes it from then on.
-  const fetchWas = window.fetch;
-  const MOVE = /\/api\/instances\/[^/]+\/account$/u;
-  /** What a move's request carries. */
-  const MoveBody = z.object({ accountId: z.string() });
-  window.fetch = new Proxy(fetchWas, {
-    apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) => {
-      const url = input instanceof Request ? input.url : String(input);
-      if (!(
-        MOVE.test(new URL(url, location.href).pathname) &&
-        init?.method === "POST"
-      )) {
-        return fetchWas(input, init);
-      }
-      const { accountId } = MoveBody.parse(JSON.parse(String(init.body)));
-      owed =
-        accountId === "jude" ? null : { to: accountId, model: owed?.model };
-      adoptRows([row(owed?.to ?? null, owed?.model)]);
-      return Promise.resolve(Response.json({ ok: true }));
-    },
-  });
-  onDestroy(() => {
-    window.fetch = fetchWas;
-  });
-
-  // A limit's check, answered after a second as the `check` dial says.
+  // A move, answered at its route: its row owes it from then on. A
+  // limit's check, answered after a second as the `check` dial says.
   const CHECK_MS = 1000;
   onDestroy(
-    answerLimitChecksWith(
-      (accountId) =>
+    standIn({
+      move: (accountId) => {
+        owed =
+          accountId === "jude" ? null : { to: accountId, model: owed?.model };
+        adoptRows([row(owed?.to ?? null, owed?.model)]);
+      },
+      check: (accountId) =>
         new Promise<LimitAnswer>((answer) => {
           setTimeout(() => {
             if (check === "cleared") {
@@ -427,8 +477,8 @@
               answer({ kind: "still" });
             }
           }, CHECK_MS);
-        })
-    )
+        }),
+    })
   );
 
   /** Seeds again when any of `_dials` changes: each is read here, so the effect follows it. */
@@ -476,7 +526,7 @@
   </BitsConfig>
   <div
     bind:this={layer}
-    class="pointer-events-none absolute inset-0 overflow-clip contain-layout *:pointer-events-auto"
+    class="pointer-events-none absolute inset-0 z-(--layer-float) overflow-clip contain-layout *:pointer-events-auto"
     data-slot="layer"
   ></div>
 </div>
