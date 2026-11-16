@@ -79,8 +79,8 @@ import type {
 import { settledQuestionResult } from "@cawco/core/question";
 import type {
   PermissionResult,
-  UserAnswers,
 } from "@cawco/core/session-messages";
+import { UserAnswersSchema } from "@cawco/core/stored-shapes";
 import {
   askClosedWords,
   askQuestionWords,
@@ -137,8 +137,11 @@ const questionResult = (
   if (settled.behavior === "deny") {
     return { behavior: "deny", message: settled.message };
   }
-  const answers = settled.updatedInput?.answers as UserAnswers | undefined;
-  return { behavior: "allow", ...(answers ? { answers } : {}) };
+  const answers = UserAnswersSchema.safeParse(settled.updatedInput?.answers);
+  return {
+    behavior: "allow",
+    ...(answers.success ? { answers: answers.data } : {}),
+  };
 };
 
 /** The mode that approves every ask for its session (core `PermissionMode`). */

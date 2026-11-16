@@ -22,6 +22,7 @@
  * {@link TOOL_CALL_KEY_KEPT_MS} past each key's answer; a key running is
  * kept as long as it runs.
  */
+import { isRecord } from "@cawco/core/is-record";
 import { createHash } from "node:crypto";
 import { TOOL_CALL_KEY_HEADER } from "@cawco/core/binary-updates";
 import {
@@ -54,10 +55,10 @@ const toolResultRefused = (words: string): Response =>
 
 /** The same result as MCP answers it: under the id of the `tools/call` in `body`. */
 export const mcpRefused = (body: unknown, words: string): Response => {
-  const call = (Array.isArray(body) ? body : [body]).find(
-    (message: { method?: unknown } | null | undefined) =>
-      message?.method === "tools/call"
-  ) as { id?: unknown } | undefined;
+  const messages: unknown[] = Array.isArray(body) ? body : [body];
+  const call = messages
+    .filter(isRecord)
+    .find((message) => message.method === "tools/call");
   return Response.json({
     jsonrpc: "2.0",
     id: call?.id ?? null,

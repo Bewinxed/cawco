@@ -14,9 +14,11 @@
  * tail, and the facts the session has stated.
  */
 
+import { everyOf } from "@cawco/core/every-of";
 import { fnv1a } from "@cawco/core/fnv1a";
 import { CONTEXT_LINE } from "@cawco/core/harness";
 import {
+  isNeutralMessage,
   type NeutralMessage,
   type SendRecord,
   type SessionMessage,
@@ -204,11 +206,13 @@ function placeLines(
   const since = firstAt === undefined ? undefined : Date.parse(firstAt);
   for (const line of [...lines].sort((a, b) => a.at - b.at)) {
     const { entry } = line;
-    const blocks = mapFrame(
-      instanceId,
-      (entry.type === "system" ? entry.message : entry) as NeutralMessage,
-      () => entry.uuid
-    ).blocks.filter((block) => !(ids.has(block.id) || held.has(block.id)));
+    const said = entry.type === "system" ? entry.message : entry;
+    if (!isNeutralMessage(said)) {
+      continue;
+    }
+    const blocks = mapFrame(instanceId, said, () => entry.uuid).blocks.filter(
+      (block) => !(ids.has(block.id) || held.has(block.id))
+    );
     const [first] = blocks;
     if (!first) {
       continue;
@@ -288,6 +292,54 @@ function risingRun(seq: number[]): Set<number> {
   }
   return kept;
 }
+
+/** Every field of a session's tail ({@link TranscriptTail}). */
+const TAIL_KEYS = everyOf<keyof TranscriptTail>()([
+  "busy",
+  "currentTool",
+  "openBlock",
+  "streaming",
+  "streams",
+  "thinkingClosing",
+  "thinkingSince",
+  "thinkingStream",
+]);
+
+/** Every fact of a session ({@link TranscriptFacts}). */
+const FACT_KEYS = everyOf<keyof TranscriptFacts>()([
+  "commands",
+  "harness",
+  "initialized",
+  "inits",
+  "lastCompaction",
+  "lastTurnFailed",
+  "model",
+  "permissionMode",
+  "sdkStatus",
+  "sessionId",
+  "tooling",
+  "totalCost",
+  "turnsEnded",
+]);
+
+/**
+ * `value`, a patch's word on `key`, written to `target` and kept in
+ * `changed` when it moved from what `target` holds (`same` says); a patch
+ * that says nothing of `key` moves nothing.
+ */
+const moveKey = <T, K extends keyof T>(
+  target: T,
+  changed: Partial<T>,
+  key: K,
+  value: T[K] | undefined,
+  same: (was: T[K], now: T[K]) => boolean
+): void => {
+  if (value === undefined || same(target[key], value)) {
+    return;
+  }
+  target[key] = value;
+  changed[key] = value;
+};
 
 export class TranscriptBuilder {
   readonly instanceId: string;
@@ -719,11 +771,11 @@ export class TranscriptBuilder {
       }
       // A `system` entry holds the frame the live stream carried for the same
       // record, so it is drawn by that frame's own mapping.
-      const mapping = mapFrame(
-        this.instanceId,
-        (entry.type === "system" ? entry.message : entry) as NeutralMessage,
-        () => entry.uuid
-      );
+      const said = entry.type === "system" ? entry.message : entry;
+      if (!isNeutralMessage(said)) {
+        continue;
+      }
+      const mapping = mapFrame(this.instanceId, said, () => entry.uuid);
       for (const event of branchEvents(mapping)) {
         applyBranchEvent(branches, this.instanceId, event, at);
       }
@@ -1612,26 +1664,26 @@ export class TranscriptBuilder {
   }
 
   private setTail(patch: Partial<TranscriptTail>): void {
-    for (const [key, value] of Object.entries(patch) as [
-      keyof TranscriptTail,
-      unknown,
-    ][]) {
-      if (this.tail[key] !== value) {
-        (this.tail as unknown as Record<string, unknown>)[key] = value;
-        (this.tailPatch as Record<string, unknown>)[key] = value;
-      }
+    for (const key of TAIL_KEYS) {
+      moveKey(
+        this.tail,
+        this.tailPatch,
+        key,
+        patch[key],
+        (was, now) => was === now
+      );
     }
   }
 
   private setFacts(patch: Partial<TranscriptFacts>): void {
-    for (const [key, value] of Object.entries(patch) as [
-      keyof TranscriptFacts,
-      unknown,
-    ][]) {
-      if (JSON.stringify(this.facts[key]) !== JSON.stringify(value)) {
-        (this.facts as unknown as Record<string, unknown>)[key] = value;
-        (this.factsPatch as Record<string, unknown>)[key] = value;
-      }
+    for (const key of FACT_KEYS) {
+      moveKey(
+        this.facts,
+        this.factsPatch,
+        key,
+        patch[key],
+        (was, now) => JSON.stringify(was) === JSON.stringify(now)
+      );
     }
   }
 

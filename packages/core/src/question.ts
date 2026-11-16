@@ -1,4 +1,5 @@
 import { ASK_USER_QUESTION } from "./ask-tools";
+import { isRecord } from "./is-record";
 import type {
   PermissionResult,
   UserAnswers,
@@ -6,10 +7,19 @@ import type {
 } from "./session-messages";
 
 const looksLikeQuestion = (value: unknown): value is UserQuestion =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as UserQuestion).question === "string" &&
-  Array.isArray((value as UserQuestion).options);
+  isRecord(value) &&
+  typeof value.question === "string" &&
+  Array.isArray(value.options);
+
+/** Whether `value` is a reader's answers: each question's label, or its labels. */
+const isUserAnswers = (value: unknown): value is UserAnswers =>
+  isRecord(value) &&
+  Object.values(value).every(
+    (answer) =>
+      typeof answer === "string" ||
+      (Array.isArray(answer) &&
+        answer.every((label) => typeof label === "string"))
+  );
 
 /**
  * What a parked tool call is really asking the reader, when it is asking rather
@@ -24,13 +34,11 @@ export function questionsOf(
   if (toolName !== ASK_USER_QUESTION) {
     return null;
   }
-  const { questions } = input as { questions?: unknown };
+  const { questions } = input;
   if (!Array.isArray(questions) || questions.length === 0) {
     return null;
   }
-  return questions.every(looksLikeQuestion)
-    ? (questions as UserQuestion[])
-    : null;
+  return questions.every(looksLikeQuestion) ? questions : null;
 }
 
 /**
@@ -58,9 +66,7 @@ export const QUESTION_DISMISSED =
   "The user dismissed the question without answering it.";
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  isRecord(value) ? value : null;
 
 /**
  * One answer in the shape its own question reads: a multi-select answer is a
@@ -119,7 +125,7 @@ export function settledQuestionResult(
     return { ...result, updatedInput: undefined };
   }
 
-  const answers = asRecord(sent.answers) as UserAnswers | null;
+  const answers = isUserAnswers(sent.answers) ? sent.answers : null;
   const input = { ...parked.input, ...sent };
   return {
     ...result,

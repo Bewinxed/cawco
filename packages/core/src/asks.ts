@@ -18,6 +18,7 @@
  */
 import { z } from "zod";
 import { canonicalJson } from "./canonical-json";
+import { everyOf } from "./every-of";
 import { markerTag, readMarkerTag } from "./injected";
 import { sessionLink } from "./references";
 import type { UserAnswers, UserQuestion } from "./session-messages";
@@ -404,7 +405,8 @@ const questionAnsweredText = (ask: AskRecord, asked: AskedQuestion): string => {
   return `${answeredBy(ask)} answered ${link}:\n${questionLines(asked.questions, result.answers ?? {})}${differs}`;
 };
 
-const OUTCOMES: ReadonlySet<string> = new Set<AskOutcome>([
+/** Every way an ask ends ({@link AskOutcome}). */
+const OUTCOMES = everyOf<AskOutcome>()([
   "ran",
   "failed",
   "declined",
@@ -447,13 +449,13 @@ export const parseAskAnswered = (
   outcome: AskOutcome;
 } | null => {
   const tag = readMarkerTag(text);
-  const { id, kind, outcome } = tag?.fields ?? {};
+  const { id, kind, outcome: said } = tag?.fields ?? {};
+  const outcome = OUTCOMES.find((known) => known === said);
   return tag?.kind === MARKER &&
     id &&
     (kind === "approve" || kind === "question" || kind === "permit") &&
-    outcome &&
-    OUTCOMES.has(outcome)
-    ? { id, kind, outcome: outcome as AskOutcome }
+    outcome
+    ? { id, kind, outcome }
     : null;
 };
 

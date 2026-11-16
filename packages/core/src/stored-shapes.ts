@@ -1247,6 +1247,7 @@ const UserAnswersShape = declared(
   "UserAnswers",
   "packages/core/src/session-messages.ts"
 );
+export const UserAnswersSchema = UserAnswersShape;
 export type UserAnswersOutput = z.output<typeof UserAnswersShape>;
 
 const UserQuestionShape = declared(

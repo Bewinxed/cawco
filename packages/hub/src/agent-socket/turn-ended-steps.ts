@@ -94,9 +94,7 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
     // picker can say whether a model fits (claude's catalog
     // carries no window of its own).
     if (traitsOf(harness).contextWindow === "hub") {
-      const { modelUsage } = neutral as {
-        modelUsage?: Record<string, { contextWindow?: number }>;
-      };
+      const { modelUsage } = neutral;
       for (const [model, usage] of Object.entries(modelUsage ?? {})) {
         if (usage.contextWindow) {
           ctx.db.noteClaudeContextWindow(model, usage.contextWindow);
@@ -239,7 +237,7 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
     // A failed turn's report carries the harness's own error
     // words — "(no text)" once stood in for a 403 that was
     // sitting right in the result frame.
-    const { errors } = neutral as { errors?: string[] };
+    const { errors } = neutral;
     const harnessError =
       errors
         ?.map((each) => each.trim())
@@ -273,7 +271,7 @@ export const turnEndedStepsOf = (ctx: TurnEndedContext) => {
       if (handed) {
         ctx.reportToParent(from, handed.body, handed.failed, {
           completion: {
-            resultId: neutral.uuid as string,
+            resultId: neutral.uuid,
             ...(neutral.timestamp ? { completedAt: neutral.timestamp } : {}),
           },
         });

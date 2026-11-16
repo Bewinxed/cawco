@@ -442,7 +442,16 @@ export interface NeutralAssistantMessage {
    * carry them, so it draws no row of its own.
    */
   failedSends?: string[];
-  message: { model?: string; content: NeutralAssistantBlock[] };
+  message: {
+    model?: string;
+    content: NeutralAssistantBlock[];
+    /** Claude: the request's own tokens, as its API answered them. */
+    usage?: {
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+      input_tokens?: number;
+    };
+  };
   parent_tool_use_id?: string | null;
   /** The harness's own event, verbatim, for renderers that need more than this. */
   raw?: unknown;
@@ -876,6 +885,15 @@ export interface NeutralResultMessage {
   is_error: boolean;
   /** Agent receive time of the last main-loop requesting status, epoch ms. */
   lastRequestAt?: number;
+  /**
+   * Claude: what the session's process has spent so far, by model (the SDK
+   * result's `modelUsage`), each field as Claude sent it, and the model's
+   * context window.
+   */
+  modelUsage?: Record<
+    string,
+    Partial<ClaudeModelUsage> & { contextWindow?: number }
+  >;
   num_turns?: number;
   raw?: unknown;
   /** Read from stored history during recovery, rather than a newly completed turn. */
@@ -901,6 +919,8 @@ export interface NeutralResultMessage {
    */
   turnUsage?: ModelTurnUsage[];
   type: "result";
+  /** Claude: the turn's last request's own tokens (the SDK result's `usage`): what it read uncached. */
+  usage?: { input_tokens?: number };
   uuid?: string;
   /**
    * What the session has arranged to wake itself as the turn ends, set by
@@ -931,9 +951,7 @@ export const waitsOnItself = (wakes: TurnWakes | undefined): boolean =>
 /** Claude reports uncached input separately from cache reads and writes. */
 export const promptCacheUsage = (result: NeutralResultMessage) => {
   const { cache = { read: 0, write: 0 } } = result;
-  const { usage } = result as NeutralResultMessage & {
-    usage?: { input_tokens?: number };
-  };
+  const { usage } = result;
   return {
     input: (usage?.input_tokens ?? 0) + cache.read + cache.write,
     read: cache.read,
@@ -1006,6 +1024,8 @@ export interface NeutralSystemMessage {
   // transcript draws (its output is otherwise startup noise, and never stored)
   hook_name?: string;
   last_tool_name?: string;
+  // leak_found ({@link import("./harness").LEAK_FOUND}) — what was found leaking
+  leak?: import("./harness").LeakFound;
   // mcp_not_connected ({@link MCP_NOT_CONNECTED}) — the server that did not connect
   mcp_server?: string;
   mcp_servers?: { name: string; status: string }[];
@@ -1093,3 +1113,28 @@ export type NeutralMessage = (
   | NeutralSystemMessage
   | NeutralRawMessage
 ) & { keepAlive?: true };
+
+/** Every {@link NeutralMessage}'s `type`. */
+const NEUTRAL_TYPES: ReadonlySet<string> = new Set(
+  everyOf<NeutralMessage["type"]>()([
+    "assistant",
+    "user",
+    "stream_event",
+    "result",
+    "system",
+    "raw",
+  ])
+);
+
+/**
+ * Whether `value` is a session's message as a harness adapter says it: a
+ * JSON object whose `type` is one a {@link NeutralMessage} names. Its other
+ * fields keep their shape from the harness, read where its type is handled
+ * (transcript-rules.ts `mapFrame`).
+ */
+export const isNeutralMessage = (value: unknown): value is NeutralMessage =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  typeof value.type === "string" &&
+  NEUTRAL_TYPES.has(value.type);

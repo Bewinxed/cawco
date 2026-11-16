@@ -1,3 +1,5 @@
+import { SessionMessageSchema } from "@cawco/core/stored-shapes";
+import { isRecord } from "@cawco/core/is-record";
 import type { AccountMove } from "@cawco/core/accounts";
 import {
   ACCOUNT_MOVE,
@@ -18,7 +20,6 @@ import type { ToolStatus } from "@cawco/core/tools";
 import {
   type TranscriptWhere,
   type TranscriptWindow,
-  transcriptWindowOf,
   type WindowAsk,
 } from "@cawco/core/transcript-types";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
@@ -126,31 +127,53 @@ export const projectNoteLine = (
  * nothing here rather than as an empty name.
  */
 export const userTurnText = (message: unknown): string | undefined => {
-  if (typeof message !== "object" || message === null) {
+  if (!isRecord(message) || message.type !== "user") {
     return undefined;
   }
-  const outer = message as {
-    type?: unknown;
-    message?: { role?: unknown; content?: unknown };
-  };
-  if (outer.type !== "user") {
-    return undefined;
-  }
-  const content = outer.message?.content;
+  const content = isRecord(message.message)
+    ? message.message.content
+    : undefined;
   const text =
     typeof content === "string"
       ? content
       : // biome-ignore lint/style/noNestedTernary: content is either a block array or absent — two mutually exclusive shapes on the wire, not a simplifiable condition.
         Array.isArray(content)
         ? content
-            .filter((block): block is { type: "text"; text: string } => {
-              const b = block as { type?: unknown; text?: unknown };
-              return b.type === "text" && typeof b.text === "string";
-            })
-            .map((block) => block.text)
+            .flatMap((block: unknown) =>
+              isRecord(block) &&
+              block.type === "text" &&
+              typeof block.text === "string"
+                ? [block.text]
+                : []
+            )
             .join("\n")
         : "";
   return text.trim() ? text : undefined;
+};
+
+/**
+ * A machine's answer to a window read as the window it is, or undefined
+ * when it is none: a read that could not see the store fails with why (each
+ * harness's `readTranscriptWindow`), so an answer that holds no `entries`
+ * list is no read of the store, and is never taken as an empty conversation.
+ */
+const transcriptWindowOf = (
+  answer: unknown
+): TranscriptWindow | undefined => {
+  if (!isRecord(answer)) {
+    return;
+  }
+  const { entries, older, newer } = answer;
+  return Array.isArray(entries)
+    ? {
+        entries: entries.flatMap((entry: unknown) => {
+          const read = SessionMessageSchema.safeParse(entry);
+          return read.success ? [read.data] : [];
+        }),
+        older: typeof older === "string" ? older : null,
+        newer: typeof newer === "string" ? newer : null,
+      }
+    : undefined;
 };
 
 export type HistoryContext = Pick<

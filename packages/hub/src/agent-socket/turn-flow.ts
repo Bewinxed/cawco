@@ -302,7 +302,7 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
       const neutral = body.message;
       const waiter = ctx.turnWaiters.get(message.instanceId);
       if (neutral.type === "result" && waiter) {
-        const { errors } = neutral as { errors?: string[] };
+        const { errors } = neutral;
         if (neutral.is_error) {
           waiter.reject(
             new Error(
@@ -410,18 +410,12 @@ export const turnFlowStagesOf = (ctx: TurnFlowContext) => {
           ctx.answeredSinceCompaction(message.instanceId);
         }
         // Claude Code ending the turn on its account's limit.
-        if ((neutral as { error?: string }).error === "rate_limit") {
+        if (neutral.error === "rate_limit") {
           ctx.limitRefused.add(message.instanceId);
         } else {
           // The context this request sent: the session's own, as
           // the turn's result (a sum over its requests) can't say.
-          const { usage } = neutral.message as {
-            usage?: {
-              cache_creation_input_tokens?: number;
-              cache_read_input_tokens?: number;
-              input_tokens?: number;
-            };
-          };
+          const { usage } = neutral.message;
           if (typeof usage?.input_tokens === "number") {
             ctx.lastRequestContext.set(
               message.instanceId,

@@ -91,7 +91,7 @@ export const sessionGateStagesOf = (ctx: SessionGateContext) => {
         ctx.tellContainers(
           message.machineId,
           message.instanceId,
-          said as { uuid?: unknown; content?: unknown },
+          said,
           said.subtype === CONTAINERS_ENDED ? "ended" : "untracked"
         );
         return "stop";
