@@ -209,6 +209,7 @@ import type { CreateOrJoinProject } from "./project-making";
 import type { MergeDeps } from "./project-merge";
 import type { createProjectOffers } from "./project-offers";
 import type { createProjectOut, placeAddedOf } from "./project-out";
+import type { ScratchPlaceProblem } from "./project-place-scratch";
 import type { createProjectStarters } from "./project-starters";
 import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
@@ -329,6 +330,7 @@ export interface ClosureContext {
         typeof problem<404, { code: "place-machine-unknown"; detail: string }>
       >
     | Exclude<ReturnType<ClosureContext["askedMachinePath"]>, MachinePath>
+    | ScratchPlaceProblem
   >;
   admission: ReturnType<typeof createAdmission>;
   advanceCompaction: (instanceId: string) => void;

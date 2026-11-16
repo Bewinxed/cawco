@@ -2,6 +2,7 @@ import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { StagesTemplate } from "@cawco/core/views";
 import type { problem } from "elysia";
 import type { PlaceRow, ProjectRow } from "./db/projects";
+import type { ScratchPlaceProblem } from "./project-place-scratch";
 
 export interface ProjectAsk {
   /** Made with Caw: a new project's Caw starts on. */
@@ -24,8 +25,9 @@ export interface ProjectMade {
   project: ProjectRow;
 }
 
-/** Why a project is not made or joined: a folder that is no absolute path on its machine, or a paused machine's (project-joining.ts `createOrJoinProject`). */
+/** Why a project is not made or joined: a folder that is no absolute path on its machine, one in its scratch root, or a paused machine's (project-joining.ts `createOrJoinProject`). */
 export type ProjectMakeProblem =
+  | ScratchPlaceProblem
   | ReturnType<
       typeof problem<
         400,

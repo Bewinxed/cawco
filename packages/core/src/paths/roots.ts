@@ -10,9 +10,11 @@ import { join } from "node:path";
 /**
  * `~/.cawco`: the agent's own home on this machine (accounts, workspaces'
  * state and scratch, carries, attachments, sessiond's socket without a
- * runtime dir). Private to its user (core folders.ts).
+ * runtime dir). Private to its user (core folders.ts). `home`: another
+ * machine's, as its daemon reported it; this one's by default.
  */
-export const cawcoHomeDir = (): string => join(homedir(), ".cawco");
+export const cawcoHomeDir = (home: string = homedir()): string =>
+  join(home, ".cawco");
 
 export const xdgConfigHome = (): string =>
   process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
@@ -36,8 +38,11 @@ export const hubDataDir = (): string =>
  * so on disk (never tmpfs, which is RAM, and workspaces build large trees
  * there), and outside every clone (never in git status). Short, because
  * tools put unix sockets in `$TMPDIR` (paths/workspace.ts `SCRATCH_SOCKET_SUFFIX`).
+ * Each dir in it goes when its workspace or session ends. `home`: another
+ * machine's, as its daemon reported it; this one's by default.
  */
-export const workspaceScratchRoot = (): string => join(cawcoHomeDir(), "tmp");
+export const workspaceScratchRoot = (home: string = homedir()): string =>
+  join(cawcoHomeDir(home), "tmp");
 
 /**
  * macOS's root for every workspace's sockets (paths/workspace.ts `workspaceDoorDir`):

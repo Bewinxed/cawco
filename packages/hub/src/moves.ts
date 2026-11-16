@@ -73,8 +73,8 @@ import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import { MachineAway } from "./hub-shapes";
 import type { HubLifetimeShape } from "./lifetime";
+import { scratchPlaceRefusal } from "./project-place-scratch";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
-
 import type { SpawnProblem } from "./spawn-problems";
 
 export interface MovesDeps {
@@ -683,9 +683,13 @@ export const createMoves = (deps: MovesDeps) => {
       targetMachineId,
       path ?? `~/${posix.basename(sourcePlace.path)}`
     );
-    return targetPath instanceof MachinePathRefused
-      ? problem(400, { code: "target-path", detail: targetPath.message })
-      : targetPath;
+    if (targetPath instanceof MachinePathRefused) {
+      return problem(400, { code: "target-path", detail: targetPath.message });
+    }
+    return (
+      scratchPlaceRefusal(db.machineHome(targetMachineId), targetPath) ??
+      targetPath
+    );
   };
 
   /**

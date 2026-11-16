@@ -209,6 +209,8 @@ export interface MachinesDb {
    * column is null until a machine has synced once, and `AgentRow` says absent.
    */
   readonly listAgents: () => AgentRow[];
+  /** The home folder `machineId`'s daemon reported; null when it has not, or the hub has no such machine. */
+  readonly machineHome: (machineId: string) => string | null;
   /**
    * `raw` as a path on `machineId` ({@link machinePath}), against the home
    * that machine's daemon reported. Every path a person or a session names
@@ -612,6 +614,12 @@ export const machinesDb = (core: DbCore): MachinesDb => {
   };
 
   return {
+    machineHome: (machineId) =>
+      db
+        .select({ home: agents.home })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get()?.home ?? null,
     machinePathOn: (machineId, raw) => {
       const agent = db
         .select({ home: agents.home, hostname: agents.hostname })

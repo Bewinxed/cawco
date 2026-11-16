@@ -589,6 +589,7 @@ import { createProjectJoining } from "./project-joining";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import { createProjectOut, placeAddedOf } from "./project-out";
+import { scratchPlaceRefusal } from "./project-place-scratch";
 import {
   foldPlaced,
   onPlacesChanged,
@@ -4381,8 +4382,9 @@ export const createServer = (
   /**
    * Another checkout of a project's repository: named by hand
    * (`POST /api/projects/:id/places`) or picked on its setup page. A project
-   * or machine the hub does not have, or a path that is none on the machine,
-   * is the problem it answers.
+   * or machine the hub does not have, a path that is none on the machine, or
+   * one in its scratch root (project-place-scratch.ts), is the problem it
+   * answers.
    */
   const addProjectPlace = async (
     projectId: string,
@@ -4405,6 +4407,10 @@ export const createServer = (
     const path = askedMachinePath(machineId, asked);
     if (path instanceof ElysiaStatus) {
       return path;
+    }
+    const scratch = scratchPlaceRefusal(db.machineHome(machineId), path);
+    if (scratch) {
+      return scratch;
     }
     const { place, added } = db.addPlace({
       projectId: project.id,
