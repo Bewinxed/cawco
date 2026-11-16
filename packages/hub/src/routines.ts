@@ -87,6 +87,7 @@ import {
 } from "@cawco/core/harness/kinds";
 import type { LandsMode } from "@cawco/core/injected";
 import { LANDS_MODES } from "@cawco/core/injected";
+import { isRecord } from "@cawco/core/is-record";
 import type {
   ProjectNoteEvent,
   RoutineMadeEvent,
@@ -1598,7 +1599,7 @@ export const createRoutines = ({
         return null;
       }
     }
-    const run = (value as { run?: unknown } | null)?.run;
+    const run = isRecord(value) ? value.run : undefined;
     return typeof run === "string" ? run.trim() : null;
   };
 

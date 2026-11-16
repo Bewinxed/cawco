@@ -185,7 +185,7 @@ const outputsBytes = (
   scratch.reduce((sum, one) => sum + (one.link ? 0 : one.size), 0);
 /** What a probe's answer says is wrong with the outputs, a sentence each. */
 const outputsSaid = (stdout: string): string[] => {
-  const by = { missing: [] as string[], link: [] as string[] };
+  const by: Record<"missing" | "link", string[]> = { missing: [], link: [] };
   const large: string[] = [];
   for (const line of stdout.split("\n")) {
     const [word, ...rest] = line.split(" ");

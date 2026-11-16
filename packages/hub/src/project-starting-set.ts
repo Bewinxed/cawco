@@ -27,6 +27,7 @@ import {
   startingSetProblem,
 } from "@cawco/core/delegate-types";
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
+import { isOneOf } from "@cawco/core/one-of";
 import { ElysiaStatus } from "elysia";
 import {
   deleteFolderFile,
@@ -66,7 +67,8 @@ export const startingSetOfLines = (
     if (line.key === undefined) {
       continue;
     }
-    if (!(FIELDS as readonly string[]).includes(line.key)) {
+    const field = line.key;
+    if (!isOneOf(FIELDS, field)) {
       problems.push(
         `“${line.key}” is not a field of ${where}: it reads skills and servers.`
       );
@@ -77,7 +79,7 @@ export const startingSetOfLines = (
       problems.push(`${line.key} is a list, like [a, b].`);
       continue;
     }
-    set[line.key as (typeof FIELDS)[number]] = names(list);
+    set[field] = names(list);
   }
   const blank = startingSetProblem(set);
   return problems.length > 0 || blank

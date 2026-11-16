@@ -264,27 +264,29 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     }
     const { files, row, states } = handed;
     const from = `${row.kind} ${row.name}`;
-    const reads = await Promise.all(
-      (states?.files ?? []).map(async (path) => {
-        try {
-          const source: HandedFile = {
-            name: `artifact-${row.name}-${inputFileName(path)}`,
-            bytes: Buffer.from(
-              await deps.workspaceText(states?.workspace as string, path)
-            ),
-            from: `${path}, a states file of ${from}`,
-          };
-          return source;
-        } catch (error) {
-          return unhanded(
-            502,
-            "handed-states-unread",
-            entry,
-            `its states file ${path} can't be read from workspace ${states?.workspace}: ${failure(error)}`
-          );
-        }
-      })
-    );
+    const reads = states
+      ? await Promise.all(
+          states.files.map(async (path) => {
+            try {
+              const source: HandedFile = {
+                name: `artifact-${row.name}-${inputFileName(path)}`,
+                bytes: Buffer.from(
+                  await deps.workspaceText(states.workspace, path)
+                ),
+                from: `${path}, a states file of ${from}`,
+              };
+              return source;
+            } catch (error) {
+              return unhanded(
+                502,
+                "handed-states-unread",
+                entry,
+                `its states file ${path} can't be read from workspace ${states.workspace}: ${failure(error)}`
+              );
+            }
+          })
+        )
+      : [];
     const sources: HandedFile[] = [];
     for (const read of reads) {
       if (read instanceof ElysiaStatus) {

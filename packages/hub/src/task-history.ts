@@ -23,6 +23,7 @@
  *   it; one the history never held still does.
  */
 
+import { isOneOf } from "@cawco/core/one-of";
 import type { TaskFileState, TaskHistoryKind } from "@cawco/core/task-history";
 import type { TaskHistoryEvent, TaskLife } from "@cawco/core/task-views";
 import { type StageKind, TASK_MOVERS, type TaskMover } from "@cawco/core/views";
@@ -91,8 +92,6 @@ export const AUTHOR = {
   routine: "routine",
 } as const;
 
-const MOVER_NAMES: ReadonlySet<string> = new Set(TASK_MOVERS);
-
 /** The `CawCo-Stage` trailer's value, `from -> to`: the hub writes it, so it is read. */
 const STAGE_TRAILER = /^(\S+) -> (\S+)$/u;
 const ACTION_ID = /^action:(.+)$/u;
@@ -136,16 +135,16 @@ const eventOf = (change: FolderFileChange): TaskHistoryEvent => {
   const { trailers } = commit;
   const trailed = trailers[TRAILERS.mover];
   const mover: TaskMover | null =
-    trailed && MOVER_NAMES.has(trailed) ? (trailed as TaskMover) : null;
+    trailed && isOneOf(TASK_MOVERS, trailed) ? trailed : null;
   const named = trailers[TRAILERS.actor] ?? "";
   const id =
     ACTION_ID.exec(named)?.[1] ??
-    (named && !MOVER_NAMES.has(named) ? named : null);
+    (named && !isOneOf(TASK_MOVERS, named) ? named : null);
   const stageTrailer = STAGE_TRAILER.exec(trailers[TRAILERS.stage] ?? "");
   const stage: TaskHistoryEvent["stage"] = stageTrailer
     ? {
-        from: stageName(stageTrailer[1] as string),
-        to: stageTrailer[2] as string,
+        from: stageName(stageTrailer[1]),
+        to: stageTrailer[2],
       }
     : null;
   return {

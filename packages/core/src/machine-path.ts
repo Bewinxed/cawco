@@ -26,6 +26,26 @@ export class MachinePathRefused extends Error {}
 /** `~` or `~/…`: under the machine's home. `~user` is not this. */
 const UNDER_HOME = /^~(?=\/|$)/u;
 
+/** An absolute `path` with `.`, `..`, repeated and trailing slashes normalised away. */
+const normalised = (path: string): string => {
+  const segments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      segments.pop();
+    } else {
+      segments.push(segment);
+    }
+  }
+  return `/${segments.join("/")}`;
+};
+
+/** Whether `path` is absolute and as {@link normalised} leaves it: the rule the brand stands for. */
+const isNormalised = (path: string): path is MachinePath =>
+  path.startsWith("/") && normalised(path) === path;
+
 /**
  * `raw` as a path on `machine`: a leading `~` expanded against `home`, the
  * home folder that machine's daemon reported, then `.`, `..`, repeated and
@@ -53,18 +73,13 @@ export const machinePath = (
       `${asked || "An empty path"} is not a folder on ${machine}: a path there starts with / (or ~/ for its home folder).`
     );
   }
-  const segments: string[] = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") {
-      continue;
-    }
-    if (segment === "..") {
-      segments.pop();
-    } else {
-      segments.push(segment);
-    }
+  const made = normalised(path);
+  if (!isNormalised(made)) {
+    throw new MachinePathRefused(
+      `${asked} does not normalise to one path on ${machine}.`
+    );
   }
-  return `/${segments.join("/")}` as MachinePath;
+  return made;
 };
 
 /**
@@ -74,4 +89,4 @@ export const machinePath = (
  * bless a path someone named: that goes through {@link machinePath}.
  */
 export const isMachinePath = (value: string): value is MachinePath =>
-  value.startsWith("/") && machinePath(undefined, value, "") === value;
+  value.trim() === value && isNormalised(value);

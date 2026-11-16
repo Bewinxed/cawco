@@ -19,8 +19,13 @@
  * migration over its stored sends (hub db/tag-markers.ts).
  */
 
-import type { ArtifactDoes, ArtifactKind } from "./artifact-kinds";
+import {
+  ARTIFACT_KINDS,
+  type ArtifactDoes,
+  type ArtifactKind,
+} from "./artifact-kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
+import { isOneOf } from "./one-of";
 import type { PlanWait } from "./plan";
 import { artifactLink, stepLink } from "./references";
 import { unhandled } from "./unhandled";
@@ -683,7 +688,8 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
     return null;
   }
   const { since = "" } = tag.fields;
-  return { ...namedOf(tag), since: Number(since) };
+  const named = namedOf(tag);
+  return named && { ...named, since: Number(since) };
 }
 
 /**
@@ -785,7 +791,8 @@ function parseArtifactHanded(text: string): ArtifactHanded | null {
     return null;
   }
   const { from = "", next } = tag.fields;
-  return { ...namedOf(tag), from, next };
+  const named = namedOf(tag);
+  return named && { ...named, from, next };
 }
 
 /** An artifact's comments notice read back into what it names, and its sections as one text. */
@@ -797,16 +804,23 @@ export function parseArtifactComments(
     return null;
   }
   const named = namedOf(tag);
-  return { ...named, sections: afterLine(tag.rest, commentsLine(named)) };
+  return (
+    named && { ...named, sections: afterLine(tag.rest, commentsLine(named)) }
+  );
 }
 
-/** What a notice's tag names: its artifact's id, kind, name and title. */
-const namedOf = ({ fields }: MarkerTag): ArtifactComments => ({
-  id: fields.id ?? "",
-  kind: (fields.kind ?? "") as ArtifactKind,
-  name: fields.name ?? "",
-  title: fields.title ?? "",
-});
+/** What a notice's tag names: its artifact's id, kind, name and title; null when its kind is no artifact's. */
+const namedOf = ({ fields }: MarkerTag): ArtifactComments | null => {
+  const { kind } = fields;
+  return isOneOf(ARTIFACT_KINDS, kind)
+    ? {
+        id: fields.id ?? "",
+        kind,
+        name: fields.name ?? "",
+        title: fields.title ?? "",
+      }
+    : null;
+};
 
 /** What a notice of `kind` names, read off its tag. */
 const namedBy =
@@ -979,13 +993,14 @@ export function parseDelegateWaitNotice(
   };
 }
 
-/** How a report's turn ended, as its tag says it. */
+/** How a report's turn ended. */
 type ReportOutcome = "complete" | "failed" | "notice";
 
 /** The words a report opens with, and its headline line under them. */
 const reportLine = (
   label: string,
-  outcome: ReportOutcome,
+  /** A {@link ReportOutcome}, or what a read-back report's tag says. */
+  outcome: string,
   headline: string | undefined
 ): string =>
   `[Report from delegate ${label} — ${outcome === "notice" ? "notice" : `turn ${outcome}`}]\n${headline ? `Headline: ${headline}\n` : ""}\n`;
@@ -1041,7 +1056,7 @@ export function parseReportMarker(text: string): {
     ...(headline ? { headline } : {}),
     body: afterLine(
       tag.rest,
-      reportLine(`${name}#${short}`, outcome as ReportOutcome, headline)
+      reportLine(`${name}#${short}`, outcome, headline)
     ),
   };
 }

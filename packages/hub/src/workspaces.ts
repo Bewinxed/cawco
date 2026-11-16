@@ -1852,9 +1852,9 @@ export const createWorkspaces = ({
       }
       return {
         workspaceId: id,
-        changed: (dirty as number) + (stashes as number),
-        dirty: dirty as number,
-        ahead: ahead as number,
+        changed: dirty + stashes,
+        dirty,
+        ahead,
         clone: {
           subjects: subjects.split("\n").filter(Boolean),
           outputs: scratchOutputsOf(outputs).map((one) => one.path),

@@ -64,7 +64,7 @@ const boundTo = <T extends FleetPlacement>(
     ...bound.filter((row) => row.projectId === projectId),
     ...bound
       .filter((row) => !!areaId && row.areaId === areaId)
-      .map(({ areaId: _area, ...row }) => ({ ...row, projectId }) as T),
+      .map((row): T => ({ ...row, areaId: undefined, projectId })),
   ];
 };
 

@@ -59,8 +59,8 @@ export const githubTarget = (
   }
   const run = RUN.exec(written);
   if (run) {
-    const repo = (run[1] as string).toLowerCase();
-    const id = run[2] as string;
+    const [, owned, id] = run;
+    const repo = owned.toLowerCase();
     return {
       kind: "run",
       repo,
@@ -91,7 +91,7 @@ export const waitTarget = (handle: string): WaitTarget | undefined => {
   if (pin) {
     return {
       kind: "pin",
-      artifactId: (pin[1] as string).toLowerCase(),
+      artifactId: pin[1].toLowerCase(),
       number: Number(pin[2]),
     };
   }
@@ -99,8 +99,8 @@ export const waitTarget = (handle: string): WaitTarget | undefined => {
   if (card) {
     return {
       kind: "card",
-      artifactId: (card[1] as string).toLowerCase(),
-      card: card[2] as string,
+      artifactId: card[1].toLowerCase(),
+      card: card[2],
       ...(card[3] ? { option: card[3] } : {}),
     };
   }
@@ -108,8 +108,8 @@ export const waitTarget = (handle: string): WaitTarget | undefined => {
   if (session) {
     return {
       kind: "session",
-      dir: session[1] as string,
-      instanceId: (session[2] as string).toLowerCase(),
+      dir: session[1],
+      instanceId: session[2].toLowerCase(),
     };
   }
 };
