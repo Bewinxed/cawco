@@ -27,7 +27,8 @@ language js
 // Allowed by file, each with its reason, never by an inline suppression:
 // - packages/agent/src/image-providers/chatgpt.ts: Codex's image edits take
 //   a JSON body; @ai-sdk/openai 4.0.118 sends edits as multipart
-//   (openai-image-model.ts). Waits on the owner's choice.
+//   (openai-image-model.ts). The owner decided (2026-11-16) this provider
+//   stays hand-written as the one named exception.
 // - packages/hub/src/jev.ts: moves with the Jev AI-SDK branch.
 // - packages/hub/src/upstreams.ts: TYPESAFE_URL, the endpoint jev.ts posts
 //   to; moves with the Jev AI-SDK branch.
