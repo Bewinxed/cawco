@@ -276,7 +276,6 @@ import {
   opencodeAccounts,
   removeCawcoSessionConfigs,
 } from "./harnesses/opencode";
-import { moveOpencodeAccountHomes } from "./harnesses/opencode-homes-move";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
@@ -347,6 +346,10 @@ import {
 import { removeFolder } from "./remove-folder";
 import { repoRoot } from "./repo-top";
 import { fenced } from "./restart";
+import {
+  moveOpencodeAccountHomes,
+  moveRedactionStores,
+} from "./runtime-dir-move";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
@@ -4202,6 +4205,10 @@ const startDaemon = (rediscover = false) =>
  * already gone, and kills the daemon the usual way.
  */
 export const runDaemon = (rediscover = false): void => {
+  // The redaction store still in the runtime dir, a tmpfs every reboot
+  // empties, moved to disk before the first line is redacted, which reads
+  // it (runtime-dir-move.ts). One that cannot move fails the start.
+  moveRedactionStores();
   // No log line prints a session credential.
   redactConsole();
   // CawCo's own folders are this user's alone, an install made under a
@@ -4229,8 +4236,8 @@ export const runDaemon = (rediscover = false): void => {
       Effect.andThen(Effect.promise(() => removeCawcoSessionConfigs())),
       // Before anything can start a harness server: each account's OpenCode
       // data home still in the runtime dir, a tmpfs every reboot empties,
-      // moved to disk (opencode-homes-move.ts). One that cannot move fails
-      // the start below, and its service manager starts the agent again.
+      // moved to disk (runtime-dir-move.ts). One that cannot move fails the
+      // start below, and its service manager starts the agent again.
       Effect.andThen(Effect.promise(() => moveOpencodeAccountHomes())),
       Effect.andThen(startDaemon(rediscover)),
       Effect.catchDefect((error) =>

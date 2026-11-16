@@ -96,3 +96,4 @@ standalone-scripts/packages/core/src/workspace-judge.ts:6:28 standalone-scripts
 standalone-scripts/packages/core/src/workspace-judge.ts:7:20 standalone-scripts
 runtime-dir-vanishes/packages/core/src/paths/planted.ts:6:8 runtime-dir-vanishes
 runtime-dir-vanishes/packages/core/src/paths/planted.ts:8:8 runtime-dir-vanishes
+runtime-dir-vanishes/packages/agent/src/redaction.ts:6:8 runtime-dir-vanishes

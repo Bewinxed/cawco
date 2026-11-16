@@ -14,10 +14,10 @@ language js
 //  - sessionIdentityDir(): the boundary's deny of it (paths/host-policy.ts),
 //    OpenCode's session credentials (opencode-credentials.ts), Claude's MCP
 //    configs with their bearers (claude-mcp-config.ts), the host key
-//    (mcp-host.ts), the redaction values (redaction.ts), the folder made
-//    before a boundary starts (boundary/package-managers.ts), the 1.x
-//    plugin's account files removed (provider-accounts.ts), and the account
-//    homes moved out of it (harnesses/opencode-homes-move.ts);
+//    (mcp-host.ts), the folder made before a boundary starts
+//    (boundary/package-managers.ts), the 1.x plugin's account files removed
+//    (provider-accounts.ts), and the OpenCode account homes and redaction
+//    stores moved out of it (runtime-dir-move.ts);
 //  - process.env.XDG_RUNTIME_DIR: sockets and the dirs around them (sessiond,
 //    workspace doors, the hub's git credential, previews, container doors,
 //    BlueZ proxies, ssh control sockets, srt's sandbox temp), the folder modes
@@ -27,7 +27,7 @@ language js
 or {
   `sessionIdentityDir()` as $hit where {
     $filename <: r".*packages/[^/]+/src/.*",
-    $filename <: not r".*packages/(?:core/src/paths/(?:cawco|host-policy)|agent/src/(?:harnesses/(?:opencode-credentials|opencode-homes-move)|claude-mcp-config|mcp-host|redaction|boundary/package-managers|provider-accounts))\.ts$",
+    $filename <: not r".*packages/(?:core/src/paths/(?:cawco|host-policy)|agent/src/(?:harnesses/opencode-credentials|runtime-dir-move|claude-mcp-config|mcp-host|boundary/package-managers|provider-accounts))\.ts$",
     register_diagnostic(span=$hit, message="sessionIdentityDir() is in the runtime dir, a tmpfs every reboot empties: only a credential that is short-lived goes there, from the modules scripts/lint/runtime-dir-vanishes.grit names. A store that must last goes under harnessStoresDir() (core paths/harnesses.ts).")
   },
   `process.env.XDG_RUNTIME_DIR` as $hit where {
