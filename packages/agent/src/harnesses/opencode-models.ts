@@ -31,6 +31,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
+import {
+  type OpencodeCatalog,
+  opencodeCatalog,
+} from "@cawco/core/harness/opencode-wire";
+import { isRecord } from "@cawco/core/is-record";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -52,15 +57,6 @@ const FETCH_TIMEOUT_MS = 60_000;
 
 /** Pauses before each read of one refresh: three reads, the later ones after a moment. Ours. */
 const ATTEMPT_DELAYS_MS = [0, 2000, 8000];
-
-/** One provider of the catalog, as far as CawCo reads it. */
-interface CatalogProvider {
-  env?: unknown;
-  models?: Record<string, unknown>;
-  name?: unknown;
-}
-
-type Catalog = Record<string, CatalogProvider>;
 
 /** The file every server is launched on, beside the plugin it loads: one per hub this agent serves. */
 const opencodeModelsFile = (): string =>
@@ -92,7 +88,7 @@ const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 class OpencodeModels {
-  #catalog: Catalog | undefined;
+  #catalog: OpencodeCatalog | undefined;
   /** The source's tag for the held copy, for a read that asks only whether it changed. */
   #etag: string | undefined;
   /** When the held copy was last confirmed the source's, epoch ms. */
@@ -284,17 +280,12 @@ class OpencodeModels {
   }
 }
 
-function parseCatalog(text: string): Catalog {
-  const parsed = JSON.parse(text) as unknown;
-  if (
-    parsed === null ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed) ||
-    !("opencode" in parsed)
-  ) {
+function parseCatalog(text: string): OpencodeCatalog {
+  const parsed: unknown = JSON.parse(text);
+  if (!(isRecord(parsed) && "opencode" in parsed)) {
     throw new Error("it names no `opencode` provider");
   }
-  return parsed as Catalog;
+  return opencodeCatalog(parsed);
 }
 
 /** The agent's one catalog. */

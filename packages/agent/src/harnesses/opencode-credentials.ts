@@ -15,6 +15,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isGone } from "@cawco/core/absent";
 import { makeFolder } from "@cawco/core/folders";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -58,7 +59,7 @@ export const readOpencodeCredentials = async (): Promise<
   try {
     return JSON.parse(await readFile(opencodeCredentialFile(), "utf8"));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isGone(error)) {
       return {};
     }
     throw error;

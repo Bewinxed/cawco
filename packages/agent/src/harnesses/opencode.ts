@@ -25,6 +25,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { lstat, readFile, realpath, rm, stat, symlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { isGone } from "@cawco/core/absent";
 import { providersOpenedBy } from "@cawco/core/accounts";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -53,6 +54,8 @@ import {
   offeredMode,
 } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
+import { opencodeCredentialValue } from "@cawco/core/harness/opencode-wire";
+import { isRecord } from "@cawco/core/is-record";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -76,7 +79,6 @@ import {
 } from "@cawco/core/session/controls";
 import { serverEnvironment } from "@cawco/core/session-env";
 import type {
-  NeutralMessage,
   NeutralSessionInfo,
   SessionMessage,
   StoredRun,
@@ -93,8 +95,9 @@ import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { opencodeSignInFaultWords } from "@cawco/core/words/harness-lines";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
-  CredentialCreateInput,
+  IntegrationListOutput,
   SessionInfo,
+  SessionMessageAssistantTool,
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
@@ -186,6 +189,7 @@ import {
   opencodeBinary,
   opencodeClient,
   opencodeSlashCommands,
+  sessionIdOf,
   unreachable,
   waitForMcp,
 } from "./opencode-client";
@@ -530,7 +534,7 @@ const DIRECTORY_RELEASE_RETRY_MS = 30_000;
  * so the generation answering is one whose start was checked against this
  * hash (its `CAWCO_CONFIG` launch flag).
  */
-const configHash = (config: Record<string, unknown>): string =>
+const configHash = (config: unknown): string =>
   createHash("sha256")
     .update(canonicalJson({ config, _policy: STATIC_POLICY }))
     .digest("hex");
@@ -624,7 +628,7 @@ const quietDir = async (): Promise<string> => {
  */
 const readDiskConfig = (): Promise<string | null> =>
   readFile(OPENCODE_CONFIG, "utf8").catch((error: unknown) =>
-    (error as NodeJS.ErrnoException).code === "ENOENT" ? "{}" : null
+    isGone(error) ? "{}" : null
   );
 
 /**
@@ -858,9 +862,7 @@ const unsettledState = (item: FleetItemState): boolean =>
   item.state === "failed" || item.state === "pending";
 
 const recordOf = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value)
-    ? { ...(value as Record<string, unknown>) }
-    : {};
+  isRecord(value) ? { ...value } : {};
 
 /**
  * The fleet's servers written whole to {@link OPENCODE_FLEET_MCP}, which
@@ -1014,18 +1016,22 @@ const placeOpencodeMcp = async (
   }
   await writeJson(OPENCODE_PLACED_SEEN, now);
   return Object.fromEntries(
-    desired
-      .filter((server) => server.enabled && server.cwd && server.placeId)
-      .map((server): [string, FleetItemState] => [
-        `${server.name}@${server.placeId}`,
-        existsSync(server.cwd as string)
-          ? { state: "applied" }
-          : {
-              state: "failed",
-              cause: "no-checkout",
-              detail: `${server.cwd} is not on this machine`,
-            },
-      ])
+    desired.flatMap(({ enabled, cwd, name, placeId }) =>
+      enabled && cwd && placeId
+        ? [
+            [
+              `${name}@${placeId}`,
+              existsSync(cwd)
+                ? { state: "applied" }
+                : {
+                    state: "failed",
+                    cause: "no-checkout",
+                    detail: `${cwd} is not on this machine`,
+                  },
+            ] satisfies [string, FleetItemState],
+          ]
+        : []
+    )
   );
 };
 
@@ -1616,6 +1622,17 @@ const forwardWindow = async (
   return { messages: taken, older, newer: null };
 };
 
+/** The child session a `subagent` call started, as its metadata names it once the call runs. */
+const childSessionOf = ({
+  state,
+}: SessionMessageAssistantTool): string | undefined => {
+  if (state.status === "streaming") {
+    return;
+  }
+  const child = state.metadata?.sessionID;
+  return typeof child === "string" ? child : undefined;
+};
+
 /**
  * Each subagent the calls among `messages` started, read whole as the
  * session it started is, its entries under the call (`parent_tool_use_id`),
@@ -1632,9 +1649,8 @@ const subagentEntries = async (
       if (block.type !== "tool" || block.name !== "subagent") {
         continue;
       }
-      const child = (block.state as { metadata?: { sessionID?: unknown } })
-        .metadata?.sessionID;
-      if (typeof child === "string") {
+      const child = childSessionOf(block);
+      if (child) {
         callByChild.set(child, block.id);
       }
     }
@@ -1690,6 +1706,9 @@ interface ServerSlot {
    */
   readonly view?: string;
 }
+
+/** A view's server slot: one whose workspace it runs in is always named. */
+type ViewSlot = ServerSlot & { readonly view: string };
 
 /** Each account's OpenCode models, by OpenCode's provider id, as its own server last listed them. */
 const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
@@ -1858,17 +1877,11 @@ const keyCheckRequest = (
 
 const TRAILING_SLASH = /\/+$/u;
 
-/** OpenCode's own list of its integrations (`GET /api/integration`), as far as CawCo reads it. */
-const integrationsOf = (listed: {
-  data: unknown;
-}): { id: string; methods?: { id?: string; type: string }[] }[] =>
-  listed.data as { id: string; methods?: { id?: string; type: string }[] }[];
-
 /** The integrations OpenCode offers an OAuth method for: those it can sign in to again, rather than take only a key. */
-const oauthIntegrationsOf = (listed: { data: unknown }): Set<string> =>
+const oauthIntegrationsOf = (listed: IntegrationListOutput): Set<string> =>
   new Set(
-    integrationsOf(listed).flatMap((integration) =>
-      (integration.methods ?? []).some((method) => method.type === "oauth")
+    listed.data.flatMap((integration) =>
+      integration.methods.some((method) => method.type === "oauth")
         ? [integration.id]
         : []
     )
@@ -1951,7 +1964,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   /** Every account's own server this agent keeps or has a record of, by account. */
   readonly #accounts = new Map<string, ServerSlot>();
   /** Every view's server this agent keeps or has a record of, by its home ({@link homeOf}). */
-  readonly #views = new Map<string, ServerSlot>();
+  readonly #views = new Map<string, ViewSlot>();
   #recorded: Promise<void> | null = null;
   /** An account's server being replaced or verified by the config watcher: one at a time. */
   #accountApplying: boolean;
@@ -1988,7 +2001,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   }
 
   /** The view's server slot for sessions on `account`, made on first use. */
-  #viewSlot(view: string, account: string | undefined): ServerSlot {
+  #viewSlot(view: string, account: string | undefined): ViewSlot {
     const home = homeOf(account, view);
     let slot = this.#views.get(home);
     if (!slot) {
@@ -2362,7 +2375,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     if (!config) {
       return null;
     }
-    const hash = configHash(config as Record<string, unknown>);
+    const hash = configHash(config);
     this.#configHashed = { hash, text };
     return hash;
   }
@@ -2398,13 +2411,14 @@ class OpencodeHarness implements Harness<"opencode"> {
         );
       }
     }
-    if (account === undefined && view === undefined) {
+    let slot: ServerSlot | undefined;
+    if (view !== undefined) {
+      slot = this.#views.get(homeOf(account, view));
+    } else if (account === undefined) {
       return;
+    } else {
+      slot = this.#accounts.get(account);
     }
-    const slot =
-      view === undefined
-        ? this.#accounts.get(account as string)
-        : this.#views.get(homeOf(account, view));
     if (!slot?.client) {
       // Its server starts on the current launch (#ensureAccount, #ensureView).
       return;
@@ -2809,10 +2823,16 @@ class OpencodeHarness implements Harness<"opencode"> {
     revision: string;
     launch: ServerLaunch;
   }> {
-    if (slot.view === undefined) {
-      return await this.#accountRevision(slot.account as string);
+    const { account, view } = slot;
+    if (view === undefined) {
+      if (account === undefined) {
+        throw new Error(
+          "The machine's server is verified by its own apply, not an account's."
+        );
+      }
+      return await this.#accountRevision(account);
     }
-    const launch = await this.#viewLaunch(slot.view, slot.account);
+    const launch = await this.#viewLaunch(view, account);
     return {
       launch,
       revision: `${this.#desiredVersion}/${launchOf(launch)}`,
@@ -2918,15 +2938,15 @@ class OpencodeHarness implements Harness<"opencode"> {
     revision: string
   ): Promise<void> {
     const { account, view } = slot;
-    if (account === undefined && view === undefined) {
+    let home: string;
+    if (view !== undefined) {
+      home = opencodeViewHome(view, account);
+    } else if (account === undefined) {
       throw new Error("The machine's server is replaced by its own apply.");
+    } else {
+      home = opencodeAccountHome(account);
     }
-    await prepareHome(
-      view === undefined
-        ? opencodeAccountHome(account as string)
-        : opencodeViewHome(view, account),
-      view === undefined
-    );
+    await prepareHome(home, view === undefined);
     await slot.owner.replace(
       launch,
       async (identity, signal) => {
@@ -3859,8 +3879,8 @@ class OpencodeHarness implements Harness<"opencode"> {
       }).then((read) => answerOf(read, "its integrations and models")),
     ]);
     const refreshable = new Set(
-      integrationsOf(integrations).flatMap((integration) =>
-        (integration.methods ?? []).flatMap((method) =>
+      integrations.data.flatMap((integration) =>
+        integration.methods.flatMap((method) =>
           method.type === "oauth" && method.id
             ? [`${integration.id}/${method.id}`]
             : []
@@ -3894,8 +3914,7 @@ class OpencodeHarness implements Harness<"opencode"> {
           `${provider}/${String(credential.value.methodID ?? "")}`
         ),
         package: model?.package,
-        baseURL: (model?.settings as { baseURL?: unknown } | undefined)
-          ?.baseURL,
+        baseURL: model?.settings?.baseURL,
         renewedSince:
           (changed[credential.id] ?? 0) > (faults.get(provider)?.at ?? 0),
       });
@@ -3970,13 +3989,15 @@ class OpencodeHarness implements Harness<"opencode"> {
         if (response.status !== 401 && response.status !== 403) {
           return { ok: response.ok, status: response.status, message: "" };
         }
-        const body = (await response.json().catch(() => undefined)) as
-          { error?: { message?: unknown } } | undefined;
+        const body: unknown = await response.json().catch(() => undefined);
+        const error = isRecord(body) ? body.error : undefined;
         return {
           ok: false,
           status: response.status,
           message:
-            typeof body?.error?.message === "string" ? body.error.message : "",
+            isRecord(error) && typeof error.message === "string"
+              ? error.message
+              : "",
         };
       });
     } catch {
@@ -4850,12 +4871,11 @@ class OpencodeHarness implements Harness<"opencode"> {
       let unavailable = `OpenCode subscription unavailable: ${identity.procId}`;
       try {
         const client = this.#clientForGeneration(identity);
-        let feed: AsyncIterator<V2Event> | undefined;
-        const first = await askOpencode(({ signal }) => {
-          feed = client.event
+        const first = await askOpencode(async ({ signal }) => {
+          const feed = client.event
             .subscribe({ signal: AbortSignal.any([signal, connection.signal]) })
             [Symbol.asyncIterator]();
-          return feed.next();
+          return { feed, next: await feed.next() };
         }, stopped);
         switch (first.kind) {
           case "unanswered":
@@ -4863,7 +4883,8 @@ class OpencodeHarness implements Harness<"opencode"> {
             console.warn(`[opencode] ${identity.procId}: ${unavailable}`);
             break;
           case "answered": {
-            let next = first.value;
+            const { feed } = first.value;
+            let { next } = first.value;
             while (!(next.done || stopped.aborted)) {
               if (!connected) {
                 connected = true;
@@ -4883,7 +4904,7 @@ class OpencodeHarness implements Harness<"opencode"> {
               }
               delay = 1000;
               this.#route(next.value, identity);
-              next = await (feed as AsyncIterator<V2Event>).next();
+              next = await feed.next();
             }
             break;
           }
@@ -4949,7 +4970,7 @@ class OpencodeHarness implements Harness<"opencode"> {
     const sid =
       event.type === "form.created"
         ? event.data.form.sessionID
-        : (event.data as { sessionID?: unknown } | undefined)?.sessionID;
+        : sessionIdOf(event.data);
     if (typeof sid !== "string") {
       return;
     }
@@ -5461,7 +5482,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       return;
     }
     const generations = await round.generations.catch(
-      () => [] as ServerIdentity[]
+      (): ServerIdentity[] => []
     );
     for (const generation of generations) {
       this.#activity(generation).observeFailed(key);
@@ -5712,7 +5733,7 @@ class OpencodeHarness implements Harness<"opencode"> {
   async #dropGoneViews(): Promise<void> {
     const named = new Set(Object.values(await readHomes()));
     for (const [home, slot] of [...this.#views]) {
-      const view = slot.view as string;
+      const { view } = slot;
       if (
         overlaySync(view) ||
         slot.starting ||
@@ -6222,10 +6243,11 @@ class OpencodeHarness implements Harness<"opencode"> {
       STORED_RUN_TAIL
     );
     let model: string | undefined;
-    for (const entry of messages) {
-      const message = entry.message as NeutralMessage;
-      if (message.type === "assistant" && message.message.model) {
-        ({ model } = message.message);
+    for (const { type, message } of messages) {
+      const said =
+        type === "assistant" && isRecord(message) ? message.model : undefined;
+      if (typeof said === "string" && said) {
+        model = said;
       }
     }
     return {
@@ -6729,7 +6751,10 @@ class OpencodeHarness implements Harness<"opencode"> {
         const states = {
           ...said,
           ...Object.fromEntries(
-            read.map((name) => [name, taken.states[name] as FleetItemState])
+            read.map((name): [string, FleetItemState] => [
+              name,
+              taken.states[name],
+            ])
           ),
         };
         this.#heardFleetMcp(states, "report");
@@ -7129,7 +7154,7 @@ async function putSlotCredential(
             id: credential.id,
             integrationID: credential.integrationID,
             label: `The machine's own sign-in, for workspace ${slot.view?.slice(0, 8)}`,
-            value: credential.value as CredentialCreateInput["value"],
+            value: opencodeCredentialValue(credential.value),
             activate: true,
           },
           options
@@ -7268,8 +7293,7 @@ async function putCredential(
             id,
             integrationID: credential.integrationID,
             label: `CawCo account ${account}`,
-            // Read from the account's JSON file: every value in it is JSON.
-            value: credential.value as CredentialCreateInput["value"],
+            value: opencodeCredentialValue(credential.value),
             activate: true,
           },
           options
@@ -7332,10 +7356,10 @@ async function readsThisConfig(
   const sources = answerOf(
     await askOpencode((options) => client.config.get(quiet, options), signal),
     "which config it reads"
-  ) as unknown as { type?: string; path?: string }[];
-  const dirs = sources
-    .filter((source) => source.type === "directory")
-    .map((source) => source.path);
+  );
+  const dirs = sources.flatMap((source) =>
+    source.type === "directory" ? [source.path] : []
+  );
   if (dirs.includes(OPENCODE_DIR)) {
     return true;
   }

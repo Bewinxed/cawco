@@ -12,6 +12,11 @@
  */
 
 import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
+import {
+  opencodeProgramCalls,
+  opencodeQuestions,
+} from "@cawco/core/harness/opencode-wire";
+import { isRecord } from "@cawco/core/is-record";
 import type {
   CompactionFailure,
   NeutralAssistantBlock,
@@ -61,10 +66,10 @@ export const toolNameOf = (tool: string): string =>
  * the transcript's.
  */
 export const toolInputOf = (input: unknown): Record<string, unknown> => {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isRecord(input)) {
     return {};
   }
-  const { __cawco: _secret, ...rest } = input as Record<string, unknown>;
+  const { __cawco: _secret, ...rest } = input;
   return rest;
 };
 
@@ -112,21 +117,16 @@ const toolContentOf = (
 
 /** An MCP call's content (`{type, text}` / `{type, data, mimeType}` blocks) as a direct call's result would read. */
 const mcpContentOf = (content: unknown): string | NeutralContentBlock[] => {
-  const blocks = Array.isArray(content)
-    ? (content as {
-        type?: string;
-        text?: string;
-        data?: string;
-        mimeType?: string;
-        uri?: string;
-        mime?: string;
-      }[])
-    : [];
-  const text = blocks
-    .filter((block) => block.type === "text" && typeof block.text === "string")
-    .map((block) => block.text)
+  const blocks: unknown[] = Array.isArray(content) ? content : [];
+  const records = blocks.filter(isRecord);
+  const text = records
+    .flatMap((block) =>
+      block.type === "text" && typeof block.text === "string"
+        ? [block.text]
+        : []
+    )
     .join("\n\n");
-  const images: NeutralContentBlock[] = blocks.flatMap((block) => {
+  const images: NeutralContentBlock[] = records.flatMap((block) => {
     if (
       block.type === "image" &&
       typeof block.data === "string" &&
@@ -143,8 +143,13 @@ const mcpContentOf = (content: unknown): string | NeutralContentBlock[] => {
         },
       ];
     }
-    const data = block.type === "file" ? DATA_URI.exec(block.uri ?? "") : null;
-    return data && block.mime?.startsWith("image/")
+    const data =
+      block.type === "file" && typeof block.uri === "string"
+        ? DATA_URI.exec(block.uri)
+        : null;
+    return data &&
+      typeof block.mime === "string" &&
+      block.mime.startsWith("image/")
       ? [
           {
             type: "image" as const,
@@ -161,33 +166,13 @@ const mcpContentOf = (content: unknown): string | NeutralContentBlock[] => {
 };
 
 /** OpenCode's question shape, which says `multiple` where the fleet says `multiSelect`. */
-const questionsOf = (raw: unknown): UserQuestion[] | null => {
-  if (!Array.isArray(raw)) {
-    return null;
-  }
-  const questions: UserQuestion[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") {
-      return null;
-    }
-    const q = item as {
-      question?: unknown;
-      header?: unknown;
-      options?: unknown;
-      multiple?: unknown;
-    };
-    if (typeof q.question !== "string" || !Array.isArray(q.options)) {
-      return null;
-    }
-    questions.push({
-      question: q.question,
-      header: typeof q.header === "string" ? q.header : q.question,
-      options: q.options as UserQuestion["options"],
-      multiSelect: q.multiple === true,
-    });
-  }
-  return questions;
-};
+const questionsOf = (input: unknown): UserQuestion[] | null =>
+  opencodeQuestions(input)?.map((q) => ({
+    question: q.question,
+    header: typeof q.header === "string" ? q.header : q.question,
+    options: q.options,
+    multiSelect: q.multiple === true,
+  })) ?? null;
 
 /**
  * How a question ended, read off its `question` tool call: the asked
@@ -206,13 +191,11 @@ const questionResultOf = (
   if (tool !== QUESTION_TOOL) {
     return null;
   }
-  const questions = questionsOf(
-    (input as { questions?: unknown } | undefined)?.questions
-  );
+  const questions = questionsOf(input);
   if (!questions) {
     return null;
   }
-  const raw = (metadata as { answers?: unknown } | undefined)?.answers;
+  const raw = isRecord(metadata) ? metadata.answers : undefined;
   // A question that completed carrying no answers is one the reader walked
   // away from, not an answered question with an empty map.
   if (!Array.isArray(raw)) {
@@ -220,29 +203,16 @@ const questionResultOf = (
   }
   const answers: UserAnswers = {};
   questions.forEach((question, i) => {
-    const picked = Array.isArray(raw[i]) ? (raw[i] as string[]) : [];
+    const one: unknown = raw[i];
+    const picked = Array.isArray(one)
+      ? one.filter((label): label is string => typeof label === "string")
+      : [];
     answers[question.question] = question.multiSelect
       ? picked
       : (picked[0] ?? "");
   });
   return { outcome: "answered", questions, answers };
 };
-
-/** What a program's call answered, as the plugin writes it onto the program (`metadata.calls`). */
-interface AnsweredCall {
-  content?: unknown;
-  input?: Record<string, unknown>;
-  isError?: boolean;
-  structuredContent?: Record<string, unknown>;
-  tool: string;
-}
-
-/** A program's own record of a call it made (`metadata.toolCalls`). */
-interface ProgramCall {
-  input?: unknown;
-  status: string;
-  tool: string;
-}
 
 /** A Code Mode program's state, as a live event or a stored tool block carries it. */
 export interface ProgramState {
@@ -268,9 +238,7 @@ export interface ProgramState {
 export const codeModeCalls = (
   program: ProgramState
 ): { key: string; use: ToolUseBlock; result?: ToolResultBlock }[] => {
-  const meta = program.metadata ?? {};
-  const calls = (meta.toolCalls as ProgramCall[] | undefined) ?? [];
-  const answers = (meta.calls as AnsweredCall[] | undefined) ?? [];
+  const { calls, answers } = opencodeProgramCalls(program.metadata ?? {});
   const seen = new Map<string, number>();
   return calls.map((call, index) => {
     // `server.tool` is the path the program wrote; the hook's name is the one a direct call carries.
@@ -294,7 +262,7 @@ export const codeModeCalls = (
           tool_use_id: key,
           content: mcpContentOf(answered.content),
           is_error: answered.isError === true,
-          ...(answered.structuredContent
+          ...(isRecord(answered.structuredContent)
             ? { structuredContent: answered.structuredContent }
             : {}),
         },
@@ -361,8 +329,7 @@ const programThrew = (block: ToolBlock): string | undefined => {
   if (state.status === "error") {
     return errorText(state.error);
   }
-  return state.status === "completed" &&
-    (state.metadata as { error?: unknown } | undefined)?.error === true
+  return state.status === "completed" && state.metadata?.error === true
     ? String(toolContentOf(state.content))
     : undefined;
 };
@@ -372,7 +339,9 @@ const programOf = (block: ToolBlock): ProgramState => {
   const threw = programThrew(block);
   return {
     id: block.id,
-    metadata: (block.state as { metadata?: Record<string, unknown> }).metadata,
+    ...(block.state.status === "streaming"
+      ? {}
+      : { metadata: block.state.metadata }),
     settled:
       block.state.status === "completed" || block.state.status === "error",
     ...(threw === undefined ? {} : { threw }),
@@ -385,11 +354,7 @@ const programOf = (block: ToolBlock): ProgramState => {
  * is `unknown`, in its own words.
  */
 export const compactionFailure = (error: unknown): CompactionFailure => {
-  const structured = (error ?? {}) as {
-    type?: unknown;
-    message?: unknown;
-    status?: unknown;
-  };
+  const structured: Record<string, unknown> = isRecord(error) ? error : {};
   return typeof structured.message === "string"
     ? {
         kind: typeof structured.type === "string" ? structured.type : "unknown",
@@ -450,14 +415,13 @@ const entry = (
     SessionMessage,
     "session_id" | "parent_tool_use_id" | "parent_agent_id" | "timestamp"
   >
-): SessionMessage =>
-  ({
-    session_id: sessionKey,
-    parent_tool_use_id: null,
-    parent_agent_id: null,
-    timestamp,
-    ...row,
-  }) as SessionMessage;
+): SessionMessage => ({
+  session_id: sessionKey,
+  parent_tool_use_id: null,
+  parent_agent_id: null,
+  timestamp,
+  ...row,
+});
 
 /**
  * Whether a window of the conversation may start at this message: the
@@ -509,14 +473,7 @@ export function toTranscript(
         // (`noteStopped`), and its word that an MCP server did not connect
         // (`sayUnconnected`), read back as the lines the live stream drew. Any
         // other synthetic input is OpenCode's or a plugin's, not anyone's words.
-        const meta = message.metadata as
-          | {
-              cawco?: unknown;
-              words?: unknown;
-              server?: unknown;
-              line?: unknown;
-            }
-          | undefined;
+        const meta = message.metadata;
         if (meta?.cawco === MCP_NOT_CONNECTED) {
           entries.push(
             entry(sessionKey, timestamp, {
@@ -726,7 +683,7 @@ function assistantEntries(
               state.status === "completed"
                 ? {
                     content: state.content,
-                    metadata: state.metadata as Record<string, unknown>,
+                    metadata: state.metadata,
                   }
                 : { error: state.error },
               state.status === "error"

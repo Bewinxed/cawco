@@ -182,7 +182,7 @@ export const prunePlugins = async (
   kept: ReadonlySet<string>
 ): Promise<void> => {
   const dir = pluginsDir();
-  const versions = (await readdir(dir).catch(() => [] as string[])).filter(
+  const versions = (await readdir(dir).catch((): string[] => [])).filter(
     (name) => PLUGIN_VERSION_DIR.test(name) && !kept.has(join(dir, name))
   );
   await Promise.all(
@@ -205,7 +205,7 @@ export const retireV1Plugins = async (
   directory = OPENCODE_DIR
 ): Promise<void> => {
   const plugins = join(directory, "plugins");
-  const files = (await readdir(plugins).catch(() => [] as string[])).filter(
+  const files = (await readdir(plugins).catch((): string[] => [])).filter(
     (file) => V1_BRIDGE.test(file)
   );
   await Promise.all(

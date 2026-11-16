@@ -12,7 +12,7 @@ const looksLikeQuestion = (value: unknown): value is UserQuestion =>
   Array.isArray(value.options);
 
 /** Whether `value` is a reader's answers: each question's label, or its labels. */
-const isUserAnswers = (value: unknown): value is UserAnswers =>
+export const isUserAnswers = (value: unknown): value is UserAnswers =>
   isRecord(value) &&
   Object.values(value).every(
     (answer) =>

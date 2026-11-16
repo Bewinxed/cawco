@@ -17,6 +17,11 @@
 
 import { Database } from "bun:sqlite";
 import {
+  type OpencodeStoredMessage,
+  type OpencodeStoredToolState,
+  opencodeStoredMessage,
+} from "@cawco/core/harness/opencode-wire";
+import {
   type DocAuthor,
   section,
   TOOL_OUTPUT_CHARS,
@@ -24,27 +29,11 @@ import {
   userAuthor,
 } from "@cawco/jsonl-parser";
 
-/** What a tool block answered, as 2.0 keeps it: its content's text parts, or its error. */
-interface ToolState {
-  content?: { type?: string; text?: string }[];
-  error?: { message?: string };
-  status?: string;
-}
-
-interface MessageData {
-  content?: {
-    type?: string;
-    text?: string;
-    name?: string;
-    state?: ToolState;
-  }[];
-  model?: { id?: string };
-  text?: string;
-  time?: { created?: number; completed?: number };
-}
-
 /** A settled tool block's words: its content's text, or its error's message, cut to `cap`. */
-function toolOutputOf(state: ToolState | undefined, cap: number): string {
+function toolOutputOf(
+  state: OpencodeStoredToolState | undefined,
+  cap: number
+): string {
   if (cap <= 0 || !state) {
     return "";
   }
@@ -90,7 +79,7 @@ interface Row {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: moved from jsonl-parser as it was written there: one pass over every kind of a message's content
 function wordsOf(
   row: Row,
-  message: MessageData,
+  message: OpencodeStoredMessage,
   reasoning: boolean,
   outputCap: number
 ): {
@@ -170,11 +159,11 @@ export async function scanRanges<R>(
   db.exec("BEGIN");
   try {
     const top =
-      (
-        db.query(`SELECT max(rowid) AS top FROM ${table}`).get() as {
-          top: number | null;
-        } | null
-      )?.top ?? 0;
+      db
+        .query<{ top: number | null }, []>(
+          `SELECT max(rowid) AS top FROM ${table}`
+        )
+        .get()?.top ?? 0;
     const read = db.query<R, [number, number, number]>(sql);
     for (let from = 0; from < top; from += SCAN_RANGE) {
       section(`${table} read, a range at a time`, () => {
@@ -222,11 +211,14 @@ export async function readOpenCodeDocs(
       since,
       (row) => {
         watermark = Math.max(watermark, row.time_updated);
-        let message: MessageData;
+        let data: unknown;
         try {
-          // biome-ignore lint/plugin/stored-json: OpenCode's own row, read as its 2.0 format writes it (moved from jsonl-parser as it was written there)
-          message = JSON.parse(row.data) as MessageData;
+          data = JSON.parse(row.data);
         } catch {
+          return;
+        }
+        const message = opencodeStoredMessage(data);
+        if (!message) {
           return;
         }
         const words = wordsOf(
