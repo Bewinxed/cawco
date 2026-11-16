@@ -634,7 +634,7 @@ function projectNoteOf(content: string): ProjectNote | null {
 }
 
 /** A context line as its hub line carries it (JSON); null for text that is none. */
-function contextLineOf(content: string): ContextLine | null {
+export function contextLineOf(content: string): ContextLine | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);

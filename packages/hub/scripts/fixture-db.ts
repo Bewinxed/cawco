@@ -9,7 +9,9 @@
  * built in-process (hub-in-process.ts) at the newest published nightly (or
  * `--at <ref>`), the schema a real hub upgrades from, seeded through the
  * hub's Db with many machines, projects, sessions (live, ended, failed,
- * delegates), sends, tasks, workspaces and work items. Every value
+ * delegates), sends, tasks, workspaces and work items, and every marker
+ * the transcript reads back off a stored send, in each shape a hub of that
+ * schema still holds ({@link seedMarkers}). Every value
  * is made up here, so nothing in it needs sanitizing: no person's words, no
  * secret, no path off a real machine.
  *
@@ -46,8 +48,10 @@ import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import { hashFiles } from "@cawco/core/file-hash";
 import { HARNESSES } from "@cawco/core/harness/kinds";
+import { markerTag } from "@cawco/core/injected";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { ContinuationAsker } from "../src/db/stored-types";
@@ -3519,6 +3523,253 @@ function seedPlansSettingsCursorsReadings(dbPath: string): void {
   sqlite.close();
 }
 
+/** When the seeded markers were sent. */
+const MARKED_AT = Date.UTC(2026, 9, 7);
+
+/** Every artifact kind a notice names (core artifact-kinds.ts `ARTIFACT_KINDS`). */
+const NOTICE_KINDS = [
+  "page",
+  "canvas",
+  "preview",
+  "component",
+  "browser",
+] as const satisfies readonly ArtifactKind[];
+
+/** The kind migration 0255 renamed `component`, still named in the tags of notices sent before it. */
+const SHEET = "sheet";
+
+/** One artifact a seeded notice names. */
+interface Noticed {
+  /** Its id. */
+  artifact: string;
+  kind: string;
+  name: string;
+  title?: string;
+}
+
+/**
+ * Each artifact notice as its builder writes it now (core injected.ts
+ * `ARTIFACT_NOTICES`): its tag, then the sentence the agent reads. A notice
+ * with no `title` is one sent before titles were kept.
+ */
+const ARTIFACT_NOTICE_TEXTS: readonly ((a: Noticed) => string)[] = [
+  ({ artifact, kind, name, title }) =>
+    `${markerTag("artifact-responses", { id: artifact, kind, name, title, since: 4 })}[CawCo] The ${kind} "${name}" has new responses since 4. Read them with artifact_read({ id: "${artifact}", since: 4 }).`,
+  ({ artifact, kind, name, title }) =>
+    `${markerTag("artifact-comments", { id: artifact, kind, name, title })}[CawCo] The person commented on the ${kind} "${name}" (artifact ${artifact}). Each pin's answer goes in its thread with comment_reply({ pin, text }): they read it there, so the thread is the whole answer. comment_resolve once a change settles it; comment_read has the history. To name a pin to the person, write its Link.\n\nPin 1 (pin_fixture-1) on the header: "The title wraps at 390."`,
+  ({ artifact, kind, name, title }) =>
+    `${markerTag("artifact-errors", { id: artifact, kind, name, title })}[CawCo] The ${kind} "${name}" (artifact ${artifact}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\nsrc/Tray.stories.ts:12:4 Cannot find name 'rows'.`,
+  ({ artifact, kind, name, title }) =>
+    `${markerTag("artifact-saves", { id: artifact, kind, name, title })}[CawCo] The person changed the ${kind} "${name}" (artifact ${artifact}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\nTray.stories.ts: Default's gap 12 → 16.`,
+  ({ artifact, kind, name, title }) =>
+    `${markerTag("artifact-handed", { from: "Fix tray", id: artifact, kind, name, title })}[CawCo] Fix tray handed you the ${kind} "${name}" (artifact ${artifact}), not opened. It asks the person to judge it: "Is the tray right?". The person sees it only when you call artifact_show: show what needs them, and leave the rest in your panel.`,
+  ({ artifact, kind, name, title }) =>
+    `${markerTag("artifact-handed", { from: "Fix tray", id: artifact, kind, name, title, next: crypto.randomUUID() })}[CawCo] Fix tray changed the ${kind} "${name}" (artifact ${artifact}): your panel keeps the version you opened until artifact_show opens the new one.`,
+];
+
+/** A delegate's short id, as a report's and a hand-off's tag carry it. */
+const SHORT = "5a167bde";
+
+/**
+ * Each marker that is not an artifact notice, as its builder writes it now
+ * (core injected.ts, rules.ts `ruleMarker`, asks.ts `askAnsweredText`), with
+ * the origin its send carries.
+ */
+const MARKER_TEXTS: readonly [string, Record<string, string>][] = [
+  [
+    `${markerTag("handoff", { from: "Release proof", short: SHORT })}[Hand-off from the Release proof#${SHORT} session — another agent, not the user]\n\nCheck the migration on a real database before the release.`,
+    { kind: "peer", name: "Release proof", fromSession: SHORT },
+  ],
+  [
+    `${markerTag("undelivered", { to: `Fix tray#${SHORT}` })}[CawCo] Your message to Fix tray#${SHORT} was not delivered: its session ended before it read it.`,
+    { kind: "system", name: "undelivered" },
+  ],
+  [
+    `${markerTag("fleet-watch", { line: "Fix tray: looping on one test" })}[Fleet watch] Fix tray: looping on one test\n\nIt ran the same failing test six times. (Session ${SHORT}. Fleet watch never tells a session about itself: steer it yourself, with handoff, interrupt_delegate or stop_delegate.)`,
+    { kind: "system", name: "fleet-watch" },
+  ],
+  [
+    `${markerTag("fork", { line: "Forked from “Fix tray”: its delegates stay its own." })}[Fork] Forked from “Fix tray”: its delegates stay its own.\n\nNone of them is running now.`,
+    { kind: "system", name: "fork" },
+  ],
+  [
+    `${markerTag("delegate-wait", { line: "Fix tray waits on the person", delegate: SHORT, request: "req-7", what: "question" })}[Delegate] Fix tray waits on the person\n\nIt asked which header to keep.`,
+    {
+      kind: "system",
+      name: "delegate-wait",
+      line: "Fix tray waits on the person",
+    },
+  ],
+  [
+    `${markerTag("report", { name: "Fix tray", short: SHORT, outcome: "complete", headline: "The tray scrolls after a reconnect." })}[Report from delegate Fix tray#${SHORT} — turn complete]\nHeadline: The tray scrolls after a reconnect.\n\nThe rail keeps its place across a reconnect.`,
+    { kind: "peer", name: "Fix tray", fromSession: SHORT },
+  ],
+  [
+    `${markerTag("report", { name: "Fix tray", short: SHORT, outcome: "notice" })}[Report from delegate Fix tray#${SHORT} — notice]\n\nIts session ended without a report.`,
+    { kind: "peer", name: "Fix tray", fromSession: SHORT },
+  ],
+  [
+    `${markerTag("delegate-ask", { label: `Fix tray#${SHORT}`, instance: "6f1c2d3e-0000-4000-8000-00000000a5c1", request: "req-9" })}[Delegate ask from Fix tray#${SHORT}]\n\nMay it run git push?\n\n[delegate-ask instance=6f1c2d3e-0000-4000-8000-00000000a5c1 request=req-9]\n\nAnswer it with the answer_delegate tool.`,
+    { kind: "peer", name: "Fix tray", fromSession: SHORT },
+  ],
+  [
+    `${markerTag("rule", { name: "no-force-push" })}[Rule: no-force-push]\n\nNever force-push main.`,
+    { kind: "system", name: "rule:no-force-push" },
+  ],
+  [
+    `${markerTag("ask-answered", { id: "ask_fixture-marked", kind: "question", outcome: "answered" })}The person answered [Where does the tray go?](cawco:ask/ask_fixture-marked):\n- Where does the tray go? → Under the rail`,
+    { kind: "system", name: "ask" },
+  ],
+];
+
+/**
+ * Each marker as the hubs before the tag wrote it, its line alone (hub
+ * db/tag-markers.ts `BEFORE`), which that once-step gives its tag: written
+ * only where it has not run, as a hub that wrote them had not.
+ */
+const UNTAGGED_TEXTS = (
+  artifact: string
+): readonly [string, Record<string, string>][] => [
+  [
+    `[Hand-off from the Release proof#${SHORT} session — another agent, not the user]\n\nTidy the preview pane.`,
+    { kind: "peer", name: "Release proof" },
+  ],
+  [
+    "[Hand-off from the Release proof session — another agent, not the user]\n\nTidy the preview pane.",
+    { kind: "peer", name: "Release proof" },
+  ],
+  [
+    `[CawCo] Your message to Fix tray#${SHORT} was not delivered: its session ended before it read it.`,
+    { kind: "system", name: "undelivered" },
+  ],
+  ...[NOTICE_KINDS[0], SHEET].flatMap(
+    (kind): [string, Record<string, string>][] =>
+      [
+        `[CawCo] The ${kind} "tray-${kind}" has new responses since 2. Read them with artifact_read({ id: "${artifact}", since: 2 }).`,
+        `[CawCo] The person commented on the ${kind} "tray-${kind}" (artifact ${artifact}). Pin 1 on the header.`,
+        `[CawCo] The ${kind} "tray-${kind}" (artifact ${artifact}) does not compile on its stage; fix it.`,
+        `[CawCo] The person changed the ${kind} "tray-${kind}" (artifact ${artifact}) from its inspector, and CawCo wrote it into the story file.`,
+        `[CawCo] Fix tray put the ${kind} "tray-${kind}" in your panel (artifact ${artifact}).`,
+      ].map((text) => [text, { kind: "system", name: "artifact" }])
+  ),
+  [
+    "[Fleet watch] Fix tray: looping on one test\n\nIt ran the same failing test six times.",
+    { kind: "system", name: "fleet-watch" },
+  ],
+  [
+    "[Fork] Forked from “Fix tray”: its delegates stay its own.\n\nNone of them is running now.",
+    { kind: "system", name: "fork" },
+  ],
+  [
+    `[Report from delegate Fix tray#${SHORT} — turn failed]\nHeadline: The build broke.\n\nbun run check failed at lint.`,
+    { kind: "peer", name: "Fix tray" },
+  ],
+  [
+    `[Delegate ask from Fix tray#${SHORT}]\n\nMay it run git push?\n\n[delegate-ask instance=6f1c2d3e-0000-4000-8000-00000000a5c1 request=req-3]\n\nAnswer it with the answer_delegate tool.`,
+    { kind: "peer", name: "Fix tray" },
+  ],
+  [
+    "[Rule: no-force-push]\n\nNever force-push main.",
+    { kind: "system", name: "rule:no-force-push" },
+  ],
+];
+
+/**
+ * Stored sends with every marker the transcript reads back
+ * (migrations-check.ts `MARKER_READERS`): each artifact notice's builder for
+ * every artifact kind, on the artifact origin, a comments notice's words in
+ * a text block as the person's pictures ride beside them; each other
+ * marker once; and every old shape a once-step still rewrites: a notice
+ * whose tag names a `sheet` (db/sheet-notices.ts) or no title
+ * (artifact-titles.ts `titledStoredNotice`), and, where the database's hub
+ * has not given the stored sends their tags (`tag-markers`), each marker's
+ * line alone (db/tag-markers.ts).
+ */
+function seedMarkers(dbPath: string): void {
+  const sqlite = new Database(dbPath);
+  if (
+    sqlite
+      .query<{ n: number }, [number]>(
+        "SELECT count(*) AS n FROM sent_messages WHERE accepted_at = ?"
+      )
+      .get(MARKED_AT)?.n
+  ) {
+    sqlite.close();
+    throw new Error(
+      `${dbPath} holds the seeded markers already: a fixture takes them once`
+    );
+  }
+  const sessions = sqlite
+    .query<{ id: string }, []>("SELECT id FROM instances ORDER BY rowid")
+    .all();
+  const tagged =
+    sqlite
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'data_migrations'"
+      )
+      .get()?.n === 1 &&
+    sqlite
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM data_migrations WHERE name = 'tag-markers'"
+      )
+      .get()?.n === 1;
+  let sent = 0;
+  const send = (
+    content: string | { text: string; type: "text" }[],
+    origin: Record<string, string>
+  ): void => {
+    const session = sessions[sent % sessions.length];
+    if (!session) {
+      return;
+    }
+    sqlite.run(
+      "INSERT INTO sent_messages (uuid, instance_id, accepted_at, body) VALUES (?, ?, ?, ?)",
+      [
+        crypto.randomUUID(),
+        session.id,
+        MARKED_AT + sent * 1000,
+        JSON.stringify({
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content },
+          parent_tool_use_id: null,
+          origin,
+        }),
+      ]
+    );
+    sent += 1;
+  };
+  const artifact = { kind: "system", name: "artifact" };
+  for (const kind of NOTICE_KINDS) {
+    for (const [at, text] of ARTIFACT_NOTICE_TEXTS.entries()) {
+      const said = text({
+        artifact: crypto.randomUUID(),
+        kind,
+        name: `tray-${kind}`,
+        title: `The ${kind} tray`,
+      });
+      send(at === 1 ? [{ type: "text", text: said }] : said, artifact);
+    }
+  }
+  for (const kind of [SHEET, NOTICE_KINDS[1]]) {
+    for (const text of ARTIFACT_NOTICE_TEXTS) {
+      send(
+        text({ artifact: crypto.randomUUID(), kind, name: `tray-${kind}` }),
+        artifact
+      );
+    }
+  }
+  for (const [text, origin] of MARKER_TEXTS) {
+    send(text, origin);
+  }
+  if (!tagged) {
+    for (const [text, origin] of UNTAGGED_TEXTS(crypto.randomUUID())) {
+      send(text, origin);
+    }
+  }
+  sqlite.close();
+}
+
 async function seed(
   dbPath: string,
   home: string,
@@ -3541,6 +3792,7 @@ async function seed(
     await seedSealedFacts(db, dbPath);
   }
   lifetime.close();
+  seedMarkers(dbPath);
   if (withLists) {
     seedByHand(dbPath, continued);
     seedBudgets(dbPath);
@@ -3583,6 +3835,34 @@ if (out) {
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+  process.exit(0);
+}
+
+// `--markers`: the fixture as committed, with the stored markers
+// {@link seedMarkers} writes, written back. The realistic fixture was seeded
+// at nightly 3146 by this file as it was then (944bc6ab49), and this file no
+// longer runs at that commit (its core has no harness/kinds, machine-path
+// or time module): its markers go in this way, at its own schema, the rest
+// of it as it was made.
+if (process.argv.includes("--markers")) {
+  const fixture = process.argv.includes(LISTS) ? LISTS_FIXTURE : FIXTURE;
+  const scratch = mkdtempSync(join(tmpdir(), "cawco-fixture-db-"));
+  try {
+    const dbPath = join(scratch, "hub.db");
+    await Bun.write(
+      dbPath,
+      Bun.gunzipSync(new Uint8Array(await Bun.file(fixture).arrayBuffer()))
+    );
+    seedMarkers(dbPath);
+    const sqlite = new Database(dbPath);
+    sqlite.run("PRAGMA wal_checkpoint(TRUNCATE)");
+    sqlite.run("VACUUM");
+    await Bun.write(fixture, Bun.gzipSync(new Uint8Array(sqlite.serialize())));
+    sqlite.close();
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  console.log(`fixture-db: stored markers seeded into ${fixture}`);
   process.exit(0);
 }
 
